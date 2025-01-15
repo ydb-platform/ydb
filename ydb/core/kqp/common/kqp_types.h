@@ -9,8 +9,6 @@ namespace NKikimr::NScheme {
 void ProtoMiniKQLTypeFromTypeInfo(NKikimrMiniKQL::TType* type, const TTypeInfo typeInfo);
 TTypeInfo TypeInfoFromProtoMiniKQLType(const NKikimrMiniKQL::TType& type);
 
-const NMiniKQL::TType* MiniKQLTypeFromTypeInfo(const TTypeInfo typeInfo,
-    const NMiniKQL::TTypeEnvironment& env);
 TTypeInfo TypeInfoFromMiniKQLType(const NMiniKQL::TType* type);
 
 } // namespace NKikimr::NScheme

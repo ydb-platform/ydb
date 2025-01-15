@@ -4,6 +4,7 @@
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 
@@ -34,10 +35,8 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
             GetColumnsInfo(type, outputDesc.GetRangePartition().GetKeyColumns(), keyColumns);
             YQL_ENSURE(!keyColumns.empty());
             for (auto& info : keyColumns) {
-                // TODO: support pg types
-                YQL_ENSURE(info.Type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data);
-                auto dataTypeId = static_cast<NKikimr::NMiniKQL::TDataType&>(*info.Type).GetSchemeType();
-                keyColumnTypeInfos.emplace_back(NScheme::TTypeInfo((NScheme::TTypeId)dataTypeId));
+                NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(info.Type);
+                keyColumnTypeInfos.emplace_back(typeInfo);
                 keyColumnIndices.emplace_back(info.Index);
             }
 

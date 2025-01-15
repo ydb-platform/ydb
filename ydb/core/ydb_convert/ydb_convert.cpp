@@ -171,7 +171,6 @@ void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& 
             break;
         }
         case Ydb::Type::kDecimalType: {
-            // TODO: Decimal parameters
             output.SetKind(NKikimrMiniKQL::ETypeKind::Data);
             auto data = output.MutableData();
             data->SetScheme(NYql::NProto::TypeIds::Decimal);
@@ -1168,7 +1167,7 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
     return ok;
 }
 
-bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
+bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Value* vp,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool)
 {
     if (vp->Hasnull_flag_value()) {
@@ -1255,7 +1254,7 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         TString text = val.Gettext_value();
         if (!text.empty()) {
             isText = true;
-            auto desc = type.GetTypeDesc();
+            auto desc = type.GetPgTypeDesc();
             auto res = NPg::PgNativeBinaryFromNativeText(text, desc);
             if (res.Error) {
                 err = TStringBuilder() << "Invalid text value for "
@@ -1266,7 +1265,7 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         } else {
             binary = val.Getbytes_value();
         }
-        auto* desc = type.GetTypeDesc();
+        auto* desc = type.GetPgTypeDesc();
         if (typmod != -1 && NPg::TypeDescNeedsCoercion(desc)) {
             auto res = NPg::PgNativeBinaryCoerce(TStringBuf(binary), desc, typmod);
             if (res.Error) {

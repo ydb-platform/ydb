@@ -2283,43 +2283,42 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithDecimalColumn";
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(35,9),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(22,20),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(22,9),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
 
-        {
+        auto createAndCheck = [&](ui32 precision, ui32 scale) {
+            TString tableName = TStringBuilder() << "/Root/TableWithDecimalColumn" << precision << scale;
+            auto createQuery = TStringBuilder() << Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint64,
+                Value Decimal(%u,%u),
+                PRIMARY KEY (Key)
+            );)", tableName.c_str(), precision, scale);
+            auto createResult = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+
+            if (precision == 0) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 33) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal parameters");
+                return;
+            }
+            if (precision == 36) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 999) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), " Invalid decimal precision");
+                return;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues().ToString());
+
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
             auto tableDesc = describe.GetTableDescription();
             TVector<TTableColumn> columns = tableDesc.GetTableColumns();
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
@@ -2331,9 +2330,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto kind = parser.GetKind();
             UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
             TDecimalType decimalType = parser.GetDecimal();
-            UNIT_ASSERT_EQUAL(decimalType.Precision, 22);
-            UNIT_ASSERT_EQUAL(decimalType.Scale, 9);
-        }
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Precision, precision);
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
+        };
+
+        createAndCheck(0, 0);
+        createAndCheck(1, 0);
+        createAndCheck(2, 1);
+        createAndCheck(22, 9);
+        createAndCheck(35, 10);
+        createAndCheck(22, 20);
+        createAndCheck(33, 34);
+        createAndCheck(36, 35);
+        createAndCheck(999, 99);
     }
 
     void AlterTableAddIndex(EIndexTypeSql type) {
@@ -2646,55 +2655,79 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = TStringBuilder() << R"(
             CREATE TABLE `)" << tableName << R"(` (
                 Key Uint64,
-                Value1 String,
+                Value String,
                 PRIMARY KEY (Key)
             );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(35,9);
-            )";
+
+        auto addColumn = [&] (ui32 precision, ui32 scale) {
+            TString columnName = TStringBuilder() << "Column" << precision << scale;
+            auto query = TStringBuilder() << Sprintf(R"(
+            ALTER TABLE `%s`
+                 ADD COLUMN %s Decimal(%u,%u)
+            )", tableName.c_str(), columnName.c_str(), precision, scale);
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(22,20);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(22,9);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+
+            if (precision == 0) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 33) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal parameters");
+                return;
+            }
+            if (precision == 36) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 999) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), " Invalid decimal precision");
+                return;
+            }
+
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            auto tableDesc = describe.GetTableDescription();
-            TVector<TTableColumn> columns = tableDesc.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
-            TType valueType = columns[2].Type;
+        };
+
+        addColumn(0, 0);
+        addColumn(1, 0);
+        addColumn(2, 1);
+        addColumn(22, 9);
+        addColumn(35, 10);
+        addColumn(22, 20);
+        addColumn(33, 34);
+        addColumn(36, 35);
+        addColumn(999, 99);
+
+        TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
+        UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+        auto tableDesc = describe.GetTableDescription();
+        TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 7);
+
+        auto checkColumn = [&] (ui64 columnIdx, ui32 precision, ui32 scale) {
+            TType valueType = columns[columnIdx].Type;
             TTypeParser parser(valueType);
             auto optionalKind = parser.GetKind();
             UNIT_ASSERT_EQUAL(optionalKind, TTypeParser::ETypeKind::Optional);
             parser.OpenOptional();
             auto kind = parser.GetKind();
-            UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
+            UNIT_ASSERT_VALUES_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
             TDecimalType decimalType = parser.GetDecimal();
-            UNIT_ASSERT_EQUAL(decimalType.Precision, 22);
-            UNIT_ASSERT_EQUAL(decimalType.Scale, 9);
-        }
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Precision, precision);
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
+        };
+
+        checkColumn(0,22, 20);
+        checkColumn(3, 1, 0);
+        checkColumn(4, 2, 1);
+        checkColumn(5, 22,9);
+        checkColumn(6, 35, 10);
     }
 
     Y_UNIT_TEST(CreateUserWithPassword) {
@@ -7559,7 +7592,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Pg).SetTypeDesc(NPg::TypeDescFromPgTypeName("pgint4"))
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint4")})
         };
         TTestHelper::TColumnTableStore testTableStore;
 
@@ -7579,7 +7612,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
 
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Pg).SetTypeDesc(NPg::TypeDescFromPgTypeName("pgfloat4")));
+            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat4")}));
             auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `" << testTableStore.GetName() << "` ADD COLUMN new_column pgfloat4;";
 
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -8069,7 +8102,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::NTypeIds::Decimal).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::TDecimalType::Default()).SetNullable(false),
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8081,47 +8114,47 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             builder.BeginList();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(1)
-                .AddMember("dec").Decimal(TString("10.1"))
+                .AddMember("dec").Decimal(TDecimalValue("10.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(2)
-                .AddMember("dec").Decimal(TString("inf"))
+                .AddMember("dec").Decimal(TDecimalValue("inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(3)
-                .AddMember("dec").Decimal(TString("-inf"))
+                .AddMember("dec").Decimal(TDecimalValue("-inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(4)
-                .AddMember("dec").Decimal(TString("nan"))
+                .AddMember("dec").Decimal(TDecimalValue("nan", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(5)
-                .AddMember("dec").Decimal(TString("-nan"))
+                .AddMember("dec").Decimal(TDecimalValue("-nan", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(6)
-                .AddMember("dec").Decimal(TString("1.1"))
+                .AddMember("dec").Decimal(TDecimalValue("1.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(7)
-                .AddMember("dec").Decimal(TString("12.1"))
+                .AddMember("dec").Decimal(TDecimalValue("12.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(8)
-                .AddMember("dec").Decimal(TString("inf"))
+                .AddMember("dec").Decimal(TDecimalValue("inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(9)
-                .AddMember("dec").Decimal(TString("-inf"))
+                .AddMember("dec").Decimal(TDecimalValue("-inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(10)
-                .AddMember("dec").Decimal(TString("2.1"))
+                .AddMember("dec").Decimal(TDecimalValue("2.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(11)
-                .AddMember("dec").Decimal(TString("15.1"))
+                .AddMember("dec").Decimal(TDecimalValue("15.1", 22, 9))
             .EndStruct();
             builder.EndList();
             const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), builder.Build()).GetValueSync();
@@ -8141,6 +8174,86 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"-inf\"];[\"1.1\"];[\"2.1\"];[\"12.1\"];[\"15.1\"];[\"inf\"]]");
     }
 
+    Y_UNIT_TEST(Decimal35) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::TDecimalType(35, 10)).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "dec"}).SetSharding({"id", "dec"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TValueBuilder builder;
+            builder.BeginList();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(1)
+                .AddMember("dec").Decimal(TDecimalValue("1055555555555555.1", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(2)
+                .AddMember("dec").Decimal(TDecimalValue("inf", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(3)
+                .AddMember("dec").Decimal(TDecimalValue("-inf", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(4)
+                .AddMember("dec").Decimal(TDecimalValue("nan", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(5)
+                .AddMember("dec").Decimal(TDecimalValue("-nan", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(6)
+                .AddMember("dec").Decimal(TDecimalValue("155555555555555.1", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(7)
+                .AddMember("dec").Decimal(TDecimalValue("1255555555555555.1", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(8)
+                .AddMember("dec").Decimal(TDecimalValue("inf", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(9)
+                .AddMember("dec").Decimal(TDecimalValue("-inf", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(10)
+                .AddMember("dec").Decimal(TDecimalValue("255555555555555.1", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(11)
+                .AddMember("dec").Decimal(TDecimalValue("1555555555555555.1", 35, 10))
+            .EndStruct();
+            builder.EndList();
+            const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), builder.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess() , result.GetIssues().ToString());
+        }
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"1055555555555555.1\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"inf\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-inf\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=4", "[[\"nan\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=5", "[[\"-nan\"]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"1055555555555555.1\" As Decimal(35, 10))", "[[1]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"inf\" As Decimal(35, 10)) ORDER BY id", "[[2];[8]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-inf\" As Decimal(35, 10)) ORDER BY id", "[[3];[9]]");
+        // Nan cannot by find.
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"nan\" As Decimal(35, 10))", "[]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-nan\" As Decimal(35, 10))", "[]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"-inf\"];[\"155555555555555.1\"];[\"255555555555555.1\"];[\"1255555555555555.1\"];[\"1555555555555555.1\"];[\"inf\"]]");
+    }
+        
     Y_UNIT_TEST(DecimalCsv) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -8149,26 +8262,30 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::NTypeIds::Decimal).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::TDecimalType::Default()).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec35").SetType(NScheme::TDecimalType(35, 10)).SetNullable(false),
         };
 
         TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "dec"}).SetSharding({"id", "dec"}).SetSchema(schema);
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "dec", "dec35"}).SetSharding({"id", "dec", "dec35"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
 
         {
             TStringBuilder builder;
-            builder << "1, 10.1" << Endl;
-            builder << "6, 1.1" << Endl;
-            builder << "7, 12.1" << Endl;
-            builder << "10, 2" << Endl;
-            builder << "11, 15.1" << Endl;
+            builder << "1, 10.1, 1055555555555555.1" << Endl;
+            builder << "6, 1.1, 155555555555555.1" << Endl;
+            builder << "7, 12.1, 1255555555555555.1" << Endl;
+            builder << "10, 2, 255555555555555" << Endl;
+            builder << "11, 15.1, 1555555555555555.1" << Endl;
             const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), EDataFormat::CSV, builder).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess() , result.GetIssues().ToString());
         }
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"10.1\"]]");
         testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"10.1\" As Decimal(22,9))", "[[1]]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"1.1\"];[\"2\"];[\"12.1\"];[\"15.1\"]]");
+        testHelper.ReadData("SELECT dec35 FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"1055555555555555.1\"]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec35=CAST(\"1055555555555555.1\" As Decimal(35, 10))", "[[1]]");
+        testHelper.ReadData("SELECT dec35 FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec35", "[[\"155555555555555.1\"];[\"255555555555555\"];[\"1255555555555555.1\"];[\"1555555555555555.1\"]]");
     }
 
     Y_UNIT_TEST(TimestampCmpErr) {

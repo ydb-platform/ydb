@@ -88,7 +88,7 @@ struct TTxReadRow : public ITransaction {
         Attempts++;
 
         TVector<TRawTypeValue> rawKey;
-        rawKey.emplace_back(&Key, sizeof(Key), NScheme::TTypeInfo(NScheme::TInt64::TypeId));
+        rawKey.emplace_back(&Key, sizeof(Key), NScheme::TInt64::TypeId);
 
         TVector<NTable::TTag> tags;
         tags.push_back(KeyColumnId);

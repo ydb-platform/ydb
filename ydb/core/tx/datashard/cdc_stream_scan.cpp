@@ -1,6 +1,7 @@
 #include "cdc_stream_scan.h"
 #include "change_record_body_serializer.h"
 #include "datashard_impl.h"
+#include "stream_scan_common.h"
 
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -183,17 +184,6 @@ class TDataShard::TTxCdcStreamScanProgress
     TVector<IDataShardChangeCollector::TChange> ChangeRecords;
     bool Reschedule = false;
 
-    static TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, TUserTable::TCPtr table) {
-        TVector<TRawTypeValue> key(Reserve(cells.size()));
-
-        Y_ABORT_UNLESS(cells.size() == table->KeyColumnTypes.size());
-        for (TPos pos = 0; pos < cells.size(); ++pos) {
-            key.emplace_back(cells.at(pos).AsRef(), table->KeyColumnTypes.at(pos));
-        }
-
-        return key;
-    }
-
     static TVector<TUpdateOp> MakeUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TUserTable::TCPtr table) {
         TVector<TUpdateOp> updates(Reserve(cells.size()));
 
@@ -202,7 +192,7 @@ class TDataShard::TTxCdcStreamScanProgress
             const auto tag = tags.at(pos);
             auto it = table->Columns.find(tag);
             Y_ABORT_UNLESS(it != table->Columns.end());
-            updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type));
+            updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type.GetTypeId()));
         }
 
         return updates;
@@ -286,7 +276,7 @@ public:
         bool pageFault = false;
 
         for (const auto& [k, v] : ev.Rows) {
-            const auto key = MakeKey(k.GetCells(), table);
+            const auto key = NStreamScan::MakeKey(k.GetCells(), table->KeyColumnTypes);
             const auto& keyTags = table->KeyColumnIds;
 
             TRowState row(0);

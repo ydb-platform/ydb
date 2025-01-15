@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         }
     }
 
-    void TestS3GenericListingRequest(const TVector<TString>& prefixColumns, const TString& pathPrefix, const TString& pathDelimiter,
+    Ydb::ObjectStorage::ListingResponse TestS3GenericListingRequest(const TVector<TString>& prefixColumns, const TString& pathPrefix, const TString& pathDelimiter,
                     const TVector<TString>& startAfterSuffixColumns,
                     const TVector<TString>& columnsToReturn, ui32 maxKeys,
                     Ydb::StatusIds_StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
@@ -598,9 +598,10 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         } else {
             UNIT_ASSERT_VALUES_EQUAL(response.issues().size(), 0);
         }
+        return response;
     }
 
-    void TestS3ListingRequest(const TVector<TString>& prefixColumns, 
+    Ydb::ObjectStorage::ListingResponse TestS3ListingRequest(const TVector<TString>& prefixColumns, 
                     const TString& pathPrefix, const TString& pathDelimiter,
                     const TString& startAfter, const TVector<TString>& columnsToReturn, ui32 maxKeys,
                     Ydb::StatusIds_StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
@@ -610,7 +611,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         if (!startAfter.empty()) {
             startAfterSuffix.push_back(startAfter);
         }
-        TestS3GenericListingRequest(prefixColumns, pathPrefix, pathDelimiter,
+        return TestS3GenericListingRequest(prefixColumns, pathPrefix, pathDelimiter,
                                            startAfterSuffix,
                                            columnsToReturn, maxKeys,
                                            expectedStatus, expectedErrMessage);
@@ -972,6 +973,74 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
             UNIT_ASSERT_VALUES_EQUAL(expectedFiles, files);
         }
     }
+
+    Y_UNIT_TEST(Decimal) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableParameterizedDecimal(true);
+        TServerSettings serverSettings(port);
+        serverSettings.SetFeatureFlags(featureFlags);
+        TServer cleverServer = TServer(serverSettings);
+        GRPC_PORT = pm.GetPort(2135);
+        cleverServer.EnableGRpc(GRPC_PORT);
+
+        TFlatMsgBusClient annoyingClient(port);
+        annoyingClient.InitRoot();
+        annoyingClient.MkDir("/dc-1", "Dir");
+        annoyingClient.CreateTable("/dc-1/Dir",
+            R"_(Name: "Table"
+                Columns { Name: "Hash"      Type: "Uint64"}
+                Columns { Name: "Name"      Type: "Utf8"}
+                Columns { Name: "Path"      Type: "Utf8"}
+                Columns { Name: "Version"   Type: "Uint64"}
+                Columns { Name: "DecimalData" Type: "Decimal"}
+                Columns { Name: "Decimal35Data" Type: "Decimal(35,10)"}
+                KeyColumnNames: [
+                    "Hash",
+                    "Name",
+                    "Path",
+                    "Version"
+                    ]
+            )_");
+
+        TString insertRowQuery =  R"(
+                    (
+                    (let key '(
+                        '('Hash (Uint64 '%llu))
+                        '('Name (Utf8 '"%s"))
+                        '('Path (Utf8 '"%s"))
+                        '('Version (Uint64 '%llu))
+                    ))
+                    (let value '(
+                        '('DecimalData (Decimal '"%s" '22 '9))
+                        '('Decimal35Data (Decimal '"%s" '35 '10))
+                    ))
+                    (let ret_ (AsList
+                        (UpdateRow '/dc-1/Dir/%s key value)
+                    ))
+                    (return ret_)
+                    )
+                )";
+
+        annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), 100, "Bucket100", "/Path1", 1, "123.321", "355555555555555.123456789", "Table" ));
+
+        Ydb::ObjectStorage::ListingResponse response = TestS3ListingRequest({"100", "Bucket100"}, "/", "/", "", {"DecimalData", "Decimal35Data"}, 10,
+            Ydb::StatusIds::SUCCESS,
+            "");
+
+        Ydb::ResultSet resultSet = response.contents();
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns_size(), 4);
+        UNIT_ASSERT_STRINGS_EQUAL(resultSet.columns(2).name(), "Decimal35Data");
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns(2).type().optional_type().item().decimal_type().precision(), 35);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns(2).type().optional_type().item().decimal_type().scale(), 10);
+        UNIT_ASSERT_STRINGS_EQUAL(resultSet.columns(3).name(), "DecimalData");
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns(3).type().optional_type().item().decimal_type().precision(), 22);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns(3).type().optional_type().item().decimal_type().scale(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(2).low_128(), 975580256289238738);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(2).high_128(), 192747);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(3).low_128(), 123321000000);
+    }    
 }
 
 }}

@@ -505,6 +505,21 @@ TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const
     };
 }
 
+TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT(record.HasPathDescription());
+        NKikimrSchemeOp::TPathDescription descr = record.GetPathDescription();
+
+        UNIT_ASSERT(descr.HasTable());
+        NKikimrSchemeOp::TTableDescription table = descr.GetTable();
+        UNIT_ASSERT(table.ColumnsSize());
+
+        const auto& col = table.GetColumns(columnIndex);
+        UNIT_ASSERT_VALUES_EQUAL(col.GetType(), columnTypename);
+    };
+}
+
+
 void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult &record) {
     const NKikimrSchemeOp::TPathDescription& descr = record.GetPathDescription();
     THashMap<ui32, NScheme::TTypeInfo> colTypes;

@@ -116,7 +116,7 @@ bool CellFromTuple(NScheme::TTypeInfo type,
         if (tupleValue.Hasbytes_value()) {
             c = TCell(tupleValue.Getbytes_value().data(), tupleValue.Getbytes_value().size());
         } else if (tupleValue.Hastext_value()) {
-            auto typeDesc = type.GetTypeDesc();
+            auto typeDesc = type.GetPgTypeDesc();
             auto convert = NPg::PgNativeBinaryFromNativeText(tupleValue.Gettext_value(), NPg::PgTypeIdFromTypeDesc(typeDesc));
             if (convert.Error) {
                 CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg: %s in tuple at position %" PRIu32, convert.Error->data(), position));
@@ -828,16 +828,23 @@ private:
 
     void FillResultRows(Ydb::ResultSet &resultSet, TVector<TSysTables::TTableColumnInfo> &columns, TVector<TSerializedCellVec> resultRows) {
         const auto getPgTypeFromColMeta = [](const auto &colMeta) {
-            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.PType.GetTypeDesc()),
+            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.PType.GetPgTypeDesc()),
                                  colMeta.PTypeMod);
         };
 
         const auto getTypeFromColMeta = [&](const auto &colMeta) {
-            if (colMeta.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+            const NScheme::TTypeInfo& typeInfo = colMeta.PType;
+            switch (typeInfo.GetTypeId()) {
+            case NScheme::NTypeIds::Pg:
                 return NYdb::TTypeBuilder().Pg(getPgTypeFromColMeta(colMeta)).Build();
-            } else {
+            case NScheme::NTypeIds::Decimal:
+                return NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(
+                        typeInfo.GetDecimalType().GetPrecision(), 
+                        typeInfo.GetDecimalType().GetScale()))
+                    .Build();
+            default:
                 return NYdb::TTypeBuilder()
-                    .Primitive((NYdb::EPrimitiveType)colMeta.PType.GetTypeId())
+                    .Primitive((NYdb::EPrimitiveType)typeInfo.GetTypeId())
                     .Build();
             }
         };
@@ -859,14 +866,23 @@ private:
                 const auto& cell = row.GetCells()[i];
                 vb.AddMember(colMeta.Name);
                 if (colMeta.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.PType.GetTypeDesc());
+                    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.PType.GetPgTypeDesc());
                     if (pgResult.Error) {
                         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "PgNativeTextFromNativeBinary error " << *pgResult.Error);
                     }
                     const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
                     vb.Pg(pgValue);
-                }
-                else {
+                } else if (colMeta.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
+                    using namespace NYql::NDecimal;
+
+                    const auto loHi = cell.AsValue<std::pair<ui64, i64>>();
+                    Ydb::Value valueProto;
+                    valueProto.set_low_128(loHi.first);
+                    valueProto.set_high_128(loHi.second);
+                    const NYdb::TDecimalValue decimal(valueProto, 
+                        {static_cast<ui8>(colMeta.PType.GetDecimalType().GetPrecision()), static_cast<ui8>(colMeta.PType.GetDecimalType().GetScale())});
+                    vb.Decimal(decimal);
+                } else {
                     const NScheme::TTypeInfo& typeInfo = colMeta.PType;
 
                     if (cell.IsNull()) {

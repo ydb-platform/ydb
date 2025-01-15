@@ -444,8 +444,7 @@ void TUserTable::DoApplyCreate(
         const TUserColumn& column = col.second;
 
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-        ui32 pgTypeId = columnType.TypeInfo ? columnType.TypeInfo->GetPgTypeId() : 0;
-        alter.AddPgColumn(tid, column.Name, columnId, columnType.TypeId, pgTypeId, column.TypeMod, column.NotNull);
+        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull);
         alter.AddColumnToFamily(tid, columnId, column.Family);
     }
 
@@ -548,8 +547,7 @@ void TUserTable::ApplyAlter(
         if (!oldTable.Columns.contains(colId)) {
             for (ui32 tid : tids) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                ui32 pgTypeId = columnType.TypeInfo ? columnType.TypeInfo->GetPgTypeId() : 0;
-                alter.AddPgColumn(tid, column.Name, colId, columnType.TypeId, pgTypeId, column.TypeMod, column.NotNull);
+                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull);
             }
         }
 

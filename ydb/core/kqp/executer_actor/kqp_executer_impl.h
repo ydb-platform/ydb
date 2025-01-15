@@ -402,20 +402,22 @@ protected:
 
         YQL_ENSURE(Stats);
 
-        if (state.HasStats() && Request.ProgressStatsPeriod) {
+        if (state.HasStats()) {
             Stats->UpdateTaskStats(taskId, state.GetStats());
-            auto now = TInstant::Now();
-            if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
-                auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
-                auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
-                Stats->ExportExecStats(execStats);
-                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
-                    const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
-                    execStats.AddTxPlansWithStats(planWithStats);
+            if (Request.ProgressStatsPeriod) {
+                auto now = TInstant::Now();
+                if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
+                    auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
+                    auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
+                    Stats->ExportExecStats(execStats);
+                    for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                        const auto& tx = Request.Transactions[txId].Body;
+                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                        execStats.AddTxPlansWithStats(planWithStats);
+                    }
+                    this->Send(Target, progress.Release());
+                    LastProgressStats = now;
                 }
-                this->Send(Target, progress.Release());
-                LastProgressStats = now;
             }
         }
 
@@ -969,7 +971,7 @@ protected:
                 settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);
             }
             if (!settings.GetInconsistentTx() && TasksGraph.GetMeta().LockMode) {
-                settings.SetLockMode(*TasksGraph.GetMeta().LockMode);   
+                settings.SetLockMode(*TasksGraph.GetMeta().LockMode);
             }
 
             output.SinkSettings.ConstructInPlace();

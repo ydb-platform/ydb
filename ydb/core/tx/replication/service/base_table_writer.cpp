@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/set.h>
@@ -447,14 +448,19 @@ class TLocalTableWriter
 
                 if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
                     record->RewriteTxId(it->second);
+                    if (PendingTxId.empty()) {
+                        records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
+                    } else {
+                        BlockedRecords.insert(record->GetOrder());
+                    }
                 } else {
                     versionsWithoutTxId.insert(version);
-                    PendingTxId[version].push_back(std::move(record));
-                    continue;
+                    PendingTxId.insert(record->GetOrder());
                 }
+            } else {
+                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
             }
 
-            records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
             Y_ABORT_UNLESS(PendingRecords.emplace(record->GetOrder(), std::move(record)).second);
         }
 
@@ -485,18 +491,55 @@ class TLocalTableWriter
             const auto version = TRowVersion::FromProto(kv.GetVersion());
             TxIds.emplace(version, kv.GetTxId());
 
-            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
-                if (it->first >= version) {
-                    break;
+            auto pendingIt = PendingTxId.begin();
+            auto blockedIt = BlockedRecords.begin();
+
+            auto processPending = [this, &records, &version, txId = kv.GetTxId()](auto& it) -> bool {
+                Y_ABORT_UNLESS(PendingRecords.contains(*it));
+                auto& record = PendingRecords.at(*it);
+
+                if (TRowVersion(record->GetStep(), record->GetTxId()) >= version) {
+                    return false;
                 }
 
-                for (auto& record : it->second) {
-                    record->RewriteTxId(kv.GetTxId());
-                    records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
-                    Y_ABORT_UNLESS(PendingRecords.emplace(record->GetOrder(), std::move(record)).second);
-                }
+                record->RewriteTxId(txId);
+                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
 
-                PendingTxId.erase(it++);
+                it = PendingTxId.erase(it);
+                return true;
+            };
+
+            auto processBlocked = [this, &records](auto& it) {
+                Y_ABORT_UNLESS(PendingRecords.contains(*it));
+                auto& record = PendingRecords.at(*it);
+
+                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
+
+                it = BlockedRecords.erase(it);
+            };
+
+            while (pendingIt != PendingTxId.end() && blockedIt != BlockedRecords.end()) {
+                if (*pendingIt < *blockedIt) {
+                    if (!processPending(pendingIt)) {
+                        break;
+                    }
+                } else {
+                    processBlocked(blockedIt);
+                }
+            }
+
+            if (blockedIt == BlockedRecords.end()) {
+                for (; pendingIt != PendingTxId.end();) {
+                    if (!processPending(pendingIt)) {
+                        break;
+                    }
+                }
+            }
+
+            if (pendingIt == PendingTxId.end()) {
+                for (; blockedIt != BlockedRecords.end();) {
+                    processBlocked(blockedIt);
+                }
             }
         }
 
@@ -624,9 +667,10 @@ private:
     bool Resolving = false;
     bool Initialized = false;
 
-    TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
+    THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
     TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
-    TMap<TRowVersion, TVector<NChangeExchange::IChangeRecord::TPtr>> PendingTxId;
+    TSet<ui64> PendingTxId;
+    TSet<ui64> BlockedRecords;
     TRowVersion PendingHeartbeat = TRowVersion::Min();
 
 }; // TLocalTableWriter

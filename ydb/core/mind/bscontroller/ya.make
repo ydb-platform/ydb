@@ -45,6 +45,7 @@ SRCS(
     resources.h
     scheme.h
     scrub.cpp
+    shred.cpp
     select_groups.cpp
     select_groups.h
     self_heal.cpp

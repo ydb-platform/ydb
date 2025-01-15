@@ -183,6 +183,12 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             while not all(f.done() for f in insert_futures):
                 check_data()
 
+        # Delete all records with l_suppkey = 9999
+        delete_query = f"""
+        DELETE FROM `{lineitem_table}` WHERE l_suppkey = 9999;
+        """
+        self.query(delete_query)
+
         # Use ThreadPoolExecutor to manage threads
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads+1) as executor:
             # Start insert and delete operations

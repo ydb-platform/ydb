@@ -1552,6 +1552,7 @@ struct Schema : NIceDb::Schema {
         struct DstPathLocalId : Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct Scheme : Column<6, NScheme::NTypeIds::String> {};
         struct Permissions : Column<11, NScheme::NTypeIds::String> {};
+        struct Metadata : Column<12, NScheme::NTypeIds::String> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1567,6 +1568,7 @@ struct Schema : NIceDb::Schema {
             DstPathLocalId,
             Scheme,
             Permissions,
+            Metadata,
             State,
             WaitTxId,
             NextIndexIdx,
@@ -1634,6 +1636,7 @@ struct Schema : NIceDb::Schema {
         struct LastSuccessfulAttempt : Column<4, NScheme::NTypeIds::Timestamp> {};
         struct LastFailedAttempt : Column<5, NScheme::NTypeIds::Timestamp> {};
         struct FailedAttemptCount : Column<6, NScheme::NTypeIds::Uint32> {using Type = ui32; static constexpr Type Default = 0;};
+        struct CreatedAt : Column<7, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<SidName>;
         using TColumns = TableColumns<
@@ -1642,7 +1645,8 @@ struct Schema : NIceDb::Schema {
             SidHash,
             LastSuccessfulAttempt,
             LastFailedAttempt,
-            FailedAttemptCount
+            FailedAttemptCount,
+            CreatedAt
         >;
     };
 

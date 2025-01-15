@@ -1737,7 +1737,7 @@ bool TTcpConnection::IsSocketError(ssize_t result)
 
 void TTcpConnection::CloseSocket()
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
     if (Socket_ != INVALID_SOCKET) {
         NNet::CloseSocket(Socket_);
@@ -1747,7 +1747,7 @@ void TTcpConnection::CloseSocket()
 
 void TTcpConnection::ArmPoller()
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
     YT_VERIFY(Socket_ != INVALID_SOCKET);
 
     Poller_->Arm(Socket_, this, EPollControl::Read | EPollControl::Write | EPollControl::EdgeTriggered);
@@ -1755,7 +1755,7 @@ void TTcpConnection::ArmPoller()
 
 void TTcpConnection::UnarmPoller()
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
     if (Socket_ != INVALID_SOCKET) {
         Poller_->Unarm(Socket_, this);
@@ -1786,7 +1786,7 @@ void TTcpConnection::InitSocketTosLevel(TTosLevel tosLevel)
 
 void TTcpConnection::FlushStatistics()
 {
-    VERIFY_SPINLOCK_AFFINITY(Lock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
     UpdateTcpStatistics();
     FlushBusStatistics();
 }

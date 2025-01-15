@@ -69,7 +69,7 @@ public:
         const auto result = PHINode::Create(statusType, 3U, "result", over);
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
 
-        BranchInst::Create(over, work, IsFinish(statePtr, block), block);
+        BranchInst::Create(over, work, IsFinish(statePtr, block, context), block);
 
         block = work;
 
@@ -350,7 +350,7 @@ public:
         const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));

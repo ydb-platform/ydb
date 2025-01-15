@@ -2,6 +2,8 @@
 
 #include <util/system/compiler.h>
 
+#include <stdlib.h>
+
 namespace NKikimr {
 
 TCountMinSketch* TCountMinSketch::Create(ui64 width, ui64 depth) {

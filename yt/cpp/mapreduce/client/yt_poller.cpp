@@ -92,14 +92,14 @@ void TYtPoller::WatchLoop()
             Y_ABORT_UNLESS(!InProgress_.empty());
         }
 
-        TRawBatchRequest rawBatchRequest(Context_.Config);
+        THttpRawBatchRequest rawBatchRequest(Context_.Config);
 
         for (auto& item : InProgress_) {
             item->PrepareRequest(&rawBatchRequest);
         }
 
         try {
-            ExecuteBatch(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, rawBatchRequest);
+            rawBatchRequest.ExecuteBatch(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_);
         } catch (const std::exception& ex) {
             YT_LOG_ERROR("Exception while executing batch request: %v", ex.what());
         }

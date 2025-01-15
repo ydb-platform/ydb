@@ -956,7 +956,7 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::PushStaticGroupsToSelfHeal() {
         if (!SelfHealId || !StorageConfigObtained || !StorageConfig.HasBlobStorageConfig() ||
-                !StorageConfig.HasSelfManagementConfig() || !StorageConfig.GetSelfManagementConfig().GetEnabled()) {
+                !StorageConfig.GetSelfManagementConfig().GetEnabled()) {
             return;
         }
 

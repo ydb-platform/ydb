@@ -3883,6 +3883,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 sid.SetName(rowset.GetValue<Schema::LoginSids::SidName>());
                 sid.SetType(rowset.GetValue<Schema::LoginSids::SidType>());
                 sid.SetHash(rowset.GetValue<Schema::LoginSids::SidHash>());
+                sid.SetCreatedAt(rowset.GetValueOrDefault<Schema::LoginSids::CreatedAt>());
+                sid.SetLastSuccessfulLogin(rowset.GetValue<Schema::LoginSids::LastSuccessfulAttempt>());
                 sidIndex[sid.name()] = securityState.SidsSize() - 1;
                 if (!rowset.Next()) {
                     return false;
@@ -4431,6 +4433,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Ydb::Scheme::ModifyPermissionsRequest permissions;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(permissions, rowset.GetValue<Schema::ImportItems::Permissions>()));
                         item.Permissions = permissions;
+                    }
+
+                    if (rowset.HaveValue<Schema::ImportItems::Metadata>()) {
+                        item.Metadata = NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
                     }
 
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());

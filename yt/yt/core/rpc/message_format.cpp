@@ -77,7 +77,7 @@ public:
         {
             google::protobuf::io::StringOutputStream output(&protoBuffer);
             auto converter = CreateProtobufWriter(&output, messageType);
-            // NB: formatOptionsYson is ignored, since YSON parser has no user-defined options.
+            // NB: FormatOptionsYson is ignored, since YSON parser has no user-defined options.
             ParseYsonStringBuffer(TStringBuf(message.Begin(), message.End()), EYsonType::Node, converter.get());
         }
         return TSharedRef::FromString(FromProto<TString>(protoBuffer));

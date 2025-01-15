@@ -1,5 +1,4 @@
 #include "arithmetic_formula.h"
-#include "phoenix.h"
 
 #include <yt/yt/core/misc/error.h>
 

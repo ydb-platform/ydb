@@ -630,10 +630,12 @@ protected:
                     case INFLIGTH_CHECK:
                         if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
                             // Allow only one message to be processed at a time for non-authenticated users
+                            KAFKA_LOG_ERROR("DoRead: failed inflight check: there are " << PendingRequestsQueue.size() << " pending requests and user is not authnicated.  Only one paraller request is allowed for a non-authenticated user.");
                             return true;
                         }
                         if (InflightSize + Request->ExpectedSize > Context->Config.GetMaxInflightSize()) {
                             // We limit the size of processed messages so as not to exceed the size of available memory
+                            KAFKA_LOG_ERROR("DoRead: failed inflight check: InflightSize + Request->ExpectedSize=" << InflightSize + Request->ExpectedSize << " > Context->Config.GetMaxInflightSize=" << Context->Config.GetMaxInflightSize());
                             return true;
                         }
                         InflightSize += Request->ExpectedSize;
@@ -716,12 +718,9 @@ protected:
     }
 
     bool RequireAuthentication(EApiKey apiKey) {
-        bool configuredToAuthenticate = NKikimr::AppData()->EnforceUserTokenRequirement;
-        bool apiKeyRequiresAuthentication = !(EApiKey::API_VERSIONS == apiKey ||
-                                              EApiKey::SASL_HANDSHAKE == apiKey ||
-                                              EApiKey::SASL_AUTHENTICATE == apiKey);
-
-        return configuredToAuthenticate && apiKeyRequiresAuthentication;
+        return !(EApiKey::API_VERSIONS == apiKey || 
+                EApiKey::SASL_HANDSHAKE == apiKey || 
+                EApiKey::SASL_AUTHENTICATE == apiKey);
     }
 
 

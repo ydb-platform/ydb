@@ -159,7 +159,8 @@ private:
     };
 
     virtual bool IsTxBroken() const override {
-        return TxBroken.value_or(false);
+        AFL_VERIFY(TxBroken);
+        return *TxBroken;
     }
 
     void InitializeRequests(TColumnShard& owner) {

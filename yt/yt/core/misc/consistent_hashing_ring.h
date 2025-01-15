@@ -4,7 +4,7 @@
 
 #include "mpl.h"
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <variant>
 
@@ -33,7 +33,7 @@ namespace NYT {
        h(s, i) -> ui64
        h(f, i) -> ui64
      where i is an int, and h, s and f are instances of H, S and F, respectively.
-     (NB: care should be taken to avoid serial hash collisions. That is, if
+     (NB: Care should be taken to avoid serial hash collisions. That is, if
        h(s1, 0) == h(s2, 0) it should be likely that h(s1, 1) != h(s2, 1).
      This is the reason why a hasher is called with both and object to hash and
      an additional sequence number.)

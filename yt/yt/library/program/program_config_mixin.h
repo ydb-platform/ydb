@@ -50,16 +50,35 @@ protected:
             .AddLongOption(
                 Format("%v-template", argumentName),
                 Format("Prints %v template and exit", argumentName))
+            .OptionalArgument()
             .SetFlag(&ConfigTemplateFlag_);
         opts
             .AddLongOption(
                 Format("%v-actual", argumentName),
                 Format("Prints actual %v and exit", argumentName))
+            .OptionalArgument()
             .SetFlag(&ConfigActualFlag_);
         opts
             .AddLongOption(
+                Format("%v-unrecognized", argumentName),
+                Format("Prints unrecognized %v and exit", argumentName))
+            .OptionalArgument()
+            .SetFlag(&ConfigUnrecognizedFlag_);
+
+        TStringBuilder unrecognizedStrategies;
+        for (const auto& strategy: TEnumTraits<NYTree::EUnrecognizedStrategy>::GetDomainNames()) {
+            if (unrecognizedStrategies.GetLength()) {
+                unrecognizedStrategies.AppendString(", ");
+            }
+            unrecognizedStrategies.AppendString(CamelCaseToUnderscoreCase(strategy));
+        }
+        opts
+            .AddLongOption(
                 Format("%v-unrecognized-strategy", argumentName),
-                Format("Configures strategy for unrecognized attributes in %v", argumentName))
+                Format("Configures strategy for unrecognized attributes in %v, variants: %v",
+                    argumentName,
+                    unrecognizedStrategies.Flush()))
+            .DefaultValue(FormatEnum(UnrecognizedStrategy_))
             .Handler1T<TStringBuf>([&] (TStringBuf value) {
                 UnrecognizedStrategy_ = ParseEnum<NYTree::EUnrecognizedStrategy>(value);
             });
@@ -76,6 +95,7 @@ protected:
                 .AddLongOption(
                     Format("dynamic-%v-template", argumentName),
                     Format("Prints dynamic %v template", argumentName))
+                .OptionalArgument()
                 .SetFlag(&DynamicConfigTemplateFlag_);
         }
 
@@ -115,6 +135,7 @@ private:
     TString ConfigSchema_;
     bool ConfigTemplateFlag_;
     bool ConfigActualFlag_;
+    bool ConfigUnrecognizedFlag_;
     bool DynamicConfigSchemaFlag_ = false;
     TString DynamicConfigSchema_;
     bool DynamicConfigTemplateFlag_ = false;
@@ -168,7 +189,14 @@ private:
             using namespace NYson;
             TYsonWriter writer(&Cout, EYsonFormat::Pretty);
             config->Save(&writer);
-            Cout << Flush;
+            Cout << Endl;
+        };
+
+        auto printNode = [] (const auto& node) {
+            using namespace NYson;
+            TYsonWriter writer(&Cout, EYsonFormat::Pretty);
+            NYTree::Serialize(node, &writer);
+            Cout << Endl;
         };
 
         auto printSchema = [] (const auto& config, TString format) {
@@ -194,6 +222,12 @@ private:
 
         if (ConfigActualFlag_) {
             print(GetConfig());
+            Exit(EProcessExitCode::OK);
+        }
+
+        if (ConfigUnrecognizedFlag_) {
+            auto unrecognized = GetConfig()->GetRecursiveUnrecognized();
+            printNode(*unrecognized);
             Exit(EProcessExitCode::OK);
         }
 

@@ -140,7 +140,7 @@ public:
             const auto reset = GetNodeValue(Switch, ctx, block);
             if constexpr (Interruptable) {
                 const auto next = BasicBlock::Create(context, "next", ctx.Func);
-                BranchInst::Create(stop, next, IsEmpty(reset, block), block);
+                BranchInst::Create(stop, next, IsEmpty(reset, block, context), block);
                 block = next;
             }
 
@@ -362,7 +362,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -460,7 +459,7 @@ private:
             block = swap;
 
             new StoreInst(ConstantInt::get(state->getType(), static_cast<ui8>(ESqueezeState::NeedInit)), statePtr, block);
-            SafeUnRefUnboxed(valuePtr, ctx, block);
+            SafeUnRefUnboxedOne(valuePtr, ctx, block);
             const auto state = codegenStateArg->CreateGetValue(ctx, block);
             new StoreInst(state, valuePtr, block);
             ValueAddRef(State.State->GetRepresentation(), valuePtr, ctx, block);
@@ -474,7 +473,7 @@ private:
 
         block = stop;
         new StoreInst(ConstantInt::get(state->getType(), static_cast<ui8>(ESqueezeState::Finished)), statePtr, block);
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
         const auto result = codegenStateArg->CreateGetValue(ctx, block);
         new StoreInst(result, valuePtr, block);
         ValueAddRef(State.State->GetRepresentation(), valuePtr, ctx, block);

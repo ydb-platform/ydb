@@ -24,10 +24,10 @@ public:
     }
 
     NUdf::TUnboxedValue GetOtherMatchRow(
-        TComputationContext& ctx,
-        const TSparseList& rows,
-        const NUdf::TUnboxedValue& partitionKey,
-        const TNfaTransitionGraph& graph) override {
+        TComputationContext& /* ctx */,
+        const TSparseList& /* rows */,
+        const NUdf::TUnboxedValue& /* partitionKey */,
+        const TNfaTransitionGraph& /* graph */) override {
         return NUdf::TUnboxedValue{};
     }
 
@@ -140,7 +140,7 @@ TOutputColumnOrder IRowsFormatter::GetOutputColumnOrder(
     return result;
 }
 
-NUdf::TUnboxedValue IRowsFormatter::DoGetMatchRow(TComputationContext& ctx, const TSparseList& rows, const NUdf::TUnboxedValue& partitionKey, const TNfaTransitionGraph& graph) {
+NUdf::TUnboxedValue IRowsFormatter::DoGetMatchRow(TComputationContext& ctx, const TSparseList& rows, const NUdf::TUnboxedValue& partitionKey, const TNfaTransitionGraph& /* graph */) {
     NUdf::TUnboxedValue *itemsPtr = nullptr;
     const auto result = State_.Cache->NewArray(ctx, State_.OutputColumnOrder.size(), itemsPtr);
     for (const auto& columnEntry: State_.OutputColumnOrder) {

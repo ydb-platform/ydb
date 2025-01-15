@@ -228,7 +228,7 @@ TStructuredJobTableList ApplyProtobufColumnFilters(
         CreateDefaultRequestRetryPolicy(preparer.GetContext().Config),
         preparer.GetContext(),
         tableList,
-        [&] (NRawClient::TRawBatchRequest& batch, const auto& table) {
+        [&] (NRawClient::THttpRawBatchRequest& batch, const auto& table) {
             return batch.Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
         });
 
@@ -358,7 +358,7 @@ TString GetJobStderrWithRetriesAndIgnoreErrors(
         jobStderr = RequestWithRetry<TString>(
             retryPolicy,
             [&rawClient, &operationId, &jobId, &options] (TMutationId /*mutationId*/) {
-                return rawClient->GetJobStderrWithRetries(operationId, jobId, options);
+                return rawClient->GetJobStderr(operationId, jobId, options)->ReadAll();
             });
     } catch (const TErrorResponse& e) {
         YT_LOG_ERROR("Cannot get job stderr (OperationId: %v, JobId: %v, Error: %v)",
@@ -2343,7 +2343,7 @@ public:
         : OperationImpl_(std::move(operationImpl))
     { }
 
-    void PrepareRequest(NRawClient::TRawBatchRequest* batchRequest) override
+    void PrepareRequest(NRawClient::THttpRawBatchRequest* batchRequest) override
     {
         auto filter = TOperationAttributeFilter()
             .Add(EOperationAttribute::State)

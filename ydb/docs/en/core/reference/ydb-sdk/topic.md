@@ -1466,7 +1466,7 @@ If a commit fails with an error, the application should log it and continue; it 
      reader.commit(batch)
    ```
 
-   The `commit` call is fast, saving data into an internal buffer and returning. The real message to the server is sent in the background. To prevent losing last commits, you should call the `Reader.Close()` method before exiting the program.
+   The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
 
 - Java (sync)
 

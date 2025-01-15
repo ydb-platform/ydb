@@ -1035,11 +1035,8 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
     if (response.PQGroupInfo) {
         const auto& pqDescr = response.PQGroupInfo->Description;
-        const auto& pqConfig = AppData(ActorContext())->PQConfig;
         NYql::TIssue issue;
-        FillTopicDescription(Result, pqDescr, pqConfig, response.Self->Info, GetCdcStreamName(),
-        AppData(TActivationContext::ActorContextFor(SelfId()))->FeatureFlags.GetEnableTopicSplitMerge(),
-         issue, ActorContext(), Settings.Consumer,GetProtoRequest()->include_stats(), GetProtoRequest()->include_location());
+        FillTopicDescription(Result, pqDescr, response.Self->Info, GetCdcStreamName());
 
         switch (issue.GetCode()) {
         case Ydb::StatusIds::INTERNAL_ERROR:
@@ -1050,8 +1047,30 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         default:
             break;
         }
+        const auto &config = pqDescr.GetPQTabletConfig();
+        auto consumerName = NPersQueue::ConvertNewConsumerName(Settings.Consumer, ActorContext());
+        bool found = false;
+        for (const auto& consumer : config.GetConsumers()) {
+            if (consumerName == consumer.GetName()) {
+                 found = true;
+            }
+            auto rr = Result.add_consumers();
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!FillConsumer(*rr, consumer, status, error)) {
+                return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
+            }
+        }
 
         if (GetProtoRequest()->include_stats() || GetProtoRequest()->include_location()) {
+            if (Settings.Consumer && !found) {
+                Request_->RaiseIssue(FillIssue(
+                        TStringBuilder() << "no consumer '" << Settings.Consumer << "' in topic",
+                        Ydb::PersQueue::ErrorCode::BAD_REQUEST
+                ));
+                return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
+            }
+
             ProcessTablets(pqDescr, ActorContext());
             return;
         }
@@ -1103,7 +1122,7 @@ void TDescribeConsumerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::
             auto rr = Result.mutable_consumer();
             Ydb::StatusIds::StatusCode status;
             TString error;
-            if (!FillConsumer(rr, consumer, ActorContext(), status, error)) {
+            if (!FillConsumer(*rr, consumer, status, error)) {
                 return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
             }
             break;

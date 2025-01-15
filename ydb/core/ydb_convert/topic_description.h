@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/pqconfig.pb.h>
+#include <util/generic/fwd.h>
 
 namespace Ydb {
     namespace Topic {
@@ -24,14 +24,15 @@ namespace NActors {
     struct TActorContext;
 }
 
+namespace NKikimrPQ {
+    class TPQTabletConfig_TConsumer;
+    class TPQConfig;
+}
+
 namespace NKikimr {
 
-bool FillConsumer(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
-    Ydb::StatusIds_StatusCode& status, TString& error);
-bool FillConsumer(Ydb::Topic::Consumer* rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
-    const NActors::TActorContext& ctx, Ydb::StatusIds_StatusCode& status, TString& error);
-bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in, const NKikimrPQ::TPQConfig& pqConfig,
-    const NKikimrSchemeOp::TDirEntry &fromDirEntry, const TMaybe<TString>& cdcName,
-    bool EnableTopicSplitMerge, NYql::TIssue& issue, const NActors::TActorContext& ctx, const TString& consumer, bool includeStats, bool includeLocation);
+bool FillConsumer(Ydb::Topic::Consumer& rr, const NKikimrPQ::TPQTabletConfig_TConsumer& consumer, Ydb::StatusIds_StatusCode& status, TString& error);
+void FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in,
+    const NKikimrSchemeOp::TDirEntry &fromDirEntry, const TMaybe<TString>& cdcName);
 
 } // namespace NKikimr

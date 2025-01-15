@@ -14,21 +14,21 @@
 
 namespace NKikimr {
 
-bool FillConsumer(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
-    const TString& consumerName,
-    const NKikimrPQ::TPQConfig& pqConfig,
+bool FillConsumer(Ydb::Topic::Consumer& rr, const NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
     Ydb::StatusIds_StatusCode& status, TString& error)
 {
-    rr->set_name(consumerName);
-    rr->mutable_read_from()->set_seconds(consumer.GetReadFromTimestampsMs() / 1000);
+    const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
+    auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), pqConfig);
+    rr.set_name(consumerName);
+    rr.mutable_read_from()->set_seconds(consumer.GetReadFromTimestampsMs() / 1000);
     auto version = consumer.GetVersion();
     if (version != 0)
-        (*rr->mutable_attributes())["_version"] = TStringBuilder() << version;
+        (*rr.mutable_attributes())["_version"] = TStringBuilder() << version;
     for (const auto &codec : consumer.GetCodec().GetIds()) {
-        rr->mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec) (codec + 1));
+        rr.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec) (codec + 1));
     }
 
-    rr->set_important(consumer.GetImportant());
+    rr.set_important(consumer.GetImportant());
     TString serviceType = "";
     if (consumer.HasServiceType()) {
         serviceType = consumer.GetServiceType();
@@ -40,29 +40,14 @@ bool FillConsumer(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TC
         }
         serviceType = pqConfig.GetDefaultClientServiceType().GetName();
     }
-    (*rr->mutable_attributes())["_service_type"] = serviceType;
+    (*rr.mutable_attributes())["_service_type"] = serviceType;
     return true;
 }
 
-bool FillConsumer(Ydb::Topic::Consumer* rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
-    const NActors::TActorContext& ctx, Ydb::StatusIds_StatusCode& status, TString& error)
-{
-    const auto& pqConfig = AppData(ctx)->PQConfig;
-    auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx);
-    return FillConsumer(rr, consumer, consumerName, pqConfig, status, error);
-}
-
-bool FillConsumer(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
-    Ydb::StatusIds_StatusCode& status, TString& error)
-{
-    const auto& pqConfig = AppData()->PQConfig;
-    auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName());
-    return FillConsumer(rr, consumer, consumerName, pqConfig, status, error);
-}
-
-bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in,
-    const NKikimrPQ::TPQConfig& pqConfig, const NKikimrSchemeOp::TDirEntry &fromDirEntry, const TMaybe<TString>& cdcName,
-    bool EnableTopicSplitMerge, NYql::TIssue& issue, const TActorContext& ctx, const TString& consumer = "", bool includeStats = false, bool includeLocation = false) {
+void FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& in,
+    const NKikimrSchemeOp::TDirEntry &fromDirEntry, const TMaybe<TString>& cdcName) {
+    
+    const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
 
     Ydb::Scheme::Entry *selfEntry = out.mutable_self();
     ConvertDirectoryEntry(fromDirEntry, selfEntry, true);
@@ -93,7 +78,7 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     }
 
     const auto &config = in.GetPQTabletConfig();
-    if (EnableTopicSplitMerge && NPQ::SplitMergeEnabled(config)) {
+    if (AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NPQ::SplitMergeEnabled(config)) {
         out.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
     } else {
         out.mutable_partitioning_settings()->set_min_active_partitions(in.GetTotalGroupCount());
@@ -177,31 +162,6 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
                 break;
         }
     }
-
-    bool found = false;
-    auto consumerName = NPersQueue::ConvertNewConsumerName(consumer, ctx);
-    for (const auto& consumer : config.GetConsumers()) {
-        if (consumerName == consumer.GetName()) {
-                found = true;
-        }
-        auto rr = out.add_consumers();
-        Ydb::StatusIds::StatusCode status;
-        TString error;
-        if (!FillConsumer(rr, consumer, ctx, status, error)) {
-            issue = NGRpcProxy::V1::FillIssue(error, status);
-            return false;
-        }
-    }
-    if (includeStats || includeLocation) {
-        if (consumer && !found) {
-           issue = NGRpcProxy::V1::FillIssue(
-                    TStringBuilder() << "no consumer '" << consumer << "' in topic",
-                    Ydb::PersQueue::ErrorCode::BAD_REQUEST
-            );
-            return false;
-        }
-    }
-    return true;
 }
 
 } // namespace NKikimr

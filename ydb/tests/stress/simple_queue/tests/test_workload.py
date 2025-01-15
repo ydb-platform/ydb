@@ -13,7 +13,7 @@ class TestYdbWorkload(object):
         config_generator.yaml_config["table_service_config"]["allow_olap_data_query"] = True
         cls.cluster = KiKiMR(config_generator)
         cls.cluster.start()
-        workload_path = yatest.common.build_path("ydb/tests/workloads/simple_queue/simple_queue")
+        workload_path = yatest.common.build_path("ydb/tests/stress/simple_queue/simple_queue")
         cls.workload_command_prefix = [
             workload_path,
             "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,

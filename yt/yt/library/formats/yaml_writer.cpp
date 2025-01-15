@@ -210,7 +210,7 @@ public:
 
     virtual void OnBeginAttributes() override
     {
-        // NB: node with attributes in YAML is represented as a yt/attrnode-tagged 2-item sequence.
+        // NB: Node with attributes in YAML is represented as a yt/attrnode-tagged 2-item sequence.
         OnNodeEnter();
         EmitEvent(
             yaml_sequence_start_event_initialize,

@@ -75,7 +75,7 @@ public:
         const auto load = new LoadInst(valueType, statePtr, "load", block);
         const auto state = PHINode::Create(valueType, 2U, "state", main);
         state->addIncoming(load, block);
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
+        BranchInst::Create(init, main, IsInvalid(load, block, context), block);
 
         block = init;
 
@@ -296,7 +296,7 @@ public:
         const auto load = new LoadInst(valueType, statePtr, "load", block);
         const auto state = PHINode::Create(valueType, 2U, "state", main);
         state->addIncoming(load, block);
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
+        BranchInst::Create(init, main, IsInvalid(load, block, context), block);
 
         block = init;
 

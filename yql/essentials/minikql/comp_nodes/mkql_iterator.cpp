@@ -210,7 +210,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -220,7 +219,7 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
         GetNodeValue(valuePtr, Flow, ctx, block);
 
         const auto value = new LoadInst(valueType, valuePtr, "value", block);
@@ -228,7 +227,7 @@ private:
         const auto kill = BasicBlock::Create(context, "kill", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-        BranchInst::Create(kill, good, IsYield(value, block), block);
+        BranchInst::Create(kill, good, IsYield(value, block, context), block);
 
         block = kill;
         const auto doThrow = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowForwardListWrapper::Throw));

@@ -29,7 +29,7 @@
 #include "ngtcp2_macro.h"
 #include "ngtcp2_tstamp.h"
 
-ngtcp2_objalloc_def(acktr_entry, ngtcp2_acktr_entry, oplent);
+ngtcp2_objalloc_def(acktr_entry, ngtcp2_acktr_entry, oplent)
 
 static void acktr_entry_init(ngtcp2_acktr_entry *ent, int64_t pkt_num,
                              ngtcp2_tstamp tstamp) {
@@ -56,10 +56,6 @@ void ngtcp2_acktr_entry_objalloc_del(ngtcp2_acktr_entry *ent,
   ngtcp2_objalloc_acktr_entry_release(objalloc, ent);
 }
 
-static int greater(const ngtcp2_ksl_key *lhs, const ngtcp2_ksl_key *rhs) {
-  return *(int64_t *)lhs > *(int64_t *)rhs;
-}
-
 void ngtcp2_acktr_init(ngtcp2_acktr *acktr, ngtcp2_log *log,
                        const ngtcp2_mem *mem) {
   ngtcp2_objalloc_acktr_entry_init(&acktr->objalloc, NGTCP2_ACKTR_MAX_ENT + 1,
@@ -67,7 +63,8 @@ void ngtcp2_acktr_init(ngtcp2_acktr *acktr, ngtcp2_log *log,
 
   ngtcp2_static_ringbuf_acks_init(&acktr->acks);
 
-  ngtcp2_ksl_init(&acktr->ents, greater, sizeof(int64_t), mem);
+  ngtcp2_ksl_init(&acktr->ents, ngtcp2_ksl_int64_greater,
+                  ngtcp2_ksl_int64_greater_search, sizeof(int64_t), mem);
 
   acktr->log = log;
   acktr->flags = NGTCP2_ACKTR_FLAG_NONE;

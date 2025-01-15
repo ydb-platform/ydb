@@ -5,7 +5,7 @@
 
 namespace NYT {
 
-using namespace NPhoenix2;
+using namespace NPhoenix;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -85,14 +85,14 @@ private:
 
 void TLogDigest::RegisterMetadata(auto&& registrar)
 {
-    PHOENIX_REGISTER_FIELD(1, Step_)();
-    PHOENIX_REGISTER_FIELD(2, LogStep_)();
-    PHOENIX_REGISTER_FIELD(3, LowerBound_)();
-    PHOENIX_REGISTER_FIELD(4, UpperBound_)();
-    PHOENIX_REGISTER_FIELD(5, DefaultValue_)();
-    PHOENIX_REGISTER_FIELD(6, BucketCount_)();
-    PHOENIX_REGISTER_FIELD(7, SampleCount_)();
-    PHOENIX_REGISTER_FIELD(8, Buckets_)();
+    PHOENIX_REGISTER_FIELD(1, Step_);
+    PHOENIX_REGISTER_FIELD(2, LogStep_);
+    PHOENIX_REGISTER_FIELD(3, LowerBound_);
+    PHOENIX_REGISTER_FIELD(4, UpperBound_);
+    PHOENIX_REGISTER_FIELD(5, DefaultValue_);
+    PHOENIX_REGISTER_FIELD(6, BucketCount_);
+    PHOENIX_REGISTER_FIELD(7, SampleCount_);
+    PHOENIX_REGISTER_FIELD(8, Buckets_);
 }
 
 PHOENIX_DEFINE_TYPE(TLogDigest);

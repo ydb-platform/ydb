@@ -61,7 +61,7 @@ ui64 TEpochSchema::Set(const TTableSchemaPtr& schema)
     return ++Revision_;
 }
 
-void TEpochSchema::Persist(const NPhoenix2::TPersistenceContext& context)
+void TEpochSchema::Persist(const NPhoenix::TPersistenceContext& context)
 {
     using NYT::Persist;
 
@@ -91,7 +91,7 @@ TTableSchemaPtr TTableUploadOptions::GetUploadSchema() const
     }
 }
 
-void TTableUploadOptions::Persist(const NPhoenix2::TPersistenceContext& context)
+void TTableUploadOptions::Persist(const NPhoenix::TPersistenceContext& context)
 {
     using NYT::Persist;
 

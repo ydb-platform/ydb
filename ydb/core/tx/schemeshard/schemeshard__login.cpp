@@ -87,6 +87,22 @@ struct TSchemeShard::TTxLogin : TTransactionBase<TSchemeShard> {
     }
 
 private:
+    bool IsAdmin() const {
+        const auto& adminSids = AppData()->AdministrationAllowedSIDs;
+        if (adminSids.empty()) {
+            return true;
+        }
+
+        const auto& user = Request->Get()->Record.GetUser();
+        const auto providerGroups = Self->LoginProvider.GetGroupsMembership(user);
+        const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
+        const auto userToken = NACLib::TUserToken(user, groups);
+        auto hasSid = [&userToken](const TString& sid) -> bool {
+            return userToken.IsExist(sid);
+        };
+        return std::find_if(adminSids.begin(), adminSids.end(), hasSid) != adminSids.end();
+    }
+
     bool LoginAttempt(NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const auto& loginRequest = GetLoginRequest();
         if (!loginRequest.ExternalAuth && !AppData(ctx)->AuthConfig.GetEnableLoginAuthentication()) {
@@ -105,6 +121,7 @@ private:
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
             Result->Record.SetToken(loginResponse.Token);
             Result->Record.SetSanitizedToken(loginResponse.SanitizedToken);
+            Result->Record.SetIsAdmin(IsAdmin());
             break;
         }
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD:
@@ -145,6 +162,7 @@ private:
             HandleLoginAuthSuccess(loginRequest, loginResponse, db);
             Result->Record.SetToken(loginResponse.Token);
             Result->Record.SetSanitizedToken(loginResponse.SanitizedToken);
+            Result->Record.SetIsAdmin(IsAdmin());
             break;
         }
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD: {
@@ -186,8 +204,8 @@ private:
         ResetFailedAttemptCount(loginRequest, db);
     }
 
-    void HandleLoginAuthSuccess(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& /* loginResponse */, NIceDb::TNiceDb& db) {
-        db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastSuccessfulAttempt, Schema::LoginSids::FailedAttemptCount>(TAppData::TimeProvider->Now().MicroSeconds(), Schema::LoginSids::FailedAttemptCount::Default);
+    void HandleLoginAuthSuccess(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& loginResponse, NIceDb::TNiceDb& db) {
+        db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastSuccessfulAttempt, Schema::LoginSids::FailedAttemptCount>(loginResponse.LoginAttemptTime, Schema::LoginSids::FailedAttemptCount::Default);
     }
 
     void HandleLoginAuthInvalidPassword(const NLogin::TLoginProvider::TLoginUserRequest& loginRequest, const NLogin::TLoginProvider::TLoginUserResponse& /* loginResponse */, NIceDb::TNiceDb& db) {

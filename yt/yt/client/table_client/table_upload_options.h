@@ -39,7 +39,7 @@ public:
 
     ui64 Set(const TTableSchemaPtr& schema);
 
-    void Persist(const NPhoenix2::TPersistenceContext& context);
+    void Persist(const NPhoenix::TPersistenceContext& context);
 
     ui64 Reset();
 
@@ -67,7 +67,7 @@ struct TTableUploadOptions
 
     TTableSchemaPtr GetUploadSchema() const;
 
-    void Persist(const NPhoenix2::TPersistenceContext& context);
+    void Persist(const NPhoenix::TPersistenceContext& context);
 };
 
 const std::vector<TString>& GetTableUploadOptionsAttributeKeys();

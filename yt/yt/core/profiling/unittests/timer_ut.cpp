@@ -15,7 +15,7 @@ namespace NYT::NProfiling {
 namespace {
 
 using namespace NConcurrency;
-using namespace NPhoenix2;
+using namespace NPhoenix;
 
 ////////////////////////////////////////////////////////////////////////////////
 

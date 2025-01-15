@@ -94,16 +94,29 @@ namespace NYql::NDqs {
                     }
 
                     YQL_CLOG(INFO, ProviderDq) << "DqsRewritePhyBlockReadOnDqIntegration";
-                    return Build<TCoWideFromBlocks>(ctx, node->Pos())
-                            .Input(
-                                Build<TCoToFlow>(ctx, node->Pos())
+                    if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
+                        return Build<TCoWideFromBlocks>(ctx, node->Pos())
+                            .Input(Build<TCoToFlow>(ctx, node->Pos())
                                 .Input(Build<TDqReadBlockWideWrap>(ctx, node->Pos())
-                                                .Input(readWideWrap.Input())
-                                                .Flags(readWideWrap.Flags())
-                                                .Token(readWideWrap.Token())
-                                            .Done().Ptr())
+                                    .Input(readWideWrap.Input())
+                                    .Flags(readWideWrap.Flags())
+                                    .Token(readWideWrap.Token())
+                                    .Done().Ptr())
                                 .Done())
                             .Done().Ptr();
+                    }
+
+                    YQL_ENSURE(NYql::NBlockStreamIO::WideFromBlocks);
+
+                    return Build<TCoToFlow>(ctx, node->Pos())
+                        .Input(Build<TCoWideFromBlocks>(ctx, node->Pos())
+                            .Input(Build<TDqReadBlockWideWrap>(ctx, node->Pos())
+                                .Input(readWideWrap.Input())
+                                .Flags(readWideWrap.Flags())
+                                .Token(readWideWrap.Token())
+                                .Done().Ptr())
+                            .Done())
+                        .Done().Ptr();
                 }, ctx, optSettings);
         });
     }

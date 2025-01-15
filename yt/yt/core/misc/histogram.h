@@ -21,7 +21,7 @@ struct THistogramView
 };
 
 struct IHistogram
-    : public virtual NPhoenix2::IPersistent
+    : public virtual NPhoenix::IPersistent
 {
     virtual void AddValue(i64 value, i64 count = 1) = 0;
     virtual void RemoveValue(i64 value, i64 count = 1) = 0;

@@ -17,7 +17,7 @@
 
 #include <concepts>
 
-namespace NYT::NPhoenix2::NDetail {
+namespace NYT::NPhoenix::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,26 +29,26 @@ namespace NYT::NPhoenix2::NDetail {
 ////////////////////////////////////////////////////////////////////////////////
 
 #define PHOENIX_DEFINE_TYPE(type) \
-    const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
+    const ::NYT::NPhoenix::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
+        static const auto& descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
         return descriptor; \
     } \
     \
-    auto type::GetRuntimeFieldDescriptorMap() -> const ::NYT::NPhoenix2::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& \
+    auto type::GetRuntimeFieldDescriptorMap() -> const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& \
     { \
-        static const auto map = ::NYT::NPhoenix2::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
+        static const auto map = ::NYT::NPhoenix::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
         return map; \
     } \
     \
     void type::Save(TSaveContext& context) const \
     { \
-        ::NYT::NPhoenix2::NDetail::SaveImpl(this, context); \
+        ::NYT::NPhoenix::NDetail::SaveImpl(this, context); \
     } \
     \
     void type::Load(TLoadContext& context) \
     { \
-        ::NYT::NPhoenix2::NDetail::LoadImpl(this, context); \
+        ::NYT::NPhoenix::NDetail::LoadImpl(this, context); \
     } \
     \
     template <class T> \
@@ -57,7 +57,7 @@ namespace NYT::NPhoenix2::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type, false>()); \
+        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>()); \
     }
 
 #define PHOENIX_DEFINE_TEMPLATE_TYPE(type, typeArgs) \
@@ -67,13 +67,13 @@ namespace NYT::NPhoenix2::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type<PP_DEPAREN(typeArgs)>> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>()); \
+        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>()); \
     }
 
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
-    const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
+    const ::NYT::NPhoenix::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
+        static const auto& descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
         return descriptor; \
     } \
     \
@@ -83,11 +83,11 @@ namespace NYT::NPhoenix2::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>()); \
+        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterOpaqueTypeDescriptorImpl<type>()); \
     }
 
-#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName) \
-    registrar.template Field<fieldTag, &TThis::fieldName>(#fieldName)
+#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...) \
+    registrar.template Field<fieldTag, &TThis::fieldName>(#fieldName) __VA_ARGS__ ()
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -757,7 +757,7 @@ template <auto Member, class TThis, class TContext, class TFieldSerializer>
 class PHOENIX_REGISTRAR_NODISCARD TRuntimeFieldDescriptorBuilderRegistar
 {
 public:
-    using TRuntimeFieldDescriptor = NPhoenix2::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
+    using TRuntimeFieldDescriptor = NPhoenix::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
 
     explicit TRuntimeFieldDescriptorBuilderRegistar(TRuntimeFieldDescriptor* descriptor)
         : Descriptor_(descriptor)
@@ -813,7 +813,7 @@ template <class TThis, class TContext>
 class TRuntimeVirtualFieldDescriptorBuilderRegistar
 {
 public:
-    using TRuntimeFieldDescriptor = NPhoenix2::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
+    using TRuntimeFieldDescriptor = NPhoenix::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
 
     TRuntimeVirtualFieldDescriptorBuilderRegistar(TRuntimeFieldDescriptor* descriptor)
         : Descriptor_(descriptor)
@@ -1186,21 +1186,21 @@ struct TSerializer
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2::NDetail
+} // namespace NYT::NPhoenix::NDetail
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, class C>
-    requires (std::derived_from<C, NPhoenix2::NDetail::TContextBase>) && (
+    requires (std::derived_from<C, NPhoenix::NDetail::TContextBase>) && (
         std::same_as<T, TIntrusivePtr<typename T::TUnderlying>> ||
         std::same_as<T, std::unique_ptr<typename T::element_type>> ||
         std::is_pointer_v<T> ||
         std::same_as<T, TWeakPtr<typename T::TUnderlying>>)
 struct TSerializerTraits<T, C>
 {
-    using TSerializer = NPhoenix2::NDetail::TSerializer;
+    using TSerializer = NPhoenix::NDetail::TSerializer;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

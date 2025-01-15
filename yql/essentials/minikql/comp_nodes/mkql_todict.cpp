@@ -1021,7 +1021,7 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -1047,7 +1047,7 @@ public:
 
         result->addIncoming(GetFinish(context), block);
 
-        BranchInst::Create(over, more, IsFinish(state, block), block);
+        BranchInst::Create(over, more, IsFinish(state, block, context), block);
 
         block = more;
 
@@ -1212,7 +1212,7 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -1238,7 +1238,7 @@ public:
 
         result->addIncoming(GetFinish(context), block);
 
-        BranchInst::Create(over, more, IsFinish(state, block), block);
+        BranchInst::Create(over, more, IsFinish(state, block, context), block);
 
         block = more;
 
@@ -1535,7 +1535,7 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -1561,7 +1561,7 @@ public:
 
         result->addIncoming(GetFinish(context), block);
 
-        BranchInst::Create(over, more, IsFinish(state, block), block);
+        BranchInst::Create(over, more, IsFinish(state, block, context), block);
 
         block = more;
 
@@ -1734,7 +1734,7 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -1760,7 +1760,7 @@ public:
 
         result->addIncoming(GetFinish(context), block);
 
-        BranchInst::Create(over, more, IsFinish(state, block), block);
+        BranchInst::Create(over, more, IsFinish(state, block, context), block);
 
         block = more;
 

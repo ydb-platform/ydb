@@ -74,7 +74,10 @@ struct TBucket
         return false;
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver /*waitTimeObserver*/) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
+    { }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
     { }
 
     ~TBucket();
@@ -298,12 +301,9 @@ public:
         auto currentInstant = GetCpuInstant();
 
         TBucketPtr bucket;
-        TWaitTimeObserver waitTimeObserver;
-
         {
             auto guard = Guard(SpinLock_);
             bucket = GetStarvingBucket(action);
-            waitTimeObserver = WaitTimeObserver_;
 
             if (!bucket) {
                 return false;
@@ -318,8 +318,9 @@ public:
             bucket->WaitTime = action->StartedAt - action->EnqueuedAt;
         }
 
-        if (waitTimeObserver) {
-            waitTimeObserver(CpuDurationToDuration(action->StartedAt - action->EnqueuedAt));
+        // Microoptimization: avoid calling CpuDurationToDuration if no observers are registered.
+        if (!WaitTimeObservers_.IsEmpty()) {
+            WaitTimeObservers_.Fire(CpuDurationToDuration(action->StartedAt - action->EnqueuedAt));
         }
 
         YT_ASSERT(action && !action->Finished);
@@ -393,10 +394,14 @@ public:
         }
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver)
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& callback)
     {
-        auto guard = Guard(SpinLock_);
-        WaitTimeObserver_ = waitTimeObserver;
+        WaitTimeObservers_.Subscribe(callback);
+    }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& callback)
+    {
+        WaitTimeObservers_.Unsubscribe(callback);
     }
 
 private:
@@ -467,7 +472,7 @@ private:
     std::atomic<int> ThreadCount_ = 0;
     std::array<TThreadState, TThreadPoolBase::MaxThreadCount> ThreadStates_;
 
-    ITwoLevelFairShareThreadPool::TWaitTimeObserver WaitTimeObserver_;
+    TCallbackList<ITwoLevelFairShareThreadPool::TWaitTimeObserver::TSignature> WaitTimeObservers_;
 
 
     size_t GetLowestEmptyPoolId()
@@ -693,9 +698,14 @@ public:
         TThreadPoolBase::Shutdown();
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& callback) override
     {
-        Queue_->RegisterWaitTimeObserver(std::move(waitTimeObserver));
+        Queue_->SubscribeWaitTimeObserved(callback);
+    }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& callback) override
+    {
+        Queue_->UnsubscribeWaitTimeObserved(callback);
     }
 
 private:

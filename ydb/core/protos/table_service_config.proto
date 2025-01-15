@@ -52,7 +52,7 @@ message TTableServiceConfig {
         optional bool PreferLocalDatacenterExecution = 27 [ default = true ];
         optional uint64 MaxNonParallelDataQueryTasksLimit = 28 [default = 1000];
 
-        optional bool VerboseMemoryLimitException = 29 [default = true];
+        optional bool VerboseMemoryLimitException = 29 [default = false];
     }
 
     message TSpillingServiceConfig {

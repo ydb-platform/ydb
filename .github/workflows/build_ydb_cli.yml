@@ -22,7 +22,7 @@ on:
         type: boolean
         description: Build YDB CLI for MacOS (arm64)
         default: true
-      build-windows:
+      build-windows-amd:
         type: boolean
         description: Build YDB CLI for Windows (amd64)
         default: true
@@ -134,7 +134,7 @@ jobs:
         if: ${{ inputs.build-darwin-arm }}
         run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/arm64
       - name: Prepare directory for windows-amd binary
-        if: ${{ inputs.build-windows }}
+        if: ${{ inputs.build-windows-amd }}
         run: mkdir -p ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
 
       - name: Copy linux-amd binary
@@ -162,7 +162,7 @@ jobs:
           name: darwin-arm-binary
           path: ${{ steps.getver.outputs.cli_version }}/darwin/arm64/
       - name: Copy windows-amd binary (unsigned)
-        if: ${{ inputs.build-windows }}
+        if: ${{ inputs.build-windows-amd }}
         uses: actions/download-artifact@v4
         with:
           name: windows-amd-binary

@@ -4,7 +4,8 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-TProgressIndication::TProgressIndication(bool onlyReadStats) : OnlyReadStats(onlyReadStats) {
+TProgressIndication::TProgressIndication(bool onlyReadStats)
+    : OnlyReadStats(onlyReadStats) {
 }
 
 void TProgressIndication::UpdateProgress(const TCurrentStats& stats)

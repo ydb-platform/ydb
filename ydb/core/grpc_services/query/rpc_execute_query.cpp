@@ -214,7 +214,7 @@ private:
                 HFunc(TEvents::TEvWakeup, Handle);
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-                HFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
+                hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
                 HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
                 hFunc(NKikimr::NGRpcService::TEvSubscribeGrpcCancel, Handle);
                 default:
@@ -358,7 +358,7 @@ private:
         channel.SendAck(SelfId());
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         auto& record = ev->Get()->Record;
 
         Ydb::Query::ExecuteQueryResponsePart response;

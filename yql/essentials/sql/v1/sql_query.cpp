@@ -205,33 +205,12 @@ static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
     return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, false);
 }
 
-TString GetFormattedLambda(auto& lambda) {
-    NSQLTranslation::TTranslationSettings settings;
-    settings.Antlr4Parser = true;
-    settings.AnsiLexer = true;
-    auto formatter = NSQLFormat::MakeSqlFormatter(settings);
-
-    return formatter->Format(&lambda);
-}
-
-static bool TransferAlterAction(std::map<TString, TNodePtr>& settings, std::optional<TString>& transformLambda,
-        const TRule_alter_transfer_action& in, TSqlExpression& ctx)
-{
-    if (in.HasAlt_alter_transfer_action1()) {
-        return TransferSettings(settings, in.GetAlt_alter_transfer_action1().GetRule_alter_transfer_set_setting1().GetRule_transfer_settings3(), ctx, false);
-    } else if (in.HasAlt_alter_transfer_action2()) {
-        transformLambda = GetFormattedLambda(in.GetAlt_alter_transfer_action2().GetRule_alter_transfer_set_using1().GetRule_lambda3());
-        return true;
-    }
-
-    return false;
-}
-
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core) {
     TString internalStatementName;
     TString humanStatementName;
     ParseStatementName(core, internalStatementName, humanStatementName);
     const auto& altCase = core.Alt_case();
+    Cerr << ">>>>> altCase = " << (int)altCase << " position = " << Ctx.Pos() << " blocks.size = " << blocks.size() << Endl << Flush;
     if (Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
         altCase != TRule_sql_stmt_core::kAltSqlStmtCore13)) {
         Error() << humanStatementName << " statement is not supported in limited views";
@@ -243,6 +222,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         altCase != TRule_sql_stmt_core::kAltSqlStmtCore18)) {
         Error() << humanStatementName << " statement is not supported in subqueries";
         return false;
+    }
+
+    if (NeedUseForAllStatements(altCase)) {
+        Ctx.ForAllStatementsParts.push_back(AsSource(core));
     }
 
     switch (altCase) {
@@ -282,6 +265,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!nodeExpr) {
                 return false;
             }
+
+            Cerr << ">>>>> " << core.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1().DebugString() << Endl << Flush;
+
             TVector<TNodePtr> nodes;
             auto subquery = nodeExpr->GetSource();
             if (subquery && Mode == NSQLTranslation::ESqlMode::LIBRARY && Ctx.ScopeLevel == 0) {
@@ -1849,6 +1835,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore58: {
             // create_transfer_stmt: CREATE TRANSFER
+
+            Cerr << ">>>>> L = " << Ctx.ForAllStatementsParts.size() << " : " 
+                << JoinRange("; ", Ctx.ForAllStatementsParts.begin(), Ctx.ForAllStatementsParts.end()) << Endl << Flush;
+
             auto& node = core.GetAlt_sql_stmt_core58().GetRule_create_transfer_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref3().HasBlock1()) {
@@ -1870,9 +1860,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString source = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
             const TString target = Id(node.GetRule_object_ref7().GetRule_id_or_at2(), *this).second;
             TString transformLambda;
-            if (node.GetBlock8().HasRule_lambda2()) {
-                transformLambda = GetFormattedLambda(node.GetBlock8().GetRule_lambda2());
+            if (node.GetBlock8().HasRule_lambda_or_parameter2()) {
+                ParseTransferLambda(transformLambda, node.GetBlock8().GetRule_lambda_or_parameter2());
             }
+
+            Cerr << ">>>>> TransformLambda = " << transformLambda << Endl << Flush;
 
             AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx.Pos(), BuildTablePath(prefixPath, id),
                 std::move(source), std::move(target), std::move(transformLambda), std::move(settings), context));
@@ -1889,14 +1881,30 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
+
             std::map<TString, TNodePtr> settings;
             std::optional<TString> transformLambda;
             TSqlExpression expr(Ctx, Mode);
-            if (!TransferAlterAction(settings, transformLambda, node.GetRule_alter_transfer_action4(), expr)) {
+
+            auto transferAlterAction = [&](std::optional<TString>& transformLambda, const TRule_alter_transfer_action& in)
+            {
+                if (in.HasAlt_alter_transfer_action1()) {
+                    return TransferSettings(settings, in.GetAlt_alter_transfer_action1().GetRule_alter_transfer_set_setting1().GetRule_transfer_settings3(), expr, false);
+                } else if (in.HasAlt_alter_transfer_action2()) {
+                    TString lb;
+                    ParseTransferLambda(lb, in.GetAlt_alter_transfer_action2().GetRule_alter_transfer_set_using1().GetRule_lambda_or_parameter3());
+                    transformLambda = lb;
+                    return true;
+                }
+
+                return false;
+            };
+
+            if (!transferAlterAction(transformLambda, node.GetRule_alter_transfer_action4())) {
                 return false;
             }
             for (auto& block : node.GetBlock5()) {
-                if (!TransferAlterAction(settings, transformLambda, block.GetRule_alter_transfer_action2(), expr)) {
+                if (!transferAlterAction(transformLambda, block.GetRule_alter_transfer_action2())) {
                     return false;
                 }
             }

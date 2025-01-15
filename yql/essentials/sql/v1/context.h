@@ -327,6 +327,7 @@ namespace NSQLTranslationV1 {
         bool DistinctOverWindow = false;
         bool SeqMode = false;
         bool EmitUnionMerge = false;
+        TVector<TString> ForAllStatementsParts;
     };
 
     class TColumnRefScope {

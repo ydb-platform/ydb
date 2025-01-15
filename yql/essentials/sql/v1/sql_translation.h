@@ -263,6 +263,7 @@ protected:
         TVector<TDeferredAtom>& addTables,
         TVector<TDeferredAtom>& removeTables,
         const TRule_alter_backup_collection_entries& entries);
+    bool ParseTransferLambda(TString& lambdaText, const TRule_lambda_or_parameter& lambdaOrParameter);
 
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
@@ -341,6 +342,6 @@ TVector<TPatternComponent<TChar>> SplitPattern(const TBasicString<TChar>& patter
 }
 
 bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix);
-TString FormatLambda(const TRule_lambda& statement);
+TString AsSource(const NProtoBuf::Message& statement);
 
 } // namespace NSQLTranslationV1

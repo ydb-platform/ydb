@@ -551,17 +551,13 @@ public:
         Scopes.push_back(EScope::Default);
         MarkedTokens.reserve(ParsedTokens.size());
         MarkTokens(msg);
-        if (!ParsedTokens.empty()) {
-            Y_ENSURE(MarkTokenStack.empty());
-            Y_ENSURE(TokenIndex == ParsedTokens.size());
-        }
+        Y_ENSURE(MarkTokenStack.empty());
+        Y_ENSURE(TokenIndex == ParsedTokens.size());
 
         TokenIndex = 0;
         Visit(msg);
-        if (!ParsedTokens.empty()) {
-            Y_ENSURE(TokenIndex == ParsedTokens.size());
-            Y_ENSURE(MarkTokenStack.empty());
-        }
+        Y_ENSURE(TokenIndex == ParsedTokens.size());
+        Y_ENSURE(MarkTokenStack.empty());
 
         for (; LastComment < Comments.size(); ++LastComment) {
             const auto text = Comments[LastComment].Content;
@@ -677,17 +673,11 @@ private:
         } else if (descr == TRule_lambda_body::GetDescriptor()) {
             Y_ENSURE(TokenIndex >= 1);
             auto prevIndex = TokenIndex - 1;
-            if (ParsedTokens.empty()) {
-                MarkedTokens[prevIndex].OpeningBracket = false;
-                ForceExpandedColumn = 0;
-                ForceExpandedLine = 0;
-            } else {
-                Y_ENSURE(prevIndex < ParsedTokens.size());
-                Y_ENSURE(ParsedTokens[prevIndex].Content == "{");
-                MarkedTokens[prevIndex].OpeningBracket = false;
-                ForceExpandedColumn = ParsedTokens[prevIndex].LinePos;
-                ForceExpandedLine = ParsedTokens[prevIndex].Line;
-            }
+            Y_ENSURE(prevIndex < ParsedTokens.size());
+            Y_ENSURE(ParsedTokens[prevIndex].Content == "{");
+            MarkedTokens[prevIndex].OpeningBracket = false;
+            ForceExpandedColumn = ParsedTokens[prevIndex].LinePos;
+            ForceExpandedLine = ParsedTokens[prevIndex].Line;
         } else if (descr == TRule_in_atom_expr::GetDescriptor()) {
             const auto& value = dynamic_cast<const TRule_in_atom_expr&>(msg);
             if (value.Alt_case() == TRule_in_atom_expr::kAltInAtomExpr7) {
@@ -777,17 +767,13 @@ private:
     }
 
     void PopBracket(const TString& expected) {
+        Y_ENSURE(!MarkTokenStack.empty());
+        Y_ENSURE(MarkTokenStack.back() < ParsedTokens.size());
+        auto& openToken = ParsedTokens[MarkTokenStack.back()];
+        Y_ENSURE(openToken.Content == expected);
         auto& openInfo = MarkedTokens[MarkTokenStack.back()];
         auto& closeInfo = MarkedTokens[TokenIndex];
-        bool forcedExpansion = false;
-
-        if (!ParsedTokens.empty()) {
-            Y_ENSURE(!MarkTokenStack.empty());
-            Y_ENSURE(MarkTokenStack.back() < ParsedTokens.size());
-            auto& openToken = ParsedTokens[MarkTokenStack.back()];
-            Y_ENSURE(openToken.Content == expected, openToken.Content << " == " << expected);
-            forcedExpansion = openToken.Line == ForceExpandedLine && openToken.LinePos <= ForceExpandedColumn;
-        }
+        const bool forcedExpansion = openToken.Line == ForceExpandedLine && openToken.LinePos <= ForceExpandedColumn;
 
         if (openInfo.OpeningBracket) {
             openInfo.ClosingBracketIndex = TokenIndex;
@@ -1766,7 +1752,7 @@ private:
         if (markedInfo.ClosingBracket) {
             Y_ENSURE(!MarkTokenStack.empty());
             auto beginTokenIndex = MarkTokenStack.back();
-            if (markedInfo.BracketForcedExpansion || (!ParsedTokens.empty() && ParsedTokens[beginTokenIndex].Line != ParsedTokens[TokenIndex].Line)) {
+            if (markedInfo.BracketForcedExpansion || ParsedTokens[beginTokenIndex].Line != ParsedTokens[TokenIndex].Line) {
                 // multiline
                 PopCurrentIndent();
                 NewLine();
@@ -1783,7 +1769,7 @@ private:
             }
         }
 
-        if (!AnsiLexer && !ParsedTokens.empty() && ParsedTokens[TokenIndex].Name == "STRING_VALUE") {
+        if (!AnsiLexer && ParsedTokens[TokenIndex].Name == "STRING_VALUE") {
             TStringBuf checkStr = str;
             if (checkStr.SkipPrefix("\"") && checkStr.ChopSuffix("\"") && !checkStr.Contains("'")) {
                 str = TStringBuilder() << '\'' << checkStr << '\'';
@@ -1792,7 +1778,7 @@ private:
 
         Out(str);
 
-        if (ParsedTokens.empty() || TokenIndex + 1 >= ParsedTokens.size() || ParsedTokens[TokenIndex + 1].Line > LastLine) {
+        if (TokenIndex + 1 >= ParsedTokens.size() || ParsedTokens[TokenIndex + 1].Line > LastLine) {
             WriteComments(true);
         }
 
@@ -1802,7 +1788,7 @@ private:
 
         if (markedInfo.OpeningBracket) {
             MarkTokenStack.push_back(TokenIndex);
-            if (markedInfo.BracketForcedExpansion || (!ParsedTokens.empty() && ParsedTokens[TokenIndex].Line != ParsedTokens[markedInfo.ClosingBracketIndex].Line)) {
+            if (markedInfo.BracketForcedExpansion || ParsedTokens[TokenIndex].Line != ParsedTokens[markedInfo.ClosingBracketIndex].Line) {
                 // multiline
                 PushCurrentIndent();
                 NewLine();
@@ -1810,9 +1796,9 @@ private:
         }
 
         if (str == "," && !MarkTokenStack.empty()) {
-            const bool addNewline = !ParsedTokens.empty()
-             && ((TokenIndex + 1 < ParsedTokens.size() && ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + 1].Line)
-             || (TokenIndex > 0 && ParsedTokens[TokenIndex - 1].Line != ParsedTokens[TokenIndex].Line));
+            const bool addNewline =
+                (TokenIndex + 1 < ParsedTokens.size() && ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + 1].Line)
+             || (TokenIndex > 0 && ParsedTokens[TokenIndex - 1].Line != ParsedTokens[TokenIndex].Line);
             // add line for trailing comma
             if (addNewline) {
                 NewLine();
@@ -2932,8 +2918,8 @@ private:
         for (; begin != end; ++begin) {
             const auto op = getOp(*begin);
             const auto opSize = BinaryOpTokenSize(op);
-            const bool hasFirstNewline = ParsedTokens.empty() ? false : LastLine != ParsedTokens[TokenIndex].Line;
-            const bool hasSecondNewline = ParsedTokens.empty() ? false : ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + opSize].Line;
+            const bool hasFirstNewline = LastLine != ParsedTokens[TokenIndex].Line;
+            const bool hasSecondNewline = ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + opSize].Line;
             const ui32 currentOutLine = OutLine;
 
             if (currentOutLine != OutLine || hasFirstNewline || hasSecondNewline) {
@@ -3319,18 +3305,6 @@ public:
         formattedQuery = finalFormattedQuery;
         return true;
     }
-
-    TString Format(const google::protobuf::Message* message) override {
-        TVector<NSQLTranslation::TParsedToken> comments;
-        TParsedTokenList parsedTokens, stmtTokens;
-
-        TPrettyVisitor visitor(parsedTokens, comments, Settings.AnsiLexer);
-        bool addLineBefore = false;
-        bool addLineAfter = false;
-        TMaybe<ui32> stmtCoreAltCase;
-        return visitor.Process(*message, addLineBefore, addLineAfter, stmtCoreAltCase);
-    };
-
 
 private:
     const NSQLTranslation::TTranslationSettings Settings;

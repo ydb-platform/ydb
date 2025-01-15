@@ -908,8 +908,13 @@ alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 
 drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
 
+lambda_or_parameter:
+    lambda
+  | bind_parameter
+;
+
 create_transfer_stmt: CREATE TRANSFER object_ref
-    FROM object_ref TO object_ref (USING lambda)?
+    FROM object_ref TO object_ref (USING lambda_or_parameter)?
     WITH LPAREN transfer_settings RPAREN
 ;
 
@@ -923,7 +928,7 @@ alter_transfer_action:
 ;
 
 alter_transfer_set_setting: SET LPAREN transfer_settings RPAREN;
-alter_transfer_set_using: SET USING lambda;
+alter_transfer_set_using: SET USING lambda_or_parameter;
 
 drop_transfer_stmt: DROP TRANSFER object_ref CASCADE?;
 

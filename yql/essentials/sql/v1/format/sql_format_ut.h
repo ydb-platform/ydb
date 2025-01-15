@@ -395,6 +395,8 @@ Y_UNIT_TEST(Transfer) {
             "DROP TRANSFER user CASCADE;\n"},
         {"create transfer user from topic1 to table1 using ($x) -> { $y = cast($x as String); return $y ; } with (user='foo')",
             "CREATE TRANSFER user FROM topic1 TO table1 USING ($x) -> {\n    $y = CAST($x AS String);\n    RETURN $y;\n} WITH (user = 'foo');\n"},
+        {"create transfer user from topic1 to table1 using $xxx with (user='foo')",
+            "CREATE TRANSFER user FROM topic1 TO table1 USING $xxx WITH (user = 'foo');\n"},
     };
 
     TSetup setup;

@@ -5096,6 +5096,57 @@ bool TSqlTranslation::ParseViewQuery(
     return true;
 }
 
+namespace {
+
+static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
+    static const TString statementSeparator = ";\n";
+
+    const TVector<TString>& parts = Ctx.ForAllStatementsParts;
+
+    TStringBuilder result;
+    result << JoinRange(statementSeparator, parts.begin(), parts.end()) << statementSeparator;
+
+    switch (lambdaOrParameter.Alt_case()) {
+        case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter1: {
+            const auto& lambda = lambdaOrParameter.GetAlt_lambda_or_parameter1().GetRule_lambda1();
+            result << "$__ydb_transfer_lambda = " << AsSource(lambda) << statementSeparator;
+
+            return result;
+        }
+        case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter2: {
+            const auto& valueBlock = lambdaOrParameter.GetAlt_lambda_or_parameter2().GetRule_bind_parameter1().GetBlock2();
+            const auto id = Id(valueBlock.GetAlt1().GetRule_an_id_or_type1(), ctx);
+            result << "$__ydb_transfer_lambda = $" << id << statementSeparator;
+            return result;
+        }
+        case NSQLv1Generated::TRule_lambda_or_parameter::ALT_NOT_SET:
+            return {}; // TODO ERROR
+    }
+}
+
+}
+
+bool TSqlTranslation::ParseTransferLambda(
+    TString& lambdaText,
+    const TRule_lambda_or_parameter& lambdaOrParameter) {
+
+    TSqlExpression expr(Ctx, Ctx.Settings.Mode);
+    auto result = expr.Build(lambdaOrParameter);
+
+    lambdaText = GetLambdaText(*this, Ctx, lambdaOrParameter);
+    //features["query_text"] = { Ctx.Pos(), queryText };
+
+    // AST is needed for ready-made validation of CREATE VIEW statement.
+    // Query is stored as plain text, not AST.
+    //const auto viewSelect = BuildTransferLambda(lambdaOrParameter, Ctx);
+    //if (!viewSelect) {
+    //    return false;
+    //}
+    //features["query_ast"] = {viewSelect, Ctx};
+
+    return true;
+}
+
 class TReturningListColumns : public INode {
 public:
     TReturningListColumns(TPosition pos)
@@ -5296,7 +5347,7 @@ bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDef
     }
 }
 
-TString FormatLambda(const TRule_lambda& statement) {
+TString AsSource(const NProtoBuf::Message& statement) {
     return CollectTokens(statement);
 }
 

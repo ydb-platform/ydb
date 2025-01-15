@@ -83,7 +83,7 @@ TNodePtr BuildViewSelect(
     const TString& contextRecreationQuery
 ) {
     TIssues issues;
-    TContext context(parentContext.Settings, {}, issues);
+    TContext context(parentContext.Settings, {}, issues, parentContext.Query);
     if (!RecreateContext(context, context.Settings, contextRecreationQuery)) {
         parentContext.Issues.AddIssues(issues);
         return nullptr;

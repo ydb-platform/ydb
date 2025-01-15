@@ -843,6 +843,22 @@ All the metadata provided when writing a message is sent to a consumer with the 
   List<MetadataItem> metadata = message.getMetadataItems();
   ```
 
+- Python
+
+  To write a message that includes metadata, create the `TopicWriterMessage` object with `metadata_items` argument as below:
+
+  ```python
+  mess = ydb.TopicWriterMessage(data=f"mess-{i}", metadata_items={"meta-key": "meta-value"})
+  writer.write(mess)
+  ```
+
+  While reading, get metadata from the `metadata_items` field of the `PublicMessage` object
+
+  ```python
+  mess = reader.receive_message()
+  metadata_items = mess.metadata_items
+  ```
+
 {% endlist %}
 
 ### Write in a transaction {#write-tx}

@@ -840,6 +840,22 @@
   List<MetadataItem> metadata = message.getMetadataItems();
   ```
 
+- Python
+
+  Для использования функции передачи метаданных, создайте объект `TopicWriterMessage` с аргументом `metadata_items` как показано ниже:
+
+  ```python
+  mess = ydb.TopicWriterMessage(data=f"mess-{i}", metadata_items={"meta-key": "meta-value"})
+  writer.write(mess)
+  ```
+
+  Во время чтения метаданные могут быть получены из поля `metadata_items` объекта `PublicMessage`:
+
+  ```python
+  mess = reader.receive_message()
+  metadata_items = mess.metadata_items
+  ```
+
 {% endlist %}
 
 ### Запись в транзакции {#write-tx}

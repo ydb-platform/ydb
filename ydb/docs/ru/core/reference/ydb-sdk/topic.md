@@ -51,7 +51,7 @@
   TDriver driver(driverConfig);
   ```
 
-  В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
+  В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Фрагмент кода приложения для создания клиента:
 
@@ -77,7 +77,7 @@
 
   В этом примере используется вспомогательный метод `CloudAuthHelper.getAuthProviderFromEnviron()`, получающий токен из переменных окружения.
   Например, `YDB_ACCESS_TOKEN_CREDENTIALS`.
-  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
+  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) работает поверх транспорта {{ ydb-short-name }} и отвечает как за управляющие операции с топиками, так и за создание писателей и читателей.
 

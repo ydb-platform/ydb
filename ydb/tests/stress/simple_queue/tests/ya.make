@@ -14,7 +14,7 @@ SIZE(MEDIUM)
 DEPENDS(
     ydb/apps/ydbd
     ydb/apps/ydb
-    ydb/tests/workloads/olap_workload
+    ydb/tests/stress/simple_queue
 )
 
 PEERDIR(

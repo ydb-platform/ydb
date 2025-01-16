@@ -3232,28 +3232,30 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
 
 TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
     TTableRef table;
-    if (!SimpleTableRefImpl(stmt.GetRule_simple_table_ref3(), table)) {
+    if (!SimpleTableRefImpl(stmt.GetRule_simple_table_ref4(), table)) {
         return nullptr;
     }
 
     const bool isKikimr = table.Service == KikimrProviderName;
     if (!isKikimr) {
-        Ctx.Error(GetPos(stmt.GetToken1())) << "DELETE is unsupported for " << table.Service;
+        Ctx.Error(GetPos(stmt.GetToken2())) << "DELETE is unsupported for " << table.Service;
         return nullptr;
     }
 
     TSourcePtr source = BuildTableSource(Ctx.Pos(), table);
 
     TNodePtr options = nullptr;
-    if (stmt.HasBlock5()) {
-        options = ReturningList(stmt.GetBlock5().GetRule_returning_columns_list1());
+    if (stmt.HasBlock6()) {
+        options = ReturningList(stmt.GetBlock6().GetRule_returning_columns_list1());
         options = options->Y(options);
     }
 
-    if (stmt.HasBlock4()) {
-        switch (stmt.GetBlock4().Alt_case()) {
-            case TRule_delete_stmt_TBlock4::kAlt1: {
-                const auto& alt = stmt.GetBlock4().GetAlt1();
+    const bool isBatch = stmt.HasBlock1();
+
+    if (stmt.HasBlock5()) {
+        switch (stmt.GetBlock5().Alt_case()) {
+            case TRule_delete_stmt_TBlock5::kAlt1: {
+                const auto& alt = stmt.GetBlock5().GetAlt1();
 
                 TColumnRefScope scope(Ctx, EColumnRefState::Allow);
                 TSqlExpression sqlExpr(Ctx, Mode);
@@ -3265,20 +3267,29 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
                 break;
             }
 
-            case TRule_delete_stmt_TBlock4::kAlt2: {
-                const auto& alt = stmt.GetBlock4().GetAlt2();
+            case TRule_delete_stmt_TBlock5::kAlt2: {
+                const auto& alt = stmt.GetBlock5().GetAlt2();
 
                 auto values = TSqlIntoValues(Ctx, Mode).Build(alt.GetRule_into_values_source2(), "DELETE ON");
                 if (!values) {
                     return nullptr;
                 }
 
+                if (isBatch) {
+                    Ctx.Error(GetPos(stmt.GetToken2())) << "BATCH DELETE is unsupported with ON";
+                    return nullptr;
+                }
+
                 return BuildWriteColumns(Ctx.Pos(), Ctx.Scoped, table, EWriteColumnMode::DeleteOn, std::move(values), options);
             }
 
-            case TRule_delete_stmt_TBlock4::ALT_NOT_SET:
+            case TRule_delete_stmt_TBlock5::ALT_NOT_SET:
                 return nullptr;
         }
+    }
+
+    if (isBatch) {
+        return BuildBatchDelete(Ctx.Pos(), Ctx.Scoped, table, std::move(source), options);
     }
 
     return BuildDelete(Ctx.Pos(), Ctx.Scoped, table, std::move(source), options);
@@ -3286,26 +3297,28 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
 
 TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
     TTableRef table;
-    if (!SimpleTableRefImpl(stmt.GetRule_simple_table_ref2(), table)) {
+    if (!SimpleTableRefImpl(stmt.GetRule_simple_table_ref3(), table)) {
         return nullptr;
     }
 
     const bool isKikimr = table.Service == KikimrProviderName;
 
     if (!isKikimr) {
-        Ctx.Error(GetPos(stmt.GetToken1())) << "UPDATE is unsupported for " << table.Service;
+        Ctx.Error(GetPos(stmt.GetToken2())) << "UPDATE is unsupported for " << table.Service;
         return nullptr;
     }
 
     TNodePtr options = nullptr;
-    if (stmt.HasBlock4()) {
-        options = ReturningList(stmt.GetBlock4().GetRule_returning_columns_list1());
+    if (stmt.HasBlock5()) {
+        options = ReturningList(stmt.GetBlock5().GetRule_returning_columns_list1());
         options = options->Y(options);
     }
 
-    switch (stmt.GetBlock3().Alt_case()) {
-        case TRule_update_stmt_TBlock3::kAlt1: {
-            const auto& alt = stmt.GetBlock3().GetAlt1();
+    const bool isBatch = stmt.HasBlock1();
+
+    switch (stmt.GetBlock4().Alt_case()) {
+        case TRule_update_stmt_TBlock4::kAlt1: {
+            const auto& alt = stmt.GetBlock4().GetAlt1();
             TSourcePtr values = Build(alt.GetRule_set_clause_choice2());
             auto source = BuildTableSource(Ctx.Pos(), table);
 
@@ -3319,21 +3332,30 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
                 source->AddFilter(Ctx, whereExpr);
             }
 
+            if (isBatch) {
+                return BuildBatchUpdate(Ctx.Pos(), Ctx.Scoped, table, std::move(values), std::move(source), options);
+            }
+
             return BuildUpdateColumns(Ctx.Pos(), Ctx.Scoped, table, std::move(values), std::move(source), options);
         }
 
-        case TRule_update_stmt_TBlock3::kAlt2: {
-            const auto& alt = stmt.GetBlock3().GetAlt2();
+        case TRule_update_stmt_TBlock4::kAlt2: {
+            const auto& alt = stmt.GetBlock4().GetAlt2();
 
             auto values = TSqlIntoValues(Ctx, Mode).Build(alt.GetRule_into_values_source2(), "UPDATE ON");
             if (!values) {
                 return nullptr;
             }
 
+            if (isBatch) {
+                Ctx.Error(GetPos(stmt.GetToken2())) << "BATCH UPDATE is unsupported with ON";
+                return nullptr;
+            }
+
             return BuildWriteColumns(Ctx.Pos(), Ctx.Scoped, table, EWriteColumnMode::UpdateOn, std::move(values), options);
         }
 
-        case TRule_update_stmt_TBlock3::ALT_NOT_SET:
+        case TRule_update_stmt_TBlock4::ALT_NOT_SET:
             return nullptr;
     }
 }

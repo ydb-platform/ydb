@@ -310,6 +310,7 @@ private:
     void SendStatisticToRowDispatcher();
     void SendSessionError(TActorId readActorId, TStatus status);
     bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
+    void RestartSessionIfOldestClient(const TClientsInfo& info);
 
 private:
 
@@ -750,10 +751,12 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong ClientSettings");
+        LOG_ROW_DISPATCHER_WARN("Ignore TEvStopSession from " << ev->Sender << ", no client");
         return;
     }
     auto& info = *it->second;
+    RestartSessionIfOldestClient(info);
+
     UnreadBytes -= info.UnreadBytes;
     Metrics.UnreadBytes->Sub(info.UnreadBytes);
     if (const auto formatIt = FormatHandlers.find(info.HandlerSettings); formatIt != FormatHandlers.end()) {
@@ -767,6 +770,41 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
         StopReadSession();
     }
     SubscribeOnNextEvent();
+}
+
+void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
+    // if we read historical data (because of this client), then we restart the session.
+
+    if (!ReadSession || !info.NextMessageOffset) {
+        return;
+    }
+    TMaybe<ui64> minMessageOffset;
+    for (auto& [readActorId, clientPtr] : Clients) {
+        if (info.ReadActorId == readActorId || !clientPtr->NextMessageOffset) {
+            continue;
+        }
+        if (!minMessageOffset) {
+            minMessageOffset = clientPtr->NextMessageOffset;
+            continue;
+        }
+        minMessageOffset = std::min(minMessageOffset, clientPtr->NextMessageOffset);
+    }
+    if (!minMessageOffset) {
+        return;
+    }
+
+    if (info.NextMessageOffset >= minMessageOffset) {
+        return;
+    }
+    LOG_ROW_DISPATCHER_INFO("Client (on StopSession) has less offset (" << info.NextMessageOffset << ") than others clients (" << minMessageOffset << "), stop (restart) topic session");
+    Metrics.RestartSessionByOffsets->Inc();
+    ++RestartSessionByOffsets;
+    info.RestartSessionByOffsetsByQuery->Inc();
+    StopReadSession();
+
+    if (!ReadSession) {
+        Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
+    }
 }
 
 void TTopicSession::FatalError(TStatus status) {

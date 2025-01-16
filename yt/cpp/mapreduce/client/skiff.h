@@ -59,8 +59,7 @@ void Deserialize(NSkiff::TSkiffSchemaPtr& schema, const TNode& node);
 TFormat CreateSkiffFormat(const NSkiff::TSkiffSchemaPtr& schema);
 
 NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
-    const TClientContext& context,
-    const IClientRetryPolicyPtr& clientRetryPolicy,
+    const IRawClientPtr& rawClient,
     const TTransactionId& transactionId,
     ENodeReaderFormat nodeReaderFormat,
     const TVector<TRichYPath>& tablePaths,

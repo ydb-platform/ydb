@@ -16,7 +16,6 @@ public:
         const TStructuredJobTableList& structuredInputs,
         const TStructuredJobTableList& structuredOutputs,
         const IRawClientPtr& rawClient,
-        const TClientContext& context,
         const IClientRetryPolicyPtr& retryPolicy,
         TTransactionId transactionId);
 
@@ -24,7 +23,6 @@ public:
         TVector<TRichYPath> inputs,
         TVector<TRichYPath> outputs,
         const IRawClientPtr& rawClient,
-        const TClientContext& context,
         const IClientRetryPolicyPtr& retryPolicy,
         TTransactionId transactionId);
 
@@ -42,7 +40,6 @@ private:
     TVector<TMaybe<TRichYPath>> Outputs_;
 
     const IRawClientPtr RawClient_;
-    const TClientContext& Context_;
     const IClientRetryPolicyPtr RetryPolicy_;
 
     TTransactionId TransactionId_;

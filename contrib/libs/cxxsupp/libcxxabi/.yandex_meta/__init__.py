@@ -1,5 +1,7 @@
 from devtools.yamaker import fileutil
-from devtools.yamaker.project import CMakeNinjaNixProject
+from devtools.yamaker import pathutil
+from devtools.yamaker.modules import Library
+from devtools.yamaker.project import NixSourceProject
 
 
 def post_install(self):
@@ -17,25 +19,32 @@ def post_install(self):
         f"VERSION({self.version})",
     )
 
-    with self.yamakes["."] as libcxxabi:
+    self.yamakes["."] = self.module(
+        Library,
+        NO_UTIL=True,
+        NO_RUNTIME=True,
+        NO_COMPILER_WARNINGS=True,
         # Files are distributed between libcxxabi and libcxx in a weird manner
         # but we can not peerdir the latter to avoid loops (see below)
         # FIXME: sort includes open moving glibcxx-shims into its own dir
-        libcxxabi.ADDINCL = [
+        SRCS=fileutil.files(self.dstdir, rel=True, test=pathutil.is_source),
+        ADDINCL=[
             f"{self.arcdir}/include",
             "contrib/libs/cxxsupp/libcxx/include",
             # libcxxabi includes libcxx's private "include/refstring.h" header from src subdirectory
             "contrib/libs/cxxsupp/libcxx/src",
-        ]
+        ],
+        PEERDIR=[
+            "contrib/libs/libunwind",
+        ],
+        CFLAGS=[
+            "-D_LIBCPP_BUILDING_LIBRARY",
+            "-D_LIBCXXABI_BUILDING_LIBRARY",
+        ],
+    )
 
-        # We link libpthread.so automatically depending on the target platform
-        libcxxabi.CFLAGS.remove("-D_LIBCXXABI_LINK_PTHREAD_LIB")
-
-        libcxxabi.NO_UTIL = True
-        libcxxabi.NO_RUNTIME = True
-
-        # As of 1.2.3, musl libc does not provide __cxa_thread_atexit_impl.
-        libcxxabi.CFLAGS.remove("-DHAVE___CXA_THREAD_ATEXIT_IMPL")
+    with self.yamakes["."] as libcxxabi:
+        # As of 1.2.3, musl libc does not provide __cxa_thread_atexit_impl
         libcxxabi.after(
             "SRCS",
             """
@@ -68,13 +77,22 @@ def post_install(self):
         libcxxabi.PEERDIR.add("library/cpp/sanitizer/include")
 
 
-llvm_libcxxabi = CMakeNinjaNixProject(
+libcxxabi = NixSourceProject(
     owners=["g:cpp-committee", "g:cpp-contrib"],
     arcdir="contrib/libs/cxxsupp/libcxxabi",
     nixattr="llvmPackages_16.libcxxabi",
     copy_sources=[
         "include/__cxxabi_config.h",
         "include/cxxabi.h",
+        "src/*.cpp",
+        "src/*.h",
+        "src/demangle/*.cpp",
+        "src/demangle/*.def",
+        "src/demangle/*.h",
+    ],
+    copy_sources_except=[
+        # fake exception implementation which just invokes std::terminate
+        "src/cxa_noexception.cpp",
     ],
     disable_includes=[
         "aix_state_tab_eh.inc",

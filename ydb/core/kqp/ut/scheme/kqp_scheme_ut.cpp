@@ -7452,35 +7452,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        {
-            auto query = R"(
-                --!syntax_v1
-                -- Comment 1
-                $a = "a"; -- Comment 2
-                -- Comment 3
-
-                -- Comment 4
-                $b = $a;
-                $c = ($x) -> {
-                    -- Comments
-                    RETURN ($y) -> { RETURN $y || $x || $b || $a ; };
-                };
-
-                CREATE TRANSFER `/Root/transfer1`
-                  FROM `/Root/topic` TO `/Root/table` USING ($lll) -> { RETURN $c($lll); 
-                    -- Comment 5
-                  }
-                WITH (
-                    ENDPOINT = "%s",
-                    DATABASE = "/Root"
-                );
-
-            )";
-
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            Cerr << ">>>>> ISSUES = " << result.GetIssues().ToString() << Endl << Flush;
-        }
-/*
         // negative
         {
             auto query = R"(
@@ -7649,10 +7620,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer1`
                   FROM `/Root/topic` TO `/Root/table` USING ($x) -> {
-                    $y = CAST($x as String);
-                    RETURN $y || $y || SUBSTRING($y, 1, 2) || FIND($y, "abc")  ;
+                    RETURN $x.meta.body;
                   }
-                WITH (
+                  WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root"
                 );
@@ -7661,7 +7631,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        */
     }
 
     Y_UNIT_TEST(AlterTransfer) {

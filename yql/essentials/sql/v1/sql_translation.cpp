@@ -5099,6 +5099,22 @@ bool TSqlTranslation::ParseViewQuery(
 
 namespace {
 
+static size_t GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token) {
+    if (1 == token.line()) {
+        return 0;
+    }
+
+    size_t position = -1;
+    for (size_t line = 1; line < token.line(); ++line) {
+        position = query.find("\n", position + 1);
+        if (position == std::string::npos) {
+            return std::string::npos;
+        }
+    }
+
+    return position + token.column();
+}
+
 static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
     static const TString statementSeparator = ";\n";
 
@@ -5109,8 +5125,6 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
         return {};
     }
 
-    Cerr << ">>>>> STATEMENTS = " << statements.size() << Endl << Flush;
-
     TStringBuilder result;
     for (const auto id : Ctx.ForAllStatementsParts) {
         result << statements[id] << "\n";
@@ -5119,8 +5133,25 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
     switch (lambdaOrParameter.Alt_case()) {
         case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter1: {
             const auto& lambda = lambdaOrParameter.GetAlt_lambda_or_parameter1().GetRule_lambda1();
-            result << "$__ydb_transfer_lambda = " << AsSource(lambda) << statementSeparator;
 
+            auto& beginToken = lambda.GetRule_smart_parenthesis1().GetToken1();
+            const NSQLv1Generated::TToken* endToken = nullptr;
+            switch (lambda.GetBlock2().GetBlock2().GetAltCase()) {
+                case TRule_lambda_TBlock2_TBlock2::AltCase::kAlt1:
+                    endToken = &lambda.GetBlock2().GetBlock2().GetAlt1().GetToken3();
+                case TRule_lambda_TBlock2_TBlock2::AltCase::kAlt2:
+                    endToken = &lambda.GetBlock2().GetBlock2().GetAlt2().GetToken3();
+                case TRule_lambda_TBlock2_TBlock2::AltCase::ALT_NOT_SET:
+                    return {};
+            }
+
+            auto begin = GetQueryPosition(Ctx.Query, beginToken);
+            auto end = GetQueryPosition(Ctx.Query, *endToken);
+            if (begin == std::string::npos || end == std::string::npos) {
+                return {};
+            }
+            
+            result << "$__ydb_transfer_lambda = " << Ctx.Query.substr(begin, end - begin + endToken->value().size() + 1) << statementSeparator;
             return result;
         }
         case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter2: {
@@ -5130,7 +5161,7 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
             return result;
         }
         case NSQLv1Generated::TRule_lambda_or_parameter::ALT_NOT_SET:
-            return {}; // TODO ERROR
+            return {};
     }
 }
 
@@ -5144,17 +5175,8 @@ bool TSqlTranslation::ParseTransferLambda(
     auto result = expr.Build(lambdaOrParameter);
 
     lambdaText = GetLambdaText(*this, Ctx, lambdaOrParameter);
-    //features["query_text"] = { Ctx.Pos(), queryText };
 
-    // AST is needed for ready-made validation of CREATE VIEW statement.
-    // Query is stored as plain text, not AST.
-    //const auto viewSelect = BuildTransferLambda(lambdaOrParameter, Ctx);
-    //if (!viewSelect) {
-    //    return false;
-    //}
-    //features["query_ast"] = {viewSelect, Ctx};
-
-    return true;
+    return !lambdaText.empty();
 }
 
 class TReturningListColumns : public INode {

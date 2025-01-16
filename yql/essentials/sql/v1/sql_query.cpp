@@ -210,7 +210,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
     TString humanStatementName;
     ParseStatementName(core, internalStatementName, humanStatementName);
     const auto& altCase = core.Alt_case();
-    Cerr << ">>>>> altCase = " << (int)altCase << " position = " << Ctx.Pos() << " blocks.size = " << blocks.size() << Endl << Flush;
     if (Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
         altCase != TRule_sql_stmt_core::kAltSqlStmtCore13)) {
         Error() << humanStatementName << " statement is not supported in limited views";
@@ -1836,9 +1835,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore58: {
             // create_transfer_stmt: CREATE TRANSFER
 
-            Cerr << ">>>>> L = " << Ctx.ForAllStatementsParts.size() << " : " 
-                << JoinRange("; ", Ctx.ForAllStatementsParts.begin(), Ctx.ForAllStatementsParts.end()) << Endl << Flush;
-
             auto& node = core.GetAlt_sql_stmt_core58().GetRule_create_transfer_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref3().HasBlock1()) {
@@ -1863,9 +1859,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.GetBlock8().HasRule_lambda_or_parameter2()) {
                 ParseTransferLambda(transformLambda, node.GetBlock8().GetRule_lambda_or_parameter2());
             }
-
-            Cerr << ">>>>> TransformLambda = " << transformLambda << Endl << Flush;
-            Cerr << ">>>>> ORIGIN = " << Ctx.Query << Endl << Flush;
 
             AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx.Pos(), BuildTablePath(prefixPath, id),
                 std::move(source), std::move(target), std::move(transformLambda), std::move(settings), context));

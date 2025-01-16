@@ -10,7 +10,7 @@ import argparse
 
 from library.python import resource
 
-logging.getLogger().setLevel(logging.DEBUG)
+logging.getLogger().setLevel(logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(sys.stderr))
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster # noqa
@@ -60,42 +60,62 @@ class StabilityCluster:
         return path_to_unpack
 
     def perform_checks(self):
+
         safety_violations = safety_warden_factory(self.kikimr_cluster, self.ssh_username).list_of_safety_violations()
         liveness_violations = liveness_warden_factory(self.kikimr_cluster, self.ssh_username).list_of_liveness_violations
+        coredumps_search_results = {}
+        for node in self.kikimr_cluster.nodes.values():  
+            result = node.ssh_command('find /coredumps/ -type f | wc -l', raise_on_error=False) 
+            coredumps_search_results[node.host.split(':')[0]] = int(result.decode('utf-8'))
 
-        count = 0
-        report = []
-
-        print("SAFETY WARDEN (total: {})".format(len(safety_violations)))
+        print("SAFETY WARDEN:")
         for i, violation in enumerate(safety_violations):
             print("[{}]".format(i))
             print(violation)
             print()
-
-        print("LIVENESS WARDEN (total: {})".format(len(liveness_violations)))
+        
+        print("LIVENESS WARDEN:")
         for i, violation in enumerate(liveness_violations):
             print("[{}]".format(i))
             print(violation)
-
             print()
-        return count, "\n".join(report)
+
+        print("SAFETY WARDEN (total: {})".format(len(safety_violations)))
+        print("LIVENESS WARDEN (total: {})".format(len(liveness_violations)))
+        print("COREDUMPS:")
+        for node in coredumps_search_results:
+            print(f'    {node}: {coredumps_search_results[node]}')
 
     def start_nemesis(self):
         for node in self.kikimr_cluster.nodes.values():
             node.ssh_command("sudo service nemesis restart", raise_on_error=True)
 
+    def stop_workloads(self):
+         for node in self.kikimr_cluster.nodes.values():
+                node.ssh_command(
+                    'sudo pkill screen',
+                    raise_on_error=True
+                )
     def stop_nemesis(self):
         for node in self.kikimr_cluster.nodes.values():
             node.ssh_command("sudo service nemesis stop", raise_on_error=False)
 
-    def deploy_ydb(self):
+    def cleanup(self, mode = 'all'):
         self.stop_nemesis()
-        self.kikimr_cluster.start()
+        for node in self.kikimr_cluster.nodes.values():  
+            if mode in ['all', 'dumps']:
+                node.ssh_command('sudo rm -rf /coredumps/*', raise_on_error=False)
+            if mode in ['all', 'logs']:
+                node.ssh_command('sudo rm -rf /Berkanavt/kikimr_31003/logs/*', raise_on_error=False)
+                node.ssh_command('sudo rm -rf /Berkanavt/kikimr/logs/*', raise_on_error=False)
+                node.ssh_command('sudo rm -rf /Berkanavt/nemesis/log/*', raise_on_error=False)
+            if mode == 'all':
+                node.ssh_command('sudo pkill screen', raise_on_error=False)
+                node.ssh_command('sudo rm -rf /Berkanavt/kikimr/bin/*', raise_on_error=False)
 
-        # cleanup nemesis logs
-        for node in self.kikimr_cluster.nodes.values():
-            node.ssh_command('sudo rm -rf /Berkanavt/nemesis/logs/*', raise_on_error=False)
-            node.ssh_command('sudo pkill screen', raise_on_error=False)
+    def deploy_ydb(self):
+        self.cleanup()
+        self.kikimr_cluster.start()
 
         with open(self._unpack_resource("tbl_profile.txt")) as f:
             self.kikimr_cluster.client.console_request(f.read())
@@ -122,15 +142,17 @@ class StabilityCluster:
         for node in self.kikimr_cluster.nodes.values():
             node.ssh_command(["sudo", "mkdir", "-p", STRESS_BINARIES_DEPLOY_PATH], raise_on_error=False)
             for artifact in self.artifacts:
-                node.copy_file_or_dir(
-                    artifact,
-                    os.path.join(
+                node_artifact_path = os.path.join(
                         STRESS_BINARIES_DEPLOY_PATH,
                         os.path.basename(
                             artifact
                         )
                     )
+                node.copy_file_or_dir(
+                    artifact,
+                    node_artifact_path
                 )
+                node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
 
 
 def path_type(path):
@@ -170,6 +192,9 @@ def parse_args():
         type=str,
         nargs="+",
         choices=[
+            "cleanup",
+            "cleanup_logs",
+            "cleanup_dumps",
             "deploy_ydb",
             "deploy_tools",
             "start_nemesis",
@@ -178,7 +203,7 @@ def parse_args():
             "start_workload_simple_queue_row",
             "start_workload_simple_queue_column",
             "start_workload_olap_workload",
-            "stop_workload",
+            "stop_workloads",
             "perform_checks",
         ],
         help="actions to execute",
@@ -198,6 +223,12 @@ def main():
     for action in args.actions:
         if action == "deploy_ydb":
             stability_cluster.deploy_ydb()
+        if action == "cleanup":
+            stability_cluster.cleanup()
+        if action == "cleanup_logs":
+            stability_cluster.cleanup('logs')
+        if action == "cleanup_dups":
+            stability_cluster.cleanup('dumps')
         if action == "deploy_tools":
             stability_cluster.deploy_tools()
         if action == "start_all_workloads":
@@ -232,12 +263,8 @@ def main():
                     'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
                     raise_on_error=True
                 )
-        if action == "stop_workload":
-            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
-                node.ssh_command(
-                    'sudo pkill screen',
-                    raise_on_error=True
-                )
+        if action == "stop_workloads":
+            stability_cluster.stop_workloads()
 
         if action == "stop_nemesis":
             stability_cluster.stop_nemesis()
@@ -246,8 +273,7 @@ def main():
             stability_cluster.start_nemesis()
 
         if action == "perform_checks":
-            count, report = stability_cluster.perform_checks()
-            print(report)
+            stability_cluster.perform_checks()
 
 
 if __name__ == "__main__":

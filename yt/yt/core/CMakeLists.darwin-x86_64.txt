@@ -126,7 +126,6 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/invoker_alarm.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/invoker_queue.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/lease_manager.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/new_fair_share_thread_pool.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/nonblocking_batcher.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/notify_manager.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/concurrency/periodic_executor.cpp

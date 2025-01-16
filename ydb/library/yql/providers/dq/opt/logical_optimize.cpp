@@ -227,6 +227,7 @@ protected:
 
     // Recursively walk join tree and replace right-side of StreamLookupJoin
     ui32 RewriteStreamJoinTuple(ui32 leftIdx, const TCoEquiJoin& equiJoin, const TCoEquiJoinTuple& joinTuple, std::vector<TExprNode::TPtr>& args, TExprContext& ctx, bool& changed) {
+        Y_ENSURE(leftIdx < args.size());
         auto rightIdx = leftIdx + 1;
         if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
             rightIdx = RewriteStreamJoinTuple(leftIdx, equiJoin, joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
@@ -234,6 +235,7 @@ protected:
         if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
             return RewriteStreamJoinTuple(rightIdx, equiJoin, joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
         }
+        Y_ENSURE(rightIdx < args.size());
         do { // not a loop
             if (!IsStreamLookup(joinTuple)) {
                 break;
@@ -273,6 +275,7 @@ protected:
         if (!changed) {
             return node;
         }
+        // fill copies of remaining args
         for (ui32 i = 0; i < argCount; ++i) {
             if (!args[i]) {
                 args[i] = equiJoin.Arg(i).Ptr();

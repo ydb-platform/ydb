@@ -1539,6 +1539,7 @@ private:
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
     NKikimrBlobStorage::TStorageConfig StorageConfig;
+    bool SelfManagementEnabled = false;
     TString YamlConfig;
     ui32 ConfigVersion = 0;
     TBackoffTimer GetBlockBackoff{1, 1000};
@@ -1572,7 +1573,6 @@ private:
     class TNodeWardenUpdateNotifier;
 
     class TConsoleInteraction;
-
     std::unique_ptr<TConsoleInteraction> ConsoleInteraction;
 
     struct TEvPrivate {
@@ -2111,10 +2111,6 @@ public:
         SignalTabletActive(TActivationContext::AsActorContext());
         Loaded = true;
         ApplyStorageConfig();
-
-        if (!ConsoleInteraction) { // maybe we are in distconf mode, no console interaction yet started
-            StartConsoleInteraction();
-        }
 
         for (const auto& [id, info] : GroupMap) {
             if (info->VirtualGroupState) {

@@ -31,7 +31,7 @@ namespace NKikimr::NBsController {
         TConsoleInteraction(TBlobStorageController& controller);
         void Start();
         void OnConfigCommit(const TCommitConfigResult& result);
-        void OnPassAway();
+        void Stop();
         bool ParseConfig(const TString& config, ui32& configVersion, NKikimrBlobStorage::TStorageConfig& storageConfig);
         TCommitConfigResult::EStatus CheckConfig(const TString& config, ui32& configVersion, bool skipBSCValidation, NKikimrBlobStorage::TStorageConfig& storageConfig);
 
@@ -53,6 +53,7 @@ namespace NKikimr::NBsController {
         TBackoffTimer GetBlockBackoff{1, 1000};
         ui32 BlockedGeneration = 0;
         bool NeedRetrySession = false;
+        bool Working = false;
 
         void MakeCommitToConsole(TString& config, ui32 configVersion);
         void MakeGetBlock();

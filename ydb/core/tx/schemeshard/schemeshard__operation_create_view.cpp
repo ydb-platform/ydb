@@ -198,7 +198,8 @@ public:
 
         dstPath.MaterializeLeaf(owner, viewPathId);
         dstPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+
         result->SetPathId(viewPathId.LocalPathId);
 
         TPathElement::TPtr viewPath = dstPath.Base();

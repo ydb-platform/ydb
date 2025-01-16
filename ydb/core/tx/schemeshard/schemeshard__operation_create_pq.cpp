@@ -558,7 +558,7 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(StreamShardsCountChange);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;

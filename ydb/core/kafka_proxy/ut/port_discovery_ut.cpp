@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/grpc_services/grpc_endpoint.h>
@@ -143,7 +144,6 @@ namespace NKafka::NTests {
 
             auto* runtime = server.GetRuntime();
             auto edge = runtime->AllocateEdgeActor();
-            Sleep(TDuration::Seconds(10));
             runtime->Register(CreateBoardLookupActor(MakeEndpointsBoardPath("/Root"), edge, EBoardLookupMode::Second));
             TAutoPtr<IEventHandle> handle;
             auto* ev = runtime->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(handle);
@@ -224,8 +224,8 @@ namespace NKafka::NTests {
             if (!error) {
                 UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::NONE_ERROR);
             } else {
-                UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::UNKNOWN_SERVER_ERROR);
-                UNIT_ASSERT(ev->ErrorCode == EKafkaErrors::UNKNOWN_SERVER_ERROR);
+                UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::LISTENER_NOT_FOUND);
+                UNIT_ASSERT(ev->ErrorCode == EKafkaErrors::LISTENER_NOT_FOUND);
                 return;
             }
             UNIT_ASSERT_VALUES_EQUAL(response->Brokers.size(), 1);

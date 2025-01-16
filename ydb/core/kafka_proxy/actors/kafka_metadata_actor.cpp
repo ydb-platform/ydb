@@ -254,7 +254,7 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     };
 
     if (HaveError) {
-        ErrorCode = EKafkaErrors::UNKNOWN_SERVER_ERROR;
+        ErrorCode = EKafkaErrors::LISTENER_NOT_FOUND;
         for (auto& topic : Response->Topics) {
             AddTopicError(topic, ErrorCode);
         }
@@ -287,7 +287,7 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
             } else {
                 // Already tried both YDB discovery and interconnect, still couldn't find the node for partition. Throw error
                 KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
-                AddTopicError(topic, EKafkaErrors::UNKNOWN_SERVER_ERROR);
+                AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
             }
         } else {
             AddTopicResponse(topic, ev.Get(), topicNodes);

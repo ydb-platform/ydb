@@ -320,6 +320,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     stream << " [options...] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
     RenderCommandsDescription(stream, colors);
+    stream << Endl << Endl << colors.BoldColor() << "Commands in " << colors.Red() << colors.BoldColor() <<  "admin" << colors.OldColor() << colors.BoldColor() << " subtree may treat global flags and profile differently, see corresponding help" << colors.OldColor() << Endl;
     opts.SetCmdLineDescr(stream.Str());
 
     opts.GetLongOption("time").Hidden();
@@ -590,14 +591,14 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
     }
 
     if (config.Address.empty() && !config.AllowEmptyAddress) {
-        throw TMisuseException() << "Missing required option 'endpoint'.";
+        throw TMisuseException() << "Missing required option 'endpoint'." << (config.OnlyExplicitProfile ? " Profile ignored due to admin command use." : "");
     }
 
     if (config.Database.empty() && config.AllowEmptyDatabase) {
         // just skip the Database check
     } else if (config.Database.empty()) {
         throw TMisuseException()
-            << "Missing required option 'database'.";
+            << "Missing required option 'database'." << (config.OnlyExplicitProfile ? " Profile ignored due to admin command use." : "");
     } else if (!config.Database.StartsWith('/')) {
         throw TMisuseException() << "Path to a database \"" << config.Database
             << "\" is incorrect. It must be absolute and thus must begin with '/'.";

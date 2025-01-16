@@ -2475,6 +2475,7 @@ partitioning_settings {
                 auto changefeedDir = "/" + GenChangefeedName(i);
                 auto* changefeed = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb");
                 UNIT_ASSERT(changefeed);
+                UNIT_ASSERT_VALUES_EQUAL(*changefeed, Sprintf("name: \"update_feed%d\"\nmode: MODE_UPDATES\nformat: FORMAT_JSON\nstate: STATE_ENABLED\n", i));
 
                 auto* topic = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb");
                 UNIT_ASSERT(topic);

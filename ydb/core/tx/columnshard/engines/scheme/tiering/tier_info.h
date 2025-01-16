@@ -73,7 +73,7 @@ public:
 
     TString GetDebugString() const {
         TStringBuilder sb;
-        sb << "storage=" << (ExternalStorageId ? ExternalStorageId->GetPath() : "") << ";duration=" << EvictDuration << ";column=" << EvictColumnName
+        sb << "storage=" << (ExternalStorageId ? ExternalStorageId->GetConfigPath() : "") << ";duration=" << EvictDuration << ";column=" << EvictColumnName
            << ";serializer=";
         if (Serializer) {
             sb << Serializer->DebugString();

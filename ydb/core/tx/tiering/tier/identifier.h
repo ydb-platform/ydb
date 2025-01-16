@@ -10,21 +10,22 @@ namespace NKikimr::NColumnShard::NTiers {
 
 class TExternalStorageId {
 private:
-    YDB_READONLY_DEF(TString, Path);
+    YDB_READONLY_DEF(TString, ConfigPath);
 
 public:
     TExternalStorageId(const TString& path)
-        : Path(CanonizePath(path)) {
+        : ConfigPath(CanonizePath(path)) {
     }
 
-    bool operator<(const TExternalStorageId& other) const {
-        return Path < other.Path;
+    TString ToString() const {
+        return ConfigPath;
     }
-    bool operator>(const TExternalStorageId& other) const {
-        return Path > other.Path;
+
+    std::strong_ordering operator<=>(const TExternalStorageId& other) const {
+        return ConfigPath <=> other.ConfigPath;
     }
     bool operator==(const TExternalStorageId& other) const {
-        return Path == other.Path;
+        return ConfigPath == other.ConfigPath;
     }
 };
 
@@ -33,6 +34,6 @@ public:
 template <>
 struct THash<NKikimr::NColumnShard::NTiers::TExternalStorageId> {
     inline ui64 operator()(const NKikimr::NColumnShard::NTiers::TExternalStorageId& x) const noexcept {
-        return THash<TString>()(x.GetPath());
+        return THash<TString>()(x.ToString());
     }
 };

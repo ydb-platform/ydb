@@ -53,7 +53,7 @@ private:
         TTiersManager* Owner;
 
     public:
-        const NTiers::TExternalStorageId& GetTier() const {
+        const NTiers::TExternalStorageId& GetTierId() const {
             return TierId;
         }
 

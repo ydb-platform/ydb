@@ -73,8 +73,8 @@ public:
 
     TString GetDebugString() const {
         TStringBuilder sb;
-        sb << "storage=" << (ExternalStorageId ? ExternalStorageId->GetConfigPath() : "") << ";duration=" << EvictDuration << ";column=" << EvictColumnName
-           << ";serializer=";
+        sb << "storage=" << (ExternalStorageId ? ExternalStorageId->GetConfigPath() : NTiering::NCommon::DeleteTierName)
+           << ";duration=" << EvictDuration << ";column=" << EvictColumnName << ";serializer=";
         if (Serializer) {
             sb << Serializer->DebugString();
         } else {

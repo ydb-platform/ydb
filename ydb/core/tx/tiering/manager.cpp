@@ -338,7 +338,7 @@ TString TTiersManager::DebugString() {
         for (const auto& [pathId, tiers] : UsedTiers) {
             sb << pathId << ":{";
             for (const auto& tierRef : tiers) {
-                sb << tierRef.GetTier() << ";";
+                sb << tierRef.GetTierId() << ";";
             }
             sb << "}";
         }

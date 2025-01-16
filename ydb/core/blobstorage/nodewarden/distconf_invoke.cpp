@@ -311,10 +311,10 @@ namespace NKikimr::NStorage {
             const auto& record = Event->Get()->Record;
             const auto& cmd = record.GetReassignGroupDisk();
 
-            if (Scepter.expired()) {
-                return FinishWithError(TResult::ERROR, "scepter lost during query execution");
-            } else if (!RunCommonChecks()) {
+            if (!RunCommonChecks()) {
                 return;
+            } else if (!Self->SelfManagementEnabled) {
+                return FinishWithError(TResult::ERROR, "self-management is not enabled");
             }
 
             STLOG(PRI_DEBUG, BS_NODE, NWDC75, "ReassignGroupDiskExecute", (SelfId, SelfId()));
@@ -383,9 +383,6 @@ namespace NKikimr::NStorage {
             }
             const auto& ss = bsConfig.GetServiceSet();
 
-            if (!config.GetSelfManagementConfig().GetEnabled()) {
-                return FinishWithError(TResult::ERROR, "self-management is not enabled");
-            }
             const auto& smConfig = config.GetSelfManagementConfig();
 
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
@@ -656,7 +653,7 @@ namespace NKikimr::NStorage {
         void ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
             if (!RunCommonChecks()) {
                 return;
-            } else if (!Self->ConfigCommittedToConsole && Self->StorageConfig->GetSelfManagementConfig().GetEnabled()) {
+            } else if (!Self->ConfigCommittedToConsole && Self->SelfManagementEnabled) {
                 return FinishWithError(TResult::ERROR, "previous config has not been committed to Console yet");
             }
 
@@ -711,7 +708,8 @@ namespace NKikimr::NStorage {
             }
 
             // whether we are enabling distconf right now
-            const bool enablingDistconf = Self->StorageConfig->GetSelfManagementConfig().GetEnabled() <
+            const bool enablingDistconf = Self->BaseConfig.GetSelfManagementConfig().GetEnabled() &&
+                !Self->SelfManagementEnabled &&
                 config.GetSelfManagementConfig().GetEnabled();
 
             if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, NewYaml)) {
@@ -863,6 +861,8 @@ namespace NKikimr::NStorage {
                 FinishWithError(TResult::ERROR, "something going on with default FSM");
             } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
                 FinishWithError(TResult::ERROR, TStringBuilder() << "current config validation failed: " << *error);
+            } else if (Scepter.expired()) {
+                FinishWithError(TResult::ERROR, "scepter lost during query execution");
             } else {
                 return true;
             }

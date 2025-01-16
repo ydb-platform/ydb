@@ -97,6 +97,8 @@ NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const T
 }
 
 void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
+    StartConsoleInteraction();
+
     // create stat processor
     StatProcessorActorId = Register(CreateStatProcessorActor());
 
@@ -124,6 +126,7 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
 
 void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     ev->Get()->Config->Swap(&StorageConfig);
+    SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
 
     auto prevStaticPDisks = std::exchange(StaticPDisks, {});
     auto prevStaticVSlots = std::exchange(StaticVSlots, {});
@@ -158,20 +161,21 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
     }
 
-    if (StorageConfig.GetSelfManagementConfig().GetEnabled()) {
+    if (SelfManagementEnabled) {
         // assuming that in autoconfig mode HostRecords are managed by the distconf; we need to apply it here to
         // avoid race with box autoconfiguration and node list change
         HostRecords = std::make_shared<THostRecordMap::element_type>(StorageConfig);
         if (SelfHealId) {
             Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
         }
+
+        ConsoleInteraction->Stop(); // distconf will handle the Console from now on
     } else {
-        StartConsoleInteraction();
-        ConsoleInteraction->Start(); // start console interaction when working in non-distconf mode
+        ConsoleInteraction->Start(); // we control the Console now
     }
 
     if (!std::exchange(StorageConfigObtained, true)) { // this is the first time we get StorageConfig in this instance of BSC
-        if (HostRecords) {
+        if (SelfManagementEnabled) {
             OnHostRecordsInitiate();
         } else {
             Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
@@ -192,9 +196,7 @@ void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
 }
 
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
-    if (!StorageConfig.HasBlobStorageConfig() || // this would be strange
-            !ignoreDistconf && (!StorageConfig.GetSelfManagementConfig().GetEnabled() ||
-            !StorageConfig.GetSelfManagementConfig().GetAutomaticBoxManagement())) {
+    if (!StorageConfig.HasBlobStorageConfig()) {
         return;
     }
     const auto& bsConfig = StorageConfig.GetBlobStorageConfig();
@@ -202,6 +204,11 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     if (Boxes.size() > 1) {
         return;
     }
+
+    if (!ignoreDistconf && (!SelfManagementEnabled || !StorageConfig.GetSelfManagementConfig().GetAutomaticBoxManagement())) {
+        return; // not expected to be managed by BSC
+    }
+
     std::optional<ui64> generation;
     if (!Boxes.empty()) {
         const auto& [boxId, box] = *Boxes.begin();
@@ -292,11 +299,10 @@ void TBlobStorageController::OnHostRecordsInitiate() {
                 "BlobStorageControllerControls.EnableSelfHealWithDegraded");
         }
     }
+    Y_ABORT_UNLESS(!SelfHealId);
     SelfHealId = Register(CreateSelfHealActor());
     PushStaticGroupsToSelfHeal();
-    if (StorageConfigObtained) {
-        Execute(CreateTxInitScheme());
-    }
+    Execute(CreateTxInitScheme());
 }
 
 void TBlobStorageController::IssueInitialGroupContent() {
@@ -471,9 +477,9 @@ void TBlobStorageController::PassAway() {
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeBlobStorageNodeWardenID(SelfId().NodeId()),
         SelfId(), nullptr, 0));
     if (ConsoleInteraction) {
-        ConsoleInteraction->OnPassAway();
+        ConsoleInteraction->Stop();
     }
-    return TActor::PassAway();
+    TActor::PassAway();
 }
 
 TBlobStorageController::TBlobStorageController(const TActorId &tablet, TTabletStorageInfo *info)

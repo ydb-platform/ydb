@@ -108,7 +108,7 @@ class TpchTestBaseH1(TestBase):
 
     def setup_tpch(cls):
         cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'init', '--store=column', '--datetime'])
-        # cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'import', 'generator', '--scale=1'])
+        cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'import', 'generator', '--scale=1'])
 
     def teardown_tpch(cls):
         cls.run_cli(['scheme', 'rmdir', '-r', '-f', cls.tpch_default_path()])
@@ -165,7 +165,7 @@ class TpchTestBaseH1(TestBase):
 
     def tpch_empty_lineitem(self):
         return {
-            # do not generated 'l_orderkey', 'l_linenumber' because they are primary keys
+            # do not generate 'l_orderkey', 'l_linenumber' because they are primary keys
             # and must be explicitly specified
             'l_partkey': random.randint(1, 1000),
             'l_suppkey': random.randint(1, 1000),

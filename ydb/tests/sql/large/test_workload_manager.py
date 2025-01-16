@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
-import pytest
+import concurrent.futures
 from ydb.tests.sql.lib.test_base import TpchTestBaseH1
 from ydb.tests.sql.lib.test_wm import WorkloadManager
 import ydb
 import yatest.common
 import os
-from time import sleep
-import threading
-import queue
+import time
 
 
 class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
@@ -63,11 +61,9 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
 
         table_name = f"{self.tpch_default_path()}/lineitem"
 
-        user_definition = f"""
-        CREATE USER testuser PASSWORD NULL
-        """
-        self.query(user_definition)
-        self.query(f"GRANT ALL ON `/Root` TO testuser ")
+        self.query(f"CREATE USER testuser PASSWORD NULL")
+        self.query(f"GRANT ALL ON `{self.database}` TO testuser ")
+
         test_user_connection = self.create_connection("testuser")
         test_user_connection.query("select 1")
 
@@ -93,7 +89,7 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
         self.query(pool_classifier_definition)
 
         # Wait until resource pool fetches resource classifiers list
-        sleep(12)
+        time.sleep(12)
 
         self.verify_pool("testuser", resource_pool, f'select count(*) from `{table_name}`')
 
@@ -106,11 +102,9 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
 
         table_name = f"{self.tpch_default_path()}/lineitem"
 
-        user_definition = f"""
-        CREATE USER testuser PASSWORD NULL
-        """
-        self.query(user_definition)
-        self.query(f"GRANT ALL ON `/Root` TO testuser ")
+        self.query(f"CREATE USER testuser PASSWORD NULL")
+        self.query(f"GRANT ALL ON `{self.database}` TO testuser ")
+
         test_user_connection = self.create_connection("testuser")
         test_user_connection.query("select 1")
 
@@ -145,11 +139,9 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
 
         table_name = f"{self.tpch_default_path()}/lineitem"
 
-        user_definition = f"""
-        CREATE USER testuser PASSWORD NULL
-        """
-        self.query(user_definition)
-        self.query(f"GRANT ALL ON `/Root` TO testuser ")
+        self.query(f"CREATE USER testuser PASSWORD NULL")
+        self.query(f"GRANT ALL ON `{self.database}` TO testuser ")
+
         test_user_connection = self.create_connection("testuser")
         test_user_connection.query("select 1")
 
@@ -181,18 +173,10 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
         """
         Test queue size limit for resource pool.
         """
-        print("test_resource_pool_queue_size_limit")
 
         table_name = f"{self.tpch_default_path()}/lineitem"
-        user_definition = f"""
-        CREATE USER testuser PASSWORD NULL
-        """
-        self.query(user_definition)
-        self.query(f"GRANT ALL ON `/Root` TO testuser ")
-        test_user_connection = self.create_connection("testuser")
-        test_user_connection.query("select 1")
-
-        print("before creating pool")
+        self.query(f"CREATE USER testuser PASSWORD NULL")
+        self.query(f"GRANT ALL ON `{self.database}` TO testuser ")
 
         queue_size = 2
 
@@ -218,55 +202,121 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
         self.query(pool_classifier_definition)
 
         # Wait until resource pool fetches resource classifiers list
-        sleep(12)
+        time.sleep(12)
 
         self.verify_pool("testuser", resource_pool, f'select count(*) from `{table_name}`')
 
-        def execute_query(query_queue, result_queue):
-            while not query_queue.empty():
-                try:
-                    query_text = query_queue.get()
-                    # Execute a query
-                    test_user_connection.query(query_text)
-                    result_queue.put("success", block=False)
-                    print("success")
-                except Exception as e:
-                    result_queue.put(f"error: {str(e)}", block=False)
-                    print("error")
-                finally:
-                    query_queue.task_done()
+        test_user_connection = self.create_connection("testuser")
 
-        query_queue = queue.Queue()
-        result_queue = queue.Queue()
-
-        for _ in range(queue_size+20):
-            query_queue.put(f"select count(*) from `{table_name}`", block=False)
-
-        print("before")
-        threads = []
-        for _ in range(queue_size+20):
-            print(f"sending command {_}")
-            t = threading.Thread(target=execute_query, args=(query_queue, result_queue))
-            threads.append(t)
-            t.start()
-
-        sleep(1)
-        print("waiting for the queue")
-        # Wait for all queries to complete
-        query_queue.join()
-
-        for t in threads:
-            t.join()
-
-        # Collect results
         success_count = 0
         error_count = 0
-        while not result_queue.empty():
-            result = result_queue.get()
-            if "success" in result:
-                success_count += 1
-            else:
-                error_count += 1
+        num_threads = 3*queue_size+10
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+            def execute_query(query):
+                test_user_connection.query(query)
+
+            query_futures = [executor.submit(execute_query,
+                                             f"select sum(l_linenumber) from `{table_name}`") for _ in range(num_threads)]
+
+            # Wait for the insert operation to complete, then allow reading to complete
+            concurrent.futures.wait(query_futures)
+
+            for future in query_futures:
+                try:
+                    future.result()
+                    success_count += 1
+                except Exception:
+                    error_count += 1
 
         assert success_count == queue_size, f"Expected {queue_size} successful queries, got {success_count}"
         assert error_count == 0, f"Expected 0 failed queries, got {error_count}"
+
+
+    def test_resource_pool_queue_resource_weight(self):
+        """
+        Test queue size limit for resource pool.
+        """
+
+        table_name = f"{self.tpch_default_path()}/lineitem"
+        self.query(f"CREATE USER testuser1 PASSWORD NULL")
+        self.query(f"GRANT ALL ON `{self.database}` TO testuser1 ")
+
+        self.query(f"CREATE USER testuser2 PASSWORD NULL")
+        self.query(f"GRANT ALL ON `{self.database}` TO testuser2 ")
+
+        queue_size = 2
+
+        resource_pool1 = "test_pool1"
+        pool_definition = f"""
+        CREATE RESOURCE POOL `{resource_pool1}` WITH (
+            CONCURRENT_QUERY_LIMIT=1,
+            QUEUE_SIZE={queue_size},
+            DATABASE_LOAD_CPU_THRESHOLD=80,
+            RESOURCE_WEIGHT=100,
+            QUERY_CPU_LIMIT_PERCENT_PER_NODE=100,
+            TOTAL_CPU_LIMIT_PERCENT_PER_NODE=70
+            )
+        """
+        self.query(pool_definition)
+
+        resource_pool2 = "test_pool2"
+        pool_definition = f"""
+        CREATE RESOURCE POOL `{resource_pool2}` WITH (
+            CONCURRENT_QUERY_LIMIT=1,
+            QUEUE_SIZE={queue_size},
+            DATABASE_LOAD_CPU_THRESHOLD=80,
+            RESOURCE_WEIGHT=0,
+            QUERY_CPU_LIMIT_PERCENT_PER_NODE=40,
+            TOTAL_CPU_LIMIT_PERCENT_PER_NODE=40
+            )
+        """
+        self.query(pool_definition)
+
+        pool_classifier1_definition = f"""
+            CREATE RESOURCE POOL CLASSIFIER test_classifier1
+            WITH (
+                RESOURCE_POOL = '{resource_pool1}',
+                MEMBER_NAME = 'testuser1'
+            )"""
+        self.query(pool_classifier1_definition)
+
+        pool_classifier2_definition = f"""
+            CREATE RESOURCE POOL CLASSIFIER test_classifier2
+            WITH (
+                RESOURCE_POOL = '{resource_pool2}',
+                MEMBER_NAME = 'testuser2'
+            )"""
+        self.query(pool_classifier2_definition)
+
+        # Wait until resource pool fetches resource classifiers list
+        time.sleep(12)
+
+        self.verify_pool("testuser1", resource_pool1, f'select count(*) from `{table_name}`')
+        self.verify_pool("testuser2", resource_pool2, f'select count(*) from `{table_name}`')
+
+        test_user1_connection = self.create_connection("testuser1")
+        test_user2_connection = self.create_connection("testuser2")
+
+        num_threads = 2
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+            def execute_query(connection, query):
+                start_time = time.time()
+                for _ in range(3):
+                    connection.query(query)
+                end_time = time.time()
+                return end_time - start_time
+
+            query = f"select sum(l_linenumber) from `{table_name}`"
+            query_testuser1_future = executor.submit(execute_query,test_user1_connection, query)
+            query_testuser2_future = executor.submit(execute_query,test_user2_connection, query)
+
+            # Wait for the insert operation to complete, then allow reading to complete
+            concurrent.futures.wait([query_testuser1_future, query_testuser2_future])
+
+            q1_time = query_testuser1_future.result()
+            q2_time = query_testuser2_future.result()
+
+            print(f"q1={q1_time} q2={q2_time}")
+
+            assert q1_time < q2_time/2, "Low CPU user2 task works faster than high cpu user 1"

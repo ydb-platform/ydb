@@ -71,7 +71,7 @@ public:
             UNIT_ASSERT_GT(columnRawBytes, 0);
         }
 
-        TestHelper->SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
+        TestHelper->SetTiering("/Root/olapStore/olapTable", GetTierPathOverride(), "timestamp");
         csController->WaitActualization(TDuration::Seconds(5));
 
         {

@@ -20,6 +20,7 @@ target_link_libraries(engines-scheme-tiering PUBLIC
   contrib-libs-cxxsupp
   yutil
   formats-arrow-serializer
+  tx-tiering-tier
 )
 
 target_sources(engines-scheme-tiering PRIVATE

@@ -19,6 +19,7 @@ target_link_libraries(tx-tiering-abstract PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-actors-core
+  tx-tiering-tier
 )
 
 target_sources(tx-tiering-abstract PRIVATE

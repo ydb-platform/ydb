@@ -145,6 +145,7 @@ public:
         , AllowOlapDataQuery(tableServiceConfig.GetAllowOlapDataQuery())
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(tableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
+        , VerboseMemoryLimitException(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException())
     {
         if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
@@ -2561,6 +2562,7 @@ private:
                     auto arbiterIterator = std::begin(shards);
                     std::advance(arbiterIterator, index);
                     columnShardArbiter = *arbiterIterator;
+                    receivingShardsSet.insert(*columnShardArbiter);
                 }
             }
 
@@ -2720,6 +2722,7 @@ private:
             .CaFactory_ = Request.CaFactory_,
             .BlockTrackingMode = BlockTrackingMode,
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
+            .VerboseMemoryLimitException = VerboseMemoryLimitException,
         });
 
         auto err = Planner->PlanExecution();
@@ -3044,6 +3047,7 @@ private:
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TDuration WaitCAStatsTimeout;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
+    const bool VerboseMemoryLimitException;
 };
 
 } // namespace

@@ -451,7 +451,7 @@ public:
             SetPartChecksum(Message_.Size(),  generateChecksums ? GetVariableChecksum() : NullChecksum);
         }
 
-        BeginPhase(EPacketPhase::FixedHeader, &FixedHeader_, sizeof (TPacketHeader));
+        BeginPhase(EPacketPhase::FixedHeader, &FixedHeader_, sizeof(TPacketHeader));
         return true;
     }
 

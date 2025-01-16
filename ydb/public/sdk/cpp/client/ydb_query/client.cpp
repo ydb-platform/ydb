@@ -341,7 +341,7 @@ public:
         const auto sessionId = resp->session_id();
         request.set_session_id(sessionId);
 
-        auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client);
+        auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client, client);
 
         // Do not pass client timeout here. Session must be alive
         TRpcRequestSettings rpcSettings;

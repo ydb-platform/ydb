@@ -397,7 +397,7 @@ public:
         result->SetPathId(path->PathId.LocalPathId);
 
         context.SS->IncrementPathDbRefCount(path->PathId);
-        parentPath->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
         parentPath.DomainInfo()->IncPathsInside();
 
         if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {

@@ -106,6 +106,19 @@ namespace NFake {
         }
 
         TEvBlobStorage::TEvGetResult* Handle(TEvBlobStorage::TEvGet *msg) {
+            if (const auto& blk = msg->ReaderTabletData) {
+                if (IsBlocked(blk->Id, blk->Generation)) {
+                    auto response = msg->MakeErrorResponse(NKikimrProto::BLOCKED, "block race detected", GroupId);
+                    return response.release();
+                }
+            }
+            if (const auto& blk = msg->ForceBlockTabletData; blk && blk->Generation) {
+                auto it = Blocks.find(blk->Id);
+                Y_VERIFY_S(it != Blocks.end() && it->second == blk->Generation, "incorrect ForceBlockTabletData"
+                    << " expected Generation# " << blk->Generation
+                    << " having Generation# " << (it != Blocks.end() ? ToString(it->second) : "none"));
+            }
+
             // prepare result structure holding the returned data
             auto result = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, msg->QuerySize, GroupId);
 

@@ -24,14 +24,12 @@ NKikimr::TConclusion<NKikimrSchemeOp::TOlapColumn::TSerializer> ConvertFamilyDes
                                                                  << "` is not support compression level");
     }
     if (familyDescription.HasColumnCodecLevel()) {
-        int level = familyDescription.GetColumnCodecLevel();
-        int minLevel = NArrow::MinimumCompressionLevel(codec.value()).value();
-        int maxLevel = NArrow::MaximumCompressionLevel(codec.value()).value();
-        if (level < minLevel || level > maxLevel) {
+        if (!NArrow::SupportsCompressionLevel(codec.value(), familyDescription.GetColumnCodecLevel())) {
             return NKikimr::TConclusionStatus::Fail(TStringBuilder()
                                                     << "family `" << familyDescription.GetName() << "`: incorrect level for codec `"
                                                     << NArrow::CompressionToString(familyDescription.GetColumnCodec()) << "`. expected: ["
-                                                    << minLevel << ":" << maxLevel << "]");
+                                                    << NArrow::MinimumCompressionLevel(codec.value()).value() << ":"
+                                                    << NArrow::MaximumCompressionLevel(codec.value()).value() << "]");
         }
     }
 

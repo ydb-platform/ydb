@@ -9,8 +9,6 @@ PEERDIR(
     yql/essentials/protos
 )
 
-IF (NOT PY_PROTOS_FOR)
-    EXCLUDE_TAGS(GO_PROTO)
-ENDIF()
+EXCLUDE_TAGS(GO_PROTO)
 
 END()

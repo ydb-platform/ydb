@@ -63,7 +63,7 @@ PEERDIR(
     yt/yql/providers/yt/lib/yt_download
     yt/yql/providers/yt/provider
     yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/dq
+    yt/yql/providers/yt/comp_nodes/dq/llvm14
     yt/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/providers/yt/dq_task_preprocessor
 

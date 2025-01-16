@@ -2946,11 +2946,23 @@ NNodes::TExprBase DqBuildStageWithSourceWrap(NNodes::TExprBase node, TExprContex
         .Build();
 
     if (supportsBlocks) {
-        wideWrap = ctx.Builder(node.Pos())
-            .Callable("WideFromBlocks")
-                .Add(0, wideWrap)
-            .Seal()
-            .Build();
+        if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
+            wideWrap = ctx.Builder(node.Pos())
+                .Callable("WideFromBlocks")
+                    .Add(0, wideWrap)
+                .Seal()
+                .Build();
+        } else {
+            wideWrap = ctx.Builder(node.Pos())
+                .Callable("ToFlow")
+                    .Callable(0, "WideFromBlocks")
+                        .Callable(0, "FromFlow")
+                            .Add(0, wideWrap)
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
     }
 
     auto narrow = ctx.Builder(node.Pos())

@@ -59,8 +59,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     TString MemoryConsumptionDetails() const override {
-        // NOTE: don't forget to disable verbosity in stable branches.
-        return Tx->ToString(true);
+        return Tx->ToString();
     }
 
     void TerminateHandler(bool success, const NYql::TIssues& issues) {

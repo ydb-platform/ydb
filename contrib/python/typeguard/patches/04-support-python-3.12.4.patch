@@ -1,0 +1,11 @@
+--- contrib/python/typeguard/typeguard/__init__.py	(index)
++++ contrib/python/typeguard/typeguard/__init__.py	(working tree)
+@@ -265,7 +265,7 @@ def resolve_forwardref(maybe_ref, memo: _TypeCheckMemo):
+         if sys.version_info < (3, 9, 0):
+             return evaluate_forwardref(maybe_ref, memo.globals, memo.locals)
+         else:
+-            return evaluate_forwardref(maybe_ref, memo.globals, memo.locals, frozenset())
++            return evaluate_forwardref(maybe_ref, memo.globals, memo.locals, recursive_guard=frozenset())
+ 
+     else:
+         return maybe_ref

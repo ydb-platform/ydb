@@ -239,7 +239,7 @@ namespace NKikimr::NBsController {
         switch (status) {
             case NKikimrProto::OK:
                 if (generation <= blockedGeneration) {
-                    Self.PassAway();
+                    Self.HandlePoison(TActivationContext::AsActorContext());
                     return;
                 }
                 if (generation == blockedGeneration + 1 && NeedRetrySession) {
@@ -249,7 +249,7 @@ namespace NKikimr::NBsController {
                 Y_VERIFY_DEBUG_S(generation == blockedGeneration + 1, "BlockedGeneration#" << blockedGeneration << " Tablet generation#" << generation);
                 break;
             case NKikimrProto::BLOCKED:
-                Self.PassAway();
+                Self.HandlePoison(TActivationContext::AsActorContext());
                 break;
             case NKikimrProto::DEADLINE:
             case NKikimrProto::RACE:

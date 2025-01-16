@@ -103,6 +103,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
             InFlyData = task->GetCounter("InFlyData");
             AlreadyWritten = task->GetCounter("AlreadyWritten");
             FirstContinuationTokenMs = task->GetCounter("FirstContinuationTokenMs");
+            EgressDataRate = task->GetCounter("EgressDataRate", true);
         }
 
         ~TMetrics() {
@@ -117,6 +118,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyData;
         ::NMonitoring::TDynamicCounters::TCounterPtr AlreadyWritten;
         ::NMonitoring::TDynamicCounters::TCounterPtr FirstContinuationTokenMs;
+        ::NMonitoring::TDynamicCounters::TCounterPtr EgressDataRate;
     };
 
     struct TAckInfo {
@@ -383,6 +385,7 @@ private:
         auto itemSize = GetItemSize(Buffer.front());
         WaitingAcks.emplace(itemSize, TInstant::Now());
         EgressStats.Bytes += itemSize;
+        Metrics.EgressDataRate->Add(itemSize);
         Buffer.pop();
     }
 

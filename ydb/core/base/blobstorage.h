@@ -849,6 +849,8 @@ struct TEvBlobStorage {
         EvControllerValidateConfigResponse          = 0x10031626,
         EvControllerReplaceConfigRequest            = 0x10031627,
         EvControllerReplaceConfigResponse           = 0x10031628,
+        EvControllerShredRequest                    = 0x10031629,
+        EvControllerShredResponse                   = 0x1003162a,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -1138,8 +1140,8 @@ struct TEvBlobStorage {
             ui32 Generation = 0;    // tablet generation
         };
 
-        using TForceBlockTabletData = TTabletData;
-        using TReaderTabletData = TTabletData;
+        struct TForceBlockTabletData : TTabletData { using TTabletData::TTabletData; };
+        struct TReaderTabletData : TTabletData { using TTabletData::TTabletData; };
 
         std::optional<TReaderTabletData> ReaderTabletData;
         std::optional<TForceBlockTabletData> ForceBlockTabletData;
@@ -2494,6 +2496,8 @@ struct TEvBlobStorage {
     struct TEvControllerValidateConfigResponse;
     struct TEvControllerReplaceConfigRequest;
     struct TEvControllerReplaceConfigResponse;
+    struct TEvControllerShredRequest;
+    struct TEvControllerShredResponse;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

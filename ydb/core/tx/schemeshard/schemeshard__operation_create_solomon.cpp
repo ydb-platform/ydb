@@ -422,7 +422,7 @@ public:
         dstPath.DomainInfo()->AddInternalShards(txState);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;

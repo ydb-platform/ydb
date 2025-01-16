@@ -2,6 +2,8 @@
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
 
+#include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -25,6 +27,11 @@ using namespace Aws;
 
 // Downloads scheme-related objects from S3
 class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
+    static TString MetadataKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
+        return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/metadata.json";
+    }
+
     static TString SchemeKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
         return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/scheme.pb";
@@ -40,6 +47,21 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             .WithKey(key);
 
         Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
+    }
+
+    void HandleMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        LOG_D("HandleMetadata TEvExternalStorage::TEvHeadObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+
+        const auto contentLength = result.GetResult().GetContentLength();
+        GetObject(MetadataKey, std::make_pair(0, contentLength - 1));
     }
 
     void HandleScheme(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -76,12 +98,65 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         GetObject(PermissionsKey, std::make_pair(0, contentLength - 1));
     }
 
+    void HandleChecksum(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        LOG_D("HandleChecksum TEvExternalStorage::TEvHeadObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+
+        const auto contentLength = result.GetResult().GetContentLength();
+        GetObject(ChecksumKey, std::make_pair(0, contentLength - 1));
+    }
+
     void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
         auto request = Model::GetObjectRequest()
             .WithKey(key)
             .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
 
         Send(Client, new TEvExternalStorage::TEvGetObjectRequest(request));
+    }
+
+    void HandleMetadata(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        LOG_D("HandleMetadata TEvExternalStorage::TEvGetObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& item = ImportInfo->Items.at(ItemIdx);
+
+        LOG_T("Trying to parse metadata"
+            << ": self# " << SelfId()
+            << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
+
+        item.Metadata = NBackup::TMetadata::Deserialize(msg.Body);
+
+        if (!item.Metadata.HasVersion()) {
+            return Reply(false, "Metadata is corrupted: no version");
+        }
+
+        NeedValidateChecksums = item.Metadata.GetVersion() > 0 && !SkipChecksumValidation;
+
+        auto nextStep = [this]() {
+            StartDownloadingScheme();
+        };
+
+        if (NeedValidateChecksums) {
+            StartValidatingChecksum(MetadataKey, msg.Body, nextStep);
+        } else {
+            nextStep();
+        }
     }
 
     void HandleScheme(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
@@ -107,10 +182,18 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             return Reply(false, "Cannot parse scheme");
         }
 
-        if (NeedDownloadPermissions) {
-            StartDownloadingPermissions();
+        auto nextStep = [this]() {
+            if (NeedDownloadPermissions) {
+                StartDownloadingPermissions();
+            } else {
+                Reply();
+            }
+        };
+
+        if (NeedValidateChecksums) {
+            StartValidatingChecksum(SchemeKey, msg.Body, nextStep);
         } else {
-            Reply();
+            nextStep();
         }
     }
 
@@ -139,7 +222,37 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
         item.Permissions = std::move(permissions);
 
-        Reply();
+        auto nextStep = [this]() {
+            Reply();
+        };
+
+        if (NeedValidateChecksums) {
+            StartValidatingChecksum(PermissionsKey, msg.Body, nextStep);
+        } else {
+            nextStep();
+        }        
+    }
+
+    void HandleChecksum(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        LOG_D("HandleChecksum TEvExternalStorage::TEvGetObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
+        TString expectedChecksum = msg.Body.substr(0, msg.Body.find(' '));
+        if (expectedChecksum != Checksum) {
+            return Reply(false, TStringBuilder() << "Checksum mismatch for " << ChecksumKey
+                << " expected# " << expectedChecksum
+                << ", got# " << Checksum);
+        }
+
+        ChecksumValidatedCallback();
     }
 
     template <typename TResult>
@@ -189,6 +302,10 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         HeadObject(key);
     }
 
+    void DownloadMetadata() {
+        Download(MetadataKey);
+    }
+
     void DownloadScheme() {
         Download(SchemeKey);
     }
@@ -197,8 +314,18 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         Download(PermissionsKey);
     }
 
+    void DownloadChecksum() {
+        Download(ChecksumKey);
+    }
+
     void ResetRetries() {
         Attempt = 0;
+    }
+
+    void StartDownloadingScheme() {
+        ResetRetries();
+        DownloadScheme();
+        Become(&TThis::StateDownloadScheme);
     }
 
     void StartDownloadingPermissions() {
@@ -207,22 +334,44 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         Become(&TThis::StateDownloadPermissions);
     }
 
+    void StartValidatingChecksum(const TString& key, const TString& object, std::function<void()> checksumValidatedCallback) {
+        ChecksumKey = NBackup::ChecksumKey(key);
+        Checksum = NBackup::ComputeChecksum(object);
+        ChecksumValidatedCallback = checksumValidatedCallback;
+
+        ResetRetries();
+        DownloadChecksum();
+        Become(&TThis::StateDownloadChecksum);
+    }
+
 public:
     explicit TSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
         : ExternalStorageConfig(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->Settings))
         , ReplyTo(replyTo)
         , ImportInfo(importInfo)
         , ItemIdx(itemIdx)
+        , MetadataKey(MetadataKeyFromSettings(importInfo->Settings, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(importInfo->Settings, itemIdx))
         , PermissionsKey(PermissionsKeyFromSettings(importInfo->Settings, itemIdx))
         , Retries(importInfo->Settings.number_of_retries())
         , NeedDownloadPermissions(!importInfo->Settings.no_acl())
+        , SkipChecksumValidation(importInfo->Settings.skip_checksum_validation())
     {
     }
 
     void Bootstrap() {
-        DownloadScheme();
-        Become(&TThis::StateDownloadScheme);
+        DownloadMetadata();
+        Become(&TThis::StateDownloadMetadata);
+    }
+
+    STATEFN(StateDownloadMetadata) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleMetadata);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleMetadata);
+
+            sFunc(TEvents::TEvWakeup, DownloadMetadata);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
     }
 
     STATEFN(StateDownloadScheme) {
@@ -245,12 +394,23 @@ public:
         }
     }
 
+    STATEFN(StateDownloadChecksum) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChecksum);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleChecksum);
+
+            sFunc(TEvents::TEvWakeup, DownloadChecksum);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
 private:
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     const TActorId ReplyTo;
     TImportInfo::TPtr ImportInfo;
     const ui32 ItemIdx;
 
+    const TString MetadataKey;
     const TString SchemeKey;
     const TString PermissionsKey;
 
@@ -264,6 +424,12 @@ private:
 
     TActorId Client;
 
+    const bool SkipChecksumValidation = false;
+    bool NeedValidateChecksums = true;
+
+    TString Checksum;
+    TString ChecksumKey;
+    std::function<void()> ChecksumValidatedCallback;
 }; // TSchemeGetter
 
 IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx) {

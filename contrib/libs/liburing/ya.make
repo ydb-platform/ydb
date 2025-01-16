@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.6)
+VERSION(2.8)
 
-ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.6.tar.gz)
+ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.8.tar.gz)
 
 LICENSE(
     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" AND
@@ -47,17 +47,20 @@ RECURSE(
     test/a0908ae19763.t
     test/a4c0b3decb33.t
     test/accept-link.t
+    test/accept-non-empty.t
     test/accept-reuse.t
     test/accept-test.t
     test/accept.t
     test/across-fork.t
     test/b19062a56726.t
     test/b5837bd5311d.t
+    test/bind-listen.t
     test/buf-ring-nommap.t
     test/buf-ring-put.t
     test/buf-ring.t
     test/ce593a6c480a.t
     test/close-opath.t
+    test/cmd-discard.t
     test/connect-rep.t
     test/connect.t
     test/coredump.t
@@ -88,6 +91,8 @@ RECURSE(
     test/fc2a85cb02ef.t
     test/fd-install.t
     test/fd-pass.t
+    test/fdinfo.t
+    test/fifo-nonblock-read.t
     test/file-register.t
     test/file-update.t
     test/file-verify.t
@@ -95,12 +100,15 @@ RECURSE(
     test/files-exit-hang-timeout.t
     test/fixed-buf-iter.t
     test/fixed-buf-merge.t
+    test/fixed-hugepage.t
     test/fixed-link.t
     test/fixed-reuse.t
     test/fpos.t
     test/fsync.t
     test/futex.t
     test/hardlink.t
+    test/ignore-single-mmap.t
+    test/init-mem.t
     test/io-cancel.t
     test/io_uring_enter.t
     test/io_uring_passthrough.t
@@ -109,22 +117,28 @@ RECURSE(
     test/iopoll-leak.t
     test/iopoll-overflow.t
     test/iopoll.t
+    test/kallsyms.t
     test/lfs-openat-write.t
     test/lfs-openat.t
     test/link-timeout.t
     test/link.t
     test/link_drain.t
+    test/linked-defer-close.t
     test/madvise.t
+    test/min-timeout-wait.t
+    test/min-timeout.t
     test/mkdir.t
     test/msg-ring-fd.t
     test/msg-ring-flags.t
     test/msg-ring-overflow.t
     test/msg-ring.t
     test/multicqes_drain.t
+    test/napi-test.t
     test/no-mmap-inval.t
     test/nolibc.t
     test/nop-all-sizes.t
     test/nop.t
+    test/ooo-file-unreg.t
     test/open-close.t
     test/open-direct-link.t
     test/open-direct-pick.t
@@ -145,17 +159,22 @@ RECURSE(
     test/poll-ring.t
     test/poll-v-poll.t
     test/poll.t
+    test/pollfree.t
     test/probe.t
     test/read-before-exit.t
     test/read-mshot-empty.t
+    test/read-mshot-stdin.t
     test/read-mshot.t
     test/read-write.t
     test/recv-msgall-stream.t
     test/recv-msgall.t
     test/recv-multishot.t
+    test/recvsend_bundle-inc.t
+    test/recvsend_bundle.t
     test/reg-fd-only.t
     test/reg-hint.t
     test/reg-reg-ring.t
+    test/regbuf-clone.t
     test/regbuf-merge.t
     test/register-restrictions.t
     test/rename.t
@@ -189,8 +208,10 @@ RECURSE(
     test/sq-poll-share.t
     test/sq-space_left.t
     test/sqpoll-disable-exit.t
+    test/sqpoll-exec.t
     test/sqpoll-exit-hang.t
     test/sqpoll-sleep.t
+    test/sqwait.t
     test/stdout.t
     test/submit-and-wait.t
     test/submit-link-fail.t
@@ -204,7 +225,9 @@ RECURSE(
     test/truncate.t
     test/tty-write-dpoll.t
     test/unlink.t
+    test/uring_cmd_ublk.t
     test/version.t
+    test/wait-timeout.t
     test/waitid.t
     test/wakeup-hang.t
     test/wq-aff.t

@@ -3,9 +3,9 @@ UNITTEST()
 PEERDIR(
     ydb/core/base
     ydb/core/ymq/base
-    ydb/library/yql/public/udf
-    ydb/library/yql/parser/pg_wrapper
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/public/udf/service/exception_policy
 )
 
 SRCS(

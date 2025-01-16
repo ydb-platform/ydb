@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
-#include <ydb/core/formats/arrow/replace_key.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>

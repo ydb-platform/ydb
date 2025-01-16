@@ -1,0 +1,10 @@
+--- contrib/libs/hyperscan/src/util/ue2string.h	(index)
++++ contrib/libs/hyperscan/src/util/ue2string.h	(working tree)
+@@ -106,6 +106,7 @@ public:
+             boost::random_access_traversal_tag,
+             elem const> {
+     public:
++        using iterator_category = typename std::random_access_iterator_tag;
+         const_iterator() {}
+     private:
+         friend class boost::iterator_core_access;

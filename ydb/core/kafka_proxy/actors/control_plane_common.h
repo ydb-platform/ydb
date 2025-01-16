@@ -209,7 +209,8 @@ public:
     }
 
     const TString& GetSerializedToken() const override {
-        return UserToken->GetSerializedToken();
+        static TString emptyString;
+        return UserToken == nullptr ? emptyString : UserToken->GetSerializedToken();
     }
 
     bool IsClientLost() const override {
@@ -290,10 +291,6 @@ public:
 
     const NKikimr::NGRpcService::TAuditLogParts& GetAuditLogParts() const override {
         return DummyAuditLogParts;
-    };
-
-    google::protobuf::Message* GetRequestMut() override {
-        return nullptr;
     };
 
     void SetRuHeader(ui64 ru) override {

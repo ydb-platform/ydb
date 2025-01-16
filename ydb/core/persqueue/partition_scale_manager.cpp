@@ -1,4 +1,5 @@
 #include "partition_scale_manager.h"
+#include "read_balancer_log.h"
 
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 
@@ -8,20 +9,23 @@ namespace NPQ {
 
 TPartitionScaleManager::TPartitionScaleManager(
     const TString& topicName,
+    const TString& topicPath,
     const TString& databasePath,
     ui64 pathId,
     int version,
-    const NKikimrPQ::TPQTabletConfig& config
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TPartitionGraph& partitionGraph
 )
     : TopicName(topicName)
+    , TopicPath(topicPath)
     , DatabasePath(databasePath)
-    , BalancerConfig(pathId, version, config) {
+    , BalancerConfig(pathId, version, config)
+    , PartitionGraph(partitionGraph) {
     }
 
 void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx) {
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::HandleScaleStatusChange "
-            << "need to split partition " << partitionId);
+        PQ_LOG_D("TPartitionScaleManager::HandleScaleStatusChange need to split partition " << partitionId);
         PartitionsToSplit.insert(partitionId);
         TrySendScaleRequest(ctx);
     } else {
@@ -41,10 +45,10 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
     }
 
     RequestInflight = true;
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::HandleScaleStatusChange "
-        << "send split request");
+    PQ_LOG_D( "TPartitionScaleManager::HandleScaleStatusChange send split request");
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
         TopicName,
+        TopicPath,
         DatabasePath,
         BalancerConfig.PathId,
         BalancerConfig.PathVersion,
@@ -62,26 +66,24 @@ const TString ToHex(const TString& value) {
     return TStringBuilder() << HexText(TBasicStringBuf(value));
 }
 
-std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartitionScaleManager::BuildScaleRequest(const TActorContext& ctx) {
+std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartitionScaleManager::BuildScaleRequest(const TActorContext&) {
     std::vector<TPartitionSplit> splitsToApply;
     std::vector<TPartitionMerge> mergesToApply;
 
     size_t allowedSplitsCount = BalancerConfig.MaxActivePartitions > BalancerConfig.CurPartitions ? BalancerConfig.MaxActivePartitions - BalancerConfig.CurPartitions : 0;
     auto partitionId = PartitionsToSplit.begin();
     while (allowedSplitsCount > 0 && partitionId != PartitionsToSplit.end()) {
-        auto* node = BalancerConfig.PartitionGraph.GetPartition(*partitionId);
+        auto* node = PartitionGraph.GetPartition(*partitionId);
         if (node->Children.empty()) {
             auto from = node->From;
             auto to = node->To;
             auto mid = MiddleOf(from, to);
             if (mid.empty()) {
                 partitionId = PartitionsToSplit.erase(partitionId);
-                LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                        "TPartitionScaleManager::BuildScaleRequest wrong partition key range. Can't get mid. Topic# " << TopicName << ", partition# " << *partitionId);
+                PQ_LOG_ERROR("TPartitionScaleManager::BuildScaleRequest wrong partition key range. Can't get mid. Topic# " << TopicName << ", partition# " << *partitionId);
                 continue;
             }
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    "TPartitionScaleManager::BuildScaleRequest partition split ranges. From# '" << ToHex(from)
+            PQ_LOG_D("TPartitionScaleManager::BuildScaleRequest partition split ranges. From# '" << ToHex(from)
                     << "'. To# '" << ToHex(to) << "'. Mid# '" << ToHex(mid)
                     << "'. Topic# " << TopicName << ". Partition# " << *partitionId);
 
@@ -104,8 +106,7 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     RequestInflight = false;
     LastResponseTime = ctx.Now();
     auto result = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            "TPartitionScaleManager::HandleScaleRequestResult scale request result: " << result->Status << ". Topic# " << TopicName);
+    PQ_LOG_D("TPartitionScaleManager::HandleScaleRequestResult scale request result: " << result->Status << ". Topic# " << TopicName);
     if (result->Status == TEvTxUserProxy::TResultStatus::ExecComplete) {
         TrySendScaleRequest(ctx);
     } else {

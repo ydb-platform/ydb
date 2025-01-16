@@ -468,6 +468,12 @@ void Serialize(const TRichYPath& path, NYson::IYsonConsumer* consumer)
         .DoIf(path.BypassArtifactCache_.Defined(), [&] (TFluentAttributes fluent) {
             fluent.Item("bypass_artifact_cache").Value(*path.BypassArtifactCache_);
         })
+        .DoIf(path.Cluster_.Defined(), [&] (TFluentAttributes fluent) {
+            fluent.Item("cluster").Value(*path.Cluster_);
+        })
+        .DoIf(path.Create_.Defined(), [&] (TFluentAttributes fluent) {
+            fluent.Item("create").Value(*path.Create_);
+        })
     .EndAttributes()
     .Value(path.Path_);
 }
@@ -499,6 +505,8 @@ void Deserialize(TRichYPath& path, const TNode& node)
     DESERIALIZE_ATTR("transaction_id", path.TransactionId_);
     DESERIALIZE_ATTR("rename_columns", path.RenameColumns_);
     DESERIALIZE_ATTR("bypass_artifact_cache", path.BypassArtifactCache_);
+    DESERIALIZE_ATTR("cluster", path.Cluster_);
+    DESERIALIZE_ATTR("create", path.Create_);
     Deserialize(path.Path_, node);
 }
 

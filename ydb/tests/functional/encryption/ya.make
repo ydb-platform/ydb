@@ -5,7 +5,6 @@ TEST_SRCS(
     test_encryption.py
 )
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 DEPENDS(
@@ -19,7 +18,7 @@ PEERDIR(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
+    REQUIREMENTS(ram:32 cpu:4)
 ENDIF()
 
 END()

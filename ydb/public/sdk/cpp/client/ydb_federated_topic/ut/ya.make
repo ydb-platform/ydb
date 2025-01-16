@@ -1,11 +1,9 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_federated_topic)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(1200)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -27,6 +25,7 @@ PEERDIR(
 
     ydb/public/sdk/cpp/client/ydb_federated_topic
     ydb/public/sdk/cpp/client/ydb_federated_topic/impl
+    ydb/public/sdk/cpp/client/ydb_federated_topic/ut/fds_mock
 )
 
 YQL_LAST_ABI_VERSION()

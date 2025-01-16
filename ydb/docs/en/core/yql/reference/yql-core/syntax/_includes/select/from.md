@@ -4,7 +4,7 @@ Data source for `SELECT`. The argument can accept the table name, the result of 
 
 {% if feature_mapreduce %}The table is searched by name in the database specified by the operator [USE](../../use.md).{% endif %}
 
-**Examples**
+### Examples
 
 ```yql
 SELECT key FROM my_table;

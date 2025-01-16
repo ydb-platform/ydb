@@ -105,7 +105,16 @@ class TestColorTableRendering:
         Tests the color table rendering using the default alignment (`'c'`)
     """
 
-    def test_color_table_rendering(self) -> None:
+    @pytest.mark.parametrize(
+        ["with_title", "with_header"],
+        [
+            (False, True),  # the default
+            (True, True),  # titled
+            (True, False),  # titled, no header
+            (True, True),  # both title and header
+        ],
+    )
+    def test_color_table_rendering(self, with_title: bool, with_header: bool) -> None:
         """Tests the color table rendering using the default alignment (`'c'`)"""
         chars = {
             "+": "\x1b[36m+\x1b[0m\x1b[96m",
@@ -140,18 +149,40 @@ class TestColorTableRendering:
             (plus + minus * 3) * 6 + plus,
         )
 
-        header_str = str("\n".join(header))
-        body_str = str("\n".join(body))
+        if with_title:
+            header_str = str("\n".join(header))
+        else:
+            header_str = str(header[2])
+        if with_header:
+            body_str = str("\n".join(body))
+        else:
+            body_str = str("\n".join(body[2:]))
 
         table = ColorTable(
             ("A", "B", "C", "D", "E", "F"),
             theme=Themes.OCEAN,
         )
 
-        table.title = "Efforts"
+        if with_title:
+            table.title = "Efforts"
+        table.header = with_header
         table.add_row([1, 2, 3, 4, 5, 6])
 
         expected = header_str + "\n" + body_str + "\x1b[0m"
         result = str(table)
 
         assert expected == result
+
+    def test_all_themes(self) -> None:
+        """Tests rendering with all available themes"""
+        table = ColorTable(
+            ("A", "B", "C", "D", "E", "F"),
+        )
+        table.title = "Theme Test"
+        table.add_row([1, 2, 3, 4, 5, 6])
+
+        for theme_name, theme in vars(Themes).items():
+            if isinstance(theme, Theme):
+                table.theme = theme
+                result = str(table)
+                assert result  # Simple check to ensure rendering doesn't fail

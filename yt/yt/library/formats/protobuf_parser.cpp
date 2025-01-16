@@ -184,7 +184,7 @@ public:
         for (const auto& element : *elements) {
             ++Counts_[element.ChildIndex];
         }
-        for (int i = 1; i < static_cast<int>(Counts_.size()); ++i) {
+        for (int i = 1; i < std::ssize(Counts_); ++i) {
             Counts_[i] += Counts_[i - 1];
         }
         Result_.resize(elements->size());

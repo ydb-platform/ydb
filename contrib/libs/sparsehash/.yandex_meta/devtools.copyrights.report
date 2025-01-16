@@ -1,0 +1,98 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0675310fe8d1bdabc838a46ac5639e9c
+BELONGS ya.make
+    License text:
+        // Copyright 2005 Google Inc.
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sparsehash/template_util.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e873553d39834f61b495e45fcd01679
+BELONGS ya.make
+    License text:
+        Copyright (c) 2005, Google Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:2]
+        src/sparsehash/dense_hash_map [1:2]
+        src/sparsehash/dense_hash_set [1:2]
+        src/sparsehash/internal/densehashtable.h [1:2]
+        src/sparsehash/internal/sparsehashtable.h [1:2]
+        src/sparsehash/sparse_hash_map [1:2]
+        src/sparsehash/sparse_hash_set [1:2]
+        src/sparsehash/sparsetable [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20b71da944b9e6967071fc4782c1355f
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2010, Google Inc.
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sparsehash/internal/hashtable-common.h [1:2]
+        src/sparsehash/internal/libc_allocator_with_realloc.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 58b7390a1692c4372f7220b3953fc3b1
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2006, Google Inc.
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sparsehash/type_traits.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e39408c802577553441f8aa6de7753a4
+BELONGS ya.make
+    License text:
+        Copyright (C) 1994, 1995, 1996, 1999, 2000, 2001, 2002, 2004, 2005,
+        2006, 2007, 2008, 2009 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        INSTALL [4:5]

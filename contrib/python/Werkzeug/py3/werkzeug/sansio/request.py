@@ -19,7 +19,6 @@ from ..datastructures import RequestCacheControl
 from ..http import parse_accept_header
 from ..http import parse_authorization_header
 from ..http import parse_cache_control_header
-from ..http import parse_cookie
 from ..http import parse_date
 from ..http import parse_etags
 from ..http import parse_if_range_header
@@ -29,9 +28,9 @@ from ..http import parse_range_header
 from ..http import parse_set_header
 from ..urls import url_decode
 from ..user_agent import UserAgent
-from ..useragents import _UserAgent as _DeprecatedUserAgent
 from ..utils import cached_property
 from ..utils import header_property
+from .http import parse_cookie
 from .utils import get_current_url
 from .utils import get_host
 
@@ -95,7 +94,7 @@ class Request:
     #: .. versionadded:: 0.6
     list_storage_class: t.Type[t.List] = ImmutableList
 
-    user_agent_class: t.Type[UserAgent] = _DeprecatedUserAgent
+    user_agent_class: t.Type[UserAgent] = UserAgent
     """The class used and returned by the :attr:`user_agent` property to
     parse the header. Defaults to
     :class:`~werkzeug.user_agent.UserAgent`, which does no parsing. An

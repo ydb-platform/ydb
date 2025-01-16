@@ -3,6 +3,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr::NKqp {
@@ -11,13 +13,9 @@ namespace {
 
 using TYqlConclusionStatus = TViewManager::TYqlConclusionStatus;
 using TInternalModificationContext = TViewManager::TInternalModificationContext;
+using TExternalModificationContext = TViewManager::TExternalModificationContext;
 
-TString GetByKeyOrDefault(const NYql::TCreateObjectSettings& container, const TString& key) {
-    const auto value = container.GetFeaturesExtractor().Extract(key);
-    return value ? *value : TString{};
-}
-
-TYqlConclusionStatus CheckFeatureFlag(TInternalModificationContext& context) {
+TYqlConclusionStatus CheckFeatureFlag(const TInternalModificationContext& context) {
     auto* const actorSystem = context.GetExternalData().GetActorSystem();
     if (!actorSystem) {
         ythrow yexception() << "This place needs an actor system. Please contact internal support";
@@ -46,21 +44,33 @@ std::pair<TString, TString> SplitPathByObjectId(const TString& objectId) {
     return pathPair;
 }
 
+void ValidateOptions(NYql::TFeaturesExtractor& features) {
+    // Current implementation does not persist the security_invoker option value.
+    if (features.Extract("security_invoker") != "true") {
+        ythrow TBadArgumentException() << "security_invoker option must be explicitly enabled";
+    }
+    if (!features.IsFinished()) {
+        ythrow TBadArgumentException() << "Unknown property: " << features.GetRemainedParamsString();
+    }
+}
+
 void FillCreateViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
                             const NYql::TCreateObjectSettings& settings,
-                            const TString& database) {
+                            const TExternalModificationContext& context) {
 
-    const auto pathPair = SplitPathByDb(settings.GetObjectId(), database);
+    const auto pathPair = SplitPathByDb(settings.GetObjectId(), context.GetDatabase());
     modifyScheme.SetWorkingDir(pathPair.first);
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateView);
+    modifyScheme.SetFailedOnAlreadyExists(!settings.GetExistingOk());
 
     auto& viewDesc = *modifyScheme.MutableCreateView();
     viewDesc.SetName(pathPair.second);
-    viewDesc.SetQueryText(GetByKeyOrDefault(settings, "query_text"));
 
-    if (!settings.GetFeaturesExtractor().IsFinished()) {
-        ythrow TBadArgumentException() << "Unknown property: " << settings.GetFeaturesExtractor().GetRemainedParamsString();
-    }
+    auto& features = settings.GetFeaturesExtractor();
+    viewDesc.SetQueryText(features.Extract("query_text").value_or(""));
+    ValidateOptions(features);
+
+    NSQLTranslation::Serialize(context.GetTranslationSettings(), *viewDesc.MutableCapturedContext());
 }
 
 void FillDropViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
@@ -69,6 +79,7 @@ void FillDropViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
     const auto pathPair = SplitPathByObjectId(settings.GetObjectId());
     modifyScheme.SetWorkingDir(pathPair.first);
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropView);
+    modifyScheme.SetSuccessOnNotExist(settings.GetMissingOk());
 
     auto& drop = *modifyScheme.MutableDrop();
     drop.SetName(pathPair.second);
@@ -76,9 +87,12 @@ void FillDropViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
 
 NThreading::TFuture<TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request,
                                                             TActorSystem* actorSystem,
-                                                            bool failOnAlreadyExists) {
+                                                            bool failedOnAlreadyExists,
+                                                            bool successOnNotExist) {
     const auto promiseScheme = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
-    IActor* const requestHandler = new TSchemeOpRequestHandler(request, promiseScheme, failOnAlreadyExists);
+    IActor* const requestHandler = new TSchemeOpRequestHandler(
+        request, promiseScheme, failedOnAlreadyExists, successOnNotExist
+    );
     actorSystem->Register(requestHandler);
     return promiseScheme.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& opResult) {
         if (opResult.HasValue()) {
@@ -92,20 +106,25 @@ NThreading::TFuture<TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvP
 }
 
 NThreading::TFuture<TYqlConclusionStatus> CreateView(const NYql::TCreateObjectSettings& settings,
-                                                     TInternalModificationContext& context) {
+                                                     const TInternalModificationContext& context) {
     auto proposal = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     proposal->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
     if (context.GetExternalData().GetUserToken()) {
         proposal->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
     }
     auto& schemeTx = *proposal->Record.MutableTransaction()->MutableModifyScheme();
-    FillCreateViewProposal(schemeTx, settings, context.GetExternalData().GetDatabase());
+    FillCreateViewProposal(schemeTx, settings, context.GetExternalData());
 
-    return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetActorSystem(), true);
+    return SendSchemeRequest(
+        proposal.Release(),
+        context.GetExternalData().GetActorSystem(),
+        schemeTx.GetFailedOnAlreadyExists(),
+        schemeTx.GetSuccessOnNotExist()
+    );
 }
 
 NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettings& settings,
-                                                   TInternalModificationContext& context) {
+                                                   const TInternalModificationContext& context) {
     auto proposal = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     proposal->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
     if (context.GetExternalData().GetUserToken()) {
@@ -114,13 +133,18 @@ NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettin
     auto& schemeTx = *proposal->Record.MutableTransaction()->MutableModifyScheme();
     FillDropViewProposal(schemeTx, settings);
 
-    return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetActorSystem(), false);
+    return SendSchemeRequest(
+        proposal.Release(),
+        context.GetExternalData().GetActorSystem(),
+        schemeTx.GetFailedOnAlreadyExists(),
+        schemeTx.GetSuccessOnNotExist()
+    );
 }
 
 void PrepareCreateView(NKqpProto::TKqpSchemeOperation& schemeOperation,
                        const NYql::TObjectSettingsImpl& settings,
-                       TInternalModificationContext& context) {
-    FillCreateViewProposal(*schemeOperation.MutableCreateView(), settings, context.GetExternalData().GetDatabase());
+                       const TInternalModificationContext& context) {
+    FillCreateViewProposal(*schemeOperation.MutableCreateView(), settings, context.GetExternalData());
 }
 
 void PrepareDropView(NKqpProto::TKqpSchemeOperation& schemeOperation,
@@ -206,10 +230,10 @@ NThreading::TFuture<TYqlConclusionStatus> TViewManager::ExecutePrepared(const NK
     switch (schemeOperation.GetOperationCase()) {
         case NKqpProto::TKqpSchemeOperation::kCreateView:
             schemeTx.CopyFrom(schemeOperation.GetCreateView());
-            return SendSchemeRequest(proposal.Release(), context.GetActorSystem(), true);
+            break;
         case NKqpProto::TKqpSchemeOperation::kDropView:
             schemeTx.CopyFrom(schemeOperation.GetDropView());
-            return SendSchemeRequest(proposal.Release(), context.GetActorSystem(), false);
+            break;
         default:
             return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
                     TStringBuilder()
@@ -218,6 +242,12 @@ NThreading::TFuture<TYqlConclusionStatus> TViewManager::ExecutePrepared(const NK
                 )
             );
     }
+    return SendSchemeRequest(
+        proposal.Release(),
+        context.GetActorSystem(),
+        schemeTx.GetFailedOnAlreadyExists(),
+        schemeTx.GetSuccessOnNotExist()
+    );
 }
 
 }

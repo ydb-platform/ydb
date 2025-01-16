@@ -5,8 +5,8 @@ import ydb
 from hamcrest import is_, empty, has_length, greater_than_or_equal_to
 
 from ydb.tests.library.wardens.factories import hive_liveness_warden_factory, transactions_processing_liveness_warden
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.harness.kikimr_http_client import HiveClient
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.clients.kikimr_http_client import HiveClient
 from ydb.tests.library.common.wait_for import wait_for_and_assert
 
 
@@ -16,7 +16,7 @@ TIMEOUT_SECONDS = 480
 class TestLivenessWarden(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
 
         cls.hive = HiveClient(cls.cluster.nodes[1].host, cls.cluster.nodes[1].mon_port)

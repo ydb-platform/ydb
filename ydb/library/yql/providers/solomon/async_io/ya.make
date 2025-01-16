@@ -13,9 +13,9 @@ PEERDIR(
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/solomon/proto
     ydb/library/yql/providers/solomon/scheme
-    ydb/library/yql/public/types
-    ydb/library/yql/public/udf
-    ydb/library/yql/utils/log
+    yql/essentials/public/types
+    yql/essentials/public/udf
+    yql/essentials/utils/log
 )
 
 YQL_LAST_ABI_VERSION()

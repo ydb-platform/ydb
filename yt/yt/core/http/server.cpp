@@ -12,7 +12,6 @@
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/misc/finally.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/public.h>
 
 #include <yt/yt/core/ytree/convert.h>
@@ -63,7 +62,6 @@ public:
         IPollerPtr poller,
         IPollerPtr acceptor,
         IInvokerPtr invoker,
-        IMemoryUsageTrackerPtr memoryUsageTracker,
         IRequestPathMatcherPtr requestPathMatcher,
         bool ownPoller = false)
         : Config_(std::move(config))
@@ -71,7 +69,6 @@ public:
         , Poller_(std::move(poller))
         , Acceptor_(std::move(acceptor))
         , Invoker_(std::move(invoker))
-        , MemoryUsageTracker_(std::move(memoryUsageTracker))
         , OwnPoller_(ownPoller)
         , RequestPathMatcher_(std::move(requestPathMatcher))
     { }
@@ -126,7 +123,6 @@ private:
     const IPollerPtr Poller_;
     const IPollerPtr Acceptor_;
     const IInvokerPtr Invoker_;
-    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
     const bool OwnPoller_ = false;
 
     IRequestPathMatcherPtr RequestPathMatcher_;
@@ -165,20 +161,19 @@ private:
             ConnectionsDropped_.Increment();
             ActiveConnections_--;
             YT_LOG_WARNING("Server is over max active connection limit (RemoteAddress: %v)",
-                connection->RemoteAddress());
+                connection->GetRemoteAddress());
             return;
         }
         ConnectionsActive_.Update(count);
         ConnectionsAccepted_.Increment();
 
-        auto connectionId = TGuid::Create();
         YT_LOG_DEBUG("Connection accepted (ConnectionId: %v, RemoteAddress: %v, LocalAddress: %v)",
-            connectionId,
-            connection->RemoteAddress(),
-            connection->LocalAddress());
+            connection->GetId(),
+            connection->GetRemoteAddress(),
+            connection->GetLocalAddress());
 
         Invoker_->Invoke(
-            BIND(&TServer::HandleConnection, MakeStrong(this), std::move(connection), connectionId));
+            BIND(&TServer::HandleConnection, MakeStrong(this), std::move(connection)));
     }
 
     bool HandleRequest(const THttpInputPtr& request, const THttpOutputPtr& response)
@@ -225,14 +220,6 @@ private:
 
                 SetRequestId(response, request->GetRequestId());
 
-                if (MemoryUsageTracker_ && MemoryUsageTracker_->IsExceeded()) {
-                    THROW_ERROR_EXCEPTION(
-                        EStatusCode::TooManyRequests,
-                        "Request is dropped due to high memory pressure")
-                        << TErrorAttribute("total_memory_limit", MemoryUsageTracker_->GetLimit())
-                        << TErrorAttribute("memory_usage", MemoryUsageTracker_->GetUsed());
-                }
-
                 handler->HandleRequest(request, response);
 
                 NTracing::FlushCurrentTraceContextElapsedTime();
@@ -271,10 +258,10 @@ private:
         return true;
     }
 
-    void HandleConnection(const IConnectionPtr& connection, TGuid connectionId)
+    void HandleConnection(const IConnectionPtr& connection)
     {
         try {
-            connection->SubscribePeerDisconnect(BIND([config = Config_, canceler = GetCurrentFiberCanceler(), connectionId = connectionId] {
+            connection->SubscribePeerDisconnect(BIND([config = Config_, canceler = GetCurrentFiberCanceler(), connectionId = connection->GetId()] {
                 YT_LOG_DEBUG("Client closed TCP socket (ConnectionId: %v)", connectionId);
 
                 if (config->CancelFiberOnConnectionClose.value_or(false)) {
@@ -291,17 +278,17 @@ private:
                 connection->SetNoDelay();
             }
 
-            DoHandleConnection(connection, connectionId);
+            DoHandleConnection(connection);
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Unhandled exception (ConnectionId: %v)", connectionId);
+            YT_LOG_ERROR(ex, "Unhandled exception (ConnectionId: %v)", connection->GetId());
         }
     }
 
-    void DoHandleConnection(const IConnectionPtr& connection, TGuid connectionId)
+    void DoHandleConnection(const IConnectionPtr& connection)
     {
         auto request = New<THttpInput>(
             connection,
-            connection->RemoteAddress(),
+            connection->GetRemoteAddress(),
             GetCurrentInvoker(),
             EMessageType::Request,
             Config_);
@@ -317,11 +304,8 @@ private:
             EMessageType::Response,
             Config_);
 
-        request->SetConnectionId(connectionId);
-        response->SetConnectionId(connectionId);
-
         while (true) {
-            auto requestId = TGuid::Create();
+            auto requestId = TRequestId::Create();
             request->SetRequestId(requestId);
             response->SetRequestId(requestId);
 
@@ -332,7 +316,7 @@ private:
 
             auto logDrop = [&] (auto reason) {
                 YT_LOG_DEBUG("Dropping HTTP connection (ConnectionId: %v, Reason: %v)",
-                    connectionId,
+                    connection->GetId(),
                     reason);
             };
 
@@ -381,10 +365,10 @@ private:
         auto connectionResult = WaitFor(connection->Close());
         if (connectionResult.IsOK()) {
             YT_LOG_DEBUG("HTTP connection closed (ConnectionId: %v)",
-                connectionId);
+                connection->GetId());
         } else {
             YT_LOG_DEBUG(connectionResult, "Error closing HTTP connection (ConnectionId: %v)",
-                connectionId);
+                connection->GetId());
         }
     }
 };
@@ -397,7 +381,6 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
-    IMemoryUsageTrackerPtr memoryUsageTracker,
     bool ownPoller)
 {
     auto handlers = New<TRequestPathMatcher>();
@@ -407,7 +390,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        std::move(memoryUsageTracker),
         std::move(handlers),
         ownPoller);
 }
@@ -417,7 +399,6 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
-    IMemoryUsageTrackerPtr memoryUsageTracker,
     bool ownPoller)
 {
     auto address = TNetworkAddress::CreateIPv6Any(config->Port);
@@ -430,7 +411,6 @@ IServerPtr CreateServer(
                 std::move(poller),
                 std::move(acceptor),
                 std::move(invoker),
-                std::move(memoryUsageTracker),
                 ownPoller);
         } catch (const std::exception& ex) {
             if (i + 1 == config->BindRetryCount) {
@@ -460,7 +440,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ false);
 }
 
@@ -468,8 +447,7 @@ IServerPtr CreateServer(
     TServerConfigPtr config,
     IListenerPtr listener,
     IPollerPtr poller,
-    IPollerPtr acceptor,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IPollerPtr acceptor)
 {
     auto invoker = poller->GetInvoker();
     return CreateServer(
@@ -478,15 +456,13 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        std::move(memoryUsageTracker),
         /*ownPoller*/ false);
 }
 
 IServerPtr CreateServer(
     TServerConfigPtr config,
     IPollerPtr poller,
-    IPollerPtr acceptor,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IPollerPtr acceptor)
 {
     auto invoker = poller->GetInvoker();
     return CreateServer(
@@ -494,7 +470,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        std::move(memoryUsageTracker),
         /*ownPoller*/ false);
 }
 
@@ -524,7 +499,6 @@ IServerPtr CreateServer(TServerConfigPtr config, int pollerThreadCount)
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ true);
 }
 
@@ -539,7 +513,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ false);
 }
 

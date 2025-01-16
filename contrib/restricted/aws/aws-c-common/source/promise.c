@@ -82,8 +82,11 @@ void aws_promise_complete(struct aws_promise *promise, void *value, void (*dtor)
     promise->value = value;
     promise->dtor = dtor;
     promise->complete = true;
-    aws_mutex_unlock(&promise->mutex);
+    /* Notify before unlocking to prevent a race condition where the recipient spuriously
+     * awakens after the unlock, sees a fulfilled promise, and attempts to free its resources
+     * before the notification has actually occured. */
     aws_condition_variable_notify_all(&promise->cv);
+    aws_mutex_unlock(&promise->mutex);
 }
 
 void aws_promise_fail(struct aws_promise *promise, int error_code) {
@@ -92,8 +95,8 @@ void aws_promise_fail(struct aws_promise *promise, int error_code) {
     AWS_FATAL_ASSERT(!promise->complete && "aws_promise_fail: cannot complete a promise more than once");
     promise->error_code = error_code;
     promise->complete = true;
-    aws_mutex_unlock(&promise->mutex);
     aws_condition_variable_notify_all(&promise->cv);
+    aws_mutex_unlock(&promise->mutex);
 }
 
 int aws_promise_error_code(struct aws_promise *promise) {

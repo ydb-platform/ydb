@@ -9,6 +9,7 @@
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 
 
 namespace NKqpRun {
@@ -119,7 +120,7 @@ public:
     }
 
     bool ExecuteScript(const TRequestOptions& script) {
-        StartScriptTraceOpt();
+        StartScriptTraceOpt(script.QueryId);
 
         TRequestResult status = YdbSetup_.ScriptRequest(script, ExecutionOperation_);
 
@@ -128,11 +129,14 @@ public:
             return false;
         }
 
-        return WaitScriptExecutionOperation();
+        ExecutionMeta_ = TExecutionMeta();
+        ExecutionMeta_.Database = script.Database;
+
+        return WaitScriptExecutionOperation(script.QueryId);
     }
 
     bool ExecuteQuery(const TRequestOptions& query, EQueryType queryType) {
-        StartScriptTraceOpt();
+        StartScriptTraceOpt(query.QueryId);
         StartTime_ = TInstant::Now();
 
         TString queryTypeStr;
@@ -156,9 +160,13 @@ public:
 
         TYdbSetup::StopTraceOpt();
 
-        PrintScriptAst(meta.Ast);
-        PrintScriptProgress(ExecutionMeta_.Plan);
-        PrintScriptPlan(meta.Plan);
+        if (!meta.Plan) {
+            meta.Plan = ExecutionMeta_.Plan;
+        }
+
+        PrintScriptAst(query.QueryId, meta.Ast);
+        PrintScriptProgress(query.QueryId, meta.Plan);
+        PrintScriptPlan(query.QueryId, meta.Plan);
         PrintScriptFinish(meta, queryTypeStr);
 
         if (!status.IsSuccess()) {
@@ -173,8 +181,9 @@ public:
         return true;
     }
 
-    void WaitAsyncQueries() const {
+    void FinalizeRunner() const {
         YdbSetup_.WaitAsyncQueries();
+        YdbSetup_.CloseSessions();
     }
 
     bool FetchScriptResults() {
@@ -183,7 +192,7 @@ public:
         ResultSets_.clear();
         ResultSets_.resize(ExecutionMeta_.ResultSetsCount);
         for (i32 resultSetId = 0; resultSetId < ExecutionMeta_.ResultSetsCount; ++resultSetId) {
-            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionOperation_, resultSetId, ResultSets_[resultSetId]);
+            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionMeta_.Database, ExecutionOperation_, resultSetId, ResultSets_[resultSetId]);
 
             if (!status.IsSuccess()) {
                 Cerr << CerrColors_.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -197,7 +206,7 @@ public:
     bool ForgetExecutionOperation() {
         TYdbSetup::StopTraceOpt();
 
-        TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionOperation_);
+        TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to forget script execution operation, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -215,7 +224,7 @@ public:
         if (Options_.ResultOutput) {
             Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing script query results..." << CoutColors_.Default() << Endl;
             for (size_t i = 0; i < ResultSets_.size(); ++i) {
-                if (ResultSets_.size() > 1) {
+                if (ResultSets_.size() > 1 && Options_.YdbSettings.VerboseLevel >= 1) {
                     *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
                 }
                 PrintScriptResult(ResultSets_[i]);
@@ -224,9 +233,8 @@ public:
     }
 
 private:
-    bool WaitScriptExecutionOperation() {
+    bool WaitScriptExecutionOperation(ui64 queryId) {
         StartTime_ = TInstant::Now();
-        ExecutionMeta_ = TExecutionMeta();
 
         TDuration getOperationPeriod = TDuration::Seconds(1);
         if (auto progressStatsPeriodMs = Options_.YdbSettings.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
@@ -235,8 +243,8 @@ private:
 
         TRequestResult status;
         while (true) {
-            status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionOperation_, ExecutionMeta_);
-            PrintScriptProgress(ExecutionMeta_.Plan);
+            status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, ExecutionMeta_);
+            PrintScriptProgress(queryId, ExecutionMeta_.Plan);
 
             if (ExecutionMeta_.Ready) {
                 break;
@@ -247,11 +255,23 @@ private:
                 return false;
             }
 
+            if (Options_.ScriptCancelAfter && TInstant::Now() - StartTime_ > Options_.ScriptCancelAfter) {
+                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Cancelling script execution..." << CoutColors_.Default() << Endl;
+                TRequestResult cancelStatus = YdbSetup_.CancelScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_);
+                if (!cancelStatus.IsSuccess()) {
+                    Cerr << CerrColors_.Red() << "Failed to cancel script execution operation, reason:" << CerrColors_.Default() << Endl << cancelStatus.ToString() << Endl;
+                    return false;
+                }
+            }
+
             Sleep(getOperationPeriod);
         }
 
-        PrintScriptAst(ExecutionMeta_.Ast);
-        PrintScriptPlan(ExecutionMeta_.Plan);
+        TYdbSetup::StopTraceOpt();
+
+        PrintScriptAst(queryId, ExecutionMeta_.Ast);
+        PrintScriptProgress(queryId, ExecutionMeta_.Plan);
+        PrintScriptPlan(queryId, ExecutionMeta_.Plan);
         PrintScriptFinish(ExecutionMeta_, "Script");
 
         if (!status.IsSuccess() || ExecutionMeta_.ExecutionStatus != NYdb::NQuery::EExecStatus::Completed) {
@@ -272,23 +292,33 @@ private:
         }
     }
 
-    void StartScriptTraceOpt() const {
-        if (Options_.TraceOptType == TRunnerOptions::ETraceOptType::All || Options_.TraceOptType == TRunnerOptions::ETraceOptType::Script) {
+    void StartScriptTraceOpt(size_t queryId) const {
+        bool startTraceOpt = Options_.TraceOptType == TRunnerOptions::ETraceOptType::All;
+
+        if (Options_.TraceOptType == TRunnerOptions::ETraceOptType::Script) {
+            startTraceOpt |= !Options_.TraceOptScriptId || *Options_.TraceOptScriptId == queryId;
+        }
+
+        if (startTraceOpt) {
             YdbSetup_.StartTraceOpt();
         }
     }
 
     void PrintSchemeQueryAst(const TString& ast) const {
         if (Options_.SchemeQueryAstOutput) {
-            Cout << CoutColors_.Cyan() << "Writing scheme query ast" << CoutColors_.Default() << Endl;
+            if (Options_.YdbSettings.VerboseLevel >= 1) {
+                Cout << CoutColors_.Cyan() << "Writing scheme query ast" << CoutColors_.Default() << Endl;
+            }
             Options_.SchemeQueryAstOutput->Write(ast);
         }
     }
 
-    void PrintScriptAst(const TString& ast) const {
-        if (Options_.ScriptQueryAstOutput) {
-            Cout << CoutColors_.Cyan() << "Writing script query ast" << CoutColors_.Default() << Endl;
-            Options_.ScriptQueryAstOutput->Write(ast);
+    void PrintScriptAst(size_t queryId, const TString& ast) const {
+        if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryAstOutputs, nullptr)) {
+            if (Options_.YdbSettings.VerboseLevel >= 1) {
+                Cout << CoutColors_.Cyan() << "Writing script query ast" << CoutColors_.Default() << Endl;
+            }
+            output->Write(ast);
         }
     }
 
@@ -307,16 +337,18 @@ private:
         printer.Print(plan);
     }
 
-    void PrintScriptPlan(const TString& plan) const {
-        if (Options_.ScriptQueryPlanOutput) {
-            Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
-            PrintPlan(plan, Options_.ScriptQueryPlanOutput);
+    void PrintScriptPlan(size_t queryId, const TString& plan) const {
+        if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryPlanOutputs, nullptr)) {
+            if (Options_.YdbSettings.VerboseLevel >= 1) {
+                Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
+            }
+            PrintPlan(plan, output);
         }
     }
 
-    void PrintScriptProgress(const TString& plan) const {
-        if (Options_.InProgressStatisticsOutputFile) {
-            TFileOutput outputStream(Options_.InProgressStatisticsOutputFile);
+    void PrintScriptProgress(size_t queryId, const TString& plan) const {
+        if (const auto& output = GetValue<TString>(queryId, Options_.InProgressStatisticsOutputFiles, {})) {
+            TFileOutput outputStream(output);
             outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistics" << Endl;
 
             auto convertedPlan = plan;
@@ -343,13 +375,22 @@ private:
 
             outputStream.Finish();
         }
+        if (const auto& output = GetValue<TString>(queryId, Options_.ScriptQueryTimelineFiles, {})) {
+            TFileOutput outputStream(output);
+
+            TPlanVisualizer planVisualizer;
+            planVisualizer.LoadPlans(plan);
+            outputStream.Write(planVisualizer.PrintSvg());
+
+            outputStream.Finish();
+        }
     }
 
     TProgressCallback GetProgressCallback() {
-        return [this](const NKikimrKqp::TEvExecuterProgress& executerProgress) mutable {
+        return [this](ui64 queryId, const NKikimrKqp::TEvExecuterProgress& executerProgress) mutable {
             const TString& plan = executerProgress.GetQueryPlan();
             ExecutionMeta_.Plan = plan;
-            PrintScriptProgress(plan);
+            PrintScriptProgress(queryId, plan);
         };
     }
 
@@ -384,6 +425,9 @@ private:
     }
 
     void PrintScriptFinish(const TQueryMeta& meta, const TString& queryType) const {
+        if (Options_.YdbSettings.VerboseLevel < 1) {
+            return;
+        }
         Cout << CoutColors_.Cyan() << queryType << " request finished.";
         if (meta.TotalDuration) {
             Cout << " Total duration: " << meta.TotalDuration;
@@ -434,8 +478,8 @@ void TKqpRunner::ExecuteQueryAsync(const TRequestOptions& query) const {
     Impl_->ExecuteQuery(query, TImpl::EQueryType::AsyncQuery);
 }
 
-void TKqpRunner::WaitAsyncQueries() const {
-    Impl_->WaitAsyncQueries();
+void TKqpRunner::FinalizeRunner() const {
+    Impl_->FinalizeRunner();
 }
 
 bool TKqpRunner::FetchScriptResults() {

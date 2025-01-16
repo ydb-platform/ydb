@@ -18,9 +18,7 @@ To read data, {{ ydb-short-name }} uses a model of strict data consistency.
 
 To design a primary key properly, follow the rules below.
 
-* Avoid situations where most of the load falls on a single [partition](../../concepts/datamodel/table.md#partitioning) of a table. With even load distribution, it's easier to achieve high overall performance.
-
-  This rule implies that you shouldn't use a monotonically increasing sequence, such as timestamp, as a table's primary key.
+* Avoid situations where most of the load falls on a single [partition](../../concepts/datamodel/table.md#partitioning) of a table. With even load distribution, it's easier to achieve high overall performance.This rule implies that you shouldn't use a monotonically increasing sequence, such as timestamp, as a table's primary key.
 * The fewer table partitions a query uses, the faster it runs. For greater performance, follow the one query — one partition rule.
 * Avoid situations where a small part of the DB is under much heavier load than the rest of the DB.
 
@@ -69,4 +67,4 @@ To efficiently delete outdated data, we recommend using [TTL](../../concepts/ttl
 
 ## Syncing two data centers in geographically distributed clusters {#sinc-between-dc}
 
-The lead [tablet](../../concepts/cluster/common_scheme_ydb.md#tablets) writes data to a [distributed network storage](../../concepts/cluster/distributed_storage.md) that saves copies to several data centers. {{ ydb-short-name }} does not commit a user query until after the required number of copies are saved to the required number of data centers.
+The lead [tablet](../../concepts/glossary.md#tablet) writes data to a [distributed network storage](../../concepts/glossary.md#distributed-storage) that saves copies to several data centers. {{ ydb-short-name }} does not commit a user query until after the required number of copies are saved to the required number of data centers.

@@ -26,7 +26,7 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::ExecuteDataQueryRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
     auto log = [](const auto& traceId, const auto& request, const auto& response) {
-        auto& record = response->Get()->Record.GetRef();
+        auto& record = response->Get()->Record;
 
         TStringStream ss;
         LogKeyValue("Component", "Grpc", ss);
@@ -65,7 +65,7 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
     Y_UNUSED(request);
 
     auto log = [](const auto& traceId, const auto& response) {
-        auto& record = response->Get()->Record.GetRef();
+        auto& record = response->Get()->Record;
 
         TStringStream ss;
         LogKeyValue("Component", "Grpc", ss);
@@ -98,8 +98,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::CommitTransactionRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
     auto log = [](const auto& traceId, const auto& request, const auto& response) {
-        const auto& record = response->Get()->Record.GetRef();
-    
+        const auto& record = response->Get()->Record;
+
         TStringStream ss;
         LogKeyValue("Component", "Grpc", ss);
         LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
@@ -131,8 +131,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::RollbackTransactionRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
     auto log = [](const auto& traceId, const auto& request, const auto& response) {
-        const auto& record = response->Get()->Record.GetRef();
-    
+        const auto& record = response->Get()->Record;
+
         TStringStream ss;
         LogKeyValue("Component", "Grpc", ss);
         LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
@@ -150,7 +150,7 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
 // ExecuteYqlScript/StreamExecuteYqlScript
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Scripting::ExecuteYqlRequest& request, const TActorContext& ctx) {
     Y_UNUSED(request);
-    
+
     auto log = [](const auto& traceId) {
         TStringStream ss;
         LogKeyValue("Component", "Grpc", ss);
@@ -164,9 +164,9 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Script
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Scripting::ExecuteYqlRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
     Y_UNUSED(request);
-    
+
     auto log = [](const auto& traceId, const auto& response) {
-        const auto& record = response->Get()->Record.GetRef();
+        const auto& record = response->Get()->Record;
 
         TStringStream ss;
         LogKeyValue("Component", "Grpc", ss);
@@ -206,14 +206,14 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
     }
 
     auto log = [](const auto&  traceId, const auto& request, const auto& response) {
-        const auto& record = response->Get()->Record.GetRef();
+        const auto& record = response->Get()->Record;
 
         TStringStream ss;
         LogKeyValue("Component", "Grpc", ss);
         LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
         LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
         LogKeyValue("Type", "ExecuteQueryResponse", ss);
-    
+
         if (request.tx_control().tx_selector_case() == Ydb::Query::TransactionControl::kBeginTx) {
             LogKeyValue("TxId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty", ss);
         }
@@ -252,7 +252,7 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
         TStringStream ss;
         LogKeyValue("Component", "Grpc", ss);
         LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogKeyValue("Type", "ExecuteSrciptResponse", ss);   
+        LogKeyValue("Type", "ExecuteSrciptResponse", ss);
         LogKeyValue("Status", ToString(response->Get()->Status), ss);
         LogKeyValue("Issues", ToString(response->Get()->Issues), ss, /*last*/ true);
         return ss.Str();

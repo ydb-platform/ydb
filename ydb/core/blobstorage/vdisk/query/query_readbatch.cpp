@@ -13,12 +13,7 @@ namespace NKikimr {
     // TReadBatcher implementation
     ////////////////////////////////////////////////////////////////////////////
     // Traverse data parts for a single key
-    void TReadBatcher::StartTraverse(
-            const TLogoBlobID& id,
-            void *cookie,
-            ui8 queryPartId,
-            ui32 queryShift,
-            ui32 querySize) {
+    void TReadBatcher::StartTraverse(const TLogoBlobID& id, void *cookie, ui8 queryPartId, ui32 queryShift, ui32 querySize) {
         Y_DEBUG_ABORT_UNLESS(id.PartId() == 0);
         Y_DEBUG_ABORT_UNLESS(!Traversing);
         ClearTmpItems();
@@ -30,24 +25,18 @@ namespace NKikimr {
         QueryPartId = queryPartId;
         QueryShift = queryShift;
         QuerySize = querySize;
-        FoundDiskItems.clear();
-        FoundInMemItems.clear();
     }
 
     // We have data on disk
     void TReadBatcher::operator () (const TDiskPart &data, NMatrix::TVectorType parts) {
         Y_DEBUG_ABORT_UNLESS(Traversing);
-        FoundDiskItems.emplace_back(data, parts);
-    }
-
-    void TReadBatcher::ProcessFoundDiskItem(const TDiskPart &data, NMatrix::TVectorType parts) {
         if (QueryPartId && !parts.Get(QueryPartId - 1)) {
             return; // we have no requested part here
         }
 
         const auto& gtype = Ctx->VCtx->Top->GType;
         ui32 blobSize = 0;
-        for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
+        for (ui8 i : parts) {
             blobSize += gtype.PartSize(TLogoBlobID(CurID, i + 1));
         }
 
@@ -58,22 +47,24 @@ namespace NKikimr {
             Y_ABORT_UNLESS(blobSize == data.Size);
         }
 
-        for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
+        for (ui8 i : parts) {
             const TLogoBlobID partId(CurID, i + 1);
             const ui32 partSize = gtype.PartSize(partId);
             if (QueryPartId == 0 || QueryPartId == i + 1) {
                 FoundAnything = true;
                 auto& tmpItem = TmpItems[i];
-                if ((QueryShift >= partSize && partSize) || QuerySize > partSize - QueryShift) {
+                if ((partSize ? QueryShift >= partSize : QueryShift) || QuerySize > partSize - QueryShift) {
                     tmpItem.UpdateWithError(partId, Cookie);
+                } else if (!partSize) {
+                    tmpItem.UpdateWithMemItem(partId, Cookie, TRope());
                 } else if (tmpItem.ShouldUpdateWithDisk()) {
                     const ui32 size = QuerySize ? QuerySize : partSize - QueryShift;
-                    if (!size) { // for metadata reads
-                        tmpItem.UpdateWithMemItem(partId, Cookie, TRope());
-                    } else {
-                        tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size));
-                    }
+                    Y_DEBUG_ABORT_UNLESS(size);
+                    tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size));
                 }
+            }
+            if (QueryPartId && QueryPartId <= i + 1) {
+                break;
             }
             partOffs += partSize;
         }
@@ -82,10 +73,6 @@ namespace NKikimr {
     // We have diskBlob in memory
     void TReadBatcher::operator () (const TDiskBlob &diskBlob) {
         Y_DEBUG_ABORT_UNLESS(Traversing);
-        FoundInMemItems.push_back(diskBlob);
-    }
-
-    void TReadBatcher::ProcessFoundInMemItem(const TDiskBlob &diskBlob) {
         if (QueryPartId == 0 || diskBlob.GetParts().Get(QueryPartId - 1)) {
             // put data item iff we gather all parts OR we need a concrete part and parts contain it
             for (TDiskBlob::TPartIterator it = diskBlob.begin(), e = diskBlob.end(); it != e; ++it) {
@@ -97,7 +84,7 @@ namespace NKikimr {
                 if (QueryPartId == 0 || QueryPartId == partId) {
                     FoundAnything = true;
                     auto& item = TmpItems[partId - 1];
-                    if ((QueryShift >= partSize && partSize) || QuerySize > partSize - QueryShift) {
+                    if ((partSize ? QueryShift >= partSize : QueryShift) || QuerySize > partSize - QueryShift) {
                         item.UpdateWithError(blobId, Cookie);
                     } else if (item.ShouldUpdateWithMem()) {
                         const ui32 size = QuerySize ? QuerySize : partSize - QueryShift;
@@ -114,22 +101,12 @@ namespace NKikimr {
         Y_DEBUG_ABORT_UNLESS(Traversing);
         Traversing = false;
 
-        // process found items; first, we process disk items; then, we process in-mem items that may possibly
-        // overwrite disk ones to prevent read IOPS
-        for (const std::tuple<TDiskPart, NMatrix::TVectorType> &diskItem : FoundDiskItems) {
-            ProcessFoundDiskItem(std::get<0>(diskItem), std::get<1>(diskItem));
-        }
-        for (const TDiskBlob &diskBlob : FoundInMemItems) {
-            ProcessFoundInMemItem(diskBlob);
-        }
-
         // NOTE: we may have parts that are not replicated yet;
         //       we MUST NOT return NO_DATA for them; but when parts are missing due to finished GC, we report NODATA
-        NMatrix::TVectorType mustHave = ingress.PartsWeMustHaveLocally(Ctx->VCtx->Top.get(),
-            Ctx->VCtx->ShortSelfVDisk, CurID);
-        NMatrix::TVectorType actuallyHave = ingress.LocalParts(Ctx->VCtx->Top->GType);
-        NMatrix::TVectorType missingParts = mustHave - actuallyHave;
-        for (ui8 i = missingParts.FirstPosition(); i != missingParts.GetSize(); i = missingParts.NextPosition(i)) {
+        const auto mustHave = ingress.PartsWeMustHaveLocally(Ctx->VCtx->Top.get(), Ctx->VCtx->ShortSelfVDisk, CurID);
+        const auto actuallyHave = ingress.LocalParts(Ctx->VCtx->Top->GType);
+        const auto missingParts = mustHave - actuallyHave;
+        for (ui8 i : missingParts) {
             // NOT_YET
             if (QueryPartId == 0 || i + 1 == QueryPartId) {
                 Y_ABORT_UNLESS(TmpItems[i].Empty());

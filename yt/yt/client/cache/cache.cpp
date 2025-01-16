@@ -18,18 +18,6 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<class T>
-TIntrusivePtr<T> CopyConfig(const TIntrusivePtr<T>& config)
-{
-    auto newConfig = New<T>();
-    newConfig->Load(
-        ConvertToNode(config),
-        /*postprocess*/ false,
-        /*setDefaults*/ false,
-        /*path*/ "");
-    return newConfig;
-}
-
 TStringBuf GetNormalClusterName(TStringBuf clusterName)
 {
     return NNet::InferYTClusterFromClusterUrlRaw(clusterName).value_or(clusterName);
@@ -38,11 +26,13 @@ TStringBuf GetNormalClusterName(TStringBuf clusterName)
 // TODO(ignat): move this logic to ads/bsyeti/libs/ytex/client/
 TClientsCacheConfigPtr GetClustersConfigWithNormalClusterName(const TClientsCacheConfigPtr& config)
 {
+    YT_VERIFY(config);
     auto newConfig = New<TClientsCacheConfig>();
 
-    newConfig->DefaultConfig = CopyConfig(config->DefaultConfig);
+    newConfig->DefaultConfig = CloneYsonStruct(config->DefaultConfig, /*postprocess*/ false, /*setDefaults*/ false);
     for (const auto& [clusterName, clusterConfig] : config->ClusterConfigs) {
-        newConfig->ClusterConfigs[ToString(GetNormalClusterName(clusterName))] = CopyConfig(clusterConfig);
+        newConfig->ClusterConfigs[ToString(GetNormalClusterName(clusterName))] =
+            CloneYsonStruct(clusterConfig, /*postprocess*/ false, /*setDefaults*/ false);
     }
     return newConfig;
 }
@@ -57,14 +47,19 @@ TConnectionConfigPtr MakeClusterConfig(
 {
     auto [cluster, proxyRole] = ExtractClusterAndProxyRole(clusterUrl);
     auto it = clustersConfig->ClusterConfigs.find(GetNormalClusterName(cluster));
-    auto config = (it != clustersConfig->ClusterConfigs.end()) ? it->second : clustersConfig->DefaultConfig;
+    const bool useDefaultConfig = (it == clustersConfig->ClusterConfigs.end());
+    const auto& config = useDefaultConfig ? clustersConfig->DefaultConfig : it->second;
 
-    auto newConfig = CopyConfig(config);
-    newConfig->ClusterUrl = ToString(cluster);
+    auto newConfig = config ? CloneYsonStruct(config, /*postprocess*/ false, /*setDefaults*/ false) : New<NApi::NRpcProxy::TConnectionConfig>();
+    // Ignore cluster url from DefaultConfig, but use it from ClusterConfigs[_] if it is set.
+    if (useDefaultConfig || !newConfig->ClusterUrl.has_value() || newConfig->ClusterUrl->empty()) {
+        newConfig->ClusterUrl = ToString(cluster);
+    }
     newConfig->ClusterName = InferYTClusterFromClusterUrl(*newConfig->ClusterUrl);
     if (!proxyRole.empty()) {
         newConfig->ProxyRole = ToString(proxyRole);
     }
+    newConfig->Postprocess();
     return newConfig;
 }
 
@@ -78,20 +73,21 @@ class TClientsCache
     : public TClientsCacheBase
 {
 public:
-    TClientsCache(const TClientsCacheConfigPtr& config, const NApi::TClientOptions& options)
+    TClientsCache(const TClientsCacheConfigPtr& config, const TClientsCacheAuthentificationOptionsPtr& clientsOptions)
         : ClustersConfig_(GetClustersConfigWithNormalClusterName(config))
-        , Options_(options)
+        , ClientsOptions_(clientsOptions)
     { }
 
 protected:
     NApi::IClientPtr CreateClient(TStringBuf clusterUrl) override
     {
-        return NCache::CreateClient(MakeClusterConfig(ClustersConfig_, clusterUrl), Options_);
+        auto& options = ClientsOptions_->ClusterOptions.ValueRef(clusterUrl, ClientsOptions_->DefaultOptions);
+        return NCache::CreateClient(MakeClusterConfig(ClustersConfig_, clusterUrl), options);
     }
 
 private:
     const TClientsCacheConfigPtr ClustersConfig_;
-    const NApi::TClientOptions Options_;
+    const TClientsCacheAuthentificationOptionsPtr ClientsOptions_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -100,8 +96,15 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const NApi::TClientOptions& options)
+IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const TClientsCacheAuthentificationOptionsPtr& options)
 {
+    return New<TClientsCache>(config, options);
+}
+
+IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const NApi::TClientOptions& defaultOptions)
+{
+    auto options = New<TClientsCacheAuthentificationOptions>();
+    options->DefaultOptions = defaultOptions;
     return New<TClientsCache>(config, options);
 }
 
@@ -110,13 +113,13 @@ IClientsCachePtr CreateClientsCache(
     const NApi::TClientOptions& options)
 {
     auto clustersConfig = New<TClientsCacheConfig>();
-    clustersConfig->DefaultConfig = CopyConfig(config);
+    clustersConfig->DefaultConfig = CloneYsonStruct(config, /*postprocess*/ false, /*setDefaults*/ false);
     return CreateClientsCache(clustersConfig, options);
 }
 
 IClientsCachePtr CreateClientsCache(const TConnectionConfigPtr& config)
 {
-    return CreateClientsCache(config, NApi::GetClientOpsFromEnvStatic());
+    return CreateClientsCache(config, NApi::GetClientOptionsFromEnvStatic());
 }
 
 IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options)
@@ -128,7 +131,7 @@ IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options)
 
 IClientsCachePtr CreateClientsCache()
 {
-    return CreateClientsCache(NApi::GetClientOpsFromEnvStatic());
+    return CreateClientsCache(NApi::GetClientOptionsFromEnvStatic());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

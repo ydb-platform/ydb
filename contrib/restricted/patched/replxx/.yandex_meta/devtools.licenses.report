@@ -1,0 +1,176 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-3-Clause         04b93f082c65a3df60786e0930d03f02
+BELONGS ya.make
+    License text:
+        licensed, readline replacement usable in Apache2 or BSD licensed
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [18:18]
+
+KEEP     Unicode-Mappings     21a868edc7974974e055dab130756d20
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode-mappings
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode-mappings.LICENSE
+    Files with this license:
+        src/ConvertUTF.cpp [4:20]
+        src/ConvertUTF.h [4:20]
+
+KEEP     BSD-3-Clause         31940786ca83a3f366a65af410fa9459
+BELONGS ya.make
+    License text:
+        * BSD license source code
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [28:28]
+
+SKIP     GPL-1.0-or-later AND BSD-3-Clause 5b4628a9879051bf53405e8459042598
+BELONGS ya.make
+    License text:
+        readline, which is GPL, this library uses a BSD license and can be
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        README.md [9:9]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [9:9]
+
+KEEP     BSD-3-Clause         5c0488fc7f7fc95dd8b53236c1e55be8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.53
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/replxx.h [11:33]
+        include/replxx.hxx [6:28]
+        src/replxx_impl.hxx [6:28]
+
+KEEP     Custom-wcwidth       69056019a7e11459c6ebbd30becd17b0
+BELONGS ya.make
+    License text:
+        Permission to use, copy, modify, and distribute this software
+        for any purpose and without fee is hereby granted. The author
+        disclaims all warranties with regard to this software.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        LICENSE.md [37:39]
+
+KEEP     BSD-3-Clause         6bdf777cfafff6bcdcf8a4ae223c43a9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.53
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/replxx.cxx [8:30]
+
+KEEP     BSD-3-Clause         7509a43352899e3a7449208cffac698a
+BELONGS ya.make
+    License text:
+        10gen Inc.  The goal is to create a zero-config, BSD
+        licensed, readline replacement usable in Apache2 or BSD licensed
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [17:18]
+
+KEEP     BSD-3-Clause         bdfa90f639457994e7e6f12df1967399
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.53
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [7:29]
+
+KEEP     Custom-wcwidth       eaa0c2df898c773a2a32283de646baf0
+BELONGS ya.make
+    License text:
+         * Permission to use, copy, modify, and distribute this software
+         * for any purpose and without fee is hereby granted. The author
+         * disclaims all warranties with regard to this software.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        src/wcwidth.cpp [55:57]
+
+KEEP     Unicode-Mappings     f86e25cc5b91d6b6b61d8dda1f95a9f6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode-mappings
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode-mappings.LICENSE
+    Files with this license:
+        LICENSE.md [47:63]

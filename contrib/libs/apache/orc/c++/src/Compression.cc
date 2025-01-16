@@ -52,19 +52,22 @@ namespace orc {
   class CompressionStreamBase : public BufferedOutputStream {
    public:
     CompressionStreamBase(OutputStream* outStream, int compressionLevel, uint64_t capacity,
-                          uint64_t blockSize, MemoryPool& pool, WriterMetrics* metrics);
+                          uint64_t compressionBlockSize, uint64_t memoryBlockSize, MemoryPool& pool,
+                          WriterMetrics* metrics);
 
     virtual bool Next(void** data, int* size) override = 0;
-    virtual void BackUp(int count) override;
+    virtual void BackUp(int count) override = 0;
 
     virtual std::string getName() const override = 0;
-    virtual uint64_t flush() override;
-    virtual void suppress() override;
+    virtual uint64_t flush() override = 0;
+    virtual void suppress() override = 0;
 
     virtual bool isCompressed() const override {
       return true;
     }
     virtual uint64_t getSize() const override;
+    virtual uint64_t getRawInputBufferSize() const override = 0;
+    virtual void finishStream() override = 0;
 
    protected:
     void writeData(const unsigned char* data, int size);
@@ -77,9 +80,6 @@ namespace orc {
 
     // ensure enough room for compression block header
     void ensureHeader();
-
-    // Buffer to hold uncompressed data until user calls Next()
-    DataBuffer<unsigned char> rawInputBuffer;
 
     // Compress level
     int level;
@@ -99,44 +99,24 @@ namespace orc {
     // Compression block header pointer array
     static const uint32_t HEADER_SIZE = 3;
     std::array<char*, HEADER_SIZE> header;
+
+    // Compression block size
+    uint64_t compressionBlockSize;
   };
 
   CompressionStreamBase::CompressionStreamBase(OutputStream* outStream, int compressionLevel,
-                                               uint64_t capacity, uint64_t blockSize,
-                                               MemoryPool& pool, WriterMetrics* metrics)
-      : BufferedOutputStream(pool, outStream, capacity, blockSize, metrics),
-        rawInputBuffer(pool, blockSize),
+                                               uint64_t capacity, uint64_t compressionBlockSize,
+                                               uint64_t memoryBlockSize, MemoryPool& pool,
+                                               WriterMetrics* metrics)
+      : BufferedOutputStream(pool, outStream, capacity, memoryBlockSize, metrics),
         level(compressionLevel),
         outputBuffer(nullptr),
         bufferSize(0),
         outputPosition(0),
-        outputSize(0) {
+        outputSize(0),
+        compressionBlockSize(compressionBlockSize) {
     // init header pointer array
     header.fill(nullptr);
-  }
-
-  void CompressionStreamBase::BackUp(int count) {
-    if (count > bufferSize) {
-      throw std::logic_error("Can't backup that much!");
-    }
-    bufferSize -= count;
-  }
-
-  uint64_t CompressionStreamBase::flush() {
-    void* data;
-    int size;
-    if (!Next(&data, &size)) {
-      throw std::runtime_error("Failed to flush compression buffer.");
-    }
-    BufferedOutputStream::BackUp(outputSize - outputPosition);
-    bufferSize = outputSize = outputPosition = 0;
-    return BufferedOutputStream::flush();
-  }
-
-  void CompressionStreamBase::suppress() {
-    outputBuffer = nullptr;
-    bufferSize = outputPosition = outputSize = 0;
-    BufferedOutputStream::suppress();
   }
 
   uint64_t CompressionStreamBase::getSize() const {
@@ -149,12 +129,12 @@ namespace orc {
     while (offset < size) {
       if (outputPosition == outputSize) {
         if (!BufferedOutputStream::Next(reinterpret_cast<void**>(&outputBuffer), &outputSize)) {
-          throw std::runtime_error("Failed to get next output buffer from output stream.");
+          throw CompressionError("Failed to get next output buffer from output stream.");
         }
         outputPosition = 0;
       } else if (outputPosition > outputSize) {
         // for safety this will unlikely happen
-        throw std::logic_error("Write to an out-of-bound place during compression!");
+        throw CompressionError("Write to an out-of-bound place during compression!");
       }
       int currentSize = std::min(outputSize - outputPosition, size - offset);
       memcpy(outputBuffer + outputPosition, data + offset, static_cast<size_t>(currentSize));
@@ -168,7 +148,7 @@ namespace orc {
     for (uint32_t i = 0; i < HEADER_SIZE; ++i) {
       if (outputPosition >= outputSize) {
         if (!BufferedOutputStream::Next(reinterpret_cast<void**>(&outputBuffer), &outputSize)) {
-          throw std::runtime_error("Failed to get next output buffer from output stream.");
+          throw CompressionError("Failed to get next output buffer from output stream.");
         }
         outputPosition = 0;
       }
@@ -183,31 +163,74 @@ namespace orc {
   class CompressionStream : public CompressionStreamBase {
    public:
     CompressionStream(OutputStream* outStream, int compressionLevel, uint64_t capacity,
-                      uint64_t blockSize, MemoryPool& pool, WriterMetrics* metrics);
+                      uint64_t compressionBlockSize, uint64_t memoryBlockSize, MemoryPool& pool,
+                      WriterMetrics* metrics);
 
     virtual bool Next(void** data, int* size) override;
     virtual std::string getName() const override = 0;
+    virtual void BackUp(int count) override;
+    virtual void suppress() override;
+    virtual uint64_t flush() override;
+    uint64_t getRawInputBufferSize() const override {
+      return rawInputBuffer.size();
+    }
+    virtual void finishStream() override {
+      compressInternal();
+      BufferedOutputStream::finishStream();
+    }
 
    protected:
     // return total compressed size
     virtual uint64_t doStreamingCompression() = 0;
+
+    // Buffer to hold uncompressed data until user calls Next()
+    BlockBuffer rawInputBuffer;
+
+    void compressInternal();
   };
 
+  void CompressionStream::BackUp(int count) {
+    uint64_t backup = static_cast<uint64_t>(count);
+    uint64_t currSize = rawInputBuffer.size();
+    if (backup > currSize) {
+      throw CompressionError("Can't backup that much!");
+    }
+    rawInputBuffer.resize(currSize - backup);
+  }
+
+  uint64_t CompressionStream::flush() {
+    compressInternal();
+    BufferedOutputStream::BackUp(outputSize - outputPosition);
+    rawInputBuffer.resize(0);
+    outputSize = outputPosition = 0;
+    return BufferedOutputStream::flush();
+  }
+
+  void CompressionStream::suppress() {
+    outputBuffer = nullptr;
+    outputPosition = outputSize = 0;
+    rawInputBuffer.resize(0);
+    BufferedOutputStream::suppress();
+  }
+
   CompressionStream::CompressionStream(OutputStream* outStream, int compressionLevel,
-                                       uint64_t capacity, uint64_t blockSize, MemoryPool& pool,
+                                       uint64_t capacity, uint64_t compressionBlockSize,
+                                       uint64_t memoryBlockSize, MemoryPool& pool,
                                        WriterMetrics* metrics)
-      : CompressionStreamBase(outStream, compressionLevel, capacity, blockSize, pool, metrics) {
+      : CompressionStreamBase(outStream, compressionLevel, capacity, compressionBlockSize,
+                              memoryBlockSize, pool, metrics),
+        rawInputBuffer(pool, memoryBlockSize) {
     // PASS
   }
 
-  bool CompressionStream::Next(void** data, int* size) {
-    if (bufferSize != 0) {
+  void CompressionStream::compressInternal() {
+    if (rawInputBuffer.size() != 0) {
       ensureHeader();
 
       uint64_t preSize = getSize();
       uint64_t totalCompressedSize = doStreamingCompression();
-      if (totalCompressedSize >= static_cast<unsigned long>(bufferSize)) {
-        writeHeader(static_cast<size_t>(bufferSize), true);
+      if (totalCompressedSize >= static_cast<unsigned long>(rawInputBuffer.size())) {
+        writeHeader(static_cast<size_t>(rawInputBuffer.size()), true);
         // reset output buffer
         outputBuffer = nullptr;
         outputPosition = outputSize = 0;
@@ -215,23 +238,42 @@ namespace orc {
         BufferedOutputStream::BackUp(static_cast<int>(backup));
 
         // copy raw input buffer into block buffer
-        writeData(rawInputBuffer.data(), bufferSize);
+        uint64_t blockNumber = rawInputBuffer.getBlockNumber();
+        for (uint64_t i = 0; i < blockNumber; ++i) {
+          auto block = rawInputBuffer.getBlock(i);
+          writeData(reinterpret_cast<const unsigned char*>(block.data), block.size);
+        }
       } else {
         writeHeader(totalCompressedSize, false);
       }
+      rawInputBuffer.resize(0);
+    }
+  }
+
+  bool CompressionStream::Next(void** data, int* size) {
+    if (rawInputBuffer.size() > compressionBlockSize) {
+      std::stringstream ss;
+      ss << "uncompressed data size " << rawInputBuffer.size()
+         << " is larger than compression block size " << compressionBlockSize;
+      throw CompressionError(ss.str());
     }
 
-    *data = rawInputBuffer.data();
-    *size = static_cast<int>(rawInputBuffer.size());
-    bufferSize = *size;
+    // compress data in the rawInputBuffer when it is full
+    if (rawInputBuffer.size() == compressionBlockSize) {
+      compressInternal();
+    }
 
+    auto block = rawInputBuffer.getNextBlock();
+    *data = block.data;
+    *size = static_cast<int>(block.size);
     return true;
   }
 
   class ZlibCompressionStream : public CompressionStream {
    public:
-    ZlibCompressionStream(OutputStream* outStream, int compressionLevel, uint64_t capacity,
-                          uint64_t blockSize, MemoryPool& pool, WriterMetrics* metrics);
+    ZlibCompressionStream(OutputStream* outStream, int compressionLevel, uint64_t bufferCapacity,
+                          uint64_t compressionBlockSize, uint64_t memoryBlockSize, MemoryPool& pool,
+                          WriterMetrics* metrics);
 
     virtual ~ZlibCompressionStream() override {
       end();
@@ -245,47 +287,62 @@ namespace orc {
    private:
     void init();
     void end();
-    z_stream strm;
+    z_stream strm_;
   };
 
   ZlibCompressionStream::ZlibCompressionStream(OutputStream* outStream, int compressionLevel,
-                                               uint64_t capacity, uint64_t blockSize,
-                                               MemoryPool& pool, WriterMetrics* metrics)
-      : CompressionStream(outStream, compressionLevel, capacity, blockSize, pool, metrics) {
+                                               uint64_t bufferCapacity,
+                                               uint64_t compressionBlockSize,
+                                               uint64_t memoryBlockSize, MemoryPool& pool,
+                                               WriterMetrics* metrics)
+      : CompressionStream(outStream, compressionLevel, bufferCapacity, compressionBlockSize,
+                          memoryBlockSize, pool, metrics) {
     init();
   }
 
   uint64_t ZlibCompressionStream::doStreamingCompression() {
-    if (deflateReset(&strm) != Z_OK) {
-      throw std::runtime_error("Failed to reset inflate.");
+    if (deflateReset(&strm_) != Z_OK) {
+      throw CompressionError("Failed to reset inflate.");
     }
 
-    strm.avail_in = static_cast<unsigned int>(bufferSize);
-    strm.next_in = rawInputBuffer.data();
+    // iterate through all blocks
+    uint64_t blockId = 0;
+    bool finish = false;
 
     do {
-      if (outputPosition >= outputSize) {
-        if (!BufferedOutputStream::Next(reinterpret_cast<void**>(&outputBuffer), &outputSize)) {
-          throw std::runtime_error("Failed to get next output buffer from output stream.");
-        }
-        outputPosition = 0;
-      }
-      strm.next_out = reinterpret_cast<unsigned char*>(outputBuffer + outputPosition);
-      strm.avail_out = static_cast<unsigned int>(outputSize - outputPosition);
-
-      int ret = deflate(&strm, Z_FINISH);
-      outputPosition = outputSize - static_cast<int>(strm.avail_out);
-
-      if (ret == Z_STREAM_END) {
-        break;
-      } else if (ret == Z_OK) {
-        // needs more buffer so will continue the loop
+      if (blockId == rawInputBuffer.getBlockNumber()) {
+        finish = true;
+        strm_.avail_in = 0;
+        strm_.next_in = nullptr;
       } else {
-        throw std::runtime_error("Failed to deflate input data.");
+        auto block = rawInputBuffer.getBlock(blockId++);
+        strm_.avail_in = static_cast<unsigned int>(block.size);
+        strm_.next_in = reinterpret_cast<unsigned char*>(block.data);
       }
-    } while (strm.avail_out == 0);
 
-    return strm.total_out;
+      do {
+        if (outputPosition >= outputSize) {
+          if (!BufferedOutputStream::Next(reinterpret_cast<void**>(&outputBuffer), &outputSize)) {
+            throw CompressionError("Failed to get next output buffer from output stream.");
+          }
+          outputPosition = 0;
+        }
+        strm_.next_out = reinterpret_cast<unsigned char*>(outputBuffer + outputPosition);
+        strm_.avail_out = static_cast<unsigned int>(outputSize - outputPosition);
+
+        int ret = deflate(&strm_, finish ? Z_FINISH : Z_NO_FLUSH);
+        outputPosition = outputSize - static_cast<int>(strm_.avail_out);
+
+        if (ret == Z_STREAM_END) {
+          break;
+        } else if (ret == Z_OK) {
+          // needs more buffer so will continue the loop
+        } else {
+          throw CompressionError("Failed to deflate input data.");
+        }
+      } while (strm_.avail_out == 0);
+    } while (!finish);
+    return strm_.total_out;
   }
 
   std::string ZlibCompressionStream::getName() const {
@@ -299,18 +356,18 @@ namespace orc {
 #endif
 
   void ZlibCompressionStream::init() {
-    strm.zalloc = nullptr;
-    strm.zfree = nullptr;
-    strm.opaque = nullptr;
-    strm.next_in = nullptr;
+    strm_.zalloc = nullptr;
+    strm_.zfree = nullptr;
+    strm_.opaque = nullptr;
+    strm_.next_in = nullptr;
 
-    if (deflateInit2(&strm, level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
-      throw std::runtime_error("Error while calling deflateInit2() for zlib.");
+    if (deflateInit2(&strm_, level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+      throw CompressionError("Error while calling deflateInit2() for zlib.");
     }
   }
 
   void ZlibCompressionStream::end() {
-    (void)deflateEnd(&strm);
+    (void)deflateEnd(&strm_);
   }
 
   DIAGNOSTIC_PUSH
@@ -399,9 +456,9 @@ namespace orc {
   };
 
   DecompressionStream::DecompressionStream(std::unique_ptr<SeekableInputStream> inStream,
-                                           size_t bufferSize, MemoryPool& _pool,
-                                           ReaderMetrics* _metrics)
-      : pool(_pool),
+                                           size_t bufferSize, MemoryPool& pool,
+                                           ReaderMetrics* metrics)
+      : pool(pool),
         input(std::move(inStream)),
         outputDataBuffer(pool, bufferSize),
         state(DECOMPRESS_HEADER),
@@ -416,7 +473,7 @@ namespace orc {
         headerPosition(0),
         inputBufferStartPosition(0),
         bytesReturned(0),
-        metrics(_metrics) {}
+        metrics(metrics) {}
 
   std::string DecompressionStream::getStreamName() const {
     return input->getName();
@@ -505,7 +562,7 @@ namespace orc {
     } else if (state == DECOMPRESS_START) {
       NextDecompress(data, size, availableSize);
     } else {
-      throw std::logic_error(
+      throw CompressionError(
           "Unknown compression state in "
           "DecompressionStream::Next");
     }
@@ -519,7 +576,7 @@ namespace orc {
 
   void DecompressionStream::BackUp(int count) {
     if (outputBuffer == nullptr || outputBufferLength != 0) {
-      throw std::logic_error("Backup without previous Next in " + getName());
+      throw CompressionError("Backup without previous Next in " + getName());
     }
     outputBuffer -= static_cast<size_t>(count);
     outputBufferLength = static_cast<size_t>(count);
@@ -622,7 +679,7 @@ namespace orc {
     virtual void NextDecompress(const void** data, int* size, size_t availableSize) override;
 
    private:
-    z_stream zstream;
+    z_stream zstream_;
   };
 
   DIAGNOSTIC_PUSH
@@ -632,35 +689,39 @@ namespace orc {
 #endif
 
   ZlibDecompressionStream::ZlibDecompressionStream(std::unique_ptr<SeekableInputStream> inStream,
-                                                   size_t bufferSize, MemoryPool& _pool,
-                                                   ReaderMetrics* _metrics)
-      : DecompressionStream(std::move(inStream), bufferSize, _pool, _metrics) {
-    zstream.next_in = nullptr;
-    zstream.avail_in = 0;
-    zstream.zalloc = nullptr;
-    zstream.zfree = nullptr;
-    zstream.opaque = nullptr;
-    zstream.next_out = reinterpret_cast<Bytef*>(outputDataBuffer.data());
-    zstream.avail_out = static_cast<uInt>(outputDataBuffer.capacity());
-    int64_t result = inflateInit2(&zstream, -15);
+                                                   size_t bufferSize, MemoryPool& pool,
+                                                   ReaderMetrics* metrics)
+      : DecompressionStream(std::move(inStream), bufferSize, pool, metrics) {
+    zstream_.next_in = nullptr;
+    zstream_.avail_in = 0;
+    zstream_.zalloc = nullptr;
+    zstream_.zfree = nullptr;
+    zstream_.opaque = nullptr;
+    zstream_.next_out = reinterpret_cast<Bytef*>(outputDataBuffer.data());
+    zstream_.avail_out = static_cast<uInt>(outputDataBuffer.capacity());
+    int64_t result = inflateInit2(&zstream_, -15);
     switch (result) {
       case Z_OK:
         break;
       case Z_MEM_ERROR:
-        throw std::logic_error("Memory error from inflateInit2");
+        throw CompressionError(
+            "Memory error from ZlibDecompressionStream::ZlibDecompressionStream inflateInit2");
       case Z_VERSION_ERROR:
-        throw std::logic_error("Version error from inflateInit2");
+        throw CompressionError(
+            "Version error from ZlibDecompressionStream::ZlibDecompressionStream inflateInit2");
       case Z_STREAM_ERROR:
-        throw std::logic_error("Stream error from inflateInit2");
+        throw CompressionError(
+            "Stream error from ZlibDecompressionStream::ZlibDecompressionStream inflateInit2");
       default:
-        throw std::logic_error("Unknown error from inflateInit2");
+        throw CompressionError(
+            "Unknown error from  ZlibDecompressionStream::ZlibDecompressionStream inflateInit2");
     }
   }
 
   DIAGNOSTIC_POP
 
   ZlibDecompressionStream::~ZlibDecompressionStream() {
-    int64_t result = inflateEnd(&zstream);
+    int64_t result = inflateEnd(&zstream_);
     if (result != Z_OK) {
       // really can't throw in destructors
       std::cout << "Error in ~ZlibDecompressionStream() " << result << "\n";
@@ -668,19 +729,19 @@ namespace orc {
   }
 
   void ZlibDecompressionStream::NextDecompress(const void** data, int* size, size_t availableSize) {
-    zstream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(inputBuffer));
-    zstream.avail_in = static_cast<uInt>(availableSize);
+    zstream_.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(inputBuffer));
+    zstream_.avail_in = static_cast<uInt>(availableSize);
     outputBuffer = outputDataBuffer.data();
-    zstream.next_out = reinterpret_cast<Bytef*>(const_cast<char*>(outputBuffer));
-    zstream.avail_out = static_cast<uInt>(outputDataBuffer.capacity());
-    if (inflateReset(&zstream) != Z_OK) {
-      throw std::logic_error(
+    zstream_.next_out = reinterpret_cast<Bytef*>(const_cast<char*>(outputBuffer));
+    zstream_.avail_out = static_cast<uInt>(outputDataBuffer.capacity());
+    if (inflateReset(&zstream_) != Z_OK) {
+      throw CompressionError(
           "Bad inflateReset in "
           "ZlibDecompressionStream::NextDecompress");
     }
     int64_t result;
     do {
-      result = inflate(&zstream, availableSize == remainingLength ? Z_FINISH : Z_SYNC_FLUSH);
+      result = inflate(&zstream_, availableSize == remainingLength ? Z_FINISH : Z_SYNC_FLUSH);
       switch (result) {
         case Z_OK:
           remainingLength -= availableSize;
@@ -688,30 +749,30 @@ namespace orc {
           readBuffer(true);
           availableSize =
               std::min(static_cast<size_t>(inputBufferEnd - inputBuffer), remainingLength);
-          zstream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(inputBuffer));
-          zstream.avail_in = static_cast<uInt>(availableSize);
+          zstream_.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(inputBuffer));
+          zstream_.avail_in = static_cast<uInt>(availableSize);
           break;
         case Z_STREAM_END:
           break;
         case Z_BUF_ERROR:
-          throw std::logic_error(
+          throw CompressionError(
               "Buffer error in "
               "ZlibDecompressionStream::NextDecompress");
         case Z_DATA_ERROR:
-          throw std::logic_error(
+          throw CompressionError(
               "Data error in "
               "ZlibDecompressionStream::NextDecompress");
         case Z_STREAM_ERROR:
-          throw std::logic_error(
+          throw CompressionError(
               "Stream error in "
               "ZlibDecompressionStream::NextDecompress");
         default:
-          throw std::logic_error(
+          throw CompressionError(
               "Unknown error in "
               "ZlibDecompressionStream::NextDecompress");
       }
     } while (result != Z_STREAM_END);
-    *size = static_cast<int>(outputDataBuffer.capacity() - zstream.avail_out);
+    *size = static_cast<int>(outputDataBuffer.capacity() - zstream_.avail_out);
     *data = outputBuffer;
     outputBufferLength = 0;
     outputBuffer += *size;
@@ -742,14 +803,14 @@ namespace orc {
    private:
     // may need to stitch together multiple input buffers;
     // to give snappy a contiguous block
-    DataBuffer<char> inputDataBuffer;
+    DataBuffer<char> inputDataBuffer_;
   };
 
   BlockDecompressionStream::BlockDecompressionStream(std::unique_ptr<SeekableInputStream> inStream,
-                                                     size_t blockSize, MemoryPool& _pool,
-                                                     ReaderMetrics* _metrics)
-      : DecompressionStream(std::move(inStream), blockSize, _pool, _metrics),
-        inputDataBuffer(pool, blockSize) {}
+                                                     size_t blockSize, MemoryPool& pool,
+                                                     ReaderMetrics* metrics)
+      : DecompressionStream(std::move(inStream), blockSize, pool, metrics),
+        inputDataBuffer_(pool, blockSize) {}
 
   void BlockDecompressionStream::NextDecompress(const void** data, int* size,
                                                 size_t availableSize) {
@@ -759,18 +820,18 @@ namespace orc {
       inputBuffer += availableSize;
     } else {
       // Did not read enough from input.
-      if (inputDataBuffer.capacity() < remainingLength) {
-        inputDataBuffer.resize(remainingLength);
+      if (inputDataBuffer_.capacity() < remainingLength) {
+        inputDataBuffer_.resize(remainingLength);
       }
-      ::memcpy(inputDataBuffer.data(), inputBuffer, availableSize);
+      ::memcpy(inputDataBuffer_.data(), inputBuffer, availableSize);
       inputBuffer += availableSize;
-      compressed = inputDataBuffer.data();
+      compressed = inputDataBuffer_.data();
 
       for (size_t pos = availableSize; pos < remainingLength;) {
         readBuffer(true);
         size_t avail =
             std::min(static_cast<size_t>(inputBufferEnd - inputBuffer), remainingLength - pos);
-        ::memcpy(inputDataBuffer.data() + pos, inputBuffer, avail);
+        ::memcpy(inputDataBuffer_.data() + pos, inputBuffer, avail);
         pos += avail;
         inputBuffer += avail;
       }
@@ -788,8 +849,8 @@ namespace orc {
   class SnappyDecompressionStream : public BlockDecompressionStream {
    public:
     SnappyDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize,
-                              MemoryPool& _pool, ReaderMetrics* _metrics)
-        : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
+                              MemoryPool& pool, ReaderMetrics* metrics)
+        : BlockDecompressionStream(std::move(inStream), blockSize, pool, metrics) {
       // PASS
     }
 
@@ -804,18 +865,18 @@ namespace orc {
                                 size_t maxOutputLength) override;
   };
 
-  uint64_t SnappyDecompressionStream::decompress(const char* _input, uint64_t length, char* output,
+  uint64_t SnappyDecompressionStream::decompress(const char* input, uint64_t length, char* output,
                                                  size_t maxOutputLength) {
     size_t outLength;
-    if (!snappy::GetUncompressedLength(_input, length, &outLength)) {
+    if (!snappy::GetUncompressedLength(input, length, &outLength)) {
       throw ParseError("SnappyDecompressionStream choked on corrupt input");
     }
 
     if (outLength > maxOutputLength) {
-      throw std::logic_error("Snappy length exceeds block size");
+      throw CompressionError("Snappy length exceeds block size");
     }
 
-    if (!snappy::RawUncompress(_input, length, output)) {
+    if (!snappy::RawUncompress(input, length, output)) {
       throw ParseError("SnappyDecompressionStream choked on corrupt input");
     }
     return outLength;
@@ -824,8 +885,8 @@ namespace orc {
   class LzoDecompressionStream : public BlockDecompressionStream {
    public:
     LzoDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize,
-                           MemoryPool& _pool, ReaderMetrics* _metrics)
-        : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
+                           MemoryPool& pool, ReaderMetrics* metrics)
+        : BlockDecompressionStream(std::move(inStream), blockSize, pool, metrics) {
       // PASS
     }
 
@@ -848,8 +909,8 @@ namespace orc {
   class Lz4DecompressionStream : public BlockDecompressionStream {
    public:
     Lz4DecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize,
-                           MemoryPool& _pool, ReaderMetrics* _metrics)
-        : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
+                           MemoryPool& pool, ReaderMetrics* metrics)
+        : BlockDecompressionStream(std::move(inStream), blockSize, pool, metrics) {
       // PASS
     }
 
@@ -881,14 +942,23 @@ namespace orc {
    public:
     BlockCompressionStream(OutputStream* outStream, int compressionLevel, uint64_t capacity,
                            uint64_t blockSize, MemoryPool& pool, WriterMetrics* metrics)
-        : CompressionStreamBase(outStream, compressionLevel, capacity, blockSize, pool, metrics),
-          compressorBuffer(pool) {
+        : CompressionStreamBase(outStream, compressionLevel, capacity, blockSize, blockSize, pool,
+                                metrics),
+          compressorBuffer(pool),
+          rawInputBuffer(pool, blockSize) {
       // PASS
     }
 
     virtual bool Next(void** data, int* size) override;
     virtual void suppress() override;
+    virtual void BackUp(int count) override;
+    virtual uint64_t flush() override;
     virtual std::string getName() const override = 0;
+    uint64_t getRawInputBufferSize() const override {
+      return bufferSize;
+    }
+
+    virtual void finishStream() override;
 
    protected:
     // compresses a block and returns the compressed size
@@ -900,7 +970,22 @@ namespace orc {
 
     // should allocate max possible compressed size
     DataBuffer<unsigned char> compressorBuffer;
+
+    // Buffer to hold uncompressed data until user calls Next()
+    DataBuffer<unsigned char> rawInputBuffer;
   };
+
+  void BlockCompressionStream::BackUp(int count) {
+    if (count > bufferSize) {
+      throw CompressionError("Can't backup that much!");
+    }
+    bufferSize -= count;
+  }
+
+  uint64_t BlockCompressionStream::flush() {
+    finishStream();
+    return BufferedOutputStream::flush();
+  }
 
   bool BlockCompressionStream::Next(void** data, int* size) {
     if (bufferSize != 0) {
@@ -935,7 +1020,19 @@ namespace orc {
 
   void BlockCompressionStream::suppress() {
     compressorBuffer.resize(0);
-    CompressionStreamBase::suppress();
+    outputBuffer = nullptr;
+    bufferSize = outputPosition = outputSize = 0;
+    BufferedOutputStream::suppress();
+  }
+
+  void BlockCompressionStream::finishStream() {
+    void* data;
+    int size;
+    if (!Next(&data, &size)) {
+      throw CompressionError("Failed to flush compression buffer.");
+    }
+    BufferedOutputStream::BackUp(outputSize - outputPosition);
+    bufferSize = outputSize = outputPosition = 0;
   }
 
   /**
@@ -967,30 +1064,30 @@ namespace orc {
    private:
     void init();
     void end();
-    LZ4_stream_t* state;
+    LZ4_stream_t* state_;
   };
 
   uint64_t Lz4CompressionSteam::doBlockCompression() {
     int result = LZ4_compress_fast_extState(
-        static_cast<void*>(state), reinterpret_cast<const char*>(rawInputBuffer.data()),
+        static_cast<void*>(state_), reinterpret_cast<const char*>(rawInputBuffer.data()),
         reinterpret_cast<char*>(compressorBuffer.data()), bufferSize,
         static_cast<int>(compressorBuffer.size()), level);
     if (result == 0) {
-      throw std::runtime_error("Error during block compression using lz4.");
+      throw CompressionError("Error during block compression using lz4.");
     }
     return static_cast<uint64_t>(result);
   }
 
   void Lz4CompressionSteam::init() {
-    state = LZ4_createStream();
-    if (!state) {
-      throw std::runtime_error("Error while allocating state for lz4.");
+    state_ = LZ4_createStream();
+    if (!state_) {
+      throw CompressionError("Error while allocating state for lz4.");
     }
   }
 
   void Lz4CompressionSteam::end() {
-    (void)LZ4_freeStream(state);
-    state = nullptr;
+    (void)LZ4_freeStream(state_);
+    state_ = nullptr;
   }
 
   /**
@@ -1055,11 +1152,11 @@ namespace orc {
    private:
     void init();
     void end();
-    ZSTD_CCtx* cctx;
+    ZSTD_CCtx* cctx_;
   };
 
   uint64_t ZSTDCompressionStream::doBlockCompression() {
-    return ZSTD_compressCCtx(cctx, compressorBuffer.data(), compressorBuffer.size(),
+    return ZSTD_compressCCtx(cctx_, compressorBuffer.data(), compressorBuffer.size(),
                              rawInputBuffer.data(), static_cast<size_t>(bufferSize), level);
   }
 
@@ -1070,15 +1167,15 @@ namespace orc {
 #endif
 
   void ZSTDCompressionStream::init() {
-    cctx = ZSTD_createCCtx();
-    if (!cctx) {
-      throw std::runtime_error("Error while calling ZSTD_createCCtx() for zstd.");
+    cctx_ = ZSTD_createCCtx();
+    if (!cctx_) {
+      throw CompressionError("Error while calling ZSTD_createCCtx() for zstd.");
     }
   }
 
   void ZSTDCompressionStream::end() {
-    (void)ZSTD_freeCCtx(cctx);
-    cctx = nullptr;
+    (void)ZSTD_freeCCtx(cctx_);
+    cctx_ = nullptr;
   }
 
   DIAGNOSTIC_PUSH
@@ -1089,8 +1186,8 @@ namespace orc {
   class ZSTDDecompressionStream : public BlockDecompressionStream {
    public:
     ZSTDDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize,
-                            MemoryPool& _pool, ReaderMetrics* _metrics)
-        : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
+                            MemoryPool& pool, ReaderMetrics* metrics)
+        : BlockDecompressionStream(std::move(inStream), blockSize, pool, metrics) {
       this->init();
     }
 
@@ -1111,13 +1208,13 @@ namespace orc {
    private:
     void init();
     void end();
-    ZSTD_DCtx* dctx;
+    ZSTD_DCtx* dctx_;
   };
 
   uint64_t ZSTDDecompressionStream::decompress(const char* inputPtr, uint64_t length, char* output,
                                                size_t maxOutputLength) {
     return static_cast<uint64_t>(
-        ZSTD_decompressDCtx(dctx, output, maxOutputLength, inputPtr, length));
+        ZSTD_decompressDCtx(dctx_, output, maxOutputLength, inputPtr, length));
   }
 
   DIAGNOSTIC_PUSH
@@ -1127,25 +1224,23 @@ namespace orc {
 #endif
 
   void ZSTDDecompressionStream::init() {
-    dctx = ZSTD_createDCtx();
-    if (!dctx) {
-      throw std::runtime_error("Error while calling ZSTD_createDCtx() for zstd.");
+    dctx_ = ZSTD_createDCtx();
+    if (!dctx_) {
+      throw CompressionError("Error while calling ZSTD_createDCtx() for zstd.");
     }
   }
 
   void ZSTDDecompressionStream::end() {
-    (void)ZSTD_freeDCtx(dctx);
-    dctx = nullptr;
+    (void)ZSTD_freeDCtx(dctx_);
+    dctx_ = nullptr;
   }
 
   DIAGNOSTIC_PUSH
 
-  std::unique_ptr<BufferedOutputStream> createCompressor(CompressionKind kind,
-                                                         OutputStream* outStream,
-                                                         CompressionStrategy strategy,
-                                                         uint64_t bufferCapacity,
-                                                         uint64_t compressionBlockSize,
-                                                         MemoryPool& pool, WriterMetrics* metrics) {
+  std::unique_ptr<BufferedOutputStream> createCompressor(
+      CompressionKind kind, OutputStream* outStream, CompressionStrategy strategy,
+      uint64_t bufferCapacity, uint64_t compressionBlockSize, uint64_t memoryBlockSize,
+      MemoryPool& pool, WriterMetrics* metrics) {
     switch (static_cast<int64_t>(kind)) {
       case CompressionKind_NONE: {
         return std::make_unique<BufferedOutputStream>(pool, outStream, bufferCapacity,
@@ -1154,8 +1249,8 @@ namespace orc {
       case CompressionKind_ZLIB: {
         int level =
             (strategy == CompressionStrategy_SPEED) ? Z_BEST_SPEED + 1 : Z_DEFAULT_COMPRESSION;
-        return std::make_unique<ZlibCompressionStream>(outStream, level, bufferCapacity,
-                                                       compressionBlockSize, pool, metrics);
+        return std::make_unique<ZlibCompressionStream>(
+            outStream, level, bufferCapacity, compressionBlockSize, memoryBlockSize, pool, metrics);
       }
       case CompressionKind_ZSTD: {
         int level = (strategy == CompressionStrategy_SPEED) ? 1 : ZSTD_CLEVEL_DEFAULT;

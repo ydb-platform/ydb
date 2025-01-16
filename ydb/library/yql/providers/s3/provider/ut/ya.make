@@ -5,10 +5,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/minikql/dom
-    ydb/library/yql/parser/pg_wrapper
-    ydb/library/yql/public/udf
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/minikql/dom
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/public/udf
+    yql/essentials/public/udf/service/exception_policy
 )
 
 END()

@@ -2,15 +2,15 @@
 
 #include "kqp_opt.h"
 
-#include <ydb/library/yql/core/yql_statistics.h>
+#include <yql/essentials/core/yql_statistics.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat_transformer_base.h>
 
 namespace NKikimr {
@@ -35,7 +35,7 @@ class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase
     public:
         TKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, 
             const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx) : 
-            TDqStatisticsTransformerBase(&typeCtx, pctx, kqpCtx->GetCardinalityHints()),
+            TDqStatisticsTransformerBase(&typeCtx, pctx, *kqpCtx->GetOptimizerHints().CardinalityHints),
             Config(config),
             KqpCtx(*kqpCtx) {}
 

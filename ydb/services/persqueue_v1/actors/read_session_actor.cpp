@@ -62,6 +62,13 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
     , AutoPartitioningSupport(false)
 {
     Y_ASSERT(Request);
+
+    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME); !values.empty()) {
+        UserAgent = values[0];
+    }
+    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER); !values.empty()) {
+        SdkBuildInfo = values[0];
+    }
 }
 
 template <bool UseMigrationProtocol>
@@ -802,7 +809,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     }
 
     if (Request->GetSerializedToken().empty()) {
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             return CloseSession(PersQueue::ErrorCode::ACCESS_DENIED,
                 "unauthenticated access is forbidden, please provide credentials", ctx);
         }
@@ -884,6 +891,18 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     }
 }
 
+template<bool UseMigrationProtocol>
+void TReadSessionActor<UseMigrationProtocol>::SetupBytesReadByUserAgentCounter() {
+    static constexpr auto protocol = UseMigrationProtocol ? "pqv1" : "topic";
+    BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", protocol)
+        ->GetSubgroup("consumer", ClientPath)
+        ->GetSubgroup("sdk_build_info", CleanupCounterValueString(SdkBuildInfo))
+        ->GetSubgroup("user_agent", DropUserAgentSuffix(CleanupCounterValueString(UserAgent)))
+        ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
+}
+
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::SetupCounters() {
     if (SessionsCreated) {
@@ -913,6 +932,8 @@ void TReadSessionActor<UseMigrationProtocol>::SetupCounters() {
     ++(*SessionsCreated);
     ++(*SessionsActive);
     PartsPerSession.IncFor(Partitions.size(), 1); // for 0
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 template <bool UseMigrationProtocol>
@@ -937,6 +958,8 @@ void TReadSessionActor<UseMigrationProtocol>::SetupTopicCounters(const NPersQueu
     topicCounters.CommitLatency          = CommitLatency;
     topicCounters.SLIBigLatency          = SLIBigLatency;
     topicCounters.SLITotal               = SLITotal;
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 template <bool UseMigrationProtocol>
@@ -960,6 +983,8 @@ void TReadSessionActor<UseMigrationProtocol>::SetupTopicCounters(const NPersQueu
     topicCounters.CommitLatency          = CommitLatency;
     topicCounters.SLIBigLatency          = SLIBigLatency;
     topicCounters.SLITotal               = SLITotal;
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 template <bool UseMigrationProtocol>
@@ -1195,11 +1220,15 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
 
     BalancerGeneration[assignId] = {record.GetGeneration(), record.GetStep()};
     const TPartitionId partitionId{converterIter->second, record.GetPartition(), assignId};
+    auto [error, maxLag, readTimestampMs] = GetReadFrom(converter, ctx);
+    if (error) {
+        return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
+    }
 
     const TActorId actorId = ctx.Register(new TPartitionActor(
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC, RangesMode,
-        converterIter->second, DirectRead, UseMigrationProtocol));
+        converterIter->second, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
@@ -1739,6 +1768,7 @@ i64 TFormedReadResponse<TServerMessage>::ApplyResponse(TServerMessage&& resp) {
     return ByteSize - prev;
 }
 
+
 template <typename TServerMessage>
 i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEvDirectReadResponse::TPtr& ev) {
 
@@ -1754,7 +1784,6 @@ i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEv
     ByteSize = DirectReadByteSize;
     return diff;
 }
-
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
@@ -1913,9 +1942,9 @@ ui64 TReadSessionActor<UseMigrationProtocol>::PrepareResponse(typename TFormedRe
     formedResponse->ByteSizeBeforeFiltering = formedResponse->Response.ByteSize();
 
     if constexpr (UseMigrationProtocol) {
-        formedResponse->HasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_data_batch());
+        formedResponse->HasMessages = HasMessages(formedResponse->Response.data_batch());
     } else {
-        formedResponse->HasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_read_response());
+        formedResponse->HasMessages = HasMessages(formedResponse->Response.read_response());
     }
 
     return formedResponse->HasMessages ? formedResponse->Response.ByteSize() : 0;
@@ -1955,6 +1984,8 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(typename TFormedRead
     if constexpr (!UseMigrationProtocol) {
         formedResponse->Response.mutable_read_response()->set_bytes_size(sizeEstimation);
     }
+
+    BytesReadByUserAgent->Add(sizeEstimation);
 
     if (formedResponse->IsDirectRead) {
         auto it = Partitions.find(formedResponse->AssignId);
@@ -2049,6 +2080,31 @@ ui32 TReadSessionActor<UseMigrationProtocol>::NormalizeMaxReadSize(ui32 sourceVa
 }
 
 template <bool UseMigrationProtocol>
+std::tuple<TString, ui32, ui64> TReadSessionActor<UseMigrationProtocol>::GetReadFrom(const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) const {
+    auto jt = ReadFromTimestamp.find(topic->GetInternalName());
+    if (jt == ReadFromTimestamp.end()) {
+        LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " error searching for topic"
+            << ": internalName# " << topic->GetInternalName()
+            << ", prettyName# " << topic->GetPrintableString());
+
+        for (const auto& kv : ReadFromTimestamp) {
+            LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " have topic"
+                << ": topic# " << kv.first);
+        }
+
+        return {"internal error", 0, 0};
+    }
+
+    ui64 readTimestampMs = Max(ReadTimestampMs, jt->second);
+
+    auto lagsIt = MaxLagByTopic.find(topic->GetInternalName());
+    Y_ABORT_UNLESS(lagsIt != MaxLagByTopic.end());
+    const ui32 maxLag = lagsIt->second;
+
+    return {TString{}, maxLag, readTimestampMs};
+}
+
+template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& ctx) {
     auto shouldContinueReads = [this]() {
         if constexpr (UseMigrationProtocol) {
@@ -2094,25 +2150,10 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
             size -= csize;
             Y_ABORT_UNLESS(csize < Max<i32>());
 
-            auto jt = ReadFromTimestamp.find(it->second.Topic->GetInternalName());
-            if (jt == ReadFromTimestamp.end()) {
-                LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " error searching for topic"
-                    << ": internalName# " << it->second.Topic->GetInternalName()
-                    << ", prettyName# " << it->second.Topic->GetPrintableString());
-
-                for (const auto& kv : ReadFromTimestamp) {
-                    LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " have topic"
-                        << ": topic# " << kv.first);
-                }
-
-                return CloseSession(PersQueue::ErrorCode::ERROR, "internal error", ctx);
+            auto [error, maxLag, readTimestampMs] = GetReadFrom(it->second.Topic, ctx);
+            if (error) {
+                return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
             }
-
-            ui64 readTimestampMs = Max(ReadTimestampMs, jt->second);
-
-            auto lagsIt = MaxLagByTopic.find(it->second.Topic->GetInternalName());
-            Y_ABORT_UNLESS(lagsIt != MaxLagByTopic.end());
-            const ui32 maxLag = lagsIt->second;
 
             auto ev = MakeHolder<TEvPQProxy::TEvRead>(guid, ccount, csize, maxLag, readTimestampMs);
 

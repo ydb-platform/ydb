@@ -71,7 +71,7 @@ git checkout CLI_2.5.0
 
 You can use the native Yatool build for x86_64 under Ubuntu Linux 18+.
 
-Run `ya make` from the repository root, followed by an optional relative path to the build target. By default, `ya make` compiles a `debug` configuration, while you can choose to have `release` or `relwithdebinfo`. The latter is recommended for faster builds, as is leverages the YDB remote build cache.
+Run `ya make` from the repository root, followed by an optional relative path to the build target. By default, `ya make` compiles a `debug` configuration, while you can choose to have `release` or `relwithdebinfo`. The latter is recommended for faster builds, as it leverages the YDB remote build cache.
 
 To build a binary, Yatool downloads and caches relevant toolchains from the YDB S3 storage, so you do not need to install anything on the build machine.
 
@@ -93,11 +93,11 @@ You can read more about Yatool options in the [YDB documentation](https://ydb.te
 
 ## Build using CMake
 
-You can use CMake build for various arcitectures and operating systems.
+You can use CMake to build YDB for various architectures and operating systems.
 
 YDB server can be built for Ubuntu 18.04, 20.04 and 22.04. Other Linux distributions are likely to work, but additional effort may be required.
 
-YDB CLI can be built for Ubuntu 18+, Windows, and MacOS. Instructions below are provided for Ubuntu only, other options are to be described later.
+YDB CLI can be built for Ubuntu 18+, Windows, and macOS. Instructions below are provided for Ubuntu only, other options are to be described later.
 
 ### For Ubuntu versions earlier than 22.04
 
@@ -133,7 +133,9 @@ It is recommended to build YDB on Ubuntu 22.04. Follow these additional instruct
 ### Install dependencies
 
 ```bash
-sudo apt-get -y install git cmake python3-pip ninja-build antlr3 m4 clang-14 lld-14 libidn11-dev libaio1 libaio-dev llvm-14
+sudo apt-get update && \
+sudo apt-get -y install git cmake python3-pip ninja-build antlr3 m4 clang-14 lld-14 libidn11-dev \
+ libaio1 libaio-dev llvm-14 curl
 sudo pip3 install conan==1.59 grpcio-tools==1.57.0
 
 ```

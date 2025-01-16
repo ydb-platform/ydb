@@ -2,8 +2,8 @@
 
 #include <optional>
 
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
 #include <util/generic/string.h>
 #include <util/string/builder.h>

@@ -22,12 +22,18 @@ Y_UNIT_TEST_SUITE(CompressionTests) {
     Y_UNIT_TEST(Zstd) {
         Check("zstd", Ydb::StatusIds::SUCCESS);
         Check("zstd-1", Ydb::StatusIds::SUCCESS);
-        Check("zstd--1", Ydb::StatusIds::SUCCESS);
+        Check("zstd-11", Ydb::StatusIds::SUCCESS);
+        Check("zstd-22", Ydb::StatusIds::SUCCESS);
+    
+        Check("zstd--1", Ydb::StatusIds::BAD_REQUEST);
         Check("zstd-foo", Ydb::StatusIds::BAD_REQUEST);
+        Check("zstd-", Ydb::StatusIds::BAD_REQUEST);
+        Check("zstd-2147483648", Ydb::StatusIds::BAD_REQUEST);
+        Check("zstd--2147483649", Ydb::StatusIds::BAD_REQUEST);
+        Check("zstd-0", Ydb::StatusIds::BAD_REQUEST);
 
         Fill("zstd", "zstd", 0);
         Fill("zstd-1", "zstd", 1);
-        Fill("zstd--1", "zstd", -1);
     }
 
     Y_UNIT_TEST(Unsupported) {

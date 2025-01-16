@@ -1,8 +1,8 @@
 #include "factory.h"
 #include "bearer_credentials_provider.h"
 #include "token_accessor_client_factory.h"
-#include <ydb/library/yql/providers/common/structured_token/yql_structured_token.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/providers/common/structured_token/yql_structured_token.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <util/string/cast.h>
 
 namespace NYql {

@@ -4,7 +4,7 @@
 
 #include <ydb/core/fq/libs/compute/common/metrics.h>
 
-#include <ydb/library/yql/providers/common/metrics/service_counters.h>
+#include <yql/essentials/providers/common/metrics/service_counters.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 

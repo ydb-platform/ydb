@@ -19,10 +19,9 @@ SRCS(
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 SIZE(MEDIUM)
-TIMEOUT(30)
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16)
+    REQUIREMENTS(ram:16 cpu:4)
 ENDIF()
 
 END()

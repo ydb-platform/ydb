@@ -15,7 +15,7 @@
 
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/library/db_pool/db_pool.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <util/generic/ptr.h>
 #include <util/datetime/base.h>
@@ -65,8 +65,18 @@ public:
         } else {
             TenantInfo.reset(new TTenantInfo(ComputeConfig));
             const auto& mapping = Config.GetMapping();
+            for (const auto& scopeToTenant : mapping.GetScopeToTenantName()) {
+                auto [_, isInserted] = TenantInfo->SubjectMapping[SUBJECT_TYPE_SCOPE].emplace(scopeToTenant.GetKey(), scopeToTenant.GetValue());
+                if (!isInserted) {
+                    CPC_LOG_E("Invalid configuation, the scope with the name " << scopeToTenant.GetKey() << " already exists");
+                }
+                TenantInfo->TenantMapping.emplace(scopeToTenant.GetValue(), scopeToTenant.GetValue());
+            }
             for (const auto& cloudToTenant : mapping.GetCloudIdToTenantName()) {
-                TenantInfo->SubjectMapping[SUBJECT_TYPE_CLOUD].emplace(cloudToTenant.GetKey(), cloudToTenant.GetValue());
+                auto [_, isInserted] = TenantInfo->SubjectMapping[SUBJECT_TYPE_CLOUD].emplace(cloudToTenant.GetKey(), cloudToTenant.GetValue());
+                if (!isInserted) {
+                    CPC_LOG_E("Invalid configuation, the cloud with the name " << cloudToTenant.GetKey() << " already exists");
+                }
                 TenantInfo->TenantMapping.emplace(cloudToTenant.GetValue(), cloudToTenant.GetValue());
             }
             for (const auto& commonTenantName : mapping.GetCommonTenantName()) {

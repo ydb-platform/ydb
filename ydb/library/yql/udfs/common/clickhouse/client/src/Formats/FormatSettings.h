@@ -31,6 +31,7 @@ struct FormatSettings
     bool decimal_trailing_zeros = false;
     String date_time_format;
     String timestamp_format;
+    String date_format;
 
     enum class DateTimeFormat {
         Unspecified,

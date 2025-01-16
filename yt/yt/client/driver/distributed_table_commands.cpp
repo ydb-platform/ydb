@@ -2,34 +2,19 @@
 #include "config.h"
 #include "helpers.h"
 
-#include <yt/yt/client/api/distributed_table_sessions.h>
-
-// #include <yt/yt/client/api/rowset.h>
-// #include <yt/yt/client/api/skynet.h>
-
-// #include <yt/yt/client/chaos_client/replication_card_serialization.h>
+#include <yt/yt/client/api/distributed_table_session.h>
+#include <yt/yt/client/api/table_writer.h>
 
 #include <yt/yt/client/formats/config.h>
 #include <yt/yt/client/formats/parser.h>
 
-// #include <yt/yt/client/table_client/adapters.h>
-// #include <yt/yt/client/table_client/blob_reader.h>
-// #include <yt/yt/client/table_client/columnar_statistics.h>
-// #include <yt/yt/client/table_client/row_buffer.h>
-// #include <yt/yt/client/table_client/table_consumer.h>
-// #include <yt/yt/client/table_client/table_output.h>
-// #include <yt/yt/client/table_client/unversioned_writer.h>
-// #include <yt/yt/client/table_client/versioned_writer.h>
-// #include <yt/yt/client/table_client/wire_protocol.h>
-
-// #include <yt/yt/client/tablet_client/table_mount_cache.h>
+#include <yt/yt/client/signature/signature.h>
 
 #include <yt/yt/client/ypath/public.h>
 
 #include <yt/yt/library/formats/format.h>
 
 #include <yt/yt/core/concurrency/scheduler_api.h>
-// #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/ytree/convert.h>
 
@@ -45,20 +30,6 @@ using namespace NYPath;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// namespace {
-
-// NLogging::TLogger WithCommandTag(
-//     const NLogging::TLogger& logger,
-//     const ICommandContextPtr& context)
-// {
-//     return logger.WithTag("Command: %v",
-//         context->Request().CommandName);
-// }
-
-// } // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
 void TStartDistributedWriteSessionCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("path", &TThis::Path);
@@ -69,12 +40,12 @@ void TStartDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
 {
     auto transaction = AttachTransaction(context, /*required*/ false);
 
-    auto session = WaitFor(context->GetClient()->StartDistributedWriteSession(
+    auto sessionAndCookies = WaitFor(context->GetClient()->StartDistributedWriteSession(
         Path,
         Options));
 
-    ProduceOutput(context, [session = std::move(session)] (IYsonConsumer* consumer) {
-        Serialize(session, consumer);
+    ProduceOutput(context, [sessionAndCookies = std::move(sessionAndCookies)] (IYsonConsumer* consumer) {
+        Serialize(sessionAndCookies, consumer);
     });
 }
 
@@ -83,17 +54,20 @@ void TStartDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
 void TFinishDistributedWriteSessionCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("session", &TThis::Session);
+    registrar.Parameter("results", &TThis::Results);
 }
 
 // -> Nothing
 void TFinishDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
 {
-    auto transaction = AttachTransaction(context, /*required*/ false);
-
-    auto session = ConvertTo<TDistributedWriteSessionPtr>(Session);
+    auto session = ConvertTo<TSignedDistributedWriteSessionPtr>(Session);
+    auto results = ConvertTo<std::vector<NTableClient::TSignedWriteFragmentResultPtr>>(Results);
 
     WaitFor(context->GetClient()->FinishDistributedWriteSession(
-        std::move(session),
+        TDistributedWriteSessionWithResults{
+            .Session = std::move(session),
+            .Results = std::move(results),
+        },
         Options))
             .ThrowOnError();
 
@@ -102,35 +76,45 @@ void TFinishDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TParticipantWriteTableCommand::Execute(ICommandContextPtr context)
+void TWriteTableFragmentCommand::Execute(ICommandContextPtr context)
 {
-    TTypedCommand<NApi::TParticipantTableWriterOptions>::Execute(std::move(context));
+    TTypedCommand<NApi::TTableFragmentWriterOptions>::Execute(std::move(context));
 }
 
-void TParticipantWriteTableCommand::Register(TRegistrar /*registrar*/)
-{ }
-
-TFuture<NApi::ITableWriterPtr> TParticipantWriteTableCommand::CreateTableWriter(
-    const ICommandContextPtr& context) const
+void TWriteTableFragmentCommand::Register(TRegistrar registrar)
 {
-    PutMethodInfoInTraceContext("participant_write_table");
+    registrar.Parameter("cookie", &TThis::Cookie);
+}
 
-    return context
+NApi::ITableWriterPtr TWriteTableFragmentCommand::CreateTableWriter(
+    const ICommandContextPtr& context)
+{
+    PutMethodInfoInTraceContext("write_table_fragment");
+
+    auto tableWriter = WaitFor(context
         ->GetClient()
-        ->CreateParticipantTableWriter(
-            StaticPointerCast<TDistributedWriteCookie>(ResultingCookie),
-            TTypedCommand<TParticipantTableWriterOptions>::Options);
+        ->CreateTableFragmentWriter(
+            ConvertTo<TSignedWriteFragmentCookiePtr>(Cookie),
+            TTypedCommand<TTableFragmentWriterOptions>::Options))
+                .ValueOrThrow();
+
+    TableWriter = tableWriter;
+    return tableWriter;
 }
 
 // -> Cookie
-void TParticipantWriteTableCommand::DoExecute(ICommandContextPtr context)
+void TWriteTableFragmentCommand::DoExecute(ICommandContextPtr context)
 {
-    auto cookie = ConvertTo<TDistributedWriteCookiePtr>(Cookie);
-    ResultingCookie = StaticPointerCast<TRefCounted>(std::move(cookie));
+    auto cookie = ConvertTo<TSignedWriteFragmentCookiePtr>(Cookie);
 
     DoExecuteImpl(context);
-    ProduceOutput(context, [cookie = std::move(ResultingCookie)] (IYsonConsumer* consumer) {
-        Serialize(StaticPointerCast<TDistributedWriteCookie>(cookie), consumer);
+
+    // Sadly, we are plagued by virtual bases :/.
+    auto writer = DynamicPointerCast<NApi::ITableFragmentWriter>(TableWriter);
+    ProduceOutput(context, [result = writer->GetWriteFragmentResult()] (IYsonConsumer* consumer) {
+        Serialize(
+            *result.Underlying(),
+            consumer);
     });
 }
 

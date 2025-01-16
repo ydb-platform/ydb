@@ -10,7 +10,7 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.6.8)
+VERSION(2.6.9)
 
 NO_COMPILER_WARNINGS()
 

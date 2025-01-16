@@ -49,6 +49,23 @@ bool operator!=(TUint128 lhs, TUint128 rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TInt256
+{
+    std::array<ui64, 4> Parts;
+};
+
+struct TUint256
+{
+    std::array<ui64, 4> Parts;
+};
+
+// Operator != is synthesized since C++ 20.
+bool operator==(const TInt256& lhs, const TInt256& rhs);
+
+bool operator==(const TUint256& lhs, const TUint256& rhs);
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TUncheckedSkiffParser
 {
 public:
@@ -67,6 +84,9 @@ public:
 
     TInt128 ParseInt128();
     TUint128 ParseUint128();
+
+    TInt256 ParseInt256();
+    TUint256 ParseUint256();
 
     double ParseDouble();
 
@@ -127,6 +147,9 @@ public:
     TInt128 ParseInt128();
     TUint128 ParseUint128();
 
+    TInt256 ParseInt256();
+    TUint256 ParseUint256();
+
     double ParseDouble();
 
     bool ParseBoolean();
@@ -177,6 +200,9 @@ public:
     void WriteInt128(TInt128 value);
     void WriteUint128(TUint128 value);
 
+    void WriteInt256(const TInt256& value);
+    void WriteUint256(const TUint256& value);
+
     void WriteString32(TStringBuf value);
 
     void WriteYson32(TStringBuf value);
@@ -222,6 +248,9 @@ public:
 
     void WriteInt128(TInt128 value);
     void WriteUint128(TUint128 value);
+
+    void WriteInt256(TInt256 value);
+    void WriteUint256(TUint256 value);
 
     void WriteString32(TStringBuf value);
 

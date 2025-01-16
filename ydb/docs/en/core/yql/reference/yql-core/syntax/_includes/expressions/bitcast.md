@@ -2,7 +2,7 @@
 
 Performs a bitwise conversion of an integer value to the specified integer type. The conversion is always successful, but may lose precision or high-order bits.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

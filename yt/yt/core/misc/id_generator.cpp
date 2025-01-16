@@ -5,6 +5,12 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TIdGenerator& TIdGenerator::operator=(const TIdGenerator& other)
+{
+    Current_.store(other.Current_.load());
+    return *this;
+}
+
 ui64 TIdGenerator::Next()
 {
     return Current_++;

@@ -1,0 +1,46 @@
+{% extends '//builtin/bag.ym' %}
+
+{% block current_version %}2.0.0{% endblock %}
+
+{% block current_url %}
+https://github.com/mike-lischke/antlr4-c3/archive/refs/tags/cpp-{{self.version().strip()}}.tar.gz
+{% endblock %}
+
+{% block patch_source %}
+# remove root src
+rm -Rf src
+
+# make new src from cpp port
+mv ports/cpp/source/antlr4-c3 src
+
+# remove files from root except license and readme
+find . -maxdepth 1 ! -name 'License.txt' ! -name 'readme.md' -type f -exec rm -f {} +
+
+# add cpp readme
+mv ports/cpp/README.md README-cpp.md
+
+# remove all directories except src
+find . ! -name 'src' ! -name . ! -name .yandex_meta -type d  -exec rm -rf {} +
+
+{% endblock %}
+
+{% block ya_make %}
+SUBSCRIBER(
+    g:cpp-contrib
+)
+
+PEERDIR(
+    contrib/libs/antlr4_cpp_runtime
+)
+
+SRC(
+    src/CodeCompletionCore.cpp
+)
+
+{% endblock %}
+
+{% block move_to_output %}
+{{super()}}
+cp -R src ${OUTPUT}/
+{% endblock %}
+

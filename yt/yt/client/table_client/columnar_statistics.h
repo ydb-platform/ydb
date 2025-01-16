@@ -21,7 +21,7 @@ struct TLightweightColumnarStatistics
 struct TNamedColumnarStatistics
 {
     //! Per-column total data weight for chunks whose meta contains columnar statistics.
-    THashMap<TString, i64> ColumnDataWeights;
+    THashMap<std::string, i64> ColumnDataWeights;
     //! Total weight of all write and delete timestamps.
     std::optional<i64> TimestampTotalWeight;
     //! Total data weight of legacy chunks whose meta misses columnar statistics.
@@ -30,10 +30,10 @@ struct TNamedColumnarStatistics
     TNamedColumnarStatistics& operator +=(const TNamedColumnarStatistics& other);
 };
 
-typedef THyperLogLog<
+using TColumnarHyperLogLogDigest = THyperLogLog<
     // Precision = 4, or 16 registers
     4
-> TColumnarHyperLogLogDigest;
+>;
 
 //! This struct includes large per-column statistics too big to fit together with basic stats
 struct TLargeColumnarStatistics
@@ -41,7 +41,7 @@ struct TLargeColumnarStatistics
     //! Per-column HyperLogLog digest to approximate number of unique values in the column.
     std::vector<TColumnarHyperLogLogDigest> ColumnHyperLogLogDigests;
 
-    bool Empty() const;
+    bool IsEmpty() const;
     void Clear();
     void Resize(int columnCount);
 
@@ -97,7 +97,7 @@ struct TColumnarStatistics
 
     TLightweightColumnarStatistics MakeLightweightStatistics() const;
 
-    TNamedColumnarStatistics MakeNamedStatistics(const std::vector<TString>& names) const;
+    TNamedColumnarStatistics MakeNamedStatistics(const std::vector<std::string>& names) const;
 
     //! Checks if there are minimum, maximum, and non-null value statistics.
     bool HasValueStatistics() const;

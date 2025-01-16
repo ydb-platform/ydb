@@ -2,17 +2,11 @@ UNITTEST_FOR(ydb/services/ydb)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:14)
-ENDIF()
-
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SPLIT_FACTOR(60)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(300)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -25,6 +19,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/testlib
     ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/lib/ut_helpers
 )
 
 YQL_LAST_ABI_VERSION()

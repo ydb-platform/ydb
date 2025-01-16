@@ -997,6 +997,24 @@ Y_UNIT_TEST(TestMapUsingGeneratedAsJSON) {
     UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
 } // TestMapUsingGeneratedAsJSON
 
+Y_UNIT_TEST(TestMapSortedKeys) {
+    TMapType proto;
+
+    auto& items = *proto.MutableItems();
+    items["key1"] = "value1";
+    items["key2"] = "value2";
+    items["key3"] = "value3";
+
+    TString modelStr(R"_({"Items":{"key1":"value1","key2":"value2","key3":"value3"}})_");
+
+    TStringStream jsonStr;
+
+    auto config = TProto2JsonConfig().SetMapAsObject(true).SetSortMapKeys(false);
+    UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
+
+    UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
+} // TestMapSortedKeys
+
 Y_UNIT_TEST(TestMapDefaultValue) {
     TMapType proto;
 

@@ -100,4 +100,8 @@ spec:
 
     grpc_config:
       port: 2135
-
+  volumes:
+  - name: coredumps
+    hostPath:
+      path: /coredumps
+      type: Directory

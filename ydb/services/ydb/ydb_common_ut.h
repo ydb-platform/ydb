@@ -114,6 +114,7 @@ public:
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableDataColumnForIndexTable(true);
         ServerSettings->SetEnableNotNullColumns(true);
+        ServerSettings->SetEnableParameterizedDecimal(true);
         ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
@@ -270,7 +271,6 @@ struct TTestOlap {
                     Columns { Name: "request_id" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     KeyColumnNames: "uid"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )", storeName.c_str());

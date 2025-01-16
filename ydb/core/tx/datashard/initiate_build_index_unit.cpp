@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -30,7 +31,7 @@ public:
 
         const auto& params = schemeTx.GetInitiateBuildIndex();
 
-        const auto pathId = PathIdFromPathId(params.GetPathId());
+        const auto pathId = TPathId::FromProto(params.GetPathId());
         Y_ABORT_UNLESS(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();
@@ -53,7 +54,8 @@ public:
         }
 
         Y_ABORT_UNLESS(tableInfo);
-        DataShard.AddUserTable(pathId, tableInfo);
+        TDataShardLocksDb locksDb(DataShard, txc);
+        DataShard.AddUserTable(pathId, tableInfo, &locksDb);
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);

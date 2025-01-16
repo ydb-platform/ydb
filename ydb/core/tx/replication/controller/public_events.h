@@ -7,7 +7,7 @@
 
 namespace NKikimr::NReplication {
 
-struct TEvController {
+namespace TEvController {
     enum EEv {
         EvCreateReplication = EventSpaceBegin(TKikimrEvents::ES_REPLICATION_CONTROLLER),
         EvCreateReplicationResult,
@@ -21,7 +21,7 @@ struct TEvController {
         EvEnd,
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_CONTROLLER), 
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_CONTROLLER),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_CONTROLLER)");
 
     struct TEvCreateReplication

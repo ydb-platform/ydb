@@ -198,6 +198,8 @@ public:
         std::optional<EStatus> Status = EStatus::Created;
 
     private:
+        mutable TAtomicCounter PreparationsStarted = 0;
+
         friend class TTxController;
         virtual bool DoParse(TColumnShard& owner, const TString& data) = 0;
         virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
@@ -215,6 +217,9 @@ public:
             return false;
         }
 
+        virtual bool DoIsInProgress() const {
+            return false;
+        }
         virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* /*owner*/) const {
             return nullptr;
         }
@@ -240,6 +245,10 @@ public:
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
         using OpType = TString;
 
+        bool IsInProgress() const {
+            return DoIsInProgress();
+        }
+
         bool PingTimeout(TColumnShard& owner, const TMonotonic now) {
             return DoPingTimeout(owner, now);
         }
@@ -257,6 +266,13 @@ public:
         }
 
         std::unique_ptr<NTabletFlatExecutor::ITransaction> BuildTxPrepareForProgress(TColumnShard* owner) const {
+            if (!IsInProgress()) {
+                return nullptr;
+            }
+            if (PreparationsStarted.Val()) {
+                return nullptr;
+            }
+            PreparationsStarted.Inc();
             return DoBuildTxPrepareForProgress(owner);
         }
 
@@ -381,6 +397,9 @@ public:
             DoOnTabletInit(owner);
         }
     };
+    TTxProgressCounters& GetCounters() {
+        return Counters;
+    }
 
 private:
     const TDuration MaxCommitTxDelay = TDuration::Seconds(30);
@@ -415,8 +434,11 @@ public:
         return TValidator::CheckNotNull(GetTxOperatorOptional(txId));
     }
     template <class TExpectedTransactionOperator>
-    std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId) const {
+    std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId, const bool optionalExists = false) const {
         auto result = GetTxOperatorOptional(txId);
+        if (optionalExists && !result) {
+            return nullptr;
+        }
         AFL_VERIFY(result);
         auto resultClass = dynamic_pointer_cast<TExpectedTransactionOperator>(result);
         AFL_VERIFY(resultClass);
@@ -441,10 +463,9 @@ public:
 
     [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> StartProposeOnExecute(
         const TTxController::TTxInfo& txInfo, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
-    void StartProposeOnComplete(const ui64 txId, const TActorContext& ctx);
-
+    void StartProposeOnComplete(ITransactionOperator& txOperator, const TActorContext& ctx);
     void FinishProposeOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-
+    void FinishProposeOnComplete(ITransactionOperator& txOperator, const TActorContext& ctx);
     void FinishProposeOnComplete(const ui64 txId, const TActorContext& ctx);
 
     void WriteTxOperatorInfo(NTabletFlatExecutor::TTransactionContext& txc, const ui64 txId, const TString& data) {
@@ -456,8 +477,8 @@ public:
 
     std::optional<TTxInfo> GetFirstPlannedTx() const;
     std::optional<TTxInfo> PopFirstPlannedTx();
-    void FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-    void CompleteRunningTx(const TPlanQueueItem& tx);
+    void ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    void ProgressOnComplete(const TPlanQueueItem& tx);
 
     std::optional<TPlanQueueItem> GetPlannedTx() const;
     TPlanQueueItem GetFrontTx() const;

@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 

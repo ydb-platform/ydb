@@ -4,9 +4,9 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/pool_stats_collector.h>
-#include <ydb/core/mon/sync_http_mon.h>
-#include <ydb/core/mon/async_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/mon_alloc/profiler.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tablet/tablet_impl.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
@@ -14,11 +14,13 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
+#include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 /**** ACHTUNG: Do not make here any new dependecies on kikimr ****/
 
@@ -27,7 +29,6 @@ namespace NActors {
     void TTestActorRuntime::TNodeData::Stop() {
         if (Mon) {
             Mon->Stop();
-            GetAppData<NKikimr::TAppData>()->Mon = nullptr;
         }
         TNodeDataBase::Stop();
     }
@@ -100,6 +101,9 @@ namespace NActors {
         SetRegistrationObserverFunc(&TTestActorRuntimeBase::DefaultRegistrationObserver);
 
         CleanupNodes();
+
+        App0 = nullptr;
+        NKikimr::NJaegerTracing::ClearTracingControl();
     }
 
     void TTestActorRuntime::AddAppDataInit(std::function<void(ui32, NKikimr::TAppData&)> callback) {
@@ -155,7 +159,7 @@ namespace NActors {
             nodeAppData->PQConfig = app0->PQConfig;
             nodeAppData->NetClassifierConfig.CopyFrom(app0->NetClassifierConfig);
             nodeAppData->EnableKqpSpilling = app0->EnableKqpSpilling;
-            nodeAppData->FeatureFlags = app0->FeatureFlags;
+            nodeAppData->InitFeatureFlags(app0->FeatureFlags);
             nodeAppData->CompactionConfig = app0->CompactionConfig;
             nodeAppData->HiveConfig.SetWarmUpBootWaitingPeriod(10);
             nodeAppData->HiveConfig.SetMaxNodeUsageToKick(100);
@@ -188,19 +192,11 @@ namespace NActors {
 
             if (NeedMonitoring && !SingleSysEnv) {
                 ui16 port = MonitoringPortOffset ? MonitoringPortOffset + nodeIndex : GetPortManager().GetPort();
-                if (MonitoringTypeAsync) {
-                    node->Mon.Reset(new NActors::TAsyncHttpMon({
-                        .Port = port,
-                        .Threads = 10,
-                        .Title = "KIKIMR monitoring"
-                    }));
-                } else {
-                    node->Mon.Reset(new NActors::TSyncHttpMon({
-                        .Port = port,
-                        .Threads = 10,
-                        .Title = "KIKIMR monitoring"
-                    }));
-                }
+                node->Mon.Reset(new NActors::TMon({
+                    .Port = port,
+                    .Threads = 10,
+                    .Title = "KIKIMR monitoring"
+                }));
                 nodeAppData->Mon = node->Mon.Get();
                 node->Mon->RegisterCountersPage("counters", "Counters", node->DynamicCounters);
                 auto actorsMonPage = node->Mon->RegisterIndexPage("actors", "Actors");

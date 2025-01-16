@@ -1,0 +1,255 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 03fecff746d0d56d59dcf795117b1f46
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/operators.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 06752fed324925429c6bb59ddac9d673
+BELONGS ya.make
+    License text:
+            Copyright (c) 2005 Matthew Calabrese
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/binary.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 11d90229b362526047d6924026cb8e28
+BELONGS ya.make
+    License text:
+           Copyright (c) Marshall Clow 2012-2012.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/string_ref_fwd.hpp [2:2]
+        include/boost/utility/string_view_fwd.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 264842641253ef729c3d30c20db5d154
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2002-2008, Fernando Luis Cacciola Carballal.
+        // Copyright 2020 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/value_init.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c3b5a72df0903cb1e8ee771593e69b5
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2002-2008, Fernando Luis Cacciola Carballal.
+        // Copyright 2020 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/value_init.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 463b016af48ea73c5777ee172f1606d7
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2007, Tobias Schwinger.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/detail/in_place_factory_prefix.hpp [1:2]
+        include/boost/utility/detail/in_place_factory_suffix.hpp [1:2]
+        include/boost/utility/in_place_factory.hpp [1:2]
+        include/boost/utility/typed_in_place_factory.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 648f3551deff5504ae253422933dad8a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/call_traits.hpp [1:3]
+        include/boost/compressed_pair.hpp [1:3]
+        include/boost/detail/call_traits.hpp [1:3]
+        include/boost/detail/compressed_pair.hpp [1:3]
+        include/boost/detail/ob_compressed_pair.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6d6738110c1306103103aca941400af9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/operators.hpp [3:6]
+        include/boost/operators_v1.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 79e7551f02d99afc8dd82a857068d461
+BELONGS ya.make
+    License text:
+        //  Copyright Douglas Gregor 2004. Use, modification and
+        //  distribution is subject to the Boost Software License, Version
+        //  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/detail/result_of_iterate.hpp [3:5]
+        include/boost/utility/detail/result_of_variadic.hpp [3:5]
+        include/boost/utility/result_of.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 843b75a62260b0f0a240e99d06ed4f7c
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2009-2012 Lorenzo Caminiti
+        // Distributed under the Boost Software License, Version 1.0
+        // (see accompanying file LICENSE_1_0.txt or a copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/identity_type.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8bc5f0332b38acd415a3f19bc0dc773c
+BELONGS ya.make
+    License text:
+           Copyright (c) Marshall Clow 2012-2015.
+           Copyright (c) Glen Joseph Fernandes 2019 (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/string_ref.hpp [2:3]
+        include/boost/utility/string_view.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9eafab1767cf5f9fa3c793e883e1c318
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a103bfee1637c9cc67288e4038d76892
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, Fernando Luis Cacciola Carballal.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/compare_pointees.hpp [1:1]
+        include/boost/utility/detail/in_place_factory_prefix.hpp [1:2]
+        include/boost/utility/detail/in_place_factory_suffix.hpp [1:2]
+        include/boost/utility/in_place_factory.hpp [1:2]
+        include/boost/utility/typed_in_place_factory.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ae8704046854e24740f868187f810e75
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/detail/result_of_iterate.hpp [8:10]
+        include/boost/utility/detail/result_of_variadic.hpp [8:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e14097bb568a6fdfd4955810061426a2
+BELONGS ya.make
+    License text:
+           Copyright (c) Marshall Clow 2012-2015.
+           Copyright (c) Beman Dawes 2015
+           Copyright (c) Glen Joseph Fernandes 2019 (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/string_view.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e323857368fb1433c9c3079428ca51d3
+BELONGS ya.make
+    License text:
+        // Copyright 2017 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/detail/minstd_rand.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eba1043e8dcee6c64ce99ad2b5a99136
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/base_from_member.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ff1798ca76282153c9c89b381b04e105
+BELONGS ya.make
+    License text:
+           Copyright (c) Marshall Clow 2012-2015.
+           Copyright (c) Glen Joseph Fernandes 2019 (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/utility/string_ref.hpp [2:3]
+        include/boost/utility/string_view.hpp [2:4]

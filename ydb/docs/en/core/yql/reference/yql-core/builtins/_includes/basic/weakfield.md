@@ -6,7 +6,7 @@ Syntax: `WeakField([<table>.]<field>, <type>[, <default_value>])`.
 
 The default value is used only if the column is missing in the data schema. To use the default value in any case, use [COALESCE](#coalesce).
 
-**Examples:**
+### Examples
 
 ```yql
 SELECT

@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 #include "login.h"
 
 using namespace NLogin;
@@ -77,6 +78,71 @@ Y_UNIT_TEST_SUITE(Login) {
         provider.Audience = "test_audience2";
         auto response3 = provider.ValidateToken(request3);
         UNIT_ASSERT_VALUES_EQUAL(response3.Error, "Wrong audience");
+    }
+
+    Y_UNIT_TEST(TestModifyUser) {
+        TLoginProvider provider;
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+        TLoginProvider::TCreateUserRequest createUser1Request {
+            .User = "user1",
+            .Password = "password1"
+        };
+        auto createUser1Response = provider.CreateUser(createUser1Request);
+        UNIT_ASSERT(!createUser1Response.Error);
+        TLoginProvider::TLoginUserRequest loginUser1Request1 {
+            .User = createUser1Request.User,
+            .Password = createUser1Request.Password
+        };
+        auto loginUser1Response1 = provider.LoginUser(loginUser1Request1);
+        UNIT_ASSERT_VALUES_EQUAL(loginUser1Response1.Error, "");
+        TLoginProvider::TValidateTokenRequest validateUser1TokenRequest1 {
+            .Token = loginUser1Response1.Token
+        };
+        auto validateUser1TokenResponse1 = provider.ValidateToken(validateUser1TokenRequest1);
+        UNIT_ASSERT_VALUES_EQUAL(validateUser1TokenResponse1.Error, "");
+        UNIT_ASSERT(validateUser1TokenResponse1.User == createUser1Request.User);
+
+        TPasswordComplexity passwordComplexity({
+            .MinLength = 8,
+            .MinLowerCaseCount = 2,
+            .MinUpperCaseCount = 2,
+            .MinNumbersCount = 2,
+            .MinSpecialCharsCount = 2,
+            .SpecialChars = TPasswordComplexity::VALID_SPECIAL_CHARS
+        });
+
+        provider.UpdatePasswordCheckParameters(passwordComplexity);
+
+        TLoginProvider::TModifyUserRequest modifyUser1RequestBad {
+            .User = createUser1Request.User,
+            .Password = "UserPassword1"
+        };
+
+        TLoginProvider::TBasicResponse modifyUser1ResponseBad = provider.ModifyUser(modifyUser1RequestBad);
+        UNIT_ASSERT(!modifyUser1ResponseBad.Error.empty());
+        UNIT_ASSERT_STRINGS_EQUAL(modifyUser1ResponseBad.Error, "Incorrect password format: should contain at least 2 number, should contain at least 2 special character");
+
+        TLoginProvider::TModifyUserRequest modifyUser1Request {
+            .User = createUser1Request.User,
+            .Password = "paS*sw1oR#d7"
+        };
+
+        TLoginProvider::TBasicResponse modifyUser1Response = provider.ModifyUser(modifyUser1Request);
+        UNIT_ASSERT_VALUES_EQUAL(modifyUser1Response.Error, "");
+
+        TLoginProvider::TLoginUserRequest loginUser1Request2  = {
+            .User = modifyUser1Request.User,
+            .Password = modifyUser1Request.Password
+        };
+        TLoginProvider::TLoginUserResponse loginUser1Response2 = provider.LoginUser(loginUser1Request2);
+        UNIT_ASSERT_VALUES_EQUAL(loginUser1Response2.Error, "");
+        TLoginProvider::TValidateTokenRequest validateUser1TokenRequest2  = {
+            .Token = loginUser1Response2.Token
+        };
+        TLoginProvider::TValidateTokenResponse validateUser1TokenResponse2 = provider.ValidateToken(validateUser1TokenRequest2);
+        UNIT_ASSERT_VALUES_EQUAL(validateUser1TokenResponse2.Error, "");
+        UNIT_ASSERT(validateUser1TokenResponse2.User == createUser1Request.User);
     }
 
     Y_UNIT_TEST(TestGroups) {
@@ -210,7 +276,7 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(Count(groups, "group5") == 1);
         }
         {
-            auto response1 = provider.RemoveUser({.User = "user1"});
+            auto response1 = provider.RemoveUser("user1");
             UNIT_ASSERT(!response1.Error);
         }
         {
@@ -281,6 +347,50 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT_VALUES_EQUAL(response3.Error, "");
             UNIT_ASSERT(response3.User == request1.User);
             UNIT_ASSERT(response3.ExternalAuth.empty());
+        }
+    }
+
+    Y_UNIT_TEST(SanitizeJwtToken) {
+        UNIT_ASSERT_VALUES_EQUAL(TLoginProvider::SanitizeJwtToken("123.456"), "123.**");
+        UNIT_ASSERT_VALUES_EQUAL(TLoginProvider::SanitizeJwtToken("123.456.789"), "123.456.**");
+        UNIT_ASSERT_VALUES_EQUAL(TLoginProvider::SanitizeJwtToken("token_without_dot"), "");
+        UNIT_ASSERT_VALUES_EQUAL(TLoginProvider::SanitizeJwtToken("token_without_signature."), "");
+    }
+
+    Y_UNIT_TEST(CheckTimeOfUserCreating) {
+        TLoginProvider provider;
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+
+        {
+            std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
+            TLoginProvider::TCreateUserRequest request {
+                .User = "user1",
+                .Password = "password1"
+            };
+            auto response = provider.CreateUser(request);
+            std::chrono::time_point<std::chrono::system_clock> finish = std::chrono::system_clock::now();
+            UNIT_ASSERT(!response.Error);
+            const auto& sid = provider.Sids["user1"];
+            UNIT_ASSERT(sid.CreatedAt >= start && sid.CreatedAt <= finish);
+        }
+        {
+            std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
+            TLoginProvider::TCreateUserRequest request {
+                .User = "user2",
+                .Password = "password2"
+            };
+            auto response = provider.CreateUser(request);
+            std::chrono::time_point<std::chrono::system_clock> finish = std::chrono::system_clock::now();
+            UNIT_ASSERT(!response.Error);
+            const auto& sid = provider.Sids["user2"];
+            UNIT_ASSERT(sid.CreatedAt >= start && sid.CreatedAt <= finish);
+        }
+
+        {
+            const auto& sid1 = provider.Sids["user1"];
+            const auto& sid2 = provider.Sids["user2"];
+            UNIT_ASSERT(sid1.CreatedAt < sid2.CreatedAt);
         }
     }
 }

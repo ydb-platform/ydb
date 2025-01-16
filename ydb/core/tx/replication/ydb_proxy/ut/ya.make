@@ -4,8 +4,6 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
-TIMEOUT(600)
-
 PEERDIR(
     ydb/core/tx/replication/ut_helpers
     ydb/public/sdk/cpp/client/ydb_topic
@@ -13,6 +11,7 @@ PEERDIR(
 )
 
 SRCS(
+    partition_end_watcher_ut.cpp
     ydb_proxy_ut.cpp
 )
 

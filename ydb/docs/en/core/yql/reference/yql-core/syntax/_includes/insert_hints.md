@@ -6,7 +6,7 @@ If necessary, specify multiple modifiers, they should be enclosed in parentheses
 
 To clear the table of existing data before writing new data to it, add the modifier: `INSERT INTO ... WITH TRUNCATE`.
 
-**Examples:**
+### Examples
 
 ```yql
 INSERT INTO my_table WITH TRUNCATE

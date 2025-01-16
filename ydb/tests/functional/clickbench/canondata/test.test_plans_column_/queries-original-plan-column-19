@@ -53,11 +53,13 @@
                                                             }
                                                         ],
                                                         "Name": "Filter",
-                                                        "Predicate": "UserID == 435090932899640449"
+                                                        "Predicate": "UserID == 435090932899640449",
+                                                        "Pushdown": "True"
                                                     },
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/clickbench/plans/column/hits",
                                                         "ReadColumns": [
                                                             "UserID"
                                                         ],

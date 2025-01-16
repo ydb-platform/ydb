@@ -2,7 +2,7 @@
 
 #include "yql_generic_state.h"
 
-#include <ydb/library/yql/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 namespace NYql {

@@ -13,7 +13,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -142,7 +142,9 @@ std::unique_ptr<ISystemLogEventProvider> CreateDefaultSystemLogEventProvider(
 
 std::unique_ptr<ISystemLogEventProvider> CreateDefaultSystemLogEventProvider(const TLogWriterConfigPtr& writerConfig)
 {
-    return CreateDefaultSystemLogEventProvider(writerConfig->AreSystemMessagesEnabled(), writerConfig->GetSystemMessageFamily());
+    return CreateDefaultSystemLogEventProvider(
+        writerConfig->AreSystemMessagesEnabled(),
+        writerConfig->GetSystemMessageFamily());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

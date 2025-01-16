@@ -71,6 +71,9 @@ constexpr bool IsFuture = false;
 template <class T>
 constexpr bool IsFuture<TFuture<T>> = true;
 
+template <class U, class F>
+void InterceptExceptions(const TPromise<U>& promise, const F& func);
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -470,6 +473,9 @@ public:
     //! Checks if the promise is canceled.
     bool IsCanceled() const;
 
+    //! Returns cancelation error if one is present.
+    TError GetCancelationError() const;
+
     //! Attaches a cancellation handler.
     /*!
      *  \param handler A callback to call when TFuture<T>::Cancel is triggered
@@ -498,6 +504,10 @@ protected:
     friend void swap(TPromise<U>& lhs, TPromise<U>& rhs);
     template <class U>
     friend struct ::hash;
+    template <class U, class F>
+    friend void ::NYT::NDetail::InterceptExceptions(const TPromise<U>& promise, const F& func);
+
+    void TrySetCanceled(const TError& error);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -52,10 +52,10 @@ Where:
 - `<connection options>` are optional [connection parameters](../../connect.md#command-line-pars) to be written to the profile.
 - `<reset options>` are optional settings for deleting parameters from an existing profile. Possible values:
 
-   `--no-endpoint`: Delete an endpoint from the profile
-   `--no-database`: Delete the database path from the profile
-   `--no-auth`: Delete authentication information from the profile
-   `--no-iam-endpoint`: Delete the IAM server URL
+   - `--no-endpoint`: Delete an endpoint from the profile
+   - `--no-database`: Delete the database path from the profile
+   - `--no-auth`: Delete authentication information from the profile
+   - `--no-iam-endpoint`: Delete the IAM server URL
 
 The profile will update with the parameters entered on the command line. Any properties not listed on the command line will remain unchanged.
 
@@ -81,7 +81,7 @@ Any command with explicit connection settings performing a YDB database transact
 For instance, if you successfully ran the `scheme Is` command with the following properties:
 
 ```bash
-{{ydb-cli}} \
+{{ ydb-cli }} \
   -e grpcs://example.com:2135 -d /Root/somedatabase --sa-key-file ~/sa_key.json \
   scheme ls
 ```
@@ -89,7 +89,7 @@ For instance, if you successfully ran the `scheme Is` command with the following
 You can create a profile to connect to the accessed database using the following command:
 
 ```bash
-{{ydb-cli}} \
+{{ ydb-cli }} \
   config profile create db1 \
   -e grpcs://example.com:2135 -d /Root/somedatabase --sa-key-file ~/sa_key.json
 ```
@@ -97,7 +97,7 @@ You can create a profile to connect to the accessed database using the following
 You can now use much shorter syntax to re-write the original command:
 
 ```bash
-{{ydb-cli}} -p db1 scheme ls
+{{ ydb-cli }} -p db1 scheme ls
 ```
 
 #### Profile to connect to a local database {#cmdline-example-local}
@@ -105,13 +105,13 @@ You can now use much shorter syntax to re-write the original command:
 Creating/replacing a `local` profile to connect to a local {{ ydb-short-name }} database deployed using [quick start](../../../../quickstart.md):
 
 ```bash
-{{ydb-cli}} config profile replace local --endpoint grpc://localhost:2136 --database /Root/local
+{{ ydb-cli }} config profile replace local --endpoint grpc://localhost:2136 --database /Root/local
 ```
 
 Defining the login and password authentication method in the `local` profile:
 
 ```bash
-{{ydb-cli}} config profile update local --user user1 --password-file ~/pwd.txt
+{{ ydb-cli }} config profile update local --user user1 --password-file ~/pwd.txt
 ```
 
 ## Interactive mode {#interactive}
@@ -129,6 +129,7 @@ or
 ```
 
 Where:
+
 - `[profile_name]` is an optional name of the profile to create or update.
 - `[connection_options]` are optional [connection settings](../../connect.md#command-line-pars) to write to the profile.
 
@@ -160,6 +161,7 @@ The interactive scenario starts differently for the `init` and the `profile crea
 - Profile Create
 
    If no profile name is specified on the command line, it is requested:
+
    ```text
    Please enter configuration profile name to create or re-configure:
    ```

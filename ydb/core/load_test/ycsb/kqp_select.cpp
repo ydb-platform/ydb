@@ -223,7 +223,7 @@ private:
         LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
             << " received from " << ev->Sender << ": " << ev->Get()->Record.DebugString());
 
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
         if (response.GetYdbStatus() != Ydb::StatusIds_StatusCode_SUCCESS) {
             ++Errors;
         }

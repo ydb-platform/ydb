@@ -180,22 +180,23 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
 }
 
 IOutputStream& operator<<(IOutputStream& out, TFederatedDbState const& state) {
-    out << "{ Status: " << state.Status.GetStatus();
+    out << "{ Status: " << state.Status.GetStatus()
+        << " SelfLocation: \"" << state.SelfLocation << '"';
     if (auto const& issues = state.Status.GetIssues(); !issues.Empty()) {
-        out << ", Issues: { " << issues.ToOneLineString() << " }";
+        out << " Issues: { " << issues.ToOneLineString() << " }";
     }
     if (!state.DbInfos.empty()) {
-        out << ", DbInfos: { ";
+        out << " DbInfos: [ ";
         bool first = true;
         for (auto const& info : state.DbInfos) {
             if (first) {
                 first = false;
             } else {
-                out << ", ";
+                out << " ";
             }
             out << "{ " << info->ShortDebugString() << " }";
         }
-        out << " }";
+        out << " ]";
     }
     return out << " }";
 }

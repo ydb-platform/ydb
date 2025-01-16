@@ -11,7 +11,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/table_creator/table_creator.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
@@ -1032,7 +1032,7 @@ public:
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
         if (!ExecutionEntryExists && status == Ydb::StatusIds::SUCCESS) {
             status = Ydb::StatusIds::NOT_FOUND;
-            issues.AddIssue("No such execution");   
+            issues.AddIssue("No such execution");
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -1796,26 +1796,26 @@ public:
             .AddParam("$items");
 
         param
-                .BeginList();
+            .BeginList();
 
         auto row = FirstRow;
         for (const auto& rowValue : ResultSet.rows()) {
             auto rowValueSerialized = rowValue.SerializeAsString();
             SavedSize += rowValueSerialized.size();
             param
-                    .AddListItem()
-                    .BeginStruct()
-                        .AddMember("row_id")
-                            .Int64(row++)
-                        .AddMember("result_set")
-                            .String(std::move(rowValueSerialized))
-                        .AddMember("accumulated_size")
-                            .Int64(AccumulatedSize + SavedSize)
-                    .EndStruct();
+                .AddListItem()
+                .BeginStruct()
+                    .AddMember("row_id")
+                        .Int64(row++)
+                    .AddMember("result_set")
+                        .String(std::move(rowValueSerialized))
+                    .AddMember("accumulated_size")
+                        .Int64(AccumulatedSize + SavedSize)
+                .EndStruct();
         }
         param
-                .EndList()
-                .Build();
+            .EndList()
+            .Build();
 
         RunDataQuery(sql, &params);
     }
@@ -2105,7 +2105,7 @@ public:
                 return;
             }
 
-            if (serializedRow->Empty()) {
+            if (serializedRow->empty()) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is empty");
                 return;
             }

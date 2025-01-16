@@ -1,7 +1,7 @@
 #include "helper.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/protos/accessor.pb.h>
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>

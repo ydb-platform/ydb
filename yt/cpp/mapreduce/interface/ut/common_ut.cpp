@@ -351,3 +351,13 @@ TEST(TCommonTest, TableSchemaEquality)
     other.UniqueKeys(false);
     ASSERT_SERIALIZABLES_NE(other, schema);
 }
+
+TEST(TCommonTest, ModificationLoadedSchema)
+{
+    auto schema = TTableSchema::FromNode(NodeFromYsonString(R"""(
+        [{name=foo;type_v3=string}]
+    )"""));
+    schema.MutableColumns()[0].Type(VT_INT64, true);
+
+    ASSERT_EQ(schema.ToNode()[0]["type"].AsString(), "int64");
+}

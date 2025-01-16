@@ -177,7 +177,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             Signature[cookie] = Max<ui64>();
             ++RepliesMerged;
 
-            ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusNoInfo, &ReplyStatus, cookie, false);
+            ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusUnavailable, &ReplyStatus, cookie, false);
         }
     }
 
@@ -192,7 +192,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         ++RepliesMerged;
         ++SignaturesMerged;
 
-        if (status == NKikimrProto::OK) {
+        switch (status) {
+        case NKikimrProto::OK: {
             const ui32 gen = record.GetCurrentGeneration();
             const ui32 step = record.GetCurrentStep();
             const TActorId leader = ActorIdFromProto(record.GetCurrentLeader());
@@ -221,9 +222,14 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
                 ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusOk, &ReplyStatus, cookie, reset);
             }
-        } else if (status == NKikimrProto::ERROR) {
+            break;
+        }
+        // NOTE: replicas currently reply with ERROR when there is no data for the tablet
+        case NKikimrProto::ERROR:
+        case NKikimrProto::NODATA:
             ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusNoInfo, &ReplyStatus, cookie, false);
-        } else {
+            break;
+        default:
             Y_ABORT();
         }
 
@@ -307,10 +313,13 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             ReplyAndDie(NKikimrProto::OK);
             return;
         case TStateStorageInfo::TSelection::StatusNoInfo:
-            ReplyAndDie(NKikimrProto::ERROR);
+            ReplyAndDie(NKikimrProto::NODATA);
             return;
         case TStateStorageInfo::TSelection::StatusOutdated:
             ReplyAndDie(NKikimrProto::RACE);
+            return;
+        case TStateStorageInfo::TSelection::StatusUnavailable:
+            ReplyAndDie(NKikimrProto::ERROR);
             return;
         }
         Y_DEBUG_ABORT_UNLESS(false);
@@ -332,11 +341,14 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
                 return;
             case TStateStorageInfo::TSelection::StatusNoInfo:
                 if (RepliesMerged == Replicas) { // for negative response always waits for full reply set to avoid herding of good replicas by fast retry cycle
-                    ReplyAndSig(NKikimrProto::ERROR);
+                    ReplyAndSig(NKikimrProto::NODATA);
                 }
                 return;
             case TStateStorageInfo::TSelection::StatusOutdated:
                 ReplyAndSig(NKikimrProto::RACE);
+                return;
+            case TStateStorageInfo::TSelection::StatusUnavailable:
+                ReplyAndSig(NKikimrProto::ERROR);
                 return;
             }
         }
@@ -379,6 +391,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             }
             return;
         case TStateStorageInfo::TSelection::StatusNoInfo:
+        case TStateStorageInfo::TSelection::StatusUnavailable:
+            // Note: StatusNoInfo shouldn't really happen for update queries
             ReplyAndDie(NKikimrProto::ERROR);
             return;
         case TStateStorageInfo::TSelection::StatusOutdated:
@@ -404,7 +418,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             }
             return;
             case TStateStorageInfo::TSelection::StatusNoInfo:
-                // should not happens for update queries
+            case TStateStorageInfo::TSelection::StatusUnavailable:
+                // Note: StatusNoInfo shouldn't really happen for update queries
                 ReplyAndSig(NKikimrProto::ERROR);
                 return;
             case TStateStorageInfo::TSelection::StatusOutdated:

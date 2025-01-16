@@ -1,6 +1,6 @@
 # Safe restart and shutdown of nodes
 
-## Stopping/restarting a YDB process on a node {#restart_process}
+## Stopping/restarting a {{ ydb-short-name }} process on a node {#restart_process}
 
 To make sure that the process is stoppable, follow these steps.
 

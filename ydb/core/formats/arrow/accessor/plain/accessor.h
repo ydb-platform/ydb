@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/core/formats/arrow/validation/validation.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -32,6 +32,10 @@ protected:
     }
 
 public:
+    const std::shared_ptr<arrow::Array>& GetArray() const {
+        return Array;
+    }
+
     TTrivialArray(const std::shared_ptr<arrow::Array>& data)
         : TBase(data->length(), EType::Array, data->type())
         , Array(data) {

@@ -23,6 +23,7 @@ struct TQueryStatistics
     bool IncompleteInput = false;
     bool IncompleteOutput = false;
     size_t MemoryUsage = 0;
+    i64 TotalGroupedRowCount = 0;
 
     std::vector<TQueryStatistics> InnerStatistics;
 

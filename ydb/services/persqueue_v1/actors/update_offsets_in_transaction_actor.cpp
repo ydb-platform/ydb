@@ -69,7 +69,7 @@ void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx
 void TUpdateOffsetsInTransactionActor::Handle(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
                                               const NActors::TActorContext& ctx)
 {
-    const auto& record = ev->Get()->Record.GetRef();
+    const auto& record = ev->Get()->Record;
     SetCost(record.GetConsumedRu());
     AddServerHintsIfAny(record);
 

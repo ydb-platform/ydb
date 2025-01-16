@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: Flask-Cors
-Version: 4.0.1
+Version: 5.0.0
 Summary: A Flask extension adding a decorator for CORS support
 Home-page: https://github.com/corydolphin/flask-cors
 Author: Cory Dolphin

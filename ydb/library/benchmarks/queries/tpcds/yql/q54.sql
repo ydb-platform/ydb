@@ -2,9 +2,9 @@
 
 -- start query 1 in stream 0 using template query54.tpl and seed 1930872976
 $d_month_seq_begin = (select distinct d_month_seq+1
-                                 from   {{date_dim}} as date_dim where d_year = 2000 and d_moy = 2);
+                                 from   {{date_dim}} as date_dim where d_year = 1998 and d_moy = 12);
 $d_month_seq_end = (select distinct d_month_seq+3
-                                 from   {{date_dim}} as date_dim where d_year = 2000 and d_moy = 2);
+                                 from   {{date_dim}} as date_dim where d_year = 1998 and d_moy = 12);
 
 $my_customers = (
  select distinct c_customer_sk
@@ -28,11 +28,11 @@ cross join
          {{customer}} as customer
  where   sold_date_sk = d_date_sk
          and item_sk = i_item_sk
-         and i_category = 'Books'
-         and i_class = 'business'
+         and i_category = 'Women'
+         and i_class = 'maternity'
          and c_customer_sk = cs_or_ws_sales.customer_sk
-         and d_moy = 2
-         and d_year = 2000
+         and d_moy = 12
+         and d_year = 1998
  );
 
 $my_revenue = (

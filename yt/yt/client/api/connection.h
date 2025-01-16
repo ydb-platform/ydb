@@ -62,6 +62,7 @@ struct IConnection
 
     virtual void ClearMetadataCaches() = 0;
     virtual void Terminate() = 0;
+    virtual bool IsTerminated() const = 0;
 
     //! Returns a YSON-serialized connection config.
     virtual NYson::TYsonString GetConfigYson() const = 0;

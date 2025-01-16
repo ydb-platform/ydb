@@ -6,7 +6,7 @@
 
 ```CONCAT(`table1`, `table2`, `table3` VIEW view_name, ...)``` — объединяет все перечисленные в аргументах таблицы.
 
-```EACH($list_of_strings) или EACH($list_of_strings VIEW view_name)``` — объединяет все таблицы, имена которых перечислены в списке строк. Опционально можно передать несколько списков в отдельных аргументах по аналогии с `CONCAT`.
+`EACH($list_of_strings)` или `EACH($list_of_strings VIEW view_name)` — объединяет все таблицы, имена которых перечислены в списке строк. Опционально можно передать несколько списков в отдельных аргументах по аналогии с `CONCAT`.
 
 ```RANGE(`prefix`, `min`, `max`, `suffix`, `view`)``` — объединяет диапазон таблиц. Аргументы:
 
@@ -14,7 +14,7 @@
 * min, max — следующие два аргумента задают диапазон имен для включения таблиц. Диапазон инклюзивный с обоих концов. Если диапазон не указан, используются все таблицы в каталоге prefix. Имена таблиц или директорий, находящихся в указанной в prefix директории, сравниваются с диапазоном `[min, max]` лексикографически, а не конкатенируются, таким образом важно указывать диапазон без лидирующих слешей.
 * suffix — имя таблицы. Ожидается без начального слеша. Если suffix не указан, то аргументы `[min, max]` задают диапазон имен таблиц. Если suffix указан, то аргументы `[min, max]` задают диапазон папок, в которых существует таблица с именем, указанным в аргументе suffix.
 
-```LIKE(`prefix`, `pattern`, `suffix`, `view`)``` и ```REGEXP(`prefix`, `pattern`, `suffix`, `view`)``` — аргумент pattern задается в формате, аналогичном одноименным бинарным операторам: [LIKE](../../expressions.md#like) и [REGEXP](../../expressions.md#regexp).
+```LIKE(`prefix`, `pattern`, `suffix`, `view`)` и `REGEXP(`prefix`, `pattern`, `suffix`, `view`)``` — аргумент pattern задается в формате, аналогичном одноименным бинарным операторам: [LIKE](../../expressions.md#like) и [REGEXP](../../expressions.md#regexp).
 
 ```FILTER(`prefix`, `callable`, `suffix`, `view`)``` — аргумент callable должен являться вызываемым выражением с сигнатурой `(String)->Bool`, который будет вызван для каждой таблицы/подкаталога в каталоге prefix. В запросе будут участвовать только те таблицы, для которых вызываемое значение вернуло `true`. В качестве вызываемого значения удобнее всего использовать [лямбда функции](../../expressions.md#lambda){% if yql == true %}, либо UDF на [Python](../../../udf/python.md) или [JavaScript](../../../udf/javascript.md){% endif %}.
 
@@ -34,10 +34,9 @@
 
 Имя исходной таблицы, из которой изначально была получена каждая строка, можно получить при помощи функции [TablePath()](../../../builtins/basic.md#tablepath).
 
+## Примеры
 
-**Примеры:**
-
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM CONCAT(
   `table1`,
@@ -45,7 +44,7 @@ SELECT * FROM CONCAT(
   `table3`);
 ```
 
-``` yql
+```yql
 USE some_cluster;
 $indices = ListFromRange(1, 4);
 $tables = ListMap($indices, ($index) -> {
@@ -54,19 +53,19 @@ $tables = ListMap($indices, ($index) -> {
 SELECT * FROM EACH($tables); -- идентично предыдущему примеру
 ```
 
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM RANGE(`my_folder`);
 ```
 
-``` yql
+```yql
 SELECT * FROM some_cluster.RANGE( -- Кластер можно указать перед названием функции
   `my_folder`,
   `from_table`,
   `to_table`);
 ```
 
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM RANGE(
   `my_folder`,
@@ -75,7 +74,7 @@ SELECT * FROM RANGE(
   `my_table`);
 ```
 
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM RANGE(
   `my_folder`,
@@ -85,7 +84,7 @@ SELECT * FROM RANGE(
   `my_view`);
 ```
 
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM LIKE(
   `my_folder`,
@@ -93,7 +92,7 @@ SELECT * FROM LIKE(
 );
 ```
 
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM REGEXP(
   `my_folder`,
@@ -101,7 +100,7 @@ SELECT * FROM REGEXP(
 );
 ```
 
-``` yql
+```yql
 $callable = ($table_name) -> {
     return $table_name > "2017-03-13";
 };

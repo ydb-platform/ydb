@@ -2,6 +2,9 @@ import os
 import sys
 import argparse
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 import java_pack_to_file as jcov
 
@@ -21,7 +24,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--moddir')
     parser.add_argument('--java')
-    parser.add_argument('--groovy')
     parser.add_argument('--kotlin')
     parser.add_argument('--coverage')
     parser.add_argument('--source-root')
@@ -29,7 +31,6 @@ def main():
 
     java = []
     kotlin = []
-    groovy = []
     coverage = []
 
     cur_resources_list_file = None
@@ -71,8 +72,6 @@ def main():
             kotlin.append(src)
             if args.coverage and args.source_root:
                 add_rel_src_to_coverage(coverage, src, args.source_root)
-        elif args.groovy and src.endswith(".groovy"):
-            groovy.append(src)
         else:
             if src == '--resources':
                 if cur_resources_list_file is not None:
@@ -115,9 +114,6 @@ def main():
     if args.kotlin:
         with open(args.kotlin, 'w') as f:
             writelines(f, kotlin)
-    if args.groovy:
-        with open(args.groovy, 'w') as f:
-            writelines(f, groovy)
     if args.coverage:
         jcov.write_coverage_sources(args.coverage, args.source_root, coverage)
 

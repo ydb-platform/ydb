@@ -280,9 +280,9 @@ TSupportsAttributes::TCombinedAttributeDictionary::TCombinedAttributeDictionary(
     : Owner_(owner)
 { }
 
-std::vector<TString> TSupportsAttributes::TCombinedAttributeDictionary::ListKeys() const
+auto TSupportsAttributes::TCombinedAttributeDictionary::ListKeys() const -> std::vector<TKey>
 {
-    std::vector<TString> keys;
+    std::vector<TKey> keys;
 
     auto* provider = Owner_->GetBuiltinAttributeProvider();
     if (provider) {
@@ -305,7 +305,7 @@ std::vector<TString> TSupportsAttributes::TCombinedAttributeDictionary::ListKeys
     return keys;
 }
 
-std::vector<IAttributeDictionary::TKeyValuePair> TSupportsAttributes::TCombinedAttributeDictionary::ListPairs() const
+auto TSupportsAttributes::TCombinedAttributeDictionary::ListPairs() const -> std::vector<TKeyValuePair>
 {
     std::vector<TKeyValuePair> pairs;
 
@@ -334,7 +334,7 @@ std::vector<IAttributeDictionary::TKeyValuePair> TSupportsAttributes::TCombinedA
     return pairs;
 }
 
-TYsonString TSupportsAttributes::TCombinedAttributeDictionary::FindYson(TStringBuf key) const
+auto TSupportsAttributes::TCombinedAttributeDictionary::FindYson(TKeyView key) const -> TValue
 {
     auto* provider = Owner_->GetBuiltinAttributeProvider();
     if (provider) {
@@ -354,7 +354,7 @@ TYsonString TSupportsAttributes::TCombinedAttributeDictionary::FindYson(TStringB
     return customAttributes->FindYson(key);
 }
 
-void TSupportsAttributes::TCombinedAttributeDictionary::SetYson(const TString& key, const TYsonString& value)
+void TSupportsAttributes::TCombinedAttributeDictionary::SetYson(TKeyView key, const TYsonString& value)
 {
     auto* provider = Owner_->GetBuiltinAttributeProvider();
     if (provider) {
@@ -377,7 +377,7 @@ void TSupportsAttributes::TCombinedAttributeDictionary::SetYson(const TString& k
     customAttributes->SetYson(key, value);
 }
 
-bool TSupportsAttributes::TCombinedAttributeDictionary::Remove(const TString& key)
+bool TSupportsAttributes::TCombinedAttributeDictionary::Remove(TKeyView key)
 {
     auto* provider = Owner_->GetBuiltinAttributeProvider();
     if (provider) {
@@ -933,10 +933,10 @@ void TSupportsAttributes::SetAttribute(
     // Check if this pooled string has a small overhead (<= 25%).
     // Otherwise make a deep copy.
     const auto& requestValue = request->value();
-    const auto& safeValue = requestValue.capacity() <= requestValue.length() * 5 / 4
-        ? requestValue
-        : TString(TStringBuf(requestValue));
-    DoSetAttribute(path, TYsonString(safeValue), request->force());
+    TYsonString safeValue = requestValue.capacity() <= requestValue.length() * 5 / 4
+        ? TYsonString{requestValue}
+        : TYsonString{TStringBuf(requestValue)};
+    DoSetAttribute(path, std::move(safeValue), request->force());
     context->Reply();
 }
 
@@ -1278,7 +1278,7 @@ class TNodeSetter
     private: \
         I##name##Node* const Node_; \
         \
-        virtual ENodeType GetExpectedType() override \
+        ENodeType GetExpectedType() override \
         { \
             return ENodeType::name; \
         }
@@ -1369,7 +1369,9 @@ private:
 
     void OnForwardingFinished(TString itemKey)
     {
-        YT_VERIFY(Map_->AddChild(itemKey, TreeBuilder_->EndTree()));
+        if (!Map_->AddChild(itemKey, TreeBuilder_->EndTree())) {
+            THROW_ERROR_EXCEPTION("Duplicate key %Qv", itemKey);
+        }
     }
 
     void OnMyEndMap() override
@@ -1590,10 +1592,7 @@ class TYPathServiceContext
     , public IYPathServiceContext
 {
 public:
-    template <class... TArgs>
-    TYPathServiceContext(TArgs&&... args)
-        : TServiceContextBase(std::forward<TArgs>(args)...)
-    { }
+    using TServiceContextBase::TServiceContextBase;
 
     void SetRequestHeader(std::unique_ptr<NRpc::NProto::TRequestHeader> header) override
     {

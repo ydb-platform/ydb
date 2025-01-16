@@ -78,6 +78,13 @@ inline TVersionedValue MakeVersionedAnyValue(TStringBuf value, TTimestamp timest
     return result;
 }
 
+inline TVersionedValue MakeVersionedCompositeValue(TStringBuf value, TTimestamp timestamp, int id = 0, EValueFlags flags = EValueFlags::None)
+{
+    auto result = MakeCompositeValue<TVersionedValue>(value, id, flags);
+    result.Timestamp = timestamp;
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TVersionedRowHeader

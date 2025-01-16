@@ -36,6 +36,16 @@ nameRecordSize = sstruct.calcsize(nameRecordFormat)
 
 
 class table__n_a_m_e(DefaultTable.DefaultTable):
+    """Naming table
+
+    The ``name`` table is used to store a variety of strings that can be
+    associated with user-facing font information. Records in the ``name``
+    table can be tagged with language tags to support multilingual naming
+    and can support platform-specific character-encoding variants.
+
+    See also https://learn.microsoft.com/en-us/typography/opentype/spec/name
+    """
+
     dependencies = ["ltag"]
 
     def decompile(self, data, ttFont):
@@ -1175,17 +1185,8 @@ class NameRecordVisitor(TTVisitor):
 
 @NameRecordVisitor.register_attrs(
     (
-        (otTables.FeatureParamsSize, ("SubfamilyID", "SubfamilyNameID")),
+        (otTables.FeatureParamsSize, ("SubfamilyNameID",)),
         (otTables.FeatureParamsStylisticSet, ("UINameID",)),
-        (
-            otTables.FeatureParamsCharacterVariants,
-            (
-                "FeatUILabelNameID",
-                "FeatUITooltipTextNameID",
-                "SampleTextNameID",
-                "FirstParamUILabelNameID",
-            ),
-        ),
         (otTables.STAT, ("ElidedFallbackNameID",)),
         (otTables.AxisRecord, ("AxisNameID",)),
         (otTables.AxisValue, ("ValueNameID",)),
@@ -1195,6 +1196,22 @@ class NameRecordVisitor(TTVisitor):
 )
 def visit(visitor, obj, attr, value):
     visitor.seen.add(value)
+
+
+@NameRecordVisitor.register(otTables.FeatureParamsCharacterVariants)
+def visit(visitor, obj):
+    for attr in ("FeatUILabelNameID", "FeatUITooltipTextNameID", "SampleTextNameID"):
+        value = getattr(obj, attr)
+        visitor.seen.add(value)
+    # also include the sequence of UI strings for individual variants, if any
+    if obj.FirstParamUILabelNameID == 0 or obj.NumNamedParameters == 0:
+        return
+    visitor.seen.update(
+        range(
+            obj.FirstParamUILabelNameID,
+            obj.FirstParamUILabelNameID + obj.NumNamedParameters,
+        )
+    )
 
 
 @NameRecordVisitor.register(ttLib.getTableClass("fvar"))

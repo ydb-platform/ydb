@@ -17,15 +17,12 @@ int main(int argc, char** argv) {
 
     TString endpoint;
     TString database;
-    TString path;
     TString certPath;
 
     opts.AddLongOption('e', "endpoint", "YDB endpoint").Required().RequiredArgument("HOST:PORT")
         .StoreResult(&endpoint);
     opts.AddLongOption('d', "database", "YDB database name").Required().RequiredArgument("PATH")
         .StoreResult(&database);
-    opts.AddLongOption('p', "path", "Base path for tables").Optional().RequiredArgument("PATH")
-        .StoreResult(&path);
     opts.AddLongOption('c', "cert", "Certificate path to use secure connection").Optional().RequiredArgument("PATH")
         .StoreResult(&certPath);
 
@@ -33,10 +30,6 @@ int main(int argc, char** argv) {
     signal(SIGTERM, &StopHandler);
 
     TOptsParseResult res(&opts, argc, argv);
-
-    if (path.empty()) {
-        path = database;
-    }
 
     auto driverConfig = TDriverConfig()
         .SetEndpoint(endpoint)
@@ -50,7 +43,7 @@ int main(int argc, char** argv) {
 
     TDriver driver(driverConfig);
 
-    if (!Run(driver, path)) {
+    if (!Run(driver)) {
         driver.Stop(true);
         return 2;
     }

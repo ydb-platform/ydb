@@ -3,6 +3,7 @@
 #include "utils.h"
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -10,7 +11,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -51,6 +52,12 @@ public:
     }
 
 protected:
+    void SendThroughPipeCache(IEventBase* ev, ui64 tabletId) {
+        DoPipeCacheUnlink = true;
+        TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev, tabletId, true),
+            IEventHandle::FlagTrackDelivery);
+    }
+
     void SendBatch(THolder<NKqp::TEvKqpCompute::TEvScanData> batch) {
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Sending scan batch, actor: " << TBase::SelfId()
@@ -116,11 +123,11 @@ protected:
             ScanLimiter->Dec();
         }
 
-        TBase::PassAway();
-    }
+        if (std::exchange(DoPipeCacheUnlink, false)) {
+            TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        }
 
-    ui64 GetBSControllerId() {
-        return MakeBSControllerID();
+        TBase::PassAway();
     }
 
     template <typename TResponse, typename TEntry, typename TExtractorsMap, bool BatchSupport = false>
@@ -321,6 +328,7 @@ protected:
     bool AckReceived = false;
 
     bool BatchRequestInFlight = false;
+    bool DoPipeCacheUnlink = false;
 
 private:
     enum EFailState {

@@ -35,7 +35,7 @@
 
 Пример:
 
-``` sql
+```yql
 SELECT
     1234p,             -- pgint4
     0x123pb,         -- pgint8
@@ -48,12 +48,11 @@ SELECT
 
 Для построения литерала массива используется функция `PgArray`:
 
-``` sql
+```yql
 SELECT
     PgArray(1p, NULL ,2p) -- {1,NULL,2}, тип _int4
 ;
 ```
-
 
 ### Конструктор литералов произвольного типа {#literals_constructor}
 
@@ -61,7 +60,8 @@ SELECT
 `Имя_типа(<строковая константа>)`.
 
 Напрмер:
-``` sql
+
+```yql
 DECLARE $foo AS String;
 SELECT
     PgInt4("1234"), -- то же что и 1234p
@@ -78,7 +78,7 @@ SELECT
 
 Например:
 
-``` sql
+```yql
 SELECT
     PgConst("1234", PgInt4), -- то же что и 1234p
     PgConst("true", PgBool)
@@ -87,7 +87,7 @@ SELECT
 
 Для некоторых типов в функции `PgConst` можно указать дополнительные модификаторы. Возможные модификаторы для типа `pginterval` перечислены в [документации PostgreSQL](https://www.postgresql.org/docs/16/datatype-datetime.html).
 
-``` sql
+```yql
 SELECT
     PgConst(90, pginterval, "day"), -- 90 days
     PgConst(13.45, pgnumeric, 10, 1); -- 13.5

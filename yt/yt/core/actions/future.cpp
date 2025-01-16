@@ -73,7 +73,7 @@ bool TFutureState<void>::Cancel(const TError& error) noexcept
     }
 
     if (CancelHandlers_.empty()) {
-        if (!TrySetError(NDetail::MakeCanceledError(error))) {
+        if (!TrySetError(NDetail::WrapIntoCancelationError(error))) {
             return false;
         }
     } else {
@@ -148,9 +148,11 @@ void TFutureState<void>::InstallAbandonedError() const
 
 void TFutureState<void>::InstallAbandonedError()
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     if (AbandonedUnset_ && !Set_) {
-        SetResultError(NDetail::MakeAbandonedError());
+        // NB(arkady-e1ppa): Once AbandonedUnset_ is |true| we are guaranteed
+        // to have a cancelation error.
+        SetResultError(CancelationError_);
         Set_ = true;
     }
 }
@@ -160,7 +162,7 @@ void TFutureState<void>::ResetResult()
 
 void TFutureState<void>::SetResultError(const TError& error)
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     ResultError_ = error;
 }
 
@@ -171,7 +173,7 @@ bool TFutureState<void>::TrySetError(const TError& error)
 
 bool TFutureState<void>::DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard)
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     return VoidResultHandlers_.TryRemove(cookie, guard);
 }
 
@@ -230,12 +232,14 @@ void TFutureState<void>::OnLastPromiseRefLost()
     }
 
     // Another fast path: no subscribers.
-    if ([&] {
+    auto cancelationError = TryExtractCancelationError();
+    if ([&] () noexcept {
         auto guard = Guard(SpinLock_);
         if (ReadyEvent_ || HasHandlers_ || Canceled_) {
             return false;
         }
         YT_ASSERT(!AbandonedUnset_);
+        CancelationError_ = std::move(cancelationError);
         AbandonedUnset_ = true;
         // Cannot access this after UnrefFuture; in particular, cannot touch SpinLock_ in guard's dtor.
         guard.Release();
@@ -247,9 +251,9 @@ void TFutureState<void>::OnLastPromiseRefLost()
     }
 
     // Slow path: notify the subscribers in a dedicated thread.
-    GetFinalizerInvoker()->Invoke(BIND_NO_PROPAGATE([this] {
+    GetFinalizerInvoker()->Invoke(BIND_NO_PROPAGATE([this, error = std::move(cancelationError)] {
         // Set the promise if the value is still missing.
-        TrySetError(NDetail::MakeAbandonedError());
+        TrySetError(std::move(error));
         // Kill the fake weak reference.
         UnrefFuture();
     }));

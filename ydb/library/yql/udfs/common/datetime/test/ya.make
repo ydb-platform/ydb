@@ -2,8 +2,6 @@ YQL_UDF_YDB_TEST()
 
 DEPENDS(ydb/library/yql/udfs/common/datetime)
 
-TIMEOUT(300)
-
 SIZE(MEDIUM)
 
 IF (SANITIZER_TYPE OR NOT OPENSOURCE)

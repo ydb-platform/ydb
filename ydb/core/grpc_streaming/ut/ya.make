@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/grpc_streaming)
 
 FORK_SUBTESTS()
 
-TIMEOUT(300)
-
 SIZE(MEDIUM)
 
 SRCS(

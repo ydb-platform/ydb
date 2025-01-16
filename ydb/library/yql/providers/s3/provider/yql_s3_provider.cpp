@@ -1,11 +1,11 @@
 #include "yql_s3_provider.h"
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 
-TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool allowLocalFiles, NActors::TActorSystem* actorSystem) {
-    return [gateway, credentialsFactory, allowLocalFiles, actorSystem] (
+TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, NActors::TActorSystem* actorSystem) {
+    return [gateway, credentialsFactory, actorSystem] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -35,7 +35,6 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
         if (gatewaysConfig) {
             state->Configuration->Init(gatewaysConfig->GetS3(), typeCtx);
         }
-        state->Configuration->AllowLocalFiles = allowLocalFiles;
         state->Gateway = gateway;
 
         TDataProviderInfo info;

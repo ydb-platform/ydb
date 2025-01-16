@@ -167,23 +167,23 @@ class TDefaultHttpClient
 public:
     IHttpResponsePtr Request(const TString& url, const TString& requestId, const THttpConfig& config, const THttpHeader& header, TMaybe<TStringBuf> body) override
     {
-        auto request = std::make_unique<THttpRequest>(requestId);
-
         auto urlRef = NHttp::ParseUrl(url);
+        auto host = CreateHost(urlRef.Host, urlRef.PortStr);
 
-        request->Connect(CreateHost(urlRef.Host, urlRef.PortStr), config.SocketTimeout);
-        request->SmallRequest(header, body);
+        auto request = std::make_unique<THttpRequest>(requestId, host, header, config.SocketTimeout);
+
+        request->SmallRequest(body);
         return std::make_unique<TDefaultHttpResponse>(std::move(request));
     }
 
     IHttpRequestPtr StartRequest(const TString& url, const TString& requestId, const THttpConfig& config, const THttpHeader& header) override
     {
-        auto request = std::make_unique<THttpRequest>(requestId);
-
         auto urlRef = NHttp::ParseUrl(url);
+        auto host = CreateHost(urlRef.Host, urlRef.PortStr);
 
-        request->Connect(CreateHost(urlRef.Host, urlRef.PortStr), config.SocketTimeout);
-        auto stream = request->StartRequest(header);
+        auto request = std::make_unique<THttpRequest>(requestId, host, header, config.SocketTimeout);
+
+        auto stream = request->StartRequest();
         return std::make_unique<TDefaultHttpRequest>(std::move(request), stream);
     }
 };

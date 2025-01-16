@@ -1,11 +1,12 @@
 #pragma once
 
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/db_pool/db_pool.h>
 
 #include <ydb/core/fq/libs/common/debug_info.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/fq/libs/exceptions/exceptions.h>
+#include <yql/essentials/utils/exceptions.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
 namespace NFq {
@@ -214,7 +215,7 @@ public:
                 if (self->Steps[self->CurrentStepIndex].ResultCallback) {
                     try {
                         self->Steps[self->CurrentStepIndex].ResultCallback(*self, result.GetResultSets());
-                    } catch (const TCodeLineException& exception) {
+                    } catch (const NYql::TCodeLineException& exception) {
                         NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
                         self->Issues.AddIssue(issue);
                         NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());

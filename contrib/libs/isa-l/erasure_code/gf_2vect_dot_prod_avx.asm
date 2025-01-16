@@ -52,7 +52,7 @@
  %define PS 8
  %define LOG_PS 3
 
- %define func(x) x:
+ %define func(x) x: endbranch
  %macro FUNC_SAVE 0
 	push	r12
  %endmacro
@@ -84,9 +84,9 @@
  %define func(x) proc_frame x
  %macro FUNC_SAVE 0
 	alloc_stack	stack_size
-	save_xmm128	xmm6, 0*16
-	save_xmm128	xmm7, 1*16
-	save_xmm128	xmm8, 2*16
+	vmovdqa		[rsp + 0*16], xmm6
+	vmovdqa		[rsp + 1*16], xmm7
+	vmovdqa		[rsp + 2*16], xmm8
 	save_reg	r12,  3*16 + 0*8
 	save_reg	r13,  3*16 + 1*8
 	save_reg	r14,  3*16 + 2*8
@@ -127,7 +127,7 @@
 
  %define PS 4
  %define LOG_PS 2
- %define func(x) x:
+ %define func(x) x: endbranch
  %define arg(x) [ebp + PS*2 + PS*x]
  %define var(x) [ebp - PS - PS*x]
 
@@ -238,13 +238,9 @@ section .text
 %endif
 
 align 16
-global gf_2vect_dot_prod_avx:ISAL_SYM_TYPE_FUNCTION
-func(gf_2vect_dot_prod_avx)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_2vect_dot_prod_avx:ISAL_SYM_TYPE_FUNCTION
-func(_gf_2vect_dot_prod_avx)
-%endif
+global gf_2vect_dot_prod_avx, function
 
+func(gf_2vect_dot_prod_avx)
 	FUNC_SAVE
 	SLDR	len, len_m
 	sub	len, 16
@@ -336,6 +332,3 @@ section .data
 
 align 16
 mask0f: dq 0x0f0f0f0f0f0f0f0f, 0x0f0f0f0f0f0f0f0f
-
-;;;       func                  core, ver, snum
-slversion gf_2vect_dot_prod_avx, 02,  05,  0191

@@ -1,6 +1,6 @@
-# Аутентификация при помощи логина и пароля
+<!-- markdownlint-disable blanks-around-fences -->
 
-{% include [work in progress message](_includes/addition.md) %}
+# Аутентификация при помощи логина и пароля
 
 Ниже приведены примеры кода аутентификации при помощи логина и пароля в разных {{ ydb-short-name }} SDK.
 

@@ -12,6 +12,8 @@
 #include "schemaless_writer_adapter.h"
 #include "skiff_parser.h"
 #include "skiff_writer.h"
+#include "yaml_parser.h"
+#include "yaml_writer.h"
 #include "yamred_dsv_parser.h"
 #include "yamred_dsv_writer.h"
 #include "yamr_parser.h"
@@ -108,6 +110,18 @@ std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForDsv(
     };
 }
 
+std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForYaml(
+    EDataType dataType,
+    const IAttributeDictionary& attributes,
+    IZeroCopyOutput* output)
+{
+    if (dataType != EDataType::Structured) {
+        THROW_ERROR_EXCEPTION("YAML is supported only for structured data");
+    }
+    auto config = ConvertTo<TYamlFormatConfigPtr>(&attributes);
+    return CreateYamlWriter(output, DataTypeToYsonType(dataType), config);
+}
+
 class TTableParserAdapter
     : public IParser
 {
@@ -161,6 +175,8 @@ std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForFormat(
             return CreateConsumerForJson(dataType, format.Attributes(), output);
         case EFormatType::Dsv:
             return CreateConsumerForDsv(dataType, format.Attributes(), output);
+        case EFormatType::Yaml:
+            return CreateConsumerForYaml(dataType, format.Attributes(), output);
         default:
             THROW_ERROR_EXCEPTION("Unsupported output format %Qlv",
                 format.GetType());
@@ -254,6 +270,7 @@ ISchemalessFormatWriterPtr CreateStaticTableWriterForFormat(
     const TFormat& format,
     TNameTablePtr nameTable,
     const std::vector<TTableSchemaPtr>& tableSchemas,
+    const std::vector<std::optional<std::vector<std::string>>>& columns,
     NConcurrency::IAsyncOutputStreamPtr output,
     bool enableContextSaving,
     TControlAttributesConfigPtr controlAttributesConfig,
@@ -320,6 +337,7 @@ ISchemalessFormatWriterPtr CreateStaticTableWriterForFormat(
             return CreateWriterForArrow(
                 nameTable,
                 tableSchemas,
+                columns,
                 std::move(output),
                 enableContextSaving,
                 controlAttributesConfig,
@@ -406,6 +424,21 @@ TYsonProducer CreateProducerForJson(
     });
 }
 
+TYsonProducer CreateProducerForYaml(
+    EDataType dataType,
+    const IAttributeDictionary& attributes,
+    IInputStream* input)
+{
+    if (dataType != EDataType::Structured) {
+        THROW_ERROR_EXCEPTION("YAML is supported only for structured data");
+    }
+    auto ysonType = DataTypeToYsonType(dataType);
+    auto config = ConvertTo<TYamlFormatConfigPtr>(&attributes);
+    return BIND([=] (IYsonConsumer* consumer) {
+        ParseYaml(input, consumer, config, ysonType);
+    });
+}
+
 TYsonProducer CreateProducerForYson(EDataType dataType, IInputStream* input)
 {
     auto ysonType = DataTypeToYsonType(dataType);
@@ -427,6 +460,8 @@ TYsonProducer CreateProducerForFormat(const TFormat& format, EDataType dataType,
             return CreateProducerForYamredDsv(dataType, format.Attributes(), input);
         case EFormatType::SchemafulDsv:
             return CreateProducerForSchemafulDsv(dataType, format.Attributes(), input);
+        case EFormatType::Yaml:
+            return CreateProducerForYaml(dataType, format.Attributes(), input);
         default:
             THROW_ERROR_EXCEPTION("Unsupported input format %Qlv",
                 format.GetType());
@@ -487,6 +522,10 @@ std::unique_ptr<IParser> CreateParserForFormat(const TFormat& format, EDataType 
             auto config = ConvertTo<TSchemafulDsvFormatConfigPtr>(&format.Attributes());
             return CreateParserForSchemafulDsv(consumer, config);
         }
+        case EFormatType::Yaml:
+            // We can only get here with EDataType::Tabular, so throw specific error about supporting
+            // only structured data in YAML.
+            THROW_ERROR_EXCEPTION("YAML is supported only for structured data");
         default:
             THROW_ERROR_EXCEPTION("Unsupported input format %Qlv",
                 format.GetType());

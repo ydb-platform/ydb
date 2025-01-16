@@ -48,4 +48,20 @@ TString UrlEscapeRet(const TStringBuf from) {
     return to;
 }
 
+bool ValidateS3ReadWriteSchema(const TStructExprType* schemaStructRowType, TExprContext& ctx) {
+    for (const TItemExprType* item : schemaStructRowType->GetItems()) {
+        const TTypeAnnotationNode* rowType = item->GetItemType();
+        if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+            rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+            ctx.AddError(TIssue(TStringBuilder() << "Double optional types are not supported (you have '"
+                << item->GetName() << " " << FormatType(item->GetItemType()) << "' field)"));
+            return false;
+        }
+    }
+    return true;
+}
+
 }

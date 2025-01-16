@@ -150,7 +150,9 @@ namespace NActors {
                 }
 
                 // setup send buffer size
-                Socket->SetSendBufferSize(Actor->Common->Settings.GetSendBufferSize());
+                if (const auto& buffer = Actor->Common->Settings.TCPSocketBufferSize) {
+                    Socket->SetSendBufferSize(buffer);
+                }
             }
 
             void RegisterInPoller() {

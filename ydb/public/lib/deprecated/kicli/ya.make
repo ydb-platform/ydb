@@ -27,12 +27,8 @@ PEERDIR(
     ydb/public/lib/deprecated/client
     ydb/public/lib/scheme_types
     ydb/public/lib/value
-    ydb/library/yql/public/decimal
-    ydb/library/yql/public/issue
+    yql/essentials/public/decimal
+    yql/essentials/public/issue
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

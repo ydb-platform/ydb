@@ -929,7 +929,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
         UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "User is unauthorized in LDAP server");
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
 
         ldapServer.Stop();
@@ -948,7 +948,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
         UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "User is unauthorized in LDAP server");
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
 
         ldapServer.Stop();
@@ -983,7 +983,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, removedUserLogin, removedUserPassword);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
         UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "User is unauthorized in LDAP server");
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
 
         ldapServer.Stop();
     }
@@ -1001,7 +1001,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
         UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "User is unauthorized in LDAP server");
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
 
         ldapServer.Stop();
     }
@@ -1162,7 +1162,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "User is unauthorized in LDAP server");
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
         UNIT_ASSERT_EQUAL(ticketParserResult->Error.Retryable, false);
 
         ldapServer.Stop();
@@ -1170,23 +1170,23 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
 Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
     Y_UNIT_TEST(LdapServerIsUnavailable) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "User is unauthorized in LDAP server", ESecurityConnectionType::START_TLS);
+        CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "Could not login via LDAP", ESecurityConnectionType::START_TLS);
     }
 
     Y_UNIT_TEST(LdapRequestWithEmptyHost) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHost, "List of ldap server hosts is empty");
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHost, "Could not login via LDAP");
     }
 
     Y_UNIT_TEST(LdapRequestWithEmptyBaseDn) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBaseDn, "Parameter BaseDn is empty");
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBaseDn, "Could not login via LDAP");
     }
 
     Y_UNIT_TEST(LdapRequestWithEmptyBindDn) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindDn, "Parameter BindDn is empty");
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindDn, "Could not login via LDAP");
     }
 
     Y_UNIT_TEST(LdapRequestWithEmptyBindPassword) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindPassword, "Parameter BindPassword is empty");
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindPassword, "Could not login via LDAP");
     }
 }
 

@@ -154,23 +154,25 @@ if __name__ == "__main__":
         ymake_binary_path = root_folder + "/ya tool ymake"
 
     if yexport_binary_path is None:
-        libiconv_path="contrib/libs/libiconv/dynamic"
-        compile_libiconv_command = f"{root_folder}/ya make -r {libiconv_path}"
-        print("Compliling libiconv...")
-        subprocess.check_output(compile_libiconv_command, shell=True)
-        yexport_binary_path = f"LD_LIBRARY_PATH={libiconv_path} {root_folder}/ya tool yexport"
+        # libiconv_path="contrib/libs/libiconv/dynamic"
+        # compile_libiconv_command = f"{root_folder}/ya make -r {libiconv_path}"
+        # print("Compliling libiconv...")
+        # subprocess.check_output(compile_libiconv_command, shell=True)
+        # yexport_binary_path = f"LD_LIBRARY_PATH={libiconv_path} {root_folder}/ya tool yexport"
+        yexport_binary_path = f"{root_folder}/ya tool yexport"
 
     platforms = [
-        ("linux-x86_64", "default-linux-x86_64"),
-        ("linux-aarch64", "default-linux-aarch64"),
-        ("darwin-x86_64", "default-darwin-x86_64"),
-        ("windows-x86_64", "default-win-x86_64"),
-        ("darwin-arm64", "default-darwin-arm64"),
+        "linux-x86_64",
+        "linux-aarch64",
+        "darwin-x86_64",
+        "darwin-arm64",
+        "windows-x86_64",
     ]
 
     generate_graph_for_platform_commands = []
 
-    for platform, target_platform in platforms:
+    for platform in platforms:
+        target_platform = "default-" + platform
         print(f"Platform {platform} target platform {target_platform}")
 
         dump_export_path = f"{ydb_metadata_folder_path}/{platform}.conf"
@@ -195,9 +197,18 @@ if __name__ == "__main__":
             generate_graph_for_platform, generate_graph_for_platform_commands
         )
 
-    for index, (platform, target_platform) in enumerate(platforms):
+    yexport_args = [yexport_binary_path, "--export-root", f"\"{root_folder}\"", "--target", "YDB", "--generator", "cmake"]
+
+    for index, platform in enumerate(platforms):
         errors_for_platform_size = len(errors_for_platform[index])
+
         if errors_for_platform_size == 0:
+            yexport_args += [
+                "--semantic-graph",
+                f"\"{ydb_metadata_folder_path + '/sem.' + platform + '.json'}\"",
+                "--platforms",
+                platform,
+            ]
             continue
 
         print(
@@ -210,14 +221,8 @@ if __name__ == "__main__":
         if not keep_going:
             sys.exit(1)
 
-    yexport_command = f"{yexport_binary_path} --export-root \"{root_folder}\" --target YDB \
-            --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-x86_64.json'}\" --platforms linux-x86_64 \
-            --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-aarch64.json'}\" --platforms linux-aarch64 \
-            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64 \
-            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-arm64.json'}\" --platforms darwin-arm64 \
-            --semantic-graph \"{ydb_metadata_folder_path + '/sem.windows-x86_64.json'}\" --platforms windows-x86_64"
-#    yexport_command = f"{yexport_binary_path} --export-root \"{ydb_tmp_folder_path}\" --target YDB \
-#            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64"
+    yexport_command = ' '.join(yexport_args)
+
     print(f"yexport command {yexport_command}")
 
     yexport_output = subprocess.check_output(

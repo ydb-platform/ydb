@@ -1,0 +1,90 @@
+--- contrib/libs/libidn/lib/idn-free.h	(9920c22126a48eb778c3500fc4c98e84a275c80a)
++++ contrib/libs/libidn/lib/idn-free.h	(cdd34515220d5a3cb13a2d6cb6a8a64d9e8eabf5)
+@@ -39,15 +39,7 @@
+  */
+ 
+ # ifndef IDNAPI
+-#  if defined LIBIDN_BUILDING && defined HAVE_VISIBILITY && HAVE_VISIBILITY
+-#   define IDNAPI __attribute__((__visibility__("default")))
+-#  elif defined LIBIDN_BUILDING && defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllexport)
+-#  elif defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllimport)
+-#  else
+ #   define IDNAPI
+-#  endif
+ # endif
+ 
+ # ifdef __cplusplus
+--- contrib/libs/libidn/lib/pr29.h	(9920c22126a48eb778c3500fc4c98e84a275c80a)
++++ contrib/libs/libidn/lib/pr29.h	(cdd34515220d5a3cb13a2d6cb6a8a64d9e8eabf5)
+@@ -39,15 +39,7 @@
+  */
+ 
+ # ifndef IDNAPI
+-#  if defined LIBIDN_BUILDING && defined HAVE_VISIBILITY && HAVE_VISIBILITY
+-#   define IDNAPI __attribute__((__visibility__("default")))
+-#  elif defined LIBIDN_BUILDING && defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllexport)
+-#  elif defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllimport)
+-#  else
+ #   define IDNAPI
+-#  endif
+ # endif
+ 
+ # ifdef __cplusplus
+--- contrib/libs/libidn/lib/stringprep.h	(9920c22126a48eb778c3500fc4c98e84a275c80a)
++++ contrib/libs/libidn/lib/stringprep.h	(cdd34515220d5a3cb13a2d6cb6a8a64d9e8eabf5)
+@@ -43,15 +43,7 @@ typedef int ssize_t;
+  */
+ 
+ # ifndef IDNAPI
+-#  if defined LIBIDN_BUILDING && defined HAVE_VISIBILITY && HAVE_VISIBILITY
+-#   define IDNAPI __attribute__((__visibility__("default")))
+-#  elif defined LIBIDN_BUILDING && defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllexport)
+-#  elif defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllimport)
+-#  else
+ #   define IDNAPI
+-#  endif
+ # endif
+ 
+ # include <stddef.h>		/* size_t */
+--- contrib/libs/libidn/lib/idna.h	(index)
++++ contrib/libs/libidn/lib/idna.h	(working tree)
+@@ -49,15 +49,7 @@
+  * https://www.gnu.org/software/gnulib/manual/html_node/Exported-Symbols-of-Shared-Libraries.html
+  */
+ # ifndef IDNAPI
+-#  if defined LIBIDN_BUILDING && defined HAVE_VISIBILITY && HAVE_VISIBILITY
+-#   define IDNAPI __attribute__((__visibility__("default")))
+-#  elif defined LIBIDN_BUILDING && defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllexport)
+-#  elif defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllimport)
+-#  else
+ #   define IDNAPI
+-#  endif
+ # endif
+ 
+ # include <stddef.h>		/* size_t */
+--- contrib/libs/libidn/lib/tld.h	(index)
++++ contrib/libs/libidn/lib/tld.h	(working tree)
+@@ -42,15 +42,7 @@
+  */
+ 
+ # ifndef IDNAPI
+-#  if defined LIBIDN_BUILDING && defined HAVE_VISIBILITY && HAVE_VISIBILITY
+-#   define IDNAPI __attribute__((__visibility__("default")))
+-#  elif defined LIBIDN_BUILDING && defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllexport)
+-#  elif defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllimport)
+-#  else
+ #   define IDNAPI
+-#  endif
+ # endif
+ 
+ # ifdef __cplusplus

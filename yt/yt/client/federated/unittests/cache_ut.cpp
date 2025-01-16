@@ -22,7 +22,7 @@ TEST(TFederatedClientsCacheTest, GetSameClient)
     auto ytClientsCache = CreateFederatedClientsCache(
         New<TConnectionConfig>(),
         New<TClientsCacheConfig>(),
-        NApi::GetClientOpsFromEnvStatic());
+        NApi::GetClientOptionsFromEnvStatic());
 
     auto client1 = ytClientsCache->GetClient("localhost");
     auto client2 = ytClientsCache->GetClient("localhost");
@@ -41,7 +41,7 @@ TEST(TFederatedClientsCacheTest, GetFederatedWithEmptyConfig)
     auto ytClientsCache = CreateFederatedClientsCache(
         New<TConnectionConfig>(),
         New<TClientsCacheConfig>(),
-        NApi::GetClientOpsFromEnvStatic());
+        NApi::GetClientOptionsFromEnvStatic());
 
     EXPECT_THROW(
         ytClientsCache->GetClient("primary+secondary"),
@@ -61,7 +61,7 @@ TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch1)
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,
         New<TClientsCacheConfig>(),
-        NApi::GetClientOpsFromEnvStatic());
+        NApi::GetClientOptionsFromEnvStatic());
 
     EXPECT_THROW(
         ytClientsCache->GetClient("primary+tertiary"),
@@ -83,7 +83,7 @@ TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch2)
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,
         New<TClientsCacheConfig>(),
-        NApi::GetClientOpsFromEnvStatic());
+        NApi::GetClientOptionsFromEnvStatic());
 
     EXPECT_THROW(
         ytClientsCache->GetClient("primary+tertiary"),
@@ -103,7 +103,7 @@ TEST(TFederatedClientsCacheTest, ConfigurationMissingCluster)
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,
         New<TClientsCacheConfig>(),
-        NApi::GetClientOpsFromEnvStatic());
+        NApi::GetClientOptionsFromEnvStatic());
 
     EXPECT_THROW(
         ytClientsCache->GetClient("primary+secondary+tertiary"),

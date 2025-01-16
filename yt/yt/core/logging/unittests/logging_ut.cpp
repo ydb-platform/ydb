@@ -224,14 +224,14 @@ TEST_F(TLoggingTest, ReloadOnSighup)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
     })", logFile.Name()));
@@ -272,14 +272,14 @@ TEST_F(TLoggingTest, ReloadOnRename)
         watch_period = 1000;
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
     })", logFile.Name()));
@@ -442,22 +442,22 @@ TEST_F(TLoggingTest, LogManager)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
             {
-                "min_level" = "error";
-                "writers" = [ "error" ];
+                min_level = "error";
+                writers = [ "error" ];
             };
         ];
-        "writers" = {
+        writers = {
             "error" = {
-                "file_name" = "%v";
-                "type" = "file";
+                file_name = "%v";
+                type = "file";
             };
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
     })", errorFile.Name(), infoFile.Name()));
@@ -486,14 +486,14 @@ TEST_F(TLoggingTest, ThreadMinLogLevel)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "debug";
-                "writers" = [ "debug" ];
+                min_level = "debug";
+                writers = [ "debug" ];
             };
         ];
-        "writers" = {
+        writers = {
             "debug" = {
-                "file_name" = "%v";
-                "type" = "file";
+                file_name = "%v";
+                type = "file";
             };
         };
     })", debugFile.Name()));
@@ -702,15 +702,15 @@ TEST_F(TLoggingTest, StructuredLoggingWithValidator)
         rules = [
             {
                 "family" = "structured";
-                "min_level" = "info";
-                "writers" = [ "test" ];
+                min_level = info;
+                writers = [ "test" ];
             };
         ];
-        "writers" = {
+        writers = {
             "test" = {
                 "format" = "structured";
-                "file_name" = "%v";
-                "type" = "file";
+                file_name = "%v";
+                type = "file";
             };
         };
         "structured_validation_sampling_rate" = 1.0;
@@ -752,15 +752,15 @@ TEST_F(TLoggingTest, StructuredValidationWithSamplingRate)
         rules = [
             {
                 "family" = "structured";
-                "min_level" = "info";
-                "writers" = [ "test" ];
+                min_level = info;
+                writers = [ "test" ];
             };
         ];
-        "writers" = {
+        writers = {
             "test" = {
-                "file_name" = "%v";
+                file_name = "%v";
                 "format" = "structured";
-                "type" = "file";
+                type = "file";
             }
         };
         "structured_validation_sampling_rate" = 0.5;
@@ -809,20 +809,18 @@ TEST_F(TLoggingTest, StructuredLoggingDisableSystemFields)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TBuiltinRotationTest
-    : public ::testing::TestWithParam<bool>
+    : public ::testing::TestWithParam<std::pair<bool, bool>>
     , public TLoggingTestBase
 {
 protected:
-    std::vector<TString> ListLogFiles(const TString& fileNamePrefix, bool reverse = false)
+    std::vector<TString> ListLogFiles(const TString& fileNamePrefix, bool reverse = false, bool keepFirst = false)
     {
-        auto files = NFS::EnumerateFiles("./");
+        auto files = NFS::EnumerateFiles("./", /*depth*/ 1, /*sortByName*/ true);
         std::erase_if(files, [&] (const TString& fileName) {
             return !fileName.StartsWith(fileNamePrefix);
         });
-        if (reverse) {
-            std::sort(files.begin(), files.end(), std::greater<TString>());
-        } else {
-            std::sort(files.begin(), files.end());
+        if (reverse || keepFirst) {
+            std::reverse(files.begin() + (keepFirst ? 1 : 0), files.end());
         }
         return files;
     }
@@ -831,33 +829,38 @@ protected:
 
 TEST_P(TBuiltinRotationTest, All)
 {
-    bool useTimestampSuffix = GetParam();
+    auto [useTimestampSuffix, useLogrotateCompatibleTimestampSuffix] = GetParam();
     auto logFileNamePrefix = GenerateLogFileName();
 
     // To ensure that renumeration of rotated files works.
-    const int RotationDepth = useTimestampSuffix ? 2 : 12;
+    const int RotationDepth = useTimestampSuffix || useLogrotateCompatibleTimestampSuffix ? 2 : 12;
 
     Configure(Format(R"({
         rotation_check_period = 1000;
         flush_period = 100;
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
+        writers = {
+            info = {
+                file_name = "%v";
                 "use_timestamp_suffix" = %v;
-                "type" = "file";
+                "use_logrotate_compatible_timestamp_suffix" = %v;
+                type = "file";
                 "rotation_policy" = {
                     "max_segment_count_to_keep" = %v;
                     "max_segment_size" = 10;
                 };
             };
         };
-    })", logFileNamePrefix, ConvertToYsonString(useTimestampSuffix).AsStringBuf(), RotationDepth));
+    })",
+        logFileNamePrefix,
+        ConvertToYsonString(useTimestampSuffix).AsStringBuf(),
+        ConvertToYsonString(useLogrotateCompatibleTimestampSuffix).AsStringBuf(),
+        RotationDepth));
 
     std::vector<TString> messages;
     for (int index = 0; index < RotationDepth + 3; ++index) {
@@ -867,7 +870,7 @@ TEST_P(TBuiltinRotationTest, All)
         // Wait until the message hits the file.
         WaitForPredicate([&] {
             YT_LOG_INFO(message);
-            auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix);
+            auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
             if (files.empty()) {
                 return false;
             }
@@ -876,15 +879,22 @@ TEST_P(TBuiltinRotationTest, All)
 
         // Wait until the file is rotated.
         WaitForPredicate([&] {
-            auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix);
+            auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
             EXPECT_FALSE(files.empty());
+            if (files.empty()) {
+                return true;
+            }
             auto lines = ReadPlainTextEvents(files[0]);
             return lines.empty();
         });
     }
 
-    auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix);
-    EXPECT_EQ(RotationDepth + 1, ssize(files));
+    auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
+    ASSERT_EQ(RotationDepth + 1, ssize(files));
+    if (useLogrotateCompatibleTimestampSuffix) {
+        EXPECT_EQ(files[0], logFileNamePrefix);
+        EXPECT_THAT(files[1], ::testing::ContainsRegex(R"(\.\d{8}-\d{6}$)"));
+    }
     // Current file is empty, previous file must contain the last logged message.
     for (int index = 1; index < ssize(files); ++index) {
         EXPECT_TRUE(CheckPlainTextLogFileContains(files[index], messages[messages.size() - index]));
@@ -893,8 +903,9 @@ TEST_P(TBuiltinRotationTest, All)
 
 INSTANTIATE_TEST_SUITE_P(ValueParametrized, TBuiltinRotationTest,
 ::testing::Values(
-    true,
-    false));
+    std::pair(true, false),
+    std::pair(false, true),
+    std::pair(false, false)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1062,14 +1073,14 @@ TEST_F(TLoggingTest, DISABLED_LogFatal)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
     })", logFile.Name()));
@@ -1084,21 +1095,21 @@ TEST_F(TLoggingTest, DISABLED_LogFatal)
 
 // Windows does not support request tracing for now.
 #ifndef _win_
-TEST_F(TLoggingTest, RequestSuppression)
+TEST_F(TLoggingTest, SupressedRequests)
 {
     TTempFile logFile(GenerateLogFileName());
 
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
         "request_suppression_timeout" = 100;
@@ -1124,6 +1135,73 @@ TEST_F(TLoggingTest, RequestSuppression)
     EXPECT_TRUE(lines[0].find("Info message") != TString::npos);
 }
 #endif
+
+TEST_F(TLoggingTest, SuppressedMessages)
+{
+    TTempFile logFile(GenerateLogFileName());
+
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = info;
+                writers = [ info ];
+            };
+        ];
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
+            };
+        };
+        suppressed_messages = ["Suppressed message"];
+    })", logFile.Name()));
+
+    YT_LOG_INFO("Suppressed message 1");
+    YT_LOG_INFO("Suppressed message 2");
+    YT_LOG_INFO("Good message");
+
+    TLogManager::Get()->Synchronize();
+
+    auto lines = ReadPlainTextEvents(logFile.Name());
+    EXPECT_EQ(1, std::ssize(lines));
+    EXPECT_TRUE(lines[0].find("Good message") != TString::npos);
+}
+
+TEST_F(TLoggingTest, MessageLevelOverride)
+{
+    TTempFile logFile(GenerateLogFileName());
+
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = info;
+                writers = [ info ];
+            };
+        ];
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
+            };
+        };
+        message_level_overrides = {
+            "Overridden message" = "info";
+        };
+    })", logFile.Name()));
+
+    YT_LOG_INFO("Overridden message 1");
+    YT_LOG_TRACE("Overridden message 2");
+    YT_LOG_INFO("Good message");
+
+    TLogManager::Get()->Synchronize();
+
+    auto lines = ReadPlainTextEvents(logFile.Name());
+    for (auto l : lines) Cerr << l << Endl;
+    EXPECT_EQ(3, std::ssize(lines));
+    EXPECT_TRUE(lines[0].find("Overridden message 1") != TString::npos);
+    EXPECT_TRUE(lines[1].find("Overridden message 2") != TString::npos);
+    EXPECT_TRUE(lines[2].find("Good message") != TString::npos);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1198,15 +1276,15 @@ protected:
         Configure(Format(R"({
             rules = [
                 {
-                    "min_level" = "info";
-                    "max_level" = "info";
-                    "writers" = [ "info" ];
+                    min_level = info;
+                    "max_level" = info;
+                    writers = [ info ];
                 };
             ];
-            "writers" = {
-                "info" = {
-                    "file_name" = "%v";
-                    "type" = "file";
+            writers = {
+                info = {
+                    file_name = "%v";
+                    type = "file";
                 };
             };
         })", fileName));
@@ -1388,9 +1466,9 @@ TEST_F(TCustomWriterTest, UnknownWriterType)
         {
             Configure(R"({
                 "rules" = [];
-                "writers" = {
+                writers = {
                     "custom" = {
-                        "type" = "unknown";
+                        type = "unknown";
                     };
                 };
             })");
@@ -1404,9 +1482,9 @@ TEST_F(TCustomWriterTest, WriterConfigValidation)
         {
             Configure(Format(R"({
                 "rules" = [];
-                "writers" = {
+                writers = {
                     "custom" = {
-                        "type" = "%v";
+                        type = "%v";
                         "padding" = -10;
                     };
                 };
@@ -1420,13 +1498,13 @@ TEST_F(TCustomWriterTest, Write)
     Configure(Format(R"({
         "rules" = [
             {
-                "min_level" = "info";
-                "writers" = [ "custom" ];
+                min_level = info;
+                writers = [ "custom" ];
             }
         ];
-        "writers" = {
+        writers = {
             "custom" = {
-                "type" = "%v";
+                type = "%v";
                 "padding" = 2;
             };
         };

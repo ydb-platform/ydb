@@ -5,7 +5,7 @@ Using the `COMMIT;` keyword you can add a barrier to the execution process to de
 
 To commit in the same way automatically after each expression in the query, you can use `PRAGMA autocommit;`.
 
-**Examples:**
+## Examples
 
 ```yql
 INSERT INTO result1 SELECT * FROM my_table;

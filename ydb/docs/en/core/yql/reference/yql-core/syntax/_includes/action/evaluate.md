@@ -16,7 +16,7 @@
 4. [DO](#do) with the name and parameters of an action or an anonymous action. In the parameters, you can use both the current element from the first paragraph and any named expressions declared above, including the list itself.
 5. An optional `ELSE` followed by the second `DO` for the situation when the list is empty.
 
-**Examples**
+### Examples
 
 ```yql
 DEFINE ACTION $hello() AS

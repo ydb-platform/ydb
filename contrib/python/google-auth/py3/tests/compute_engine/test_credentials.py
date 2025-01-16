@@ -72,6 +72,13 @@ class TestCredentials(object):
             universe_domain=FAKE_UNIVERSE_DOMAIN,
         )
 
+    def test_get_cred_info(self):
+        assert self.credentials.get_cred_info() == {
+            "credential_source": "metadata server",
+            "credential_type": "VM credentials",
+            "principal": "default",
+        }
+
     def test_default_state(self):
         assert not self.credentials.valid
         # Expiration hasn't been set yet
@@ -480,6 +487,16 @@ class TestIDTokenCredentials(object):
             },
         )
 
+        # mock information about universe_domain
+        responses.add(
+            responses.GET,
+            "http://metadata.google.internal/computeMetadata/v1/universe/"
+            "universe-domain",
+            status=200,
+            content_type="application/json",
+            json={},
+        )
+
         # mock token for credentials
         responses.add(
             responses.GET,
@@ -650,6 +667,16 @@ class TestIDTokenCredentials(object):
                 "expires_in": 3210,
                 "token_type": "Bearer",
             },
+        )
+
+        # stubby response about universe_domain
+        responses.add(
+            responses.GET,
+            "http://metadata.google.internal/computeMetadata/v1/universe/"
+            "universe-domain",
+            status=200,
+            content_type="application/json",
+            json={},
         )
 
         # mock sign blob endpoint

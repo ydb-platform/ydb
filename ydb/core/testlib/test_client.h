@@ -6,22 +6,26 @@
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/server/grpc_server.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/mind/local.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/protos/kesus.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/core/protos/console_tenant.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/security/ticket_parser.h>
@@ -120,8 +124,8 @@ namespace Tests {
         TString DomainName = TestDomainName;
         ui32 NodeCount = 1;
         ui32 DynamicNodeCount = 0;
+        ui64 StorageGeneration = 0;
         NFake::TStorage CustomDiskParams;
-        NFake::TCaches CacheParams;
         TControls Controls;
         TAppPrepare::TFnReg FrFactory = &DefaultFrFactory;
         TIntrusivePtr<TFormatFactory> Formats;
@@ -134,6 +138,7 @@ namespace Tests {
         bool EnableConsole = true;
         bool EnableNodeBroker = false;
         bool EnableConfigsDispatcher = true;
+        bool EnableFeatureFlagsConfigurator = false;
         bool UseRealThreads = true;
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
@@ -175,8 +180,8 @@ namespace Tests {
         TServerSettings& SetDomainName(const TString& value);
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
+        TServerSettings& SetStorageGeneration(ui64 value) { StorageGeneration = value; return *this; }
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
-        TServerSettings& SetCacheParams(const NFake::TCaches& value) { CacheParams = value; return *this; }
         TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; }
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }
         TServerSettings& SetEnableMockOnSingleNode(bool value) { EnableMockOnSingleNode = value; return *this; }
@@ -188,6 +193,7 @@ namespace Tests {
         TServerSettings& SetEnableConsole(bool value) { EnableConsole = value; return *this; }
         TServerSettings& SetEnableNodeBroker(bool value) { EnableNodeBroker = value; return *this; }
         TServerSettings& SetEnableConfigsDispatcher(bool value) { EnableConfigsDispatcher = value; return *this; }
+        TServerSettings& SetEnableFeatureFlagsConfigurator(bool value) { EnableFeatureFlagsConfigurator = value; return *this; }
         TServerSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; }
         TServerSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = std::make_shared<NKikimrConfig::TAppConfig>(value); return *this; }
         TServerSettings& InitKikimrRunConfig() { KikimrRunConfig = std::make_shared<TKikimrRunConfig>(*AppConfig); return *this; }
@@ -225,6 +231,22 @@ namespace Tests {
             DataStreamsAuthFactory = factory;
             return *this;
         }
+        TServerSettings& SetEnableOltpSink(bool withOltpSink) {
+            AppConfig->MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
+            return *this;
+        }
+        TServerSettings& SetEnableOlapSink(bool withOlapSink) {
+            AppConfig->MutableTableServiceConfig()->SetEnableOlapSink(withOlapSink);
+            return *this;
+        }
+        TServerSettings& SetEnableHtapTx(bool withHtapTx) {
+            AppConfig->MutableTableServiceConfig()->SetEnableHtapTx(withHtapTx);
+            return *this;
+        }
+        TServerSettings& SetAllowOlapDataQuery(bool withAllowOlapDataQuery) {
+            AppConfig->MutableTableServiceConfig()->SetAllowOlapDataQuery(withAllowOlapDataQuery);
+            return *this;
+        }
 
 
         // Add additional grpc services
@@ -256,6 +278,8 @@ namespace Tests {
             AppConfig->MutableHiveConfig()->SetObjectImbalanceToBalance(100);
             AppConfig->MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
+            FeatureFlags.SetEnableWritePortionsOnInsert(true);
+            FeatureFlags.SetEnableFollowerStats(true);
         }
 
         TServerSettings(const TServerSettings& settings) = default;
@@ -293,8 +317,8 @@ namespace Tests {
         TServer& operator =(TServer&& server) = default;
         virtual ~TServer();
 
-        void EnableGRpc(const NYdbGrpc::TServerOptions& options);
-        void EnableGRpc(ui16 port);
+        void EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId = 0);
+        void EnableGRpc(ui16 port, ui32 grpcServiceNodeId = 0);
         void SetupRootStoragePools(const TActorId sender) const;
 
         void SetupDefaultProfiles();
@@ -310,7 +334,7 @@ namespace Tests {
             }
         }
         void StartDummyTablets();
-        TVector<ui64> StartPQTablets(ui32 pqTabletsN);
+        TVector<ui64> StartPQTablets(ui32 pqTabletsN, bool wait = true);
         TTestActorRuntime* GetRuntime() const;
         const TServerSettings& GetSettings() const;
         const NScheme::TTypeRegistry* GetTypeRegistry();
@@ -436,8 +460,12 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus DeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteUnsafe(const TString& parent, const TString &name);
-        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password);
-
+        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
+        NMsgBusProxy::EResponseStatus ModifyUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
+        NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
+        NMsgBusProxy::EResponseStatus CreateGroup(const TString& parent, const TString& group);
+        NMsgBusProxy::EResponseStatus AddGroupMembership(const TString& parent, const TString& group, const TString& member);
+        
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent,
@@ -490,10 +518,13 @@ namespace Tests {
         void SetSecurityToken(const TString& token) { SecurityToken = token; }
         void ModifyOwner(const TString& parent, const TString& name, const TString& owner);
         void ModifyACL(const TString& parent, const TString& name, const TString& acl);
+        NKikimrScheme::TEvDescribeSchemeResult Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId = SchemeRoot);
         TString CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups = 1);
         NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
         void RemoveStoragePool(const TString& name);
 
+        void Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights);
+        void GrantConnect(const TString& subject);
 
         TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                 const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
@@ -634,6 +665,8 @@ namespace Tests {
         ui32 Size() const;
         ui32 Availabe() const;
         ui32 Capacity() const;
+
+        void CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes = 1, TDuration timeout = TDuration::Seconds(30));
 
     private:
         TVector<ui32>& Nodes(const TString &name);

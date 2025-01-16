@@ -7,17 +7,17 @@ RECURSE(
     arrow_parquet
     backup
     benchmarks
-    binary_json
     chunks_limiter
-    dynumber
     folder_service
+    formats
+    fyamlcpp
     grpc
     http_proxy
     keys
+    lockfree_bucket
     logger
     login
     mkql_proto
-    minsketch
     naming_conventions
     ncloud
     pdisk_io
@@ -34,7 +34,7 @@ RECURSE(
     workload
     workload
     yaml_config
-    yaml_config
+    yaml_json
     ycloud
     yql
 )

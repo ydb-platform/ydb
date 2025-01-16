@@ -13,7 +13,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 
 namespace NKikimr::NKqp::NRm {

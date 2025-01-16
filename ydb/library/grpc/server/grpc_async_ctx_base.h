@@ -25,7 +25,7 @@ public:
     {
     }
 
-    TString GetPeerName() const {
+    TString GetPeer() const {
         // Decode URL-encoded square brackets
         auto ip = Context.peer();
         CGIUnescape(ip);

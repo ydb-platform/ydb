@@ -1,15 +1,17 @@
 #include "calcer.h"
-#include "xx_hash.h"
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <ydb/library/actors/core/log.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow::NHash {
 
-void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer) {
+namespace {
+template <class TStreamCalcer>
+void AppendFieldImpl(const std::shared_ptr<arrow::Scalar>& scalar, TStreamCalcer& hashCalcer) {
     AFL_VERIFY(scalar);
     NArrow::SwitchType(scalar->type->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
@@ -28,7 +30,8 @@ void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TSt
     });
 }
 
-void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) {
+template <class TStreamCalcer>
+void AppendFieldImpl(const std::shared_ptr<arrow::Array>& array, const int row, TStreamCalcer& hashCalcer) {
     NArrow::SwitchType(array->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using T = typename TWrap::T;
@@ -47,6 +50,24 @@ void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int ro
         }
         return true;
     });
+}
+
+}   // namespace
+
+void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer) {
+    AppendFieldImpl(scalar, hashCalcer);
+}
+
+void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer_H3& hashCalcer) {
+    AppendFieldImpl(scalar, hashCalcer);
+}
+
+void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) {
+    AppendFieldImpl(array, row, hashCalcer);
+}
+
+void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer_H3& hashCalcer) {
+    AppendFieldImpl(array, row, hashCalcer);
 }
 
 std::optional<std::vector<ui64>> TXX64::Execute(const std::shared_ptr<arrow::RecordBatch>& batch) const {

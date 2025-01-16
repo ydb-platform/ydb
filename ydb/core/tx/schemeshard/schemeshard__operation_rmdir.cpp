@@ -1,6 +1,8 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include "schemeshard_private.h"
+
 namespace {
 
 using namespace NKikimr;

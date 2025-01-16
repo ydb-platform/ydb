@@ -8,16 +8,19 @@ namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Forward declaration.
+// Forward declarations
 template <class TTo>
 TTo ConvertTo(const INodePtr& node);
+
 template <class TTo, class TFrom>
 TTo ConvertTo(const TFrom& value);
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
 T INode::GetValue() const
 {
-    return ConvertTo<T>(const_cast<INode*>(this));
+    return ConvertTo<T>(INodePtr(const_cast<INode*>(this)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

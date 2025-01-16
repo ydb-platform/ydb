@@ -1,3 +1,5 @@
+from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
+
 from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
@@ -6,6 +8,9 @@ import ydb.library.yql.providers.generic.connector.tests.common_test_cases.selec
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as tc_select_missing_table
 
 # import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as tc_select_missing_database
+
+
+LOGGER = make_logger(__name__)
 
 
 def select_positive(

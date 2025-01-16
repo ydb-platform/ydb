@@ -9,7 +9,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -98,6 +98,9 @@ private:
     TRetryPolicy::IRetryState::TPtr RetryState;
 };
 
+
+TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId);
+TString DatabaseIdToDatabase(TStringBuf databaseId);
 
 NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message);
 

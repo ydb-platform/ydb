@@ -34,5 +34,17 @@ inline void ThrowOnError(const NYdb::TOperation& operation) {
     ThrowOnError(operation.Status());
 }
 
+inline bool ThrowOnErrorAndCheckEOS(NYdb::TStreamPartStatus status) {
+    if (!status.IsSuccess()) {
+        if (status.EOS()) {
+            return true;
+        }
+        throw TYdbErrorException(status) << static_cast<TStatus>(status);
+    } else if (status.GetIssues()) {
+        Cerr << static_cast<TStatus>(status);
+    }
+    return false;
+}
+
 }
 }

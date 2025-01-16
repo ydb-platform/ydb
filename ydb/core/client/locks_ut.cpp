@@ -1810,8 +1810,14 @@ static void LocksLimit() {
 
     using TLock = TSysTables::TLocksTable::TLock;
 
-    ui32 limit = NDataShard::TLockLocker::LockLimit();
-    const ui32 factor = 100;
+    auto prevLimit = NDataShard::TLockLocker::LockLimit();
+    NDataShard::TLockLocker::SetLockLimit(20);
+    Y_DEFER {
+        NDataShard::TLockLocker::SetLockLimit(prevLimit);
+    };
+
+    const ui32 limit = NDataShard::TLockLocker::LockLimit();
+    const ui32 factor = 5;
 
     const char * query = R"((
         (let row0_ '('('key (Uint32 '%u))))
@@ -1916,9 +1922,13 @@ static void ShardLocks() {
     NKikimrMiniKQL::TResult res;
     TClient::TFlatQueryOptions opts;
 
+    auto prevLimit = NDataShard::TLockLocker::TotalRangesLimit();
+    NDataShard::TLockLocker::SetTotalRangesLimit(10);
+    Y_DEFER {
+        NDataShard::TLockLocker::SetTotalRangesLimit(prevLimit);
+    };
 
-    ui32 limit = NDataShard::TLockLocker::LockLimit();
-    //const ui32 factor = 100;
+    const ui32 limit = NDataShard::TLockLocker::TotalRangesLimit();
 
     const char * setLock = R"___((
         (let range_ '('IncFrom 'IncTo '('key (Uint32 '%u) (Uint32 '%u))))
@@ -1932,14 +1942,16 @@ static void ShardLocks() {
     // Attach lots of ranges to a single lock.
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks;
     ui64 lockId = 0;
-    for (ui32 i = 0; i < limit + 1; ++i) {
+    for (ui32 i = 0; i < limit; ++i) {
+        Cout << "... reading range " << i << Endl;
         cs.Client.FlatQuery(Sprintf(setLock, i * 10, i * 10 + 5, lockId), res);
         ExtractResultLocks<TLocksVer>(res, locks);
         lockId = locks.back().LockId;
     }
 
-    // We now have too many rnages attached to locks and new lock
-    // will be forced to be shard lock.
+    // We now have too many ranges attached to locks and the oldest lock
+    // will be forced to be a shard lock.
+    Cout << "... reading additional range with a new lock" << Endl;
     cs.Client.FlatQuery(Sprintf(setLock, 0, 5, 0), res);
     ExtractResultLocks<TLocksVer>(res, locks);
 
@@ -1953,6 +1965,7 @@ static void ShardLocks() {
         ))
     ))___";
     {
+        Cout << "... checking the last lock (must be set)" << Endl;
         cs.Client.FlatQuery(Sprintf(checkLock,
                                     TLocksVer::TableName(),
                                     TLocksVer::Key(locks.back().LockId,
@@ -1969,9 +1982,11 @@ static void ShardLocks() {
         UNIT_ASSERT_VALUES_EQUAL(lock.Counter, locks.back().Counter);
     }
 
-    // Break locks by single row update.
+    // Upsert key 48, which does not conflict with either lock.
+    // However since the first lock is forced to be a shard lock it will break.
+    Cout << "... upserting key 48 (will break the first lock despite no conflicts)" << Endl;
     const char * lockUpdate = R"___((
-        (let row0_ '('('key (Uint32 '42))))
+        (let row0_ '('('key (Uint32 '48))))
         (let update_ '('('value (Uint32 '0))))
         (let ret_ (AsList
             (UpdateRow '/dc-1/Dir/A row0_ update_)
@@ -1980,8 +1995,9 @@ static void ShardLocks() {
     ))___";
     cs.Client.FlatQuery(lockUpdate, opts, res);
 
-    // Check locks are broken.
+    // Check the last lock is not broken.
     {
+        Cout << "... checking the last lock (must not be broken)" << Endl;
         cs.Client.FlatQuery(Sprintf(checkLock,
                                     TLocksVer::TableName(),
                                     TLocksVer::Key(locks.back().LockId,
@@ -1991,10 +2007,16 @@ static void ShardLocks() {
                                     TLocksVer::Columns()), res);
         TValue result = TValue::Create(res.GetValue(), res.GetType());
         TValue xres = result["Result"];
-        UNIT_ASSERT(!xres.HaveValue());
+        UNIT_ASSERT(xres.HaveValue());
+        auto lock = ExtractRowLock<TLocksVer>(xres);
+        UNIT_ASSERT_VALUES_EQUAL(lock.LockId, locks.back().LockId);
+        UNIT_ASSERT_VALUES_EQUAL(lock.Generation, locks.back().Generation);
+        UNIT_ASSERT_VALUES_EQUAL(lock.Counter, locks.back().Counter);
     }
 
+    // Check the first lock is broken.
     {
+        Cout << "... checking the first lock (must be broken)" << Endl;
         cs.Client.FlatQuery(Sprintf(checkLock,
                                     TLocksVer::TableName(),
                                     TLocksVer::Key(locks[0].LockId,

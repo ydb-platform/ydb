@@ -4,9 +4,8 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
-TIMEOUT(600)
-
 PEERDIR(
+    ydb/core/tx/datashard/ut_common
     ydb/core/tx/replication/ut_helpers
     library/cpp/string_utils/base64
     library/cpp/testing/unittest

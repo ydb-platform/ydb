@@ -1165,7 +1165,7 @@ Y_UNIT_TEST_SUITE(TStringConversionTest) {
         std::string_view stdAbra = abra;
         UNIT_ASSERT_VALUES_EQUAL(stdAbra, "cadabra");
     }
-}
+} // Y_UNIT_TEST_SUITE(TStringConversionTest)
 
 Y_UNIT_TEST_SUITE(HashFunctorTests) {
     Y_UNIT_TEST(TestTransparency) {
@@ -1178,7 +1178,7 @@ Y_UNIT_TEST_SUITE(HashFunctorTests) {
         UNIT_ASSERT_VALUES_EQUAL(h(ptr), h(str));
         UNIT_ASSERT_VALUES_EQUAL(h(ptr), h(stdStr));
     }
-}
+} // Y_UNIT_TEST_SUITE(HashFunctorTests)
 
 #if !defined(TSTRING_IS_STD_STRING)
 Y_UNIT_TEST_SUITE(StdNonConformant) {
@@ -1208,7 +1208,7 @@ Y_UNIT_TEST_SUITE(StdNonConformant) {
         UNIT_ASSERT_VALUES_EQUAL(s, "xabc");
         UNIT_ASSERT_VALUES_EQUAL(TString(s.c_str()), "xabc");
     }
-}
+} // Y_UNIT_TEST_SUITE(StdNonConformant)
 #endif
 
 Y_UNIT_TEST_SUITE(Interop) {
@@ -1243,4 +1243,16 @@ Y_UNIT_TEST_SUITE(Interop) {
     Y_UNIT_TEST(TestTemp) {
         UNIT_ASSERT_VALUES_EQUAL("x" + ConstRef(TString("y")), "xy");
     }
-}
+
+    static void ComparePointers(const std::string& s, const void* expected, TStringBuf descr) {
+        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<const void*>(s.c_str()), expected, descr);
+    }
+
+    Y_UNIT_TEST(TestConstShared) {
+        TString s(600, 'a');
+        const void* stringStart = s.c_str();
+        ComparePointers(s, stringStart, "unique");
+        TString shared{s};
+        ComparePointers(s, stringStart, "shared"); // converting a TString to a `const std::string&` should not cause data cloning
+    }
+} // Y_UNIT_TEST_SUITE(Interop)

@@ -10,7 +10,7 @@
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
-#include <ydb/library/yql/utils/bind_in_range.h>
+#include <yql/essentials/utils/network/bind_in_range.h>
 
 #include <util/system/file.h>
 #include <util/stream/str.h>

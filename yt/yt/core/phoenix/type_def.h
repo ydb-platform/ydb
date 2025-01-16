@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -28,9 +28,12 @@ struct _
 //! Defines a Phoenix-enabled opaque class.
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type, typeTagValue)
 
+//! A handy helper for registering Phoenix fields.
+#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...)
+
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 
 #define TYPE_DEF_INL_H_
 #include "type_def-inl.h"

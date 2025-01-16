@@ -11,12 +11,14 @@ PY_SRCS(
     node_modules_bundler.py
     package_json.py
     package_manager.py
+    timeit.py
     utils.py
 )
 
 PEERDIR(
     contrib/python/six
     library/python/archive
+    devtools/frontend_build_platform/libraries/logging
 )
 
 END()

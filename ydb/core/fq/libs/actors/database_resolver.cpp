@@ -4,11 +4,11 @@
 #include <ydb/core/fq/libs/common/cache.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/fq/libs/exceptions/exceptions.h>
+#include <yql/essentials/utils/exceptions.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -29,7 +29,7 @@ using TParser = std::function<TDatabaseDescription(
         NJson::TJsonValue& body,
         const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
         bool useTls,
-        NConnector::NApi::EProtocol protocol
+        NYql::EGenericProtocol protocol
 )>;
 using TParsers = THashMap<NYql::EDatabaseType, TParser>;
 
@@ -213,11 +213,13 @@ private:
                 DatabaseId2Description[std::make_pair(params.Id, params.DatabaseType)] = description;
                 result.ConstructInPlace(description);
                 return "";
-            } catch (const TCodeLineException& ex) {
+            } catch (const NYql::TCodeLineException& ex) {
+                LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): " << ex.what());
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << ex.GetRawMessage();
             } catch (...) {
+                LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): " << CurrentExceptionMessage());
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << CurrentExceptionMessage();
@@ -290,7 +292,7 @@ public:
             .SetErrorTtl(TDuration::Minutes(1))
             .SetMaxSize(1000000))
     {
-        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&, bool, NConnector::NApi::EProtocol) {
+        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&, bool, NYql::EGenericProtocol) {
             bool secure = false;
             TString endpoint = databaseInfo.GetMap().at("endpoint").GetStringRobust();
             TString prefix("/?database=");
@@ -331,7 +333,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol)
+            NYql::EGenericProtocol protocol)
         {
             auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls, protocol);
             // TODO: Take explicit field from MVP
@@ -347,7 +349,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol
+            NYql::EGenericProtocol protocol
             ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
@@ -359,7 +361,7 @@ public:
             }
 
             if (aliveHosts.empty()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -378,7 +380,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol
+            NYql::EGenericProtocol protocol
             ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
@@ -407,7 +409,7 @@ public:
             }
             
             if (aliveHosts.empty()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -425,7 +427,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol
+            NYql::EGenericProtocol protocol
             ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TString aliveHost;
@@ -445,7 +447,7 @@ public:
             }
     
             if (aliveHost == "") {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -463,7 +465,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol
+            NYql::EGenericProtocol protocol
             ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
@@ -495,7 +497,7 @@ public:
             }
 
             if (aliveHosts.empty()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -584,7 +586,7 @@ private:
             try {
                 TString url;
                 if (IsIn({NYql::EDatabaseType::Ydb, NYql::EDatabaseType::DataStreams }, databaseType)) {
-                    YQL_ENSURE(ev->Get()->YdbMvpEndpoint.Size() > 0, "empty YDB MVP Endpoint");
+                    YQL_ENSURE(ev->Get()->YdbMvpEndpoint.size() > 0, "empty YDB MVP Endpoint");
                     url = TUrlBuilder(ev->Get()->YdbMvpEndpoint + "/database")
                             .AddUrlParam("databaseId", databaseId)
                             .Build();

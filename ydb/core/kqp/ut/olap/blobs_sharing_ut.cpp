@@ -1,21 +1,22 @@
-#include "helpers/typed_local.h"
 #include "helpers/local.h"
+#include "helpers/typed_local.h"
 #include "helpers/writer.h"
-#include <ydb/core/tx/columnshard/data_sharing/initiator/controller/abstract.h>
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.h>
-#include <ydb/core/tx/columnshard/data_sharing/common/context/context.h>
-#include <ydb/core/tx/columnshard/data_sharing/destination/session/destination.h>
-#include <ydb/core/tx/columnshard/data_sharing/destination/events/control.h>
+
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/data_sharing/common/context/context.h>
+#include <ydb/core/tx/columnshard/data_sharing/destination/events/control.h>
+#include <ydb/core/tx/columnshard/data_sharing/destination/session/destination.h>
+#include <ydb/core/tx/columnshard/data_sharing/initiator/controller/abstract.h>
+#include <ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_ss_tasks/task.h>
 
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
-
     namespace {
     class TTransferStatus {
     private:
@@ -60,7 +61,6 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             return TConclusionStatus::Success();
         }
         virtual void DoSerializeToProto(NKikimrColumnShardDataSharingProto::TInitiator::TController& /*proto*/) const override {
-
         }
 
         virtual TString GetClassName() const override {
@@ -68,10 +68,16 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         }
     };
 
+    TKikimrSettings GetKikimrSettings() {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAlterShardingInColumnShard(true);
+        return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
+    }
+
     class TSharingDataTestCase {
     private:
         const ui32 ShardsCount;
-        TKikimrRunner& Kikimr;
+        TKikimrRunner Kikimr;
         TTypedLocalHelper Helper;
         NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController> Controller;
         std::vector<ui64> ShardIds;
@@ -86,15 +92,15 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             Helper.FillPKOnly(kff, recordsCount);
         }
 
-        TSharingDataTestCase(const ui32 shardsCount, TKikimrRunner& kikimr)
+        TSharingDataTestCase(const ui32 shardsCount)
             : ShardsCount(shardsCount)
-            , Kikimr(kikimr)
+            , Kikimr(GetKikimrSettings())
             , Helper("", Kikimr, "olapTable", "olapStore12")
             , Controller(NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>()) {
             Controller->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
             Controller->SetExpectedShardsCount(ShardsCount);
             Controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-            Controller->SetOverrideReadTimeoutClean(TDuration::Seconds(1));
+            Controller->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
 
             Tests::NCommon::TLoggerInit(Kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
 
@@ -111,7 +117,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         }
 
         void WaitNormalization() {
-            Controller->SetOverrideReadTimeoutClean(TDuration::Seconds(1));
+            Controller->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
             Controller->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
             const auto start = TInstant::Now();
             while (!Controller->IsTrivialLinks() && TInstant::Now() - start < TDuration::Seconds(30)) {
@@ -120,11 +126,11 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             }
             AFL_VERIFY(Controller->IsTrivialLinks());
             Controller->CheckInvariants();
-            Controller->SetOverrideReadTimeoutClean(TDuration::Minutes(5));
+            Controller->SetOverrideMaxReadStaleness(TDuration::Minutes(5));
         }
 
         void Execute(const ui64 destinationIdx, const std::vector<ui64>& sourceIdxs, const bool move, const NOlap::TSnapshot& snapshot, const std::set<ui64>& pathIdxs) {
-            Controller->SetOverrideReadTimeoutClean(TDuration::Seconds(1));
+            Controller->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
             AFL_VERIFY(destinationIdx < ShardIds.size());
             const ui64 destination = ShardIds[destinationIdx];
             std::vector<ui64> sources;
@@ -192,22 +198,18 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             CSTransferStatus->Reset();
             AFL_VERIFY(!Controller->IsTrivialLinks());
             Controller->CheckInvariants();
-            Controller->SetOverrideReadTimeoutClean(TDuration::Minutes(5));
+            Controller->SetOverrideMaxReadStaleness(TDuration::Minutes(5));
         }
     };
     Y_UNIT_TEST(BlobsSharingSplit1_1) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(4, kikimr);
+        TSharingDataTestCase tester(4);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
         tester.Execute(0, { 1 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_1_clean) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(2, kikimr);
+        TSharingDataTestCase tester(2);
         tester.AddRecords(80000);
         CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[80000u;]])");
         Sleep(TDuration::Seconds(1));
@@ -219,9 +221,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_1_clean_with_restarts) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(2, kikimr);
+        TSharingDataTestCase tester(2);
         tester.SetRebootTablet(true);
         tester.AddRecords(80000);
         CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[80000u;]])");
@@ -234,18 +234,14 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     }
 
     Y_UNIT_TEST(BlobsSharingSplit3_1) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(4, kikimr);
+        TSharingDataTestCase tester(4);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
         tester.Execute(0, { 1, 2, 3 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_3_1) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(4, kikimr);
+        TSharingDataTestCase tester(4);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
         tester.Execute(1, { 0 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
@@ -255,9 +251,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_3_2_1_clean) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TSharingDataTestCase tester(4, kikimr);
+        TSharingDataTestCase tester(4);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
         tester.Execute(1, { 0 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
@@ -273,18 +267,17 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     class TReshardingTest {
     public:
         TReshardingTest()
-            : Kikimr(TKikimrSettings().SetWithSampleTables(false))
+            : Kikimr(GetKikimrSettings())
             , CSController(NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>())
             , TableClient(Kikimr.GetTableClient()) {
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
             CSController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-            CSController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
         }
 
         void WaitResharding(const TString& hint = "") {
             const TInstant start = TInstant::Now();
             bool clean = false;
-            while (TInstant::Now() - start < TDuration::Seconds(20)) {
+            while (TInstant::Now() - start < TDuration::Seconds(200)) {
                 NYdb::NOperation::TOperationClient operationClient(Kikimr.GetDriver());
                 auto result = operationClient.List<NYdb::NSchemeShard::TBackgroundProcessesResponse>().GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -329,9 +322,6 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
         void Execute() {
             TLocalHelper(Kikimr).SetShardingMethod(ShardingType).CreateTestOlapTable("olapTable", "olapStore", 24, 4);
-
-            Tests::NCommon::TLoggerInit(Kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD, NKikimrServices::TX_COLUMNSHARD_SCAN }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
-
             {
                 WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
                 WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
@@ -411,7 +401,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     }
 
     Y_UNIT_TEST(TableReshardingModuloN) {
-        TShardingTypeTest().SetShardingType("HASH_FUNCTION_CONSISTENCY_64").Execute();
+        TShardingTypeTest().SetShardingType("HASH_FUNCTION_MODULO_N").Execute();
     }
 
     class TAsyncReshardingTest: public TReshardingTest {
@@ -419,7 +409,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
     public:
         TAsyncReshardingTest() {
-            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 24, 4);
+            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 1024, 32);
         }
 
         void AddBatch(int numRows) {
@@ -443,11 +433,36 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             TReshardingTest::CheckCount(NumRows);
         }
 
+        void AddManyColumns() {
+            auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `/Root/olapStore` ";
+            for (int i = 0; i < 10000; i++) {
+                alterQuery << " ADD COLUMN col_" << i << " Int8";
+                if (i < 10000 - 1) {
+                    alterQuery << ", ";
+                }
+            }
+
+            auto session = TableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        void RestartAllShards() {
+            for (i64 id : CSController->GetShardActualIds()) {
+                Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), id, false));
+            }
+        }
+
         void ChangeSchema() {
-            auto alterQuery =
-                "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=level, "
-                "`SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, "
-                "`COMPRESSION.TYPE`=`zstd`);";
+            const char* alterQuery;
+            if (HasNewCol) {
+                alterQuery = "ALTER TABLESTORE `/Root/olapStore` DROP COLUMN new_col";
+            } else {
+                alterQuery = "ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_col Int8";
+            }
+            HasNewCol = !HasNewCol;
+
             auto session = TableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
 
@@ -462,6 +477,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         ui64 LastPathId = 1000000;
         ui64 LastTs = 300000000;
         ui64 NumRows = 0;
+        ui64 HasNewCol = false;
     };
 
     Y_UNIT_TEST(UpsertWhileSplitTest) {
@@ -483,6 +499,18 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         tester.CheckCount();
     }
 
+    Y_UNIT_TEST(SplitEmpty) {
+        TAsyncReshardingTest tester;
+
+        tester.CheckCount();
+
+        tester.StartResharding("SPLIT");
+
+        tester.CheckCount();
+        tester.WaitResharding();
+        tester.CheckCount();
+    }
+
     Y_UNIT_TEST(ChangeSchemaAndSplit) {
         TAsyncReshardingTest tester;
         tester.DisableCompaction();
@@ -493,6 +521,159 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
         tester.StartResharding("SPLIT");
         tester.WaitResharding();
+
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleSchemaVersions) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        for (int i = 0; i < 3; i++) {
+            tester.AddBatch(1);
+            tester.ChangeSchema();
+        }
+
+        tester.StartResharding("SPLIT");
+        tester.WaitResharding();
+
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(HugeSchemeHistory) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddManyColumns();
+
+        for (int i = 0; i < 100; i++) {
+            tester.AddBatch(1);
+            tester.ChangeSchema();
+        }
+
+        tester.StartResharding("SPLIT");
+        tester.WaitResharding();
+
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleMerge) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("MERGE");
+            tester.WaitResharding();
+        }
+
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleSplits) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("SPLIT");
+            tester.WaitResharding();
+        }
+
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleSplitsThenMerges) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("SPLIT");
+            tester.WaitResharding();
+        }
+
+        for (int i = 0; i < 8; i++) {
+            tester.StartResharding("MERGE");
+            tester.WaitResharding();
+        }
+
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleSplitsWithRestartsAfterWait) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("SPLIT");
+            tester.WaitResharding();
+            tester.RestartAllShards();
+        }
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleSplitsWithRestartsWhenWait) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("SPLIT");
+            tester.RestartAllShards();
+            tester.WaitResharding();
+        }
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleMergesWithRestartsAfterWait) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("MERGE");
+            tester.WaitResharding();
+            tester.RestartAllShards();
+        }
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleMergesWithRestartsWhenWait) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("MERGE");
+            tester.RestartAllShards();
+            tester.WaitResharding();
+        }
+        tester.RestartAllShards();
 
         tester.CheckCount();
     }

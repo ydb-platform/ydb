@@ -1,9 +1,7 @@
 #include "options.h"
 
-#include <util/folder/dirut.h>
-#include <util/folder/path.h>
+#include <yt/yt/library/auth/auth.h>
 
-#include <util/stream/file.h>
 #include <util/string/strip.h>
 
 #include <util/system/env.h>
@@ -12,34 +10,23 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NApi::TClientOptions GetClientOpsFromEnv()
+NApi::TClientOptions GetClientOptionsFromEnv()
 {
-    NApi::TClientOptions options;
+    NApi::TClientOptions options {
+        .Token = NAuth::LoadToken(),
+    };
 
     auto user = Strip(GetEnv("YT_USER"));
     if (!user.empty()) {
         options.User = user;
     }
 
-    auto token = Strip(GetEnv("YT_TOKEN"));
-    if (!token.empty()) {
-        options.Token = token;
-    } else {
-        auto tokenPath = Strip(GetEnv("YT_TOKEN_PATH"));
-        if (tokenPath.empty()) {
-            tokenPath = GetHomeDir() + "/.yt/token";
-        }
-        TFsPath path(tokenPath);
-        if (path.IsFile()) {
-            options.Token = Strip(TIFStream(path).ReadAll());
-        }
-    }
     return options;
 }
 
-const NApi::TClientOptions& GetClientOpsFromEnvStatic()
+const NApi::TClientOptions& GetClientOptionsFromEnvStatic()
 {
-    static const NApi::TClientOptions options = GetClientOpsFromEnv();
+    static const NApi::TClientOptions options = GetClientOptionsFromEnv();
     return options;
 }
 

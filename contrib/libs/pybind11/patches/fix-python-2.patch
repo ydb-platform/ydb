@@ -1,0 +1,60 @@
+--- contrib/libs/pybind11/include/pybind11/detail/class.h	(index)
++++ contrib/libs/pybind11/include/pybind11/detail/class.h	(working tree)
+@@ -628,6 +628,9 @@ extern "C" inline int pybind11_getbuffer(PyObject *obj, Py_buffer *view, int fla
+         return -1;
+     }
+     std::memset(view, 0, sizeof(Py_buffer));
++#if PY_MAJOR_VERSION < 3
++    buffer_info *info = tinfo->get_buffer(obj, tinfo->get_buffer_data);
++#else
+     buffer_info *info = nullptr;
+     try {
+         info = tinfo->get_buffer(obj, tinfo->get_buffer_data);
+@@ -639,6 +642,7 @@ extern "C" inline int pybind11_getbuffer(PyObject *obj, Py_buffer *view, int fla
+     if (info == nullptr) {
+         pybind11_fail("FATAL UNEXPECTED SITUATION: tinfo->get_buffer() returned nullptr.");
+     }
++#endif
+ 
+     if ((flags & PyBUF_WRITABLE) == PyBUF_WRITABLE && info->readonly) {
+         delete info;
+--- contrib/libs/pybind11/include/pybind11/detail/type_caster_base.h	(index)
++++ contrib/libs/pybind11/include/pybind11/detail/type_caster_base.h	(working tree)
+@@ -12,7 +12,9 @@
+ #include <pybind11/pytypes.h>
+ 
+ #include "common.h"
++#if PY_MAJOR_VERSION >= 3
+ #include "cpp_conduit.h"
++#endif
+ #include "descr.h"
+ #include "internals.h"
+ #include "typeid.h"
+@@ -624,6 +626,7 @@ public:
+         }
+         return false;
+     }
++#if PY_MAJOR_VERSION >= 3
+     bool try_cpp_conduit(handle src) {
+         value = try_raw_pointer_ephemeral_from_cpp_conduit(src, cpptype);
+         if (value != nullptr) {
+@@ -631,6 +634,7 @@ public:
+         }
+         return false;
+     }
++#endif
+     void check_holder_compat() {}
+ 
+     PYBIND11_NOINLINE static void *local_load(PyObject *src, const type_info *ti) {
+@@ -762,9 +766,11 @@ public:
+             return true;
+         }
+ 
++#if PY_MAJOR_VERSION >= 3
+         if (convert && cpptype && this_.try_cpp_conduit(src)) {
+             return true;
+         }
++#endif
+ 
+         return false;
+     }

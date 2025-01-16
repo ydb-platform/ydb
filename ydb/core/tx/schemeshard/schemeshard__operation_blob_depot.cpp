@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
+#include <ydb/core/blob_depot/events.h>
 
 namespace NKikimr::NSchemeShard {
 

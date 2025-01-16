@@ -67,6 +67,11 @@ void TQueryBuilder::AddGroupByExpression(TString expression, TString alias)
     });
 }
 
+void TQueryBuilder::SetWithTotals(EWithTotalsMode withTotalsMode)
+{
+    WithTotalsMode_ = withTotalsMode;
+}
+
 void TQueryBuilder::AddHavingConjunct(TString expression)
 {
     HavingConjuncts_.push_back(std::move(expression));
@@ -151,12 +156,20 @@ TString TQueryBuilder::Build()
         parts.push_back(JoinSeq(", ", GroupByEntries_));
     }
 
+    if (WithTotalsMode_ == EWithTotalsMode::BeforeHaving) {
+        parts.push_back("WITH TOTALS");
+    }
+
     if (!HavingConjuncts_.empty()) {
         if (GroupByEntries_.empty()) {
             THROW_ERROR_EXCEPTION("Having without group by is not valid");
         }
         parts.push_back("HAVING");
         parts.push_back(JoinSeq(" AND ", Parenthesize(HavingConjuncts_)));
+    }
+
+    if (WithTotalsMode_ == EWithTotalsMode::AfterHaving) {
+        parts.push_back("WITH TOTALS");
     }
 
     if (!OrderByEntries_.empty()) {

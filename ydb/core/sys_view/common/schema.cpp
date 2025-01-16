@@ -1,7 +1,7 @@
 #include "schema.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -21,7 +21,7 @@ TVector<Schema::PgColumn> GetPgStaticTableColumns(const TString& schema, const T
 
 Schema::PgColumn::PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName)
     : _ColumnId(columnId)
-    , _ColumnTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(NYql::NPg::LookupType(TString(columnTypeName)).TypeId))
+    , _ColumnTypeInfo(NPg::TypeDescFromPgTypeId(NYql::NPg::LookupType(TString(columnTypeName)).TypeId))
     , _ColumnName(columnName)
 {}
 
@@ -286,6 +286,14 @@ private:
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);
 
         RegisterPgTablesSystemViews();
+
+        {
+            using namespace NAuth;
+            RegisterSystemView<Schema::AuthUsers>(UsersName);
+            RegisterSystemView<Schema::AuthGroups>(NAuth::GroupsName);
+            RegisterSystemView<Schema::AuthGroupMembers>(GroupMembersName);
+            RegisterSystemView<Schema::AuthOwners>(OwnersName);
+        }
     }
 
 private:

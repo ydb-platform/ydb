@@ -35,7 +35,7 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TFetchScriptResultsRPC(TEvFetchScriptResultsRequest* request)
+    TFetchScriptResultsRPC(IRequestNoOpCtx* request)
         : TRpcRequestActorBase(request)
     {}
 
@@ -57,7 +57,7 @@ public:
         }
 
         RowsOffset = 0;
-        if (!req->fetch_token().Empty()) {
+        if (!req->fetch_token().empty()) {
             auto fetch_token = TryFromString<ui64>(req->fetch_token());
             if (fetch_token) {
                 RowsOffset = *fetch_token;
@@ -108,10 +108,7 @@ private:
 
         result.set_status(status);
 
-        TString serializedResult;
-        Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToString(&serializedResult);
-
-        Request->SendSerializedResult(std::move(serializedResult), status);
+        TProtoResponseHelper::SendProtoResponse(result, status, Request);
 
         PassAway();
     }
@@ -152,6 +149,11 @@ void DoFetchScriptResults(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityPro
     f.RegisterActor(new TFetchScriptResultsRPC(req));
 }
 
+}
+
+template<>
+IActor* TEvFetchScriptResultsRequest::CreateRpcActor(IRequestNoOpCtx* msg) {
+    return new TFetchScriptResultsRPC(msg);
 }
 
 } // namespace NKikimr::NGRpcService

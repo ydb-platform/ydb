@@ -132,13 +132,13 @@ void TCommandExportToYt::Config(TConfig& config) {
         .NoArgument().StoreTrue(&UseTypeV3);
 
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
 void TCommandExportToYt::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     ParseYtProxy(config, "proxy");
     ParseYtToken(config, "token");
@@ -211,7 +211,12 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
-    config.Opts->AddLongOption("scheme", "S3 endpoint scheme")
+    auto colors = NColorizer::AutoColors(Cout);
+    config.Opts->AddLongOption("scheme", TStringBuilder()
+            << "S3 endpoint scheme - "
+            << colors.BoldColor() << "http" << colors.OldColor()
+            << " or "
+            << colors.BoldColor() << "https" << colors.OldColor())
         .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme);
 
     TStringBuilder storageClassHelp;
@@ -274,20 +279,25 @@ void TCommandExportToS3::Config(TConfig& config) {
             << "Codec used to compress data" << Endl
             << "  Available options:" << Endl
             << "    - zstd" << Endl
-            << "    - zstd-N (N is compression level, e.g. zstd-3)" << Endl)
+            << "    - zstd-N (N is compression level in range [1, 22], e.g. zstd-3)" << Endl)
         .RequiredArgument("STRING").StoreResult(&Compression);
 
-    config.Opts->AddLongOption("use-virtual-addressing", "S3 bucket virtual addressing")
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder() 
+            << "Sets bucket URL style. Value "
+            << colors.BoldColor() << "true" << colors.OldColor()
+            << " means use Virtual-Hosted-Style URL, "
+            << colors.BoldColor() << "false" << colors.OldColor()
+            << " - Path-Style URL.")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
 void TCommandExportToS3::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     ParseAwsProfile(config, "aws-profile");
     ParseAwsAccessKey(config, "access-key");

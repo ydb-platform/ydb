@@ -20,7 +20,7 @@ class TJsonWriter
 {
 public:
     TJsonWriter(IOutputStream* output, bool isPretty);
-    virtual ~TJsonWriter() override;
+    ~TJsonWriter() override;
 
     void Flush() override;
     void OnStringScalar(TStringBuf value) override;
@@ -202,7 +202,7 @@ void TJsonWriter::Flush()
 {
     auto buf = GetBuffer();
     Output_->Write(buf);
-    WrittenToOutputByteCount_ += buf.Size();
+    WrittenToOutputByteCount_ += buf.size();
     yajl_gen_clear(Handle_);
 }
 
@@ -288,7 +288,7 @@ void TJsonWriter::OnRaw(TStringBuf /*yson*/, NYT::NYson::EYsonType /*type*/)
 
 ui64 TJsonWriter::GetWrittenByteCount() const
 {
-    return GetBuffer().Size() + WrittenToOutputByteCount_;
+    return GetBuffer().size() + WrittenToOutputByteCount_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

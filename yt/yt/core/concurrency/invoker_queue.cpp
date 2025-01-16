@@ -269,10 +269,17 @@ public:
         }
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& callback) override
     {
         if (auto queue = Queue_.Lock()) {
-            queue->RegisterWaitTimeObserver(waitTimeObserver);
+            queue->SubscribeWaitTimeObserved(callback);
+        }
+    }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& callback) override
+    {
+        if (auto queue = Queue_.Lock()) {
+            queue->UnsubscribeWaitTimeObserved(callback);
         }
     }
 
@@ -368,7 +375,7 @@ template <class TQueueImpl>
 TInvokerQueue<TQueueImpl>::TInvokerQueue(
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
     const TTagSet& counterTagSet,
-    NProfiling::IRegistryImplPtr registry)
+    NProfiling::IRegistryPtr registry)
     : CallbackEventCount_(std::move(callbackEventCount))
 {
     Counters_.push_back(CreateCounters(counterTagSet, std::move(registry)));
@@ -379,7 +386,7 @@ TInvokerQueue<TQueueImpl>::TInvokerQueue(
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
     const std::vector<TTagSet>& counterTagSets,
     const std::vector<NYTProf::TProfilerTagPtr>& profilerTags,
-    NProfiling::IRegistryImplPtr registry)
+    NProfiling::IRegistryPtr registry)
     : CallbackEventCount_(std::move(callbackEventCount))
 {
     YT_VERIFY(counterTagSets.size() == profilerTags.size());
@@ -597,9 +604,7 @@ bool TInvokerQueue<TQueueImpl>::BeginExecute(TEnqueuedAction* action, typename T
 
     auto waitTime = CpuDurationToDuration(action->StartedAt - action->EnqueuedAt);
 
-    if (IsWaitTimeObserverSet_.load()) {
-        WaitTimeObserver_(waitTime);
-    }
+    WaitTimeObserved_.Fire(waitTime);
 
     if (Counters_[action->ProfilingTag]) {
         Counters_[action->ProfilingTag]->DequeuedCounter.Increment();
@@ -676,17 +681,19 @@ IInvoker* TInvokerQueue<TQueueImpl>::GetProfilingTagSettingInvoker(int profiling
 }
 
 template <class TQueueImpl>
-void TInvokerQueue<TQueueImpl>::RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver)
+void TInvokerQueue<TQueueImpl>::SubscribeWaitTimeObserved(const TWaitTimeObserver& callback)
 {
-    WaitTimeObserver_ = waitTimeObserver;
-    auto alreadyInitialized = IsWaitTimeObserverSet_.exchange(true);
-
-    // Multiple observers are forbidden.
-    YT_VERIFY(!alreadyInitialized);
+    WaitTimeObserved_.Subscribe(callback);
 }
 
 template <class TQueueImpl>
-typename TInvokerQueue<TQueueImpl>::TCountersPtr TInvokerQueue<TQueueImpl>::CreateCounters(const TTagSet& tagSet, NProfiling::IRegistryImplPtr registry)
+void TInvokerQueue<TQueueImpl>::UnsubscribeWaitTimeObserved(const TWaitTimeObserver& callback)
+{
+    WaitTimeObserved_.Unsubscribe(callback);
+}
+
+template <class TQueueImpl>
+typename TInvokerQueue<TQueueImpl>::TCountersPtr TInvokerQueue<TQueueImpl>::CreateCounters(const TTagSet& tagSet, NProfiling::IRegistryPtr registry)
 {
     auto profiler = TProfiler(registry, "/action_queue").WithTags(tagSet).WithHot();
 

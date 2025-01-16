@@ -18,13 +18,13 @@ select
  		     sum(ss_sales_price) as revenue
  		from {{store_sales}} as store_sales
         cross join {{date_dim}} as date_dim
- 		where ss_sold_date_sk = d_date_sk and d_month_seq between 1186 and 1186+11
+ 		where ss_sold_date_sk = d_date_sk and d_month_seq between 1176 and 1176+11
  		group by store_sales.ss_store_sk, store_sales.ss_item_sk) sa
  	group by ss_store_sk) sb cross join
      (select  store_sales.ss_store_sk ss_store_sk, store_sales.ss_item_sk ss_item_sk, sum(ss_sales_price) as revenue
  	from {{store_sales}} as store_sales
     cross join {{date_dim}} as date_dim
- 	where ss_sold_date_sk = d_date_sk and d_month_seq between 1186 and 1186+11
+ 	where ss_sold_date_sk = d_date_sk and d_month_seq between 1176 and 1176+11
  	group by store_sales.ss_store_sk, store_sales.ss_item_sk) sc
  where sb.ss_store_sk = sc.ss_store_sk and
        sc.revenue <= $z0_1_35 * sb.ave and

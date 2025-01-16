@@ -1,16 +1,19 @@
 #include "ydb_tools.h"
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/pg_dump_parser.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
-#include <ydb/library/backup/backup.h>
 #include <ydb/library/backup/util.h>
 
+#include <library/cpp/regex/pcre/regexp.h>
+
+#include <util/generic/serialized_enum.h>
 #include <util/stream/format.h>
 #include <util/string/split.h>
-
-#include <algorithm>
-#include <queue>
 
 namespace NYdb::NConsoleClient {
 
@@ -54,28 +57,31 @@ void TCommandDump::Config(TConfig& config) {
     config.Opts->AddLongOption('o', "output", "[Required] Path in a local filesystem to a directory to place dump into."
             " Directory should either not exist or be empty.")
         .StoreResult(&FilePath);
+
+    NDump::TDumpSettings defaults;
+
     config.Opts->AddLongOption("scheme-only", "Dump only scheme including ACL and owner")
-        .StoreTrue(&IsSchemeOnly);
+        .DefaultValue(defaults.SchemaOnly_).StoreTrue(&IsSchemeOnly);
     config.Opts->AddLongOption("avoid-copy", "Avoid copying."
             " By default, YDB makes a copy of a table before dumping it to reduce impact on workload and ensure consistency.\n"
             "In some cases (e.g. for tables with external blobs) copying should be disabled.")
-        .StoreTrue(&AvoidCopy);
+        .DefaultValue(defaults.AvoidCopy_).StoreTrue(&AvoidCopy);
     config.Opts->AddLongOption("save-partial-result", "Do not remove partial dump result."
             " If this option is not enabled, all files that have already been created will be removed in case of error.")
-        .StoreTrue(&SavePartialResult);
+        .DefaultValue(defaults.SavePartialResult_).StoreTrue(&SavePartialResult);
     config.Opts->AddLongOption("preserve-pool-kinds", "Preserve storage pool kind settings."
             " If this option is enabled, storage pool kind will be saved to dump."
             " In this case, if there will be no such storage pool kind in database on restore, error will occur."
             " By default this option is disabled and any existing storage pool kind will be used on restore.")
-        .StoreTrue(&PreservePoolKinds);
+        .DefaultValue(defaults.PreservePoolKinds_).StoreTrue(&PreservePoolKinds);
     config.Opts->AddLongOption("consistency-level", "Consistency level."
             " Options: database, table\n"
             "database - take one consistent snapshot of all tables specified for dump."
             " Takes more time and is more likely to impact workload;\n"
             "table - take consistent snapshot per each table independently.")
-        .DefaultValue("database").StoreResult(&ConsistencyLevel);
+        .DefaultValue(defaults.ConsistencyLevel_).StoreResult(&ConsistencyLevel);
     config.Opts->AddLongOption("ordered", "Preserve order by primary key in backup files.")
-            .StoreTrue(&Ordered);
+        .DefaultValue(defaults.Ordered_).StoreTrue(&Ordered);
 }
 
 void TCommandDump::Parse(TConfig& config) {
@@ -84,29 +90,28 @@ void TCommandDump::Parse(TConfig& config) {
 }
 
 int TCommandDump::Run(TConfig& config) {
-
-    bool useConsistentCopyTable;
-    if (ConsistencyLevel == "database") {
-        useConsistentCopyTable = true;
-    } else if (ConsistencyLevel == "table") {
-        useConsistentCopyTable = false;
-    } else {
-        throw yexception() << "Incorrect consistency level. Available options: \"database\", \"table\"" << Endl;
+    NDump::TDumpSettings::EConsistencyLevel consistencyLevel;
+    if (!TryFromString<NDump::TDumpSettings::EConsistencyLevel>(ConsistencyLevel, consistencyLevel)) {
+        throw yexception() << "Incorrect consistency level."
+            " Available options: " << GetEnumAllNames<NDump::TDumpSettings::EConsistencyLevel>();
     }
 
-    NYdb::SetVerbosity(config.IsVerbose());
+    auto settings = NDump::TDumpSettings()
+        .Database(config.Database)
+        .ExclusionPatterns(std::move(ExclusionPatterns))
+        .SchemaOnly(IsSchemeOnly)
+        .ConsistencyLevel(consistencyLevel)
+        .AvoidCopy(AvoidCopy)
+        .SavePartialResult(SavePartialResult)
+        .PreservePoolKinds(PreservePoolKinds)
+        .Ordered(Ordered);
 
-    try {
-        TString relPath = NYdb::RelPathFromAbsolute(config.Database, Path);
-        NYdb::NBackup::BackupFolder(CreateDriver(config), config.Database, relPath, FilePath, ExclusionPatterns,
-            IsSchemeOnly, useConsistentCopyTable, AvoidCopy, SavePartialResult, PreservePoolKinds, Ordered);
-    } catch (const NYdb::NBackup::TYdbErrorException& e) {
-        e.LogToStderr();
-        return EXIT_FAILURE;
-    } catch (const yexception& e) {
-        Cerr << "General error, what# " << e.what() << Endl;
-        return EXIT_FAILURE;
-    }
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+
+    NDump::TClient client(CreateDriver(config), std::move(log));
+    ThrowOnError(client.Dump(Path, FilePath, settings));
+
     return EXIT_SUCCESS;
 }
 
@@ -180,8 +185,10 @@ void TCommandRestore::Config(TConfig& config) {
         .StoreTrue(&UseBulkUpsert)
         .Hidden(); // Deprecated. Using ImportData should be more effective.
 
-    config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data with lower consistency level."
-        " Global secondary indexes are not supported in this mode.")
+    config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data."
+        " ImportData will throw an error if you try to upload data into an existing table that has"
+        " secondary indexes or is in the process of building them. If you need to restore a table"
+        " with secondary indexes, make sure it's not already present in the scheme.")
         .StoreTrue(&UseImportData);
 
     config.Opts->MutuallyExclusive("bandwidth", "rps");
@@ -194,8 +201,6 @@ void TCommandRestore::Parse(TConfig& config) {
 }
 
 int TCommandRestore::Run(TConfig& config) {
-    NYdb::SetVerbosity(config.IsVerbose());
-
     auto settings = NDump::TRestoreSettings()
         .DryRun(IsDryRun)
         .RestoreData(RestoreData)
@@ -232,7 +237,10 @@ int TCommandRestore::Run(TConfig& config) {
         settings.Mode(NDump::TRestoreSettings::EMode::ImportData);
     }
 
-    NDump::TClient client(CreateDriver(config));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+
+    NDump::TClient client(CreateDriver(config), std::move(log));
     ThrowOnError(client.Restore(FilePath, Path, settings));
 
     return EXIT_SUCCESS;

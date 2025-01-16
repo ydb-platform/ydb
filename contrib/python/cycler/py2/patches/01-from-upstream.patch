@@ -1,0 +1,31 @@
+--- contrib/python/cycler/py2/cycler.py	(index)
++++ contrib/python/cycler/py2/cycler.py	(working tree)
+@@ -87,7 +87,7 @@ class Cycler(object):
+       in-place ``+``
+ 
+     ``*``
+-      for outer products (itertools.product) and integer multiplication
++      for outer products (`itertools.product`) and integer multiplication
+ 
+     ``*=``
+       in-place ``*``
+@@ -135,6 +135,9 @@ class Cycler(object):
+         self._keys = _process_keys(self._left, self._right)
+         self._op = op
+ 
++    def __contains__(self, k):
++        return k in self._keys
++
+     @property
+     def keys(self):
+         """
+@@ -367,8 +370,7 @@ class Cycler(object):
+         # and if we care.
+ 
+         keys = self.keys
+-        # change this to dict comprehension when drop 2.6
+-        out = dict((k,  list()) for k in keys)
++        out = {k: list() for k in keys}
+ 
+         for d in self:
+             for k in keys:

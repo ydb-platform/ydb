@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/core/kafka_proxy)
 
 SIZE(medium)
-TIMEOUT(600)
 
 SRCS(
     ut_kafka_functions.cpp

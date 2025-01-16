@@ -4,7 +4,7 @@ Deletes the specified table.{% if feature_mapreduce %}  The table is searched by
 
 If there is no such table, an error is returned.
 
-**Examples:**
+## Examples
 
 ```yql
 DROP TABLE my_table;

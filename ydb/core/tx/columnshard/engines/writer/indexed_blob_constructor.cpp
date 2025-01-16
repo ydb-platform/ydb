@@ -1,16 +1,16 @@
 #include "indexed_blob_constructor.h"
 
-#include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-
+#include <ydb/core/tx/columnshard/defs.h>
 
 namespace NKikimr::NOlap {
 
-TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
+TIndexedWriteController::TIndexedWriteController(
+    const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
     : Buffer(action, std::move(aggregations))
-    , DstActor(dstActor)
-{
+    , DstActor(dstActor) {
     auto blobs = Buffer.GroupIntoBlobs();
     for (auto&& b : blobs) {
         auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.ExtractBlobData(), action));
@@ -31,6 +31,26 @@ void TIndexedWriteController::DoOnStartSending() {
 void TWideSerializedBatch::InitBlobId(const TUnifiedBlobId& id) {
     AFL_VERIFY(!Range.BlobId.GetTabletId());
     Range.BlobId = id;
+}
+
+std::shared_ptr<NKikimr::NOlap::TUserData> TWideSerializedBatch::BuildInsertionUserData(const NColumnShard::TColumnShard& owner) const {
+    NKikimrTxColumnShard::TLogicalMetadata meta;
+    meta.SetNumRows(SplittedBlobs.GetRowsCount());
+    meta.SetRawBytes(SplittedBlobs.GetRawBytes());
+    meta.SetDirtyWriteTimeSeconds(GetStartInstant().Seconds());
+    meta.SetSpecialKeysRawData(SplittedBlobs.GetSpecialKeysFullSafe());
+    meta.SetSpecialKeysPayloadData(SplittedBlobs.GetSpecialKeysPayloadSafe());
+
+    const auto& blobRange = Range;
+    Y_ABORT_UNLESS(blobRange.GetBlobId().IsValid());
+
+    const auto& writeMeta = GetAggregation().GetWriteMeta();
+    meta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::SerializeToProto(writeMeta.GetModificationType()));
+    *meta.MutableSchemaSubset() = GetAggregation().GetSchemaSubset().SerializeToProto();
+    auto schemeVersion = GetAggregation().GetSchemaVersion();
+    auto tableSchema = owner.GetTablesManager().GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(schemeVersion);
+
+    return std::make_shared<NOlap::TUserData>(writeMeta.GetTableId(), blobRange, meta, tableSchema->GetVersion(), SplittedBlobs.GetData());
 }
 
 void TWritingBuffer::InitReadyInstant(const TMonotonic instant) {
@@ -89,4 +109,4 @@ TString TWritingBlob::ExtractBlobData() {
     return result;
 }
 
-}
+}   // namespace NKikimr::NOlap

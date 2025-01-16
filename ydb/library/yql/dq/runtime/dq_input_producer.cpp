@@ -2,13 +2,13 @@
 
 #include "dq_columns_resolve.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/computation/mkql_block_reader.h>
+#include <yql/essentials/minikql/computation/mkql_block_builder.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
-#include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
-#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
+#include <yql/essentials/public/udf/arrow/args_dechunker.h>
+#include <yql/essentials/public/udf/arrow/memory_pool.h>
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
@@ -345,15 +345,14 @@ TVector<std::unique_ptr<IBlockReader>> MakeReaders(const TVector<NKikimr::NMiniK
     return result;
 }
 
-TVector<std::unique_ptr<IArrayBuilder>> MakeBuilders(ui64 blockLen, const TVector<NKikimr::NMiniKQL::TType*> itemTypes) {
+TVector<std::unique_ptr<IArrayBuilder>> MakeBuilders(ui64 blockLen, const TVector<NKikimr::NMiniKQL::TType*> itemTypes, NUdf::IPgBuilder* pgBuilder) {
     TVector<std::unique_ptr<IArrayBuilder>> result;
     TTypeInfoHelper helper;
     for (auto& itemType : itemTypes) {
         if (itemType) {
             // TODO: pass memory pool
-            // TODO: IPgBuilder
             YQL_ENSURE(!itemType->IsPg(), "pg types are not supported yet");
-            result.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), blockLen, nullptr));
+            result.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), blockLen, pgBuilder));
         } else {
             result.emplace_back();
         }
@@ -380,13 +379,14 @@ class TDqInputMergeBlockStreamValue : public TComputationValue<TDqInputMergeBloc
     using TBase = TComputationValue<TDqInputMergeBlockStreamValue>;
 public:
     TDqInputMergeBlockStreamValue(TMemoryUsageInfo* memInfo, const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
-        TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats)
+        TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats,
+        NUdf::IPgBuilder* pgBuilder)
         : TBase(memInfo)
         , SortCols_(std::move(sortCols))
         , ItemTypes_(ExtractBlockItemTypes(type))
         , MaxOutputBlockLen_(CalcMaxBlockLength(ItemTypes_.begin(), ItemTypes_.end(), TTypeInfoHelper()))
         , Comparators_(MakeComparators(SortCols_, ItemTypes_))
-        , Builders_(MakeBuilders(MaxOutputBlockLen_, ItemTypes_))
+        , Builders_(MakeBuilders(MaxOutputBlockLen_, ItemTypes_, pgBuilder))
         , Factory_(factory)
         , Stats_(stats)
     {
@@ -419,6 +419,10 @@ private:
 
         bool IsEmpty() const {
             return CurrBlockIndex_ >= BlockLen_;
+        }
+
+        bool IsFinished() const {
+            return IsFinished_;
         }
 
         void NextRow() {
@@ -633,7 +637,7 @@ private:
             input.NextRow();
             InputRows_.pop_back();
             if (input.IsEmpty()) {
-                auto status = input.FetchNext();
+                auto status = FetchInput(inputIndex);
                 if (status == NUdf::EFetchStatus::Yield) {
                     StartInputIndex_ = inputIndex;
                     return status;
@@ -645,6 +649,7 @@ private:
         }
 
         if (!OutputBlockLen_) {
+            YQL_ENSURE(AllOf(InputData_, [](const TDqInputBatch& input) { return input.IsEmpty() && input.IsFinished(); }));
             return NUdf::EFetchStatus::Finish;
         }
 
@@ -745,7 +750,8 @@ NUdf::TUnboxedValue CreateInputUnionValue(const NKikimr::NMiniKQL::TType* type, 
 }
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
-    TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats)
+    TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats,
+    NUdf::IPgBuilder* pgBuilder)
 {
     ValidateInputTypes(type, inputs);
     YQL_ENSURE(!inputs.empty());
@@ -756,7 +762,7 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(const NKikimr::NMiniKQL::TTyp
             if (sortCols.empty()) {
                 return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats);
             }
-            return factory.Create<TDqInputMergeBlockStreamValue>(type, std::move(inputs), std::move(sortCols), factory, stats);
+            return factory.Create<TDqInputMergeBlockStreamValue>(type, std::move(inputs), std::move(sortCols), factory, stats, pgBuilder);
         }
         return factory.Create<TDqInputMergeStreamValue<true>>(type, std::move(inputs), std::move(sortCols), stats);
     }

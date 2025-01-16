@@ -23,12 +23,14 @@
 , где `[profile_name]` - необязательное имя профиля.
 
 Если имя профиля указано, то производится его активация. Если профиля с указанным именем не существует, то будет выдана ошибка с предложением посмотреть список доступных профилей:
-``` text
+
+```text
 No existing profile "<profile_name>". Run "ydb config profile list" without arguments to see existing profiles
 ```
 
 Если имя профиля не указано, то в интерактивном режиме будет предложено выбрать между следующими вариантами:
-``` text
+
+```text
 Please choose profile to activate:
  [1] Don't do anything, just exit
  [2] Deactivate current active profile (if any)
@@ -43,7 +45,8 @@ Please enter your numeric choice:
 - `3` и далее — активация выбранного профиля. Текущий активированный профиль отмечен как `(active)`
 
 При успешной активации профиля исполнение завершается сообщением
-``` text
+
+```text
 Profile "<profile_name>" was activated.
 ```
 
@@ -70,19 +73,19 @@ Activate profile "<profile_name>" to use by default? (current active profile is 
 
 Деактивация текущего активированного профиля выполняется командой
 
-``` bash
+```bash
 {{ ydb-cli }} config profile deactivate
 ```
 
 Если активированный профиль существовал, то выводится сообщение о его успешной деактивации:
 
-``` text
+```text
 Profile "profile_name" was deactivated.
 ```
 
 Если активированного профиля не существовало, то выводится сообщение о том что в результате исполнения команды никаких изменений не произведено:
 
-``` text
+```text
 There is no profile active. Nothing is done.
 ```
 

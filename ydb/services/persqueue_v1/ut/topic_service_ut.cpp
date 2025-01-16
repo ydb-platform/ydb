@@ -147,6 +147,8 @@ protected:
                            , NKikimrServices::KQP_EXECUTER
                            , NKikimrServices::KQP_SESSION}, NActors::NLog::PRI_DEBUG);
 
+        server->AnnoyingClient->GrantConnect(AUTH_TOKEN);   
+
         auto partsCount = 5u;
         server->AnnoyingClient->CreateTopicNoLegacy(VALID_TOPIC_PATH, partsCount,
                                                     true,

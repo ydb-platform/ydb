@@ -1,0 +1,11 @@
+--- contrib/python/pytest-asyncio/pytest_asyncio/plugin.py	(index)
++++ contrib/python/pytest-asyncio/pytest_asyncio/plugin.py	(working tree)
+@@ -78,7 +78,7 @@ def pytest_addoption(parser: Parser, pluginmanager: PytestPluginManager) -> None
+     parser.addini(
+         "asyncio_mode",
+         help="default value for --asyncio-mode",
+-        default="strict",
++        default="auto",
+     )
+ 
+ 

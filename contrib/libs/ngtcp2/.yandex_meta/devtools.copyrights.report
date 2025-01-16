@@ -1,0 +1,272 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0badd8dd1e0fa79a05753bbdaf7b9220
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_cc.c [4:4]
+        lib/ngtcp2_cc.h [4:4]
+        lib/ngtcp2_cid.c [4:4]
+        lib/ngtcp2_cid.h [4:4]
+        lib/ngtcp2_ksl.c [4:4]
+        lib/ngtcp2_ksl.h [4:4]
+        lib/ngtcp2_log.c [4:4]
+        lib/ngtcp2_log.h [4:4]
+        lib/ngtcp2_vec.c [4:4]
+        lib/ngtcp2_vec.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 277b7d2c7033dac98effbf39a0fa11c4
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2023 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_conn_stat.h [4:4]
+        lib/ngtcp2_frame_chain.c [4:4]
+        lib/ngtcp2_frame_chain.h [4:4]
+        lib/ngtcp2_pktns_id.h [4:4]
+        lib/ngtcp2_transport_params.c [4:4]
+        lib/ngtcp2_transport_params.h [4:4]
+        lib/ngtcp2_tstamp.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3782c9399af9718cb85783105b7784ae
+BELONGS ya.make
+    License text:
+           Copyright (C) 1994-1996, 1999-2002, 2004-2017, 2020-2021 Free
+        Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        INSTALL [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 45c763ee42f330d97a4b988bd6ff227d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_balloc.c [4:4]
+        lib/ngtcp2_balloc.h [4:4]
+        lib/ngtcp2_net.h [4:4]
+        lib/ngtcp2_objalloc.c [4:4]
+        lib/ngtcp2_objalloc.h [4:4]
+        lib/ngtcp2_opl.c [4:4]
+        lib/ngtcp2_opl.h [4:4]
+        lib/ngtcp2_pmtud.c [4:4]
+        lib/ngtcp2_pmtud.h [4:4]
+        lib/ngtcp2_unreachable.c [4:4]
+        lib/ngtcp2_unreachable.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4f1d12ee611509dda7cf5d5cbd920f3a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2021 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_bbr.c [4:4]
+        lib/ngtcp2_bbr.h [4:4]
+        lib/ngtcp2_window_filter.c [4:4]
+        lib/ngtcp2_window_filter.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 58664e40c9f8424ff9aaf888f8b2814d
+BELONGS ya.make
+    License text:
+        Copyright (c) 2016 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:3]
+        README.rst [357:357]
+        lib/includes/ngtcp2/version.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 94b9ad611aac02e9c9d2f6105f7ab5f2
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_settings.c [4:4]
+        lib/ngtcp2_settings.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b9bce4a8047145ca716cda7c1ba12739
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017 ngtcp2 contributors
+         * Copyright (c) 2017 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/includes/ngtcp2/ngtcp2.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc545ae6368aee638646db325e41a41c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/includes/ngtcp2/ngtcp2.h [4:5]
+        lib/ngtcp2_acktr.c [4:4]
+        lib/ngtcp2_acktr.h [4:4]
+        lib/ngtcp2_buf.c [4:4]
+        lib/ngtcp2_buf.h [4:4]
+        lib/ngtcp2_conn.c [4:4]
+        lib/ngtcp2_conn.h [4:4]
+        lib/ngtcp2_conv.c [4:4]
+        lib/ngtcp2_conv.h [4:4]
+        lib/ngtcp2_crypto.c [4:4]
+        lib/ngtcp2_crypto.h [4:4]
+        lib/ngtcp2_err.c [4:4]
+        lib/ngtcp2_err.h [4:4]
+        lib/ngtcp2_gaptr.c [4:4]
+        lib/ngtcp2_gaptr.h [4:4]
+        lib/ngtcp2_idtr.c [4:4]
+        lib/ngtcp2_idtr.h [4:4]
+        lib/ngtcp2_macro.h [4:4]
+        lib/ngtcp2_map.c [4:5]
+        lib/ngtcp2_map.h [4:5]
+        lib/ngtcp2_mem.c [4:5]
+        lib/ngtcp2_mem.h [4:5]
+        lib/ngtcp2_pkt.c [4:4]
+        lib/ngtcp2_pkt.h [4:4]
+        lib/ngtcp2_ppe.c [4:4]
+        lib/ngtcp2_ppe.h [4:4]
+        lib/ngtcp2_pq.c [4:5]
+        lib/ngtcp2_pq.h [4:5]
+        lib/ngtcp2_range.c [4:4]
+        lib/ngtcp2_range.h [4:4]
+        lib/ngtcp2_ringbuf.c [4:4]
+        lib/ngtcp2_ringbuf.h [4:4]
+        lib/ngtcp2_rob.c [4:4]
+        lib/ngtcp2_rob.h [4:4]
+        lib/ngtcp2_rtb.c [4:4]
+        lib/ngtcp2_rtb.h [4:4]
+        lib/ngtcp2_str.c [4:4]
+        lib/ngtcp2_str.h [4:4]
+        lib/ngtcp2_strm.c [4:4]
+        lib/ngtcp2_strm.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c812bfe524d8bc74ad8cf40a45902020
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017 ngtcp2 contributors
+         * Copyright (c) 2012 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_map.c [4:5]
+        lib/ngtcp2_map.h [4:5]
+        lib/ngtcp2_pq.c [4:5]
+        lib/ngtcp2_pq.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d8ca50c11a8cd311a31e6462c4b42555
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017 ngtcp2 contributors
+         * Copyright (c) 2014 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_mem.c [4:5]
+        lib/ngtcp2_mem.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ed9787b1511b75f8534d2b25efbe271c
+BELONGS ya.make
+    License text:
+         * // Copyright (c) 2016 The Chromium Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_window_filter.c [31:31]
+        lib/ngtcp2_window_filter.h [31:31]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f467e93f3d8b0ebd3dc4ff1696f09048
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/includes/ngtcp2/ngtcp2_crypto.h [4:4]
+        crypto/includes/ngtcp2/ngtcp2_crypto_quictls.h [4:4]
+        crypto/quictls/quictls.c [4:4]
+        crypto/shared.c [4:4]
+        crypto/shared.h [4:4]
+        lib/ngtcp2_addr.c [4:4]
+        lib/ngtcp2_addr.h [4:4]
+        lib/ngtcp2_path.c [4:4]
+        lib/ngtcp2_path.h [4:4]
+        lib/ngtcp2_pv.c [4:4]
+        lib/ngtcp2_pv.h [4:4]
+        lib/ngtcp2_qlog.c [4:4]
+        lib/ngtcp2_qlog.h [4:4]
+        lib/ngtcp2_rcvry.h [4:4]
+        lib/ngtcp2_rst.c [4:4]
+        lib/ngtcp2_rst.h [4:4]
+        lib/ngtcp2_version.c [4:4]

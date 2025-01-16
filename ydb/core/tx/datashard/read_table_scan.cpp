@@ -7,9 +7,9 @@
 #include <ydb/core/protos/ydb_result_set_old.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 //#include <ydb/library/actors/interconnect/interconnect.h>
 
 //#include <util/generic/cast.h>
@@ -187,7 +187,7 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         break;
     }
     case NScheme::NTypeIds::Pg: {
-        auto result = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetTypeDesc());
+        auto result = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetPgTypeDesc());
         if (result.Error) {
             err = Sprintf("Failed to add cell to Ydb::Value: %s", (*result.Error).c_str());
             return false;
@@ -355,7 +355,7 @@ private:
 
             if (col.GetTypeId() == NScheme::NTypeIds::Pg) {
                 auto* pg = meta->mutable_type()->mutable_pg_type();
-                auto* typeDesc = typeInfoMod.TypeInfo.GetTypeDesc();
+                auto typeDesc = typeInfoMod.TypeInfo.GetPgTypeDesc();
                 pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
                 pg->set_type_modifier(typeInfoMod.TypeMod);
                 pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
@@ -366,10 +366,7 @@ private:
                 auto id = static_cast<NYql::NProto::TypeIds>(col.GetTypeId());
                 auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
                 if (id == NYql::NProto::Decimal) {
-                    auto decimalType = xType->mutable_decimal_type();
-                    //TODO: Pass decimal params here
-                    decimalType->set_precision(22);
-                    decimalType->set_scale(9);
+                    NScheme::ProtoFromDecimalType(typeInfoMod.TypeInfo.GetDecimalType(), *xType->mutable_decimal_type());
                 } else {
                     xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
                 }

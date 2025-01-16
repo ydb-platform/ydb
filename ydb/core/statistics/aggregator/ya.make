@@ -33,7 +33,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/statistics/database
-    ydb/library/minsketch
+    yql/essentials/core/minsketch
 )
 
 YQL_LAST_ABI_VERSION()

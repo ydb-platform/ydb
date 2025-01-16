@@ -6,11 +6,11 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/public/udf/arrow/util.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/parser/pg_wrapper/interface/pack.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
@@ -28,7 +28,7 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
         {
             return {
                 sizeof(NUdf::TUnboxedValue),
-                PgValueSize(value, NPg::TypeDescGetTypeLen(type.GetTypeDesc()))
+                PgValueSize(value, NPg::TypeDescGetTypeLen(type.GetPgTypeDesc()))
             };
         }
 
@@ -238,8 +238,8 @@ public:
     using TArrayType = arrow::Decimal128Array;
     static void Validate(const arrow::Decimal128Array& array) {
         const auto& type = arrow::internal::checked_cast<const arrow::Decimal128Type&>(*array.type());
-        YQL_ENSURE(type.precision() == NScheme::DECIMAL_PRECISION, "Unsupported Decimal precision.");
-        YQL_ENSURE(type.scale() == NScheme::DECIMAL_SCALE, "Unsupported Decimal scale.");
+        TString error;
+        YQL_ENSURE(NScheme::TDecimalType::Validate(type.precision(), type.scale(), error), "" << error);
     }
 
     static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::Decimal128Array& array, const ui32 rowIndex) {
@@ -438,7 +438,7 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, NUdf::TStringRef>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Pg:
-            switch (NPg::PgTypeIdFromTypeDesc(columnType.GetTypeDesc())) {
+            switch (NPg::PgTypeIdFromTypeDesc(columnType.GetPgTypeDesc())) {
                 case INT2OID:
                     return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT4OID:

@@ -42,6 +42,9 @@ struct TBridgeYqlPluginOptions
     // convenient; get rid of this ASAP.
     using TLogBackendHolder = void;
     TLogBackendHolder* LogBackend = nullptr;
+
+    const char* Libraries = nullptr;
+    size_t LibrariesLength = 0;
 };
 
 // Opaque type representing a YQL plugin.
@@ -125,13 +128,14 @@ using TFuncBridgeRun = TBridgeQueryResult*(
     TBridgeYqlPlugin* plugin,
     const char* queryId,
     const char* user,
-    const char* token,
     const char* queryText,
     const char* settings,
     int settingsLength,
     const TBridgeQueryFile* files,
     int fileCount,
-    int executeMode);
+    int executeMode,
+    const char* credentials,
+    int credentialsLength);
 using TFuncBridgeGetUsedClusters = TBridgeClustersResult*(
     TBridgeYqlPlugin* plugin,
     const char* queryText,

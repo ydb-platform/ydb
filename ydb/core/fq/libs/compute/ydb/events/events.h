@@ -8,7 +8,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/events.h>
@@ -74,11 +74,11 @@ struct TEvYdbCompute {
 
     // Events
     struct TEvExecuteScriptRequest : public NActors::TEventLocal<TEvExecuteScriptRequest, EvExecuteScriptRequest> {
-        TEvExecuteScriptRequest(TString sql, TString idempotencyKey, const TDuration& resultTtl, const TDuration& operationTimeout, NYdb::NQuery::ESyntax syntax, NYdb::NQuery::EExecMode execMode, NYdb::NQuery::EStatsMode statsMode, const TString& traceId, const std::map<TString, Ydb::TypedValue>& queryParameters)
+        TEvExecuteScriptRequest(TString sql, TString idempotencyKey, const TDuration& resultTtl, const TInstant& operationDeadline, NYdb::NQuery::ESyntax syntax, NYdb::NQuery::EExecMode execMode, NYdb::NQuery::EStatsMode statsMode, const TString& traceId, const std::map<TString, Ydb::TypedValue>& queryParameters)
             : Sql(std::move(sql))
             , IdempotencyKey(std::move(idempotencyKey))
             , ResultTtl(resultTtl)
-            , OperationTimeout(operationTimeout)
+            , OperationDeadline(operationDeadline)
             , Syntax(syntax)
             , ExecMode(execMode)
             , StatsMode(statsMode)
@@ -89,7 +89,7 @@ struct TEvYdbCompute {
         TString Sql;
         TString IdempotencyKey;
         TDuration ResultTtl;
-        TDuration OperationTimeout;
+        TInstant OperationDeadline;
         NYdb::NQuery::ESyntax Syntax = NYdb::NQuery::ESyntax::YqlV1;
         NYdb::NQuery::EExecMode ExecMode = NYdb::NQuery::EExecMode::Execute;
         NYdb::NQuery::EStatsMode StatsMode = NYdb::NQuery::EStatsMode::Full;

@@ -3,11 +3,12 @@
 #include "public.h"
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/dns/public.h>
 
 #include <yt/yt/core/actions/future.h>
+
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 #include <util/generic/hash.h>
 
@@ -42,6 +43,9 @@ int GetServicePort(TStringBuf address);
 TStringBuf GetServiceHostName(TStringBuf address);
 
 ////////////////////////////////////////////////////////////////////////////////
+
+//! Constructs an address of the form |[address]:port|.
+TString FormatNetworkAddress(TStringBuf address, int port);
 
 class TIP6Address;
 
@@ -122,6 +126,8 @@ public:
 
     const ui32* GetRawDWords() const;
     ui32* GetRawDWords();
+
+    bool IsMtn() const;
 
 private:
     std::array<ui8, ByteSize> Raw_ = {};
@@ -226,7 +232,6 @@ class TMtnAddress
 {
 public:
     TMtnAddress() = default;
-
     TMtnAddress(TIP6Address address);
 
     ui64 GetPrefix() const;
@@ -241,11 +246,10 @@ public:
     ui64 GetHost() const;
     TMtnAddress& SetHost(ui64 host);
 
-    const TIP6Address& ToIP6Address() const;
+    TIP6Address ToIP6Address() const;
 
 private:
     ui64 GetBytesRangeValue(int leftIndex, int rightIndex) const;
-
     void SetBytesRangeValue(int leftIndex, int rightIndex, ui64 value);
 
     static constexpr int HostOffsetInBytes = 0;

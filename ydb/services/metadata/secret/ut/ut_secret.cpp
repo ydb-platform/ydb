@@ -1,6 +1,5 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/testlib/cs_helper.h>
-#include <ydb/core/tx/tiering/external_data.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -25,8 +24,6 @@
 #include <util/system/hostname.h>
 
 namespace NKikimr {
-
-using namespace NColumnShard;
 
 Y_UNIT_TEST_SUITE(Secret) {
 
@@ -197,7 +194,7 @@ Y_UNIT_TEST_SUITE(Secret) {
             {
                 TString resultData;
                 lHelper.StartDataRequest("SELECT COUNT(*) FROM `/Root/.metadata/initialization/migrations`", true, &resultData);
-                UNIT_ASSERT_EQUAL_C(resultData, "[6u]", resultData);
+                UNIT_ASSERT_EQUAL_C(resultData, "[7u]", resultData);
             }
 
             emulator->SetExpectedSecretsCount(2).SetExpectedAccessCount(0).CheckFound();
@@ -214,7 +211,7 @@ Y_UNIT_TEST_SUITE(Secret) {
             {
                 TString resultData;
                 lHelper.StartDataRequest("SELECT COUNT(*) FROM `/Root/.metadata/initialization/migrations`", true, &resultData);
-                UNIT_ASSERT_EQUAL_C(resultData, "[10u]", resultData);
+                UNIT_ASSERT_EQUAL_C(resultData, "[11u]", resultData);
             }
 
             emulator->SetExpectedSecretsCount(2).SetExpectedAccessCount(1).CheckFound();
@@ -296,10 +293,17 @@ Y_UNIT_TEST_SUITE(Secret) {
             lHelper.StartSchemaRequest("CREATE OBJECT IF NOT EXISTS `secret1:test@test1` (TYPE SECRET_ACCESS)");
             lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)", false);
             lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/secrets/values`", false);
+
+            lHelper.SetAuthToken("test@test1");
+            lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`", false);
+            lHelper.StartSchemaRequest("UPSERT OBJECT secret1 (TYPE SECRET) WITH value = `100`", false);
+            lHelper.StartSchemaRequest("CREATE OBJECT secret2 (TYPE SECRET) WITH value = `100`");
+            lHelper.ResetAuthToken();
+
             {
                 TString resultData;
                 lHelper.StartDataRequest("SELECT COUNT(*) FROM `/Root/.metadata/initialization/migrations`", true, &resultData);
-                UNIT_ASSERT_EQUAL_C(resultData, "[10u]", resultData);
+                UNIT_ASSERT_EQUAL_C(resultData, "[11u]", resultData);
             }
         }
     }

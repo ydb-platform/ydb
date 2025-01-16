@@ -109,9 +109,10 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
 
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
 
-    THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(cfg, counters));
+    auto pCtx = std::make_shared<NPDisk::TPDiskCtx>(creator.GetActorSystem());
+    THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(pCtx, cfg, counters));
 
-    pDisk->Initialize(creator.GetActorSystem(), TActorId());
+    pDisk->Initialize();
 
     if (!pDisk->BlockDevice->IsGood()) {
         ythrow yexception() << "Device with path# " << path << " is not good, info# " << pDisk->BlockDevice->DebugInfo();

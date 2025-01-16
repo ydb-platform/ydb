@@ -205,7 +205,7 @@ public:
         request.set_address(settings.Address_);
         request.set_domain_path(settings.DomainPath_);
         request.set_fixed_node_id(settings.FixedNodeId_);
-        if (!settings.Path_.Empty()) {
+        if (!settings.Path_.empty()) {
             request.set_path(settings.Path_);
         }
 

@@ -287,9 +287,12 @@ struct TBlobTableReaderOptions
     ///
     /// All blob parts except the last part of the blob must be of this size
     /// otherwise blob table reader emits error.
-    FLUENT_FIELD_DEFAULT(ui64, PartSize, 4 * 1024 * 1024);
+    FLUENT_FIELD_DEFAULT(i64, PartSize, 4 * 1024 * 1024);
 
-    /// @brief Offset from which to start reading
+    /// @brief Part index from which to start reading.
+    FLUENT_FIELD_DEFAULT(i64, StartPartIndex, 0);
+
+    /// @brief Offset from which to start reading.
     FLUENT_FIELD_DEFAULT(i64, Offset, 0);
 };
 
@@ -468,7 +471,7 @@ struct TFileReaderOptions
     /// @brief Offset to start reading from.
     ///
     /// By default reading is started from the beginning of the file.
-    FLUENT_FIELD_OPTION(i64, Offset);
+    FLUENT_FIELD_DEFAULT(i64, Offset, 0);
 
     ///
     /// @brief Maximum length to read.
@@ -1484,6 +1487,9 @@ struct TSkyShareTableOptions
 
     /// @brief Allow skynet manager to return fastbone links to skynet. See YT-11437
     FLUENT_FIELD_OPTION(bool, EnableFastbone);
+
+    /// @brief Custom pool.
+    FLUENT_FIELD_OPTION(TString, Pool);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

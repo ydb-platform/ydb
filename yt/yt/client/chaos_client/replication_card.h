@@ -97,6 +97,11 @@ struct TReplicationCardFetchOptions
 
 void FormatValue(TStringBuilderBase* builder, const TReplicationCardFetchOptions& options, TStringBuf /*spec*/);
 
+inline constexpr auto MinimalFetchOptions = TReplicationCardFetchOptions{
+    .IncludeCoordinators = true,
+    .IncludeHistory = true,
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FormatValue(

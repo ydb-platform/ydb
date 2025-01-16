@@ -14,13 +14,12 @@
 #include <random>
 
 namespace NYT::NTableClient {
-
-////////////////////////////////////////////////////////////////////////////////
-
 namespace {
 
 using namespace NYson;
 using namespace NYTree;
+
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -397,7 +396,7 @@ TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
 {
     NProto::TColumnSchema columnSchemaProto;
     columnSchemaProto.set_name("foo");
-    columnSchemaProto.set_type(static_cast<int>(EValueType::Uint64));
+    columnSchemaProto.set_type(ToProto(EValueType::Uint64));
 
     TColumnSchema columnSchema;
     FromProto(&columnSchema, columnSchemaProto);
@@ -407,7 +406,7 @@ TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
     EXPECT_EQ(columnSchema.Name(), "foo");
     EXPECT_EQ(columnSchema.StableName().Underlying(), "foo");
 
-    columnSchemaProto.set_simple_logical_type(static_cast<int>(ESimpleLogicalValueType::Uint32));
+    columnSchemaProto.set_simple_logical_type(ToProto(ESimpleLogicalValueType::Uint32));
     columnSchemaProto.set_name("foo");
     columnSchemaProto.set_stable_name("foo_stable");
     FromProto(&columnSchema, columnSchemaProto);

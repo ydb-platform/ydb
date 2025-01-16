@@ -248,7 +248,7 @@ namespace NKikimr::NBsController {
                 if (const TGroupInfo *group = Self->FindGroup(GroupId); !group || group->VirtualGroupSetupMachineId != MachineId) {
                     return true; // another machine is already running
                 }
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 TGroupInfo *group = State->Groups.FindForUpdate(GroupId);
                 Y_ABORT_UNLESS(group);
                 if (!Callback(*group, *State)) {
@@ -294,7 +294,7 @@ namespace NKikimr::NBsController {
                 if (Token.expired()) {
                     return true; // actor is already dead
                 }
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 const size_t n = State->BlobDepotDeleteQueue.Unshare().erase(GroupId);
                 Y_ABORT_UNLESS(n == 1);
                 TString error;
@@ -897,7 +897,7 @@ namespace NKikimr::NBsController {
             TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_DECOMMIT_GROUP; }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 Action(*State);
                 TString error;
                 if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {

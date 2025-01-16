@@ -1,8 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/util/random.h>
 
 #include <library/cpp/iterator/enumerate.h>
 
-#include <util/random/entropy.h>
 
 
 using TPartsLocations = TVector<TVector<ui8>>;
@@ -31,7 +31,13 @@ struct TTestEnv {
         .NodeCount = nodeCount,
         .VDiskReplPausedAtStart = false,
         .Erasure = erasure,
-        .FeatureFlags = MakeFeatureFlags(),
+        .ConfigPreprocessor = [](ui32, TNodeWardenConfig& conf) {
+            auto* balancingConf = conf.BlobStorageConfig.MutableVDiskBalancingConfig();
+            balancingConf->SetEnableSend(true);
+            balancingConf->SetEnableDelete(true);
+            balancingConf->SetBalanceOnlyHugeBlobs(false);
+            balancingConf->SetSecondsToSleepIfNothingToDo(1);
+        },
     })
     {
         Env.CreateBoxAndPool(1, 1);
@@ -44,12 +50,6 @@ struct TTestEnv {
         for (ui32 i = 0; i < Env.Settings.NodeCount; ++i) {
             RunningNodes.insert(i);
         }
-    }
-
-    static TFeatureFlags MakeFeatureFlags() {
-        TFeatureFlags res;
-        res.SetUseVDisksBalancing(true);
-        return res;
     }
 
     static TString PrepareData(const ui32 dataLen, const ui32 start) {
@@ -183,6 +183,23 @@ struct TTestEnv {
         Queues.clear();
     }
 
+    void SetVDiskReadOnly(ui32 position, bool value) {
+        const TVDiskID& someVDisk = GroupInfo->GetVDiskId(position);
+        auto baseConfig = Env.FetchBaseConfig();
+
+        const auto& somePDisk = baseConfig.GetPDisk(position);
+        const auto& someVSlot = baseConfig.GetVSlot(position);
+        Cerr << "Setting VDisk read-only to " << value << " for position " << position << Endl;
+        if (!value) {
+            Env.PDiskMockStates[{somePDisk.GetNodeId(), somePDisk.GetPDiskId()}]->SetReadOnly(someVDisk, value);
+        }
+        Env.SetVDiskReadOnly(somePDisk.GetNodeId(), somePDisk.GetPDiskId(), someVSlot.GetVSlotId().GetVSlotId(), someVDisk, value);
+        Env.Sim(TDuration::Seconds(30));
+        if (value) {
+            Env.PDiskMockStates[{somePDisk.GetNodeId(), somePDisk.GetPDiskId()}]->SetReadOnly(someVDisk, value);
+        }
+    }
+
     TEnvironmentSetup* operator->() {
         return &Env;
     }
@@ -196,14 +213,6 @@ struct TTestEnv {
 TLogoBlobID MakeLogoBlobId(ui32 step, ui32 dataSize) {
     return TLogoBlobID(1, 1, step, 0, dataSize, 0);
 }
-
-
-TString GenData(ui32 len) {
-    TString res = TString::Uninitialized(len);
-    EntropyPool().Read(res.Detach(), res.size());
-    return res;
-}
-
 
 struct TStopOneNodeTest {
     TTestEnv Env;
@@ -229,21 +238,63 @@ struct TStopOneNodeTest {
             Env.SendPut(step, data, NKikimrProto::OK);
             Env->Sim(TDuration::Seconds(10));
             Env.StartNode(nodeIdWithBlob);
-            Env->Sim(TDuration::Seconds(30));
-
-            Cerr << "Start compaction 1" << Endl;
+            Env->Sim(TDuration::Seconds(60));
+            Cerr << "Start compaction" << Endl;
             for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
                 Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
             }
             Env->Sim(TDuration::Seconds(30));
-            Cerr << "Finish compaction 1" << Endl;
+            Cerr << "Finish compaction" << Endl;
 
-            Cerr << "Start compaction 2" << Endl;
+            Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));
+            UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data.size())->Get()->Responses[0].Buffer.ConvertToString(), data);
+        }
+    }
+};
+
+struct TDontSendToReadOnlyTest {
+    TTestEnv Env;
+    TString data;
+
+    void RunTest() {
+        ui32 step = 0;
+
+        { // Check just a normal put works
+            Env.SendPut(++step, data, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data.size())->Get()->Responses[0].Buffer.ConvertToString(), data);
+            Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));
+        }
+
+
+        {
+            auto blobId = MakeLogoBlobId(++step, data.size());
+            auto locations = Env.GetExpectedPartsLocations(blobId);
+            ui32 nodeIdWithBlob = 0;
+            while (locations[nodeIdWithBlob].size() == 0) ++nodeIdWithBlob;
+
+            Env.SetVDiskReadOnly(nodeIdWithBlob, true);
+            Env.SendPut(step, data, NKikimrProto::OK);
+
+            // Check that balancing does not send anything when vdisk in readonly mode
+            Env.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvVPut || ev->GetTypeRewrite() == TEvBlobStorage::EvVMultiPut) {
+                    UNIT_ASSERT(false);
+                }
+                return true;
+            };
+            Env->Sim(TDuration::Seconds(60));
+            Env.Env.Runtime->FilterFunction = {};
+
+            Env.SetVDiskReadOnly(nodeIdWithBlob, false);
+
+            Env->Sim(TDuration::Seconds(60));
+
+            Cerr << "Start compaction" << Endl;
             for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
                 Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
             }
             Env->Sim(TDuration::Seconds(30));
-            Cerr << "Finish compaction 2" << Endl;
+            Cerr << "Finish compaction" << Endl;
 
             Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));
             UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data.size())->Get()->Responses[0].Buffer.ConvertToString(), data);
@@ -264,7 +315,7 @@ struct TRandomTest {
 
         for (ui32 step = 0; step < NumIters; ++step) {
             Cerr << "Step = " << step << Endl;
-            data.push_back(GenData(16 + random() % MaxBlobSize));
+            data.push_back(GenRandomBuffer(16 + random() % MaxBlobSize));
 
             if (Env.SendPut(step, data.back()) == NKikimrProto::OK) {
                 successfulSteps.push_back(step);
@@ -322,12 +373,6 @@ struct TRandomTest {
         Env->Sim(TDuration::Seconds(60));
 
         Cerr << "Start compaction 1" << Endl;
-        for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
-            Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
-        }
-        Env->Sim(TDuration::Seconds(60));
-
-        Cerr << "Start compaction 2" << Endl;
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
             Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
         }
@@ -408,13 +453,6 @@ struct TTwoPartsOnOneNodeTest {
         Env->Sim(TDuration::Seconds(30));
         Cerr << "Finish compaction 1" << Endl;
 
-        Cerr << "Start compaction 2" << Endl;
-        for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
-            Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
-        }
-        Env->Sim(TDuration::Seconds(30));
-        Cerr << "Finish compaction 2" << Endl;
-
         Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));
         UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data.size())->Get()->Responses[0].Buffer.ConvertToString(), data);
     }
@@ -425,16 +463,16 @@ struct TTwoPartsOnOneNodeTest {
 Y_UNIT_TEST_SUITE(VDiskBalancing) {
 
     Y_UNIT_TEST(TestStopOneNode_Block42) {
-        TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(100)}.RunTest();
+        TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(100)}.RunTest();
     }
     Y_UNIT_TEST(TestStopOneNode_Mirror3dc) {
-        TStopOneNodeTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), GenData(100)}.RunTest();
+        TStopOneNodeTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), GenRandomBuffer(100)}.RunTest();
     }
     Y_UNIT_TEST(TestStopOneNode_Block42_HugeBlob) {
-        TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(521_KB * 6)}.RunTest();
+        TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(521_KB * 6)}.RunTest();
     }
     Y_UNIT_TEST(TestStopOneNode_Mirror3dc_HugeBlob) {
-        TStopOneNodeTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), GenData(521_KB)}.RunTest();
+        TStopOneNodeTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), GenRandomBuffer(521_KB)}.RunTest();
     }
 
     Y_UNIT_TEST(TestRandom_Block42) {
@@ -445,10 +483,13 @@ Y_UNIT_TEST_SUITE(VDiskBalancing) {
     }
 
     Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block42) {
-        TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(100)}.RunTest();
+        TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(100)}.RunTest();
     }
     Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block42_HugeBlob) {
-        TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(521_KB * 6)}.RunTest();
+        TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(521_KB * 6)}.RunTest();
     }
 
+    Y_UNIT_TEST(TestDontSendToReadOnlyTest_Block42) {
+        TDontSendToReadOnlyTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(100)}.RunTest();
+    }
 }

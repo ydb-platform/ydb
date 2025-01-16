@@ -17,13 +17,8 @@ class TJsonRender : public TViewerPipeClient {
     TEvViewer::TEvViewerRequest::TPtr ViewerRequest;
     ui32 Timeout = 0;
     std::vector<TString> Metrics;
-    TString Database;
     TCgiParameters Params;
 
-    std::optional<TNodeId> SubscribedNodeId;
-    std::vector<TNodeId> TenantDynamicNodes;
-    bool Direct = false;
-    bool MadeProxyRequest = false;
 public:
     TJsonRender(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
@@ -31,8 +26,6 @@ public:
         const auto& params(Event->Get()->Request.GetParams());
 
         InitConfig(params);
-        Database = params.Get("database");
-        Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 30000);
     }
 
@@ -48,6 +41,9 @@ public:
     }
 
     void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
         auto postData = Event
             ? Event->Get()->Request.GetPostContent()
             : ViewerRequest->Get()->Record.GetRenderRequest().GetContent();
@@ -67,15 +63,7 @@ public:
                     ++num;
                 }
             }
-            //StringSplitter(Params.Get("target")).Split(',').SkipEmpty().Collect(&Metrics);
-            Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-            Direct |= (Database == AppData()->TenantName); // we're already on the right node
-            if (Database && !Direct) {
-                return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
-            }
-            if (Requests == 0) {
-                SendGraphRequest();
-            }
+            SendGraphRequest();
         } else {
             ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"));
             return;
@@ -84,65 +72,14 @@ public:
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
-    void PassAway() override {
-        if (SubscribedNodeId.has_value()) {
-            Send(TActivationContext::InterconnectProxy(SubscribedNodeId.value()), new TEvents::TEvUnsubscribe());
-        }
-        TBase::PassAway();
-        BLOG_TRACE("PassAway()");
-    }
-
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvUndelivered, Undelivered);
-            hFunc(TEvInterconnect::TEvNodeConnected, Connected);
-            hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
-            hFunc(TEvViewer::TEvViewerResponse, Handle);
             hFunc(NGraph::TEvGraph::TEvMetricsResult, Handle);
-
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &) {}
-
-    void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
-        if (ev->Get()->SourceType == NViewer::TEvViewer::EvViewerRequest) {
-            SendGraphRequest();
-        }
-    }
-
-    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &) {
-        SendGraphRequest();
-    }
-
-    void SendDynamicNodeRenderRequest() {
-        ui64 hash = std::hash<TString>()(Event->Get()->Request.GetRemoteAddr());
-
-        auto itPos = std::next(TenantDynamicNodes.begin(), hash % TenantDynamicNodes.size());
-        std::nth_element(TenantDynamicNodes.begin(), itPos, TenantDynamicNodes.end());
-
-        TNodeId nodeId = *itPos;
-        SubscribedNodeId = nodeId;
-        TActorId viewerServiceId = MakeViewerID(nodeId);
-
-        THolder<TEvViewer::TEvViewerRequest> request = MakeHolder<TEvViewer::TEvViewerRequest>();
-        request->Record.SetTimeout(Timeout);
-        auto renderRequest = request->Record.MutableRenderRequest();
-        renderRequest->SetUri(TString(Event->Get()->Request.GetUri()));
-
-        TStringBuf content = Event->Get()->Request.GetPostContent();
-        renderRequest->SetContent(TString(content));
-
-        ViewerWhiteboardCookie cookie(NKikimrViewer::TEvViewerRequest::kRenderRequest, nodeId);
-        SendRequest(viewerServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie.ToUi64());
-    }
-
     void SendGraphRequest() {
-        if (MadeProxyRequest) {
-            return;
-        }
-        MadeProxyRequest = true;
         NKikimrGraph::TEvGetMetrics getRequest;
         if (Metrics.size() > 0) {
             for (const auto& metric : Metrics) {
@@ -223,15 +160,6 @@ public:
 
     void Handle(NGraph::TEvGraph::TEvMetricsResult::TPtr& ev) {
         HandleRenderResponse(ev->Get()->Record);
-    }
-
-    void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        auto& record = ev.Get()->Get()->Record;
-        if (record.HasRenderResponse()) {
-            HandleRenderResponse(*(record.MutableRenderResponse()));
-        } else {
-            SendGraphRequest(); // fallback
-        }
     }
 
     void HandleTimeout() {

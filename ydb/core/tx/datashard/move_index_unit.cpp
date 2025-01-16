@@ -18,8 +18,8 @@ public:
     }
 
     void MoveChangeRecords(NIceDb::TNiceDb& db, const NKikimrTxDataShard::TMoveIndex& move, TVector<IDataShardChangeCollector::TChange>& changeRecords) {
-        const auto remapPrevId = PathIdFromPathId(move.GetReMapIndex().GetSrcPathId());
-        const auto remapNewId = PathIdFromPathId(move.GetReMapIndex().GetDstPathId());
+        const auto remapPrevId = TPathId::FromProto(move.GetReMapIndex().GetSrcPathId());
+        const auto remapNewId = TPathId::FromProto(move.GetReMapIndex().GetDstPathId());
 
         for (auto& record: changeRecords) {
             if (record.PathId == remapPrevId) {

@@ -6,6 +6,8 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
 
@@ -124,12 +126,12 @@ struct TUserTable : public TThrRefBase {
             return MainChannelByStorageEnum();
         }
 
-        ui32 ExternalChannel() const {
+        TSet<ui32> ExternalChannels() const {
             if (!*Room) {
-                return ExternalChannelByStorageEnum();
+                return {ExternalChannelByStorageEnum()};
             }
 
-            return Room->GetChannel(NKikimrStorageSettings::TChannelPurpose::External, 1);
+            return Room->GetExternalChannels(1);
         }
 
         ui32 ExternalChannelByStorageEnum() const {
@@ -324,31 +326,31 @@ struct TUserTable : public TThrRefBase {
 
     struct TReplicationConfig {
         NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode Mode;
-        NKikimrSchemeOp::TTableReplicationConfig::EConsistency Consistency;
+        NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel ConsistencyLevel;
 
         TReplicationConfig()
             : Mode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
-            , Consistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN)
+            , ConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN)
         {
         }
 
         TReplicationConfig(const NKikimrSchemeOp::TTableReplicationConfig& config)
             : Mode(config.GetMode())
-            , Consistency(config.GetConsistency())
+            , ConsistencyLevel(config.GetConsistencyLevel())
         {
         }
 
-        bool HasWeakConsistency() const {
-            return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK;
+        bool HasRowConsistency() const {
+            return ConsistencyLevel == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW;
         }
 
-        bool HasStrongConsistency() const {
-            return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG;
+        bool HasGlobalConsistency() const {
+            return ConsistencyLevel == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL;
         }
 
         void Serialize(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
             proto.SetMode(Mode);
-            proto.SetConsistency(Consistency);
+            proto.SetConsistencyLevel(ConsistencyLevel);
         }
     };
 
@@ -392,6 +394,7 @@ struct TUserTable : public TThrRefBase {
         THashSet<ui64> PartOwners;
         ui64 PartCount = 0;
         ui64 SearchHeight = 0;
+        bool HasSchemaChanges = false;
         TInstant StatsUpdateTime;
         ui64 DataSizeResolution = 0;
         ui64 RowCountResolution = 0;

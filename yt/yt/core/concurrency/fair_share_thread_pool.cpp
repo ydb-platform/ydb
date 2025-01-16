@@ -71,7 +71,10 @@ public:
         return false;
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver /*waitTimeObserver*/) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
+    { }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
     { }
 
     ~TBucket();
@@ -524,7 +527,7 @@ public:
             CallbackEventCount_,
             GetThreadTags(ThreadNamePrefix_)))
     {
-        Configure(threadCount);
+        SetThreadCount(threadCount);
         EnsureStarted();
     }
 
@@ -533,9 +536,9 @@ public:
         Shutdown();
     }
 
-    void Configure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        TThreadPoolBase::Configure(threadCount);
+        TThreadPoolBase::SetThreadCount(threadCount);
     }
 
     IInvokerPtr GetInvoker(const TFairShareThreadPoolTag& tag) override
@@ -560,10 +563,10 @@ private:
         TThreadPoolBase::DoShutdown();
     }
 
-    void DoConfigure(int threadCount) override
+    void DoSetThreadCount(int threadCount) override
     {
         Queue_->Configure(threadCount);
-        TThreadPoolBase::DoConfigure(threadCount);
+        TThreadPoolBase::DoSetThreadCount(threadCount);
     }
 
     TSchedulerThreadPtr SpawnThread(int index) override

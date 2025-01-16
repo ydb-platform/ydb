@@ -1,0 +1,30 @@
+--- a/lib/fuzzer/FuzzerDefs.h
++++ b/lib/fuzzer/FuzzerDefs.h
+@@ -64,2 +64,4 @@ typedef int (*UserCallback)(const uint8_t *Data, size_t Size);
+ 
++#define exit(status) FuzzerExit(status)
++void FuzzerExit(int status);
+ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback);
+--- a/lib/fuzzer/FuzzerDriver.cpp
++++ b/lib/fuzzer/FuzzerDriver.cpp
+@@ -607,2 +607,8 @@ static Vector<SizedFile> ReadCorpora(const Vector<std::string> &CorpusDirs,
+ 
++void FuzzerExit(int status) {
++  if (EF->LLVMFuzzerCleanup)
++      EF->LLVMFuzzerCleanup();
++  (exit)(status);
++}
++
+ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
+--- a/lib/fuzzer/FuzzerExtFunctions.def
++++ b/lib/fuzzer/FuzzerExtFunctions.def
+@@ -17,2 +17,3 @@
+ EXT_FUNC(LLVMFuzzerInitialize, int, (int *argc, char ***argv), false);
++EXT_FUNC(LLVMFuzzerCleanup, void, (), false);
+ EXT_FUNC(LLVMFuzzerCustomMutator, size_t,
+--- a/lib/fuzzer/FuzzerInterface.h
++++ b/lib/fuzzer/FuzzerInterface.h
+@@ -47,2 +47,3 @@ LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
+ FUZZER_INTERFACE_VISIBILITY int LLVMFuzzerInitialize(int *argc, char ***argv);
++FUZZER_INTERFACE_VISIBILITY void LLVMFuzzerCleanup();
+ 

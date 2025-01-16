@@ -1,13 +1,13 @@
 # Pire
 
-**Список функций**
+## Список функций
 
-* ```Pire::Grep(pattern:String) -> (string:String?) -> Bool```
-* ```Pire::Match(pattern:String) -> (string:String?) -> Bool```
-* ```Pire::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Pire::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Pire::Capture(pattern:String) -> (string:String?) -> String?```
-* ```Pire::Replace(pattern:String) -> (string:String?, replacement:String) -> String?```
+* `Pire::Grep(pattern:String) -> (string:String?) -> Bool`
+* `Pire::Match(pattern:String) -> (string:String?) -> Bool`
+* `Pire::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Pire::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Pire::Capture(pattern:String) -> (string:String?) -> String?`
+* `Pire::Replace(pattern:String) -> (string:String?, replacement:String) -> String?`
 
 Одной из опций для поиска по регулярным выражениям в YQL является библиотека [Pire](https://github.com/yandex/pire) (Perl Incompatible Regular Expressions). Это разработанная в Яндексе очень быстрая библиотека регулярных выражений: на нижнем уровне она просматривает входную строку один раз, подряд, без откатов, и тратит (на x86 и x86_64) по 5 инструкций на символ.
 
@@ -24,7 +24,7 @@
 
 Чтобы избежать компиляции регулярного выражения на каждой строке таблицы, необходимо обернуть вызов функции в [именованное выражение](../../syntax/expressions.md#named-nodes):
 
-```sql
+```yql
 $re = Pire::Grep("\\d+"); -- создаем вызываемое значение для проверки конкретного регулярного выражения
 SELECT * FROM table WHERE $re(key); -- используем его для фильтрации таблицы
 ```
@@ -37,9 +37,9 @@ SELECT * FROM table WHERE $re(key); -- используем его для фил
 
 Есть возможность отключить чувствительность к регистру (то есть включить case-insensitive режим), указав в начале регулярного выражения флаг `(?i)`.
 
-**Примеры**
+### Примеры
 
-```sql
+```yql
 $value = "xaaxaaxaa";
 $match = Pire::Match("a.*");
 $grep = Pire::Grep("axa");
@@ -79,11 +79,12 @@ SELECT
 
 * Если вас интересует совпадение строки с любым из перечисленных выражений (результаты объединяются через «или»), то намного эффективнее сделать одно регулярное выражение, объединив части с помощью оператора `|`, и использовать для поиска обычный Grep или Match.
 * В библиотеке Pire установлен лимит на размер конечного автомата (в YQL используется значение этого лимита, установленное по умолчанию в библиотеке). Если лимит превышен, при запуске запроса вернется ошибка `Failed to glue up regexes, probably the finite state machine appeared to be too large`.
+
 При вызове функций MultiGrep/MultiMatch регулярные выражения передаются по одному на строку с использованием [многострочных строковых литералов](../../syntax/expressions.md#multiline-string-literals):
 
-**Примеры**
+### Примеры
 
-```sql
+```yql
 $multi_match = Pire::MultiMatch(@@a.*
 .*x.*
 .*axa.*@@);

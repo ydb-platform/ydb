@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import typing
-from typing import Optional
 
 from .._synchronization import current_async_library
 from .base import SOCKET_OPTION, AsyncNetworkBackend, AsyncNetworkStream
@@ -22,9 +23,9 @@ class AutoBackend(AsyncNetworkBackend):
         self,
         host: str,
         port: int,
-        timeout: Optional[float] = None,
-        local_address: Optional[str] = None,
-        socket_options: typing.Optional[typing.Iterable[SOCKET_OPTION]] = None,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: typing.Iterable[SOCKET_OPTION] | None = None,
     ) -> AsyncNetworkStream:
         await self._init_backend()
         return await self._backend.connect_tcp(
@@ -38,8 +39,8 @@ class AutoBackend(AsyncNetworkBackend):
     async def connect_unix_socket(
         self,
         path: str,
-        timeout: Optional[float] = None,
-        socket_options: typing.Optional[typing.Iterable[SOCKET_OPTION]] = None,
+        timeout: float | None = None,
+        socket_options: typing.Iterable[SOCKET_OPTION] | None = None,
     ) -> AsyncNetworkStream:  # pragma: nocover
         await self._init_backend()
         return await self._backend.connect_unix_socket(

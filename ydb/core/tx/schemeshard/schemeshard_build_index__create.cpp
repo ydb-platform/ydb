@@ -3,7 +3,7 @@
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"
+#include "schemeshard_utils.h"  // for NTableIndex::CommonCheck
 
 #include <ydb/core/ydb_convert/table_settings.h>
 
@@ -229,6 +229,8 @@ private:
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
             buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
+            buildInfo.KMeans.K = std::max<ui32>(2, vectorIndexKmeansTreeDescription.GetSettings().clusters());
+            buildInfo.KMeans.Levels = std::max<ui32>(1, vectorIndexKmeansTreeDescription.GetSettings().levels());
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:

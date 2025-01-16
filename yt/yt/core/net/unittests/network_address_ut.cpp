@@ -325,7 +325,16 @@ TEST(TIP6AddressTest, ToStringFromStringRandom)
     }
 }
 
-TEST(TMtnAddressTest, SimpleTest)
+TEST(TIP6AddressTest, IsMtn)
+{
+    EXPECT_TRUE(TIP6Address::FromString("2a02:6b8:c23:130:0:4397:571f:0").IsMtn());
+    EXPECT_TRUE(TIP6Address::FromString("2a02:6b8:fc00:c21b:0:4397:ead:0").IsMtn());
+    EXPECT_FALSE(TIP6Address::FromString("fe80::5054:ff:fe12:3456").IsMtn());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TMtnAddressTest, Simple)
 {
     TMtnAddress address(TIP6Address::FromString("1361:24ad:4326:bda1:8432:a3fe:3f6c:4b38"));
     EXPECT_EQ(address.GetPrefix(), 0x136124ad43u);
@@ -353,7 +362,7 @@ TEST(TMtnAddressTest, SimpleTest)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(InferYPCluster, ValidFqdns)
+TEST(TInferYPClusterTest, ValidFqdns)
 {
     TString gencfgHostName = "sas1-5535-9d7.sas-test.yp.gencfg-c.yandex.net";
     TString ypHostName = "noqpmfiudzbb4hvs.man.yp-c.yandex.net";
@@ -362,7 +371,7 @@ TEST(InferYPCluster, ValidFqdns)
     EXPECT_EQ(InferYPClusterFromHostName(ypHostName), "man");
 }
 
-TEST(InferYPCluster, InvalidFqdn)
+TEST(TInferYPClusterTest, InvalidFqdn)
 {
     TString hostName = "noqpmfiudzbb4hvs..yp-c.yandex.net";
 
@@ -372,9 +381,7 @@ TEST(InferYPCluster, InvalidFqdn)
     EXPECT_EQ(InferYPClusterFromHostName("yandex.net"), std::nullopt);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-TEST(InferYTCluster, ClusterUrls)
+TEST(TInferYPClusterTest, ClusterUrls)
 {
     EXPECT_EQ(InferYTClusterFromClusterUrl("hume"), "hume");
     EXPECT_EQ(InferYTClusterFromClusterUrl("http://yp-sas.yt.yandex.net"), "yp-sas");

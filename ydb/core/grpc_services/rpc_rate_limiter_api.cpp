@@ -594,9 +594,16 @@ public:
         SendRequest();
     }
 
+    // Always race when "cancel after" time is not set.
+    // If "cancel after" is not set, quoter service can spend resource and say "OK", but we here reply with TIMEOUT.
     void OnOperationTimeout(const TActorContext& ctx) {
         Send(MakeQuoterServiceID(), new TEvQuota::TEvRpcTimeout(GetProtoRequest()->coordination_node_path(), GetProtoRequest()->resource_path()), 0, 0);
         TBase::OnOperationTimeout(ctx);
+    }
+
+    // Do nothing here, because quoter service replies after "cancel after" time passes.
+    void OnCancelOperation(const TActorContext& ctx) {
+        Y_UNUSED(ctx);
     }
 
     STFUNC(StateFunc) {
@@ -637,22 +644,37 @@ public:
                                     true));
     }
 
+    StatusIds::StatusCode QuoterDeadlineStatusCode() {
+        if (const TDuration cancelAfter = GetCancelAfter(); cancelAfter && cancelAfter < GetOperationTimeout()) {
+            return StatusIds::CANCELLED;
+        }
+        return StatusIds::TIMEOUT;
+    }
+
     void SendLeaf(const TEvQuota::TResourceLeaf& leaf) {
+        TDuration deadline = GetOperationTimeout();
+        // CancelAfter is an intelligent way to say quoter service that we can wait maximum time.
+        // After that time quoter service sends EResult::Deadline.
+        // It says that the system lacks the resource.
+        if (const TDuration cancelAfter = GetCancelAfter(); cancelAfter && cancelAfter < deadline) {
+            deadline = cancelAfter;
+        }
+
         Send(MakeQuoterServiceID(),
-            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { leaf }, GetOperationTimeout()), 0, 0);
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { leaf }, deadline), 0, 0);
     }
 
     void Handle(TEvQuota::TEvClearance::TPtr& ev) {
         switch (ev->Get()->Result) {
             case TEvQuota::TEvClearance::EResult::Success:
                 Reply(StatusIds::SUCCESS, TActivationContext::AsActorContext());
-            break;
+                break;
             case TEvQuota::TEvClearance::EResult::UnknownResource:
                 Reply(StatusIds::BAD_REQUEST, TActivationContext::AsActorContext());
-            break;
+                break;
             case TEvQuota::TEvClearance::EResult::Deadline:
-                Reply(StatusIds::TIMEOUT, TActivationContext::AsActorContext());
-            break;
+                Reply(QuoterDeadlineStatusCode(), TActivationContext::AsActorContext());
+                break;
             default:
                 Reply(StatusIds::INTERNAL_ERROR, TActivationContext::AsActorContext());
         }

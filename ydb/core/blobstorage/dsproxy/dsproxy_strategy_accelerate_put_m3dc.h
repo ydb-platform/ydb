@@ -30,50 +30,56 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests,
+            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests,
             const TAccelerationParams& accelerationParams) override {
         Y_UNUSED(accelerationParams);
         // Find the unput parts and disks
-        ui32 badDiskMask = 0;
-        for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
+        bool unresponsiveDisk = false;
+        for (size_t diskIdx = 0; diskIdx < state.Disks.size() && !unresponsiveDisk; ++diskIdx) {
             TBlobState::TDisk &disk = state.Disks[diskIdx];
-            for (size_t partIdx = 0; partIdx < disk.DiskParts.size(); ++partIdx) {
-                TBlobState::TDiskPart &diskPart = disk.DiskParts[partIdx];
+            for (TBlobState::TDiskPart &diskPart : disk.DiskParts) {
                 if (diskPart.Situation == TBlobState::ESituation::Sent) {
-                    badDiskMask |= (1 << diskIdx);
+                    unresponsiveDisk = true;
+                    break;
                 }
             }
         }
-        if (badDiskMask > 0) {
-            // Mark the 'bad' disk as the single slow disk
-            for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
-                state.Disks[diskIdx].IsSlow = badDiskMask & (1 << diskIdx);
-            }
+        if (unresponsiveDisk) {
+            blackboard.MarkSlowDisks(state, true, accelerationParams);
 
-            // Prepare part placement if possible
-            TBlobStorageGroupType::TPartPlacement partPlacement;
-            bool degraded = false;
+            for (bool considerSlowAsError : {true, false}) {
+                // Prepare part placement if possible
+                TBlobStorageGroupType::TPartPlacement partPlacement;
+                bool degraded = false;
 
-            // check if we are in degraded mode -- that means that we have one fully failed realm
-            TBlobStorageGroupInfo::TSubgroupVDisks success(&info.GetTopology());
-            TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
-            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, true, success, error, degraded);
+                // check if we are in degraded mode -- that means that we have one fully failed realm
+                TBlobStorageGroupInfo::TSubgroupVDisks success(&info.GetTopology());
+                TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
+                Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, considerSlowAsError,
+                        success, error, degraded);
+                // check for failure tolerance; we issue ERROR in case when it is not possible to achieve success condition in
+                // any way; also check if we have already finished writing replicas
+                const auto& checker = info.GetQuorumChecker();
+                if (checker.CheckFailModelForSubgroup(error)) {
+                    if (checker.CheckQuorumForSubgroup(success)) {
+                        // OK
+                        return EStrategyOutcome::DONE;
+                    }
 
-            // check for failure tolerance; we issue ERROR in case when it is not possible to achieve success condition in
-            // any way; also check if we have already finished writing replicas
-            const auto& checker = info.GetQuorumChecker();
-            if (checker.CheckFailModelForSubgroup(error)) {
-                if (checker.CheckQuorumForSubgroup(success)) {
-                    // OK
-                    return EStrategyOutcome::DONE;
-                }
+                    // now check every realm and check if we have to issue some write requests to it
+                    bool fullPlacement;
+                    Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
+                        PreferredReplicasPerRealm(degraded), considerSlowAsError, true, partPlacement, fullPlacement);
 
-                // now check every realm and check if we have to issue some write requests to it
-                Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
-                    PreferredReplicasPerRealm(degraded), true, partPlacement);
+                    if (considerSlowAsError && !fullPlacement) {
+                        // unable to place all parts to fast disks, retry
+                        continue;
+                    }
 
-                if (IsPutNeeded(state, partPlacement)) {
-                    PreparePutsForPartPlacement(logCtx, state, info, groupDiskRequests, partPlacement);
+                    if (IsPutNeeded(state, partPlacement)) {
+                        PreparePutsForPartPlacement(logCtx, state, info, groupDiskRequests, partPlacement);
+                    }
+                    break;
                 }
             }
         }

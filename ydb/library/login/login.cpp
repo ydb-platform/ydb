@@ -8,12 +8,11 @@
 #include <openssl/pem.h>
 #include <openssl/rand.h>
 
-#include <util/generic/singleton.h>
 #include <util/string/builder.h>
-#include <util/string/cast.h>
-#include <util/string/hex.h>
 
 #include <deque>
+
+#include <ydb/library/login/password_checker/password_checker.h>
 
 #include "login.h"
 
@@ -38,6 +37,12 @@ struct TLoginProvider::TImpl {
 
 TLoginProvider::TLoginProvider()
     : Impl(new TImpl())
+    , PasswordChecker(TPasswordComplexity())
+{}
+
+TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity)
+    : Impl(new TImpl())
+    , PasswordChecker(passwordComplexity)
 {}
 
 TLoginProvider::~TLoginProvider()
@@ -54,6 +59,13 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
         response.Error = "Name is not allowed";
         return response;
     }
+
+    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
+    if (!passwordCheckResult.Success) {
+        response.Error = passwordCheckResult.Error;
+        return response;
+    }
+
     auto itUserCreate = Sids.emplace(request.User, TSidRecord{.Type = NLoginProto::ESidType::USER});
     if (!itUserCreate.second) {
         if (itUserCreate.first->second.Type == ESidType::USER) {
@@ -67,6 +79,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
     TSidRecord& user = itUserCreate.first->second;
     user.Name = request.User;
     user.Hash = Impl->GenerateHash(request.Password);
+    user.CreatedAt = std::chrono::system_clock::now();
 
     return response;
 }
@@ -76,8 +89,8 @@ bool TLoginProvider::CheckSubjectExists(const TString& name, const ESidType::Sid
     return itSidModify != Sids.end() && itSidModify->second.Type == type;
 }
 
-bool TLoginProvider::CheckUserExists(const TString& name) {
-    return CheckSubjectExists(name, ESidType::USER);
+bool TLoginProvider::CheckUserExists(const TString& user) {
+    return CheckSubjectExists(user, ESidType::USER);
 }
 
 TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserRequest& request) {
@@ -89,30 +102,34 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
         return response;
     }
 
+    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
+    if (!passwordCheckResult.Success) {
+        response.Error = passwordCheckResult.Error;
+        return response;
+    }
+
     TSidRecord& user = itUserModify->second;
     user.Hash = Impl->GenerateHash(request.Password);
 
     return response;
 }
 
-TLoginProvider::TRemoveUserResponse TLoginProvider::RemoveUser(const TRemoveUserRequest& request) {
+TLoginProvider::TRemoveUserResponse TLoginProvider::RemoveUser(const TString& user) {
     TRemoveUserResponse response;
 
-    auto itUserModify = Sids.find(request.User);
+    auto itUserModify = Sids.find(user);
     if (itUserModify == Sids.end() || itUserModify->second.Type != ESidType::USER) {
-        if (!request.MissingOk) {
-            response.Error = "User not found";
-        }
+        response.Error = "User not found";
         return response;
     }
 
-    auto itChildToParentIndex = ChildToParentIndex.find(request.User);
+    auto itChildToParentIndex = ChildToParentIndex.find(user);
     if (itChildToParentIndex != ChildToParentIndex.end()) {
         for (const TString& parent : itChildToParentIndex->second) {
             auto itGroup = Sids.find(parent);
             if (itGroup != Sids.end()) {
                 response.TouchedGroups.emplace_back(itGroup->first);
-                itGroup->second.Members.erase(request.User);
+                itGroup->second.Members.erase(user);
             }
         }
         ChildToParentIndex.erase(itChildToParentIndex);
@@ -142,6 +159,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateGroup(const TCreateGroupReq
 
     TSidRecord& group = itGroupCreate.first->second;
     group.Name = request.Group;
+    group.CreatedAt = std::chrono::system_clock::now();
 
     return response;
 }
@@ -300,33 +318,39 @@ std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) 
 }
 
 TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request) {
+    auto now = std::chrono::system_clock::now();
     TLoginUserResponse response;
+    response.LoginAttemptTime = std::chrono::time_point_cast<std::chrono::microseconds>(now).time_since_epoch().count();
+
+    if (Keys.empty() || Keys.back().PrivateKey.empty()) {
+        response.Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
+        response.Error = "No key to generate token";
+        return response;
+    }
+
     if (!request.ExternalAuth) {
         auto itUser = Sids.find(request.User);
         if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
+            response.Status = TLoginUserResponse::EStatus::INVALID_USER;
             response.Error = "Invalid user";
             return response;
         }
 
         if (!Impl->VerifyHash(request.Password, itUser->second.Hash)) {
+            response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
             response.Error = "Invalid password";
             return response;
         }
-    }
 
-    if (Keys.empty() || Keys.back().PrivateKey.empty()) {
-        response.Error = "No key to generate token";
-        return response;
+        itUser->second.LastSuccessfulLogin = response.LoginAttemptTime;
     }
 
     const TKeyRecord& key = Keys.back();
-
     auto keyId = ToString(key.KeyId);
     const auto& publicKey = key.PublicKey;
     const auto& privateKey = key.PrivateKey;
 
     // encode jwt
-    auto now = std::chrono::system_clock::now();
     auto expires_at = now + MAX_TOKEN_EXPIRE_TIME;
     if (request.Options.ExpiresAfter != std::chrono::system_clock::duration::zero()) {
         expires_at = std::min(expires_at, now + request.Options.ExpiresAfter);
@@ -339,7 +363,8 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
             .set_issued_at(now)
             .set_expires_at(expires_at);
     if (!Audience.empty()) {
-        token.set_audience(Audience);
+        // jwt.h require audience claim to be a set
+        token.set_audience(std::set<std::string>{Audience});
     }
 
     if (request.ExternalAuth) {
@@ -354,6 +379,8 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
     auto encoded_token = token.sign(algorithm);
 
     response.Token = TString(encoded_token);
+    response.SanitizedToken = SanitizeJwtToken(response.Token);
+    response.Status = TLoginUserResponse::EStatus::SUCCESS;
 
     return response;
 }
@@ -381,7 +408,7 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
     try {
         jwt::decoded_jwt decoded_token = jwt::decode(request.Token);
         if (Audience) {
-            // we check audience manually because we wan't this error instead of wrong key id in case of databases mismatch
+            // we check audience manually because we want an explicit error instead of wrong key id in case of databases mismatch
             auto audience = decoded_token.get_audience();
             if (audience.empty() || TString(*audience.begin()) != Audience) {
                 response.Error = "Wrong audience";
@@ -391,11 +418,15 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
         auto keyId = FromStringWithDefault<ui64>(decoded_token.get_key_id());
         const TKeyRecord* key = FindKey(keyId);
         if (key != nullptr) {
+            static const size_t ISSUED_AT_LEEWAY_SEC = 2;
             auto verifier = jwt::verify()
-                .allow_algorithm(jwt::algorithm::ps256(key->PublicKey));
+                .allow_algorithm(jwt::algorithm::ps256(key->PublicKey))
+                .issued_at_leeway(ISSUED_AT_LEEWAY_SEC);
             if (Audience) {
-                verifier.with_audience(std::set<std::string>({Audience}));
+                // jwt.h require audience claim to be a set
+                verifier.with_audience(std::set<std::string>{Audience});
             }
+
             verifier.verify(decoded_token);
             response.User = decoded_token.get_subject();
             response.ExpiresAt = decoded_token.get_expires_at();
@@ -435,8 +466,10 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
                 response.Error = "Key not found";
             }
         }
-    } catch (const jwt::token_verification_exception& e) {
+    } catch (const jwt::signature_verification_exception& e) {
         response.Error = e.what(); // invalid token signature
+    } catch (const jwt::token_verification_exception& e) {
+        response.Error = e.what(); // invalid token
     } catch (const std::invalid_argument& e) {
         response.Error = "Token is not in correct format";
         response.TokenUnrecognized = true;
@@ -638,12 +671,26 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             sid.Type = pbSid.GetType();
             sid.Name = pbSid.GetName();
             sid.Hash = pbSid.GetHash();
+            sid.LastSuccessfulLogin = pbSid.GetLastSuccessfulLogin();
             for (const auto& pbSubSid : pbSid.GetMembers()) {
                 sid.Members.emplace(pbSubSid);
                 ChildToParentIndex[pbSubSid].emplace(sid.Name);
             }
+            sid.CreatedAt = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetCreatedAt()));
         }
     }
+}
+
+TString TLoginProvider::SanitizeJwtToken(const TString& token) {
+    const size_t signaturePos = token.find_last_of('.');
+    if (signaturePos == TString::npos || signaturePos == token.size() - 1) {
+        return {};
+    }
+    return TStringBuilder() << TStringBuf(token).SubString(0, signaturePos) << ".**"; // <token>.**
+}
+
+void TLoginProvider::UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity) {
+    PasswordChecker.Update(passwordComplexity);
 }
 
 }

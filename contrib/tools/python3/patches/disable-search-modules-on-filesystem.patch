@@ -1,0 +1,40 @@
+commit 6d00415ed919717959a3b801d1c71fb83b6bece8
+merge: 018629609ef9f3ae6ca5b2a2b0070fba40016b32 4883f0360b567e068fcca67261df7e13ce6a4a2c
+author: orivej
+date: 2019-07-22T03:09:30+03:00
+revision: 5328556
+
+    Do not let Python 3 search modules on filesystem by default. DEVTOOLS-4574
+    
+    REVIEW: 885661
+    Note: mandatory check (NEED_CHECK) was skipped
+
+--- contrib/tools/python3/Lib/site.py	(018629609ef9f3ae6ca5b2a2b0070fba40016b32)
++++ contrib/tools/python3/Lib/site.py	(6d00415ed919717959a3b801d1c71fb83b6bece8)
+@@ -590,17 +590,17 @@ def main():
+     global ENABLE_USER_SITE
+ 
+     orig_path = sys.path[:]
+-    known_paths = removeduppaths()
++    #known_paths = removeduppaths()
+     if orig_path != sys.path:
+         # removeduppaths() might make sys.path absolute.
+         # fix __file__ and __cached__ of already imported modules too.
+         abs_paths()
+ 
+-    known_paths = venv(known_paths)
++    #known_paths = venv(known_paths)
+     if ENABLE_USER_SITE is None:
+         ENABLE_USER_SITE = check_enableusersite()
+-    known_paths = addusersitepackages(known_paths)
+-    known_paths = addsitepackages(known_paths)
++    #known_paths = addusersitepackages(known_paths)
++    #known_paths = addsitepackages(known_paths)
+     setquit()
+     setcopyright()
+     sethelper()
+--- contrib/tools/python3/Python/sysmodule.c	(018629609ef9f3ae6ca5b2a2b0070fba40016b32)
++++ contrib/tools/python3/Python/sysmodule.c	(6d00415ed919717959a3b801d1c71fb83b6bece8)
+@@ -3307,1 +3307,1 @@ PySys_SetArgvEx(int argc, wchar_t **argv, int updatepath)
+-    PySys_SetArgvEx(argc, argv, Py_IsolatedFlag == 0);
++    PySys_SetArgvEx(argc, argv, 0);

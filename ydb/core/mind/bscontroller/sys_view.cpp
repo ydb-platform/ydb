@@ -312,6 +312,7 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     }
     info->SetAvailableSize(pDiskInfo->Metrics.GetAvailableSize());
     info->SetTotalSize(pDiskInfo->Metrics.GetTotalSize());
+    info->SetState(NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo->Metrics.GetState()));
     info->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(pDiskInfo->Status));
     if (pDiskInfo->StatusTimestamp != TInstant::Zero()) {
         info->SetStatusChangeTimestamp(pDiskInfo->StatusTimestamp.GetValue());
@@ -325,8 +326,8 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
 }
 
 void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId, const NKikimrBlobStorage::TVDiskMetrics& m,
-        std::optional<NKikimrBlobStorage::EVDiskStatus> status, NHPTimer::STime statusTimestamp,
-        NKikimrBlobStorage::TVDiskKind::EVDiskKind kind, bool isBeingDeleted) {
+        std::optional<NKikimrBlobStorage::EVDiskStatus> status, NKikimrBlobStorage::TVDiskKind::EVDiskKind kind,
+        bool isBeingDeleted) {
     pb->SetGroupId(vdiskId.GroupID.GetRawId());
     pb->SetGroupGeneration(vdiskId.GroupGeneration);
     pb->SetFailRealm(vdiskId.FailRealm);
@@ -338,11 +339,17 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
     if (m.HasAvailableSize()) {
         pb->SetAvailableSize(m.GetAvailableSize());
     }
-    if (!status && CyclesToDuration(GetCycleCountFast() - statusTimestamp) > TDuration::Seconds(15)) {
-        status = NKikimrBlobStorage::EVDiskStatus::ERROR;
-    }
     if (status) {
         pb->SetStatusV2(NKikimrBlobStorage::EVDiskStatus_Name(*status));
+    }
+    if (m.HasState()) {
+        pb->SetState(NKikimrWhiteboard::EVDiskState_Name(m.GetState()));
+    }
+    if (m.HasReplicated()) {
+        pb->SetReplicated(m.GetReplicated());
+    }
+    if (m.HasDiskSpace()) {
+        pb->SetDiskSpace(NKikimrWhiteboard::EFlag_Name(m.GetDiskSpace()));
     }
     pb->SetKind(NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(kind));
     if (isBeingDeleted) {
@@ -352,7 +359,7 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
 
 void CopyInfo(NKikimrSysView::TVSlotInfo* info, const THolder<TBlobStorageController::TVSlotInfo>& vSlotInfo) {
     SerializeVSlotInfo(info, vSlotInfo->GetVDiskId(), vSlotInfo->Metrics, vSlotInfo->VDiskStatus,
-        vSlotInfo->VDiskStatusTimestamp, vSlotInfo->Kind, vSlotInfo->IsBeingDeleted());
+        vSlotInfo->Kind, vSlotInfo->IsBeingDeleted());
 }
 
 void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageController::TGroupInfo>& groupInfo) {
@@ -428,6 +435,21 @@ void TBlobStorageController::UpdateSystemViews() {
         return;
     }
 
+    const TMonotonic now = TActivationContext::Monotonic();
+    const TDuration expiration = TDuration::Seconds(15);
+    for (auto& [key, value] : VSlots) {
+        if (!value->VDiskStatus && value->VDiskStatusTimestamp + expiration <= now) {
+            value->VDiskStatus = NKikimrBlobStorage::ERROR;
+            SysViewChangedVSlots.insert(key);
+        }
+    }
+    for (auto& [key, value] : StaticVSlots) {
+        if (!value.VDiskStatus && value.VDiskStatusTimestamp + expiration <= now) {
+            value.VDiskStatus = NKikimrBlobStorage::ERROR;
+            SysViewChangedVSlots.insert(key);
+        }
+    }
+
     if (!SysViewChangedPDisks.empty() || !SysViewChangedVSlots.empty() || !SysViewChangedGroups.empty() ||
             !SysViewChangedStoragePools.empty() || SysViewChangedSettings) {
         auto update = MakeHolder<TEvControllerUpdateSystemViews>();
@@ -454,6 +476,7 @@ void TBlobStorageController::UpdateSystemViews() {
                 if (pdisk.PDiskMetrics) {
                     pb->SetAvailableSize(pdisk.PDiskMetrics->GetAvailableSize());
                     pb->SetTotalSize(pdisk.PDiskMetrics->GetTotalSize());
+                    pb->SetState(NKikimrBlobStorage::TPDiskState::E_Name(pdisk.PDiskMetrics->GetState()));
                     if (pdisk.PDiskMetrics->HasEnforcedDynamicSlotSize()) {
                         pb->SetEnforcedDynamicSlotSize(pdisk.PDiskMetrics->GetEnforcedDynamicSlotSize());
                     }
@@ -468,7 +491,7 @@ void TBlobStorageController::UpdateSystemViews() {
             if (SysViewChangedVSlots.count(vslotId)) {
                 static const NKikimrBlobStorage::TVDiskMetrics zero;
                 SerializeVSlotInfo(&state.VSlots[vslotId], vslot.VDiskId, vslot.VDiskMetrics ? *vslot.VDiskMetrics : zero,
-                    vslot.VDiskStatus, vslot.VDiskStatusTimestamp, vslot.VDiskKind, false);
+                    vslot.VDiskStatus, vslot.VDiskKind, false);
             }
         }
         if (StorageConfig.HasBlobStorageConfig()) {

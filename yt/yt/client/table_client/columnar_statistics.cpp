@@ -1,9 +1,8 @@
 #include "columnar_statistics.h"
 
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/schema.h>
-#include <yt/yt/client/table_client/unversioned_row.h>
-#include <yt/yt/client/table_client/versioned_row.h>
+#include "name_table.h"
+#include "unversioned_row.h"
+#include "versioned_row.h"
 
 #include <library/cpp/iterator/functools.h>
 
@@ -74,8 +73,8 @@ TUnversionedOwningValue ApproximateMaxValue(TUnversionedValue value)
 template <typename TRow>
 void UpdateLargeColumnarStatistics(TLargeColumnarStatistics& statistics, TRange<TRow> rows)
 {
-    for (const auto& values : rows) {
-        for (const auto& value : values) {
+    for (auto row : rows) {
+        for (const auto& value : row) {
             if (value.Type != EValueType::Null) {
                 auto valueNoFlags = value;
                 valueNoFlags.Flags = EValueFlags::None;
@@ -160,7 +159,7 @@ void UpdateColumnarStatistics(TColumnarStatistics& statistics, TRange<TRow> rows
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TLargeColumnarStatistics::Empty() const
+bool TLargeColumnarStatistics::IsEmpty() const
 {
     return ColumnHyperLogLogDigests.empty();
 }
@@ -266,7 +265,7 @@ TLightweightColumnarStatistics TColumnarStatistics::MakeLightweightStatistics() 
     };
 }
 
-TNamedColumnarStatistics TColumnarStatistics::MakeNamedStatistics(const std::vector<TString>& names) const
+TNamedColumnarStatistics TColumnarStatistics::MakeNamedStatistics(const std::vector<std::string>& names) const
 {
     TNamedColumnarStatistics result;
     result.TimestampTotalWeight = TimestampTotalWeight;
@@ -289,7 +288,7 @@ bool TColumnarStatistics::HasValueStatistics() const
 
 bool TColumnarStatistics::HasLargeStatistics() const
 {
-    return GetColumnCount() == 0 || !LargeStatistics.Empty();
+    return GetColumnCount() == 0 || !LargeStatistics.IsEmpty();
 }
 
 void TColumnarStatistics::ClearValueStatistics()

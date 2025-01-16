@@ -6,7 +6,6 @@ TEST_SRCS(
     test_sql.py
 )
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")

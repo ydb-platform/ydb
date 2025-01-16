@@ -1,20 +1,21 @@
 #pragma once
 
-#include "program.h"
+#include "program_mixin.h"
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TProgramSetsidMixin
+    : public virtual TProgramMixinBase
 {
 protected:
     explicit TProgramSetsidMixin(NLastGetopt::TOpts& opts);
 
-    bool HandleSetsidOptions();
-
 private:
     bool Setsid_ = false;
+
+    void Handle();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

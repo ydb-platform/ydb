@@ -1,0 +1,22 @@
+--- a/src/google/protobuf/compiler/cpp/file.cc	(0493be282efcece0bb95a5f970ede895072fe7f8)
++++ b/src/google/protobuf/compiler/cpp/file.cc	(0ee9b261e62e35e2fa69209db9c8787ac99ad867)
+@@ -556,8 +556,7 @@ void FileGenerator::GenerateSourceDefaultInstance(int idx, io::Printer* p) {
+             };
+           };
+ 
+-          PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+-              PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const $type$ $name$;
++          PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const $type$ $name$;
+         )cc");
+   }
+ 
+@@ -579,8 +578,7 @@ void FileGenerator::GenerateSourceDefaultInstance(int idx, io::Printer* p) {
+           };
+         };
+ 
+-        PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+-            PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 $type$ $name$;
++        PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 $type$ $name$;
+       )cc");
+ 
+   for (int i = 0; i < generator->descriptor()->field_count(); ++i) {

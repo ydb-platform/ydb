@@ -9,7 +9,7 @@ PEERDIR(
     ydb/core/fq/libs/events
     ydb/core/protos
     ydb/library/actors/core
-    ydb/library/yql/providers/common/proto
+    yql/essentials/providers/common/proto
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/pq/proto
     ydb/public/api/protos

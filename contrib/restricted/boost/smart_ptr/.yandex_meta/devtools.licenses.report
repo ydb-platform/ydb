@@ -1,0 +1,329 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              183e86c91b8c37c98adc93220ae9a174
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost Software License, Version 1.0.
+        //
+        //  (See accompanying file LICENSE_1_0.txt or copy at 
+        //  http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/pointer_to_other.hpp [10:13]
+
+KEEP     BSL-1.0              47a0454637d4fa45d78eb2557ccd70c4
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+        // http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/smart_ptr/bad_weak_ptr.hpp [15:17]
+        include/boost/smart_ptr/detail/atomic_count_pt.hpp [9:11]
+        include/boost/smart_ptr/detail/atomic_count_win32.hpp [15:17]
+        include/boost/smart_ptr/detail/lightweight_mutex.hpp [15:17]
+        include/boost/smart_ptr/detail/lwm_pthreads.hpp [15:17]
+        include/boost/smart_ptr/detail/lwm_win32_cs.hpp [15:17]
+        include/boost/smart_ptr/detail/quick_allocator.hpp [16:18]
+        include/boost/smart_ptr/detail/shared_count.hpp [16:18]
+        include/boost/smart_ptr/detail/sp_counted_base.hpp [15:17]
+        include/boost/smart_ptr/detail/sp_counted_base_nt.hpp [16:18]
+        include/boost/smart_ptr/detail/sp_counted_base_pt.hpp [16:18]
+        include/boost/smart_ptr/detail/sp_counted_impl.hpp [16:18]
+
+KEEP     BSL-1.0              59c75c5a0cf680ac7d511be8b54ed0eb
+BELONGS ya.make
+    License text:
+        // https://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/smart_ptr/detail/lwm_std_mutex.hpp [6:6]
+
+KEEP     BSL-1.0              5cd4044c79f85aa40c2edd653c1d76f4
+BELONGS ya.make
+    License text:
+        (http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/make_unique.hpp [6:6]
+        include/boost/smart_ptr/allocate_local_shared_array.hpp [6:6]
+        include/boost/smart_ptr/allocate_shared_array.hpp [6:6]
+        include/boost/smart_ptr/allocate_unique.hpp [6:6]
+        include/boost/smart_ptr/make_local_shared_array.hpp [7:7]
+        include/boost/smart_ptr/make_shared_array.hpp [6:6]
+        include/boost/smart_ptr/make_unique.hpp [6:6]
+
+KEEP     BSL-1.0              6fb8dab2fa17abac18f239108501392d
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2003 Peter Dimov  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/smart_ptr.hpp [10:12]
+
+KEEP     BSL-1.0              745252704aa72167f50d9aad40337785
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost Software License, Version 1.0.
+        //  See accompanying file LICENSE_1_0.txt or copy at
+        //  http://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/enable_shared_from_this.hpp [9:11]
+        include/boost/intrusive_ptr.hpp [9:11]
+        include/boost/make_shared.hpp [8:10]
+        include/boost/smart_ptr/detail/atomic_count.hpp [16:18]
+        include/boost/smart_ptr/detail/atomic_count_nt.hpp [13:15]
+        include/boost/smart_ptr/detail/atomic_count_spin.hpp [9:11]
+        include/boost/smart_ptr/detail/atomic_count_std_atomic.hpp [11:13]
+        include/boost/smart_ptr/detail/lightweight_thread.hpp [15:17]
+        include/boost/smart_ptr/detail/sp_convertible.hpp [14:16]
+        include/boost/smart_ptr/detail/sp_counted_base_gcc_sparc.hpp [16:18]
+        include/boost/smart_ptr/detail/sp_counted_base_snc_ps3.hpp [16:18]
+        include/boost/smart_ptr/detail/sp_counted_base_std_atomic.hpp [14:16]
+        include/boost/smart_ptr/detail/sp_counted_base_sync.hpp [14:16]
+        include/boost/smart_ptr/detail/sp_interlocked.hpp [15:17]
+        include/boost/smart_ptr/detail/sp_noexcept.hpp [14:16]
+        include/boost/smart_ptr/enable_shared_from.hpp [8:10]
+        include/boost/smart_ptr/enable_shared_from_raw.hpp [10:12]
+        include/boost/smart_ptr/enable_shared_from_this.hpp [9:11]
+        include/boost/smart_ptr/make_local_shared.hpp [8:10]
+        include/boost/smart_ptr/make_local_shared_object.hpp [8:10]
+        include/boost/smart_ptr/make_shared.hpp [8:10]
+        include/boost/smart_ptr/make_shared_object.hpp [8:10]
+        include/boost/weak_ptr.hpp [9:11]
+
+KEEP     BSL-1.0              8a8e0b18cc05e7bc28034b7fb1c69575
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost Software License, Version 1.0.
+        //  See accompanying file LICENSE_1_0.txt or copy at
+        //  http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/smart_ptr/detail/sp_disable_deprecated.hpp [15:17]
+        include/boost/smart_ptr/detail/sp_has_sync_intrinsics.hpp [15:17]
+        include/boost/smart_ptr/detail/sp_typeinfo_.hpp [14:16]
+        include/boost/smart_ptr/detail/spinlock.hpp [15:17]
+        include/boost/smart_ptr/detail/spinlock_gcc_arm.hpp [7:9]
+        include/boost/smart_ptr/detail/spinlock_nt.hpp [13:15]
+        include/boost/smart_ptr/detail/spinlock_pool.hpp [15:17]
+        include/boost/smart_ptr/detail/spinlock_pt.hpp [13:15]
+        include/boost/smart_ptr/detail/spinlock_std_atomic.hpp [13:15]
+        include/boost/smart_ptr/detail/spinlock_sync.hpp [13:15]
+        include/boost/smart_ptr/detail/spinlock_w32.hpp [13:15]
+
+KEEP     BSL-1.0              8abbac2c705b0911702566954b0ebe9b
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost Software License, Version 1.0. (See
+        //  accompanying file LICENSE_1_0.txt or copy at
+        //  http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/scoped_array.hpp [7:9]
+        include/boost/scoped_ptr.hpp [7:9]
+        include/boost/shared_array.hpp [10:12]
+        include/boost/shared_ptr.hpp [10:12]
+        include/boost/smart_ptr/atomic_shared_ptr.hpp [9:11]
+        include/boost/smart_ptr/detail/atomic_count_gcc.hpp [15:17]
+        include/boost/smart_ptr/detail/atomic_count_gcc_x86.hpp [11:13]
+        include/boost/smart_ptr/detail/atomic_count_sync.hpp [13:15]
+        include/boost/smart_ptr/detail/local_counted_base.hpp [14:16]
+        include/boost/smart_ptr/detail/local_sp_deleter.hpp [14:16]
+        include/boost/smart_ptr/detail/sp_counted_base_acc_ia64.hpp [10:12]
+        include/boost/smart_ptr/detail/sp_counted_base_aix.hpp [12:14]
+        include/boost/smart_ptr/detail/sp_counted_base_cw_ppc.hpp [16:18]
+        include/boost/smart_ptr/detail/sp_counted_base_gcc_ia64.hpp [11:13]
+        include/boost/smart_ptr/detail/sp_counted_base_gcc_mips.hpp [15:17]
+        include/boost/smart_ptr/detail/sp_counted_base_gcc_ppc.hpp [16:18]
+        include/boost/smart_ptr/detail/sp_counted_base_gcc_x86.hpp [16:18]
+        include/boost/smart_ptr/detail/sp_counted_base_spin.hpp [16:18]
+        include/boost/smart_ptr/detail/sp_counted_base_vacpp_ppc.hpp [13:15]
+        include/boost/smart_ptr/detail/sp_counted_base_w32.hpp [16:18]
+        include/boost/smart_ptr/intrusive_ptr.hpp [9:11]
+        include/boost/smart_ptr/local_shared_ptr.hpp [8:10]
+        include/boost/smart_ptr/owner_less.hpp [10:12]
+        include/boost/smart_ptr/scoped_array.hpp [7:9]
+        include/boost/smart_ptr/scoped_ptr.hpp [7:9]
+        include/boost/smart_ptr/shared_array.hpp [10:12]
+        include/boost/smart_ptr/shared_ptr.hpp [10:12]
+        include/boost/smart_ptr/weak_ptr.hpp [9:11]
+
+KEEP     BSL-1.0              a33a9326898e5c686dcfd60e20f5be85
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0. 
+        // (See accompanying file LICENSE_1_0.txt or copy at 
+        //  http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/pointer_cast.hpp [4:6]
+
+KEEP     BSL-1.0              bb6c4a594a57e74611676fda9449a7e3
+BELONGS ya.make
+    License text:
+         * Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+         *          http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/smart_ptr/intrusive_ref_counter.hpp [3:5]
+
+KEEP     BSL-1.0              c9e6118e07afed16d6f26c06b5f29fe8
+BELONGS ya.make
+    License text:
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/detail/atomic_count.hpp [6:6]
+        include/boost/detail/lightweight_mutex.hpp [6:6]
+        include/boost/detail/lightweight_thread.hpp [7:7]
+        include/boost/detail/quick_allocator.hpp [7:7]
+        include/boost/smart_ptr/detail/atomic_count_gcc_atomic.hpp [11:11]
+        include/boost/smart_ptr/detail/deprecated_macros.hpp [6:6]
+        include/boost/smart_ptr/detail/sp_thread_pause.hpp [6:6]
+        include/boost/smart_ptr/detail/sp_thread_sleep.hpp [6:6]
+        include/boost/smart_ptr/detail/sp_thread_yield.hpp [6:6]
+        include/boost/smart_ptr/detail/sp_type_traits.hpp [6:6]
+        include/boost/smart_ptr/owner_equal_to.hpp [6:6]
+        include/boost/smart_ptr/owner_hash.hpp [6:6]
+
+KEEP     BSL-1.0              e03c043ca7052925e34194f3fe2631e4
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/detail/atomic_count.hpp [5:5]
+        include/boost/detail/lightweight_mutex.hpp [5:5]
+        include/boost/detail/lightweight_thread.hpp [6:6]
+        include/boost/detail/quick_allocator.hpp [6:6]
+        include/boost/smart_ptr/detail/atomic_count_gcc_atomic.hpp [10:10]
+        include/boost/smart_ptr/detail/deprecated_macros.hpp [5:5]
+        include/boost/smart_ptr/detail/lwm_std_mutex.hpp [5:5]
+        include/boost/smart_ptr/detail/sp_thread_pause.hpp [5:5]
+        include/boost/smart_ptr/detail/sp_thread_sleep.hpp [5:5]
+        include/boost/smart_ptr/detail/sp_thread_yield.hpp [5:5]
+        include/boost/smart_ptr/detail/sp_type_traits.hpp [5:5]
+        include/boost/smart_ptr/owner_equal_to.hpp [5:5]
+        include/boost/smart_ptr/owner_hash.hpp [5:5]
+
+KEEP     BSL-1.0              e9df2954141aa96551bf39192c39d2fe
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 94.44
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/smart_ptr/detail/sp_counted_base_gcc_atomic.hpp [13:14]
+        include/boost/smart_ptr/detail/sp_has_gcc_intrinsics.hpp [14:15]
+        include/boost/smart_ptr/detail/sp_obsolete.hpp [14:15]
+        include/boost/smart_ptr/detail/spinlock_gcc_atomic.hpp [11:12]
+        include/boost/smart_ptr/detail/yield_k.hpp [19:20]
+
+KEEP     BSL-1.0              eeda69591b5957fb1dbf0286c30acb85
+BELONGS ya.make
+    License text:
+        Distributed under the Boost Software License, Version 1.0.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/make_unique.hpp [5:5]
+        include/boost/smart_ptr/allocate_local_shared_array.hpp [5:5]
+        include/boost/smart_ptr/allocate_shared_array.hpp [5:5]
+        include/boost/smart_ptr/allocate_unique.hpp [5:5]
+        include/boost/smart_ptr/make_local_shared_array.hpp [6:6]
+        include/boost/smart_ptr/make_shared_array.hpp [5:5]
+        include/boost/smart_ptr/make_unique.hpp [5:5]

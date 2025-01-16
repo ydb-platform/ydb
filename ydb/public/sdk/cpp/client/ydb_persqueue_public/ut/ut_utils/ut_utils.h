@@ -436,7 +436,7 @@ public:
         auto log = Setup->GetLog();
         log << TLOG_INFO << "Enqueue message with sequence number " << SeqNo;
         EventLoop->MessageBuffer.Enqueue(::NPersQueue::TAcknowledgableMessage{
-                message.Empty() ? Message : message,
+                message.empty() ? Message : message,
                 SeqNo, TInstant::Now(), promise
         });
         MessagesWrittenToBuffer.Signal();

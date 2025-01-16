@@ -41,6 +41,7 @@ struct TMemoryLimits
     std::optional<i64> UncompressedBlockCache;
     std::optional<i64> VersionedChunkMeta;
     std::optional<i64> Reserved;
+    std::optional<i64> Query;
 
     REGISTER_YSON_STRUCT(TMemoryLimits);
 
@@ -55,7 +56,11 @@ struct TInstanceResources
     : public NYTree::TYsonStruct
 {
     i64 Memory;
-    std::optional<i64> Net;
+    // Bits per second.
+    // TODO(grachevkirill): Remove this field.
+    std::optional<i64> NetBits;
+    // Bytes per second.
+    std::optional<i64> NetBytes;
 
     TString Type;
     int Vcpu;
@@ -63,6 +68,9 @@ struct TInstanceResources
     bool operator==(const TInstanceResources& resources) const;
 
     void Clear();
+
+    void CanonizeNet();
+    void ResetNet();
 
     REGISTER_YSON_STRUCT(TInstanceResources);
 
@@ -93,6 +101,8 @@ struct TInstanceSize
 {
     TInstanceResourcesPtr ResourceGuarantee;
     TDefaultInstanceConfigPtr DefaultConfig;
+
+    std::optional<TString> HostTagFilter;
 
     REGISTER_YSON_STRUCT(TInstanceSize);
 
@@ -142,6 +152,9 @@ struct TBundleResourceQuota
 {
     int Vcpu;
     i64 Memory;
+    // TODO(grachevkirill): Remove it later.
+    i64 NetworkBits;
+    i64 NetworkBytes;
 
     REGISTER_YSON_STRUCT(TBundleResourceQuota);
 

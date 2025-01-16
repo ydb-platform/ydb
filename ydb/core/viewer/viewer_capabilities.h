@@ -15,6 +15,9 @@ public:
     {}
 
     void Bootstrap() override {
+        if (TBase::NeedToRedirect()) {
+            return;
+        }
         ReplyAndPassAway();
     }
 

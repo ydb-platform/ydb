@@ -165,21 +165,6 @@ def create_execute_query_request(
     )
 
 
-def wrap_execute_query_response(
-    rpc_state: RpcState,
-    response_pb: _apis.ydb_query.ExecuteQueryResponsePart,
-    tx: Optional["BaseQueryTxContext"] = None,
-    commit_tx: Optional[bool] = False,
-    settings: Optional[QueryClientSettings] = None,
-) -> convert.ResultSet:
-    issues._process_response(response_pb)
-    if tx and response_pb.tx_meta and not tx.tx_id:
-        tx._move_to_beginned(response_pb.tx_meta.id)
-    if tx and commit_tx:
-        tx._move_to_commited()
-    return convert.ResultSet.from_message(response_pb.result_set, settings)
-
-
 def bad_session_handler(func):
     @functools.wraps(func)
     def decorator(rpc_state, response_pb, session_state: IQuerySessionState, *args, **kwargs):
@@ -190,3 +175,21 @@ def bad_session_handler(func):
             raise
 
     return decorator
+
+
+@bad_session_handler
+def wrap_execute_query_response(
+    rpc_state: RpcState,
+    response_pb: _apis.ydb_query.ExecuteQueryResponsePart,
+    session_state: IQuerySessionState,
+    tx: Optional["BaseQueryTxContext"] = None,
+    commit_tx: Optional[bool] = False,
+    settings: Optional[QueryClientSettings] = None,
+) -> convert.ResultSet:
+    issues._process_response(response_pb)
+    if tx and commit_tx:
+        tx._move_to_commited()
+    elif tx and response_pb.tx_meta and not tx.tx_id:
+        tx._move_to_beginned(response_pb.tx_meta.id)
+
+    return convert.ResultSet.from_message(response_pb.result_set, settings)

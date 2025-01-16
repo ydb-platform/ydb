@@ -394,9 +394,9 @@ enum class EShadowDataMode {
     Enabled,
 };
 
-enum class EReplicationConsistency: int {
-    Strong = 1,
-    Weak = 2,
+enum class EConsistencyLevel: int {
+    Global = 1,
+    Row = 2,
 };
 
 struct TShardedTableOptions {
@@ -422,7 +422,7 @@ struct TShardedTableOptions {
 
     static TVector<TColumn> DefaultColumns() {
         return {
-            {"key",   "Uint32", true,  false}, 
+            {"key",   "Uint32", true,  false},
             {"value", "Uint32", false, false}
         };
     }
@@ -448,6 +448,7 @@ struct TShardedTableOptions {
         bool VirtualTimestamps = false;
         TMaybe<TDuration> ResolvedTimestamps;
         TMaybe<TString> AwsRegion;
+        bool TopicAutoPartitioning = false;
     };
 
     struct TFamily {
@@ -458,6 +459,7 @@ struct TShardedTableOptions {
         TString ExternalPoolKind;
         ui64 DataThreshold = 0;
         ui64 ExternalThreshold = 0;
+        ui8 ExternalChannelsCount = 1;
     };
 
     using TAttributes = THashMap<TString, TString>;
@@ -484,7 +486,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(std::optional<ui64>, ExecutorCacheSize, std::nullopt);
     TABLE_OPTION(std::optional<ui32>, DataTxCacheSize, std::nullopt);
     TABLE_OPTION(bool, Replicated, false);
-    TABLE_OPTION(std::optional<EReplicationConsistency>, ReplicationConsistency, std::nullopt);
+    TABLE_OPTION(std::optional<EConsistencyLevel>, ReplicationConsistencyLevel, std::nullopt);
     TABLE_OPTION(TAttributes, Attributes, {});
     TABLE_OPTION(bool, Sequences, false);
     TABLE_OPTION(bool, AllowSystemColumnNames, false);
@@ -596,6 +598,10 @@ void ApplyChanges(
             NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
 
 TRowVersion CommitWrites(
+        TTestActorRuntime& runtime,
+        const TVector<TString>& tables,
+        ui64 writeTxId);
+TRowVersion CommitWrites(
         Tests::TServer::TPtr server,
         const TVector<TString>& tables,
         ui64 writeTxId);
@@ -633,6 +639,19 @@ ui64 AsyncAlterDropColumn(
         const TString& workingDir,
         const TString& name,
         const TString& colName);
+
+ui64 AsyncSetEnableFilterByKey(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        bool value);
+
+ui64 AsyncSetColumnFamily(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        const TString& colName,
+        TShardedTableOptions::TFamily family);
 
 ui64 AsyncAlterAndDisableShadow(
         Tests::TServer::TPtr server,
@@ -694,8 +713,14 @@ ui64 AsyncAlterTakeIncrementalBackup(
 ui64 AsyncAlterRestoreIncrementalBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TString& srcTableName,
-        const TString& dstTableName);
+        const TString& srcTablePath,
+        const TString& dstTablePath);
+
+ui64 AsyncAlterRestoreMultipleIncrementalBackups(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TVector<TString>& srcTablePaths,
+        const TString& dstTablePAth);
 
 struct TReadShardedTableState {
     TActorId Sender;
@@ -703,6 +728,12 @@ struct TReadShardedTableState {
     TString Result;
 };
 
+TReadShardedTableState StartReadShardedTable(
+        TTestActorRuntime& runtime,
+        const TString& path,
+        TRowVersion snapshot = TRowVersion::Max(),
+        bool pause = true,
+        bool ordered = true);
 TReadShardedTableState StartReadShardedTable(
         Tests::TServer::TPtr server,
         const TString& path,
@@ -715,6 +746,10 @@ void ResumeReadShardedTable(
         TReadShardedTableState& state);
 
 TString ReadShardedTable(
+        TTestActorRuntime& runtime,
+        const TString& path,
+        TRowVersion snapshot = TRowVersion::Max());
+TString ReadShardedTable(
         Tests::TServer::TPtr server,
         const TString& path,
         TRowVersion snapshot = TRowVersion::Max());
@@ -722,7 +757,10 @@ TString ReadShardedTable(
 void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId);
 void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId);
 
-NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minPartCount = 0, ui64 minRows = 0);
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 datashardId,
+    std::function<bool(const NKikimrTableStats::TTableStats& stats)> condition = [](const NKikimrTableStats::TTableStats&)->bool{return true;});
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRuntime& runtime, ui64 datashardId,
+    std::function<bool(const NKikimrTableStats::TTableStats& stats)> condition = [](const NKikimrTableStats::TTableStats&)->bool{return true;});
 
 void SimulateSleep(Tests::TServer::TPtr server, TDuration duration);
 void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);

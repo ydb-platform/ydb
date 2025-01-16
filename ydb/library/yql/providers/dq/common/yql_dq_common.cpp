@@ -1,17 +1,17 @@
 #include "yql_dq_common.h"
 
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 
-#include <ydb/library/yql/sql/sql.h>
-#include <ydb/library/yql/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 
 #include <util/string/split.h>
 

@@ -4,8 +4,8 @@
 #include "private.h"
 
 #include <yt/yt/core/actions/invoker_util.h>
+
 #include <yt/yt/core/misc/relaxed_mpsc_queue.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/threading/thread.h>
 
@@ -16,6 +16,10 @@ namespace NYT::NConcurrency {
 ////////////////////////////////////////////////////////////////////////////////
 
 static constexpr auto CoalescingInterval = TDuration::MicroSeconds(100);
+
+static constexpr auto LowPrecisionDelayThreshold = TDuration::MilliSeconds(10);
+static constexpr auto LowPrecisionQuantumUsLog2 = 10; // ~1 ms
+
 static constexpr auto LateWarningThreshold = TDuration::Seconds(1);
 
 static constexpr auto& Logger = ConcurrencyLogger;
@@ -164,31 +168,20 @@ public:
 
     TDelayedExecutorCookie Submit(TDelayedCallback callback, TDuration delay, IInvokerPtr invoker)
     {
-        YT_VERIFY(callback);
-        return Submit(
+        return DoSubmit(
             std::move(callback),
-            delay.ToDeadLine(),
+            delay,
+            GetInstant() + delay,
             std::move(invoker));
     }
 
     TDelayedExecutorCookie Submit(TDelayedCallback callback, TInstant deadline, IInvokerPtr invoker)
     {
-        YT_VERIFY(callback);
-        auto entry = New<TDelayedExecutorEntry>(std::move(callback), deadline, std::move(invoker));
-        PollerThread_->EnqueueSubmission(entry); // <- (a)
-
-        std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b)
-
-        if (!PollerThread_->Start()) { // <- (c)
-            if (auto callback = TakeCallback(entry)) {
-                callback(/*aborted*/ true);
-            }
-#if defined(_asan_enabled_)
-            NSan::MarkAsIntentionallyLeaked(entry.Get());
-#endif
-        }
-
-        return entry;
+        return DoSubmit(
+            std::move(callback),
+            deadline - GetInstant(),
+            deadline,
+            std::move(invoker));
     }
 
     void Cancel(TDelayedExecutorEntryPtr entry)
@@ -246,10 +239,10 @@ private:
         TActionQueuePtr DelayedQueue_;
         IInvokerPtr DelayedInvoker_;
 
-        NProfiling::TGauge ScheduledCallbacksGauge_ = ConcurrencyProfiler.Gauge("/delayed_executor/scheduled_callbacks");
-        NProfiling::TCounter SubmittedCallbacksCounter_ = ConcurrencyProfiler.Counter("/delayed_executor/submitted_callbacks");
-        NProfiling::TCounter CanceledCallbacksCounter_ = ConcurrencyProfiler.Counter("/delayed_executor/canceled_callbacks");
-        NProfiling::TCounter StaleCallbacksCounter_ = ConcurrencyProfiler.Counter("/delayed_executor/stale_callbacks");
+        NProfiling::TGauge ScheduledCallbacksGauge_ = ConcurrencyProfiler().Gauge("/delayed_executor/scheduled_callbacks");
+        NProfiling::TCounter SubmittedCallbacksCounter_ = ConcurrencyProfiler().Counter("/delayed_executor/submitted_callbacks");
+        NProfiling::TCounter CanceledCallbacksCounter_ = ConcurrencyProfiler().Counter("/delayed_executor/canceled_callbacks");
+        NProfiling::TCounter StaleCallbacksCounter_ = ConcurrencyProfiler().Counter("/delayed_executor/stale_callbacks");
 
         class TCallbackGuard
         {
@@ -341,7 +334,10 @@ private:
             // NB: The callbacks are forwarded to the DelayedExecutor thread to prevent any user-code
             // from leaking to the Delayed Poller thread, which is, e.g., fiber-unfriendly.
             auto runAbort = [&] (const TDelayedExecutorEntryPtr& entry) {
-                RunCallback(entry, /*aborted*/ true);
+                if (auto callback = TakeCallback(entry)) {
+                    const auto& invoker = entry->Invoker ? entry->Invoker : DelayedInvoker_;
+                    invoker->Invoke(BIND_NO_PROPAGATE(TCallbackGuard(std::move(callback), /*aborted*/ true)));
+                }
             };
             for (const auto& entry : ScheduledEntries_) {
                 runAbort(entry);
@@ -370,7 +366,7 @@ private:
 
         void ProcessQueues()
         {
-            auto now = TInstant::Now();
+            auto now = GetInstant();
 
             {
                 int submittedCallbacks = 0;
@@ -412,32 +408,33 @@ private:
             }
 
             ScheduledCallbacksGauge_.Update(ScheduledEntries_.size());
+            THashMap<IInvokerPtr, std::vector<TClosure>> invokerToCallbacks;
             while (!ScheduledEntries_.empty()) {
                 auto it = ScheduledEntries_.begin();
                 const auto& entry = *it;
+
                 if (entry->Deadline > now + CoalescingInterval) {
                     break;
                 }
+
                 if (entry->Deadline + LateWarningThreshold < now) {
                     StaleCallbacksCounter_.Increment();
                     YT_LOG_DEBUG("Found a late delayed scheduled callback (Deadline: %v, Now: %v)",
                         entry->Deadline,
                         now);
                 }
-                RunCallback(entry, false);
+
+                if (auto callback = TakeCallback(entry)) {
+                    auto [it, _] = invokerToCallbacks.emplace(std::move(entry->Invoker), std::vector<TClosure>());
+                    it->second.push_back(BIND_NO_PROPAGATE(TCallbackGuard(std::move(callback), /*abort*/ false)));
+                }
+
                 entry->Iterator.reset();
                 ScheduledEntries_.erase(it);
             }
-        }
 
-        void RunCallback(const TDelayedExecutorEntryPtr& entry, bool abort)
-        {
-            if (auto callback = TakeCallback(entry)) {
-                const auto& invoker = entry->Invoker
-                    ? entry->Invoker
-                    : DelayedInvoker_;
-                invoker
-                    ->Invoke(BIND_NO_PROPAGATE(TCallbackGuard(std::move(callback), abort)));
+            for (auto& [invoker, callbacks] : invokerToCallbacks) {
+                (invoker ? invoker : DelayedInvoker_)->Invoke(TMutableRange(callbacks));
             }
         }
     };
@@ -445,6 +442,50 @@ private:
     using TPollerThreadPtr = TIntrusivePtr<TPollerThread>;
     const TPollerThreadPtr PollerThread_ = New<TPollerThread>();
 
+
+    TDelayedExecutorCookie DoSubmit(
+        TDelayedCallback callback,
+        TDuration delay,
+        TInstant deadline,
+        IInvokerPtr invoker)
+    {
+        YT_VERIFY(callback);
+
+        auto adjustedDeadline = GetAdjustedDeadline(delay, deadline);
+        auto entry = New<TDelayedExecutorEntry>(std::move(callback), adjustedDeadline, std::move(invoker));
+        PollerThread_->EnqueueSubmission(entry); // <- (a)
+
+        std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b)
+
+        if (!PollerThread_->Start()) { // <- (c)
+            if (auto callback = TakeCallback(entry)) {
+                callback(/*aborted*/ true);
+            }
+#if defined(_asan_enabled_)
+            NSan::MarkAsIntentionallyLeaked(entry.Get());
+#endif
+        }
+
+        return entry;
+    }
+
+    static TInstant GetAdjustedDeadline(TDuration delay, TInstant deadline)
+    {
+        // Dont mess with small delays.
+        if (delay < LowPrecisionDelayThreshold) {
+            return deadline;
+        }
+
+        // Beware of overflow; e.g. TInstant::Max() is quite common.
+        constexpr TInstant::TValue maskUs = (1ULL << LowPrecisionQuantumUsLog2) - 1;
+        constexpr TInstant::TValue deltaUs = maskUs - 1;
+        if (deadline.MicroSeconds() > Max<TInstant::TValue>() - deltaUs) {
+            return deadline;
+        }
+
+        // Round up to the nearest quantum.
+        return TInstant::MicroSeconds((deadline.MicroSeconds() + deltaUs) & ~maskUs);
+    }
 
     static void ClosureToDelayedCallbackAdapter(const TClosure& closure, bool aborted)
     {

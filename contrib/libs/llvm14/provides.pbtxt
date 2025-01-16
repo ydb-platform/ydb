@@ -1,0 +1,175 @@
+p { i: "llvm" x: "LLVMAArch64AsmParser" ix: true peerdir: "contrib/libs/llvm14/lib/Target/AArch64/AsmParser" }
+p { i: "llvm" x: "LLVMAArch64CodeGen" ix: true peerdir: "contrib/libs/llvm14/lib/Target/AArch64" }
+p { i: "llvm" x: "LLVMAArch64Desc" ix: true peerdir: "contrib/libs/llvm14/lib/Target/AArch64/MCTargetDesc" }
+p { i: "llvm" x: "LLVMAArch64Disassembler" ix: true peerdir: "contrib/libs/llvm14/lib/Target/AArch64/Disassembler" }
+p { i: "llvm" x: "LLVMAArch64Info" ix: true peerdir: "contrib/libs/llvm14/lib/Target/AArch64/TargetInfo" }
+p { i: "llvm" x: "LLVMAArch64Utils" ix: true peerdir: "contrib/libs/llvm14/lib/Target/AArch64/Utils" }
+p { i: "llvm" x: "LLVMARMAsmParser" ix: true peerdir: "contrib/libs/llvm14/lib/Target/ARM/AsmParser" }
+p { i: "llvm" x: "LLVMARMCodeGen" ix: true peerdir: "contrib/libs/llvm14/lib/Target/ARM" }
+p { i: "llvm" x: "LLVMARMDesc" ix: true peerdir: "contrib/libs/llvm14/lib/Target/ARM/MCTargetDesc" }
+p { i: "llvm" x: "LLVMARMDisassembler" ix: true peerdir: "contrib/libs/llvm14/lib/Target/ARM/Disassembler" }
+p { i: "llvm" x: "LLVMARMInfo" ix: true peerdir: "contrib/libs/llvm14/lib/Target/ARM/TargetInfo" }
+p { i: "llvm" x: "LLVMARMUtils" ix: true peerdir: "contrib/libs/llvm14/lib/Target/ARM/Utils" }
+p { i: "llvm" x: "LLVMAggressiveInstCombine" ix: true peerdir: "contrib/libs/llvm14/lib/Transforms/AggressiveInstCombine" }
+p { i: "llvm" x: "LLVMAnalysis" ix: true peerdir: "contrib/libs/llvm14/lib/Analysis" }
+p { i: "llvm" x: "LLVMAsmParser" ix: true peerdir: "contrib/libs/llvm14/lib/AsmParser" }
+p { i: "llvm" x: "LLVMAsmPrinter" ix: true peerdir: "contrib/libs/llvm14/lib/CodeGen/AsmPrinter" }
+p { i: "llvm" x: "LLVMBPFAsmParser" ix: true peerdir: "contrib/libs/llvm14/lib/Target/BPF/AsmParser" }
+p { i: "llvm" x: "LLVMBPFCodeGen" ix: true peerdir: "contrib/libs/llvm14/lib/Target/BPF" }
+p { i: "llvm" x: "LLVMBPFDesc" ix: true peerdir: "contrib/libs/llvm14/lib/Target/BPF/MCTargetDesc" }
+p { i: "llvm" x: "LLVMBPFDisassembler" ix: true peerdir: "contrib/libs/llvm14/lib/Target/BPF/Disassembler" }
+p { i: "llvm" x: "LLVMBPFInfo" ix: true peerdir: "contrib/libs/llvm14/lib/Target/BPF/TargetInfo" }
+p { i: "llvm" x: "LLVMBinaryFormat" ix: true peerdir: "contrib/libs/llvm14/lib/BinaryFormat" }
+p { i: "llvm" x: "LLVMBitReader" ix: true peerdir: "contrib/libs/llvm14/lib/Bitcode/Reader" }
+p { i: "llvm" x: "LLVMBitWriter" ix: true peerdir: "contrib/libs/llvm14/lib/Bitcode/Writer" }
+p { i: "llvm" x: "LLVMBitstreamReader" ix: true peerdir: "contrib/libs/llvm14/lib/Bitstream/Reader" }
+p { i: "llvm" x: "LLVMCFGuard" ix: true peerdir: "contrib/libs/llvm14/lib/Transforms/CFGuard" }
+p { i: "llvm" x: "LLVMCFIVerify" ix: true peerdir: "contrib/libs/llvm14/tools/llvm-cfi-verify/lib" }
+p { i: "llvm" x: "LLVMCodeGen" ix: true peerdir: "contrib/libs/llvm14/lib/CodeGen" }
+p { i: "llvm" x: "LLVMCore" ix: true peerdir: "contrib/libs/llvm14/lib/IR" }
+p { i: "llvm" x: "LLVMCoroutines" ix: true peerdir: "contrib/libs/llvm14/lib/Transforms/Coroutines" }
+p { i: "llvm" x: "LLVMCoverage" ix: true peerdir: "contrib/libs/llvm14/lib/ProfileData/Coverage" }
+p { i: "llvm" x: "LLVMDWARFLinker" ix: true peerdir: "contrib/libs/llvm14/lib/DWARFLinker" }
+p { i: "llvm" x: "LLVMDWP" ix: true peerdir: "contrib/libs/llvm14/lib/DWP" }
+p { i: "llvm" x: "LLVMDebugInfoCodeView" ix: true peerdir: "contrib/libs/llvm14/lib/DebugInfo/CodeView" }
+p { i: "llvm" x: "LLVMDebugInfoDWARF" ix: true peerdir: "contrib/libs/llvm14/lib/DebugInfo/DWARF" }
+p { i: "llvm" x: "LLVMDebugInfoGSYM" ix: true peerdir: "contrib/libs/llvm14/lib/DebugInfo/GSYM" }
+p { i: "llvm" x: "LLVMDebugInfoMSF" ix: true peerdir: "contrib/libs/llvm14/lib/DebugInfo/MSF" }
+p { i: "llvm" x: "LLVMDebugInfoPDB" ix: true peerdir: "contrib/libs/llvm14/lib/DebugInfo/PDB" }
+p { i: "llvm" x: "LLVMDemangle" ix: true peerdir: "contrib/libs/llvm14/lib/Demangle" }
+p { i: "llvm" x: "LLVMDiff" ix: true peerdir: "contrib/libs/llvm14/tools/llvm-diff/lib" }
+p { i: "llvm" x: "LLVMDlltoolDriver" ix: true peerdir: "contrib/libs/llvm14/lib/ToolDrivers/llvm-dlltool" }
+p { i: "llvm" x: "LLVMExecutionEngine" ix: true peerdir: "contrib/libs/llvm14/lib/ExecutionEngine" }
+p { i: "llvm" x: "LLVMExegesis" ix: true peerdir: "contrib/libs/llvm14/tools/llvm-exegesis/lib" }
+p { i: "llvm" x: "LLVMExegesisAArch64" ix: true peerdir: "contrib/libs/llvm14/tools/llvm-exegesis/lib/AArch64" }
+p { i: "llvm" x: "LLVMExegesisPowerPC" ix: true peerdir: "contrib/libs/llvm14/tools/llvm-exegesis/lib/PowerPC" }
+p { i: "llvm" x: "LLVMExegesisX86" ix: true peerdir: "contrib/libs/llvm14/tools/llvm-exegesis/lib/X86" }
+p { i: "llvm" x: "LLVMExtensions" ix: true peerdir: "contrib/libs/llvm14/lib/Extensions" }
+p { i: "llvm" x: "LLVMFileCheck" ix: true peerdir: "contrib/libs/llvm14/lib/FileCheck" }
+p { i: "llvm" x: "LLVMFrontendOpenACC" ix: true peerdir: "contrib/libs/llvm14/lib/Frontend/OpenACC" }
+p { i: "llvm" x: "LLVMFrontendOpenMP" ix: true peerdir: "contrib/libs/llvm14/lib/Frontend/OpenMP" }
+p { i: "llvm" x: "LLVMFuzzMutate" ix: true peerdir: "contrib/libs/llvm14/lib/FuzzMutate" }
+p { i: "llvm" x: "LLVMGlobalISel" ix: true peerdir: "contrib/libs/llvm14/lib/CodeGen/GlobalISel" }
+p { i: "llvm" x: "LLVMIRReader" ix: true peerdir: "contrib/libs/llvm14/lib/IRReader" }
+p { i: "llvm" x: "LLVMInstCombine" ix: true peerdir: "contrib/libs/llvm14/lib/Transforms/InstCombine" }
+p { i: "llvm" x: "LLVMInstrumentation" ix: true peerdir: "contrib/libs/llvm14/lib/Transforms/Instrumentation" }
+p { i: "llvm" x: "LLVMInterfaceStub" ix: true peerdir: "contrib/libs/llvm14/lib/InterfaceStub" }
+p { i: "llvm" x: "LLVMInterpreter" ix: true peerdir: "contrib/libs/llvm14/lib/ExecutionEngine/Interpreter" }
+p { i: "llvm" x: "LLVMJITLink" ix: true peerdir: "contrib/libs/llvm14/lib/ExecutionEngine/JITLink" }
+p { i: "llvm" x: "LLVMLTO" ix: true peerdir: "contrib/libs/llvm14/lib/LTO" }
+p { i: "llvm" x: "LLVMLibDriver" ix: true peerdir: "contrib/libs/llvm14/lib/ToolDrivers/llvm-lib" }
+p { i: "llvm" x: "LLVMLineEditor" ix: true peerdir: "contrib/libs/llvm14/lib/LineEditor" }
+p { i: "llvm" x: "LLVMLinker" ix: true peerdir: "contrib/libs/llvm14/lib/Linker" }
+p { i: "llvm" x: "LLVMMC" ix: true peerdir: "contrib/libs/llvm14/lib/MC" }
+p { i: "llvm" x: "LLVMMCA" ix: true peerdir: "contrib/libs/llvm14/lib/MCA" }
+p { i: "llvm" x: "LLVMMCDisassembler" ix: true peerdir: "contrib/libs/llvm14/lib/MC/MCDisassembler" }
+p { i: "llvm" x: "LLVMMCJIT" ix: true peerdir: "contrib/libs/llvm14/lib/ExecutionEngine/MCJIT" }
+p { i: "llvm" x: "LLVMMCParser" ix: true peerdir: "contrib/libs/llvm14/lib/MC/MCParser" }
+p { i: "llvm" x: "LLVMMIRParser" ix: true peerdir: "contrib/libs/llvm14/lib/CodeGen/MIRParser" }
+p { i: "llvm" x: "LLVMNVPTXCodeGen" ix: true peerdir: "contrib/libs/llvm14/lib/Target/NVPTX" }
+p { i: "llvm" x: "LLVMNVPTXDesc" ix: true peerdir: "contrib/libs/llvm14/lib/Target/NVPTX/MCTargetDesc" }
+p { i: "llvm" x: "LLVMNVPTXInfo" ix: true peerdir: "contrib/libs/llvm14/lib/Target/NVPTX/TargetInfo" }
+p { i: "llvm" x: "LLVMObjCARCOpts" ix: true peerdir: "contrib/libs/llvm14/lib/Transforms/ObjCARC" }
+p { i: "llvm" x: "LLVMObject" ix: true peerdir: "contrib/libs/llvm14/lib/Object" }
+p { i: "llvm" x: "LLVMObjectYAML" ix: true peerdir: "contrib/libs/llvm14/lib/ObjectYAML" }
+p { i: "llvm" x: "LLVMOption" ix: true peerdir: "contrib/libs/llvm14/lib/Option" }
+p { i: "llvm" x: "LLVMOrcJIT" ix: true peerdir: "contrib/libs/llvm14/lib/ExecutionEngine/Orc" }
+p { i: "llvm" x: "LLVMOrcShared" ix: true peerdir: "contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared" }
+p { i: "llvm" x: "LLVMOrcTargetProcess" ix: true peerdir: "contrib/libs/llvm14/lib/ExecutionEngine/Orc/TargetProcess" }
+p { i: "llvm" x: "LLVMPasses" ix: true peerdir: "contrib/libs/llvm14/lib/Passes" }
+p { i: "llvm" x: "LLVMPerfJITEvents" ix: true peerdir: "contrib/libs/llvm14/lib/ExecutionEngine/PerfJITEvents" }
+p { i: "llvm" x: "LLVMPowerPCAsmParser" ix: true peerdir: "contrib/libs/llvm14/lib/Target/PowerPC/AsmParser" }
+p { i: "llvm" x: "LLVMPowerPCCodeGen" ix: true peerdir: "contrib/libs/llvm14/lib/Target/PowerPC" }
+p { i: "llvm" x: "LLVMPowerPCDesc" ix: true peerdir: "contrib/libs/llvm14/lib/Target/PowerPC/MCTargetDesc" }
+p { i: "llvm" x: "LLVMPowerPCDisassembler" ix: true peerdir: "contrib/libs/llvm14/lib/Target/PowerPC/Disassembler" }
+p { i: "llvm" x: "LLVMPowerPCInfo" ix: true peerdir: "contrib/libs/llvm14/lib/Target/PowerPC/TargetInfo" }
+p { i: "llvm" x: "LLVMProfileData" ix: true peerdir: "contrib/libs/llvm14/lib/ProfileData" }
+p { i: "llvm" x: "LLVMRemarks" ix: true peerdir: "contrib/libs/llvm14/lib/Remarks" }
+p { i: "llvm" x: "LLVMRuntimeDyld" ix: true peerdir: "contrib/libs/llvm14/lib/ExecutionEngine/RuntimeDyld" }
+p { i: "llvm" x: "LLVMScalarOpts" ix: true peerdir: "contrib/libs/llvm14/lib/Transforms/Scalar" }
+p { i: "llvm" x: "LLVMSelectionDAG" ix: true peerdir: "contrib/libs/llvm14/lib/CodeGen/SelectionDAG" }
+p { i: "llvm" x: "LLVMSupport" ix: true peerdir: "contrib/libs/llvm14/lib/Support" }
+p { i: "llvm" x: "LLVMSymbolize" ix: true peerdir: "contrib/libs/llvm14/lib/DebugInfo/Symbolize" }
+p { i: "llvm" x: "LLVMTableGen" ix: true peerdir: "contrib/libs/llvm14/lib/TableGen" }
+p { i: "llvm" x: "LLVMTableGenGlobalISel" ix: true peerdir: "contrib/libs/llvm14/utils/TableGen/GlobalISel" }
+p { i: "llvm" x: "LLVMTarget" ix: true peerdir: "contrib/libs/llvm14/lib/Target" }
+p { i: "llvm" x: "LLVMTextAPI" ix: true peerdir: "contrib/libs/llvm14/lib/TextAPI" }
+p { i: "llvm" x: "LLVMTransformUtils" ix: true peerdir: "contrib/libs/llvm14/lib/Transforms/Utils" }
+p { i: "llvm" x: "LLVMVectorize" ix: true peerdir: "contrib/libs/llvm14/lib/Transforms/Vectorize" }
+p { i: "llvm" x: "LLVMWindowsManifest" ix: true peerdir: "contrib/libs/llvm14/lib/WindowsManifest" }
+p { i: "llvm" x: "LLVMX86AsmParser" ix: true peerdir: "contrib/libs/llvm14/lib/Target/X86/AsmParser" }
+p { i: "llvm" x: "LLVMX86CodeGen" ix: true peerdir: "contrib/libs/llvm14/lib/Target/X86" }
+p { i: "llvm" x: "LLVMX86Desc" ix: true peerdir: "contrib/libs/llvm14/lib/Target/X86/MCTargetDesc" }
+p { i: "llvm" x: "LLVMX86Disassembler" ix: true peerdir: "contrib/libs/llvm14/lib/Target/X86/Disassembler" }
+p { i: "llvm" x: "LLVMX86Info" ix: true peerdir: "contrib/libs/llvm14/lib/Target/X86/TargetInfo" }
+p { i: "llvm" x: "LLVMXRay" ix: true peerdir: "contrib/libs/llvm14/lib/XRay" }
+p { i: "llvm" x: "LLVMgold" ix: true peerdir: "contrib/libs/llvm14/tools/gold" }
+p { i: "llvm" x: "LLVMipo" ix: true peerdir: "contrib/libs/llvm14/lib/Transforms/IPO" }
+p { i: "llvm" x: "LTO" ix: true peerdir: "contrib/libs/llvm14/tools/lto" }
+p { i: "llvm" x: "Polly" ix: true peerdir: "contrib/libs/llvm14/tools/polly/lib" }
+p { i: "llvm" x: "PollyISL" ix: true peerdir: "contrib/libs/llvm14/tools/polly/lib/External/isl" }
+p { i: "llvm" x: "PollyPPCG" ix: true peerdir: "contrib/libs/llvm14/tools/polly/lib/External/ppcg" }
+p { i: "llvm" x: "Remarks" ix: true peerdir: "contrib/libs/llvm14/tools/remarks-shlib" }
+p { x: "bugpoint" peerdir: "contrib/libs/llvm14/tools/bugpoint" }
+p { x: "dsymutil" peerdir: "contrib/libs/llvm14/tools/dsymutil" }
+p { x: "llc" peerdir: "contrib/libs/llvm14/tools/llc" }
+p { x: "lli" peerdir: "contrib/libs/llvm14/tools/lli" }
+p { x: "lli-child-target" peerdir: "contrib/libs/llvm14/tools/lli/ChildTarget" }
+p { x: "llvm-ar" peerdir: "contrib/libs/llvm14/tools/llvm-ar" }
+p { x: "llvm-as" peerdir: "contrib/libs/llvm14/tools/llvm-as" }
+p { x: "llvm-bcanalyzer" peerdir: "contrib/libs/llvm14/tools/llvm-bcanalyzer" }
+p { x: "llvm-cat" peerdir: "contrib/libs/llvm14/tools/llvm-cat" }
+p { x: "llvm-cfi-verify" peerdir: "contrib/libs/llvm14/tools/llvm-cfi-verify" }
+p { x: "llvm-config" peerdir: "contrib/libs/llvm14/tools/llvm-config" }
+p { x: "llvm-cov" peerdir: "contrib/libs/llvm14/tools/llvm-cov" }
+p { x: "llvm-cvtres" peerdir: "contrib/libs/llvm14/tools/llvm-cvtres" }
+p { x: "llvm-cxxdump" peerdir: "contrib/libs/llvm14/tools/llvm-cxxdump" }
+p { x: "llvm-cxxfilt" peerdir: "contrib/libs/llvm14/tools/llvm-cxxfilt" }
+p { x: "llvm-cxxmap" peerdir: "contrib/libs/llvm14/tools/llvm-cxxmap" }
+p { x: "llvm-diff" peerdir: "contrib/libs/llvm14/tools/llvm-diff" }
+p { x: "llvm-dis" peerdir: "contrib/libs/llvm14/tools/llvm-dis" }
+p { x: "llvm-dwarfdump" peerdir: "contrib/libs/llvm14/tools/llvm-dwarfdump" }
+p { x: "llvm-dwp" peerdir: "contrib/libs/llvm14/tools/llvm-dwp" }
+p { x: "llvm-exegesis" peerdir: "contrib/libs/llvm14/tools/llvm-exegesis" }
+p { x: "llvm-extract" peerdir: "contrib/libs/llvm14/tools/llvm-extract" }
+p { x: "llvm-gsymutil" peerdir: "contrib/libs/llvm14/tools/llvm-gsymutil" }
+p { x: "llvm-ifs" peerdir: "contrib/libs/llvm14/tools/llvm-ifs" }
+p { x: "llvm-jitlink" peerdir: "contrib/libs/llvm14/tools/llvm-jitlink" }
+p { x: "llvm-jitlink-executor" peerdir: "contrib/libs/llvm14/tools/llvm-jitlink/llvm-jitlink-executor" }
+p { x: "llvm-libtool-darwin" peerdir: "contrib/libs/llvm14/tools/llvm-libtool-darwin" }
+p { x: "llvm-link" peerdir: "contrib/libs/llvm14/tools/llvm-link" }
+p { x: "llvm-lipo" peerdir: "contrib/libs/llvm14/tools/llvm-lipo" }
+p { x: "llvm-lto" peerdir: "contrib/libs/llvm14/tools/llvm-lto" }
+p { x: "llvm-lto2" peerdir: "contrib/libs/llvm14/tools/llvm-lto2" }
+p { x: "llvm-mc" peerdir: "contrib/libs/llvm14/tools/llvm-mc" }
+p { x: "llvm-mca" peerdir: "contrib/libs/llvm14/tools/llvm-mca" }
+p { x: "llvm-ml" peerdir: "contrib/libs/llvm14/tools/llvm-ml" }
+p { x: "llvm-modextract" peerdir: "contrib/libs/llvm14/tools/llvm-modextract" }
+p { x: "llvm-mt" peerdir: "contrib/libs/llvm14/tools/llvm-mt" }
+p { x: "llvm-nm" peerdir: "contrib/libs/llvm14/tools/llvm-nm" }
+p { x: "llvm-objcopy" peerdir: "contrib/libs/llvm14/tools/llvm-objcopy" }
+p { x: "llvm-objdump" peerdir: "contrib/libs/llvm14/tools/llvm-objdump" }
+p { x: "llvm-opt-report" peerdir: "contrib/libs/llvm14/tools/llvm-opt-report" }
+p { x: "llvm-pdbutil" peerdir: "contrib/libs/llvm14/tools/llvm-pdbutil" }
+p { x: "llvm-profdata" peerdir: "contrib/libs/llvm14/tools/llvm-profdata" }
+p { x: "llvm-profgen" peerdir: "contrib/libs/llvm14/tools/llvm-profgen" }
+p { x: "llvm-rc" peerdir: "contrib/libs/llvm14/tools/llvm-rc" }
+p { x: "llvm-readobj" peerdir: "contrib/libs/llvm14/tools/llvm-readobj" }
+p { x: "llvm-reduce" peerdir: "contrib/libs/llvm14/tools/llvm-reduce" }
+p { x: "llvm-rtdyld" peerdir: "contrib/libs/llvm14/tools/llvm-rtdyld" }
+p { x: "llvm-size" peerdir: "contrib/libs/llvm14/tools/llvm-size" }
+p { x: "llvm-split" peerdir: "contrib/libs/llvm14/tools/llvm-split" }
+p { x: "llvm-stress" peerdir: "contrib/libs/llvm14/tools/llvm-stress" }
+p { x: "llvm-strings" peerdir: "contrib/libs/llvm14/tools/llvm-strings" }
+p { x: "llvm-symbolizer" peerdir: "contrib/libs/llvm14/tools/llvm-symbolizer" }
+p { x: "llvm-tblgen" peerdir: "contrib/libs/llvm14/utils/TableGen" }
+p { x: "llvm-undname" peerdir: "contrib/libs/llvm14/tools/llvm-undname" }
+p { x: "llvm-xray" peerdir: "contrib/libs/llvm14/tools/llvm-xray" }
+p { x: "obj2yaml" peerdir: "contrib/libs/llvm14/tools/obj2yaml" }
+p { x: "opt" peerdir: "contrib/libs/llvm14/tools/opt" }
+p { x: "sancov" peerdir: "contrib/libs/llvm14/tools/sancov" }
+p { x: "sanstats" peerdir: "contrib/libs/llvm14/tools/sanstats" }
+p { x: "split-file" peerdir: "contrib/libs/llvm14/tools/split-file" }
+p { x: "verify-uselistorder" peerdir: "contrib/libs/llvm14/tools/verify-uselistorder" }
+p { x: "yaml2obj" peerdir: "contrib/libs/llvm14/tools/yaml2obj" }
+p { i: "llvm/include" addincl: "contrib/libs/llvm14/include" addinclbuild: true }

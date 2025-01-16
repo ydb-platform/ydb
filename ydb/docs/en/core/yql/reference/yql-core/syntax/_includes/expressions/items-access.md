@@ -9,7 +9,7 @@ For accessing the values inside containers:
 
 When using this syntax to access containers within table columns, be sure to specify the full column name, including the table name or table alias separated by a dot (see the first example below).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

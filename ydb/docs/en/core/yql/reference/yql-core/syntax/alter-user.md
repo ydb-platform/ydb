@@ -2,7 +2,7 @@
 
 Changes the user password.
 
-Syntax:
+## Syntax
 
 ```yql
 ALTER USER user_name [ WITH ] option [ ... ]

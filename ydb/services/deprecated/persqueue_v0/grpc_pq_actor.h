@@ -465,6 +465,7 @@ private:
 
     void GenerateNextWriteRequest(const NActors::TActorContext& ctx);
 
+    void SetupBytesWrittenByUserAgentCounter();
     void SetupCounters();
     void SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath,
                        bool isServerless, const TString& folderId);
@@ -570,6 +571,7 @@ private:
     TInstant StartTime;
     NKikimr::NPQ::TPercentileCounter InitLatency;
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
+    NYdb::NPersQueue::TCounterPtr BytesWrittenByUserAgent;
 
     THolder<NPersQueue::TTopicNamesConverterFactory> ConverterFactory;
     NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
@@ -699,6 +701,7 @@ private:
     void SendAuthRequest(const TActorContext& ctx);
     void CreateInitAndAuthActor(const TActorContext& ctx);
 
+    void SetupBytesReadByUserAgentCounter();
     void SetupCounters();
     void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic);
     void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic, const TString& cloudId, const TString& dbId,
@@ -726,7 +729,7 @@ private:
     static ui32 NormalizeMaxReadSize(ui32 sourceValue);
     static ui32 NormalizeMaxReadPartitionsCount(ui32 sourceValue);
 
-    static bool RemoveEmptyMessages(NPersQueue::TReadResponse::TBatchedData& data); // returns true if there are nonempty messages
+    static bool HasMessages(const NPersQueue::TReadResponse::TBatchedData& data); // returns true if there are any messages
 
 private:
     IReadSessionHandlerRef Handler;
@@ -746,6 +749,7 @@ private:
     TString Session;
     TString PeerName;
     TString Database;
+    TString UserAgent;
 
     bool ClientsideLocksAllowed;
     bool BalanceRightNow;
@@ -929,6 +933,7 @@ private:
     NKikimr::NPQ::TPercentileCounter InitLatency;
     NKikimr::NPQ::TPercentileCounter CommitLatency;
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
+    NYdb::NPersQueue::TCounterPtr BytesReadByUserAgent;
 
     NKikimr::NPQ::TPercentileCounter ReadLatency;
     NKikimr::NPQ::TPercentileCounter ReadLatencyFromDisk;

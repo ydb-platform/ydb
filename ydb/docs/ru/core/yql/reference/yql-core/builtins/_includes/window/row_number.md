@@ -2,14 +2,15 @@
 
 Номер строки в рамках [раздела](../../../syntax/window.md#partition). Без аргументов.
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 ROW_NUMBER()->Uint64
 ```
 
+### Примеры
 
-**Примеры**
-``` yql
+```yql
 SELECT
     ROW_NUMBER() OVER w AS row_num
 FROM my_table

@@ -4,6 +4,8 @@
 
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -49,6 +51,25 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         }
     }
 
+    THashSet<TString> sequences;
+    for (const auto& child: srcPath.Base()->GetChildren()) {
+        auto name = child.first;
+        auto pathId = child.second;
+
+        TPath childPath = srcPath.Child(name);
+        if (!childPath.IsSequence() || childPath.IsDeleted()) {
+            continue;
+        }
+
+        Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
+
+        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
+        const auto& sequenceDesc = sequenceInfo->Description;
+        const auto& sequenceName = sequenceDesc.GetName();
+
+        sequences.emplace(sequenceName);
+    }
+
     TPath dstPath = TPath::Resolve(dstStr, context.SS);
 
     result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcPath, dstPath)));
@@ -63,6 +84,10 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
         if (srcChildPath.IsCdcStream()) {
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move table with cdc streams")};
+        }
+
+        if (srcChildPath.IsSequence()) {
+            continue;
         }
 
         TPath dstIndexPath = dstPath.Child(name);
@@ -83,6 +108,19 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
         result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
+    }
+
+    for (const auto& sequence : sequences) {
+        auto scheme = TransactionTemplate(
+            dstPath.PathString(),
+            NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence);
+        scheme.SetFailOnExist(true);
+
+        auto* moveSequence = scheme.MutableMoveSequence();
+        moveSequence->SetSrcPath(srcPath.PathString() + "/" + sequence);
+        moveSequence->SetDstPath(dstPath.PathString() + "/" + sequence);
+
+        result.push_back(CreateMoveSequence(NextPartId(nextId, result), scheme));
     }
 
     return result;

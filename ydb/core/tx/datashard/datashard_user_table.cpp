@@ -147,7 +147,7 @@ static bool IsJsonCdcStream(TUserTable::TCdcStream::EFormat format) {
 
 void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
     Y_ABORT_UNLESS(streamDesc.HasPathId());
-    const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
+    const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
 
     if (CdcStreams.contains(streamPathId)) {
         return;
@@ -175,7 +175,7 @@ void TUserTable::SwitchCdcStreamState(const TPathId& streamPathId, TCdcStream::E
     GetSchema(schema);
 
     for (auto it = schema.MutableCdcStreams()->begin(); it != schema.MutableCdcStreams()->end(); ++it) {
-        if (streamPathId != PathIdFromPathId(it->GetPathId())) {
+        if (streamPathId != TPathId::FromProto(it->GetPathId())) {
             continue;
         }
 
@@ -201,7 +201,7 @@ void TUserTable::DropCdcStream(const TPathId& streamPathId) {
     GetSchema(schema);
 
     for (auto it = schema.GetCdcStreams().begin(); it != schema.GetCdcStreams().end(); ++it) {
-        if (streamPathId != PathIdFromPathId(it->GetPathId())) {
+        if (streamPathId != TPathId::FromProto(it->GetPathId())) {
             continue;
         }
 
@@ -327,7 +327,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     for (const auto& streamDesc : descr.GetCdcStreams()) {
         Y_ABORT_UNLESS(streamDesc.HasPathId());
-        CdcStreams.emplace(PathIdFromPathId(streamDesc.GetPathId()), TCdcStream(streamDesc));
+        CdcStreams.emplace(TPathId::FromProto(streamDesc.GetPathId()), TCdcStream(streamDesc));
         JsonCdcStreamCount += ui32(IsJsonCdcStream(streamDesc.GetFormat()));
     }
 }
@@ -441,7 +441,7 @@ void TUserTable::DoApplyCreate(
         alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
         if (appliedRooms.insert(family.GetRoomId()).second) {
             // Call SetRoom once per room
-            alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
+            alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannels(), family.OuterChannel());
         }
     }
 
@@ -450,8 +450,7 @@ void TUserTable::DoApplyCreate(
         const TUserColumn& column = col.second;
 
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-        ui32 pgTypeId = columnType.TypeInfo ? columnType.TypeInfo->GetPgTypeId() : 0;
-        alter.AddPgColumn(tid, column.Name, columnId, columnType.TypeId, pgTypeId, column.TypeMod, column.NotNull);
+        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull);
         alter.AddColumnToFamily(tid, columnId, column.Family);
     }
 
@@ -542,7 +541,7 @@ void TUserTable::ApplyAlter(
         if (appliedRooms.insert(family.GetRoomId()).second) {
             // Call SetRoom once per room
             for (ui32 tid : tids) {
-                alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
+                alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannels(), family.OuterChannel());
             }
         }
     }
@@ -554,8 +553,7 @@ void TUserTable::ApplyAlter(
         if (!oldTable.Columns.contains(colId)) {
             for (ui32 tid : tids) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                ui32 pgTypeId = columnType.TypeInfo ? columnType.TypeInfo->GetPgTypeId() : 0;
-                alter.AddPgColumn(tid, column.Name, colId, columnType.TypeId, pgTypeId, column.TypeMod, column.NotNull);
+                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull);
             }
         }
 

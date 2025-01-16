@@ -1,0 +1,36 @@
+--- a/lib/fuzzer/FuzzerDriver.cpp
++++ b/lib/fuzzer/FuzzerDriver.cpp
+@@ -657,4 +657,6 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
+   Options.ErrorExitCode = Flags.error_exitcode;
+   Options.TimeoutExitCode = Flags.timeout_exitcode;
++  Options.InterruptExitCode = Flags.interrupted_exitcode;
++  Options.DumpInterrupted = Flags.dump_interrupted;
+   Options.IgnoreTimeouts = Flags.ignore_timeouts;
+   Options.IgnoreOOMs = Flags.ignore_ooms;
+--- a/lib/fuzzer/FuzzerFlags.def
++++ b/lib/fuzzer/FuzzerFlags.def
+@@ -40,4 +40,7 @@ FUZZER_FLAG_INT(error_exitcode, 77, "When libFuzzer itself reports a bug "
+ FUZZER_FLAG_INT(timeout_exitcode, 70, "When libFuzzer reports a timeout "
+   "this exit code will be used.")
++FUZZER_FLAG_INT(interrupted_exitcode, 0, "[arcadia] When libFuzzer intercepts a singal "
++  "this exit code will be used.")
++FUZZER_FLAG_INT(dump_interrupted, 0, "[arcadia] If 1, dump current unit on signal.")
+ FUZZER_FLAG_INT(max_total_time, 0, "If positive, indicates the maximal total "
+                                    "time in seconds to run the fuzzer.")
+--- a/lib/fuzzer/FuzzerLoop.cpp
++++ b/lib/fuzzer/FuzzerLoop.cpp
+@@ -263,4 +263,6 @@ void Fuzzer::MaybeExitGracefully() {
+ 
+ void Fuzzer::InterruptCallback() {
++  if (Options.DumpInterrupted)
++    DumpCurrentUnit("interrupted-");
+   Printf("==%lu== libFuzzer: run interrupted; exiting\n", GetPid());
+   PrintFinalStats();
+--- a/lib/fuzzer/FuzzerOptions.h
++++ b/lib/fuzzer/FuzzerOptions.h
+@@ -24,4 +24,5 @@ struct FuzzingOptions {
+   int InterruptExitCode = 72;
+   int ErrorExitCode = 77;
++  bool DumpInterrupted = false;
+   bool IgnoreTimeouts = true;
+   bool IgnoreOOMs = true;

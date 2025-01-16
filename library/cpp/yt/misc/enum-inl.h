@@ -11,6 +11,7 @@
 #include <util/generic/cast.h>
 
 #include <algorithm>
+#include <numeric>
 #include <stdexcept>
 
 namespace NYT {
@@ -35,6 +36,14 @@ namespace NYT {
 
 #define ENUM__DOMAIN_ITEM_SEQ(seq) \
     PP_ELEMENT(seq, 0) = PP_ELEMENT(seq, 1) PP_COMMA
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+constexpr std::optional<T> TryGetEnumUnknownValueImpl(T)
+{
+    return std::nullopt;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -132,6 +141,13 @@ constexpr bool CheckDomainNames(const TNames& names)
             return std::nullopt; \
         } \
         \
+        static constexpr bool IsKnownValue(T value) \
+        { \
+            return false  \
+                PP_FOR_EACH(ENUM__IS_KNOWN_VALUE_ITEM, seq) \
+            ; \
+        } \
+        \
         static constexpr const std::array<TStringBuf, DomainSize>& GetDomainNames() \
         { \
             return Names; \
@@ -183,6 +199,19 @@ constexpr bool CheckDomainNames(const TNames& names)
 
 #define ENUM__GET_DOMAIN_NAMES_ITEM_ATOMIC(item) \
     TStringBuf(PP_STRINGIZE(item)),
+
+#define ENUM__IS_KNOWN_VALUE_ITEM(item) \
+    PP_IF( \
+        PP_IS_SEQUENCE(item), \
+        ENUM__IS_KNOWN_VALUE_ITEM_SEQ, \
+        ENUM__IS_KNOWN_VALUE_ITEM_ATOMIC \
+    )(item)
+
+#define ENUM__IS_KNOWN_VALUE_ITEM_SEQ(seq) \
+    ENUM__IS_KNOWN_VALUE_ITEM_ATOMIC(PP_ELEMENT(seq, 0))
+
+#define ENUM__IS_KNOWN_VALUE_ITEM_ATOMIC(item) \
+    || value == T::item
 
 #define ENUM__VALIDATE_UNIQUE(enumType) \
     static_assert(IsMonotonic || ::NYT::NDetail::CheckValuesUnique(Values), \
@@ -241,6 +270,13 @@ constexpr T TEnumTraitsWithKnownDomain<T, true>::GetMaxValue()
 }
 
 template <class T>
+constexpr T TEnumTraitsWithKnownDomain<T, true>::GetAllSetValue()
+    requires (TEnumTraitsImpl<T>::IsBitEnum)
+{
+    return TEnumTraitsImpl<T>::GetAllSetValue();
+}
+
+template <class T>
 std::vector<T> TEnumTraitsWithKnownDomain<T, true>::Decompose(T value)
     requires (TEnumTraitsImpl<T>::IsBitEnum)
 {
@@ -262,6 +298,13 @@ TStringBuf TEnumTraits<T, true>::GetTypeName()
 }
 
 template <class T>
+constexpr std::optional<T> TEnumTraits<T, true>::TryGetUnknownValue()
+{
+    using NYT::TryGetEnumUnknownValueImpl;
+    return TryGetEnumUnknownValueImpl(T());
+}
+
+template <class T>
 std::optional<T> TEnumTraits<T, true>::FindValueByLiteral(TStringBuf literal)
 {
     return TEnumTraitsImpl<T>::FindValueByLiteral(literal);
@@ -271,6 +314,23 @@ template <class T>
 std::optional<TStringBuf> TEnumTraits<T, true>::FindLiteralByValue(T value)
 {
     return TEnumTraitsImpl<T>::FindLiteralByValue(value);
+}
+
+template <class T>
+constexpr bool TEnumTraits<T, true>::IsKnownValue(T value)
+    requires (!TEnumTraitsImpl<T>::IsBitEnum)
+{
+    return TEnumTraitsImpl<T>::IsKnownValue(value);
+}
+
+template <class T>
+constexpr bool TEnumTraits<T, true>::IsValidValue(T value)
+{
+    if constexpr (IsBitEnum) {
+        return (value & TEnumTraits<T>::GetAllSetValue()) == value;
+    } else {
+        return IsKnownValue(value);
+    }
 }
 
 template <class T>
@@ -308,7 +368,7 @@ T TEnumTraits<T, true>::FromString(TStringBuf literal)
         return T(ToUnderlying(lhs) op ToUnderlying(rhs)); \
     } \
     \
-    [[maybe_unused]] inline T& operator assignOp (T& lhs, T rhs) \
+    [[maybe_unused]] inline constexpr T& operator assignOp (T& lhs, T rhs) \
     { \
         lhs = T(ToUnderlying(lhs) op ToUnderlying(rhs)); \
         return lhs; \
@@ -326,19 +386,29 @@ T TEnumTraits<T, true>::FromString(TStringBuf literal)
         return T(ToUnderlying(lhs) op rhs); \
     } \
     \
-    [[maybe_unused]] inline T& operator assignOp (T& lhs, size_t rhs) \
+    [[maybe_unused]] inline constexpr T& operator assignOp (T& lhs, size_t rhs) \
     { \
         lhs = T(ToUnderlying(lhs) op rhs); \
         return lhs; \
     }
 
-#define ENUM__BITWISE_OPS(enumType) \
+#define ENUM__BITWISE_OPS(enumType)                 \
     ENUM__BINARY_BITWISE_OPERATOR(enumType, &=, &)  \
     ENUM__BINARY_BITWISE_OPERATOR(enumType, |=, | ) \
     ENUM__BINARY_BITWISE_OPERATOR(enumType, ^=, ^)  \
     ENUM__UNARY_BITWISE_OPERATOR(enumType, ~)       \
     ENUM__BIT_SHIFT_OPERATOR(enumType, <<=, << )    \
     ENUM__BIT_SHIFT_OPERATOR(enumType, >>=, >> )
+
+#define ENUM__ALL_SET_VALUE(enumType, seq)             \
+    static constexpr enumType GetAllSetValue()         \
+    {                                                  \
+        return std::accumulate(                        \
+            Values.begin(),                            \
+            Values.end(),                              \
+            enumType(),                                \
+            [] (auto a, auto b) { return a | b; });    \
+    }
 
 ////////////////////////////////////////////////////////////////////////////////
 

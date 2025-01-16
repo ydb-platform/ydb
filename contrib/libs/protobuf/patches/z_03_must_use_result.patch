@@ -1,0 +1,15 @@
+--- contrib/libs/protobuf/src/google/protobuf/message_lite.h	(index)
++++ contrib/libs/protobuf/src/google/protobuf/message_lite.h	(working tree)
+@@ -39,6 +39,12 @@
+ #ifndef GOOGLE_PROTOBUF_MESSAGE_LITE_H__
+ #define GOOGLE_PROTOBUF_MESSAGE_LITE_H__
+ 
++#if defined(_MSC_VER)
++#define PROTOBUF_MUST_USE_RESULT
++#else
++#define PROTOBUF_MUST_USE_RESULT __attribute__((warn_unused_result))
++#endif
++
+ #include <climits>
+ #include <iosfwd>
+ #include <string>

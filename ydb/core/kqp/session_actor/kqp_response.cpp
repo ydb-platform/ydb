@@ -2,7 +2,7 @@
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -52,36 +52,6 @@ bool HasSchemeOrFatalIssues(const TIssue& issue) {
 }
 
 } // namespace
-
-void ConvertKqpQueryResultToDbResult(const NKikimrMiniKQL::TResult& from, Ydb::ResultSet* to) {
-    const auto& type = from.GetType();
-    TStackVec<NKikimrMiniKQL::TType> columnTypes;
-    Y_ENSURE(type.GetKind() == NKikimrMiniKQL::ETypeKind::Struct);
-    for (const auto& member : type.GetStruct().GetMember()) {
-        if (member.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::List) {
-            for (const auto& column : member.GetType().GetList().GetItem().GetStruct().GetMember()) {
-                auto columnMeta = to->add_columns();
-                columnMeta->set_name(column.GetName());
-                columnTypes.push_back(column.GetType());
-                ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta->mutable_type());
-            }
-        }
-    }
-    for (const auto& responseStruct : from.GetValue().GetStruct()) {
-        for (const auto& row : responseStruct.GetList()) {
-            auto newRow = to->add_rows();
-            ui32 columnCount = static_cast<ui32>(row.StructSize());
-            Y_ENSURE(columnCount == columnTypes.size());
-            for (ui32 i = 0; i < columnCount; i++) {
-                const auto& column = row.GetStruct(i);
-                ConvertMiniKQLValueToYdbValue(columnTypes[i], column, *newRow->add_items());
-            }
-        }
-        if (responseStruct.Getvalue_valueCase() == NKikimrMiniKQL::TValue::kBool) {
-            to->set_truncated(responseStruct.GetBool());
-        }
-    }
-}
 
 TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const TIssue& issue) {
     if (issue.GetSeverity() == TSeverityIds::S_FATAL) {

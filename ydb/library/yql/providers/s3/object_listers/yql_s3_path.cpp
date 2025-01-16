@@ -1,7 +1,7 @@
 #include "yql_s3_path.h"
 
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 
@@ -112,7 +112,7 @@ TMaybe<TString> BuildS3FilePattern(
     TString effectiveFilePattern = filePattern ? filePattern : "*";
 
     if (partitionedBy.empty()) {
-        if (path.Empty()) {
+        if (path.empty()) {
             return "Can not read from empty path";
         }
 

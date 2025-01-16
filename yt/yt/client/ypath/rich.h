@@ -67,8 +67,8 @@ public:
     void SetReadViaExecNode(bool value);
 
     // "columns"
-    std::optional<std::vector<TString>> GetColumns() const;
-    void SetColumns(const std::vector<TString>& columns);
+    std::optional<std::vector<std::string>> GetColumns() const;
+    void SetColumns(const std::vector<std::string>& columns);
 
     // "rename_columns"
     std::optional<NTableClient::TColumnRenameDescriptors> GetColumnRenameDescriptors() const;
@@ -170,6 +170,9 @@ public:
     // "versioned_read_options"
     NTableClient::TVersionedReadOptions GetVersionedReadOptions() const;
 
+    // "versioned_write_options"
+    NTableClient::TVersionedWriteOptions GetVersionedWriteOptions() const;
+
 private:
     TYPath Path_;
     NYTree::IAttributeDictionaryPtr Attributes_;
@@ -189,6 +192,9 @@ void Deserialize(TRichYPath& richPath, NYson::TYsonPullParserCursor* cursor);
 
 void ToProto(TString* protoPath, const TRichYPath& path);
 void FromProto(TRichYPath* path, const TString& protoPath);
+
+void ToProto(std::string* protoPath, const TRichYPath& path);
+void FromProto(TRichYPath* path, const std::string& protoPath);
 
 ////////////////////////////////////////////////////////////////////////////////
 

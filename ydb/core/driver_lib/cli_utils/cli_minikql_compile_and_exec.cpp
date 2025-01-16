@@ -1,11 +1,11 @@
 #include "cli.h"
 
-#include <ydb/library/yql/ast/yql_ast.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 

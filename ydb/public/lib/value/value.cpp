@@ -1,6 +1,6 @@
 #include "value.h"
 
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 

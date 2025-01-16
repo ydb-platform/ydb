@@ -21,17 +21,17 @@ namespace NPrivate {
         auto bestValue = func(*begin);
         auto bestPos = begin;
 
-        for (auto i = ++begin; i != end; ++i) {
-            auto curValue = func(*i);
+        for (++begin; begin != end; ++begin) {
+            auto curValue = func(*begin);
             if (pred(curValue, bestValue)) {
-                bestValue = curValue;
-                bestPos = i;
+                bestValue = std::move(curValue);
+                bestPos = begin;
             }
         }
 
         return bestPos;
     }
-}
+} // namespace NPrivate
 
 template <class T>
 constexpr void Sort(T f, T l) {
@@ -585,7 +585,7 @@ namespace NPrivate {
         ::ApplyToMany(std::forward<TOp>(op), std::get<Is>(std::forward<T>(t))...);
 #endif
     }
-}
+} // namespace NPrivate
 
 // check that TOp return true for all of element from tuple T
 template <class T, class TOp>
@@ -723,7 +723,7 @@ namespace NPrivate {
     constexpr TForwardIterator AdjacentFindBy(TForwardIterator begin, TForwardIterator end, const TGetKey& getKey) {
         return std::adjacent_find(begin, end, [&](auto&& left, auto&& right) { return getKey(left) == getKey(right); });
     }
-}
+} // namespace NPrivate
 
 template <class TContainer, class TGetKey>
 constexpr auto AdjacentFindBy(TContainer&& c, const TGetKey& getKey) {

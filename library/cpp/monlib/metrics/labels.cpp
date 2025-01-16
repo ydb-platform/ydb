@@ -35,7 +35,7 @@ Y_MONLIB_DEFINE_LABEL_OUT(NMonitoring::TLabel);
 
 namespace NMonitoring {
     bool TryLoadLabelsFromString(TStringBuf sb, ILabels& labels) {
-        if (sb.Empty()) {
+        if (sb.empty()) {
             return false;
         }
 
@@ -46,7 +46,7 @@ namespace NMonitoring {
         sb.Skip(1);
         sb.Chop(1);
 
-        if (sb.Empty()) {
+        if (sb.empty()) {
             return true;
         }
 

@@ -48,7 +48,7 @@ coalesce(ws_sp,$z0_35)+coalesce(cs_sp,$z0_35) other_chan_sales_price
 from $ss ss
 left join $ws ws on (ws.ws_sold_year=ss.ss_sold_year and ws.ws_item_sk=ss.ss_item_sk and ws.ws_customer_sk=ss.ss_customer_sk)
 left join $cs cs on (cs.cs_sold_year=ss.ss_sold_year and cs.cs_item_sk=ss.ss_item_sk and cs.cs_customer_sk=ss.ss_customer_sk)
-where (coalesce(ws_qty,0)>0 or coalesce(cs_qty, 0)>0) and ss_sold_year=2001
+where (coalesce(ws_qty,0)>0 or coalesce(cs_qty, 0)>0) and ss_sold_year=2000
 order by
   ss_sold_year, ss_item_sk, ss_customer_sk,
   store_qty desc, store_wholesale_cost desc, store_sales_price desc,

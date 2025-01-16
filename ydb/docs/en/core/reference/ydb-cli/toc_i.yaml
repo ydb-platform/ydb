@@ -125,5 +125,7 @@ items:
       href: workload-transfer.md
     - name: TPC-H load
       href: workload-tpch.md
+    - name: TPC-DS load
+      href: workload-tpcds.md
   - name: Configuration
     href: configs.md

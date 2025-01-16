@@ -10,9 +10,9 @@
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/rwlock.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
-#include "openid_connect.h"
+#include "oidc_settings.h"
 
-namespace NMVP {
+namespace NMVP::NOIDC {
 
 const TString& GetEServiceName(NActors::NLog::EComponent component);
 
@@ -71,4 +71,4 @@ public:
     int Shutdown();
 };
 
-} // namespace NMVP
+} // NMVP::NOIDC

@@ -2,6 +2,11 @@
 
 namespace NYdb::NConsoleClient {
 
+namespace BenchmarkUtils {
+    class TQueryBenchmarkResult;
+    struct TQueryBenchmarkDeadline;
+}
+
 class TWorkloadCommandBenchmark final: public TWorkloadCommandBase {
 public:
     TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
@@ -15,7 +20,10 @@ private:
     bool NeedRun(const ui32 queryIdx) const;
 
     template <typename TClient>
-    bool RunBench(TClient& client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen);
+    bool RunBench(TClient* client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen);
+    void SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, ui32 queryNum, const TStringBuf name) const;
+    void PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const;
+    BenchmarkUtils::TQueryBenchmarkDeadline GetDeadline() const;
 
 private:
     TString QueryExecuterType;
@@ -29,6 +37,9 @@ private:
     TSet<ui32> QueriesToSkip;
     TVector<TString> QuerySettings;
     ui32 VerboseLevel = 0;
+    TDuration GlobalTimeout = TDuration::Zero();
+    TDuration RequestTimeout = TDuration::Zero();
+    TInstant GlobalDeadline = TInstant::Max();
 };
 
 }

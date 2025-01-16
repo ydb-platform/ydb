@@ -180,7 +180,7 @@ namespace NKikimr::NBsController {
                     Response->MutableStatus()->RemoveLast();
                 }
 
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 State->CheckConsistency();
 
                 TString m;
@@ -352,6 +352,8 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(CancelVirtualGroup)
                     HANDLE_COMMAND(SetVDiskReadOnly)
                     HANDLE_COMMAND(RestartPDisk)
+                    HANDLE_COMMAND(SetPDiskReadOnly)
+                    HANDLE_COMMAND(StopPDisk)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

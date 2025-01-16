@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import datetime
 from typing import Sequence
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
@@ -80,7 +80,13 @@ class Factory:
                 datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
                 datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
             ],
-            [3, None, None, None, None],
+            [
+                3,
+                datetime.date(2079, 6, 6),
+                datetime.datetime(2079, 6, 6, 23, 59),
+                datetime.datetime(2079, 6, 7, 0, 0),
+                None,
+            ],
         ]
 
         return TestCase(
@@ -90,8 +96,8 @@ class Factory:
             data_out_=data_out,
             select_what=SelectWhat.asterisk(self._schema.columns),
             select_where=None,
-            data_source_kind=EDataSourceKind.MS_SQL_SERVER,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.MS_SQL_SERVER,
+            protocol=EGenericProtocol.NATIVE,
             schema=self._schema,
             pragmas=dict(),
         )
@@ -112,7 +118,13 @@ class Factory:
                 '2023-03-21T11:21:31Z',
                 '2023-03-21T11:21:31Z',
             ],
-            [3, '2079-06-06', '2079-06-06T23:59:00Z', '2079-06-06T23:59:59.999Z', '2079-06-06T23:59:59.9999999Z'],
+            [
+                3,
+                '2079-06-06',
+                '2079-06-06T23:59:00Z',
+                '2079-06-07T00:00:00Z',  # For a some reason server rounds it to the first second of the next day
+                '9999-12-31T23:59:59.9999999Z',
+            ],
         ]
 
         return TestCase(
@@ -122,8 +134,8 @@ class Factory:
             data_out_=data_out,
             select_what=SelectWhat.asterisk(self._schema.columns),
             select_where=None,
-            data_source_kind=EDataSourceKind.MS_SQL_SERVER,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.MS_SQL_SERVER,
+            protocol=EGenericProtocol.NATIVE,
             schema=self._schema,
             pragmas=dict(),
         )

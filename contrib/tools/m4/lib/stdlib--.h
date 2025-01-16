@@ -1,6 +1,6 @@
 /* Like stdlib.h, but redefine some names to avoid glitches.
 
-   Copyright (C) 2005-2007, 2009-2013 Free Software Foundation, Inc.
+   Copyright (C) 2005-2007, 2009-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -19,12 +19,6 @@
 
 #include <stdlib.h>
 #include "stdlib-safer.h"
-
-#if defined(_WIN32)
-char *mkdtemp(char *template);
-int mkstemp(char*);
-char *secure_getenv(const char *name);
-#endif
 
 #undef mkstemp
 #define mkstemp mkstemp_safer

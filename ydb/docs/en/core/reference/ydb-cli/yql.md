@@ -20,17 +20,21 @@ View the description of the YQL script command:
 ## Parameters of the subcommand {#options}
 
 #|
-|| **Name** | **Description** ||
+|| Name | Description ||
 || `--timeout` | The time within which the operation should be completed on the server. ||
 || `--stats` | Statistics mode.
+
 Acceptable values:
+
 * `none` (default): Do not collect.
 * `basic`: Collect statistics for basic events.
 * `full`: Collect statistics for all events.
+
      ||
 || `-s`, `--script` | Text of the YQL query to be executed. ||
 || `-f`, `--file` | Path to the text of the YQL query to be executed. ||
 || `--format` | Result format.
+
 Possible values:
 
 {% include notitle [format](./_includes/result_format_common.md) %}
@@ -39,6 +43,7 @@ Possible values:
 
 ||
 |#
+
 ### Working with parameterized queries {#parameterized-query}
 
 {% include [parameterized-query](../../_includes/parameterized-query.md) %}
@@ -80,7 +85,6 @@ Command output:
 ```text
 {"release_date":"2023-04-20","series_id":1,"series_info":"Info1","title":"Title1"}
 ```
-
 
 You can find examples of passing parameters to scripts in the [article on how to pass parameters to YQL execution commands](parameterized-queries-cli.md).
 

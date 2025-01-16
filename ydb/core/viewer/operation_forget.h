@@ -18,35 +18,8 @@ public:
 
     TOperationForget(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
-    {}
-
-    void Bootstrap() override {
-        if (Event->Get()->Request.GetMethod() != HTTP_METHOD_POST) {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only POST method is allowed"));
-        }
-
-        if (!PostToRequest()) {
-            return;
-        }
-
-        const auto& params(Event->Get()->Request.GetParams());
-        if (params.Has("database")) {
-            Database = params.Get("database");
-        }
-
-        if (Database.empty()) {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'database' is required"));
-        }
-
-        if (params.Has("id")) {
-            Request.set_id(params.Get("id"));
-        }
-
-        if (Request.id().empty()) {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'id' is required"));
-        }
-
-        TBase::Bootstrap();
+    {
+        AllowedMethods = {HTTP_METHOD_POST};
     }
 
     static YAML::Node GetSwagger() {

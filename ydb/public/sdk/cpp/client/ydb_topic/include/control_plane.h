@@ -108,12 +108,18 @@ public:
     ui64 GetLastReadOffset() const;
     TString GetReaderName() const;
     TString GetReadSessionId() const;
+    const TInstant& GetLastReadTime() const;
+    const TDuration& GetMaxReadTimeLag() const;
+    const TDuration& GetMaxWriteTimeLag() const;
 
 private:
     ui64 CommittedOffset_;
     i64 LastReadOffset_;
     TString ReaderName_;
     TString ReadSessionId_;
+    TInstant LastReadTime_;
+    TDuration MaxReadTimeLag_;
+    TDuration MaxWriteTimeLag_;
 };
 
 // Topic partition location

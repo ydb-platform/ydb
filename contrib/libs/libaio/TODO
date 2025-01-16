@@ -1,0 +1,4 @@
+- Write man pages.
+- Make -static links against libaio work.
+- Fallback on userspace if the kernel calls return -ENOSYS.
+

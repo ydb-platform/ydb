@@ -1,8 +1,8 @@
 #include "registry.h"
 
-#include <ydb/library/yql/core/arrow_kernels/registry/registry.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/core/arrow_kernels/registry/registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <util/system/tls.h>
 
 namespace NKikimr::NOlap {

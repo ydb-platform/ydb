@@ -14,6 +14,8 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/services/persqueue_v1/actors/helpers.h>
+
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 
 #include <util/string/strip.h>
@@ -655,6 +657,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     Session = session;
     ProtocolVersion = init.GetProtocolVersion();
     CommitsDisabled = init.GetCommitsDisabled();
+    UserAgent = init.GetVersion();
 
     if (ProtocolVersion >= NPersQueue::TReadRequest::ReadParamsInInit) {
         ReadSettingsInited = true;
@@ -702,7 +705,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         if (SessionsWithoutAuth) {
             ++(*SessionsWithoutAuth);
         }
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             CloseSession("Unauthenticated access is forbidden, please provide credentials", NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
             return;
         }
@@ -835,6 +838,14 @@ void TReadSessionActor::RegisterSessions(const TActorContext& ctx) {
     }
 }
 
+void TReadSessionActor::SetupBytesReadByUserAgentCounter() {
+    BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", "pqv0")
+        ->GetSubgroup("consumer", ClientPath)
+        ->GetSubgroup("user_agent", V1::DropUserAgentSuffix(V1::CleanupCounterValueString(UserAgent)))
+        ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
+}
 
 void TReadSessionActor::SetupCounters()
 {
@@ -864,6 +875,8 @@ void TReadSessionActor::SetupCounters()
     if (ProtocolVersion < NPersQueue::TReadRequest::Batching) {
         ++(*SessionsWithOldBatchingVersion);
     }
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 
@@ -884,6 +897,8 @@ void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic)
     topicCounters.Errors                 = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"PartitionsErrors"}, true);
     topicCounters.Commits                = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"Commits"}, true);
     topicCounters.WaitsForData           = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"WaitsForData"}, true);
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic, const TString& cloudId,
@@ -902,6 +917,8 @@ void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic, cons
     topicCounters.PartitionsInfly        = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.count"}, false, "name");
     topicCounters.Errors                 = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.errors"}, true, "name");
     topicCounters.Commits                = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.commits"}, true, "name");
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
@@ -1525,7 +1542,10 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
 
     Y_ABORT_UNLESS(formedResponse->RequestsInfly == 0);
     i64 diff = formedResponse->Response.ByteSize();
-    const bool hasMessages = RemoveEmptyMessages(*formedResponse->Response.MutableBatchedData());
+
+    BytesReadByUserAgent->Add(diff);
+
+    const bool hasMessages = HasMessages(formedResponse->Response.GetBatchedData());
     if (hasMessages) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign read id " << ReadIdToResponse << " to read request " << formedResponse->Guid);
         formedResponse->Response.MutableBatchedData()->SetCookie(ReadIdToResponse);
@@ -1758,26 +1778,15 @@ void TReadSessionActor::HandleWakeup(const TActorContext& ctx) {
     }
 }
 
-bool TReadSessionActor::RemoveEmptyMessages(TReadResponse::TBatchedData& data) {
-    bool hasNonEmptyMessages = false;
-    auto isMessageEmpty = [&](TReadResponse::TBatchedData::TMessageData& message) -> bool {
-        if (message.GetData().empty()) {
-            return true;
-        } else {
-            hasNonEmptyMessages = true;
-            return false;
+bool TReadSessionActor::HasMessages(const TReadResponse::TBatchedData& data) {
+    for (const auto& partData : data.GetPartitionData()) {
+        for (const auto& batch : partData.GetBatch()) {
+            if (batch.MessageDataSize() > 0) {
+                return true;
+            }
         }
-    };
-    auto batchRemover = [&](TReadResponse::TBatchedData::TBatch& batch) -> bool {
-        NProtoBuf::RemoveRepeatedFieldItemIf(batch.MutableMessageData(), isMessageEmpty);
-        return batch.MessageDataSize() == 0;
-    };
-    auto partitionDataRemover = [&](TReadResponse::TBatchedData::TPartitionData& partition) -> bool {
-        NProtoBuf::RemoveRepeatedFieldItemIf(partition.MutableBatch(), batchRemover);
-        return partition.BatchSize() == 0;
-    };
-    NProtoBuf::RemoveRepeatedFieldItemIf(data.MutablePartitionData(), partitionDataRemover);
-    return hasNonEmptyMessages;
+    }
+    return false;
 }
 
 
@@ -2137,6 +2146,11 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         if (proto.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue; //TODO - no such chunks must be on prod
         }
+
+        if (!proto.has_codec()) {
+            proto.set_codec(NPersQueueCommon::RAW);
+        }
+
         TString sourceId = "";
         if (!r.GetSourceId().empty()) {
             if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) {
@@ -2417,10 +2431,6 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
 
 void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
-    if (ReadingFinishedSent) {
-        return;
-    }
-
     if (WaitDataInfly.size() > 1) { //already got 2 requests inflight
         return;
     }
@@ -2428,8 +2438,9 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     Y_ABORT_UNLESS(InitDone);
     Y_ABORT_UNLESS(PipeClient);
 
-    if (!WaitForData)
+    if (!WaitForData) {
         return;
+    }
 
     Y_ABORT_UNLESS(ReadOffset >= EndOffset);
 
@@ -2450,7 +2461,6 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     NTabletPipe::SendData(ctx, PipeClient, event.Release());
 
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
-
     ctx.Schedule(WAIT_DATA, new TEvPQProxy::TEvDeadlineExceeded(WaitDataCookie));
 
     WaitDataInfly.insert(WaitDataCookie);
@@ -2491,12 +2501,14 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
 
-    if (ReadOffset < EndOffset) {
-        WaitForData = false;
-        WaitDataInfly.clear();
-        SendPartitionReady(ctx);
-    } else if (PipeClient) {
-        WaitDataInPartition(ctx);
+    if (!record.GetReadingFinished()) {
+        if (ReadOffset < EndOffset) {
+            WaitForData = false;
+            WaitDataInfly.clear();
+            SendPartitionReady(ctx);
+        } else if (PipeClient) {
+            WaitDataInPartition(ctx);
+        }
     }
 
     if (!ReadingFinishedSent) {
@@ -2625,7 +2637,6 @@ void TPartitionActor::HandlePoison(TEvents::TEvPoisonPill::TPtr&, const TActorCo
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const TActorContext& ctx) {
-
     WaitDataInfly.erase(ev->Get()->Cookie);
     if (ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) {
         Y_ABORT_UNLESS(WaitForData);

@@ -1,0 +1,79 @@
+From ac334617a9f20b79f5e554135dca15a4c8144f49 Mon Sep 17 00:00:00 2001
+From: Antony Polukhin <antoshkka@gmail.com>
+Date: Tue, 6 Jun 2023 18:09:27 +0300
+Subject: [PATCH 1/2] Workaround false positive warning of MSAN in eng_rdrand.c
+
+---
+ crypto/engine/eng_rdrand.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/crypto/engine/eng_rdrand.c b/crypto/engine/eng_rdrand.c
+index f46a5145974e..88f2fa20bc3e 100644
+--- a/crypto/engine/eng_rdrand.c
++++ b/crypto/engine/eng_rdrand.c
+@@ -32,6 +32,16 @@ static int get_random_bytes(unsigned char *buf, int num)
+         return 0;
+     }
+ 
++#if defined(__has_feature)
++#if __has_feature(memory_sanitizer)
++    /*
++     * MemorySanitizer fails to understand asm and produces false positive 
++     * use-of-uninitialized-value warnings without memset.
++     */
++    memset(buf, 0, num);
++#endif
++#endif
++
+     return (size_t)num == OPENSSL_ia32_rdrand_bytes(buf, (size_t)num);
+ }
+ 
+
+From 7096737ce9e2fdc5a1c18e34020c613c4074778c Mon Sep 17 00:00:00 2001
+From: Antony Polukhin <antoshkka@gmail.com>
+Date: Tue, 6 Jun 2023 20:07:23 +0300
+Subject: [PATCH 2/2] Review fixes
+
+---
+ crypto/engine/eng_rdrand.c | 18 ++++++++++++------
+ 1 file changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/crypto/engine/eng_rdrand.c b/crypto/engine/eng_rdrand.c
+index 88f2fa20bc3e..a18a772fb364 100644
+--- a/crypto/engine/eng_rdrand.c
++++ b/crypto/engine/eng_rdrand.c
+@@ -20,6 +20,12 @@
+ #include <openssl/err.h>
+ #include <openssl/crypto.h>
+ 
++#if defined(__has_feature)
++# if __has_feature(memory_sanitizer)
++#  include <sanitizer/msan_interface.h>
++# endif
++#endif
++
+ #if (defined(__i386)   || defined(__i386__)   || defined(_M_IX86) || \
+      defined(__x86_64) || defined(__x86_64__) || \
+      defined(_M_AMD64) || defined (_M_X64)) && defined(OPENSSL_CPUID_OBJ)
+@@ -32,15 +38,15 @@ static int get_random_bytes(unsigned char *buf, int num)
+         return 0;
+     }
+ 
+-#if defined(__has_feature)
+-#if __has_feature(memory_sanitizer)
++# if defined(__has_feature)
++#  if __has_feature(memory_sanitizer)
+     /*
+      * MemorySanitizer fails to understand asm and produces false positive 
+-     * use-of-uninitialized-value warnings without memset.
++     * use-of-uninitialized-value warnings.
+      */
+-    memset(buf, 0, num);
+-#endif
+-#endif
++    __msan_unpoison(buf, num);
++#  endif
++# endif
+ 
+     return (size_t)num == OPENSSL_ia32_rdrand_bytes(buf, (size_t)num);
+ }

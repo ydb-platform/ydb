@@ -6,7 +6,7 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
@@ -276,8 +276,7 @@ void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());
     }
 
-    auto facilityProvider = CreateFacilityProviderSameMailbox(ActorContext(), channelBufferSize);
-    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, Nothing(), facilityProvider, &DoExecuteScanQueryRequest, true);
+    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, Nothing(), ActorContext(), true, channelBufferSize);
     ReadNextStreamPart();
 }
 

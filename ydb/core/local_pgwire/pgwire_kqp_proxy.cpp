@@ -7,7 +7,7 @@
 #include <ydb/core/pgproxy/pg_proxy_events.h>
 #include <ydb/core/pgproxy/pg_proxy_types.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -273,15 +273,14 @@ protected:
         TBase::Send(EventRequest_->Sender, response.release(), 0, EventRequest_->Cookie);
 
         BLOG_D(this->SelfId() << " Send stream data ack to " << ev->Sender);
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetFreeSpace(std::numeric_limits<i64>::max());
         TBase::Send(ev->Sender, resp.Release());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         BLOG_D("Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
-        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
+        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record;
         if (record.GetResponse().HasExtraInfo()) {
             const auto& extraInfo = record.GetResponse().GetExtraInfo();
             if (extraInfo.HasPgInfo() && extraInfo.GetPgInfo().HasCommandTag()) {
@@ -399,7 +398,7 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         BLOG_D("Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
-        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
+        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record;
         try {
             if (record.HasYdbStatus()) {
                 if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {

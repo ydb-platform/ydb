@@ -12,7 +12,7 @@
 
 To interact with {{ ydb-short-name }}, you can use the [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/index.md) and [SDK](../../../reference/ydb-sdk/index.md) fo C++, C#, Go, Java, Node.js, PHP, Python, and Rust.
 
-{{ ydb-short-name }} supports a relational [data model](../../../concepts/datamodel/table.md) and manages [tables](../../datamodel/table.md) with a predefined schema. To make it easier to organize tables, directories can be created like in the file system. In addition to tables, {{ ydb-short-name }} supports [topics](../../topic.md) as an entity for storing unstructured messages and delivering them to multiple subscribers.
+{{ ydb-short-name }} supports a relational [data model](../../../concepts/datamodel/table.md) and manages [row-oriented](../../datamodel/table.md#row-oriented-tables) and [column-oriented](../../datamodel/table.md#column-oriented-tables) tables with a predefined schema. To make it easier to organize tables, directories can be created like in the file system. In addition to tables, {{ ydb-short-name }} supports [topics](../../topic.md) as an entity for storing unstructured messages and delivering them to multiple subscribers.
 
 Database commands are mainly written in YQL, an SQL dialect. This gives the user a powerful and already familiar way to interact with the database.
 

@@ -2,13 +2,13 @@
 #include "dq_opt.h"
 #include "dq_opt_phy_finalizing.h"
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/common_opt/yql_co.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/common_opt/yql_co.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NYql::NDq {
 
@@ -768,10 +768,16 @@ bool CanRebuildForWideBlockChannelOutput(bool forceBlocks, const TDqPhyStage& st
 
     if (!forceBlocks) {
         // ensure that stage has blocks on top level (i.e. FromFlow(WideFromBlocks(...)))
-        if (!stage.Program().Body().Maybe<TCoFromFlow>() ||
-            !stage.Program().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
-        {
-            return false;
+        if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
+            if (!stage.Program().Body().Maybe<TCoFromFlow>() ||
+                !stage.Program().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
+            {
+                return false;
+            }
+        } else {
+            if (!stage.Program().Body().Maybe<TCoWideFromBlocks>()) {
+                return false;
+            }
         }
     }
 
@@ -826,15 +832,24 @@ TDqPhyStage RebuildStageInputsAsWideBlock(bool forceBlocks, const TDqPhyStage& s
         if (maybeConn && IsSupportedForWideBlocks(maybeConn.Cast()) && CanRebuildForWideBlockChannelOutput(forceBlocks, maybeConn.Cast().Output(), ctx, typesCtx)) {
             ++blockInputs;
             // input will actually be wide block stream - convert it to wide stream first
-            TExprNode::TPtr newArgNode = ctx.Builder(arg.Pos())
-                .Callable("FromFlow")
-                    .Callable(0, "WideFromBlocks")
-                        .Callable(0, "ToFlow")
-                            .Add(0, newArg.Ptr())
+            TExprNode::TPtr newArgNode;
+            if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
+                newArgNode = ctx.Builder(arg.Pos())
+                    .Callable("FromFlow")
+                        .Callable(0, "WideFromBlocks")
+                            .Callable(0, "ToFlow")
+                                .Add(0, newArg.Ptr())
+                            .Seal()
                         .Seal()
                     .Seal()
-                .Seal()
-                .Build();
+                    .Build();
+            } else {
+                newArgNode = ctx.Builder(arg.Pos())
+                    .Callable("WideFromBlocks")
+                        .Add(0, newArg.Ptr())
+                    .Seal()
+                    .Build();
+            }
             argsMap.emplace(arg.Raw(), newArgNode);
 
             const TDqConnection& conn = maybeConn.Cast();

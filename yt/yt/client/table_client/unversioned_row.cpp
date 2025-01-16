@@ -2,13 +2,12 @@
 
 #include "composite_compare.h"
 #include "helpers.h"
+#include "name_table.h"
+#include "row_buffer.h"
+#include "schema.h"
 #include "serialize.h"
 #include "unversioned_value.h"
 #include "validate_logical_type.h"
-
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/row_buffer.h>
-#include <yt/yt/client/table_client/schema.h>
 
 #include <yt/yt/library/decimal/decimal.h>
 
@@ -28,9 +27,12 @@
 
 #include <library/cpp/yt/coding/varint.h>
 
+#include <library/cpp/yt/misc/compare.h>
+
 #include <util/generic/ymath.h>
 
 #include <util/charset/utf8.h>
+
 #include <util/stream/str.h>
 
 #include <cmath>
@@ -107,8 +109,8 @@ size_t WriteRowValue(char* output, const TUnversionedValue& value, bool isInline
             break;
 
         case EValueType::Double:
-            ::memcpy(current, &value.Data.Double, sizeof (double));
-            current += sizeof (double);
+            ::memcpy(current, &value.Data.Double, sizeof(double));
+            current += sizeof(double);
             break;
 
         case EValueType::Boolean:
@@ -168,8 +170,8 @@ size_t ReadRowValue(const char* input, TUnversionedValue* value)
 
         case EValueType::Double: {
             double data;
-            ::memcpy(&data, current, sizeof (double));
-            current += sizeof (double);
+            ::memcpy(&data, current, sizeof(double));
+            current += sizeof(double);
             *value = MakeUnversionedDoubleValue(data, id);
             break;
         }
@@ -203,19 +205,19 @@ void Save(TStreamSaveContext& context, const TUnversionedValue& value)
 {
     auto* output = context.GetOutput();
     if (IsStringLikeType(value.Type)) {
-        output->Write(&value, sizeof (ui16) + sizeof (ui16) + sizeof (ui32)); // Id, Type, Length
+        output->Write(&value, sizeof(ui16) + sizeof(ui16) + sizeof(ui32)); // Id, Type, Length
         if (value.Length != 0) {
             output->Write(value.Data.String, value.Length);
         }
     } else {
-        output->Write(&value, sizeof (TUnversionedValue));
+        output->Write(&value, sizeof(TUnversionedValue));
     }
 }
 
 void Load(TStreamLoadContext& context, TUnversionedValue& value, TChunkedMemoryPool* pool)
 {
     auto* input = context.GetInput();
-    const size_t fixedSize = sizeof (ui16) + sizeof (ui16) + sizeof (ui32); // Id, Type, Length
+    const size_t fixedSize = sizeof(ui16) + sizeof(ui16) + sizeof(ui32); // Id, Type, Length
     YT_VERIFY(input->Load(&value, fixedSize) == fixedSize);
     if (IsStringLikeType(value.Type)) {
         if (value.Length != 0) {
@@ -225,7 +227,7 @@ void Load(TStreamLoadContext& context, TUnversionedValue& value, TChunkedMemoryP
             value.Data.String = nullptr;
         }
     } else {
-        YT_VERIFY(input->Load(&value.Data, sizeof (value.Data)) == sizeof (value.Data));
+        YT_VERIFY(input->Load(&value.Data, sizeof(value.Data)) == sizeof(value.Data));
     }
 }
 
@@ -246,7 +248,7 @@ size_t GetYsonSize(const TUnversionedValue& value)
             return 1 + MaxVarInt64Size;
 
         case EValueType::Double:
-            // Type marker + sizeof double.
+            // Type marker + sizeofdouble.
             return 1 + 8;
 
         case EValueType::String:
@@ -326,7 +328,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
             if (lhs.Type == EValueType::Composite || rhs.Type == EValueType::Composite) {
                 ThrowIncomparableTypes(lhs, rhs);
             }
-            return static_cast<int>(lhs.Type) - static_cast<int>(rhs.Type);
+            return TernaryCompare(lhs.Type, rhs.Type);
         }
         try {
             auto lhsData = TYsonStringBuf(lhs.AsStringBuf());
@@ -349,7 +351,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
             {
                 ThrowIncomparableTypes(lhs, rhs);
             }
-            return static_cast<int>(lhs.Type) - static_cast<int>(rhs.Type);
+            return TernaryCompare(lhs.Type, rhs.Type);
         }
         try {
             auto lhsData = TYsonStringBuf(lhs.AsStringBuf());
@@ -366,67 +368,24 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
     }
 
     if (Y_UNLIKELY(lhs.Type != rhs.Type)) {
-        return static_cast<int>(lhs.Type) - static_cast<int>(rhs.Type);
+        return TernaryCompare(lhs.Type, rhs.Type);
     }
 
     switch (lhs.Type) {
-        case EValueType::Int64: {
-            auto lhsValue = lhs.Data.Int64;
-            auto rhsValue = rhs.Data.Int64;
-            if (lhsValue < rhsValue) {
-                return -1;
-            } else if (lhsValue > rhsValue) {
-                return +1;
-            } else {
-                return 0;
-            }
-        }
+        case EValueType::Int64:
+            return TernaryCompare(lhs.Data.Int64, rhs.Data.Int64);
 
-        case EValueType::Uint64: {
-            auto lhsValue = lhs.Data.Uint64;
-            auto rhsValue = rhs.Data.Uint64;
-            if (lhsValue < rhsValue) {
-                return -1;
-            } else if (lhsValue > rhsValue) {
-                return +1;
-            } else {
-                return 0;
-            }
-        }
+        case EValueType::Uint64:
+            return TernaryCompare(lhs.Data.Uint64, rhs.Data.Uint64);
 
-        case EValueType::Double: {
-            return CompareDoubleValues(lhs.Data.Double, rhs.Data.Double);
-        }
+        case EValueType::Double:
+            return NaNSafeTernaryCompare(lhs.Data.Double, rhs.Data.Double);
 
-        case EValueType::Boolean: {
-            bool lhsValue = lhs.Data.Boolean;
-            bool rhsValue = rhs.Data.Boolean;
-            if (lhsValue < rhsValue) {
-                return -1;
-            } else if (lhsValue > rhsValue) {
-                return +1;
-            } else {
-                return 0;
-            }
-        }
+        case EValueType::Boolean:
+            return TernaryCompare(lhs.Data.Boolean, rhs.Data.Boolean);
 
-        case EValueType::String: {
-            size_t lhsLength = lhs.Length;
-            size_t rhsLength = rhs.Length;
-            size_t minLength = std::min(lhsLength, rhsLength);
-            int result = ::memcmp(lhs.Data.String, rhs.Data.String, minLength);
-            if (result == 0) {
-                if (lhsLength < rhsLength) {
-                    return -1;
-                } else if (lhsLength > rhsLength) {
-                    return +1;
-                } else {
-                    return 0;
-                }
-            } else {
-                return result;
-            }
-        }
+        case EValueType::String:
+            return TernaryCompare(lhs.AsStringBuf(), rhs.AsStringBuf());
 
         // All sentinel types are equal.
         default:
@@ -728,7 +687,7 @@ void ValidateDynamicValue(const TUnversionedValue& value, bool isKey)
         case EValueType::Double:
             if (isKey && std::isnan(value.Data.Double)) {
                 THROW_ERROR_EXCEPTION(
-                    NTableClient::EErrorCode::KeyCannotBeNan,
+                    NTableClient::EErrorCode::KeyCannotBeNaN,
                     "Key of type \"double\" cannot be NaN");
             }
             break;
@@ -1315,7 +1274,9 @@ void ValidateReadTimestamp(TTimestamp timestamp)
         timestamp != AsyncLastCommittedTimestamp &&
         (timestamp < MinTimestamp || timestamp > MaxTimestamp))
     {
-        THROW_ERROR_EXCEPTION("Invalid read timestamp %x", timestamp);
+        THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::TimestampOutOfRange,
+            "Invalid read timestamp %x",
+            timestamp);
     }
 }
 
@@ -1586,7 +1547,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
     TRefCountedTypeCookie tagCookie)
 {
     size_t bufferSize = 0;
-    bufferSize += sizeof (TUnversionedRow) * rows.Size();
+    bufferSize += sizeof(TUnversionedRow) * rows.Size();
     for (auto row : rows) {
         bufferSize += GetUnversionedRowByteSize(row.GetCount());
         for (const auto& value : row) {
@@ -1610,7 +1571,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
         return unalignedPtr;
     };
 
-    auto* capturedRows = reinterpret_cast<TUnversionedRow*>(allocateAligned(sizeof (TUnversionedRow) * rows.Size()));
+    auto* capturedRows = reinterpret_cast<TUnversionedRow*>(allocateAligned(sizeof(TUnversionedRow) * rows.Size()));
     for (size_t index = 0; index < rows.Size(); ++index) {
         auto row = rows[index];
         int valueCount = row.GetCount();
@@ -1619,7 +1580,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
         capturedHeader->Count = valueCount;
         auto capturedRow = TMutableUnversionedRow(capturedHeader);
         capturedRows[index] = capturedRow;
-        ::memcpy(capturedRow.Begin(), row.Begin(), sizeof (TUnversionedValue) * row.GetCount());
+        ::memcpy(capturedRow.Begin(), row.Begin(), sizeof(TUnversionedValue) * row.GetCount());
         for (auto& capturedValue : capturedRow) {
             if (IsStringLikeType(capturedValue.Type)) {
                 auto* capturedString = allocateUnaligned(capturedValue.Length);
@@ -2186,6 +2147,24 @@ bool TBitwiseUnversionedValueRangeEqual::operator()(TUnversionedValueRange lhs, 
     return true;
 }
 
+void TBitwiseUnversionedValueRangeEqual::FormatDiff(TStringBuilderBase* builder, TUnversionedValueRange lhs, TUnversionedValueRange rhs)
+{
+    if (lhs.size() != rhs.size()) {
+        builder->AppendFormat("Value count mismatch: %v vs %v\n",
+            lhs.size(),
+            rhs.size());
+        return;
+    }
+    for (size_t index = 0; index < lhs.size(); ++index) {
+        if (!TBitwiseUnversionedValueEqual()(lhs[index], rhs[index])) {
+            builder->AppendFormat("Value mismatch at index %v\n",
+                index);
+            TBitwiseUnversionedValueEqual::FormatDiff(builder, lhs[index], rhs[index]);
+            break;
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 size_t TBitwiseUnversionedRowHash::operator()(TUnversionedRow row) const
@@ -2196,6 +2175,11 @@ size_t TBitwiseUnversionedRowHash::operator()(TUnversionedRow row) const
 bool TBitwiseUnversionedRowEqual::operator()(TUnversionedRow lhs, TUnversionedRow rhs) const
 {
     return TBitwiseUnversionedValueRangeEqual()(lhs.Elements(), rhs.Elements());
+}
+
+void TBitwiseUnversionedRowEqual::FormatDiff(TStringBuilderBase* builder, TUnversionedRow lhs, TUnversionedRow rhs)
+{
+    TBitwiseUnversionedValueRangeEqual::FormatDiff(builder, lhs.Elements(), rhs.Elements());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -9,7 +9,7 @@ namespace {
 std::shared_ptr<FormatConfig> MakeCsvConfig(const THashMap<TString, TString>& params) {
     auto config = std::make_shared<CsvConfig>();
     if (auto delimiter = params.FindPtr("csvdelimiter"); delimiter) {
-        if (delimiter->Size() != 1) {
+        if (delimiter->size() != 1) {
             throw yexception() << "invalid parameter: csv_delimiter must be single character";
         }
         config->ParseOpts.delimiter = (*delimiter)[0];
@@ -42,9 +42,26 @@ std::shared_ptr<FormatConfig> MakeJsonListConfig(const THashMap<TString, TString
 }
 
 std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>& params) {
+    static THashSet<TString> supportedParams {
+        "format",
+        "compression",
+        "filepattern",
+        "partitionedby",
+        "projection",
+        "csvdelimiter",
+    };
+
+    for (const auto& [param, value] : params) {
+        if (!supportedParams.contains(param)) {
+            throw yexception() << "parameter is not supported with type inference: " << param;
+        }
+    }
+
     EFileFormat format;
     if (auto formatPtr = params.FindPtr("format"); formatPtr) {
         format = ConvertFileFormat(*formatPtr);
+    } else {
+        throw yexception() << "format unspecified, use format parameter with type inferring";
     }
     
     if (auto delimiter = params.FindPtr("csvdelimiter"); delimiter) {

@@ -1,0 +1,1407 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 05eab326a2bb43e6277e3402e60b62e3
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2013-2024 by
+         * Google, Inc.
+         * Written by Stuart Gill and Behdad Esfahbod.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sfnt/pngshim.c [7:9]
+        src/sfnt/pngshim.h [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0c1ded5f70c7094d63317535666157ac
+BELONGS ya.make
+    License text:
+          Copyright 2000, 2001, 2004 by
+          Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pcf/pcfutil.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 114bc993e0bf3fd09ce55664c6fbc5b9
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2007-2024 by
+         * Dereg Clegg and Michael Toftdal.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/ftcid.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 160af8662b27f4b19ce72e59be67a182
+BELONGS ya.make
+    License text:
+        Copyright (C) 2018-2024 by
+        Nikhil Ramakrishnan, David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/DOCGUIDE [288:289]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 161cf70918551cc974cc2d64ca7397ad
+BELONGS ya.make
+    License text:
+                            Copyright 1996-2002, 2006 by
+                  David Turner, Robert Wilhelm, and Werner Lemberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/FTL.TXT [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1961a1d330871654ef346aeeea3d1370
+BELONGS ya.make
+    License text:
+        Copyright (C) 2001-2002 by Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/bdf/README [102:102]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a2e27be29f9fc0bf43bd2f18676f1b4
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1996-2024 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+         * Copyright 2003 Huw D M Davies for Codeweavers
+         * Copyright 2007 Dmitry Timoshkov for Codeweavers
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/winfonts/winfnt.c [7:10]
+        src/winfonts/winfnt.h [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e47cec4075861cad1ec7aecfb812349
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2005-2024 by
+         * David Turner.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lzw/ftzopen.c [11:12]
+        src/lzw/ftzopen.h [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 224ab6b162d99e65fb7ff65834660b8a
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004-2024 by
+         * David Turner, Robert Wilhelm, Werner Lemberg and George Williams.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/truetype/ttgxvar.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 24564aa94b7367facbfdc45683cbc6b7
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2007-2024 by
+         * David Turner.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/services/svttglyf.h [7:8]
+        src/base/ftpatent.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 24b874ed2f2d777fe67244afd2e5ce45
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2022-2024 by
+         * David Turner, Robert Wilhelm, Werner Lemberg, and Moazin Khatti.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/svginterface.h [7:8]
+        include/freetype/otsvg.h [7:8]
+        src/sfnt/ttsvg.c [7:8]
+        src/sfnt/ttsvg.h [7:8]
+        src/svg/ftsvg.c [7:8]
+        src/svg/ftsvg.h [7:8]
+        src/svg/svg.c [7:8]
+        src/svg/svgtypes.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 26287154437da4082b06efc4bbd6a904
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2016-2024 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/services/svmetric.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 30527b4b3821df90f4d70cb3166409cf
+BELONGS ya.make
+    License text:
+        Copyright (C) 2002-2024 by
+        David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/DEBUG [300:301]
+        docs/VERSIONS.TXT [128:129]
+        include/freetype/config/ftstdlib.h [8:9]
+        include/freetype/ftbdf.h [7:8]
+        include/freetype/fterrdef.h [7:8]
+        include/freetype/ftfntfmt.h [7:8]
+        include/freetype/ftgzip.h [7:8]
+        include/freetype/ftincrem.h [7:8]
+        include/freetype/ftpfr.h [7:8]
+        include/freetype/ftstroke.h [7:8]
+        include/freetype/internal/ftgloadr.h [7:8]
+        include/freetype/internal/fttrace.h [7:8]
+        src/base/ftbdf.c [7:8]
+        src/base/ftfntfmt.c [7:8]
+        src/base/ftgloadr.c [7:8]
+        src/base/ftpfr.c [7:8]
+        src/base/ftstroke.c [7:8]
+        src/base/fttype1.c [7:8]
+        src/base/ftutil.c [7:8]
+        src/cff/cffcmap.c [7:8]
+        src/cff/cffcmap.h [7:8]
+        src/gzip/ftgzip.c [11:12]
+        src/pfr/pfr.c [7:8]
+        src/pfr/pfrcmap.c [7:8]
+        src/pfr/pfrcmap.h [7:8]
+        src/pfr/pfrdrivr.c [7:8]
+        src/pfr/pfrdrivr.h [7:8]
+        src/pfr/pfrerror.h [7:8]
+        src/pfr/pfrgload.c [7:8]
+        src/pfr/pfrgload.h [7:8]
+        src/pfr/pfrload.c [7:8]
+        src/pfr/pfrload.h [7:8]
+        src/pfr/pfrobjs.c [7:8]
+        src/pfr/pfrobjs.h [7:8]
+        src/pfr/pfrsbit.c [7:8]
+        src/pfr/pfrsbit.h [7:8]
+        src/pfr/pfrtypes.h [7:8]
+        src/psaux/t1cmap.c [7:8]
+        src/psaux/t1cmap.h [7:8]
+        src/sfnt/ttcmap.c [7:8]
+        src/sfnt/ttcmap.h [7:8]
+        src/type42/t42error.h [7:8]
+        src/type42/type42.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 331da52bb84c1ebba5fe104b95765568
+BELONGS ya.make
+    License text:
+          Copyright (C) 2000, 2001, 2002, 2003, 2006, 2010 by
+          Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pcf/pcf.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 356ca27d9304a998d8b81bf56037f07e
+BELONGS ya.make
+    License text:
+         * Copyright © 2009, 2023  Red Hat, Inc.
+         * Copyright © 2015  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/autofit/ft-hb.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 35e28ca9dde5b932e96138203e529472
+BELONGS ya.make
+    License text:
+            Copyright (C) 2001-2008, 2011, 2013, 2014 by
+            Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/bdf/bdfdrivr.c [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 35e7b27b28739ab9882b8043f46df2c8
+BELONGS ya.make
+    License text:
+         * Copyright 2006-2013 Adobe Systems Incorporated.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/psaux/pserror.c [7:7]
+        src/psaux/pserror.h [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 36f4d6aa0c63b8f12c15047ba79df945
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2013-2024 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/autofit/afblue.c [10:11]
+        src/autofit/afblue.h [10:11]
+        src/autofit/afcover.h [7:8]
+        src/autofit/afranges.c [7:8]
+        src/autofit/afranges.h [7:8]
+        src/autofit/afscript.h [7:8]
+        src/autofit/afshaper.c [7:8]
+        src/autofit/afshaper.h [7:8]
+        src/autofit/afstyles.h [7:8]
+        src/autofit/afws-decl.h [7:8]
+        src/autofit/afws-iter.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 38db777b6b56373068b835a5870e3a7a
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2018-2024 by
+         * David Turner, Robert Wilhelm, Dominik Röttsches, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sfnt/ttcolr.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3b51a383362336e7d8857dff7a6a23ea
+BELONGS ya.make
+    License text:
+          Copyright (C) 2001, 2002, 2003, 2004 by
+          Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/bdf/bdfdrivr.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3b85c10c1574ed7204356fa730b0b53a
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1996-2024 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/config/ftconfig.h [7:8]
+        include/freetype/config/ftheader.h [7:8]
+        include/freetype/config/ftoption.h [7:8]
+        include/freetype/config/integer-types.h [7:8]
+        include/freetype/config/mac-support.h [7:8]
+        include/freetype/freetype.h [7:8]
+        include/freetype/ftbbox.h [7:8]
+        include/freetype/ftcache.h [7:8]
+        include/freetype/fterrors.h [7:8]
+        include/freetype/ftglyph.h [7:8]
+        include/freetype/ftimage.h [8:9]
+        include/freetype/ftlist.h [7:8]
+        include/freetype/ftmm.h [7:8]
+        include/freetype/ftmodapi.h [7:8]
+        include/freetype/ftoutln.h [8:9]
+        include/freetype/ftrender.h [7:8]
+        include/freetype/ftsizes.h [7:8]
+        include/freetype/ftsnames.h [10:11]
+        include/freetype/ftsystem.h [7:8]
+        include/freetype/fttypes.h [7:8]
+        include/freetype/internal/autohint.h [7:8]
+        include/freetype/internal/cfftypes.h [8:9]
+        include/freetype/internal/ftcalc.h [7:8]
+        include/freetype/internal/ftdebug.h [7:8]
+        include/freetype/internal/ftdrv.h [7:8]
+        include/freetype/internal/ftmemory.h [7:8]
+        include/freetype/internal/ftobjs.h [7:8]
+        include/freetype/internal/ftstream.h [7:8]
+        include/freetype/internal/psaux.h [8:9]
+        include/freetype/internal/sfnt.h [7:8]
+        include/freetype/internal/t1types.h [8:9]
+        include/freetype/internal/tttypes.h [8:9]
+        include/freetype/internal/wofftypes.h [8:9]
+        include/freetype/t1tables.h [8:9]
+        include/freetype/ttnameid.h [7:8]
+        include/freetype/tttables.h [8:9]
+        include/freetype/tttags.h [7:8]
+        include/ft2build.h [7:8]
+        src/base/ftbase.c [7:8]
+        src/base/ftbbox.c [7:8]
+        src/base/ftcalc.c [7:8]
+        src/base/ftdebug.c [7:8]
+        src/base/ftglyph.c [7:8]
+        src/base/ftinit.c [7:8]
+        src/base/ftmm.c [7:8]
+        src/base/ftobjs.c [7:8]
+        src/base/ftoutln.c [7:8]
+        src/base/ftsnames.c [10:11]
+        src/base/ftsystem.c [7:8]
+        src/cff/cff.c [7:8]
+        src/cff/cffdrivr.h [7:8]
+        src/cff/cffgload.c [7:8]
+        src/cff/cffgload.h [7:8]
+        src/cff/cffload.c [7:8]
+        src/cff/cffload.h [7:8]
+        src/cff/cffobjs.c [7:8]
+        src/cff/cffobjs.h [7:8]
+        src/cff/cffparse.c [7:8]
+        src/cff/cffparse.h [7:8]
+        src/cff/cfftoken.h [7:8]
+        src/cid/cidgload.c [7:8]
+        src/cid/cidgload.h [7:8]
+        src/cid/cidload.c [7:8]
+        src/cid/cidload.h [7:8]
+        src/cid/cidobjs.c [7:8]
+        src/cid/cidobjs.h [7:8]
+        src/cid/cidparse.c [7:8]
+        src/cid/cidparse.h [7:8]
+        src/cid/cidriver.c [7:8]
+        src/cid/cidriver.h [7:8]
+        src/cid/cidtoken.h [7:8]
+        src/cid/type1cid.c [7:8]
+        src/psaux/psaux.c [7:8]
+        src/psaux/psobjs.c [7:8]
+        src/psaux/psobjs.h [7:8]
+        src/psnames/psmodule.c [7:8]
+        src/psnames/psmodule.h [7:8]
+        src/psnames/psnames.c [7:8]
+        src/raster/ftraster.c [7:8]
+        src/raster/ftraster.h [7:8]
+        src/raster/ftrend1.c [7:8]
+        src/raster/ftrend1.h [7:8]
+        src/raster/raster.c [7:8]
+        src/sfnt/sfdriver.c [7:8]
+        src/sfnt/sfdriver.h [7:8]
+        src/sfnt/sfnt.c [7:8]
+        src/sfnt/sfobjs.c [7:8]
+        src/sfnt/sfobjs.h [7:8]
+        src/sfnt/sfwoff.c [7:8]
+        src/sfnt/sfwoff.h [7:8]
+        src/sfnt/ttkern.c [8:9]
+        src/sfnt/ttkern.h [8:9]
+        src/sfnt/ttload.c [8:9]
+        src/sfnt/ttload.h [8:9]
+        src/sfnt/ttpost.c [8:9]
+        src/sfnt/ttpost.h [8:9]
+        src/sfnt/ttsbit.h [7:8]
+        src/smooth/ftgrays.h [7:8]
+        src/smooth/ftsmooth.h [7:8]
+        src/smooth/smooth.c [7:8]
+        src/truetype/truetype.c [7:8]
+        src/truetype/ttdriver.c [7:8]
+        src/truetype/ttdriver.h [7:8]
+        src/truetype/ttgload.c [7:8]
+        src/truetype/ttgload.h [7:8]
+        src/truetype/ttinterp.c [7:8]
+        src/truetype/ttinterp.h [7:8]
+        src/truetype/ttobjs.c [7:8]
+        src/truetype/ttobjs.h [7:8]
+        src/truetype/ttpload.c [7:8]
+        src/truetype/ttpload.h [7:8]
+        src/type1/t1afm.c [7:8]
+        src/type1/t1afm.h [7:8]
+        src/type1/t1driver.c [7:8]
+        src/type1/t1driver.h [7:8]
+        src/type1/t1gload.c [7:8]
+        src/type1/t1gload.h [7:8]
+        src/type1/t1load.c [7:8]
+        src/type1/t1load.h [7:8]
+        src/type1/t1objs.c [7:8]
+        src/type1/t1objs.h [7:8]
+        src/type1/t1parse.c [7:8]
+        src/type1/t1parse.h [7:8]
+        src/type1/t1tokens.h [7:8]
+        src/type1/type1.c [7:8]
+        src/winfonts/winfnt.c [7:10]
+        src/winfonts/winfnt.h [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c8dbb1104a58dda0585967f536f0b19
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2018-2024 by
+         * Armin Hasitzka, David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/base/fterrors.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 413b336c8a69cac2f76c8dd47992b725
+BELONGS ya.make
+    License text:
+               Copyright (C) <year> Free Software Foundation Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/INSTALL.UNIX [20:20]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 42309f641131ece0512293952b16361e
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1994, 1998  The Open Group
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pcf/pcfutil.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 42ee344b2adbd5d64451f6d1c8d2debe
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004-2024 by
+         * Masatake YAMATO and Redhat K.K.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/ftrfork.h [7:8]
+        src/base/ftrfork.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 44c4aee6bd3a8ce9348e53ec660b48d0
+BELONGS ya.make
+    License text:
+         * Copyright © 2009, 2023  Red Hat, Inc.
+         * Copyright © 2015  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/autofit/ft-hb.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4540a5351f0d389254fa0cc075df18dd
+BELONGS ya.make
+    License text:
+        Copyright (C) 2005-2024 by
+        David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.git [92:93]
+        src/autofit/aferrors.h [7:8]
+        src/psnames/pstables.h [7:8]
+        src/sfnt/ttbdf.c [7:8]
+        src/sfnt/ttbdf.h [7:8]
+        src/sfnt/ttsbit.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4a0a5fa80fb4ffa8c1a89c3cdeaf8efb
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2019 nyorain
+        // Distributed under the Boost Software License, Version 1.0.
+        // See accompanying file LICENSE or copy at http://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/dlg/dlg.h [1:3]
+        include/dlg/output.h [1:3]
+        src/dlg/dlg.c [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4ca50c7fb28140387ce302143b7a2b82
+BELONGS ya.make
+    License text:
+            Copyright (C) 2000-2004, 2006-2011, 2013, 2014 by
+            Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pcf/pcfdrivr.c [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4d7dea98c4742fe78f3c20ad48ae35d3
+BELONGS ya.make
+    License text:
+          The FreeType  Project is copyright (C) 1996-2000  by David Turner,
+          Robert Wilhelm, and Werner Lemberg.  All rights reserved except as
+          specified below.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/FTL.TXT [84:86]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4e8c7994fd2cca6965129defbd93b3cf
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2003-2024 by
+         * Masatake YAMATO, Redhat K.K.,
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/services/svttcmap.h [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 50795e775be30dcc0afc1ac43da22e98
+BELONGS ya.make
+    License text:
+         * Copyright 2000 Computing Research Labs, New Mexico State University
+         * Copyright 2001-2014
+         *   Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/bdf/bdflib.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 51eb35687fcd42f4d4f2dea0054a8f79
+BELONGS ya.make
+    License text:
+         * Copyright 2001, 2012 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pcf/pcferror.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 556351e9242d726f11f413b590e295f2
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2024 by
+         * David Saltzman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sfnt/ttgpos.c [15:16]
+        src/sfnt/ttgpos.h [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 56a118a263857e7ae4e06f4f1499e3dc
+BELONGS ya.make
+    License text:
+          Copyright 2000-2001, 2002 by
+          Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pcf/pcfdrivr.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 58a30d22eb5d32504a330e4d1a223156
+BELONGS ya.make
+    License text:
+         * Copyright 2007-2013 Adobe Systems Incorporated.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/psaux/psarrst.c [7:7]
+        src/psaux/psarrst.h [7:7]
+        src/psaux/psfixed.h [7:7]
+        src/psaux/psfont.h [7:7]
+        src/psaux/psglue.h [7:7]
+        src/psaux/pshints.h [7:7]
+        src/psaux/psintrp.h [7:7]
+        src/psaux/psread.c [7:7]
+        src/psaux/psread.h [7:7]
+        src/psaux/psstack.c [7:7]
+        src/psaux/psstack.h [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5b592224d6f5ec146b33656387cf92b8
+BELONGS ya.make
+    License text:
+            Copyright (C) 2001, 2002 by
+            Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/bdf/bdf.c [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c3fb6d40a18291906da96f112e50c12
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2007-2024 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/ftgasp.h [7:8]
+        src/base/ftgasp.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5e793949ac414e425d2618b94810d5ed
+BELONGS ya.make
+    License text:
+        Copyright 2000 Computing Research Labs, New Mexico State University
+        Copyright 2001-2002, 2011 Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/bdf/README [125:126]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a8e93fe0fbd4dee57108d99199610e5
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1996-2024 by
+         * Just van Rossum, David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/ftmac.h [7:8]
+        src/base/ftmac.c [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 75b6726172f54ed2031b5588f513cf99
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2008-2024 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/ftadvanc.h [7:8]
+        src/base/ftadvanc.c [7:8]
+        src/base/ftfstype.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77bc1ba799c4986f14138f26293a6200
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2007-2024 by
+         * Derek Clegg and Michael Toftdal.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/services/svcid.h [7:8]
+        src/base/ftcid.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7b53ca5f33a3f0903d36a3849ee0e0d6
+BELONGS ya.make
+    License text:
+         * Copyright 2013 Adobe Systems Incorporated.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/psaux/psft.h [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c22c32170062458bc3f503abe9d57e1
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2003-2024 by
+         * David Turner, Robert Wilhelm, Werner Lemberg, and Dominik Röttsches.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/services/svmm.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7d96c9e595e12f8f64315e47103ec214
+BELONGS ya.make
+    License text:
+         * Copyright 2007-2014 Adobe Systems Incorporated.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/psaux/psfont.c [7:7]
+        src/psaux/pshints.c [7:7]
+        src/psaux/psintrp.c [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7daa9169fec0e0696d7bf34fa9ae9cb2
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2017-2024 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/ftdriver.h [7:8]
+        include/freetype/ftparams.h [7:8]
+        include/freetype/internal/cffotypes.h [7:8]
+        include/freetype/internal/ftpsprop.h [7:8]
+        include/freetype/internal/services/svcfftl.h [7:8]
+        src/base/ftpsprop.c [8:9]
+        src/psaux/cffdecode.c [7:8]
+        src/psaux/cffdecode.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 83a264e41249a991fc59d5cbb8981cd2
+BELONGS ya.make
+    License text:
+            Portions of this software are copyright © <year> The FreeType
+            Project (www.freetype.org).  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/FTL.TXT [51:52]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8893f9fb3ea576d98200a0718fa92f36
+BELONGS ya.make
+    License text:
+        Copyright (C) 2003-2024 by
+        David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/CUSTOMIZE [142:143]
+        docs/INSTALL.ANY [147:148]
+        docs/INSTALL.GNU [171:172]
+        docs/INSTALL.UNIX [129:130]
+        docs/raster.txt [621:622]
+        docs/release [214:215]
+        include/freetype/ftwinfnt.h [7:8]
+        include/freetype/internal/ftserv.h [7:8]
+        include/freetype/internal/services/svbdf.h [7:8]
+        include/freetype/internal/services/svfntfmt.h [7:8]
+        include/freetype/internal/services/svgldict.h [7:8]
+        include/freetype/internal/services/svpfr.h [7:8]
+        include/freetype/internal/services/svpostnm.h [7:8]
+        include/freetype/internal/services/svpscmap.h [7:8]
+        include/freetype/internal/services/svpsinfo.h [7:8]
+        include/freetype/internal/services/svsfnt.h [7:8]
+        include/freetype/internal/services/svwinfnt.h [7:8]
+        src/autofit/afdummy.c [8:9]
+        src/autofit/afdummy.h [8:9]
+        src/autofit/afglobal.c [7:8]
+        src/autofit/afglobal.h [8:9]
+        src/autofit/afhints.c [7:8]
+        src/autofit/afhints.h [7:8]
+        src/autofit/aflatin.c [7:8]
+        src/autofit/aflatin.h [8:9]
+        src/autofit/afloader.c [7:8]
+        src/autofit/afloader.h [7:8]
+        src/autofit/afmodule.c [7:8]
+        src/autofit/afmodule.h [7:8]
+        src/autofit/aftypes.h [7:8]
+        src/autofit/autofit.c [7:8]
+        src/base/ftwinfnt.c [7:8]
+        src/cache/ftcbasic.c [7:8]
+        src/cache/ftcmru.c [7:8]
+        src/pshinter/pshnterr.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8cf91579d8cb4087b6bd775cd2b2bbed
+BELONGS ya.make
+    License text:
+         Copyright (C) 1989, 1991 Free Software Foundation, Inc.
+             51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/GPLv2.TXT [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8e3d3c17374f6d3419e05b87929177d4
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004-2024 by
+         * Albert Chin-A-Young.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lzw/ftlzw.c [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 97ce76ca0d5f5fa693b30f19531299c2
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2019-2024 by
+         * Nikhil Ramakrishnan, David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sfnt/sfwoff2.c [7:8]
+        src/sfnt/sfwoff2.h [7:8]
+        src/sfnt/woff2tags.c [7:8]
+        src/sfnt/woff2tags.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 990685689dbf7a402a858630ff899227
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2008-2024 by
+         * David Turner, Robert Wilhelm, Werner Lemberg, and suzuki toshiya.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/base/ftbase.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9cc21435e8bf8498034a7670cb1697bf
+BELONGS ya.make
+    License text:
+        Copyright (C) 2000 by Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pcf/README [69:69]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9dd10d760975b3722ce890536654e2c8
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1996-2024 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+         * Copyright 2003 Huw D M Davies for Codeweavers
+         * Copyright 2007 Dmitry Timoshkov for Codeweavers
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/winfonts/winfnt.c [7:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a5a6d92442a6fde5d049c0bf6ab31eaf
+BELONGS ya.make
+    License text:
+          Copyright 2000-2001, 2003 by
+          Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pcf/pcf.c [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa2cfbf1f2b3df8d7c284df06e4d8041
+BELONGS ya.make
+    License text:
+        Copyright (C) 2000-2024 by
+        David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/INSTALL [104:105]
+        docs/INSTALL.VMS [59:60]
+        include/freetype/ftsynth.h [8:9]
+        src/base/ftstream.c [7:8]
+        src/base/ftsynth.c [7:8]
+        src/cache/ftcache.c [7:8]
+        src/cache/ftccache.c [7:8]
+        src/cache/ftccache.h [7:8]
+        src/cache/ftccmap.c [7:8]
+        src/cache/ftcglyph.c [7:8]
+        src/cache/ftcglyph.h [7:8]
+        src/cache/ftcimage.c [7:8]
+        src/cache/ftcimage.h [7:8]
+        src/cache/ftcmanag.c [7:8]
+        src/cache/ftcmanag.h [7:8]
+        src/cache/ftcmru.h [7:8]
+        src/cache/ftcsbits.c [7:8]
+        src/cache/ftcsbits.h [7:8]
+        src/psaux/psauxmod.c [7:8]
+        src/psaux/psauxmod.h [7:8]
+        src/psaux/t1decode.c [7:8]
+        src/psaux/t1decode.h [7:8]
+        src/smooth/ftgrays.c [7:8]
+        src/smooth/ftsmooth.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa95f63069fda02fa7f92613b24b40e7
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2009-2024 by
+         * Oran Agra and Mickey Gabel.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sfnt/ttcmapc.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ac4f7dfdb18b55b994bce75260762462
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2022-2024 by
+         * David Turner, Robert Wilhelm, Werner Lemberg, George Williams, and
+         * Dominik Röttsches.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/ftmmtypes.h [8:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL acb4a512f7200d137d0ab1859224f1ef
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1996-2024 by
+         * David Turner, Robert Wilhelm, Werner Lemberg, and Dominik Röttsches.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/cff/cffdrivr.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b0755dc0e11bb697a29bd7de0ecaaeae
+BELONGS ya.make
+    License text:
+         * Copyright 2011-2013 Adobe Systems Incorporated.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/psaux/pstypes.h [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b51dbe39e416004833ab451cc4934fc8
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2018-2024 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/ftcolor.h [7:8]
+        src/base/ftcolor.c [7:8]
+        src/sfnt/ttcolr.h [7:8]
+        src/sfnt/ttcpal.c [7:8]
+        src/sfnt/ttcpal.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b8bce245a3ae4f67ad3052c16a4850d5
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004-2024 by
+         * Masatake YAMATO, Redhat K.K,
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/ftgxval.h [7:9]
+        src/base/ftgxval.c [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b917aed0d74d5a994cbd4448bbe686a0
+BELONGS ya.make
+    License text:
+         * Copyright 2013-2014 Adobe Systems Incorporated.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/psaux/psft.c [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL beb0d0fcde838baf609a39a63ead919a
+BELONGS ya.make
+    License text:
+        Copyright (C) 2006-2024 by
+        suzuki toshiya, David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/INSTALL.CROSS [166:167]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/GPLv2.TXT [251:256]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c253caf08281212270432e30c46c9193
+BELONGS ya.make
+    License text:
+         * Copyright 2013 by Google, Inc.
+         * Google Author(s): Behdad Esfahbod.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sfnt/ttsbit.c [10:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c298d16e5bf9812b4c38dbca7faf5c50
+BELONGS ya.make
+    License text:
+         * Copyright 2000 Computing Research Labs, New Mexico State University
+         * Copyright 2001-2015
+         *   Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/fthash.h [10:12]
+        src/base/fthash.c [10:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c2bead3cb724026c8528c014741db706
+BELONGS ya.make
+    License text:
+         * Copyright 2009-2014 Adobe Systems Incorporated.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/psaux/psblues.c [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd020fb7a11edc7d8d6fbd995ebb44e5
+BELONGS ya.make
+    License text:
+        Copyright (C) 2006-2024 by
+        David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README [97:98]
+        include/freetype/ftlcdfil.h [8:9]
+        include/freetype/internal/services/svkern.h [7:8]
+        include/freetype/internal/services/svtteng.h [7:8]
+        src/autofit/afcjk.c [7:8]
+        src/autofit/afcjk.h [7:8]
+        src/base/ftlcdfil.c [7:8]
+        src/psaux/afmparse.c [7:8]
+        src/psaux/afmparse.h [7:8]
+        src/psaux/psconv.c [7:8]
+        src/psaux/psconv.h [7:8]
+        src/sfnt/ttmtx.c [7:8]
+        src/sfnt/ttmtx.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ceafd77116fb61c435ee12b1455c3443
+BELONGS ya.make
+    License text:
+         * Copyright 2009-2013 Adobe Systems Incorporated.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/psaux/psblues.h [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d394ce0f901e89bb6fc12ebab7f4837b
+BELONGS ya.make
+    License text:
+         * Copyright 2001, 2002, 2012 Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/bdf/bdferror.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d42f9eacc3f149f0fa3f9326b47c4ffe
+BELONGS ya.make
+    License text:
+          Copyright 2003 by
+          Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pcf/pcfread.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dc595fed9c07c27a41b0f8c99df43070
+BELONGS ya.make
+    License text:
+         * Copyright 2000 Computing Research Labs, New Mexico State University
+         * Copyright 2001-2015
+         *   Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/fthash.h [10:12]
+        src/base/fthash.c [10:12]
+        src/bdf/README [125:126]
+        src/bdf/bdf.h [2:3]
+        src/bdf/bdflib.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dcdbf8afb24322faad0ffbaf7fe8c522
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2007-2024 by
+         * Rahul Bhalerao <rahul.bhalerao@redhat.com>, <b.rahul.pm@gmail.com>.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/autofit/afindic.c [7:8]
+        src/autofit/afindic.h [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dd6c7be6fcef5f110caacec1da61c30f
+BELONGS ya.make
+    License text:
+        Copyright (C) 2001-2024 by
+        David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/TODO [30:31]
+        include/freetype/ftmoderr.h [7:8]
+        include/freetype/fttrigon.h [7:8]
+        include/freetype/internal/pshints.h [9:10]
+        src/base/ftdbgmem.c [7:8]
+        src/base/fttrigon.c [7:8]
+        src/cache/ftcerror.h [7:8]
+        src/cff/cfferrs.h [7:8]
+        src/cid/ciderrs.h [7:8]
+        src/psaux/psauxerr.h [7:8]
+        src/pshinter/pshalgo.c [7:8]
+        src/pshinter/pshalgo.h [7:8]
+        src/pshinter/pshglob.c [8:9]
+        src/pshinter/pshglob.h [7:8]
+        src/pshinter/pshinter.c [7:8]
+        src/pshinter/pshmod.c [7:8]
+        src/pshinter/pshmod.h [7:8]
+        src/pshinter/pshrec.c [7:8]
+        src/pshinter/pshrec.h [7:8]
+        src/psnames/psnamerr.h [7:8]
+        src/raster/rasterrs.h [7:8]
+        src/sfnt/sferrors.h [7:8]
+        src/smooth/ftsmerrs.h [7:8]
+        src/truetype/tterrors.h [7:8]
+        src/type1/t1errors.h [7:8]
+        src/winfonts/fnterrs.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e10b17801440995c57dfe4f8419502e7
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2012-2024 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/services/svprop.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e1520b049b8cb26c0c1fad0d12487383
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2020-2024 by
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/config/public-macros.h [7:8]
+        include/freetype/ftlogging.h [7:8]
+        include/freetype/internal/compiler-macros.h [7:8]
+        src/dlg/dlgwrap.c [7:8]
+        src/sdf/ftbsdf.c [7:8]
+        src/sdf/ftsdf.c [7:8]
+        src/sdf/ftsdf.h [7:8]
+        src/sdf/ftsdfcommon.c [7:8]
+        src/sdf/ftsdfcommon.h [7:8]
+        src/sdf/ftsdferrs.h [7:8]
+        src/sdf/ftsdfrend.c [7:8]
+        src/sdf/ftsdfrend.h [7:8]
+        src/sdf/sdf.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e1cf22929c3960b94c8d76f235e2c6dd
+BELONGS ya.make
+    License text:
+        Copyright (C) 2004-2024 by
+        David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        docs/formats.txt [209:210]
+        include/freetype/ftbitmap.h [7:8]
+        include/freetype/ftlzw.h [7:8]
+        include/freetype/ftotval.h [7:8]
+        include/freetype/internal/ftvalid.h [7:8]
+        include/freetype/internal/services/svotval.h [7:8]
+        src/base/ftbitmap.c [7:8]
+        src/base/ftotval.c [7:8]
+        src/cache/ftccback.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e718c2c96499b5763672fde9423d6a9a
+BELONGS ya.make
+    License text:
+         * Copyright 2000 Computing Research Labs, New Mexico State University
+         * Copyright 2001-2004, 2011 Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/bdf/bdf.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e8098daecf46b4d42f8adb664e560ef1
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2010-2024 by
+         * Joel Klinghed.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/ftbzip2.h [7:8]
+        src/bzip2/ftbzip2.c [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ee62eb68d7b00b203af02afb0a753e1a
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004-2024 by
+         * Masatake YAMATO, Red Hat K.K.,
+         * David Turner, Robert Wilhelm, and Werner Lemberg.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/freetype/internal/services/svgxval.h [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL efcd193de0cf2de68e85227788d583d4
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004-2024 by
+         * David Turner, Robert Wilhelm, Werner Lemberg, and George Williams.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/truetype/ttgxvar.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f38404a02e69976b94505df0c691bed0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/base/md5.c [11:16]
+        src/base/md5.h [11:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f717d5b9a8597f941eac851a6b0eb8a5
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2002-2024 by
+         * Roberto Alameda.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/type42/t42drivr.c [7:8]
+        src/type42/t42drivr.h [7:8]
+        src/type42/t42objs.c [7:8]
+        src/type42/t42objs.h [7:8]
+        src/type42/t42parse.c [7:8]
+        src/type42/t42parse.h [7:8]
+        src/type42/t42types.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fa7bfd6976dc989e42570721d1b62b5e
+BELONGS ya.make
+    License text:
+          Copyright 2000-2010, 2012-2014 by
+          Francesco Zappa Nardelli
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pcf/pcfread.c [5:6]

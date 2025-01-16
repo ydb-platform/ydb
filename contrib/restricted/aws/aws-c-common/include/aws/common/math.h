@@ -12,6 +12,8 @@
 #include <limits.h>
 #include <stdlib.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 /* The number of bits in a size_t variable */
 #if SIZE_MAX == UINT32_MAX
 #    define SIZE_BITS 32
@@ -203,5 +205,6 @@ AWS_STATIC_IMPL double aws_max_double(double a, double b);
 #endif /* AWS_NO_STATIC_IMPL */
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_MATH_H */

@@ -19,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCopySequence TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -138,7 +138,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TCopySequence TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -239,7 +239,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -271,7 +271,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCopySequence TProposedCopySequence"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
     void UpdateSequenceDescription(NKikimrSchemeOp::TSequenceDescription& descr) {

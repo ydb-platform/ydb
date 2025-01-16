@@ -33,6 +33,8 @@
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 
+#include <queue>
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -46,11 +48,13 @@ class TCompletionEventSender;
 
 class TPDisk : public IPDisk {
 public:
-    ui32 PDiskId;
-    TActorId PDiskActor;
+    std::shared_ptr<TPDiskCtx> PCtx;
+    // ui32 PDiskId; // deprecated, moved to PCtx
+    // TActorId PDiskActor; // deprecated, moved to PCtx
+    // TActorSystem *ActorSystem; // deprecated, moved to PCtx
 
     // Monitoring
-    TPDiskMon Mon;
+    TPDiskMon Mon; // deprecated, will be moved to PCtx
 
 
     // Static state
@@ -72,10 +76,9 @@ public:
     TAtomic InputQueueCost = 0;
 
     TVector<TRequestBase*> JointLogReads;
-    TVector<TIntrusivePtr<TRequestBase>> JointChunkReads;
-    TVector<TRequestBase*> JointChunkWrites;
-    TVector<TLogWrite*> JointLogWrites;
-    TVector<TLogWrite*> JointCommits;
+    std::queue<TIntrusivePtr<TRequestBase>> JointChunkReads;
+    std::queue<TRequestBase*> JointChunkWrites;
+    std::queue<TLogWrite*> JointLogWrites;
     TVector<TChunkTrim*> JointChunkTrims;
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
@@ -100,6 +103,9 @@ public:
     TControlWrapper ForsetiMaxLogBatchNs;
     TControlWrapper ForsetiOpPieceSizeSsd;
     TControlWrapper ForsetiOpPieceSizeRot;
+    TControlWrapper UseNoopSchedulerSSD;
+    TControlWrapper UseNoopSchedulerHDD;
+    bool UseNoopSchedulerCached = false;
 
     // SectorMap Controls
     TControlWrapper SectorMapFirstSectorReadRate;
@@ -119,7 +125,6 @@ public:
     TNonceSet ForceLogNonceDiff;
 
     // Static state
-    TActorSystem *ActorSystem;
     alignas(16) TDiskFormat Format;
     ui64 ExpectedDiskGuid;
     TPDiskCategory PDiskCategory;
@@ -143,7 +148,7 @@ public:
     ui64 InsaneLogChunks = 0;  // Set when pdisk sees insanely large log, to give vdisks a chance to cut it
     ui32 FirstLogChunkToParseCommits = 0;
 
-    // Chunks that is owned by killed owner, but has operations InFlight
+    // Chunks that are owned by killed owner, but have operations InFlight
     TVector<TChunkIdx> QuarantineChunks;
     TVector<TOwner> QuarantineOwners;
 
@@ -167,7 +172,7 @@ public:
 
     // Initialization data
     ui64 InitialSysLogWritePosition = 0;
-    EInitPhase InitPhase = EInitPhase::Uninitialized;
+    std::atomic<EInitPhase> InitPhase = EInitPhase::Uninitialized;
     TBuffer *InitialTailBuffer = nullptr;
     TLogPosition InitialLogPosition{0, 0};
     volatile ui64 InitialPreviousNonce = 0;
@@ -177,6 +182,10 @@ public:
 
     TIntrusivePtr<TPDiskConfig> Cfg;
     TInstant CreationTime;
+    // Last chunk and sector indexes we have seen on initial log read.
+    // Used to limit log reading in read-only mode.
+    ui32 LastInitialChunkIdx;
+    ui64 LastInitialSectorIdx;
 
     ui64 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
 
@@ -200,9 +209,11 @@ public:
     // Metadata storage
     NMeta::TInfo Meta;
 
+    NLWTrace::TOrbit UpdateCycleOrbit;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
-    TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+    TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
     TString DynamicStateToString(bool isMultiline);
     TCheckDiskFormatResult ReadChunk0Format(ui8* formatSectors, const TMainKey& mainKey); // Called by actor
     bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize, const TMainKey& mainKey); // Called by actor
@@ -291,8 +302,7 @@ public:
     void SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& errorReason,
             NKikimrProto::EReplyStatus status);
     EChunkReadPieceResult ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit,
-            ui64 *reallyReadBytes, NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit);
-    void SplitChunkJobSize(ui32 totalSize, ui32 *outSmallJobSize, ui32 *outLargeJObSize, ui32 *outSmallJobCount);
+            NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk locking
     TVector<TChunkIdx> LockChunksForOwner(TOwner owner, const ui32 count, TString &errorReason);
@@ -324,7 +334,7 @@ public:
             std::optional<TRcBuf> metadata);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
-    void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str);
+    void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str, NKikimrProto::EReplyStatus status = NKikimrProto::ERROR);
     TOwner FindNextOwnerId();
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
@@ -346,7 +356,8 @@ public:
     void KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEventSender *completionAction);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Update process
-    void ProcessLogWriteQueueAndCommits();
+    void ProcessLogWriteQueue();
+    void ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWrite*> commits);
     void ProcessChunkForgetQueue();
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
@@ -393,7 +404,7 @@ public:
 
     // Schedules EvReadLogResult event for the system log
     void ResetInit();
-    bool Initialize(TActorSystem *actorSystem, const TActorId &pDiskActorId); // Called by actor
+    bool Initialize(); // Called by actor
     void InitiateReadSysLog(const TActorId &pDiskActor); // Called by actor
     void ProcessReadLogResult(const TEvReadLogResult &evReadLogResult, const TActorId &pDiskActor);
 
@@ -403,12 +414,13 @@ public:
     bool PreprocessRequestImpl(T *req); // const;
     NKikimrProto::EReplyStatus CheckOwnerAndRound(TRequestBase* req, TStringStream& err);
     bool PreprocessRequest(TRequestBase *request);
-    void PushRequestToForseti(TRequestBase *request);
-    void AddJobToForseti(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind);
+    void PushRequestToScheduler(TRequestBase *request);
+    void AddJobToScheduler(TRequestBase *request, NSchLab::EJobKind jobKind);
     void RouteRequest(TRequestBase *request);
     void ProcessPausedQueue();
     void ProcessPendingActivities();
     void EnqueueAll();
+    void GetJobsFromForsetti();
     void Update() override;
     void Wakeup() override;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -420,6 +432,7 @@ private:
     void AddCbs(ui32 ownerId, EGate gate, const char *gateName, ui64 minBudget);
     void AddCbsSet(ui32 ownerId);
     void UpdateMinLogCostNs();
+    bool HandleReadOnlyIfWrite(TRequestBase *request);
 };
 
 void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, ui64 lastSector, ui64 currentSector,
@@ -430,4 +443,3 @@ bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui3
 
 } // NPDisk
 } // NKikimr
-

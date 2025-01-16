@@ -28,7 +28,19 @@ bool Contains(const auto& names, std::string_view str) {
     return std::find(std::begin(names), std::end(names), str) != std::end(names);
 }
 
-constexpr std::string_view ImplTables[] = {ImplTable, NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable};
+constexpr std::string_view ImplTables[] = {
+    ImplTable, NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable,
+};
+
+constexpr std::string_view GlobalSecondaryImplTables[] = {
+    ImplTable,
+};
+static_assert(std::is_sorted(std::begin(GlobalSecondaryImplTables), std::end(GlobalSecondaryImplTables)));
+
+constexpr std::string_view GlobalKMeansTreeImplTables[] = {
+    NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable,
+};
+static_assert(std::is_sorted(std::begin(GlobalKMeansTreeImplTables), std::end(GlobalKMeansTreeImplTables)));
 
 }
 
@@ -115,17 +127,17 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
             return false;
         }
 
-        if (Contains(table.Keys, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
-            explain = TStringBuilder() << "table key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
+        if (Contains(table.Keys, NTableVectorKmeansTreeIndex::ParentColumn)) {
+            explain = TStringBuilder() << "table key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::ParentColumn;
             return false;
         }
-        if (Contains(index.KeyColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
+        if (Contains(index.KeyColumns, NTableVectorKmeansTreeIndex::ParentColumn)) {
             // This isn't really needed, but it will be really strange to have column with such name but different meaning
-            explain = TStringBuilder() << "index key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
+            explain = TStringBuilder() << "index key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::ParentColumn;
             return false;
         }
-        if (Contains(index.DataColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
-            explain = TStringBuilder() << "index data column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
+        if (Contains(index.DataColumns, NTableVectorKmeansTreeIndex::ParentColumn)) {
+            explain = TStringBuilder() << "index data column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::ParentColumn;
             return false;
         }
     }
@@ -142,11 +154,11 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     return true;
 }
 
-TVector<TString> GetImplTables(NKikimrSchemeOp::EIndexType indexType) {
+std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType) {
     if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        return { NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable };
+        return GlobalKMeansTreeImplTables;
     } else {
-        return { ImplTable };
+        return GlobalSecondaryImplTables;
     }
 }
 
@@ -154,9 +166,9 @@ bool IsImplTable(std::string_view tableName) {
     return Contains(ImplTables, tableName);
 }
 
-bool IsTmpImplTable(std::string_view tableName) {
-    // all impl tables that ends with "tmp" should be used only for index creation and dropped when index build is finished
-    return tableName.ends_with("tmp");
+bool IsBuildImplTable(std::string_view tableName) {
+    // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
+    return tableName.ends_with("build");
 }
 
 }

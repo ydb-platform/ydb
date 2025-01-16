@@ -21,8 +21,8 @@ public:
     MOCK_METHOD(const TUrlRef&, GetUrl, (), (override));
     MOCK_METHOD(const THeadersPtr&, GetHeaders, (), (override));
     MOCK_METHOD(const NNet::TNetworkAddress&, GetRemoteAddress, (), (const, override));
-    MOCK_METHOD(TGuid, GetConnectionId, (), (const, override));
-    MOCK_METHOD(TGuid, GetRequestId, (), (const, override));
+    MOCK_METHOD(TConnectionId, GetConnectionId, (), (const, override));
+    MOCK_METHOD(TRequestId, GetRequestId, (), (const, override));
     MOCK_METHOD(i64, GetReadByteCount, (), (const, override));
     MOCK_METHOD(TInstant, GetStartTime, (), (const, override));
     MOCK_METHOD(int, GetPort, (), (const, override));

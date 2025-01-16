@@ -1,0 +1,289 @@
+====================Apache-2.0 WITH LLVM-exception====================
+ * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+ * See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+ * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+/* Part of the LLVM Project, under the Apache License v2.0 with LLVM          */
+/* Exceptions.                                                                */
+/* See https://llvm.org/LICENSE.txt for license information.                  */
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+/* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception                    */
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+/// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+/// See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+/// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+====================Apache-2.0 WITH LLVM-exception====================
+|* Part of the LLVM Project, under the Apache License v2.0 with LLVM          *|
+|* Exceptions.                                                                *|
+|* See https://llvm.org/LICENSE.txt for license information.                  *|
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+|* Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+|* See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+|* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+|* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception                    *|
+
+
+====================BSD-2-Clause====================
+   BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
+
+
+====================BSD-2-Clause====================
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions are
+   met:
+
+       * Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+       * Redistributions in binary form must reproduce the above
+   copyright notice, this list of conditions and the following disclaimer
+   in the documentation and/or other materials provided with the
+   distribution.
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================CC0-1.0====================
+|* SPDX-License-Identifier: CC0-1.0                                           *|
+
+
+====================COPYRIGHT====================
+   Copyright (C) 2012-2016, Yann Collet.
+
+
+====================COPYRIGHT====================
+  static bool isChar6(char C) { return isAlnum(C) || C == '.' || C == '_'; }
+  static unsigned EncodeChar6(char C) {
+    if (C >= 'a' && C <= 'z') return C-'a';
+
+
+====================COPYRIGHT====================
+ * Copyright © 1991-2015 Unicode, Inc. All rights reserved.
+
+
+====================COPYRIGHT====================
+ * This software was written by Alexander Peslyak in 2001.  No copyright is
+ * claimed, and the software is hereby placed in the public domain.
+ * In case this attempt to disclaim copyright and place the software in the
+ * public domain is deemed null and void, then the software is
+ * Copyright (c) 2001 Alexander Peslyak and it is hereby released to the
+ * general public under the following terms:
+
+
+====================COPYRIGHT====================
+// <copyright file="Program.cpp" company="Microsoft Corporation">
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+
+====================File: tools/polly/lib/External/isl/AUTHORS====================
+isl was written by
+
+	    Sven Verdoolaege
+2006-2007   Leiden Institute of Advanced Computer Science
+	    Universiteit Leiden
+	    Niels Bohrweg 1
+	    2333 CA Leiden
+	    The Netherlands
+2008-2009   K.U.Leuven
+	    Departement Computerwetenschappen
+	    Celestijnenlaan 200A
+	    B-3001 Leuven
+	    Belgium
+2010-2011   INRIA Saclay - Ile-de-France
+	    Parc Club Orsay Universite, ZAC des vignes, 4 rue Jacques Monod
+	    91893 Orsay
+	    France
+2011-2012   consultant for Leiden Institute of Advanced Computer Science
+2012-2014   Ecole Normale Superieure
+	    45 rue d'Ulm, 75230 Paris
+	    France
+2014-2015   INRIA Rocquencourt
+	    Domaine de Voluceau - Rocquencourt, B.P. 105
+	    78153 Le Chesnay
+	    France
+2015-2020   Polly Labs
+2018-2020   Cerebras Systems
+	    175 S San Antonio Rd
+	    Los Altos, CA
+	    USA
+
+Contributions by
+
+Mythri Alle
+Riyadh Baghdadi
+Serge Belyshev
+Albert Cohen
+Ray Donnelly
+Johannes Doerfert
+Andi Drebes
+Ron Estrin
+Clement Foyer
+Armin Groesslinger
+Tobias Grosser
+Frederik Harwath
+Alexandre Isoard
+Andreas Kloeckner
+Michael Kruse
+Manjunath Kudlur
+Alexander Matz
+Chielo Newctle
+Sebastian Pop
+Louis-Noel Pouchet
+Benoit Pradelle
+Uday Bondhugula
+Andreas Simbuerger
+Tianjiao Sun
+Malhar Thakkar
+Sergei Trofimovich
+Miheer Vaidya
+Sven van Haastregt
+Oleksandr Zinenko
+
+The merge sort implementation was written by Jeffrey Stedfast.
+
+
+====================MIT====================
+// <license>
+// The MIT License (MIT)
+
+
+====================MIT====================
+// Licensed under the MIT license.
+
+
+====================MIT====================
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+
+====================Public-Domain====================
+ *   [0] https://hyperelliptic.org/nacl/nacl-20110221.tar.bz2 (public domain
+ *       code)
+
+
+====================Public-Domain====================
+ * Homepage:
+ * http://openwall.info/wiki/people/solar/software/public-domain-source-code/md5
+ *
+ * Author:
+ * Alexander Peslyak, better known as Solar Designer <solar at openwall.com>
+ *
+ * This software was written by Alexander Peslyak in 2001.  No copyright is
+ * claimed, and the software is hereby placed in the public domain.
+ * In case this attempt to disclaim copyright and place the software in the
+ * public domain is deemed null and void, then the software is
+ * Copyright (c) 2001 Alexander Peslyak and it is hereby released to the
+ * general public under the following terms:
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted.
+ *
+ * There's ABSOLUTELY NO WARRANTY, express or implied.
+
+
+====================Public-Domain====================
+// This code is taken from public domain
+
+
+====================Public-Domain AND CC0-1.0====================
+|* Released into the public domain with CC0 1.0                               *|
+
+
+====================Unicode====================
+ * Distributed under the Terms of Use in
+ * http://www.unicode.org/copyright.html.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of the Unicode data files and any associated documentation
+ * (the "Data Files") or Unicode software and any associated documentation
+ * (the "Software") to deal in the Data Files or Software
+ * without restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, and/or sell copies of
+ * the Data Files or Software, and to permit persons to whom the Data Files
+ * or Software are furnished to do so, provided that
+ * (a) this copyright and permission notice appear with all copies
+ * of the Data Files or Software,
+ * (b) this copyright and permission notice appear in associated
+ * documentation, and
+ * (c) there is clear notice in each modified Data File or in the Software
+ * as well as in the documentation associated with the Data File(s) or
+ * Software that the data or software has been modified.
+ *
+ * THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF
+ * ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+ * WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT OF THIRD PARTY RIGHTS.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS
+ * NOTICE BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL
+ * DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
+ * DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+ * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+ * PERFORMANCE OF THE DATA FILES OR SOFTWARE.
+ *
+ * Except as contained in this notice, the name of a copyright holder
+ * shall not be used in advertising or otherwise to promote the sale,
+ * use or other dealings in these Data Files or Software without prior
+ * written authorization of the copyright holder.

@@ -61,11 +61,33 @@ struct TControllerSchema: NIceDb::Schema {
         using TColumns = TableColumns<ReplicationId, TargetId, Name, State>;
     };
 
+    struct TxIds: Table<5> {
+        struct VersionStep: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct VersionTxId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WriteTxId: Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<VersionStep, VersionTxId>;
+        using TColumns = TableColumns<VersionStep, VersionTxId, WriteTxId>;
+    };
+
+    struct Workers: Table<6> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct HeartbeatVersionStep: Column<4, NScheme::NTypeIds::Uint64> {};
+        struct HeartbeatVersionTxId: Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, HeartbeatVersionStep, HeartbeatVersionTxId>;
+    };
+
     using TTables = SchemaTables<
         SysParams,
         Replications,
         Targets,
-        SrcStreams
+        SrcStreams,
+        TxIds,
+        Workers
     >;
 
 }; // TControllerSchema

@@ -12,19 +12,10 @@ from pytest_lazy_fixtures import lf
 
 import prettytable
 from prettytable import (
-    ALL,
-    DEFAULT,
-    DOUBLE_BORDER,
-    FRAME,
-    HEADER,
-    MARKDOWN,
-    MSWORD_FRIENDLY,
-    NONE,
-    ORGMODE,
-    PLAIN_COLUMNS,
-    RANDOM,
-    SINGLE_BORDER,
+    HRuleStyle,
     PrettyTable,
+    TableStyle,
+    VRuleStyle,
     from_csv,
     from_db_cursor,
     from_html,
@@ -314,22 +305,22 @@ def field_name_less_table() -> PrettyTable:
 class TestFieldNameLessTable:
     """Make sure that building and stringing a table with no fieldnames works fine"""
 
-    def test_can_string_ascii(self, field_name_less_table: prettytable) -> None:
+    def test_can_string_ascii(self, field_name_less_table: PrettyTable) -> None:
         output = field_name_less_table.get_string()
         assert "|  Field 1  | Field 2 | Field 3 | Field 4 |" in output
         assert "|  Adelaide |   1295  | 1158259 |  600.5  |" in output
 
-    def test_can_string_html(self, field_name_less_table: prettytable) -> None:
+    def test_can_string_html(self, field_name_less_table: PrettyTable) -> None:
         output = field_name_less_table.get_html_string()
         assert "<th>Field 1</th>" in output
         assert "<td>Adelaide</td>" in output
 
-    def test_can_string_latex(self, field_name_less_table: prettytable) -> None:
+    def test_can_string_latex(self, field_name_less_table: PrettyTable) -> None:
         output = field_name_less_table.get_latex_string()
         assert "Field 1 & Field 2 & Field 3 & Field 4 \\\\" in output
         assert "Adelaide & 1295 & 1158259 & 600.5 \\\\" in output
 
-    def test_add_field_names_later(self, field_name_less_table: prettytable) -> None:
+    def test_add_field_names_later(self, field_name_less_table: PrettyTable) -> None:
         field_name_less_table.field_names = [
             "City name",
             "Area",
@@ -376,21 +367,21 @@ class TestAlignment:
     """Make sure alignment works regardless of when it was set"""
 
     def test_aligned_ascii(
-        self, aligned_before_table: prettytable, aligned_after_table: prettytable
+        self, aligned_before_table: PrettyTable, aligned_after_table: PrettyTable
     ) -> None:
         before = aligned_before_table.get_string()
         after = aligned_after_table.get_string()
         assert before == after
 
     def test_aligned_html(
-        self, aligned_before_table: prettytable, aligned_after_table: prettytable
+        self, aligned_before_table: PrettyTable, aligned_after_table: PrettyTable
     ) -> None:
         before = aligned_before_table.get_html_string()
         after = aligned_after_table.get_html_string()
         assert before == after
 
     def test_aligned_latex(
-        self, aligned_before_table: prettytable, aligned_after_table: prettytable
+        self, aligned_before_table: PrettyTable, aligned_after_table: PrettyTable
     ) -> None:
         before = aligned_before_table.get_latex_string()
         after = aligned_after_table.get_latex_string()
@@ -428,7 +419,7 @@ def city_data_from_csv() -> PrettyTable:
 class TestOptionOverride:
     """Make sure all options are properly overwritten by get_string."""
 
-    def test_border(self, city_data_prettytable: prettytable) -> None:
+    def test_border(self, city_data_prettytable: PrettyTable) -> None:
         default = city_data_prettytable.get_string()
         override = city_data_prettytable.get_string(border=False)
         assert default != override
@@ -440,12 +431,12 @@ class TestOptionOverride:
 
     def test_hrules_all(self, city_data_prettytable) -> None:
         default = city_data_prettytable.get_string()
-        override = city_data_prettytable.get_string(hrules=ALL)
+        override = city_data_prettytable.get_string(hrules=HRuleStyle.ALL)
         assert default != override
 
     def test_hrules_none(self, city_data_prettytable) -> None:
         default = city_data_prettytable.get_string()
-        override = city_data_prettytable.get_string(hrules=NONE)
+        override = city_data_prettytable.get_string(hrules=HRuleStyle.NONE)
         assert default != override
 
 
@@ -535,12 +526,12 @@ class TestBasic:
         assert len(rows) == 7
         assert rows[0] == ["Adelaide", 1295, 1158259, 600.5]
 
-    def _test_no_blank_lines(self, table: prettytable) -> None:
+    def _test_no_blank_lines(self, table: PrettyTable) -> None:
         string = table.get_string()
         lines = string.split("\n")
         assert "" not in lines
 
-    def _test_all_length_equal(self, table: prettytable) -> None:
+    def _test_all_length_equal(self, table: PrettyTable) -> None:
         string = table.get_string()
         lines = string.split("\n")
         lengths = [len(line) for line in lines]
@@ -608,42 +599,42 @@ class TestBasic:
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """No table should ever have blank lines in it."""
-        city_data_prettytable.hrules = NONE
+        city_data_prettytable.hrules = HRuleStyle.NONE
         self._test_no_blank_lines(city_data_prettytable)
 
     def test_all_lengths_equal_with_hrules_none(
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """All lines in a table should be of the same length."""
-        city_data_prettytable.hrules = NONE
+        city_data_prettytable.hrules = HRuleStyle.NONE
         self._test_all_length_equal(city_data_prettytable)
 
     def test_no_blank_lines_with_hrules_all(
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """No table should ever have blank lines in it."""
-        city_data_prettytable.hrules = ALL
+        city_data_prettytable.hrules = HRuleStyle.ALL
         self._test_no_blank_lines(city_data_prettytable)
 
     def test_all_lengths_equal_with_hrules_all(
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """All lines in a table should be of the same length."""
-        city_data_prettytable.hrules = ALL
+        city_data_prettytable.hrules = HRuleStyle.ALL
         self._test_all_length_equal(city_data_prettytable)
 
     def test_no_blank_lines_with_style_msword(
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """No table should ever have blank lines in it."""
-        city_data_prettytable.set_style(MSWORD_FRIENDLY)
+        city_data_prettytable.set_style(TableStyle.MSWORD_FRIENDLY)
         self._test_no_blank_lines(city_data_prettytable)
 
     def test_all_lengths_equal_with_style_msword(
         self, city_data_prettytable: PrettyTable
     ) -> None:
         """All lines in a table should be of the same length."""
-        city_data_prettytable.set_style(MSWORD_FRIENDLY)
+        city_data_prettytable.set_style(TableStyle.MSWORD_FRIENDLY)
         self._test_all_length_equal(city_data_prettytable)
 
     def test_no_blank_lines_with_int_format(
@@ -850,7 +841,7 @@ class TestBreakLine:
         [
             (
                 [["value 1", "value2\nsecond line"], ["value 3", "value4"]],
-                ALL,
+                HRuleStyle.ALL,
                 """
 +---------+-------------+
 | Field 1 |   Field 2   |
@@ -867,7 +858,7 @@ class TestBreakLine:
                     ["value 1", "value2\nsecond line"],
                     ["value 3\n\nother line", "value4\n\n\nvalue5"],
                 ],
-                ALL,
+                HRuleStyle.ALL,
                 """
 +------------+-------------+
 |  Field 1   |   Field 2   |
@@ -887,7 +878,7 @@ class TestBreakLine:
                     ["value 1", "value2\nsecond line"],
                     ["value 3\n\nother line", "value4\n\n\nvalue5"],
                 ],
-                FRAME,
+                HRuleStyle.FRAME,
                 """
 +------------+-------------+
 |  Field 1   |   Field 2   |
@@ -916,7 +907,7 @@ class TestBreakLine:
         table = PrettyTable(["Field 1", "Field 2"])
         table.add_row(["value 1", "value2\nsecond line"])
         table.add_row(["value 3", "value4"])
-        result = table.get_html_string(hrules=ALL)
+        result = table.get_html_string(hrules=HRuleStyle.ALL)
         assert (
             result.strip()
             == """
@@ -1455,7 +1446,7 @@ class TestPositionalJunctions:
     """Verify different cases for positional-junction characters"""
 
     def test_default(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
 
         assert (
             city_data_prettytable.get_string().strip()
@@ -1474,7 +1465,7 @@ class TestPositionalJunctions:
         )
 
     def test_no_header(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
         city_data_prettytable.header = False
 
         assert (
@@ -1492,7 +1483,7 @@ class TestPositionalJunctions:
         )
 
     def test_with_title(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
         city_data_prettytable.title = "Title"
 
         assert (
@@ -1514,7 +1505,7 @@ class TestPositionalJunctions:
         )
 
     def test_with_title_no_header(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
         city_data_prettytable.title = "Title"
         city_data_prettytable.header = False
         assert (
@@ -1534,9 +1525,9 @@ class TestPositionalJunctions:
         )
 
     def test_hrule_all(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
         city_data_prettytable.title = "Title"
-        city_data_prettytable.hrules = ALL
+        city_data_prettytable.hrules = HRuleStyle.ALL
         assert (
             city_data_prettytable.get_string().strip()
             == """
@@ -1562,8 +1553,8 @@ class TestPositionalJunctions:
         )
 
     def test_vrules_none(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
-        city_data_prettytable.vrules = NONE
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
+        city_data_prettytable.vrules = VRuleStyle.NONE
         assert (
             city_data_prettytable.get_string().strip()
             == "═══════════════════════════════════════════════════\n"
@@ -1580,8 +1571,8 @@ class TestPositionalJunctions:
         )
 
     def test_vrules_frame_with_title(self, city_data_prettytable: PrettyTable) -> None:
-        city_data_prettytable.set_style(DOUBLE_BORDER)
-        city_data_prettytable.vrules = FRAME
+        city_data_prettytable.set_style(TableStyle.DOUBLE_BORDER)
+        city_data_prettytable.vrules = VRuleStyle.FRAME
         city_data_prettytable.title = "Title"
         assert (
             city_data_prettytable.get_string().strip()
@@ -1607,7 +1598,7 @@ class TestStyle:
         "style, expected",
         [
             pytest.param(
-                DEFAULT,
+                TableStyle.DEFAULT,
                 """
 +---+---------+---------+---------+
 |   | Field 1 | Field 2 | Field 3 |
@@ -1620,7 +1611,7 @@ class TestStyle:
                 id="DEFAULT",
             ),
             pytest.param(
-                MARKDOWN,  # TODO fix
+                TableStyle.MARKDOWN,  # TODO fix
                 """
 |     | Field 1 | Field 2 | Field 3 |
 | :-: | :-----: | :-----: | :-----: |
@@ -1631,7 +1622,7 @@ class TestStyle:
                 id="MARKDOWN",
             ),
             pytest.param(
-                MSWORD_FRIENDLY,
+                TableStyle.MSWORD_FRIENDLY,
                 """
 |   | Field 1 | Field 2 | Field 3 |
 | 1 | value 1 |  value2 |  value3 |
@@ -1641,7 +1632,7 @@ class TestStyle:
                 id="MSWORD_FRIENDLY",
             ),
             pytest.param(
-                ORGMODE,
+                TableStyle.ORGMODE,
                 """
 |---+---------+---------+---------|
 |   | Field 1 | Field 2 | Field 3 |
@@ -1654,7 +1645,7 @@ class TestStyle:
                 id="ORGMODE",
             ),
             pytest.param(
-                PLAIN_COLUMNS,
+                TableStyle.PLAIN_COLUMNS,
                 """
          Field 1        Field 2        Field 3        
 1        value 1         value2         value3        
@@ -1664,20 +1655,18 @@ class TestStyle:
                 id="PLAIN_COLUMNS",
             ),
             pytest.param(
-                RANDOM,
+                TableStyle.RANDOM,
                 """
-'^^^^^'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
-%    1%    value 1%    value2%    value3%
-'^^^^^'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
-%    4%    value 4%    value5%    value6%
-'^^^^^'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
-%    7%    value 7%    value8%    value9%
-'^^^^^'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^'
+%    1     value 1     value2     value3%
+%    4     value 4     value5     value6%
+%    7     value 7     value8     value9%
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^'
 """,
                 id="RANDOM",
             ),
             pytest.param(
-                DOUBLE_BORDER,
+                TableStyle.DOUBLE_BORDER,
                 """
 ╔═══╦═════════╦═════════╦═════════╗
 ║   ║ Field 1 ║ Field 2 ║ Field 3 ║
@@ -1689,7 +1678,7 @@ class TestStyle:
 """,
             ),
             pytest.param(
-                SINGLE_BORDER,
+                TableStyle.SINGLE_BORDER,
                 """
 ┌───┬─────────┬─────────┬─────────┐
 │   │ Field 1 │ Field 2 │ Field 3 │
@@ -1721,13 +1710,13 @@ class TestStyle:
         # Act / Assert
         # This is an hrule style, not a table style
         with pytest.raises(ValueError):
-            t.set_style(ALL)
+            t.set_style(HRuleStyle.ALL)  # type: ignore[arg-type]
 
     @pytest.mark.parametrize(
         "style, expected",
         [
             pytest.param(
-                MARKDOWN,
+                TableStyle.MARKDOWN,
                 """
 | l |  c  | r | Align left | Align centre | Align right |
 | :-| :-: |-: | :----------| :----------: |-----------: |
@@ -1829,7 +1818,7 @@ class TestLatexOutput:
             "\\end{tabular}"
         )
 
-        options = {"vrules": FRAME}
+        options = {"vrules": VRuleStyle.FRAME}
         assert t.get_latex_string(format=True, **options) == (
             "\\begin{tabular}{|cccc|}\r\n"
             "\\hline\r\n"
@@ -1841,7 +1830,7 @@ class TestLatexOutput:
             "\\end{tabular}"
         )
 
-        options = {"hrules": ALL}
+        options = {"hrules": HRuleStyle.ALL}
         assert t.get_latex_string(format=True, **options) == (
             "\\begin{tabular}{|c|c|c|c|}\r\n"
             "\\hline\r\n"
@@ -1858,7 +1847,7 @@ class TestLatexOutput:
 
     def test_latex_output_header(self) -> None:
         t = helper_table()
-        assert t.get_latex_string(format=True, hrules=HEADER) == (
+        assert t.get_latex_string(format=True, hrules=HRuleStyle.HEADER) == (
             "\\begin{tabular}{|c|c|c|c|}\r\n"
             " & Field 1 & Field 2 & Field 3 \\\\\r\n"
             "\\hline\r\n"
@@ -2368,7 +2357,7 @@ class TestMaxTableWidth:
     def test_max_table_width_wide_vrules_frame(self) -> None:
         table = PrettyTable()
         table.max_table_width = 52
-        table.vrules = FRAME
+        table.vrules = VRuleStyle.FRAME
         table.add_row(
             [
                 0,
@@ -2400,7 +2389,7 @@ class TestMaxTableWidth:
     def test_max_table_width_wide_vrules_none(self) -> None:
         table = PrettyTable()
         table.max_table_width = 52
-        table.vrules = NONE
+        table.vrules = VRuleStyle.NONE
         table.add_row(
             [
                 0,
@@ -2608,3 +2597,51 @@ class TestGeneralOutput:
         t = helper_table()
         with pytest.raises(ValueError):
             t.get_formatted_string("pdf")
+
+
+class TestDeprecations:
+    @pytest.mark.parametrize(
+        "module_name",
+        [
+            "prettytable",
+            "prettytable.prettytable",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "FRAME",
+            "ALL",
+            "NONE",
+            "HEADER",
+        ],
+    )
+    def test_hrule_constant_deprecations(self, module_name: str, name: str) -> None:
+        with pytest.deprecated_call(match=f"the '{name}' constant is deprecated"):
+            exec(f"from {module_name} import {name}")
+
+    @pytest.mark.parametrize(
+        "module_name",
+        [
+            "prettytable",
+            "prettytable.prettytable",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "DEFAULT",
+            "MSWORD_FRIENDLY",
+            "PLAIN_COLUMNS",
+            "MARKDOWN",
+            "ORGMODE",
+            "DOUBLE_BORDER",
+            "SINGLE_BORDER",
+            "RANDOM",
+        ],
+    )
+    def test_table_style_constant_deprecations(
+        self, module_name: str, name: str
+    ) -> None:
+        with pytest.deprecated_call(match=f"the '{name}' constant is deprecated"):
+            exec(f"from {module_name} import {name}")

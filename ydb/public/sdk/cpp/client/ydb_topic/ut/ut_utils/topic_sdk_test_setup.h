@@ -21,6 +21,8 @@ public:
     void CreateTopicWithAutoscale(const TString& path = TEST_TOPIC, const TString& consumer = TEST_CONSUMER, size_t partitionCount = 1,
                      size_t maxPartitionCount = 100);
 
+    TTopicDescription DescribeTopic(const TString& path = TEST_TOPIC);
+
     TString GetEndpoint() const;
     TString GetTopicPath(const TString& name = TEST_TOPIC) const;
     TString GetTopicParent() const;
@@ -31,6 +33,7 @@ public:
     TLog& GetLog();
 
     TTopicClient MakeClient() const;
+    NYdb::NTable::TTableClient MakeTableClient() const;
 
     TDriver MakeDriver() const;
     TDriver MakeDriver(const TDriverConfig& config) const;

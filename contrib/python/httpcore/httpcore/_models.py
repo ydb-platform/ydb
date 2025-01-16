@@ -1,30 +1,22 @@
-from typing import (
-    Any,
-    AsyncIterable,
-    AsyncIterator,
-    Iterable,
-    Iterator,
-    List,
-    Mapping,
-    MutableMapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-)
-from urllib.parse import urlparse
+from __future__ import annotations
+
+import base64
+import ssl
+import typing
+import urllib.parse
 
 # Functions for typechecking...
 
 
-HeadersAsSequence = Sequence[Tuple[Union[bytes, str], Union[bytes, str]]]
-HeadersAsMapping = Mapping[Union[bytes, str], Union[bytes, str]]
-HeaderTypes = Union[HeadersAsSequence, HeadersAsMapping, None]
+ByteOrStr = typing.Union[bytes, str]
+HeadersAsSequence = typing.Sequence[typing.Tuple[ByteOrStr, ByteOrStr]]
+HeadersAsMapping = typing.Mapping[ByteOrStr, ByteOrStr]
+HeaderTypes = typing.Union[HeadersAsSequence, HeadersAsMapping, None]
 
-Extensions = MutableMapping[str, Any]
+Extensions = typing.MutableMapping[str, typing.Any]
 
 
-def enforce_bytes(value: Union[bytes, str], *, name: str) -> bytes:
+def enforce_bytes(value: bytes | str, *, name: str) -> bytes:
     """
     Any arguments that are ultimately represented as bytes can be specified
     either as bytes or as strings.
@@ -45,7 +37,7 @@ def enforce_bytes(value: Union[bytes, str], *, name: str) -> bytes:
     raise TypeError(f"{name} must be bytes or str, but got {seen_type}.")
 
 
-def enforce_url(value: Union["URL", bytes, str], *, name: str) -> "URL":
+def enforce_url(value: URL | bytes | str, *, name: str) -> URL:
     """
     Type check for URL parameters.
     """
@@ -59,15 +51,15 @@ def enforce_url(value: Union["URL", bytes, str], *, name: str) -> "URL":
 
 
 def enforce_headers(
-    value: Union[HeadersAsMapping, HeadersAsSequence, None] = None, *, name: str
-) -> List[Tuple[bytes, bytes]]:
+    value: HeadersAsMapping | HeadersAsSequence | None = None, *, name: str
+) -> list[tuple[bytes, bytes]]:
     """
     Convienence function that ensure all items in request or response headers
     are either bytes or strings in the plain ASCII range.
     """
     if value is None:
         return []
-    elif isinstance(value, Mapping):
+    elif isinstance(value, typing.Mapping):
         return [
             (
                 enforce_bytes(k, name="header name"),
@@ -75,7 +67,7 @@ def enforce_headers(
             )
             for k, v in value.items()
         ]
-    elif isinstance(value, Sequence):
+    elif isinstance(value, typing.Sequence):
         return [
             (
                 enforce_bytes(k, name="header name"),
@@ -91,8 +83,10 @@ def enforce_headers(
 
 
 def enforce_stream(
-    value: Union[bytes, Iterable[bytes], AsyncIterable[bytes], None], *, name: str
-) -> Union[Iterable[bytes], AsyncIterable[bytes]]:
+    value: bytes | typing.Iterable[bytes] | typing.AsyncIterable[bytes] | None,
+    *,
+    name: str,
+) -> typing.Iterable[bytes] | typing.AsyncIterable[bytes]:
     if value is None:
         return ByteStream(b"")
     elif isinstance(value, bytes):
@@ -113,11 +107,11 @@ DEFAULT_PORTS = {
 
 
 def include_request_headers(
-    headers: List[Tuple[bytes, bytes]],
+    headers: list[tuple[bytes, bytes]],
     *,
     url: "URL",
-    content: Union[None, bytes, Iterable[bytes], AsyncIterable[bytes]],
-) -> List[Tuple[bytes, bytes]]:
+    content: None | bytes | typing.Iterable[bytes] | typing.AsyncIterable[bytes],
+) -> list[tuple[bytes, bytes]]:
     headers_set = set(k.lower() for k, v in headers)
 
     if b"host" not in headers_set:
@@ -154,10 +148,10 @@ class ByteStream:
     def __init__(self, content: bytes) -> None:
         self._content = content
 
-    def __iter__(self) -> Iterator[bytes]:
+    def __iter__(self) -> typing.Iterator[bytes]:
         yield self._content
 
-    async def __aiter__(self) -> AsyncIterator[bytes]:
+    async def __aiter__(self) -> typing.AsyncIterator[bytes]:
         yield self._content
 
     def __repr__(self) -> str:
@@ -170,7 +164,7 @@ class Origin:
         self.host = host
         self.port = port
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: typing.Any) -> bool:
         return (
             isinstance(other, Origin)
             and self.scheme == other.scheme
@@ -254,12 +248,12 @@ class URL:
 
     def __init__(
         self,
-        url: Union[bytes, str] = "",
+        url: bytes | str = "",
         *,
-        scheme: Union[bytes, str] = b"",
-        host: Union[bytes, str] = b"",
-        port: Optional[int] = None,
-        target: Union[bytes, str] = b"",
+        scheme: bytes | str = b"",
+        host: bytes | str = b"",
+        port: int | None = None,
+        target: bytes | str = b"",
     ) -> None:
         """
         Parameters:
@@ -271,7 +265,7 @@ class URL:
             target: The target of the HTTP request. Such as `"/items?search=red"`.
         """
         if url:
-            parsed = urlparse(enforce_bytes(url, name="url"))
+            parsed = urllib.parse.urlparse(enforce_bytes(url, name="url"))
             self.scheme = parsed.scheme
             self.host = parsed.hostname or b""
             self.port = parsed.port
@@ -292,12 +286,13 @@ class URL:
             b"ws": 80,
             b"wss": 443,
             b"socks5": 1080,
+            b"socks5h": 1080,
         }[self.scheme]
         return Origin(
             scheme=self.scheme, host=self.host, port=self.port or default_port
         )
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: typing.Any) -> bool:
         return (
             isinstance(other, URL)
             and other.scheme == self.scheme
@@ -325,12 +320,15 @@ class Request:
 
     def __init__(
         self,
-        method: Union[bytes, str],
-        url: Union[URL, bytes, str],
+        method: bytes | str,
+        url: URL | bytes | str,
         *,
         headers: HeaderTypes = None,
-        content: Union[bytes, Iterable[bytes], AsyncIterable[bytes], None] = None,
-        extensions: Optional[Extensions] = None,
+        content: bytes
+        | typing.Iterable[bytes]
+        | typing.AsyncIterable[bytes]
+        | None = None,
+        extensions: Extensions | None = None,
     ) -> None:
         """
         Parameters:
@@ -345,11 +343,11 @@ class Request:
         """
         self.method: bytes = enforce_bytes(method, name="method")
         self.url: URL = enforce_url(url, name="url")
-        self.headers: List[Tuple[bytes, bytes]] = enforce_headers(
+        self.headers: list[tuple[bytes, bytes]] = enforce_headers(
             headers, name="headers"
         )
-        self.stream: Union[Iterable[bytes], AsyncIterable[bytes]] = enforce_stream(
-            content, name="content"
+        self.stream: typing.Iterable[bytes] | typing.AsyncIterable[bytes] = (
+            enforce_stream(content, name="content")
         )
         self.extensions = {} if extensions is None else extensions
 
@@ -375,8 +373,11 @@ class Response:
         status: int,
         *,
         headers: HeaderTypes = None,
-        content: Union[bytes, Iterable[bytes], AsyncIterable[bytes], None] = None,
-        extensions: Optional[Extensions] = None,
+        content: bytes
+        | typing.Iterable[bytes]
+        | typing.AsyncIterable[bytes]
+        | None = None,
+        extensions: Extensions | None = None,
     ) -> None:
         """
         Parameters:
@@ -388,11 +389,11 @@ class Response:
                 `"reason_phrase"`, and `"network_stream"`.
         """
         self.status: int = status
-        self.headers: List[Tuple[bytes, bytes]] = enforce_headers(
+        self.headers: list[tuple[bytes, bytes]] = enforce_headers(
             headers, name="headers"
         )
-        self.stream: Union[Iterable[bytes], AsyncIterable[bytes]] = enforce_stream(
-            content, name="content"
+        self.stream: typing.Iterable[bytes] | typing.AsyncIterable[bytes] = (
+            enforce_stream(content, name="content")
         )
         self.extensions = {} if extensions is None else extensions
 
@@ -401,7 +402,7 @@ class Response:
     @property
     def content(self) -> bytes:
         if not hasattr(self, "_content"):
-            if isinstance(self.stream, Iterable):
+            if isinstance(self.stream, typing.Iterable):
                 raise RuntimeError(
                     "Attempted to access 'response.content' on a streaming response. "
                     "Call 'response.read()' first."
@@ -419,7 +420,7 @@ class Response:
     # Sync interface...
 
     def read(self) -> bytes:
-        if not isinstance(self.stream, Iterable):  # pragma: nocover
+        if not isinstance(self.stream, typing.Iterable):  # pragma: nocover
             raise RuntimeError(
                 "Attempted to read an asynchronous response using 'response.read()'. "
                 "You should use 'await response.aread()' instead."
@@ -428,8 +429,8 @@ class Response:
             self._content = b"".join([part for part in self.iter_stream()])
         return self._content
 
-    def iter_stream(self) -> Iterator[bytes]:
-        if not isinstance(self.stream, Iterable):  # pragma: nocover
+    def iter_stream(self) -> typing.Iterator[bytes]:
+        if not isinstance(self.stream, typing.Iterable):  # pragma: nocover
             raise RuntimeError(
                 "Attempted to stream an asynchronous response using 'for ... in "
                 "response.iter_stream()'. "
@@ -444,7 +445,7 @@ class Response:
             yield chunk
 
     def close(self) -> None:
-        if not isinstance(self.stream, Iterable):  # pragma: nocover
+        if not isinstance(self.stream, typing.Iterable):  # pragma: nocover
             raise RuntimeError(
                 "Attempted to close an asynchronous response using 'response.close()'. "
                 "You should use 'await response.aclose()' instead."
@@ -455,7 +456,7 @@ class Response:
     # Async interface...
 
     async def aread(self) -> bytes:
-        if not isinstance(self.stream, AsyncIterable):  # pragma: nocover
+        if not isinstance(self.stream, typing.AsyncIterable):  # pragma: nocover
             raise RuntimeError(
                 "Attempted to read an synchronous response using "
                 "'await response.aread()'. "
@@ -465,8 +466,8 @@ class Response:
             self._content = b"".join([part async for part in self.aiter_stream()])
         return self._content
 
-    async def aiter_stream(self) -> AsyncIterator[bytes]:
-        if not isinstance(self.stream, AsyncIterable):  # pragma: nocover
+    async def aiter_stream(self) -> typing.AsyncIterator[bytes]:
+        if not isinstance(self.stream, typing.AsyncIterable):  # pragma: nocover
             raise RuntimeError(
                 "Attempted to stream an synchronous response using 'async for ... in "
                 "response.aiter_stream()'. "
@@ -482,7 +483,7 @@ class Response:
             yield chunk
 
     async def aclose(self) -> None:
-        if not isinstance(self.stream, AsyncIterable):  # pragma: nocover
+        if not isinstance(self.stream, typing.AsyncIterable):  # pragma: nocover
             raise RuntimeError(
                 "Attempted to close a synchronous response using "
                 "'await response.aclose()'. "
@@ -490,3 +491,26 @@ class Response:
             )
         if hasattr(self.stream, "aclose"):
             await self.stream.aclose()
+
+
+class Proxy:
+    def __init__(
+        self,
+        url: URL | bytes | str,
+        auth: tuple[bytes | str, bytes | str] | None = None,
+        headers: HeadersAsMapping | HeadersAsSequence | None = None,
+        ssl_context: ssl.SSLContext | None = None,
+    ):
+        self.url = enforce_url(url, name="url")
+        self.headers = enforce_headers(headers, name="headers")
+        self.ssl_context = ssl_context
+
+        if auth is not None:
+            username = enforce_bytes(auth[0], name="auth")
+            password = enforce_bytes(auth[1], name="auth")
+            userpass = username + b":" + password
+            authorization = b"Basic " + base64.b64encode(userpass)
+            self.auth: tuple[bytes, bytes] | None = (username, password)
+            self.headers = [(b"Proxy-Authorization", authorization)] + self.headers
+        else:
+            self.auth = None

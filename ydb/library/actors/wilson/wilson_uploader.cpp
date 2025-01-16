@@ -131,6 +131,7 @@ namespace NWilson {
 
             TString ErrStr;
             TString LastCommitTraceErrStr;
+            size_t DroppedSpans = 0;
 
         public:
             TWilsonUploader(TWilsonUploaderParams params)
@@ -203,6 +204,7 @@ namespace NWilson {
 
             void Handle(TEvWilson::TPtr ev) {
                 if (SpansSizeBytes >= MaxPendingSpanBytes) {
+                    ++DroppedSpans;
                     ALOG_ERROR(WILSON_SERVICE_ID, "dropped span due to overflow");
                 } else {
                     const TMonotonic now = TActivationContext::Monotonic();
@@ -210,6 +212,7 @@ namespace NWilson {
                     auto& span = ev->Get()->Span;
                     const ui32 size = span.ByteSizeLong();
                     if (size > MaxBytesInBatch) {
+                        ++DroppedSpans;
                         ALOG_ERROR(WILSON_SERVICE_ID, "dropped span of size " << size << ", which exceeds max batch size " << MaxBytesInBatch);
                         return;
                     }
@@ -271,6 +274,7 @@ namespace NWilson {
                 }
 
                 if (numSpansDropped) {
+                    DroppedSpans += numSpansDropped;
                     ALOG_ERROR(WILSON_SERVICE_ID,
                         "dropped " << numSpansDropped << " span(s) due to expiration");
                 }
@@ -333,7 +337,7 @@ namespace NWilson {
                         ALOG_ERROR(WILSON_SERVICE_ID,
                             "failed to commit traces: " << node->Status.error_message());
                     }
-                    
+
                     --ExportRequestsCount;
                     node->Unlink();
                 }
@@ -404,6 +408,9 @@ namespace NWilson {
                         str << "Current batch queue size: " << BatchQueue.size();
                     }
                     PARA() {
+                        str << "Dropped spans: " << DroppedSpans;
+                    }
+                    PARA() {
                         std::string state;
                         switch (Channel->GetState(false)) {
                             case GRPC_CHANNEL_IDLE:
@@ -446,7 +453,7 @@ namespace NWilson {
                 }
 
                 auto* result = new NMon::TEvHttpInfoRes(str.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Html);
-                
+
                 Send(ev->Sender, result);
             }
 

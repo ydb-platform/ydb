@@ -4,8 +4,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -18,7 +18,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
         , QueryCtx(queryCtx)
         , Tables(tables)
         , UserRequestContext(userRequestContext)
-    {
+    {   
         YQL_ENSURE(QueryCtx);
         YQL_ENSURE(Tables);
     }
@@ -31,9 +31,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     int JoinsCount{};
     int EquiJoinsCount{};
     std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};
-    std::shared_ptr<NYql::TCardinalityHints> CardinalityHints{};
-    std::shared_ptr<NYql::TJoinAlgoHints> JoinAlgoHints{};
-    std::shared_ptr<NYql::TJoinOrderHints> JoinOrderHints{};
+    std::shared_ptr<NYql::TOptimizerHints> Hints{};
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics() {
         if (Config->OptOverrideStatistics.Get()) {
@@ -49,37 +47,15 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
         }
     }
 
-    NYql::TCardinalityHints GetCardinalityHints() {
-        if (Config->OptCardinalityHints.Get()) {
-            if (!CardinalityHints) {
-                CardinalityHints = std::make_shared<NYql::TCardinalityHints>(*Config->OptCardinalityHints.Get());
+    NYql::TOptimizerHints GetOptimizerHints() {
+        if (Config->OptimizerHints.Get()) {
+            if (!Hints) {
+                Hints = std::make_shared<NYql::TOptimizerHints>(*Config->OptimizerHints.Get());
             }
-            return *CardinalityHints;
-        } else {
-            return NYql::TCardinalityHints();
+            return *Hints;
         }
-    }
 
-    NYql::TJoinAlgoHints GetJoinAlgoHints() {
-        if (Config->OptJoinAlgoHints.Get()) {
-            if (!JoinAlgoHints) {
-                JoinAlgoHints = std::make_shared<NYql::TJoinAlgoHints>(*Config->OptJoinAlgoHints.Get());
-            }
-            return *JoinAlgoHints;
-        } else {
-            return NYql::TJoinAlgoHints();
-        }
-    }
-
-    NYql::TJoinOrderHints GetJoinOrderHints() {
-        if (Config->OptJoinOrderHints.Get()) {
-            if (!JoinOrderHints) {
-                JoinOrderHints = std::make_shared<NYql::TJoinOrderHints>(*Config->OptJoinOrderHints.Get());
-            }
-            return *JoinOrderHints;
-        } else {
-            return NYql::TJoinOrderHints();
-        }
+        return NYql::TOptimizerHints();
     }
 
     bool IsDataQuery() const {

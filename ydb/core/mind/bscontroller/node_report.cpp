@@ -26,7 +26,7 @@ public:
             return true;
         }
 
-        State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+        State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
         State->CheckConsistency();
 
         NIceDb::TNiceDb db(txc.DB);

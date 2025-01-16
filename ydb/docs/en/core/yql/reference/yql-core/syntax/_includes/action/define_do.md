@@ -2,7 +2,7 @@
 
 Specifies a named action that is a parameterizable block of multiple top-level expressions.
 
-**Syntax**
+### Syntax
 
 1. `DEFINE ACTION`: action definition.
 1. [Action name](../../expressions.md#named-nodes) that will be used to access the defined action further in the query.
@@ -17,7 +17,7 @@ One or more of the last parameters can be marked with a question mark `?` as opt
 
 Executes an `ACTION` with the specified parameters.
 
-**Syntax**
+### Syntax
 
 1. `DO`: Executing an action.
 1. The named expression for which the action is defined.
@@ -35,7 +35,7 @@ In large queries, you can use separate files for action definition and include t
 
 {% endif %}
 
-**Example**
+### Example
 
 ```yql
 DEFINE ACTION $hello_world($name, $suffix?) AS

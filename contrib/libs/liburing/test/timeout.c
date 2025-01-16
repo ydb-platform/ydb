@@ -30,31 +30,6 @@ static void msec_to_ts(struct __kernel_timespec *ts, unsigned int msec)
 	ts->tv_nsec = (msec % 1000) * 1000000;
 }
 
-static unsigned long long mtime_since(const struct timeval *s,
-				      const struct timeval *e)
-{
-	long long sec, usec;
-
-	sec = e->tv_sec - s->tv_sec;
-	usec = (e->tv_usec - s->tv_usec);
-	if (sec > 0 && usec < 0) {
-		sec--;
-		usec += 1000000;
-	}
-
-	sec *= 1000;
-	usec /= 1000;
-	return sec + usec;
-}
-
-static unsigned long long mtime_since_now(struct timeval *tv)
-{
-	struct timeval end;
-
-	gettimeofday(&end, NULL);
-	return mtime_since(tv, &end);
-}
-
 /*
  * Test that we return to userspace if a timeout triggers, even if we
  * don't satisfy the number of events asked for.
@@ -981,6 +956,7 @@ static int test_update_timeout(struct io_uring *ring, unsigned long ms,
 	struct io_uring_cqe *cqe;
 	struct __kernel_timespec ts, ts_upd;
 	unsigned long long exp_ms, base_ms = 10000;
+	bool update_ealready = false;
 	struct timeval tv;
 	int ret, i, nr = 2;
 	__u32 mode = abs ? IORING_TIMEOUT_ABS : 0;
@@ -1043,6 +1019,16 @@ static int test_update_timeout(struct io_uring *ring, unsigned long ms,
 			}
 			break;
 		case 2:
+			/*
+			 * We should not be hitting this case, but for
+			 * a kernel with PREEMPT_RT, even an instant attempt
+			 * to remove a timer will return that the timer is
+			 * already running... Deal with it.
+			 */
+			if (cqe->res == -EALREADY) {
+				update_ealready = true;
+				break;
+			}
 			if (cqe->res != 0) {
 				fprintf(stderr, "%s: got %d, wanted %d\n",
 						__FUNCTION__, cqe->res,
@@ -1063,7 +1049,7 @@ static int test_update_timeout(struct io_uring *ring, unsigned long ms,
 	}
 
 	exp_ms = mtime_since_now(&tv);
-	if (exp_ms >= base_ms / 2) {
+	if (!update_ealready && exp_ms >= base_ms / 2) {
 		fprintf(stderr, "too long, timeout wasn't updated\n");
 		goto err;
 	}
@@ -1234,7 +1220,7 @@ static int test_timeout_link_cancel(void)
 			exit(1);
 		}
 
-		/* trigger full cancellation */
+		/* trigger full cancelation */
 		ret = execl(prog_path, prog_path, NULL);
 		if (ret) {
 			fprintf(stderr, "exec failed %i\n", errno);

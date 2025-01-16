@@ -175,7 +175,7 @@ def main():
                         max(run_timestamp) as last_run
                     from (
                         select * from (
-                                select 
+                                select distinct
                                     t1.suite_folder,
                                     t1.test_name,
                                     t1.full_name,
@@ -184,6 +184,8 @@ def main():
                                     '{build_type}' as  build_type,
                                     '{branch}' as  branch
                                 from  `test_results/analytics/testowners` as t1
+                                where  run_timestamp_last >= Date('{date}') - 3*Interval("P1D") 
+                                and run_timestamp_last <= Date('{date}') + Interval("P1D")
                             ) as test_and_date
                         left JOIN (
                             select * from (
@@ -198,7 +200,7 @@ def main():
                                         where
                                             run_timestamp <= Date('{date}') + Interval("P1D")
                                             and run_timestamp >= Date('{date}') -13*Interval("P1D") 
-                                            and job_name in ('Postcommit_relwithdebinfo','Postcommit_asan')
+                                            and (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
                                             and build_type = '{build_type}'
                                             and status != 'skipped'
                                             and branch = '{branch}'
@@ -216,7 +218,7 @@ def main():
                                         where
                                             run_timestamp <= Date('{date}') + Interval("P1D")
                                             and run_timestamp >= Date('{date}') -13*Interval("P1D") 
-                                            and job_name in ('Postcommit_relwithdebinfo','Postcommit_asan')
+                                            and (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
                                             and build_type = '{build_type}'
                                             and status = 'skipped'
                                             and branch = '{branch}'

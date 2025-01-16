@@ -1,5 +1,7 @@
 #include "blob_recovery_impl.h"
 
+#include <bit>
+
 namespace NKikimr {
 
     void TBlobRecoveryActor::AddBlobQuery(const TLogoBlobID& id, NMatrix::TVectorType needed,
@@ -156,7 +158,7 @@ namespace NKikimr {
         if (item.GetAvailableParts().IsSupersetOf(item.Needed)) {
             return NKikimrProto::OK;
         }
-        const ui32 numParts = PopCount(item.PartsMask);
+        const ui32 numParts = std::popcount(item.PartsMask);
         if (numParts >= Info->Type.MinimalRestorablePartCount()) {
             Y_DEBUG_ABORT_UNLESS(item.Parts.size() == Info->Type.TotalPartCount());
 

@@ -19,8 +19,8 @@ void ValidateGenericConnectionSetting(
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
     }
 
-    if (!connection.database_id() && !(connection.host() && connection.port())) {
-        auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.{database_id or host,port} field is not specified";
+    if (!connection.database_id()) {
+        auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.database_id field is not specified";
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
     }
 
@@ -75,34 +75,11 @@ NYql::TIssues ValidateConnectionSetting(
         break;
     }
     case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
-        const FederatedQuery::GreenplumCluster& greenplumCluster = setting.greenplum_cluster(); 
-
-        if (!greenplumCluster.has_auth() || greenplumCluster.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.greenplum_database.auth field is not specified"));
-        }
-
-        if (greenplumCluster.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
-        }
-
-        if (!greenplumCluster.database_id() && !greenplumCluster.database_name()) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.greenplum_database.{database_id or database_name} field is not specified"));
-        }
+        ValidateGenericConnectionSetting(setting.greenplum_cluster(), "greenplum", disableCurrentIam, passwordRequired, issues);
         break;
     }
     case FederatedQuery::ConnectionSetting::kMysqlCluster: {
-        const FederatedQuery::MySQLCluster database = setting.mysql_cluster(); 
-        if (!database.has_auth() || database.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.mysql_database.auth field is not specified"));
-        }
-
-        if (database.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
-        }
-
-        if (!database.database_id() && !database.database_name()) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.mysql_database.{database_id or database_name} field is not specified"));
-        }
+        ValidateGenericConnectionSetting(setting.mysql_cluster(), "mysql", disableCurrentIam, passwordRequired, issues);
         break;
     }
     case FederatedQuery::ConnectionSetting::kObjectStorage: {
@@ -154,6 +131,22 @@ NYql::TIssues ValidateConnectionSetting(
         }
         break;
     }
+    case FederatedQuery::ConnectionSetting::kLogging: {
+        const FederatedQuery::Logging logging = setting.logging();
+        if (!logging.has_auth() || logging.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.logging.auth field is not specified"));
+        }
+
+        if (logging.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
+        }
+
+        if (!logging.folder_id()) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.logging.folder_id field is not specified"));
+        }
+
+        break;
+    }
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET: {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "connection is not set"));
         break;
@@ -171,13 +164,13 @@ NYql::TIssues ValidateEntityName(const TString& name) {
             MakeErrorIssue(TIssuesIds::BAD_REQUEST, "name field is not specified"));
     }
 
-    if (name.Size() > 255) {
+    if (name.size() > 255) {
         issues.AddIssue(
             MakeErrorIssue(TIssuesIds::BAD_REQUEST,
                            TStringBuilder{}
                                << "Incorrect connection name: " << name
                                << ". Name length must not exceed 255 symbols. Current length is "
-                               << name.Size() << " symbol(s)"));
+                               << name.size() << " symbol(s)"));
     }
 
     if (name != to_lower(name)) {

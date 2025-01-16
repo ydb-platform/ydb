@@ -13,8 +13,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/diff/diff.h>
 
-#include <ydb/library/yql/ast/yql_ast.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <util/folder/path.h>
 #include <util/generic/xrange.h>

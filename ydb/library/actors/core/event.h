@@ -13,29 +13,20 @@
 namespace NActors {
     class TChunkSerializer;
     class IActor;
-    class ISerializerToStream {
-    public:
-        virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
-    };
 
     class IEventBase
-        : TNonCopyable,
-          public ISerializerToStream {
+        : TNonCopyable {
     protected:
         // for compatibility with virtual actors
-        virtual bool DoExecute(IActor* /*actor*/, std::unique_ptr<IEventHandle> /*eventPtr*/) {
-            Y_DEBUG_ABORT_UNLESS(false);
-            return false;
-        }
+        virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
+
     public:
         // actual typing is performed by IEventHandle
 
         virtual ~IEventBase() {
         }
 
-        bool Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) {
-            return DoExecute(actor, std::move(eventPtr));
-        }
+        bool Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
 
         virtual TString ToStringHeader() const = 0;
         virtual TString ToString() const {
@@ -66,6 +57,13 @@ namespace NActors {
             {
             }
         };
+
+    public:
+        typedef TAutoPtr<IEventHandle> TPtr;
+
+    public:
+        // Used by a mailbox intrusive list
+        std::atomic<uintptr_t> NextLinkPtr;
 
     public:
         template <typename TEv>
@@ -124,6 +122,7 @@ namespace NActors {
             FlagUseSubChannel = 1 << 3,
             FlagGenerateUnsureUndelivered = 1 << 4,
             FlagExtendedFormat = 1 << 5,
+            FlagDebugTrackReceive = 1 << 6,
         };
         using TEventFlags = ui32;
 
@@ -196,10 +195,34 @@ namespace NActors {
             return OnNondeliveryHolder.Get() ? OnNondeliveryHolder->Recipient : TActorId();
         }
 
+#ifndef NDEBUG
+        static inline thread_local bool TrackNextEvent = false;
+
+        /**
+         * Call this function in gdb before
+         * sending the event you want to debug
+         * and continue execution. __builtin_debugtrap/SIGTRAP
+         * will stop gdb at the receiving point.
+         * Currently, to get to Handle function you
+         * also need to ascend couple frames (up, up) and step to
+         * function you are searching for
+         */
+        static void DoTrackNextEvent();
+
+        static TEventFlags ApplyGlobals(TEventFlags flags) {
+            bool trackNextEvent = std::exchange(TrackNextEvent, false);
+            return flags | (trackNextEvent ? FlagDebugTrackReceive : 0);
+        }
+#else
+        Y_FORCE_INLINE static TEventFlags ApplyGlobals(TEventFlags flags) {
+            return flags;
+        }
+#endif
+
         IEventHandle(const TActorId& recipient, const TActorId& sender, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0,
                      const TActorId* forwardOnNondelivery = nullptr, NWilson::TTraceId traceId = {})
             : Type(ev->Type())
-            , Flags(flags)
+            , Flags(ApplyGlobals(flags))
             , Recipient(recipient)
             , Sender(sender)
             , Cookie(cookie)
@@ -224,7 +247,7 @@ namespace NActors {
                      const TActorId* forwardOnNondelivery = nullptr,
                      NWilson::TTraceId traceId = {})
             : Type(type)
-            , Flags(flags)
+            , Flags(ApplyGlobals(flags))
             , Recipient(recipient)
             , Sender(sender)
             , Cookie(cookie)
@@ -251,7 +274,7 @@ namespace NActors {
                      TScopeId originScopeId,
                      NWilson::TTraceId traceId) noexcept
             : Type(type)
-            , Flags(flags)
+            , Flags(ApplyGlobals(flags))
             , Recipient(recipient)
             , Sender(sender)
             , Cookie(cookie)
@@ -349,6 +372,10 @@ namespace NActors {
     template <typename TEventType>
     class TEventHandle: public IEventHandle {
         TEventHandle(); // we never made instance of TEventHandle
+
+    public:
+        typedef TAutoPtr<TEventHandle<TEventType>> TPtr;
+
     public:
         TEventType* Get() {
             return IEventHandle::Get<TEventType>();
@@ -371,8 +398,22 @@ namespace NActors {
         // still abstract
 
         typedef TEventHandle<TEventType> THandle;
-        typedef TAutoPtr<THandle> TPtr;
+        typedef typename THandle::TPtr TPtr;
     };
+
+#define DEFINE_SIMPLE_LOCAL_EVENT(eventType, header)                    \
+    TString ToStringHeader() const override {                           \
+        return TString(header);                                         \
+    }                                                                   \
+    bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
+        Y_ABORT("Local event " #eventType " is not serializable");       \
+    }                                                                   \
+    static IEventBase* Load(NActors::TEventSerializedData*) {           \
+        Y_ABORT("Local event " #eventType " has no load method");        \
+    }                                                                   \
+    bool IsSerializable() const override {                              \
+        return false;                                                   \
+    }
 
 #define DEFINE_SIMPLE_NONLOCAL_EVENT(eventType, header)                 \
     TString ToStringHeader() const override {                           \

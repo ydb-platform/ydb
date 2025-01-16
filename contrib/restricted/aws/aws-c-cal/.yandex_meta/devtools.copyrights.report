@@ -1,0 +1,86 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b26996bfb42c528af128697232328ba
+BELONGS ya.make
+    License text:
+        Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [2:2]
+        include/aws/cal/cal.h [4:4]
+        include/aws/cal/ecc.h [4:4]
+        include/aws/cal/exports.h [4:4]
+        include/aws/cal/hash.h [4:4]
+        include/aws/cal/hmac.h [4:4]
+        include/aws/cal/private/der.h [4:4]
+        include/aws/cal/private/ecc.h [4:4]
+        include/aws/cal/private/symmetric_cipher_priv.h [4:4]
+        include/aws/cal/symmetric_cipher.h [4:4]
+        source/cal.c [2:2]
+        source/darwin/commoncrypto_aes.c [2:2]
+        source/darwin/commoncrypto_hmac.c [2:2]
+        source/darwin/commoncrypto_md5.c [2:2]
+        source/darwin/commoncrypto_platform_init.c [2:2]
+        source/darwin/commoncrypto_sha1.c [2:2]
+        source/darwin/commoncrypto_sha256.c [2:2]
+        source/darwin/securityframework_ecc.c [2:2]
+        source/der.c [2:2]
+        source/ecc.c [2:2]
+        source/hash.c [2:2]
+        source/hmac.c [2:2]
+        source/symmetric_cipher.c [2:2]
+        source/unix/openssl_aes.c [2:2]
+        source/unix/openssl_platform_init.c [2:2]
+        source/unix/opensslcrypto_ecc.c [2:2]
+        source/unix/opensslcrypto_hash.c [2:2]
+        source/unix/opensslcrypto_hmac.c [2:2]
+        source/windows/bcrypt_aes.c [2:2]
+        source/windows/bcrypt_ecc.c [2:2]
+        source/windows/bcrypt_hash.c [2:2]
+        source/windows/bcrypt_hmac.c [2:2]
+        source/windows/bcrypt_platform_init.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9b3428451fa759287a2e04cd16a4619c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2010 Apple Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        source/darwin/common_cryptor_spi.h [2:2]

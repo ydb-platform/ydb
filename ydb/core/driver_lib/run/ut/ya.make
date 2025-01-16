@@ -4,8 +4,6 @@ FORK_SUBTESTS()
 
 SIZE(SMALL)
 
-TIMEOUT(60)
-
 PEERDIR(
     ydb/core/testlib/default
 )

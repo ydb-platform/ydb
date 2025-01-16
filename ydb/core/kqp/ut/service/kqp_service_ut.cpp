@@ -67,8 +67,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
     }
 
     Y_UNIT_TEST(CloseSessionsWithLoad) {
-        UNIT_FAIL("Fast fail to avoid 10 min time waste, https://github.com/ydb-platform/ydb/issues/5349");
-
         auto kikimr = std::make_shared<TKikimrRunner>();
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
@@ -155,6 +153,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 tx = result.GetTransaction();
             }
         }, 0, SessionsCount + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+        WaitForZeroReadIterators(kikimr->GetTestServer(), "/Root/EightShard");
     }
 
     TVector<TAsyncDataQueryResult> simulateSessionBusy(ui32 count, TSession& session) {

@@ -7,6 +7,7 @@
 #include <util/system/types.h>
 #include <util/digest/multi.h>
 #include <util/str_stl.h>
+#include <util/string/builder.h>
 
 #include <functional>
 
@@ -49,6 +50,13 @@ public:
         } else {
             s << OriginalPartitionId;
         }
+    }
+
+    TString ToString() const
+    {
+        TStringBuilder s;
+        s << *this;
+        return s;
     }
 
     bool IsSupportivePartition() const

@@ -26,6 +26,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 
 #include <util/string/builder.h>
+#include <regex>
 
 using namespace NKikimr;
 using namespace NViewer;
@@ -250,14 +251,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
     };
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {
-        auto& nodes = (*ev)->Get()->Nodes;
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
 
-        auto sample = nodes[0];
-        nodes.clear();
+        auto sample = *nodes->begin();
+        nodes->clear();
 
         for (int nodeId = 0; nodeId < nodesTotal; nodeId++) {
-            nodes.emplace_back(sample);
+            nodes->emplace_back(sample);
         }
+
+        auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+            new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
+        );
+        ev->Swap(newEv);
     }
 
     void ChangeTabletStateResponse(TEvWhiteboard::TEvTabletStateResponse::TPtr* ev, int tabletsTotal, int& tabletId, int& nodeId) {
@@ -721,7 +727,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 2);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];
@@ -800,7 +806,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 3);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];
@@ -883,7 +889,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 3);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];
@@ -969,7 +975,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 case TEvInterconnect::EvNodesInfo: {
                     auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
+                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
                     UNIT_ASSERT_EQUAL(nodes.size(), 4);
                     staticNodeId = nodes[0];
                     sharedDynNodeId = nodes[1];
@@ -1043,12 +1049,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
     TVector<TString> DifferentWordsDictionary = { "/orders", "/peoples", "/OrdinaryScheduleTables" };
 
     void FuzzySearcherTest(TVector<TString>& dictionary, TString search, ui32 limit, TVector<TString> expectations) {
-        auto fuzzy = FuzzySearcher<TString>(dictionary);
-        auto result = fuzzy.Search(search, limit);
+        auto result = FuzzySearcher::Search(dictionary, search, limit);
 
         UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
         for (ui32 i = 0; i < expectations.size(); i++) {
-            UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            UNIT_ASSERT_VALUES_EQUAL(expectations[i], *result[i]);
         }
     }
 
@@ -1312,7 +1317,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "nam", "/Root/Database", {"orders", "products"});
         VerifyJsonAutocompleteSuccess(value, {
             "name",
+            "name",
             "id",
+            "id",
+            "description",
             "description",
         });
     }
@@ -1322,7 +1330,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         JsonAutocompleteTest(HTTP_METHOD_POST, value, "nam", "/Root/Database", {"orders", "products"});
         VerifyJsonAutocompleteSuccess(value, {
             "name",
+            "name",
             "id",
+            "id",
+            "description",
             "description",
         });
     }
@@ -1588,7 +1599,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         void Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
             ++AuthorizeTicketSuccesses;
             NACLib::TUserToken::TUserTokenInitFields args;
-            args.UserSID = "user_name";
+            args.UserSID = "username";
             args.GroupSIDs.push_back("group_name");
             TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
             LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult success");
@@ -1599,6 +1610,21 @@ Y_UNIT_TEST_SUITE(Viewer) {
         size_t AuthorizeTicketSuccesses = 0;
         size_t AuthorizeTicketFails = 0;
     };
+
+    IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
+        return new TFakeTicketParserActor();
+    }
+
+    void GrantConnect(TClient& client) {
+        client.CreateUser("/Root", "username", "password");
+        client.GrantConnect("username");
+
+        const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
+            { "folder_id", "test_folder_id" },
+            { "database_id", "test_database_id" },
+        });
+        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+    }
 
     TString PostQuery(TKeepAliveHttpClient& httpClient, TString query, TString action = "", TString transactionMode = "") {
         TStringStream requestBody;
@@ -1631,11 +1657,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
+
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
@@ -1664,11 +1693,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
+
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
@@ -1699,10 +1731,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
+
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
@@ -1764,11 +1799,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
 
-        const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
-            { "folder_id", "test_folder_id" },
-            { "database_id", "test_database_id" },
-        });
-        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
@@ -1816,8 +1847,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
-        headers["Content-Type"] = "application/json";
-        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/feature_flags?timeout=600000&base64=false", &responseStream, headers);
+        headers["Accept"] = "application/json";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/feature_flags", &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
         NJson::TJsonReaderConfig jsonCfg;
@@ -1826,4 +1857,234 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto resultSets = json["Databases"].GetArray();
         UNIT_ASSERT_EQUAL_C(1, resultSets.size(), response);
     }
+
+    static const ui32 ROWS_N = 15;
+    static const ui32 ROWS_LIMIT = 5;
+
+    TString PostExecuteScript(TKeepAliveHttpClient& httpClient, TString query) {
+        TStringStream requestBody;
+        requestBody << R"json({
+            "database": "/Root",
+            "script_content": { "text": ")json" << query << R"json(" },
+            "exec_mode": "EXEC_MODE_EXECUTE",
+            "stats_mode": "STATS_MODE_FULL" })json";
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost(TStringBuilder()
+                                                            << "/query/script/execute?timeout=600000"
+                                                            << "&database=%2FRoot", requestBody.Str(), &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        return response;
+    }
+
+    TString GetOperation(TKeepAliveHttpClient& httpClient, TString id) {
+        TStringStream requestBody;
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        id = std::regex_replace(id.c_str(), std::regex("/"), "%2F");
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
+                                                            << "/operation/get?timeout=600000&id=" << id
+                                                            << "&database=%2FRoot", &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+
+        return response;
+    }
+
+    TString ListOperations(TKeepAliveHttpClient& httpClient) {
+        TStringStream requestBody;
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
+                                                            << "/operation/list?timeout=600000&kind=scriptexec"
+                                                            << "&database=%2FRoot", &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+
+        return response;
+    }
+
+    TString GetFetchScript(TKeepAliveHttpClient& httpClient, TString id) {
+        TStringStream requestBody;
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        id = std::regex_replace(id.c_str(), std::regex("/"), "%2F");
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
+                                                            << "/query/script/fetch?timeout=600000&operation_id=" << id
+                                                            << "&database=%2FRoot"
+                                                            << "&rows_limit=" << ROWS_LIMIT, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        return response;
+    }
+
+    Y_UNIT_TEST(QueryExecuteScript) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+
+        GrantConnect(client);
+
+
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+
+        PostQuery(httpClient, "CREATE TABLE `/Root/Test` (Key Uint64, Value String, PRIMARY KEY (Key));", "execute-query");
+        for (ui32 i = 1; i <= ROWS_N; ++i) {
+            PostQuery(httpClient, TStringBuilder() << "INSERT INTO `/Root/Test` (Key, Value) VALUES (" << i << ", 'testvalue');", "execute-query");
+        }
+
+        NJson::TJsonReaderConfig jsonCfg;
+        NJson::TJsonValue json;
+
+        TString response = PostExecuteScript(httpClient, "SELECT * FROM `/Root/Test`;");
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+        UNIT_ASSERT_EQUAL_C(json["status"].GetString(), "SUCCESS", response);
+        TString id = json["id"].GetString();
+
+        Sleep(TDuration::MilliSeconds(1000));
+
+        response = GetOperation(httpClient, id);
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+        UNIT_ASSERT_EQUAL_C(json["issues"].GetArray().size(), 0, response);
+        UNIT_ASSERT_C(json.GetMap().contains("metadata"), response);
+        UNIT_ASSERT_C(json["metadata"].GetMap().contains("exec_stats"), response);
+        UNIT_ASSERT_C(json["metadata"].GetMap().at("exec_stats").GetMap().contains("process_cpu_time_us"), response);
+
+        response = ListOperations(httpClient);
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+        UNIT_ASSERT_EQUAL_C(json["operations"].GetArray().size(), 1, response);
+        UNIT_ASSERT_EQUAL_C(json["operations"].GetArray()[0]["id"], id, response);
+
+        response = GetFetchScript(httpClient, id);
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+        UNIT_ASSERT_EQUAL_C(json["status"].GetString(), "SUCCESS", response);
+        auto rows = json["result_set"].GetMap().at("rows").GetArray();
+        UNIT_ASSERT_EQUAL_C(rows.size(), ROWS_LIMIT, response);
+    }
+
+    Y_UNIT_TEST(Plan2SvgOK) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TString tinyPlan = R"json({
+            "Plan" : {
+                "Node Type" : "Query",
+                "PlanNodeType" : "Query",
+                "Plans" : [
+                    {
+                        "Node Type" : "ResultSet",
+                        "PlanNodeType" : "ResultSet",
+                        "Plans" : [
+                            {
+                                "Node Type" : "Limit"
+                            }
+                        ]
+                    }
+                ]
+            }
+        })json";
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/plan2svg", tinyPlan, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        UNIT_ASSERT_C(response.StartsWith("<svg"), response);
+    }
+
+    Y_UNIT_TEST(Plan2SvgBad) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TString brokenPlan = R"json({
+            "Plan" : {
+                "Node Type" : "Query",
+                "PlanNodeType" : "Query",
+                "Plans" : [
+                    {
+                        "Node Type" : "ResultSet",
+                        "PlanNodeType" : "ResultSet",
+                        "Plans" : [
+                            {
+                                "Node Type" : "Limit",
+                                "Plans" : [
+                                    {
+                                        "Node Type" : "Merge",
+                                        "CTE Name": "TableFullScan_15",
+                                        "PlanNodeType" : "Connection"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        })json";
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/plan2svg", brokenPlan, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_BAD_REQUEST, statusCode << ": " << response);
+        UNIT_ASSERT_C(response.StartsWith("Conversion error"), response);
+    }
+
 }

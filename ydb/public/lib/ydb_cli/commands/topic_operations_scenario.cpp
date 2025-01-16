@@ -226,11 +226,11 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .ConsumerPrefix = ConsumerPrefix,
                 .ReaderIdx = readerIdx,
                 .UseTransactions = UseTransactions,
-                .UseTopicCommit = OnlyTableInTx,
+                .UseTopicCommit = OnlyTopicInTx,
                 .UseTableSelect = UseTableSelect && !OnlyTopicInTx,
                 .UseTableUpsert = !OnlyTopicInTx,
                 .ReadWithoutConsumer = ReadWithoutConsumer,
-                .CommitPeriod = CommitPeriod,
+                .CommitPeriodMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion,
                 .CommitMessages = CommitMessages
             };
 
@@ -243,6 +243,10 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
     }
 }
 
+/*!
+ * This method starts producers threads specified in -t option, that will write to topic in parallel. Every producer thread will create 
+ * WriteSession for every partition in the topic and will write in partitions in round robin manner. 
+ * */
 void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void>>& threads,
                                                     ui32 partitionCount,
                                                     ui32 partitionSeed,
@@ -265,18 +269,19 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .GeneratedMessages = generatedMessages,
             .Database = database,
             .TopicName = TopicName,
-            .ByteRate = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
-            .MessageSize = MessageSize,
+            .BytesPerSec = MessagesPerSec != 0 ? MessagesPerSec * MessageSizeBytes : BytesPerSec,
+            .MessageSize = MessageSizeBytes,
             .ProducerThreadCount = ProducerThreadCount,
             .WriterIdx = writerIdx,
-            .ProducerId = TGUID::CreateTimebased().AsGuidString(),
-            .PartitionId = (partitionSeed + writerIdx) % partitionCount,
+            .PartitionCount = partitionCount,
+            .PartitionSeed = partitionSeed,
             .Direct = Direct,
             .Codec = Codec,
             .UseTransactions = UseTransactions,
             .UseAutoPartitioning = useAutoPartitioning,
-            .CommitPeriod = CommitPeriod,
-            .CommitMessages = CommitMessages
+            .CommitIntervalMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion
+            .CommitMessages = CommitMessages,
+            .UseCpuTimestamp = UseCpuTimestamp
         };
 
         threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));

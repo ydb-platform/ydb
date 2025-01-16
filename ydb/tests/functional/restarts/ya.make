@@ -7,15 +7,13 @@ TEST_SRCS(
 SPLIT_FACTOR(10)
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
+    REQUIREMENTS(ram:32 cpu:4)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -26,6 +24,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/clients
 )
 
 FORK_SUBTESTS()

@@ -14,7 +14,7 @@ PEERDIR(
     ydb/core/jaeger_tracing
     ydb/public/api/protos
     ydb/public/sdk/cpp/client/resources
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

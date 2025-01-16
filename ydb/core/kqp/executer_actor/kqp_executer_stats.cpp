@@ -165,6 +165,11 @@ void TTableStats::Resize(ui32 taskCount) {
     AffectedPartitions.resize(taskCount);
 }
 
+void TOperatorStats::Resize(ui32 taskCount) {
+    Rows.resize(taskCount);
+    Bytes.resize(taskCount);
+}
+
 void TStageExecutionStats::Resize(ui32 taskCount) {
     CpuTimeUs.Resize(taskCount);
     SourceCpuTimeUs.resize(taskCount);
@@ -196,6 +201,10 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     for (auto& p : Input)   p.second.Resize(taskCount);
     for (auto& p : Output)  p.second.Resize(taskCount);
     for (auto& p : Egress)  p.second.Resize(taskCount);
+
+    for (auto& [id, j] : Joins) j.Resize(taskCount);
+    for (auto& [id, f] : Filters) f.Resize(taskCount);
+    for (auto& [id, a] : Aggregations) a.Resize(taskCount);
 
     MaxMemoryUsage.Resize(taskCount);
 }
@@ -261,7 +270,7 @@ void SetNonZero(ui64& target, ui64 source) {
     }
 }
 
-ui64 TStageExecutionStats::UpdateAsyncStats(i32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats) {
+ui64 TStageExecutionStats::UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats) {
     ui64 baseTimeMs = 0;
 
     aggrAsyncStats.Bytes.SetNonZero(index, asyncStats.GetBytes());
@@ -406,6 +415,37 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
         }
     }
 
+    for (auto& operatorStat : taskStats.GetOperators()) {
+        auto operatorId = operatorStat.GetOperatorId();
+        if (operatorId) {
+            switch (operatorStat.GetTypeCase()) {
+                case NYql::NDqProto::TDqOperatorStats::kJoin: {
+                    auto [it, inserted] = Joins.try_emplace(operatorId, taskCount);
+                    auto& joinStats = it->second;
+                    SetNonZero(joinStats.Rows[index], operatorStat.GetRows());
+                    SetNonZero(joinStats.Bytes[index], operatorStat.GetBytes());
+                    break;
+                }
+                case NYql::NDqProto::TDqOperatorStats::kFilter: {
+                    auto [it, inserted] = Filters.try_emplace(operatorId, taskCount);
+                    auto& filterStats = it->second;
+                    SetNonZero(filterStats.Rows[index], operatorStat.GetRows());
+                    SetNonZero(filterStats.Bytes[index], operatorStat.GetBytes());
+                    break;
+                }
+                case NYql::NDqProto::TDqOperatorStats::kAggregation: {
+                    auto [it, inserted] = Aggregations.try_emplace(operatorId, taskCount);
+                    auto& aggStats = it->second;
+                    SetNonZero(aggStats.Rows[index], operatorStat.GetRows());
+                    SetNonZero(aggStats.Bytes[index], operatorStat.GetBytes());
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+    }
+
     MaxMemoryUsage.SetNonZero(index, maxMemoryUsage);
 
     return baseTimeMs;
@@ -436,21 +476,6 @@ void UpdateAggr(NDqProto::TDqStatsAggr* aggr, ui64 value) noexcept {
         aggr->SetCnt(aggr->GetCnt() + 1);
     }
 }
-
-struct TAsyncGroupStat {
-    ui64 Bytes = 0;
-    ui64 DecompressedBytes = 0;
-    ui64 Rows = 0;
-    ui64 Chunks = 0;
-    ui64 Splits = 0;
-    ui64 FirstMessageMs = 0;
-    ui64 PauseMessageMs = 0;
-    ui64 ResumeMessageMs = 0;
-    ui64 LastMessageMs = 0;
-    ui64 WaitTimeUs = 0;
-    ui64 WaitPeriods = 0;
-    ui64 Count = 0;
-};
 
 ui64 UpdateAsyncAggr(NDqProto::TDqAsyncStatsAggr& asyncAggr, const NDqProto::TDqAsyncBufferStats& asyncStat) noexcept {
     ui64 baseTimeMs = 0;
@@ -641,6 +666,39 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
         BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutablePush(),   sinksStat.GetPush()));
         BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutablePop(),    sinksStat.GetPop()));
         BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutableEgress(), sinksStat.GetEgress()));
+    }
+    for (auto& operatorStat : task.GetOperators()) {
+        switch (operatorStat.GetTypeCase()) {
+            case NYql::NDqProto::TDqOperatorStats::kJoin: {
+                auto& joinStats = (*stageStats->MutableOperatorJoin())[operatorStat.GetOperatorId()];
+                joinStats.SetOperatorId(operatorStat.GetOperatorId());
+                UpdateAggr(joinStats.MutableBytes(), operatorStat.GetBytes());
+                UpdateAggr(joinStats.MutableRows(), operatorStat.GetRows());
+                break;
+            }
+            case NYql::NDqProto::TDqOperatorStats::kFilter: {
+                auto& filterStats = (*stageStats->MutableOperatorFilter())[operatorStat.GetOperatorId()];
+                filterStats.SetOperatorId(operatorStat.GetOperatorId());
+                UpdateAggr(filterStats.MutableBytes(), operatorStat.GetBytes());
+                UpdateAggr(filterStats.MutableRows(), operatorStat.GetRows());
+                break;
+            }
+            case NYql::NDqProto::TDqOperatorStats::kAggregation: {
+                auto& aggrStats = (*stageStats->MutableOperatorAggregation())[operatorStat.GetOperatorId()];
+                aggrStats.SetOperatorId(operatorStat.GetOperatorId());
+                UpdateAggr(aggrStats.MutableBytes(), operatorStat.GetBytes());
+                UpdateAggr(aggrStats.MutableRows(), operatorStat.GetRows());
+                break;
+            }
+            default:
+                break;
+        }
+
+    }
+    for (auto& tableStat : task.GetTables()) {
+        auto& tableStats = *GetOrCreateTableAggrStats(stageStats, tableStat.GetTablePath());
+        UpdateAggr(tableStats.MutableReadRows(), tableStat.GetReadRows());
+        UpdateAggr(tableStats.MutableReadBytes(), tableStat.GetReadBytes());
     }
 }
 
@@ -890,6 +948,26 @@ void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txSta
     }
 }
 
+void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats) {
+    for (auto& table : taskStats.GetTables()) {
+        NYql::NDqProto::TDqTableStats* tableAggr = nullptr;
+        if (auto it = TableStats.find(table.GetTablePath()); it != TableStats.end()) {
+            tableAggr = it->second;
+        } else {
+            tableAggr = Result->AddTables();
+            tableAggr->SetTablePath(table.GetTablePath());
+            TableStats.emplace(table.GetTablePath(), tableAggr);
+        }
+
+        tableAggr->SetReadRows(tableAggr->GetReadRows() + table.GetReadRows());
+        tableAggr->SetReadBytes(tableAggr->GetReadBytes() + table.GetReadBytes());
+        tableAggr->SetWriteRows(tableAggr->GetWriteRows() + table.GetWriteRows());
+        tableAggr->SetWriteBytes(tableAggr->GetWriteBytes() + table.GetWriteBytes());
+        tableAggr->SetEraseRows(tableAggr->GetEraseRows() + table.GetEraseRows());
+        tableAggr->SetAffectedPartitions(table.GetAffectedPartitions());
+    }
+}
+
 void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats) {
     Y_ASSERT(stats.GetTasks().size() == 1);
     const NYql::NDqProto::TDqTaskStats& taskStats = stats.GetTasks(0);
@@ -990,62 +1068,80 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
     }
 
-    for (auto& p : StageStats) {
-        auto& stageStats = *protoStages[p.second.StageId.StageId];
-        stageStats.SetTotalTasksCount(p.second.Task2Index.size());
+    for (auto& [stageId, stageStat] : StageStats) {
+        auto& stageStats = *protoStages[stageStat.StageId.StageId];
+        stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
 
         stageStats.SetBaseTimeMs(BaseTimeMs);
-        p.second.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
-        ExportAggStats(p.second.SourceCpuTimeUs, *stageStats.MutableSourceCpuTimeUs());
-        p.second.MaxMemoryUsage.ExportAggStats(BaseTimeMs, *stageStats.MutableMaxMemoryUsage());
+        stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
+        ExportAggStats(stageStat.SourceCpuTimeUs, *stageStats.MutableSourceCpuTimeUs());
+        stageStat.MaxMemoryUsage.ExportAggStats(BaseTimeMs, *stageStats.MutableMaxMemoryUsage());
 
-        ExportAggStats(p.second.InputRows, *stageStats.MutableInputRows());
-        ExportAggStats(p.second.InputBytes, *stageStats.MutableInputBytes());
-        ExportAggStats(p.second.OutputRows, *stageStats.MutableOutputRows());
-        ExportAggStats(p.second.OutputBytes, *stageStats.MutableOutputBytes());
-        ExportAggStats(p.second.ResultRows, *stageStats.MutableResultRows());
-        ExportAggStats(p.second.ResultBytes, *stageStats.MutableResultBytes());
-        ExportAggStats(p.second.IngressRows, *stageStats.MutableIngressRows());
-        ExportAggStats(p.second.IngressBytes, *stageStats.MutableIngressBytes());
-        ExportAggStats(p.second.IngressDecompressedBytes, *stageStats.MutableIngressDecompressedBytes());
-        ExportAggStats(p.second.EgressRows, *stageStats.MutableEgressRows());
-        ExportAggStats(p.second.EgressBytes, *stageStats.MutableEgressBytes());
+        ExportAggStats(stageStat.InputRows, *stageStats.MutableInputRows());
+        ExportAggStats(stageStat.InputBytes, *stageStats.MutableInputBytes());
+        ExportAggStats(stageStat.OutputRows, *stageStats.MutableOutputRows());
+        ExportAggStats(stageStat.OutputBytes, *stageStats.MutableOutputBytes());
+        ExportAggStats(stageStat.ResultRows, *stageStats.MutableResultRows());
+        ExportAggStats(stageStat.ResultBytes, *stageStats.MutableResultBytes());
+        ExportAggStats(stageStat.IngressRows, *stageStats.MutableIngressRows());
+        ExportAggStats(stageStat.IngressBytes, *stageStats.MutableIngressBytes());
+        ExportAggStats(stageStat.IngressDecompressedBytes, *stageStats.MutableIngressDecompressedBytes());
+        ExportAggStats(stageStat.EgressRows, *stageStats.MutableEgressRows());
+        ExportAggStats(stageStat.EgressBytes, *stageStats.MutableEgressBytes());
 
-        ExportOffsetAggStats(p.second.StartTimeMs, *stageStats.MutableStartTimeMs(), BaseTimeMs);
-        ExportOffsetAggStats(p.second.FinishTimeMs, *stageStats.MutableFinishTimeMs(), BaseTimeMs);
-        ExportAggStats(p.second.DurationUs, *stageStats.MutableDurationUs());
-        ExportAggStats(p.second.WaitInputTimeUs, *stageStats.MutableWaitInputTimeUs());
-        ExportAggStats(p.second.WaitOutputTimeUs, *stageStats.MutableWaitOutputTimeUs());
+        ExportOffsetAggStats(stageStat.StartTimeMs, *stageStats.MutableStartTimeMs(), BaseTimeMs);
+        ExportOffsetAggStats(stageStat.FinishTimeMs, *stageStats.MutableFinishTimeMs(), BaseTimeMs);
+        ExportAggStats(stageStat.DurationUs, *stageStats.MutableDurationUs());
+        ExportAggStats(stageStat.WaitInputTimeUs, *stageStats.MutableWaitInputTimeUs());
+        ExportAggStats(stageStat.WaitOutputTimeUs, *stageStats.MutableWaitOutputTimeUs());
 
-        p.second.SpillingComputeBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeBytes());
-        p.second.SpillingChannelBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelBytes());
-        p.second.SpillingComputeTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeTimeUs());
-        p.second.SpillingChannelTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelTimeUs());
+        stageStat.SpillingComputeBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeBytes());
+        stageStat.SpillingChannelBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelBytes());
+        stageStat.SpillingComputeTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeTimeUs());
+        stageStat.SpillingChannelTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelTimeUs());
 
         FillStageDurationUs(stageStats);
 
-        for (auto& p2 : p.second.Tables) {
+        for (auto& [path, t] : stageStat.Tables) {
             auto& table = *stageStats.AddTables();
-            table.SetTablePath(p2.first);
-            ExportAggStats(p2.second.ReadRows, *table.MutableReadRows());
-            ExportAggStats(p2.second.ReadBytes, *table.MutableReadBytes());
-            ExportAggStats(p2.second.WriteRows, *table.MutableWriteRows());
-            ExportAggStats(p2.second.WriteBytes, *table.MutableWriteBytes());
-            ExportAggStats(p2.second.EraseRows, *table.MutableEraseRows());
-            ExportAggStats(p2.second.EraseBytes, *table.MutableEraseBytes());
-            table.SetAffectedPartitions(ExportAggStats(p2.second.AffectedPartitions));
+            table.SetTablePath(path);
+            ExportAggStats(t.ReadRows, *table.MutableReadRows());
+            ExportAggStats(t.ReadBytes, *table.MutableReadBytes());
+            ExportAggStats(t.WriteRows, *table.MutableWriteRows());
+            ExportAggStats(t.WriteBytes, *table.MutableWriteBytes());
+            ExportAggStats(t.EraseRows, *table.MutableEraseRows());
+            ExportAggStats(t.EraseBytes, *table.MutableEraseBytes());
+            table.SetAffectedPartitions(ExportAggStats(t.AffectedPartitions));
         }
-        for (auto& p2 : p.second.Ingress) {
-            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableIngress())[p2.first]);
+        for (auto& [id, i] : stageStat.Ingress) {
+            ExportAggAsyncBufferStats(i, (*stageStats.MutableIngress())[id]);
         }
-        for (auto& p2 : p.second.Input) {
-            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableInput())[p2.first]);
+        for (auto& [id, i] : stageStat.Input) {
+            ExportAggAsyncBufferStats(i, (*stageStats.MutableInput())[id]);
         }
-        for (auto& p2 : p.second.Output) {
-            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableOutput())[p2.first]);
+        for (auto& [id, o] : stageStat.Output) {
+            ExportAggAsyncBufferStats(o, (*stageStats.MutableOutput())[id]);
         }
-        for (auto& p2 : p.second.Egress) {
-            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableEgress())[p2.first]);
+        for (auto& [id, e] : stageStat.Egress) {
+            ExportAggAsyncBufferStats(e, (*stageStats.MutableEgress())[id]);
+        }
+        for (auto& [id, j] : stageStat.Joins) {
+            auto& joinStat = (*stageStats.MutableOperatorJoin())[id];
+            joinStat.SetOperatorId(id);
+            ExportAggStats(j.Bytes, *joinStat.MutableBytes());
+            ExportAggStats(j.Rows, *joinStat.MutableRows());
+        }
+        for (auto& [id, f] : stageStat.Filters) {
+            auto& filterStat = (*stageStats.MutableOperatorFilter())[id];
+            filterStat.SetOperatorId(id);
+            ExportAggStats(f.Bytes, *filterStat.MutableBytes());
+            ExportAggStats(f.Rows, *filterStat.MutableRows());
+        }
+        for (auto& [id, a] : stageStat.Aggregations) {
+            auto& aggrStat = (*stageStats.MutableOperatorAggregation())[id];
+            aggrStat.SetOperatorId(id);
+            ExportAggStats(a.Bytes, *aggrStat.MutableBytes());
+            ExportAggStats(a.Rows, *aggrStat.MutableRows());
         }
     }
 }

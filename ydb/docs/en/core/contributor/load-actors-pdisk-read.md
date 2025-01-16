@@ -4,8 +4,8 @@ Tests the performance of reads from the PDisk. The load is generated on behalf o
 
 You can generate two types of load:
 
-* _Continuous_: The actor ensures the specified number of requests are run concurrently. To generate continuous load, set a zero interval between requests (e.g., `IntervalMsMin: 0` and `IntervalMsMax: 0`), while keeping the `InFlightReads` parameter different from zero.
-* _Interval_: The actor runs requests at preset intervals. To generate interval load, set a non-zero interval between requests, e.g., `IntervalMsMin: 10` and `IntervalMsMax: 100`. You can set the maximum number of in-flight requests using the `InFlightReads` parameter. If its value is `0`, their number is unlimited.
+* **Continuous:** The actor ensures the specified number of requests are run concurrently. To generate continuous load, set a zero interval between requests (e.g., `IntervalMsMin: 0` and `IntervalMsMax: 0`), while keeping the `InFlightReads` parameter different from zero.
+* **Interval:** The actor runs requests at preset intervals. To generate interval load, set a non-zero interval between requests, e.g., `IntervalMsMin: 10` and `IntervalMsMax: 100`. You can set the maximum number of in-flight requests using the `InFlightReads` parameter. If its value is `0`, their number is unlimited.
 
 ## Actor parameters {#options}
 
@@ -25,7 +25,7 @@ You can generate two types of load:
 
 ## Examples {#examples}
 
-The following actor reads data blocks of `32`MB during `120` seconds with `64` in-flight requests (continuous load):
+The following actor reads data blocks of 32 MB during 120 seconds with 64 in-flight requests (continuous load):
 
 ```proto
 PDiskReadLoad: {

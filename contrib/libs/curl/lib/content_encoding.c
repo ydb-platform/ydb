@@ -38,7 +38,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wvla"
 #endif
-#error #include <brotli/decode.h>
+#include <brotli/decode.h>
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif

@@ -4,21 +4,19 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/data_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/operations/common/context.h>
 
 namespace NKikimr::NOlap {
 
-class TModificationRestoreTask: public NDataReader::IRestoreTask {
+class TModificationRestoreTask: public NDataReader::IRestoreTask, public NColumnShard::TMonitoringObjectsCounter<TModificationRestoreTask> {
 private:
     using TBase = NDataReader::IRestoreTask;
     NEvWrite::TWriteData WriteData;
-    const ui64 TabletId;
-    const NActors::TActorId ParentActorId;
-    const NActors::TActorId BufferActorId;
     std::shared_ptr<IMerger> Merger;
-    const std::shared_ptr<ISnapshotSchema> ActualSchema;
     const ui64 LocalPathId;
     const TSnapshot Snapshot;
-    std::shared_ptr<arrow::RecordBatch> IncomingData;
+    NArrow::TContainerWithIndexes<arrow::RecordBatch> IncomingData;
+    const TWritingContext Context;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const override;
 
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override;
@@ -27,9 +25,14 @@ private:
     void SendErrorMessage(const TString& errorMessage, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
 
 public:
-    TModificationRestoreTask(const ui64 tabletId, const NActors::TActorId parentActorId, const NActors::TActorId bufferActorId,
-        NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, const std::shared_ptr<ISnapshotSchema>& actualSchema,
-        const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData);
+    virtual bool IsActive() const override {
+        return Context.IsActive();
+    }
+
+    virtual TDuration GetTimeout() const override;
+
+    TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, const TSnapshot actualSnapshot,
+        const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context);
 };
 
 }   // namespace NKikimr::NOlap

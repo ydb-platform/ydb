@@ -8,9 +8,9 @@ Applying `DISTINCT` to calculated values is not currently implemented. For this 
 
 {% endnote %}
 
-**Example**
+### Example
 
-```sql
+```yql
 SELECT
   key,
   COUNT (DISTINCT value) AS count -- top 3 keys by the number of unique values

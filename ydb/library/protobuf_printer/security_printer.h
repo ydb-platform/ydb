@@ -50,4 +50,13 @@ inline TString SecureDebugString(const TMsg& message) {
     return result;
 }
 
+template <typename TMsg>
+inline TString SecureDebugStringMultiline(const TMsg& message) {
+    TString result;
+    TSecurityTextFormatPrinter<TMsg> printer;
+    printer.SetSingleLineMode(false);
+    printer.PrintToString(message, &result);
+    return result;
+}
+
 } // namespace NKikimr

@@ -28,7 +28,7 @@ namespace NKikimr::NConsole {
  * ConfigId filled in and request Cookie used for response).
  */
 
-struct TEvConfigsDispatcher {
+namespace TEvConfigsDispatcher {
     enum EEv {
         EvSetConfigSubscriptionRequest = EventSpaceBegin(TKikimrEvents::ES_CONFIGS_DISPATCHER),
         EvSetConfigSubscriptionResponse,

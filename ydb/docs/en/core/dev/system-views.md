@@ -59,7 +59,7 @@ Table structure:
 
 Top 5 of most loaded partitions among all DB tables:
 
-```sql
+```yql
 SELECT
     Path,
     PartIdx,
@@ -71,7 +71,7 @@ LIMIT 5
 
 List of DB tables with in-flight sizes and loads:
 
-```sql
+```yql
 SELECT
     Path,
     COUNT(*) as Partitions,
@@ -136,7 +136,7 @@ All tables have the same set of fields:
 
 Top queries by execution time for the last minute when queries were made:
 
-```sql
+```yql
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 $last = (
     SELECT
@@ -154,7 +154,7 @@ WHERE IntervalEnd IN $last
 
 Queries that read the most bytes, broken down by minute:
 
-```sql
+```yql
 SELECT
     IntervalEnd,
     QueryText,
@@ -215,7 +215,7 @@ Table structure:
 
 Top 10 queries for the last 6 hours by the total number of rows updated per minute:
 
-```sql
+```yql
 SELECT
     SumUpdateRows,
     Count,
@@ -227,7 +227,7 @@ ORDER BY SumUpdateRows DESC LIMIT 10
 
 Recent queries that read the most bytes per minute:
 
-```sql
+```yql
 SELECT
     IntervalEnd,
     SumReadBytes,
@@ -270,7 +270,7 @@ Both tables have the same set of fields:
 
 The following query returns partitions with CPU usage of more than 70% in the specified interval, with tablet IDs and sizes as of the time when the percentage was exceeded. The query is made to the `.sys/top_partitions_one_minute` table with data over the last six hours split into one-minute intervals:
 
-```sql
+```yql
 SELECT
    IntervalEnd,
    CPUCores,
@@ -287,7 +287,7 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 The following query returns partitions with CPU usage of over 90% in the specified interval, with tablet IDs and sizes as of the time when the percentage was exceeded. The query is made to the `.sys/top_partitions_one_hour` table with data over the last two weeks split into one-hour intervals:
 
-```sql
+```yql
 SELECT
    IntervalEnd,
    CPUCores,

@@ -1,11 +1,13 @@
 #include "constructor.h"
+
+#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
 #include <ydb/core/tx/program/program.h>
 
 namespace NKikimr::NOlap::NReader {
 
-NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedIndex* vIndex,
-    const NKikimrSchemeOp::EOlapProgramType programType, const TString& serializedProgram, TReadDescription& read, const IColumnResolver& columnResolver) const {
+NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedIndex* vIndex, const NKikimrSchemeOp::EOlapProgramType programType,
+    const TString& serializedProgram, TReadDescription& read, const IColumnResolver& columnResolver) const {
     AFL_VERIFY(!read.ColumnIds.size() || !read.ColumnNames.size());
     std::vector<TString> names;
     std::set<TString> namesChecker;
@@ -39,7 +41,7 @@ NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedInd
             }
             //its possible dont use columns from filter where pk field compare with null and remove from PKFilter and program, but stay in kqp columns request
             if (vIndex) {
-                for (auto&& i : vIndex->GetSchema(read.GetSnapshot())->GetIndexInfo().GetReplaceKey()->field_names()) {
+                for (auto&& i : vIndex->GetSchemaVerified(read.GetSnapshot())->GetIndexInfo().GetReplaceKey()->field_names()) {
                     const TString cId(i.data(), i.size());
                     namesChecker.erase(cId);
                     programColumns.erase(cId);
@@ -47,7 +49,8 @@ NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedInd
             }
 
             const auto getDiffColumnsMessage = [&]() {
-                return TStringBuilder() << "ssa program has different columns with kqp request: kqp_columns=" << JoinSeq(",", namesChecker) << " vs program_columns=" << JoinSeq(",", programColumns);
+                return TStringBuilder() << "ssa program has different columns with kqp request: kqp_columns=" << JoinSeq(",", namesChecker)
+                                        << " vs program_columns=" << JoinSeq(",", programColumns);
             };
 
             if (namesChecker.size() != programColumns.size()) {
@@ -66,16 +69,31 @@ NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedInd
     }
 }
 
-NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::BuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::BuildReadMetadata(
+    const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     TConclusion<std::shared_ptr<TReadMetadataBase>> result = DoBuildReadMetadata(self, read);
     if (result.IsFail()) {
         return result;
     } else if (!*result) {
         return result.DetachResult();
     } else {
-        (*result)->Limit = ItemsLimit;
+        (*result)->SetRequestedLimit(ItemsLimit);
+        (*result)->SetScanIdentifier(read.GetScanIdentifier());
         return result.DetachResult();
     }
 }
 
+NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::IScanCursor>> IScannerConstructor::BuildCursorFromProto(
+    const NKikimrKqp::TEvKqpScanCursor& proto) const {
+    auto result = DoBuildCursor();
+    if (!result) {
+        return result;
+    }
+    auto status = result->DeserializeFromProto(proto);
+    if (status.IsFail()) {
+        return status;
+    }
+    return result;
 }
+
+}   // namespace NKikimr::NOlap::NReader

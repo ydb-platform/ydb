@@ -35,6 +35,9 @@ NKikimrSchemeOp::TColumnDescription Col(const TString& columnName, NScheme::TTyp
 
 [[maybe_unused]] NKikimrSchemeOp::TTTLSettings TtlCol(const TString& columnName) {
     NKikimrSchemeOp::TTTLSettings settings;
+    auto* deleteTier = settings.MutableEnabled()->AddTiers();
+    deleteTier->MutableDelete();
+    deleteTier->SetApplyAfterSeconds(TDuration::Minutes(20).Seconds());
     settings.MutableEnabled()->SetExpireAfterSeconds(TDuration::Minutes(20).Seconds());
     settings.MutableEnabled()->SetColumnName(columnName);
     settings.MutableEnabled()->MutableSysSettings()->SetRunInterval(TDuration::Minutes(60).MicroSeconds());

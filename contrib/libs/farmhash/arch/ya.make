@@ -1,0 +1,3 @@
+SUBSCRIBER(
+    g:cpp-contrib
+)

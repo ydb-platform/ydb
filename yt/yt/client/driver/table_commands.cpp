@@ -34,6 +34,7 @@ namespace NYT::NDriver {
 using namespace NApi;
 using namespace NChaosClient;
 using namespace NChunkClient;
+using namespace NCodegen;
 using namespace NConcurrency;
 using namespace NFormats;
 using namespace NHiveClient;
@@ -129,6 +130,7 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
         format,
         reader->GetNameTable(),
         {reader->GetTableSchema()},
+        {Path.GetColumns()},
         context->Request().OutputStream,
         false,
         ControlAttributes,
@@ -265,14 +267,15 @@ void TWriteTableCommand::Register(TRegistrar registrar)
         .Default(1_MB);
 }
 
-TFuture<ITableWriterPtr> TWriteTableCommand::CreateTableWriter(
-    const ICommandContextPtr& context) const
+NApi::ITableWriterPtr TWriteTableCommand::CreateTableWriter(
+    const ICommandContextPtr& context)
 {
     PutMethodInfoInTraceContext("write_table");
 
-    return context->GetClient()->CreateTableWriter(
+    return WaitFor(context->GetClient()->CreateTableWriter(
         Path,
-        Options);
+        Options))
+            .ValueOrThrow();
 }
 
 void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
@@ -287,8 +290,7 @@ void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
     Options.PingAncestors = true;
     Options.Config = config;
 
-    auto apiWriter = WaitFor(CreateTableWriter(context))
-        .ValueOrThrow();
+    auto apiWriter = CreateTableWriter(context);
 
     auto schemalessWriter = CreateSchemalessFromApiWriterAdapter(std::move(apiWriter));
 
@@ -823,7 +825,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EExecutionBackend>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<EExecutionBackend>>(
         "execution_backend",
         [] (TThis* command) -> auto& {
             return command->Options.ExecutionBackend;
@@ -834,6 +836,12 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         "versioned_read_options",
         [] (TThis* command) -> auto& {
             return command->Options.VersionedReadOptions;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "use_lookup_cache",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseLookupCache;
         })
         .Optional(/*init*/ false);
 }
@@ -1558,6 +1566,14 @@ void TAlterTableReplicaCommand::Register(TRegistrar registrar)
             return command->Options.EnableReplicatedTableTracker;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TYPath>>(
+        "replica_path",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicaPath;
+        })
+        .Optional(/*init*/ false);
+
 }
 
 void TAlterTableReplicaCommand::DoExecute(ICommandContextPtr context)
@@ -1796,6 +1812,37 @@ void TGetTabletErrorsCommand::DoExecute(ICommandContextPtr context)
                 })
             .EndMap();
     });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TGetTableMountInfoCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("path", &TThis::Path_);
+}
+
+void TGetTableMountInfoCommand::DoExecute(ICommandContextPtr context)
+{
+    auto tableMountCache = context->GetClient()->GetTableMountCache();
+    auto tableInfo = WaitFor(tableMountCache->GetTableInfo(Path_))
+        .ValueOrThrow();
+
+    // Rudimentary, for tests only
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .BeginMap()
+            .Item("lower_cap_bound").Value(tableInfo->LowerCapBound)
+            .Item("upper_cap_bound").Value(tableInfo->UpperCapBound)
+            .Item("primary_revision").Value(tableInfo->PrimaryRevision)
+            .Item("secondary_revision").Value(tableInfo->SecondaryRevision)
+            .Item("schemas")
+                .DoMap([&tableInfo] (auto fluent) {
+                    for (auto kind : TEnumTraits<ETableSchemaKind>::GetDomainValues()) {
+                        if (auto schemaPtr = tableInfo->Schemas[kind]) {
+                            fluent.Item(ToString(kind)).Value(schemaPtr);
+                        }
+                    }
+                })
+        .EndMap());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -114,11 +114,11 @@ void TColumnEngineChanges::OnFinish(NColumnShard::TColumnShard& self, TChangesFi
     DoOnFinish(self, context);
 }
 
-TWriteIndexContext::TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs)
+TWriteIndexContext::TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot)
     : DB(db)
     , DBWrapper(dbWrapper)
     , EngineLogs(engineLogs)
-{
+    , Snapshot(snapshot) {
 
 }
 

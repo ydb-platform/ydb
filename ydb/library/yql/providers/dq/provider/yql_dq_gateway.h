@@ -1,19 +1,19 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
-#include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
+#include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 #include <ydb/library/yql/providers/dq/planner/execution_planner.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
-#include <ydb/library/yql/core/yql_udf_resolver.h>
-#include <ydb/library/yql/core/yql_execution.h>
+#include <yql/essentials/core/yql_udf_resolver.h>
+#include <yql/essentials/core/yql_execution.h>
 
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
 namespace NYql {
@@ -78,6 +78,7 @@ public:
         bool Retriable = false;
         bool Truncated = false;
         ui64 RowsCount = 0;
+        bool Timeout = false;
 
         TOperationStatistics Statistics;
 

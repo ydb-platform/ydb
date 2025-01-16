@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
@@ -35,7 +35,7 @@ struct TS3State : public TThrRefBase
     NActors::TActorSystem* ActorSystem = nullptr;
 };
 
-TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool allowLocalFiles = false, NActors::TActorSystem* actorSystem = nullptr);
+TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, NActors::TActorSystem* actorSystem = nullptr);
 
 TIntrusivePtr<IDataProvider> CreateS3DataSource(TS3State::TPtr state);
 TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state);

@@ -4,7 +4,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/threading/future/core/future.h>
 

@@ -83,10 +83,11 @@ private:
 
     TBackoffStrategy RetryBackoffStrategy_;
 
-    TPromise<void> ClosePromise_ = NewPromise<void>();
+    const TPromise<void> ClosePromise_ = NewPromise<void>();
     std::atomic<bool> Closed_ = false;
 
-    void Loop() {
+    void Loop()
+    {
         while (!Closed_) {
             auto asyncBatch = Batcher_->DequeueBatch();
             auto batch = WaitForUnique(asyncBatch)

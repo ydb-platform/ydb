@@ -5,12 +5,12 @@ PEERDIR(
     ydb/library/grpc/client
     yt/cpp/mapreduce/interface
     ydb/library/yql/providers/dq/config
-    ydb/library/yql/core/issue
-    ydb/library/yql/providers/common/metrics
+    yql/essentials/core/issue
+    yql/essentials/providers/common/metrics
     ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common
-    ydb/library/yql/providers/yt/lib/log
+    yt/yql/providers/yt/lib/log
     ydb/library/yql/providers/dq/actors/events
 )
 

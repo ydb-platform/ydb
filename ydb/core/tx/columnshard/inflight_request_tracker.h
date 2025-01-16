@@ -17,7 +17,6 @@ using NOlap::IBlobInUseTracker;
 class TSnapshotLiveInfo {
 private:
     const NOlap::TSnapshot Snapshot;
-    std::optional<TInstant> LastPingInstant;
     std::optional<TInstant> LastRequestFinishedInstant;
     THashSet<ui32> Requests;
     YDB_READONLY(bool, IsLock, false);
@@ -48,22 +47,32 @@ public:
 
     static TSnapshotLiveInfo BuildFromDatabase(const NOlap::TSnapshot& reqSnapshot) {
         TSnapshotLiveInfo result(reqSnapshot);
-        result.LastPingInstant = TInstant::Now();
-        result.LastRequestFinishedInstant = result.LastPingInstant;
+        result.LastRequestFinishedInstant = TInstant::Now();
         result.IsLock = true;
         return result;
     }
 
-    bool Ping(const TDuration critDuration, const TInstant now) {
-        LastPingInstant = now;
-        if (Requests.empty()) {
-            AFL_VERIFY(LastRequestFinishedInstant);
-            if (critDuration < *LastPingInstant - *LastRequestFinishedInstant && IsLock) {
-                IsLock = false;
+    bool IsExpired(const TDuration critDuration, const TInstant now) const {
+        if (Requests.size()) {
+            return false;
+        }
+        AFL_VERIFY(LastRequestFinishedInstant);
+        return critDuration < now - *LastRequestFinishedInstant;
+    }
+
+    bool CheckToLock(const TDuration snapshotLivetime, const TDuration usedSnapshotGuaranteeLivetime, const TInstant now) {
+        if (IsLock) {
+            return false;
+        }
+
+        if (Requests.size()) {
+            if (now + usedSnapshotGuaranteeLivetime > Snapshot.GetPlanInstant() + snapshotLivetime) {
+                IsLock = true;
                 return true;
             }
         } else {
-            if (critDuration < *LastPingInstant - Snapshot.GetPlanInstant() && !IsLock) {
+            AFL_VERIFY(LastRequestFinishedInstant);
+            if (*LastRequestFinishedInstant + usedSnapshotGuaranteeLivetime > Snapshot.GetPlanInstant() + snapshotLivetime) {
                 IsLock = true;
                 return true;
             }
@@ -76,6 +85,12 @@ class TInFlightReadsTracker {
 private:
     std::map<NOlap::TSnapshot, TSnapshotLiveInfo> SnapshotsLive;
     std::shared_ptr<TRequestsTracerCounters> Counters;
+    THashMap<ui64, NActors::TActorId> ActorIds;
+
+    std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
+    ui64 NextCookie = 1;
+    THashMap<ui64, NOlap::NReader::TReadMetadataBase::TConstPtr> RequestsMeta;
+    NOlap::TSelectInfo::TStats SelectStatsDelta;
 
 public:
     std::optional<NOlap::TSnapshot> GetSnapshotToClean() const {
@@ -88,11 +103,15 @@ public:
 
     bool LoadFromDatabase(NTable::TDatabase& db);
 
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Ping(TColumnShard* self, const TDuration critDuration, const TInstant now);
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Ping(
+        TColumnShard* self, const TDuration stalenessInMem, const TDuration usedSnapshotLivetime, const TInstant now);
 
     // Returns a unique cookie associated with this request
     [[nodiscard]] ui64 AddInFlightRequest(
         NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index);
+    void AddScanActorId(const ui64 cookie, const NActors::TActorId& actorId) {
+        AFL_VERIFY(ActorIds.emplace(cookie, actorId).second);
+    }
 
     [[nodiscard]] NOlap::NReader::TReadMetadataBase::TConstPtr ExtractInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* index, const TInstant now);
 
@@ -100,6 +119,12 @@ public:
         auto delta = SelectStatsDelta;
         SelectStatsDelta = NOlap::TSelectInfo::TStats();
         return delta;
+    }
+
+    void Stop(TColumnShard* /*self*/) {
+        for (auto&& i : ActorIds) {
+            NActors::TActivationContext::Send(i.second, std::make_unique<NActors::TEvents::TEvPoison>());
+        }
     }
 
     TInFlightReadsTracker(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TRequestsTracerCounters>& counters)
@@ -110,12 +135,6 @@ public:
 private:
     void AddToInFlightRequest(
         const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
-
-private:
-    std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
-    ui64 NextCookie = 1;
-    THashMap<ui64, NOlap::NReader::TReadMetadataBase::TConstPtr> RequestsMeta;
-    NOlap::TSelectInfo::TStats SelectStatsDelta;
 };
 
 }   // namespace NKikimr::NColumnShard

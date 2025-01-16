@@ -1,11 +1,15 @@
+#include <library/cpp/malloc/api/malloc.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/interconnect/interconnect_common.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/actors/interconnect/event_holder_pool.h>
 
+#include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
+
 #include <atomic>
+#include <iostream>
 
 using namespace NActors;
 
@@ -56,4 +60,72 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
         freeQ.clear(); // if we don't this, we may probablty crash due to the order of object destruction
     }
 
+    struct TMemProfiler {
+        size_t UsedAtStart = 0;
+
+
+        TMemProfiler()
+            : UsedAtStart(0)
+        {
+            UsedAtStart = GetUsed();
+
+            const auto &info = NMalloc::MallocInfo();
+            bool tcmallocIsUsed = TStringBuf(info.Name).StartsWith("tc");
+            UNIT_ASSERT(tcmallocIsUsed);
+        }
+
+        size_t GetUsed() {
+            auto properties = tcmalloc::MallocExtension::GetProperties();
+            auto x = properties["generic.bytes_in_use_by_app"];
+            return x.value - UsedAtStart;
+        }
+    };
+
+    void MemComsumption(size_t repeats, size_t buffSize) {
+        TDeque<THolder<IEventBase>> freeQ;
+        auto callback = [&](THolder<IEventBase> event) {
+            freeQ.push_back(std::move(event));
+        };
+        auto pool = Setup(std::move(callback));
+
+        std::list<TEventHolder> q;
+        TMemProfiler prof;
+
+        for (ui32 i = 0; i < repeats; i++) {
+            TEventHolder& event = pool.Allocate(q);
+            TString data = TString::Uninitialized(buffSize);
+            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
+            event.Fill(*holder);
+
+            pool.Release(q, q.begin());
+            UNIT_ASSERT_LT_C(prof.GetUsed(), TEventHolderPool::MaxBytesPerMessage * 2, prof.GetUsed());
+        }
+
+        for (ui32 i = 0; i < repeats; i++) {
+            TEventHolder& event = pool.Allocate(q);
+            TString data = TString::Uninitialized(buffSize);
+            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
+            event.Fill(*holder);
+        }
+        for (ui32 i = 0; i < repeats; i++) {
+            pool.Release(q, q.begin());
+        }
+        UNIT_ASSERT_LT_C(prof.GetUsed(), TEventHolderPool::MaxBytesPerMessage * 2, prof.GetUsed());
+    }
+
+    Y_UNIT_TEST(MemConsumptionSmall) {
+#ifdef _san_enabled_
+        std::cout << "Skipping, because TCMalloc is unavailable\n";
+        return;
+#endif
+        MemComsumption(100'000, 4);
+    }
+
+    Y_UNIT_TEST(MemConsumptionLarge) {
+#ifdef _san_enabled_
+        std::cout << "Skipping, because TCMalloc is unavailable\n";
+        return;
+#endif
+        MemComsumption(10'000, 1024*1024);
+    }
 }

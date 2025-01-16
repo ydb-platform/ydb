@@ -1,11 +1,10 @@
 #pragma once
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
-
-#include <ydb/core/formats/arrow/modifier/schema.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
+#include <ydb/library/formats/arrow/modifier/schema.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
@@ -63,8 +62,29 @@ public:
         return Columns[idx];
     }
 
-    std::shared_ptr<arrow::Table> BuildTableVerified(const std::optional<std::set<std::string>>& columnNames = {}) const;
-    std::shared_ptr<arrow::Table> BuildTableOptional(const std::optional<std::set<std::string>>& columnNames = {}) const;
+    class TTableConstructionContext {
+    private:
+        YDB_ACCESSOR_DEF(std::optional<std::set<std::string>>, ColumnNames);
+        YDB_ACCESSOR_DEF(std::optional<ui32>, StartIndex);
+        YDB_ACCESSOR_DEF(std::optional<ui32>, RecordsCount);
+
+    public:
+        TTableConstructionContext() = default;
+        TTableConstructionContext(std::set<std::string>&& columnNames)
+            : ColumnNames(std::move(columnNames)) {
+        }
+
+        TTableConstructionContext(const std::set<std::string>& columnNames)
+            : ColumnNames(columnNames) {
+        }
+
+        void SetColumnNames(const std::vector<TString>& names) {
+            ColumnNames = std::set<std::string>(names.begin(), names.end());
+        }
+    };
+
+    std::shared_ptr<arrow::Table> BuildTableVerified(const TTableConstructionContext& context = Default<TTableConstructionContext>()) const;
+    std::shared_ptr<arrow::Table> BuildTableOptional(const TTableConstructionContext& context = Default<TTableConstructionContext>()) const;
 
     std::shared_ptr<TGeneralContainer> BuildEmptySame() const;
 
@@ -73,6 +93,8 @@ public:
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::Array>& data);
 
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::ChunkedArray>& data);
+
+    void DeleteFieldsByIndex(const std::vector<ui32>& idxs);
 
     TGeneralContainer(const std::shared_ptr<arrow::Table>& table);
     TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table);

@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/concurrency/config.h>
 
+#include <yt/yt/core/misc/backoff_strategy.h>
+
 #include <library/cpp/yt/misc/enum.h>
 
 #include <vector>
@@ -132,7 +134,7 @@ public:
     std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
     TTimeHistogramConfigPtr TimeHistogram;
-    THashMap<TString, TMethodConfigPtr> Methods;
+    THashMap<std::string, TMethodConfigPtr> Methods;
     std::optional<int> AuthenticationQueueSizeLimit;
     std::optional<TDuration> PendingPayloadsTimeout;
     std::optional<bool> Pooled;
@@ -182,6 +184,12 @@ public:
     //! Maximum number of retry attempts to make.
     int RetryAttempts;
 
+    // COMPAT(danilalexeev): YT-23734.
+    bool EnableExponentialRetryBackoffs;
+
+    //! Retry backoff policy.
+    TExponentialBackoffOptions RetryBackoff;
+
     //! Maximum time to spend while retrying.
     //! If null then no limit is enforced.
     std::optional<TDuration> RetryTimeout;
@@ -195,7 +203,12 @@ DEFINE_REFCOUNTED_TYPE(TRetryingChannelConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelConfigBase
+DEFINE_ENUM(EPeerPriorityStrategy,
+    (None)
+    (PreferLocal)
+);
+
+class TViablePeerRegistryConfig
     : public virtual NYTree::TYsonStruct
 {
 public:
@@ -227,22 +240,6 @@ public:
     //! returns a soft failure (i.e. "down" response) to |Discover| request.
     TDuration SoftBackoffTime;
 
-    REGISTER_YSON_STRUCT(TBalancingChannelConfigBase);
-
-    static void Register(TRegistrar registrar);
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-DEFINE_ENUM(EPeerPriorityStrategy,
-    (None)
-    (PreferLocal)
-);
-
-class TViablePeerRegistryConfig
-    : public TBalancingChannelConfigBase
-{
-public:
     //! In case too many peers are known, the registry will only maintain this many peers active.
     int MaxPeerCount;
 
@@ -313,6 +310,11 @@ public:
     TString EndpointSetId;
     TDuration UpdatePeriod;
 
+    //! Use IPv4 address of endpoint.
+    bool UseIPv4;
+    //! Use IPv6 address of endpoint.
+    bool UseIPv6;
+
     REGISTER_YSON_STRUCT(TServiceDiscoveryEndpointsConfig);
 
     static void Register(TRegistrar registrar);
@@ -322,26 +324,39 @@ DEFINE_REFCOUNTED_TYPE(TServiceDiscoveryEndpointsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelConfig
+class TBalancingChannelConfigBase
     : public TDynamicChannelPoolConfig
 {
 public:
-    //! First option: static list of addresses.
-    std::optional<std::vector<std::string>> Addresses;
-
     //! Disables discovery and balancing when just one address is given.
     //! This is vital for jobs since node's redirector is incapable of handling
     //! discover requests properly.
     bool DisableBalancingOnSingleAddress;
-
-    //! Second option: SD endpoints.
-    TServiceDiscoveryEndpointsConfigPtr Endpoints;
 
     //! Delay before sending a hedged request. If null then hedging is disabled.
     std::optional<TDuration> HedgingDelay;
 
     //! Whether to cancel the primary request when backup one is sent.
     bool CancelPrimaryRequestOnHedging;
+
+    REGISTER_YSON_STRUCT(TBalancingChannelConfigBase);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TBalancingChannelConfigBase)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TBalancingChannelConfig
+    : public TBalancingChannelConfigBase
+{
+public:
+    //! First option: static list of addresses.
+    std::optional<std::vector<std::string>> Addresses;
+
+    //! Second option: SD endpoints.
+    TServiceDiscoveryEndpointsConfigPtr Endpoints;
 
     REGISTER_YSON_STRUCT(TBalancingChannelConfig);
 
@@ -421,13 +436,13 @@ class TDispatcherConfig
     : public NYTree::TYsonStruct
 {
 public:
-    static constexpr int DefaultHeavyPoolSize = 16;
-    static constexpr int DefaultCompressionPoolSize = 8;
     int HeavyPoolSize;
     int CompressionPoolSize;
     TDuration HeavyPoolPollingPeriod;
 
     bool AlertOnMissingRequestInfo;
+
+    bool SendTracingBaggage;
 
     TDispatcherConfigPtr ApplyDynamic(const TDispatcherDynamicConfigPtr& dynamicConfig) const;
 
@@ -449,6 +464,8 @@ public:
     std::optional<TDuration> HeavyPoolPollingPeriod;
 
     std::optional<bool> AlertOnMissingRequestInfo;
+
+    std::optional<bool> SendTracingBaggage;
 
     REGISTER_YSON_STRUCT(TDispatcherDynamicConfig);
 

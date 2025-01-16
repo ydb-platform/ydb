@@ -28,6 +28,7 @@ public:
     NYson::TYsonString DqManagerConfig;
     NYson::TYsonString FileStorageConfig;
     NYson::TYsonString OperationAttributes;
+    NYson::TYsonString Libraries;
 
     TString YTTokenPath;
 
@@ -88,7 +89,7 @@ struct IYqlPlugin
     virtual TQueryResult Run(
         TQueryId queryId,
         TString user,
-        TString token,
+        NYson::TYsonString credentials,
         TString queryText,
         NYson::TYsonString settings,
         std::vector<TQueryFile> files,

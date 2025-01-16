@@ -63,19 +63,6 @@ private:
     void AbortImpl(EStatus statusCode, const TString& message, TDeferredActions<false>& deferred);
 
 private:
-    using TOffsetRanges = THashMap<TString, THashMap<ui64, TDisjointIntervalTree<ui64>>>;
-
-    void CollectOffsets(NTable::TTransaction& tx,
-                        const TReadSessionEvent::TDataReceivedEvent& event);
-    void CollectOffsets(NTable::TTransaction& tx,
-                        const TString& topicPath, ui32 partitionId, ui64 offset);
-    void UpdateOffsets(const NTable::TTransaction& tx);
-
-    //
-    // (session, tx) -> topic -> partition -> (begin, end)
-    //
-    THashMap<std::pair<TString, TString>, TOffsetRanges> OffsetRanges;
-
     TReadSessionSettings Settings;
     const TString SessionId;
     const TInstant StartSessionTime = TInstant::Now();

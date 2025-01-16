@@ -1,7 +1,7 @@
 #include "kqp_opt_impl.h"
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -231,8 +231,8 @@ TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionH
         .Done();
 }
 
-TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, const TCoAtomList& columns,
-        const bool allowInconsistentWrites, const TStringBuf mode, TExprContext& ctx) {
+TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
+        const bool allowInconsistentWrites, const TStringBuf mode, const i64 order, const bool isOlap, TExprContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
 
     return Build<TDqStage>(ctx, expr.Pos())
@@ -253,11 +253,12 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, const 
                 .Index().Value("0").Build()
                 .Settings<TKqpTableSinkSettings>()
                     .Table(table)
-                    .Columns(columns)
                     .InconsistentWrite(allowInconsistentWrites
                         ? ctx.NewAtom(expr.Pos(), "true")
                         : ctx.NewAtom(expr.Pos(), "false"))
                     .Mode(ctx.NewAtom(expr.Pos(), mode))
+                    .Priority(ctx.NewAtom(expr.Pos(), ToString(order)))
+                    .TableType(ctx.NewAtom(expr.Pos(), isOlap ? "olap" : "oltp"))
                     .Settings()
                         .Build()
                     .Build()
@@ -297,7 +298,7 @@ TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) {
 }
 
 bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect, bool& sinkEffect)
+    const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect, bool& sinkEffect, const i64 order)
 {
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
 
@@ -307,12 +308,14 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     }
 
     sinkEffect = NeedSinks(table, kqpCtx) || (kqpCtx.IsGenericQuery() && settings.AllowInconsistentWrites);
+    const bool isOlap = (table.Metadata->Kind == EKikimrTableKind::Olap);
+    const i64 priority = isOlap ? 0 : order;
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
             stageInput = RebuildPureStageWithSink(
-                node.Input(), node.Table(), node.Columns(),
-                settings.AllowInconsistentWrites, settings.Mode, ctx);
+                node.Input(), node.Table(),
+                settings.AllowInconsistentWrites, settings.Mode, priority, isOlap, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -349,11 +352,12 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             .Index().Value("0").Build()
             .Settings<TKqpTableSinkSettings>()
                 .Table(node.Table())
-                .Columns(node.Columns())
                 .InconsistentWrite(settings.AllowInconsistentWrites
                     ? ctx.NewAtom(node.Pos(), "true")
                     : ctx.NewAtom(node.Pos(), "false"))
                 .Mode(ctx.NewAtom(node.Pos(), settings.Mode))
+                .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
+                .TableType(ctx.NewAtom(node.Pos(), isOlap ? "olap" : "oltp"))
                 .Settings()
                     .Build()
                 .Build()
@@ -450,16 +454,17 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
 }
 
 bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect, bool& sinkEffect)
+    const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect, bool& sinkEffect, const i64 order)
 {
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
     sinkEffect = NeedSinks(table, kqpCtx);
-
+    const bool isOlap = (table.Metadata->Kind == EKikimrTableKind::Olap);
+    const i64 priority = isOlap ? 0 : order;
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
             const auto keyColumns = BuildKeyColumnsList(table, node.Pos(), ctx);
-            stageInput = RebuildPureStageWithSink(node.Input(), node.Table(), keyColumns, false, "delete", ctx);
+            stageInput = RebuildPureStageWithSink(node.Input(), node.Table(), false, "delete", priority, isOlap, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -486,7 +491,6 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
     auto input = dqUnion.Output().Stage().Program().Body();
 
     if (sinkEffect) {
-        const auto keyColumns = BuildKeyColumnsList(table, node.Pos(), ctx);
         auto sink = Build<TDqSink>(ctx, node.Pos())
             .DataSink<TKqpTableSink>()
                 .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
@@ -495,9 +499,10 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
             .Index().Value("0").Build()
             .Settings<TKqpTableSinkSettings>()
                 .Table(node.Table())
-                .Columns(keyColumns)
                 .InconsistentWrite(ctx.NewAtom(node.Pos(), "false"))
                 .Mode(ctx.NewAtom(node.Pos(), "delete"))
+                .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
+                .TableType(ctx.NewAtom(node.Pos(), isOlap ? "olap" : "oltp"))
                 .Settings()
                     .Build()
                 .Build()
@@ -588,6 +593,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
     TVector<TExprBase> newSinkEffects;
     newEffects.reserve(effects.size());
     newSinkEffects.reserve(effects.size());
+    i64 order = builtEffects.size();
 
     for (const auto& effect : effects) {
         TMaybeNode<TExprBase> newEffect;
@@ -600,15 +606,17 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
                 .Done();
 
             if (auto maybeUpsertRows = effect.Maybe<TKqlUpsertRows>()) {
-                if (!BuildUpsertRowsEffect(maybeUpsertRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect, sinkEffect)) {
+                if (!BuildUpsertRowsEffect(maybeUpsertRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect, sinkEffect, order)) {
                     return false;
                 }
+                ++order;
             }
 
             if (auto maybeDeleteRows = effect.Maybe<TKqlDeleteRows>()) {
-                if (!BuildDeleteRowsEffect(maybeDeleteRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect, sinkEffect)) {
+                if (!BuildDeleteRowsEffect(maybeDeleteRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect, sinkEffect, order)) {
                     return false;
                 }
+                ++order;
             }
 
             if (input) {
@@ -700,7 +708,6 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx)
 {
     TVector<TExprBase> builtEffects;
-
     if constexpr (GroupEffectsByTable) {
         TMap<TStringBuf, TVector<TExprBase>> tableEffectsMap;
         ExploreEffectLists(

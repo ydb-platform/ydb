@@ -11,8 +11,8 @@ SRCS(
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/testlib/default
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
     ydb/public/sdk/cpp/client/ydb_driver
 )
 

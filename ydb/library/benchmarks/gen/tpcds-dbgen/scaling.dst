@@ -1,0 +1,138 @@
+--
+-- Legal Notice
+--
+-- This document and associated source code (the "Work") is a part of a
+-- benchmark specification maintained by the TPC.
+--
+-- The TPC reserves all right, title, and interest to the Work as provided
+-- under U.S. and international laws, including without limitation all patent
+-- and trademark rights therein.
+--
+-- No Warranty
+--
+-- 1.1 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE INFORMATION
+--     CONTAINED HEREIN IS PROVIDED "AS IS" AND WITH ALL FAULTS, AND THE
+--     AUTHORS AND DEVELOPERS OF THE WORK HEREBY DISCLAIM ALL OTHER
+--     WARRANTIES AND CONDITIONS, EITHER EXPRESS, IMPLIED OR STATUTORY,
+--     INCLUDING, BUT NOT LIMITED TO, ANY (IF ANY) IMPLIED WARRANTIES,
+--     DUTIES OR CONDITIONS OF MERCHANTABILITY, OF FITNESS FOR A PARTICULAR
+--     PURPOSE, OF ACCURACY OR COMPLETENESS OF RESPONSES, OF RESULTS, OF
+--     WORKMANLIKE EFFORT, OF LACK OF VIRUSES, AND OF LACK OF NEGLIGENCE.
+--     ALSO, THERE IS NO WARRANTY OR CONDITION OF TITLE, QUIET ENJOYMENT,
+--     QUIET POSSESSION, CORRESPONDENCE TO DESCRIPTION OR NON-INFRINGEMENT
+--     WITH REGARD TO THE WORK.
+-- 1.2 IN NO EVENT WILL ANY AUTHOR OR DEVELOPER OF THE WORK BE LIABLE TO
+--     ANY OTHER PARTY FOR ANY DAMAGES, INCLUDING BUT NOT LIMITED TO THE
+--     COST OF PROCURING SUBSTITUTE GOODS OR SERVICES, LOST PROFITS, LOSS
+--     OF USE, LOSS OF DATA, OR ANY INCIDENTAL, CONSEQUENTIAL, DIRECT,
+--     INDIRECT, OR SPECIAL DAMAGES WHETHER UNDER CONTRACT, TORT, WARRANTY,
+--     OR OTHERWISE, ARISING IN ANY WAY OUT OF THIS OR ANY OTHER AGREEMENT
+--     RELATING TO THE WORK, WHETHER OR NOT SUCH AUTHOR OR DEVELOPER HAD
+--     ADVANCE NOTICE OF THE POSSIBILITY OF SUCH DAMAGES.
+--
+-- Contributors:
+-- Gradient Systems
+--
+--
+--
+------
+-- rowcount
+-- This distribution defines the rowcounts for each table at 
+-- 6 discrete scaling levels the first (scale=1G) is intended 
+-- for validation testing
+-- other values are not valid for publication, but are generated using
+-- the interpolation method defined for each table
+-- NOTE: this needs to sync with the definitions in tables.h
+-- values                     weights
+-- -------------------------------------------------
+-- 1. table                1. 1GB rowcount
+-- 2, multiplier (10^x)       2. 10GB rowcount
+-- 3. scaling model           3. 100GB rowcount
+--    (1 = static, 2=linear,     4. 300GB rowcount
+--    3=logarithmic)          5. 1TB rowcount
+--                         6. 3TB rowcount
+--                         7. 10TB rowcount
+--                         8. 30TB rowcount
+--                         9. 100TB rowcount
+--                         10. update percentage
+------
+create rowcounts;
+set types =  (varchar, int, int);
+set weights = 10;
+--    table       mult  model       1G    10G      100G     300G     1T       3T       10T      30T      100T     upd
+add ("call_center",  0,    3:       3,    12,      15,      18,      21,      24,      27,      30,      30,         0);
+add ("catalog_page", 0,    1:       11718,12000,   20400,   26000,   30000,   36000,   40000,   46000,   50000,      0);
+add ("catalog_returns", 4, 2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("catalog_sales",   4, 2:       16,   160,     1600     4800,    16000,   48000,   160000,  480000,  1600000,    0);
+add ("customer",     3,    3:       100,  500,     2000,    5000,    12000,   30000,   65000,   80000,   100000,     0);
+add ("customer_address",3, 3:       50,   250,     1000,    2500,    6000,    15000,   32500,   40000,   50000,      0);
+add ("customer_demographics",2, 1:  19208,19208,   19208,   19208,   19208,   19208,   19208,   19208,   19208,      0);
+add ("date",         0,    1:       73049,73049,   73049,   73049,   73049,   73049,   73049,   73049,   73049,      0);
+add ("household_demographics",0,1:  7200, 7200,    7200,    7200,    7200,    7200,    7200,    7200,    7200,       0);
+add ("income_band",  0,    1:       20,   20,      20,      20,      20,      20,      20,      20,      20,         0);
+--    inventory is a special case derived from item, warehouse, date
+add ("inventory",    -1,   -1:      -1,   -1,      -1,      -1,      -1,      -1,      -1.      -1.      -1.         0);
+add ("item",         3,    3:       9,    51,      102,     132,     150,     180,     201,     231,     251,     0);
+add ("promotion",    0,    3:       300,  500,     1000,    1300,    1500,    1800,    2000,    2300,    2500,    0);
+add ("reason",       0,    3:       35,   45,      55,      60,      65,      67,      70,      72,      75,         0);
+add ("ship_mode",    0,    1:       20,   20,      20,      20,      20,      20,      20,      20,      20,         0);
+add ("store",        0,    3:       6,    51,      201,     402,     501,     675,     750,     852,     951,     0);
+add ("store_returns",-1,   -1:      -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("store_sales",  4,    2:       24,   240,     2400,    7200,    24000,   72000,   240000,  720000,  2400000,    0);
+add ("time",         0,    1:       86400,86400,   86400,   86400,   86400,   86400,   86400,   86400,   86400,      0);
+add ("warehouse",    0,    3:       5,    10,      15,      17,      20,      22,      25,      27,      30,         0);
+add ("web_page",     0,    3:       30,   100,     1020,    1302,    1500,    1800,    2001,    2301,    2502,     0);
+add ("web_returns",  4,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("web_sales",    3,    2:       60,   600,     6000,    18000,   60000,   180000,  600000,  1800000, 6000000, 0);
+add ("web_site",     0,    3:       15,   21,      12,      21,      27,      33,      39,      42,      48,         0);
+add ("dbgen_version",0,    1:       1,    1,       1,       1,       1,       1,       1,       1,       1,       0);
+-- source schema tables
+--    table       mult     model    1G    10G      100G     300G     1T       3T       10T      30T      100T     upd
+add ("s_brand",      2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         10);
+add ("s_customer_address",0,2:      25,   40,      100,     250,     600,     1500,    3250,    4000,    5000,    10);
+add ("s_call_center",0,    2:       1,    1,       1,       1,       1,       1,       1,       1,       1,       100);
+add ("s_catalog",    0,    0:       1,    10,      100,     300,     1000,    3000,    10000,   30000,   100000,     10);
+add ("s_catalog_order", 2, 1:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,      0);
+add ("s_catalog_lineitem",0,1:      -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_catalog_page",  0, 2:       150,  210,     240,     240,     240,     240,     240,     240,     240,     15);
+add ("s_catalog_promotional_item",2,2:-1, -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         10);
+add ("s_catalog_returns",2,2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_category",   2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_class",      2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_company",    2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_customer",   3,    2:       5,    10,      20,      50,      120,     300,     650,     800,     1000,    15);
+add ("s_division",   2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_inventory",  2,    2:       1,    10,      100,     300,     1000,    3000,    10000,   30000,   100000,     0);
+add ("s_item",       2,    2:       5,    7,       10,      13,      15,      18,      20,      23,      25,         50);
+add ("s_manager",    2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_manufacturer",2,   2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_market",     2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_product",    2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_promotion",  0,    2:       5,    7,       10,      13,      15,      18,      20,      23,      25,         50);
+add ("s_purchase",   3,    1:       8,    8,       80,      240,     800,     2400,    8000,    24000,   180000,     0);
+add ("s_purchase_lineitem",2, 2:    -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_reason",     2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_store",      0,    2:       1,    1,       2,       4,       5,       6,       7,       8,       9,       10);
+add ("s_store_promotional_item",2 2:-1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_store_returns",2,  2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_subcategory",2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_subclass",   2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_warehouse",  0,    2:       1,    1,       1,       1,       1,       1,       1,       1,       1,       100);
+add ("s_web_order",  3,    1:       4,    20,      40,      120,     400,     1200,    4000,    12000,   40000,      0);
+add ("s_web_order_lineitem",2,2:    -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_web_page",   0,    2:       6,    1,       200,       260,       300,       360,       400,       460,       500,       50);
+add ("s_web_promotional_item",2,2:  -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_web_returns",2,    2:       -1,   -1,      -1,      -1,      -1,      -1,      -1,      -1,      -1,         0);
+add ("s_web_site",   0,    2:       1,    1,       1,       1,       1,       1,       1,       1,       1,       50);
+add ("s_zip_to_gmt", 3,    2:       100,  100,     100,     100,     100,     100,     100,     100,     100,     0);
+-- PSEUDO TABLES: cardinalities, but not actual rowcounts
+--    table       mult  model 1G    10G      100G  300G  1T    3T    10T      30T      100T     upd
+add ("item_brands",     0,    1:    1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,    0);
+add ("item_classes", 0,    1:    100,  100,  100,  100,  100,  100,  100,  100,  100,     0);
+add ("item_categories", 0,    1:    10,      10,      10,      10,      10,      10,      10,      10,      10,         0);
+add ("divisions",    0,    3:    2,    3,    4,    5,    5,    5,    5,    5,    5,       0);
+add ("companies",    0,    3:       2,    3,    4,    5,    5,    5,    5,    5,    5,       0);
+add ("concurrent_web_sites",0,   3:    2,    3,    4,    5,    5,    5,    5,    5,    5,       0);
+add ("active_cities":   0     3:    2,    6,    18,      30,      54,      90,      165,  270,  495,     0);
+add ("active_counties": 0,    3:    1,    3,    9,    15,      27,      45,      81,      135,  245,     0);
+add ("active_states":   0,    3:    1,    3,    9,    13,      21,      29,      34,      42,      47,         0);

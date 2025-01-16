@@ -202,7 +202,7 @@ namespace NYdb::NTopic::NTests {
 
         private:
             Ydb::Discovery::ListEndpointsResult MockResults;
-            TString DiscoveryAddr = 0;
+            TString DiscoveryAddr;
             std::unique_ptr<grpc::Server> Server;
             TAdaptiveLock Lock;
 
@@ -620,6 +620,8 @@ namespace NYdb::NTopic::NTests {
 
             auto setup = CreateSetup(TEST_CASE_NAME);
             auto authToken = "x-user-x@builtin";
+
+            setup->GetServer().AnnoyingClient->GrantConnect(authToken);
 
             {
                 // Allow UpdateRow only, no DescribeSchema permission.

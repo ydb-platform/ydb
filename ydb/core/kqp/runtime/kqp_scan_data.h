@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kqp_arrow_memory_pool.h"
 #include "kqp_compute.h"
 #include "kqp_scan_data_meta.h"
 
@@ -8,16 +9,17 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/permutations.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 
 namespace NKikimrTxDataShard {
@@ -85,26 +87,42 @@ public:
         return DataIndexes.size() ? DataIndexes.size() : Batch->num_rows();
     }
 
-    TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch, std::vector<ui32>&& dataIndexes)
-        : Batch(batch)
+    using EBlockTrackingMode = NKikimrConfig::TTableServiceConfig::EBlockTrackingMode;
+
+    TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch, std::vector<ui32>&& dataIndexes, EBlockTrackingMode mode)
+        : Batch(HandleBatch(mode, batch))
         , DataIndexes(std::move(dataIndexes))
     {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
     }
 
-    TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch)
-        : Batch(batch) {
+    TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch,
+        EBlockTrackingMode mode = NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE)
+        : Batch(HandleBatch(mode, batch)) {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
 
     }
 
-    TBatchDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch)
-        : Batch(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({batch}))) {
+    TBatchDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch,
+        EBlockTrackingMode mode = NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE)
+        : Batch(HandleBatch(mode, NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({batch})))) {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
 
+    }
+
+private:
+    static inline std::shared_ptr<arrow::Table> HandleBatch(EBlockTrackingMode mode, const std::shared_ptr<arrow::Table>& batch) {
+        switch(mode) {
+            case NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE:
+                return batch;
+            case NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_DEEP_COPY:
+                return NArrow::DeepCopy(batch, GetArrowMemoryPool());
+            case NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_SERIALIZE:
+                return NArrow::ReallocateBatch(batch, GetArrowMemoryPool());
+        }
     }
 };
 

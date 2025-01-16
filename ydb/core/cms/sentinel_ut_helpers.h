@@ -17,6 +17,7 @@ const auto& MockConfig = TFakeNodeWhiteboardService::Config;
 auto& MockNodes = TFakeNodeWhiteboardService::Info;
 
 static constexpr ui32 DefaultStateLimit = 5;
+static constexpr ui32 GoodStateLimit = 5;
 static constexpr ui32 DefaultErrorStateLimit = 60;
 auto DefaultStateLimits = NCms::TCmsSentinelConfig::DefaultStateLimits();
 
@@ -30,6 +31,7 @@ static constexpr NCms::EPDiskState ErrorStates[] = {
     NKikimrBlobStorage::TPDiskState::OpenFileError,
     NKikimrBlobStorage::TPDiskState::ChunkQuotaError,
     NKikimrBlobStorage::TPDiskState::DeviceIoError,
+    NKikimrBlobStorage::TPDiskState::Stopped,
 };
 
 constexpr NCms::EPDiskState FaultyStates[] = {

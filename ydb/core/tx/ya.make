@@ -27,6 +27,7 @@ RECURSE(
     columnshard
     coordinator
     datashard
+    locks
     long_tx_service
     mediator
     replication

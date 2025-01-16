@@ -120,6 +120,8 @@ message GetTaskResult {
         NFq.NConfig.TYdbStorageConfig compute_connection = 37;
         google.protobuf.Duration result_ttl = 38;
         map<string, Ydb.TypedValue> parameters = 39;
+
+        google.protobuf.Timestamp request_submitted_at = 40;
     }
     repeated Task tasks = 1;
 }

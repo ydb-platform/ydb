@@ -5,8 +5,11 @@ RECURSE(
     library/sqs
     olap
     oss
-    perf
+    postgres_integrations
+    sql
+    sql/large
     stability
+    stress
     supp
     tools
 )

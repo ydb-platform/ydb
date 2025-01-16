@@ -1,6 +1,6 @@
 #include "dq_pq_meta_extractor.h"
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 
 namespace {
@@ -44,8 +44,8 @@ namespace {
             "_yql_sys_message_group_id", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
                 const auto& data = message.GetMessageGroupId();
                 return std::make_pair(
-                    NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.Data(), data.Size())),
-                    data.Size()
+                    NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.data(), data.size())),
+                    data.size()
                 );
             }
         },

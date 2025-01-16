@@ -11,7 +11,7 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TCommandYql : public TYdbOperationCommand, public TCommandWithParameters,
+class TCommandYql : public TYdbOperationCommand, public TCommandWithParameters, public TCommandWithOutput,
     public TInterruptibleCommand
 {
 public:

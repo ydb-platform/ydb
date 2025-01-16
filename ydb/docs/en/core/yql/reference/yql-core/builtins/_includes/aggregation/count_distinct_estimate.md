@@ -11,7 +11,7 @@ By selecting accuracy, you can trade added resource and RAM consumption for decr
 
 All the three functions are aliases at the moment, but `CountDistinctEstimate` may start using a different algorithm in the future.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

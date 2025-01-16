@@ -54,11 +54,8 @@ private:
     size_t Updates = 0;
 };
 
-ITransaction* TDataShard::CreateTxMonitoringResetSchemaVersion(
-        TDataShard* self,
-        NMon::TEvRemoteHttpInfo::TPtr ev)
-{
-    return new TTxMonitoringResetSchemaVersion(self, ev);
+void TDataShard::HandleMonResetSchemaVersion(NMon::TEvRemoteHttpInfo::TPtr& ev) {
+    Execute(new TTxMonitoringResetSchemaVersion(this, ev));
 }
 
 }

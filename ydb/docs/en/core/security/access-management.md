@@ -35,7 +35,7 @@ To create, update, or delete a group, use the YQL operators:
 
 When using the names of built-in groups in the `ALTER GROUP` commands, those names must be provided in the upper case. In addition, the names of built-in groups containing the "-" symbol must be surrounded with the backticks, for example:
 
-```
+```yql
 ALTER GROUP `DATA-WRITERS` ADD USER myuser1;
 ```
 

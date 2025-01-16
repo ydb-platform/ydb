@@ -1,5 +1,7 @@
 #include "grpc_request_context_wrapper.h"
 
+#include <util/generic/set.h>
+
 namespace NKikimr::NPublicHttp {
 
     TGrpcRequestContextWrapper::TGrpcRequestContextWrapper(const THttpRequestContext& requestContext, std::unique_ptr<NProtoBuf::Message> request, TReplySender replySender)
@@ -16,10 +18,6 @@ namespace NKikimr::NPublicHttp {
     }
 
     const NProtoBuf::Message* TGrpcRequestContextWrapper::GetRequest() const {
-        return Request.get();
-    }
-
-    NProtoBuf::Message* TGrpcRequestContextWrapper::GetRequestMut() {
         return Request.get();
     }
 
@@ -81,5 +79,7 @@ namespace NKikimr::NPublicHttp {
     TString TGrpcRequestContextWrapper::GetPeer() const {
        return RequestContext.GetPeer();
     }
+
+    TString TGrpcRequestContextWrapper::GetEndpointId() const { return {}; }
 
 } // namespace NKikimr::NPublicHttp

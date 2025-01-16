@@ -62,6 +62,18 @@ protected:
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const override;
 
 public:
+    static std::shared_ptr<ISerializer> GetUncompressed() {
+        static std::shared_ptr<ISerializer> result =
+            std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::UNCOMPRESSED);
+        return result;
+    }
+
+    static std::shared_ptr<ISerializer> GetFast() {
+        static std::shared_ptr<ISerializer> result =
+            std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::LZ4_FRAME);
+        return result;
+    }
+
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
@@ -85,7 +97,25 @@ public:
     TNativeSerializer(const arrow::ipc::IpcWriteOptions& options = GetDefaultOptions())
         : Options(options) {
         Options.use_threads = false;
+    }
 
+    TNativeSerializer(arrow::MemoryPool* pool) {
+        Options.use_threads = false;
+        Options.memory_pool = pool;
+    }
+
+    arrow::Compression::type GetCodecType() const {
+        if (Options.codec) {
+            return Options.codec->compression_type();
+        }
+        return arrow::Compression::type::UNCOMPRESSED;
+    }
+
+    std::optional<i32> GetCodecLevel() const {
+        if (Options.codec && arrow::util::Codec::SupportsCompressionLevel(Options.codec->compression_type())) {
+            return Options.codec->compression_level();
+        }
+        return {};
     }
 };
 

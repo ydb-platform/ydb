@@ -88,7 +88,7 @@ static int __test_io(const char *file, struct io_uring *ring, int write, int sqt
 	}
 	fd = open(file, open_flags);
 	if (fd < 0) {
-		if (errno == EINVAL)
+		if (errno == EINVAL || errno == EPERM || errno == EACCES)
 			return 0;
 		perror("file open");
 		goto err;
@@ -231,7 +231,7 @@ static int test_io_uring_cqe_peek(const char *file)
 
 	fd = open(file, O_RDONLY | O_DIRECT);
 	if (fd < 0) {
-		if (errno == EINVAL) {
+		if (errno == EINVAL || errno == EPERM || errno == EACCES) {
 			io_uring_queue_exit(&ring);
 			return T_EXIT_SKIP;
 		}
@@ -303,7 +303,7 @@ static int test_io_uring_submit_enters(const char *file)
 	open_flags = O_WRONLY | O_DIRECT;
 	fd = open(file, open_flags);
 	if (fd < 0) {
-		if (errno == EINVAL)
+		if (errno == EINVAL || errno == EPERM || errno == EACCES)
 			return T_EXIT_SKIP;
 		perror("file open");
 		goto err;

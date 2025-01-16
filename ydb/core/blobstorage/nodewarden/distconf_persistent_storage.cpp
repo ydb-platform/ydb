@@ -1,6 +1,8 @@
 #include "distconf.h"
 #include <google/protobuf/util/json_util.h>
 
+#include <library/cpp/openssl/crypto/sha.h>
+
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::ReadConfig(ui64 cookie) {

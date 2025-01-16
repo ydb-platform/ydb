@@ -5,11 +5,13 @@
 
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -28,7 +30,7 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
     return CreateFinalizeBuildIndexImplTable(partId, transaction);
 }
 
-ISubOperation::TPtr DropIndexImplTable(TOperationContext& /*context*/, const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId) {
+ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId, bool& rejected) {
     TPath implTable = index.Child(name);
     Y_ABORT_UNLESS(implTable->PathId == pathId);
     Y_ABORT_UNLESS(implTable.LeafName() == name);
@@ -41,8 +43,10 @@ ISubOperation::TPtr DropIndexImplTable(TOperationContext& /*context*/, const TPa
         .NotUnderDeleting()
         .NotUnderOperation();
     if (!checks) {
-        return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        rejected = true;
+        return CreateReject(nextId, checks.GetStatus(), checks.GetError());
     }
+    rejected = false;
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
     auto operation = transaction.MutableDrop();
     operation->SetName(name);
@@ -69,7 +73,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         op->SetBuildIndexId(config.GetBuildIndexId());
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
-            PathIdFromPathId(index.Base()->PathId, op->MutableOutcome()->MutableApply()->MutableIndexPathId());
+            index.Base()->PathId.ToProto(op->MutableOutcome()->MutableApply()->MutableIndexPathId());
         }
 
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
@@ -92,8 +96,13 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto& indexImplTableName = indexChildItems.first;
             const auto partId = NextPartId(nextId, result);
-            if (NTableIndex::IsTmpImplTable(indexImplTableName)) {
-                result.push_back(DropIndexImplTable(context, index, nextId, partId, indexImplTableName, indexChildItems.second));
+            if (NTableIndex::IsBuildImplTable(indexImplTableName)) {
+                bool rejected = false;
+                auto op = DropIndexImplTable(index, nextId, partId, indexImplTableName, indexChildItems.second, rejected);
+                if (rejected) {
+                    return {std::move(op)};
+                }
+                result.push_back(std::move(op));
             } else {
                 result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second));
             }
@@ -123,7 +132,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
 
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
-            PathIdFromPathId(index.Base()->PathId, op->MutableOutcome()->MutableCancel()->MutableIndexPathId());
+            index.Base()->PathId.ToProto(op->MutableOutcome()->MutableCancel()->MutableIndexPathId());
         }
 
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
@@ -143,7 +152,12 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto partId = NextPartId(nextId, result);
-            result.push_back(DropIndexImplTable(context, index, nextId, partId, indexChildItems.first, indexChildItems.second));
+            bool rejected = false;
+            auto op = DropIndexImplTable(index, nextId, partId, indexChildItems.first, indexChildItems.second, rejected);
+            if (rejected) {
+                return {std::move(op)};
+            }
+            result.push_back(std::move(op));
         }
     }
 

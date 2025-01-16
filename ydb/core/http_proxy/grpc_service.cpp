@@ -148,19 +148,6 @@ void TGRpcDiscoveryService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrp
     SetupIncomingRequests(std::move(logger));
 }
 
-void TGRpcDiscoveryService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter *limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcDiscoveryService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcDiscoveryService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
 void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
 #ifdef ADD_REQUEST

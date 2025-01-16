@@ -1,8 +1,6 @@
 IF (OS_LINUX AND NOT WITH_VALGRIND)
     UNITTEST()
 
-    TIMEOUT(1200)
-
     SIZE(LARGE)
 
     TAG(ya:fat)

@@ -1,0 +1,9 @@
+diff --git a/Configurations/10-main.conf b/Configurations/10-main.conf
+index 930f2d3..a9994d1 100644
+--- a/Configurations/10-main.conf
++++ b/Configurations/10-main.conf
+@@ -650,3 +650,3 @@ my %targets = (
+         thread_scheme    => "pthreads",
+-        dso_scheme       => "dlfcn",
++        dso_scheme       => "none",
+         shared_target    => "linux-shared",

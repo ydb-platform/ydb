@@ -4,12 +4,12 @@
 
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
@@ -163,6 +163,10 @@ private:
             case TKikimrKey::Type::PGObject:
                 return TStatus::Ok;
             case TKikimrKey::Type::Replication:
+                return TStatus::Ok;
+            case TKikimrKey::Type::BackupCollection:
+                return TStatus::Ok;
+            case TKikimrKey::Type::Sequence:
                 return TStatus::Ok;
         }
 
@@ -332,12 +336,16 @@ public:
                 tableDesc->Metadata = res.Metadata;
 
                 bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
-                YQL_ENSURE(res.Metadata->Indexes.size() == res.Metadata->SecondaryGlobalIndexMetadata.size());
-                for (const auto& indexMeta : res.Metadata->SecondaryGlobalIndexMetadata) {
-                    YQL_ENSURE(indexMeta);
-                    auto& desc = SessionCtx->Tables().GetOrAddTable(indexMeta->Cluster, SessionCtx->GetDatabase(), indexMeta->Name);
-                    desc.Metadata = indexMeta;
-                    desc.Load(ctx, sysColumnsEnabled);
+                YQL_ENSURE(res.Metadata->Indexes.size() == res.Metadata->ImplTables.size());
+                for (auto implTable : res.Metadata->ImplTables) {
+                    YQL_ENSURE(implTable);
+                    do {
+                        auto nextImplTable = implTable->Next;
+                        auto& desc = SessionCtx->Tables().GetOrAddTable(implTable->Cluster, SessionCtx->GetDatabase(), implTable->Name);
+                        desc.Metadata = std::move(implTable);
+                        desc.Load(ctx, sysColumnsEnabled);
+                        implTable = std::move(nextImplTable);
+                    } while (implTable);
                 }
 
                 if (!tableDesc->Load(ctx, sysColumnsEnabled)) {
@@ -771,16 +779,17 @@ public:
                     .Repeat(TExprStep::LoadTablesMetadata)
                     .Repeat(TExprStep::RewriteIO);
 
-                const auto& query = tableDesc.Metadata->ViewPersistedData.QueryText;
+                const auto& viewData = tableDesc.Metadata->ViewPersistedData;
+
                 NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                     SessionCtx->Query().Type,
                     SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(),
                     cluster,
-                    query,
+                    viewData.QueryText,
                     SessionCtx->Config().BindingsMode,
                     GUCSettings
                 );
-                return RewriteReadFromView(node, ctx, query, settingsBuilder, Types.Modules);
+                return RewriteReadFromView(node, ctx, settingsBuilder, Types.Modules, viewData);
             }
         }
 

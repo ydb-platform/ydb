@@ -965,9 +965,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
 
         if (isUserAdmin) {
-            UNIT_ASSERT_STRING_CONTAINS(last, "account_type=admin");
+            UNIT_ASSERT_STRING_CONTAINS(last, "login_user_level=admin");
         } else {
-            UNIT_ASSERT(!last.contains("account_type=admin"));
+            UNIT_ASSERT(!last.contains("login_user_level=admin"));
         }
     }
 

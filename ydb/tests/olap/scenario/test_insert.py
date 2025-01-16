@@ -8,7 +8,7 @@ from ydb.tests.olap.scenario.helpers import (
 from helpers.thread_helper import TestThread
 from ydb import PrimitiveType
 from typing import List, Dict, Any
-from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.olap.lib.utils import get_external_param, external_param_is_true
 
 
 class TestInsert(BaseTestSet):
@@ -31,20 +31,20 @@ class TestInsert(BaseTestSet):
         for batch in data:
             sth.bulk_upsert_data(table_name, self.schema_log, batch)
 
-    def _loop_insert(self, ctx: TestContext, rows_count: int, table: str):
+    def _loop_insert(self, ctx: TestContext, rows_count: int, table: str, ignore_read_errors: bool):
         sth = ScenarioTestHelper(ctx)
         log: str = sth.get_full_path("log" + table)
         cnt: str = sth.get_full_path("cnt" + table)
         for i in range(rows_count):
-            for j in range(10):
-                try:
-                    sth.execute_query(
-                        f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)'
-                    )
-                    break
-                except Exception:
+            try:
+                sth.execute_query(
+                    yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=10
+                )
+            except Exception:
+                if ignore_read_errors:
                     pass
-            time.sleep(1)
+                else:
+                    raise
 
     def scenario_read_data_during_bulk_upsert(self, ctx: TestContext):
         sth = ScenarioTestHelper(ctx)
@@ -53,12 +53,13 @@ class TestInsert(BaseTestSet):
         batches_count = int(get_external_param("batches_count", "10"))
         rows_count = int(get_external_param("rows_count", "1000"))
         inserts_count = int(get_external_param("inserts_count", "200"))
-        table_count = int(get_external_param("table_count", "1"))
-        for table in range(table_count):
+        tables_count = int(get_external_param("tables_count", "1"))
+        ignore_read_errors = external_param_is_true("ignore_read_errors")
+        for table in range(tables_count):
             sth.execute_scheme_query(
                 CreateTable(cnt_table_name + str(table)).with_schema(self.schema_cnt)
             )
-        for table in range(table_count):
+        for table in range(tables_count):
             sth.execute_scheme_query(
                 CreateTable(log_table_name + str(table)).with_schema(self.schema_log)
             )
@@ -71,10 +72,10 @@ class TestInsert(BaseTestSet):
 
         thread1 = []
         thread2 = []
-        for table in range(table_count):
+        for table in range(tables_count):
             thread1.append(TestThread(target=self._loop_upsert, args=[ctx, data, str(table)]))
-        for table in range(table_count):
-            thread2.append(TestThread(target=self._loop_insert, args=[ctx, inserts_count, str(table)]))
+        for table in range(tables_count):
+            thread2.append(TestThread(target=self._loop_insert, args=[ctx, inserts_count, str(table), ignore_read_errors]))
 
         for thread in thread1:
             thread.start()
@@ -88,22 +89,23 @@ class TestInsert(BaseTestSet):
         for thread in thread1:
             thread.join()
 
-        cnt_table_name0 = cnt_table_name + "0"
-        rows: int = sth.get_table_rows_count(cnt_table_name0)
-        assert rows == inserts_count
-        scan_result = sth.execute_scan_query(
-            f"SELECT key, c FROM `{sth.get_full_path(cnt_table_name0)}` ORDER BY key"
-        )
-        for i in range(rows):
-            if scan_result.result_set.rows[i]["key"] != i:
-                assert False, f"{i} ?= {scan_result.result_set.rows[i]['key']}"
+        for table in range(tables_count):
+            cnt_table_name0 = cnt_table_name + str(table)
+            rows: int = sth.get_table_rows_count(cnt_table_name0)
+            assert rows == inserts_count
+            scan_result = sth.execute_scan_query(
+                f"SELECT key, c FROM `{sth.get_full_path(cnt_table_name0)}` ORDER BY key"
+            )
+            for i in range(rows):
+                if scan_result.result_set.rows[i]["key"] != i:
+                    assert False, f"{i} ?= {scan_result.result_set.rows[i]['key']}"
 
-        log_table_name0 = log_table_name + "0"
-        rows: int = sth.get_table_rows_count(log_table_name0)
-        assert rows == rows_count * batches_count
-        scan_result = sth.execute_scan_query(
-            f"SELECT key FROM `{sth.get_full_path(log_table_name0)}` ORDER BY key"
-        )
-        for i in range(rows):
-            if scan_result.result_set.rows[i]["key"] != i:
-                assert False, f"{i} ?= {scan_result.result_set.rows[i]['key']}"
+            log_table_name0 = log_table_name + str(table)
+            rows: int = sth.get_table_rows_count(log_table_name0)
+            assert rows == rows_count * batches_count
+            scan_result = sth.execute_scan_query(
+                f"SELECT key FROM `{sth.get_full_path(log_table_name0)}` ORDER BY key"
+            )
+            for i in range(rows):
+                if scan_result.result_set.rows[i]["key"] != i:
+                    assert False, f"{i} ?= {scan_result.result_set.rows[i]['key']}"

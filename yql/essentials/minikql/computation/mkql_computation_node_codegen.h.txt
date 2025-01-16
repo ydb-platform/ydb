@@ -92,6 +92,8 @@ using NYql::GetMethodIndex;
 using namespace llvm;
 
 Type* GetCompContextType(LLVMContext &context);
+Type* GetStringRefType(LLVMContext &context);
+Type* GetSourcePosType(LLVMContext &context);
 
 class DISubprogramAnnotator;
 
@@ -158,7 +160,7 @@ public:
     virtual Value* CreateSwapValue(const TCodegenContext& ctx, BasicBlock*& block, Value* value) const = 0;
     virtual void CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
 
-    using TValueBuilder = std::function<llvm::Value * (const TCodegenContext &)>;
+    using TValueBuilder = std::function<std::pair<llvm::Value*,llvm::Type*> (const TCodegenContext &)>;
     virtual void SetValueBuilder(TValueBuilder valueBuilder) = 0;
 
     using TValueGetterBuilder = std::function<llvm::Function * (const TCodegenContext &)>;
@@ -170,8 +172,6 @@ public:
     virtual ~ICodegeneratorRunNode() {}
     virtual void CreateRun(const TCodegenContext& ctx, BasicBlock*& block, Value* result, Value* args) const = 0;
 };
-
-Value* WrapArgumentForWindows(Value* arg, const TCodegenContext& ctx, BasicBlock* block);
 
 Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
 
@@ -233,7 +233,8 @@ void AddRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block);
 void UnRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block);
 void CleanupBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block);
 
-void SafeUnRefUnboxed(Value* pointer, const TCodegenContext& ctx, BasicBlock*& block);
+void SafeUnRefUnboxedOne(Value* pointer, const TCodegenContext& ctx, BasicBlock*& block);
+void SafeUnRefUnboxedArray(Value* pointer, ArrayType* arrayType, const TCodegenContext& ctx, BasicBlock*& block);
 
 void ValueAddRef(EValueRepresentation kind, Value* pointer, const TCodegenContext& ctx, BasicBlock*& block);
 void ValueUnRef(EValueRepresentation kind, Value* pointer, const TCodegenContext& ctx, BasicBlock*& block);
@@ -1195,14 +1196,14 @@ ConstantInt* GetYield(LLVMContext &context);
 
 ConstantInt* GetConstant(ui64 value, LLVMContext &context);
 
-Value* IsExists(Value* value, BasicBlock* block);
-Value* IsEmpty(Value* value, BasicBlock* block);
-Value* IsInvalid(Value* value, BasicBlock* block);
-Value* IsValid(Value* value, BasicBlock* block);
-Value* IsFinish(Value* value, BasicBlock* block);
-Value* IsYield(Value* value, BasicBlock* block);
-Value* IsSpecial(Value* value, BasicBlock* block);
-Value* HasValue(Value* value, BasicBlock* block);
+Value* IsExists(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsEmpty(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsInvalid(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsValid(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsFinish(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsYield(Value* value, BasicBlock* block, LLVMContext &context);
+Value* IsSpecial(Value* value, BasicBlock* block, LLVMContext &context);
+Value* HasValue(Value* value, BasicBlock* block, LLVMContext &context);
 
 Value* GenNewArray(const TCodegenContext& ctx, Value* size, Value* items, BasicBlock* block);
 

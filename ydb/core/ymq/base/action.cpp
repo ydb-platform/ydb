@@ -51,6 +51,9 @@ static const TActionProps ActionProps[] = {
     {"ListPermissions",              "list_permissions",                EAction::ListPermissions,               FOR_USER | FAST,                        EAction::ListPermissions},
     {"ListDeadLetterSourceQueues",   "list_dead_letter_source_queues",  EAction::ListDeadLetterSourceQueues,    FOR_QUEUE | FAST,                       EAction::ListDeadLetterSourceQueues},
     {"CountQueues",                  "count_queues",                    EAction::CountQueues,                   FOR_USER | FAST | PRIVATE,              EAction::CountQueues},
+    {"ListQueueTags",                "list_queue_tags",                 EAction::ListQueueTags,                 FOR_QUEUE | YMQ_FOR_QUEUE | FAST,       EAction::ListQueueTags},
+    {"TagQueue",                     "tag_queue",                       EAction::TagQueue,                      FOR_QUEUE | YMQ_FOR_QUEUE | FAST,       EAction::TagQueue},
+    {"UntagQueue",                   "untag_queue",                     EAction::UntagQueue,                    FOR_QUEUE | YMQ_FOR_QUEUE | FAST,       EAction::UntagQueue},
 };
 
 static_assert(Y_ARRAY_SIZE(ActionProps) == EAction::ActionsArraySize);
@@ -142,7 +145,7 @@ bool IsProxyAction(EAction action) {
 }
 
 
-// Actions modifying a schema 
+// Actions modifying a schema
 #define ENUMERATE_MODIFY_SCHEME_ACTIONS(macro)      \
         macro(CreateQueue)      \
         macro(CreateUser) \

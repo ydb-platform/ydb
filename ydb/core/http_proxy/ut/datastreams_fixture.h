@@ -351,7 +351,9 @@ public:
 
     NJson::TJsonMap SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        if (expectedHttpCode != 0) {
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        }
         NJson::TJsonMap json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         return json;
@@ -403,6 +405,18 @@ public:
 
     NJson::TJsonMap SetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("SetQueueAttributes", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap ListQueueTags(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("ListQueueTags", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap TagQueue(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("TagQueue", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap UntagQueue(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("UntagQueue", request, expectedHttpCode);
     }
 
     void WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes) {
@@ -534,6 +548,7 @@ private:
         ActorRuntime->SetLogPriority(NKikimrServices::HTTP_PROXY, NLog::PRI_DEBUG);
         ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
         ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        ActorRuntime->SetLogPriority(NKikimrServices::SQS, NLog::PRI_TRACE);
 
         if (enableMetering) {
             ActorRuntime->RegisterService(
@@ -572,6 +587,7 @@ private:
            "Columns { Name: \"Version\"            Type: \"Uint64\"}"
            "Columns { Name: \"DlqName\"            Type: \"Utf8\"}"
            "Columns { Name: \"TablesFormat\"       Type: \"Uint32\"}"
+           "Columns { Name: \"Tags\"               Type: \"Utf8\"}"
            "KeyColumnNames: [\"Account\", \"QueueName\"]"
         );
 
@@ -710,6 +726,7 @@ private:
            "Columns { Name: \"CustomQueueName\"  Type: \"Utf8\"}"
            "Columns { Name: \"EventTimestamp\"   Type: \"Uint64\"}"
            "Columns { Name: \"FolderId\"         Type: \"Utf8\"}"
+           "Columns { Name: \"Labels\"           Type: \"Utf8\"}"
            "KeyColumnNames: [\"Account\", \"QueueName\", \"EventType\"]"
         );
 

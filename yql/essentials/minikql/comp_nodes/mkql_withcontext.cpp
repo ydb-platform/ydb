@@ -116,7 +116,7 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(main, make, HasValue(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -139,7 +139,7 @@ public:
         CallInst::Create(attachFuncType, attachFuncPtr, { stateArg }, "", block);
 
         const auto value = GetNodeValue(Flow, ctx, block);
-        const auto finish = IsFinish(value, block);
+        const auto finish = IsFinish(value, block, context);
 
         const auto detachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Detach));
         const auto detachFuncType = FunctionType::get(Type::getVoidTy(context), { statePtrType, finish->getType() }, false);
@@ -198,7 +198,7 @@ public:
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(main, make, HasValue(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));

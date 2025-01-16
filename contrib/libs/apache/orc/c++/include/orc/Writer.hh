@@ -55,7 +55,7 @@ namespace orc {
    */
   class WriterOptions {
    private:
-    std::unique_ptr<WriterOptionsPrivate> privateBits;
+    std::unique_ptr<WriterOptionsPrivate> privateBits_;
 
    public:
     WriterOptions();
@@ -277,6 +277,32 @@ namespace orc {
      * @return if not set, return default value which is 1 MB.
      */
     uint64_t getOutputBufferCapacity() const;
+
+    /**
+     * Set the initial block size of original input buffer in the class CompressionStream.
+     * the input buffer is used to store raw data before compression, while the output buffer is
+     * dedicated to holding compressed data
+     */
+    WriterOptions& setMemoryBlockSize(uint64_t capacity);
+
+    /**
+     * Get the initial block size of original input buffer in the class CompressionStream.
+     * @return if not set, return default value which is 64 KB.
+     */
+    uint64_t getMemoryBlockSize() const;
+
+    /**
+     * Set whether the compression block should be aligned to row group boundary.
+     * The boolean type may not be aligned to row group boundary due to the
+     * requirement of the Boolean RLE encoder to pack input bits into bytes
+     */
+    WriterOptions& setAlignBlockBoundToRowGroup(bool alignBlockBoundToRowGroup);
+
+    /**
+     * Get if the compression block should be aligned to row group boundary.
+     * @return if not set, return default value which is false.
+     */
+    bool getAlignBlockBoundToRowGroup() const;
   };
 
   class Writer {

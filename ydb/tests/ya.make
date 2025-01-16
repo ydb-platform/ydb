@@ -9,7 +9,7 @@ RECURSE(
     sql
     sql/large
     stability
+    stress
     supp
     tools
-    workloads
 )

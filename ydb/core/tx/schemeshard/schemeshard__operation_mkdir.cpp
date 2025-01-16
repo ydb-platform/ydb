@@ -260,7 +260,7 @@ public:
         }
 
         dstPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         context.OnComplete.ActivateTx(OperationId);
 

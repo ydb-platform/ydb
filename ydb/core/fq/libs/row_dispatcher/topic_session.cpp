@@ -23,20 +23,23 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTopicSessionMetrics {
-    void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, ui32 partitionId) {
+    void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroup, ui32 partitionId) {
         TopicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
-        AllSessionsDataRate = counters->GetCounter("AllSessionsDataRate", true);
+        ReadGroup = TopicGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
+        PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
 
-        PartitionGroup = TopicGroup->GetSubgroup("partition", ToString(partitionId));
+        AllSessionsDataRate = ReadGroup->GetCounter("AllSessionsDataRate", true);
         InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");
         InFlySubscribe = PartitionGroup->GetCounter("InFlySubscribe");
         ReconnectRate = PartitionGroup->GetCounter("ReconnectRate", true);
-        RestartSessionByOffsets = counters->GetCounter("RestartSessionByOffsets", true);
+        RestartSessionByOffsets = PartitionGroup->GetCounter("RestartSessionByOffsets", true);
         SessionDataRate = PartitionGroup->GetCounter("SessionDataRate", true);
         WaitEventTimeMs = PartitionGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(13, 2, 1)); // ~ 1ms -> ~ 8s
+        UnreadBytes = PartitionGroup->GetCounter("UnreadBytes");
     }
 
     ::NMonitoring::TDynamicCounterPtr TopicGroup;
+    ::NMonitoring::TDynamicCounterPtr ReadGroup;
     ::NMonitoring::TDynamicCounterPtr PartitionGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
@@ -45,6 +48,7 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr SessionDataRate;
     ::NMonitoring::THistogramPtr WaitEventTimeMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr AllSessionsDataRate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr UnreadBytes;
 };
 
 struct TEvPrivate {
@@ -104,9 +108,9 @@ private:
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
             auto queryGroup = Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
-            auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
-            FilteredDataRate = topicGroup->GetCounter("FilteredDataRate", true);
-            RestartSessionByOffsetsByQuery = counters->GetCounter("RestartSessionByOffsetsByQuery", true);
+            auto readSubGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
+            FilteredDataRate = readSubGroup->GetCounter("FilteredDataRate", true);
+            RestartSessionByOffsetsByQuery = readSubGroup->GetCounter("RestartSessionByOffsetsByQuery", true);
         }
 
         ~TClientsInfo() {
@@ -160,6 +164,7 @@ private:
             UnreadBytes += rowSize;
             Self.UnreadBytes += rowSize;
             Self.SendDataArrived(*this);
+            Self.Metrics.UnreadBytes->Add(rowSize);
         }
 
         void UpdateClientOffset(ui64 offset) override {
@@ -302,6 +307,7 @@ private:
     bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     TMaybe<ui64> GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings);
     void SendSessionError(TActorId readActorId, TStatus status);
+    void RestartSessionIfOldestClient(const TClientsInfo& info);
 
 private:
 
@@ -364,7 +370,7 @@ TTopicSession::TTopicSession(
 
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
-    Metrics.Init(Counters, TopicPath, PartitionId);
+    Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
         << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");
@@ -655,6 +661,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
     } while(!buffer.empty());
 
     UnreadBytes -= info.UnreadBytes;
+    Metrics.UnreadBytes->Sub(info.UnreadBytes);
     info.UnreadRows = 0;
     info.UnreadBytes = 0;
 
@@ -717,11 +724,14 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong ClientSettings");
+        LOG_ROW_DISPATCHER_WARN("Ignore TEvStopSession from " << ev->Sender << ", no client");
         return;
     }
     auto& info = *it->second;
+    RestartSessionIfOldestClient(info);
+
     UnreadBytes -= info.UnreadBytes;
+    Metrics.UnreadBytes->Sub(info.UnreadBytes);
     if (const auto formatIt = FormatHandlers.find(info.HandlerSettings); formatIt != FormatHandlers.end()) {
         formatIt->second->RemoveClient(info.GetClientId());
         if (!formatIt->second->HasClients()) {
@@ -733,6 +743,41 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
         StopReadSession();
     }
     SubscribeOnNextEvent();
+}
+
+void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
+    // if we read historical data (because of this client), then we restart the session.
+
+    if (!ReadSession || !info.NextMessageOffset) {
+        return;
+    }
+    TMaybe<ui64> minMessageOffset;
+    for (auto& [readActorId, clientPtr] : Clients) {
+        if (info.ReadActorId == readActorId || !clientPtr->NextMessageOffset) {
+            continue;
+        }
+        if (!minMessageOffset) {
+            minMessageOffset = clientPtr->NextMessageOffset;
+            continue;
+        }
+        minMessageOffset = std::min(minMessageOffset, clientPtr->NextMessageOffset);
+    }
+    if (!minMessageOffset) {
+        return;
+    }
+
+    if (info.NextMessageOffset >= minMessageOffset) {
+        return;
+    }
+    LOG_ROW_DISPATCHER_INFO("Client (on StopSession) has less offset (" << info.NextMessageOffset << ") than others clients (" << minMessageOffset << "), stop (restart) topic session");
+    Metrics.RestartSessionByOffsets->Inc();
+    ++RestartSessionByOffsets;
+    info.RestartSessionByOffsetsByQuery->Inc();
+    StopReadSession();
+
+    if (!ReadSession) {
+        Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
+    }
 }
 
 void TTopicSession::FatalError(TStatus status) {

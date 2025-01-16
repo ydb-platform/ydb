@@ -1170,6 +1170,54 @@ void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath
     }
 }
 
+void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup) {
+    parentPath.Base()->IncAliveChildrenPrivate(isBackup);
+    if (parentPath.Base()->GetAliveChildren() == 1 && !parentPath.Base()->IsDomainRoot()) {
+        auto grandParent = parentPath.Parent();
+        if (grandParent.Base()->IsLikeDirectory()) {
+            ++grandParent.Base()->DirAlterVersion;
+            context.MemChanges.GrabPath(context.SS, grandParent.Base()->PathId);
+            context.DbChanges.PersistPath(grandParent.Base()->PathId);
+        }
+
+        if (grandParent.IsActive()) {
+            context.SS->ClearDescribePathCaches(grandParent.Base());
+            context.OnComplete.PublishToSchemeBoard(opId, grandParent->PathId);
+        }
+    }
+}
+
+void IncAliveChildrenDirect(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup) {
+    parentPath.Base()->IncAliveChildrenPrivate(isBackup);
+    if (parentPath.Base()->GetAliveChildren() == 1 && !parentPath.Base()->IsDomainRoot()) {
+        auto grandParent = parentPath.Parent();
+        if (grandParent.Base()->IsLikeDirectory()) {
+            ++grandParent.Base()->DirAlterVersion;
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->PersistPathDirAlterVersion(db, grandParent.Base());
+        }
+
+        if (grandParent.IsActive()) {
+            context.SS->ClearDescribePathCaches(grandParent.Base());
+            context.OnComplete.PublishToSchemeBoard(opId, grandParent->PathId);
+        }
+    }
+}
+
+void DecAliveChildrenDirect(const TOperationId& opId, TPathElement::TPtr parentPath, TOperationContext& context, bool isBackup) {
+    parentPath->DecAliveChildrenPrivate(isBackup);
+    if (parentPath->GetAliveChildren() == 0 && !parentPath->IsDomainRoot()) {
+        auto grandParentDir = context.SS->PathsById.at(parentPath->ParentPathId);
+        if (grandParentDir->IsLikeDirectory()) {
+            ++grandParentDir->DirAlterVersion;
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->PersistPathDirAlterVersion(db, grandParentDir);
+            context.SS->ClearDescribePathCaches(grandParentDir);
+            context.OnComplete.PublishToSchemeBoard(opId, grandParentDir->PathId);
+        }
+    }
+}
+
 NKikimrSchemeOp::TModifyScheme MoveTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst) {
     NKikimrSchemeOp::TModifyScheme scheme;
 

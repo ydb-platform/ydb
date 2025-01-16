@@ -71,7 +71,6 @@ SRCS(
     concurrency/invoker_alarm.cpp
     concurrency/invoker_queue.cpp
     concurrency/lease_manager.cpp
-    concurrency/new_fair_share_thread_pool.cpp
     concurrency/nonblocking_batcher.cpp
     concurrency/notify_manager.cpp
     concurrency/periodic_executor.cpp
@@ -300,6 +299,7 @@ SRCS(
     ytree/ypath_service.cpp
     ytree/yson_struct.cpp
     ytree/yson_struct_detail.cpp
+    ytree/yson_struct_update.cpp
 
     json/config.cpp
     json/json_callbacks.cpp

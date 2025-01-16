@@ -36,11 +36,11 @@ using ::NThreading::NewPromise;
 
 TBatchRequest::TBatchRequest(const TTransactionId& defaultTransaction, ::TIntrusivePtr<TClient> client)
     : DefaultTransaction_(defaultTransaction)
-    , Impl_(MakeIntrusive<TRawBatchRequest>(client->GetContext().Config))
+    , Impl_(client->GetRawClient()->CreateRawBatchRequest())
     , Client_(client)
 { }
 
-TBatchRequest::TBatchRequest(TRawBatchRequest* impl, ::TIntrusivePtr<TClient> client)
+TBatchRequest::TBatchRequest(IRawBatchRequest* impl, ::TIntrusivePtr<TClient> client)
     : Impl_(impl)
     , Client_(std::move(client))
 { }
@@ -189,7 +189,7 @@ TFuture<TCheckPermissionResponse> TBatchRequest::CheckPermission(
 
 void TBatchRequest::ExecuteBatch(const TExecuteBatchOptions& options)
 {
-    NYT::NDetail::ExecuteBatch(Client_->GetRetryPolicy()->CreatePolicyForGenericRequest(), Client_->GetContext(), *Impl_, options);
+    Impl_->ExecuteBatch(options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

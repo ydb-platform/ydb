@@ -132,7 +132,7 @@ public:
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside();
-        parentDir->DecAliveChildren();
+        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
 
         context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);

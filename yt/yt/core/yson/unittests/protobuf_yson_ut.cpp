@@ -2113,7 +2113,7 @@ void TestScalarByYPath(const TYPath& path, FieldDescriptor::Type type)
     EXPECT_EQ(path, result.HeadPath);
     EXPECT_EQ("", result.TailPath);
     EXPECT_EQ(
-        static_cast<TProtobufScalarElement::TType>(type),
+        static_cast<TProtobufElementType>(type),
         std::get<std::unique_ptr<TProtobufScalarElement>>(result.Element)->Type);
 }
 

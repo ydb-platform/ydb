@@ -335,6 +335,8 @@ public:
 
     ui64 GenerateTimestamp() override;
 
+    IRawBatchRequestPtr CreateRawBatchRequest() override;
+
 private:
     const TClientContext Context_;
 };

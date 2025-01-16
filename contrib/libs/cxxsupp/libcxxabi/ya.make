@@ -47,6 +47,7 @@ SRCS(
     src/cxa_guard.cpp
     src/cxa_handlers.cpp
     src/cxa_personality.cpp
+    src/cxa_thread_atexit.cpp
     src/cxa_vector.cpp
     src/cxa_virtual.cpp
     src/fallback_malloc.cpp
@@ -57,21 +58,22 @@ SRCS(
     src/stdlib_typeinfo.cpp
 )
 
-SRC_C_PIC(
-    src/cxa_thread_atexit.cpp
-    -fno-lto
-)
-
-IF (OS_EMSCRIPTEN AND ARCH_WASM32)
+IF (NOT MUSL)
     CFLAGS(
-        -D_LIBCPP_SAFE_STATIC=
-        -D_LIBCXXABI_DTOR_FUNC=
+        -DHAVE___CXA_THREAD_ATEXIT_IMPL
     )
-ELSEIF (OS_EMSCRIPTEN AND NOT ARCH_WASM32)
+ENDIF()
+
+IF (OS_EMSCRIPTEN AND ARCH_WASM64)
     CFLAGS(
         -D_LIBCPP_SAFE_STATIC=
         -D_LIBCXXABI_DTOR_FUNC=
         -D__USING_WASM_EXCEPTIONS__
+    )
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32)
+    CFLAGS(
+        -D_LIBCPP_SAFE_STATIC=
+        -D_LIBCXXABI_DTOR_FUNC=
     )
 ENDIF()
 

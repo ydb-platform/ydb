@@ -316,9 +316,11 @@ protected:
         if (auto maybe = TExprBase(rightInput).Maybe<TCoExtractMembers>()) {
             rightInput = maybe.Cast().Input().Ptr();
         }
+        auto leftLabel = join.LeftLabel().Maybe<NNodes::TCoAtom>() ? join.LeftLabel().Cast<NNodes::TCoAtom>().Ptr() : ctx.NewAtom(pos, "");
+        Y_ENSURE(join.RightLabel().Maybe<NNodes::TCoAtom>());
         auto cn = Build<TDqCnStreamLookup>(ctx, pos)
             .Output(left.Output().Cast())
-            .LeftLabel(join.LeftLabel().Cast<NNodes::TCoAtom>())
+            .LeftLabel(leftLabel)
             .RightInput(rightInput)
             .RightLabel(join.RightLabel().Cast<NNodes::TCoAtom>())
             .JoinKeys(join.JoinKeys())

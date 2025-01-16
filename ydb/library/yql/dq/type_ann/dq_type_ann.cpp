@@ -631,7 +631,15 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         return TStatus::Error;
     }
     const auto leftRowType = GetSeqItemType(leftInputType);
+    if (!leftRowType) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), "DqCnStreamLookup: Failed to annotate left row type"));
+        return TStatus::Error;
+    }
     const auto rightRowType = GetSeqItemType(rightInput.Raw()->GetTypeAnn());
+    if (!rightRowType) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), "DqCnStreamLookup: Failed to annotate right row type"));
+        return TStatus::Error;
+    }
     const auto outputRowType = GetDqJoinResultType<true>(
         input->Pos(),
         *leftRowType->Cast<TStructExprType>(),
@@ -642,6 +650,10 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         cnStreamLookup.JoinKeys(),
         ctx
     );
+    if (!outputRowType) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), "DqCnStreamLookup: Failed to annotate output row type"));
+        return TStatus::Error;
+    }
     if (!EnsureConvertibleTo<ui64>(cnStreamLookup.MaxCachedRows().Ref(), "MaxCachedRows", ctx) ||
         !EnsureConvertibleTo<ui64>(cnStreamLookup.TTL().Ref(), "TTL", ctx) ||
         !EnsureConvertibleTo<ui64>(cnStreamLookup.MaxDelayedRows().Ref(), "MaxDelayedRows", ctx)) {

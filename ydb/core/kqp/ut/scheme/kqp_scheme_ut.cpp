@@ -7620,7 +7620,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer1`
                   FROM `/Root/topic` TO `/Root/table` USING ($x) -> {
-                    RETURN $x.meta.body;
+                    RETURN $x;
                   }
                   WITH (
                     ENDPOINT = "%s",

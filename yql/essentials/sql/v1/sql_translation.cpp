@@ -5100,16 +5100,14 @@ bool TSqlTranslation::ParseViewQuery(
 namespace {
 
 static size_t GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token) {
-    if (1 == token.line()) {
-        return 0;
-    }
+    size_t position = 0;
 
-    size_t position = -1;
     for (size_t line = 1; line < token.line(); ++line) {
-        position = query.find("\n", position + 1);
+        position = query.find("\n", position);
         if (position == std::string::npos) {
             return std::string::npos;
         }
+        ++position;
     }
 
     return position + token.column();
@@ -5120,7 +5118,6 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
 
     TVector<TString> statements;
     NYql::TIssues issues;
-
     if (!NSQLFormat::SplitQueryToStatements(Ctx.Query, statements, issues, Ctx.Settings)) {
         return {};
     }
@@ -5139,8 +5136,10 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
             switch (lambda.GetBlock2().GetBlock2().GetAltCase()) {
                 case TRule_lambda_TBlock2_TBlock2::AltCase::kAlt1:
                     endToken = &lambda.GetBlock2().GetBlock2().GetAlt1().GetToken3();
+                    break;
                 case TRule_lambda_TBlock2_TBlock2::AltCase::kAlt2:
                     endToken = &lambda.GetBlock2().GetBlock2().GetAlt2().GetToken3();
+                    break;
                 case TRule_lambda_TBlock2_TBlock2::AltCase::ALT_NOT_SET:
                     return {};
             }
@@ -5151,7 +5150,8 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
                 return {};
             }
             
-            result << "$__ydb_transfer_lambda = " << Ctx.Query.substr(begin, end - begin + endToken->value().size() + 1) << statementSeparator;
+            result << "$__ydb_transfer_lambda = " << Ctx.Query.substr(begin, end - begin + endToken->value().size()) << statementSeparator;
+
             return result;
         }
         case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter2: {

@@ -22,12 +22,12 @@ TString WrapYaml(const TString& yaml) {
     return out.Str();
 }
 
-TCommandConfig::TCommandConfig(std::optional<bool> overrideOnlyExplicitProfile)
+TCommandConfig::TCommandConfig(std::optional<bool> overrideOnlyExplicitProfile, bool allowEmptyDatabase)
     : TClientCommandTree("config", {}, "Dynamic config")
     , OverrideOnlyExplicitProfile(overrideOnlyExplicitProfile)
 {
-    AddCommand(std::make_unique<TCommandConfigFetch>());
-    AddCommand(std::make_unique<TCommandConfigReplace>());
+    AddCommand(std::make_unique<TCommandConfigFetch>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandConfigReplace>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
 }
 
@@ -44,8 +44,9 @@ void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
     }
 }
 
-TCommandConfigFetch::TCommandConfigFetch()
+TCommandConfigFetch::TCommandConfigFetch(bool allowEmptyDatabase)
     : TYdbCommand("fetch", {"get", "dump"}, "Fetch main dynamic-config")
+    , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
 
@@ -59,7 +60,7 @@ void TCommandConfigFetch::Config(TConfig& config) {
         .NoArgument().SetFlag(&StripMetadata);
     config.SetFreeArgsNum(0);
 
-    config.AllowEmptyDatabase = true;
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.Opts->MutuallyExclusive("all", "strip-metadata");
     config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }
@@ -120,9 +121,10 @@ int TCommandConfigFetch::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TCommandConfigReplace::TCommandConfigReplace()
+TCommandConfigReplace::TCommandConfigReplace(bool allowEmptyDatabase)
     : TYdbCommand("replace", {}, "Replace dynamic config")
     , IgnoreCheck(false)
+    , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
 
@@ -138,7 +140,7 @@ void TCommandConfigReplace::Config(TConfig& config) {
         .NoArgument().SetFlag(&AllowUnknownFields);
     config.Opts->AddLongOption("force", "Ignore metadata on config replacement")
         .NoArgument().SetFlag(&Force);
-    config.AllowEmptyDatabase = true;
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
 

@@ -311,7 +311,7 @@ void TClientCommand::RenderOneCommandDescription(
     const NColorizer::TColors& colors,
     RenderEntryType type
 ) {
-    if (Hidden) {
+    if (Hidden && type != BEGIN) {
         return;
     }
     TString prefix;

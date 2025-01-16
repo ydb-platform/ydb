@@ -11,7 +11,7 @@ TCommandCluster::TCommandCluster()
     : TClientCommandTree("cluster", {}, "Cluster-wide administration")
 {
     AddCommand(std::make_unique<TCommandClusterBootstrap>());
-    AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>());
+    AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(std::nullopt, true));
 }
 
 TCommandClusterBootstrap::TCommandClusterBootstrap()

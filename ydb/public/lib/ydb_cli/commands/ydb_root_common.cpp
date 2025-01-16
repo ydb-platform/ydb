@@ -589,7 +589,7 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
         return;
     }
 
-    if (config.Address.empty() && config.AllowEmptyAddress) {
+    if (config.Address.empty() && !config.AllowEmptyAddress) {
         throw TMisuseException() << "Missing required option 'endpoint'.";
     }
 

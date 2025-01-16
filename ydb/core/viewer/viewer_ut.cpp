@@ -1664,8 +1664,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         JsonStorage9Nodes9GroupsListingTest("v2", false, true, true, 4, 8);
     }
 
-<<<<<<< HEAD
-=======
     struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
         TFakeTicketParserActor()
             : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StFunc)
@@ -1782,7 +1780,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         return response;
     }
 
->>>>>>> 5e689da643 (fix compilation error for client.CreateUser)
     Y_UNIT_TEST(ExecuteQueryDoesntExecuteSchemeOperationsInsideTransation) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);

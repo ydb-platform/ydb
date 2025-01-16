@@ -68,11 +68,6 @@ namespace NYql::NDq {
 
         struct TEvLookupRetry : NActors::TEventLocal<TEvLookupRetry, EvRetry> {
             typedef typename THandle::TPtr TPtr;
-            explicit TEvLookupRetry(ILookupRetryState::TPtr&& retryState)
-                : RetryState(std::move(retryState))
-            {
-            }
-            ILookupRetryState::TPtr RetryState;
         };
 
     public:
@@ -104,7 +99,7 @@ namespace NYql::NDq {
             , RetryPolicy(
                     ILookupRetryPolicy::GetExponentialBackoffPolicy(
                         /* retryClassFunction */
-                        [](const NYdbGrpc::TGrpcStatus& status)  {
+                        [](const NYdbGrpc::TGrpcStatus&)  {
                                 return ERetryErrorClass::ShortRetry; // TODO tweak
                         },
                         /* minDelay */ TDuration::MilliSeconds(1),
@@ -192,9 +187,8 @@ namespace NYql::NDq {
                 [
                     actorSystem = TActivationContext::ActorSystem(),
                     selfId = SelfId(),
-                    retryState = std::move(RetryState),
-                    retryPolicy = RetryPolicy
-                ](const NConnector::TAsyncResult<NConnector::NApi::TListSplitsResponse>& asyncResult) mutable {
+                    retryState = RetryState
+                ](const NConnector::TAsyncResult<NConnector::NApi::TListSplitsResponse>& asyncResult) {
                     YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got TListSplitsResponse from Connector";
                     auto result = ExtractFromConstFuture(asyncResult);
                     if (result.Status.Ok()) {
@@ -202,7 +196,7 @@ namespace NYql::NDq {
                         auto ev = new TEvListSplitsPart(std::move(*result.Response));
                         actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
                     } else {
-                        SendRetryOrError(actorSystem, selfId, result.Status, retryPolicy, std::move(retryState));
+                        SendRetryOrError(actorSystem, selfId, result.Status, retryState);
                     }
                 });
         }
@@ -226,16 +220,15 @@ namespace NYql::NDq {
             Connector->ReadSplits(readRequest, RequestTimeout).Subscribe([
                     actorSystem = TActivationContext::ActorSystem(),
                     selfId = SelfId(),
-                    retryState = std::move(RetryState),
-                    retryPolicy = RetryPolicy
-            ](const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) mutable {
+                    retryState = RetryState
+            ](const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) {
                 YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector";
                 auto result = ExtractFromConstFuture(asyncResult);
                 if (result.Status.Ok()) {
                     auto ev = new TEvReadSplitsIterator(std::move(result.Iterator));
                     actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
                 } else {
-                    SendRetryOrError(actorSystem, selfId, result.Status, retryPolicy, std::move(retryState));
+                    SendRetryOrError(actorSystem, selfId, result.Status, retryState);
                 }
             });
         }
@@ -264,9 +257,8 @@ namespace NYql::NDq {
             actorSystem->Send(new NActors::IEventHandle(ParentId, SelfId(), errEv.release()));
         }
 
-        void Handle(TEvLookupRetry::TPtr ev) {
+        void Handle(TEvLookupRetry::TPtr) {
             auto guard = Guard(*Alloc);
-            RetryState = std::move(ev->Get()->RetryState);
             SendRequest();
         }
 
@@ -298,7 +290,7 @@ namespace NYql::NDq {
             }
 
             Request = std::move(request);
-            RetryState = RetryPolicy->CreateRetryState();
+            RetryState = std::make_shared<ILookupRetryState::TPtr>(RetryPolicy->CreateRetryState());
             SendRequest();
         }
 
@@ -316,9 +308,8 @@ namespace NYql::NDq {
             Connector->ListSplits(splitRequest, RequestTimeout).Subscribe([
                     actorSystem = TActivationContext::ActorSystem(),
                     selfId = SelfId(),
-                    retryState = std::move(RetryState),
-                    retryPolicy = RetryPolicy
-            ](const NConnector::TListSplitsStreamIteratorAsyncResult& asyncResult) mutable {
+                    retryState = RetryState
+            ](const NConnector::TListSplitsStreamIteratorAsyncResult& asyncResult) {
                 auto result = ExtractFromConstFuture(asyncResult);
                 if (result.Status.Ok()) {
                     YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got TListSplitsStreamIterator";
@@ -326,7 +317,7 @@ namespace NYql::NDq {
                     auto ev = new TEvListSplitsIterator(std::move(result.Iterator));
                     actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
                 } else {
-                    SendRetryOrError(actorSystem, selfId, result.Status, retryPolicy, std::move(retryState));
+                    SendRetryOrError(actorSystem, selfId, result.Status, retryState);
                 }
             });
             if (CpuTime) {
@@ -339,9 +330,8 @@ namespace NYql::NDq {
                 [
                    actorSystem = TActivationContext::ActorSystem(),
                    selfId = SelfId(),
-                   retryState = std::move(RetryState),
-                   retryPolicy = RetryPolicy
-                ](const NConnector::TAsyncResult<NConnector::NApi::TReadSplitsResponse>& asyncResult) mutable {
+                   retryState = RetryState
+                ](const NConnector::TAsyncResult<NConnector::NApi::TReadSplitsResponse>& asyncResult) {
                     auto result = ExtractFromConstFuture(asyncResult);
                     if (result.Status.Ok()) {
                         YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got DataChunk";
@@ -359,7 +349,7 @@ namespace NYql::NDq {
                         auto ev = new TEvReadSplitsFinished(std::move(result.Status));
                         actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
                     } else {
-                        SendRetryOrError(actorSystem, selfId, result.Status, retryPolicy, std::move(retryState));
+                        SendRetryOrError(actorSystem, selfId, result.Status, retryState);
                     }
                 });
         }
@@ -425,12 +415,9 @@ namespace NYql::NDq {
                 new TEvError(std::move(error)));
         }
 
-        static void SendRetryOrError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, ILookupRetryPolicy::TPtr retryPolicy, ILookupRetryState::TPtr&& retryState) {
+        static void SendRetryOrError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, std::shared_ptr<ILookupRetryState::TPtr> retryState) {
             if (NConnector::GrpcStatusNeedsRetry(status) || status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED) {
-                if (!retryState) {
-                    retryState = retryPolicy->CreateRetryState();
-                }
-                auto nextRetry = retryState->GetNextRetryDelay(status);
+                auto nextRetry = (*retryState)->GetNextRetryDelay(status);
                 if (nextRetry) {
                     // <<< TODO tune/tweak
                     YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;
@@ -438,7 +425,7 @@ namespace NYql::NDq {
                         // if error was deadline, retry only once
                         //retriesRemaining = 0; // TODO tune/tweak
                     }
-                    actorSystem->Schedule(*nextRetry, new IEventHandle(selfId, selfId, new TEvLookupRetry(std::move(retryState))));
+                    actorSystem->Schedule(*nextRetry, new IEventHandle(selfId, selfId, new TEvLookupRetry()));
                     return;
                 }
                 YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry count exceed limit";
@@ -534,7 +521,7 @@ namespace NYql::NDq {
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; // TODO move me to TEvReadSplitsPart
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
         ILookupRetryPolicy::TPtr RetryPolicy;
-        ILookupRetryState::TPtr RetryState;
+        std::shared_ptr<ILookupRetryState::TPtr> RetryState;
         ::NMonitoring::TDynamicCounters::TCounterPtr Count;
         ::NMonitoring::TDynamicCounters::TCounterPtr Keys;
         ::NMonitoring::TDynamicCounters::TCounterPtr ResultRows;

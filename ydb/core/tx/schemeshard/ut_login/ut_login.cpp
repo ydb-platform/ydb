@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
-    Y_UNIT_TEST(FailedLoginWithInvalidUser) {
+    Y_UNIT_TEST(FailedLoginUserUnderNameOfGroup) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -402,12 +402,32 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         CreateAlterLoginCreateGroup(runtime, ++txId, "/MyRoot", "group1");
         auto resultLogin = Login(runtime, "group1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "group1 is a group");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "User \'group1\' is not permitted to log in");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
+        }
+    }
+
+    Y_UNIT_TEST(FailedLoginWithInvalidUser) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            Cerr << describe.DebugString() << Endl;
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
         }
     }
 

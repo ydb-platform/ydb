@@ -5,7 +5,6 @@
 
 #include <ydb/library/actors/http/http.h>
 
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/export.pb.h>
 #include <ydb/core/protos/import.pb.h>
 
@@ -81,10 +80,10 @@ TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) 
 
 }  // anonymous namespace
 
-void AuditLogModifySchemeTransaction(const NKikimrSchemeOp::TModifyScheme& operation,
-                                     const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS,
-                                     const TString& peerName, const TString& userSID, const TString& sanitizedToken,
-                                     ui64 txId, const TParts& additionalParts) {
+void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operation,
+                                   NKikimrScheme::EStatus status, const TString& reason, TSchemeShard* SS,
+                                   const TString& peerName, const TString& userSID, const TString& sanitizedToken,
+                                   ui64 txId, const TParts& additionalParts) {
     auto logEntry = MakeAuditLogFragment(operation);
 
     TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
@@ -100,9 +99,9 @@ void AuditLogModifySchemeTransaction(const NKikimrSchemeOp::TModifyScheme& opera
         AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
         AUDIT_PART("operation", logEntry.Operation)
         AUDIT_PART("paths", RenderList(logEntry.Paths), !logEntry.Paths.empty())
-        AUDIT_PART("status", GeneralStatus(response.GetStatus()))
-        AUDIT_PART("detailed_status", NKikimrScheme::EStatus_Name(response.GetStatus()))
-        AUDIT_PART("reason", response.GetReason(), response.HasReason())
+        AUDIT_PART("status", GeneralStatus(status))
+        AUDIT_PART("detailed_status", NKikimrScheme::EStatus_Name(status))
+        AUDIT_PART("reason", reason, !reason.empty())
 
         for (const auto& [name, value] : additionalParts) {
             AUDIT_PART(name, (!value.empty() ? value : EmptyValue))
@@ -144,12 +143,14 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
     // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
     // (even if it was packed into a single TxProxy transaction with some other operations).
     const auto txId = request.GetTxId();
+    const auto status = response.GetStatus();
+    const auto reason = response.HasReason() ? response.GetReason() : TString();
     for (const auto& operation : request.GetTransaction()) {
         const auto type = operation.GetOperationType();
         if (NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin == type) {
             continue;
         }
-        AuditLogModifySchemeTransaction(operation, response, SS, peerName, userSID, sanitizedToken, txId, TParts());
+        AuditLogModifySchemeOperation(operation, status, reason, SS, peerName, userSID, sanitizedToken, txId, TParts());
     }
 }
 

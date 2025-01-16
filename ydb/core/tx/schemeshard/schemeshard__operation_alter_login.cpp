@@ -35,8 +35,6 @@ public:
                     auto response = context.SS->LoginProvider.CreateUser(
                         {.User = createUser.GetUser(), .Password = createUser.GetPassword()});
 
-                    AddIsUserAdmin(createUser.GetUser(), context.SS->LoginProvider, additionalParts);
-
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
@@ -54,14 +52,13 @@ public:
                             }
                         }
                         result->SetStatus(NKikimrScheme::StatusSuccess);
+
+                        AddIsUserAdmin(createUser.GetUser(), context.SS->LoginProvider, additionalParts);
                     }
                     break;
                 }
                 case NKikimrSchemeOp::TAlterLogin::kModifyUser: {
                     const auto& modifyUser = alterLogin.GetModifyUser();
-
-                    AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);
-
                     auto response = context.SS->LoginProvider.ModifyUser({.User = modifyUser.GetUser(), .Password = modifyUser.GetPassword()});
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
@@ -69,19 +66,27 @@ public:
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
+
+                        AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);
+                        AddLastSuccessfulLogin(sid, additionalParts);
                     }
                     break;
                 }
                 case NKikimrSchemeOp::TAlterLogin::kRemoveUser: {
                     const auto& removeUser = alterLogin.GetRemoveUser();
 
-                    AddIsUserAdmin(removeUser.GetUser(), context.SS->LoginProvider, additionalParts);
+                    auto sid = context.SS->LoginProvider.Sids.find(removeUser.GetUser());
+                    if (context.SS->LoginProvider.Sids.end() != sid) {
+                        AddLastSuccessfulLogin(sid->second, additionalParts);
+                    }
 
                     auto response = RemoveUser(context, removeUser, db);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         result->SetStatus(NKikimrScheme::StatusSuccess);
+
+                        AddIsUserAdmin(removeUser.GetUser(), context.SS->LoginProvider, additionalParts);
                     }
                     break;
                 }
@@ -182,7 +187,9 @@ public:
                 userSID = context.UserToken->GetUserSID();
                 sanitizedToken = context.UserToken->GetSanitizedToken();
             }
-            AuditLogModifySchemeTransaction(Transaction, result->Record, context.SS, context.PeerName, userSID, sanitizedToken, ui64(txId), additionalParts);
+            const auto status = result->Record.GetStatus();
+            const auto reason = result->Record.HasReason() ? result->Record.GetReason() : TString();
+            AuditLogModifySchemeOperation(Transaction, status, reason, context.SS, context.PeerName, userSID, sanitizedToken, ui64(txId), additionalParts);
         }
 
         if (result->Record.GetStatus() == NKikimrScheme::StatusSuccess) {
@@ -282,7 +289,13 @@ public:
         }
 
         if (isAdmin) {
-            additionalParts.emplace_back("account_type", "admin");
+            additionalParts.emplace_back("login_user_level", "admin");
+        }
+    }
+
+    void AddLastSuccessfulLogin(NLogin::TLoginProvider::TSidRecord& sid, TParts& additionalParts) {
+        if (sid.LastSuccessfulLogin) {
+            additionalParts.emplace_back("last_login", TInstant::FromValue(sid.LastSuccessfulLogin).ToString());
         }
     }
 };

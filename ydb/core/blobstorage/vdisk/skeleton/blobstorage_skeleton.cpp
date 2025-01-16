@@ -1689,7 +1689,7 @@ namespace NKikimr {
             if (VDiskCompactionState && !results.empty()) {
                 VDiskCompactionState->Logged(ctx, results.back().Lsn);
             }
-            if (ev->Get()->Status != NKikimrProto::CORRUPTED) {
+            if (ev->Get()->StatusFlags & ui32(NKikimrBlobStorage::StatusIsValid)) {
                 i64 count = ev->Get()->LogChunkCount;
                 OverloadHandler->SetLogChunkCount(count >= 0 ? (ui32)count : 0);
             }

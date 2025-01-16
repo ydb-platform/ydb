@@ -1418,7 +1418,7 @@ message TImmediateControlsConfig {
             Description: "Maximum pdisk log chunk count - throttling speed is zero",
             MinValue: 1,
             MaxValue: 1000,
-            DefaultValue: 150 }];
+            DefaultValue: 130 }];
     }
 
     message TTabletControls {

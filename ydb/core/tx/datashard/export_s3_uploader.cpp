@@ -223,7 +223,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Become(&TThis::StateUploadPermissions);
     }
 
-    void PutDescription(const google::protobuf::Message& desc, const TString& key, TString& checksum, const auto& stateFunc) {
+    template<typename T>
+    void PutDescription(const google::protobuf::Message& desc, const TString& key, TString& checksum, T stateFunc) {
         google::protobuf::TextFormat::PrintToString(desc, &Buffer);
         if (EnableChecksums) {
             checksum = ComputeChecksum(Buffer);

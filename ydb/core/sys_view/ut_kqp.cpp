@@ -2593,6 +2593,102 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }
+
+    Y_UNIT_TEST(AuthPermissions_Selects) {
+        TTestEnv env;
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
+        CreateTenantsAndTables(env, true);
+        TTableClient client(env.GetDriver());
+
+        env.GetClient().CreateUser("/Root", "user1", "password1");
+        env.GetClient().CreateUser("/Root", "user2", "password2");
+
+        env.GetClient().MkDir("/Root", "Dir1/SubDir1");
+        env.GetClient().MkDir("/Root", "Dir1/SubDir2");
+
+        {
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+            env.GetClient().ModifyACL("/", "Root", acl.SerializeAsString());
+            env.GetClient().ModifyACL("/Root", "Dir1", acl.SerializeAsString());
+        }
+        {
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user2");
+            env.GetClient().ModifyACL("/Root", "Dir1", acl.SerializeAsString());
+            env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
+        }
+        {
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user2");
+            env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
+        }
+        
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_permissions`
+                WHERE Path = "/Root/Dir1"
+            )").GetValueSync();
+
+            // TODO:
+            NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "TableRange.From filter is not supported");
+
+            // auto expected = R"([
+            //     [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
+            //     [["/Root/Dir1"];["ydb.granular.select_row"];["user2"]];
+            // ])";
+
+            // NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_effective_permissions`
+                WHERE Path = "/Root/Dir1"
+            )").GetValueSync();
+
+            // TODO:
+            NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "TableRange.From filter is not supported");
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_permissions`
+                WHERE Sid = "user2"
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["/Root/Dir1"];["ydb.granular.select_row"];["user2"]];
+                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
+                [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user2"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_effective_permissions`
+                WHERE Sid = "user2"
+            )").GetValueSync();
+
+            // TODO: make result unique
+            auto expected = R"([
+                [["/Root/Dir1"];["ydb.granular.select_row"];["user2"]];
+                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
+                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
+                [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user2"]];
+                [["/Root/Dir1/SubDir2"];["ydb.granular.select_row"];["user2"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+    }
 }
 
 } // NSysView

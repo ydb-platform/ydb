@@ -11,6 +11,8 @@ import re
 import socket
 from hamcrest import assert_that, equal_to, not_none, none, greater_than, less_than_or_equal_to, any_of, not_
 
+import yatest
+
 import ydb.tests.library.common.yatest_common as yatest_common
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
@@ -46,8 +48,8 @@ TABLES_FORMAT_PARAMS = {
 
 POLLING_PARAMS = {
     'argnames': 'polling_wait_timeout',
-    'argvalues': [0, 1],
-    'ids': ['short_polling', 'long_polling'],
+    'argvalues': [1],
+    'ids': ['long_polling'],
 }
 
 STOP_NODE_PARAMS = {

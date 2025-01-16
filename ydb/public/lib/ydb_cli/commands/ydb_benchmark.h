@@ -11,6 +11,7 @@ class TWorkloadCommandBenchmark final: public TWorkloadCommandBase {
 public:
     TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
     virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
 
 protected:
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;

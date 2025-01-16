@@ -81,7 +81,7 @@ struct TQueryBenchmarkDeadline {
 struct TQueryBenchmarkSettings {
     TQueryBenchmarkDeadline Deadline;
     TMaybe<TString> StatsFileName;
-    bool WithProgress;
+    bool WithProgress = false;
 };
 
 TString FullTablePath(const TString& database, const TString& table);

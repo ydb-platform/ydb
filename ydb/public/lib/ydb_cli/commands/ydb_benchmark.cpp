@@ -38,10 +38,12 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("plan", "Query plans report file name")
         .DefaultValue("")
         .StoreResult(&PlanFileName);
-    config.Opts->AddLongOption("full-stats", "Full stats report file name")
+    config.Opts->AddLongOption("full-stats", "Full stats report file name. "
+            "Requires generic query executer type.")
         .DefaultValue("")
         .StoreResult(&FullStatsFileName);
-    config.Opts->AddLongOption("print-progress", "Print progress of query execution.")
+    config.Opts->AddLongOption("print-progress", "Print progress of query execution. "
+            "Requires generic query executer type.")
         .StoreTrue(&PrintProgress);
     config.Opts->AddLongOption("query-settings")
         .AppendTo(&QuerySettings).Hidden();
@@ -98,6 +100,18 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request")
         .StoreResult(&RequestTimeout);
 
+}
+
+void TWorkloadCommandBenchmark::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+
+    if (QueryExecuterType == "scan" && PrintProgress) {
+        throw TMisuseException() << "Option \"--print-progress\" requires generic query executer type.";
+    }
+
+    if (QueryExecuterType == "scan" && FullStatsFileName) {
+        throw TMisuseException() << "Option \"--full-stats\" requires generic query executer type.";
+    }
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {

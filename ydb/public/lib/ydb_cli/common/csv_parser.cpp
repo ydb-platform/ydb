@@ -313,13 +313,13 @@ public:
     bool TryParsePrimitive(const TString& token) {
         switch (Parser.GetPrimitive()) {
         case EPrimitiveType::Uint8:
-            return TryParseArithmetic<ui8>(token);
+            return TryParseArithmetic<ui8>(token) && !token.StartsWith('-');
         case EPrimitiveType::Uint16:
-            return TryParseArithmetic<ui16>(token);
+            return TryParseArithmetic<ui16>(token) && !token.StartsWith('-');;
         case EPrimitiveType::Uint32:
-            return TryParseArithmetic<ui32>(token);
+            return TryParseArithmetic<ui32>(token) && !token.StartsWith('-');;
         case EPrimitiveType::Uint64:
-            return TryParseArithmetic<ui64>(token);
+            return TryParseArithmetic<ui64>(token) && !token.StartsWith('-');;
         case EPrimitiveType::Int8:
             return TryParseArithmetic<i8>(token);
         case EPrimitiveType::Int16:
@@ -625,12 +625,7 @@ static const std::vector<TType> availableTypes = {
     TTypeBuilder().Primitive(EPrimitiveType::Datetime).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Timestamp).Build(),
     TTypeBuilder().Primitive(EPrimitiveType::Json).Build(),
-
-    TTypeBuilder().Primitive(EPrimitiveType::Interval).Build(),
-    TTypeBuilder().Primitive(EPrimitiveType::Date32).Build(),
-    TTypeBuilder().Primitive(EPrimitiveType::Datetime64).Build(),
-    TTypeBuilder().Primitive(EPrimitiveType::Timestamp64).Build(),
-    TTypeBuilder().Primitive(EPrimitiveType::Interval64).Build(),
+    TTypeBuilder().Primitive(EPrimitiveType::Uuid).Build(),
 };
 
 static const auto availableTypesEnd = availableTypes.end();

@@ -1,4 +1,3 @@
-import time
 from conftest import BaseTestSet
 from ydb.tests.olap.scenario.helpers import (
     ScenarioTestHelper,

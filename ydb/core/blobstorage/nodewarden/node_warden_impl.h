@@ -141,6 +141,7 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxSyncLogChunksInFlightSSD;
         TControlWrapper DefaultHugeGarbagePerMille;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille;
+        TControlWrapper MaxChunksToDefragInflight;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
@@ -181,6 +182,7 @@ namespace NKikimr::NStorage {
             , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
             , DefaultHugeGarbagePerMille(300, 1, 1000)
             , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
+            , MaxChunksToDefragInflight(10, 1, 50)
             , CostMetricsParametersByMedia({
                 TCostMetricsParameters{200},
                 TCostMetricsParameters{50},

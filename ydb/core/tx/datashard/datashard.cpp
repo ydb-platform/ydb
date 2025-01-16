@@ -409,6 +409,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     NotifySchemeshard(ctx);
     CheckInitiateBorrowedPartsReturn(ctx);
     CheckStateChange(ctx);
+    CleanupUncommitted(ctx);
 }
 
 void TDataShard::SyncConfig() {

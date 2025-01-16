@@ -52,7 +52,7 @@ namespace NYdb {
 namespace NConsoleClient {
 namespace {
 
-static const ui64 rowsToAnalyze = 100000;
+constexpr ui64 rowsToAnalyze = 100000;
 
 inline
 TStatus MakeStatus(EStatus code = EStatus::SUCCESS, const TString& error = {}) {

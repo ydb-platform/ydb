@@ -1734,10 +1734,8 @@ public:
                     if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                         TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
                         ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(resourceDomainKey, ENavigateRequestResource);
-                        FilterPeerScopeId = GetScopeId(entry.DomainInfo->ResourcesDomainKey);
                     } else {
                         CheckAndFillStoragePoolFilter(entry);
-                        FilterPeerScopeId = GetScopeId(entry.DomainInfo->DomainKey);
                     }
                     if (FieldsNeeded(FieldsHiveNodeStat) || (FilterPath && FieldsNeeded(FieldsTablets))) {
                         const auto ownerId = entry.DomainInfo->DomainKey.OwnerId;

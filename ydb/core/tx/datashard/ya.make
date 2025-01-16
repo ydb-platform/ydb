@@ -49,6 +49,7 @@ SRCS(
     datashard__cleanup_borrowed.cpp
     datashard__cleanup_in_rs.cpp
     datashard__cleanup_tx.cpp
+    datashard__cleanup_uncommitted.cpp
     datashard__conditional_erase_rows.cpp
     datashard__engine_host.cpp
     datashard__engine_host.h

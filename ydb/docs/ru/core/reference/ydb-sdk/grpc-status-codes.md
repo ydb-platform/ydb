@@ -1,0 +1,395 @@
+# gRPC status codes
+
+{{ ydb-short-name }} предоставляет gRPC API, с помощью которого вы можете управлять ресурсами и данными БД. В следующей таблице описаны статусы завершения запросов gRPC:
+
+#|
+||
+Код
+|
+Статус
+|
+Возможность повтора
+|
+Стратегия задержек
+|
+Пересоздать сессию
+||
+
+||
+[0](#ok)
+|
+[OK](#ok)
+|
+–
+|
+–
+|
+–
+||
+
+||
+[1](#cancelled)
+|
+[CANCELLED](#cancelled)
+|
+условно повторяемый
+|
+короткая
+|
+yes
+||
+
+||
+[2](#unknown)
+|
+[UNKNOWN](#unknown)
+|
+неповторяемый
+|
+–
+|
+да
+||
+
+||
+[3](#invalid-argument)
+|
+[INVALID_ARGUMENT](#invalid-argument)
+|
+неповторяемый
+|
+–
+|
+да
+||
+
+||
+[4](#deadline-exceeded)
+|
+[DEADLINE_EXCEEDED](#deadline-exceeded)
+|
+условно повторяемый
+|
+короткая
+|
+да
+||
+
+||
+[5](#not-found)
+|
+[NOT_FOUND](#not-found)
+|
+неповторяемый
+|
+–
+|
+да
+||
+
+||
+[6](#already-exists)
+|
+[ALREADY_EXISTS](#already-exists)
+|
+неповторяемый
+|
+–
+|
+да
+||
+
+||
+[7](#permission-denied)
+|
+[PERMISSION_DENIED](#permission-denied)
+|
+неповторяемый
+|
+–
+|
+да
+||
+
+||
+[8](#resource-exhausted)
+|
+[RESOURCE_EXHAUSTED](#resource-exhausted)
+|
+повторяемый
+|
+большая
+|
+нет
+||
+
+||
+[9](#failed-precondition)
+|
+[FAILED_PRECONDITION](#failed-precondition)
+|
+неповторяемый
+|
+–
+|
+да
+||
+
+||
+[10](#aborted)
+|
+[ABORTED](#aborted)
+|
+повторяемый
+|
+моментально
+|
+да
+||
+
+||
+[11](#out-of-range)
+|
+[OUT_OF_RANGE](#out-of-range)
+|
+неповторяемый
+|
+–
+|
+нет
+||
+
+||
+[12](#unimplemented)
+|
+[UNIMPLEMENTED](#unimplemented)
+|
+неповторяемый
+|
+–
+|
+да
+||
+
+||
+[13](#internal)
+|
+[INTERNAL](#internal)
+|
+условно повторяемый
+|
+короткая
+|
+да
+||
+
+||
+[14](#unavailable)
+|
+[UNAVAILABLE](#unavailable)
+|
+условно повторяемый
+|
+короткая
+|
+да
+||
+
+||
+[15](#data-loss)
+|
+[DATA_LOSS](#data-loss)
+|
+неповторяемый
+|
+–
+|
+да
+||
+
+||
+[16](#unauthenticated)
+|
+[UNAUTHENTICATED](#unauthenticated)
+|
+неповторяемый
+|
+–
+|
+да
+||
+|#
+
+## 0: OK {#ok}
+
+Не является ошибкой. Возвращается при успешном выполнении.
+
+<div class="tags_list">
+
+## 1: CANCELLED {#cancelled}
+
+{% include notitle [conditionally-retryable-fastbackoff](./_includes/tags.md#conditionally-retryable-fastbackoff) %}
+
+</div>
+
+Операция была отменена, как правило, вызывающей стороной.
+
+<div class="tags_list">
+
+## 2: UNKNOWN {#unknown}
+
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
+
+</div>
+
+Неизвестная ошибка. Например, эта ошибка может возникнуть, когда значение `Status`, полученное из другого адресного пространства, относится к неизвестному в этом адресном пространстве пространству ошибок. Также эта ошибка может быть преобразована из ошибок, вызванных API-интерфейсами, которые не предоставляют достаточно информации об ошибке.
+
+<div class="tags_list">
+
+## 3: INVALID_ARGUMENT {#invalid-argument}
+
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
+
+</div>
+
+Клиент указал недопустимый аргумент. Этот статус отличается от `FAILED_PRECONDITION`. `INVALID_ARGUMENT` указывает на аргументы, которые являются проблемными независимо от состояния системы (например, неправильное имя файла).
+
+<div class="tags_list">
+
+## 4: DEADLINE_EXCEEDED {#deadline-exceeded}
+
+{% include notitle [conditionally-retryable-fastbackoff](./_includes/tags.md#conditionally-retryable-fastbackoff) %}
+
+</div>
+
+Запрос не был обработан за заданный клиентский таймаут, иная сетевая проблема.
+
+Проверить корректность заданного таймаута, наличие сетевого доступа, проверить endpoint или другие настройки сети снизить интенсивность запросов, оптимизировать запросы.
+
+<div class="tags_list">
+
+## 5: NOT_FOUND {#not-found}
+
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
+
+</div>
+
+Запрашиваемый объект базы данных (например, таблица или папка) не найден.
+
+<div class="tags_list">
+
+## 6: ALREADY_EXISTS {#already-exists}
+
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
+
+</div>
+
+Сущность, которую пытается создать клиент (например, таблица или папка), уже существует.
+
+<div class="tags_list">
+
+## 7: PERMISSION_DENIED {#permission-denied}
+
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
+
+</div>
+
+У вызывающего нет разрешения на выполнение указанной операции.
+
+<div class="tags_list">
+
+## 8: RESOURCE_EXHAUSTED {#resource-exhausted}
+
+{% include notitle [retryable-slowbackoff](./_includes/tags.md#retryable-slowbackoff) %}
+
+</div>
+
+Недостаточно свободных ресурсов для обслуживания запроса.
+
+Снизить интенсивность запросов, проверить клиентскую балансировку.
+
+<div class="tags_list">
+
+## 9: FAILED_PRECONDITION {#failed-precondition}
+
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
+
+</div>
+
+Запрос не может быть выполнен для данного состояния (например, вставка в таблицу с существующим ключом).
+
+Исправить состояние или запрос и повторить.
+
+<div class="tags_list">
+
+## 10: ABORTED {#aborted}
+
+{% include notitle [retryable-instant](./_includes/tags.md#retryable) %}
+
+</div>
+
+Операция не выполнена (например, по причине инвалидации локов, TRANSACTION_LOCKS_INVALIDATE в подробных сообщениях об ошибке).
+
+Повторить всю транзакцию.
+
+<div class="tags_list">
+
+## 11: OUT_OF_RANGE {#out-of-range}
+
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
+
+</div>
+
+Была предпринята попытка выполнить операцию за пределами допустимого диапазона. В отличие от `INVALID_ARGUMENT`, эта ошибка указывает на проблему, которая может быть исправлена, если изменится состояние системы.
+
+<div class="tags_list">
+
+## 12: UNIMPLEMENTED {#unimplemented}
+
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
+
+</div>
+
+Операция не реализована или не поддерживается (не активирована) в {{ ydb-short-name }}.
+
+<div class="tags_list">
+
+## 13: INTERNAL {#internal}
+
+{% include notitle [conditionally-retryable-fastbackoff](./_includes/tags.md#conditionally-retryable-fastbackoff) %}
+
+</div>
+
+Внутренние ошибки. Это значит, что некоторые инварианты, ожидаемые базовой системой, были нарушены. Данный код ошибки предназначен для серьёзных ошибок.
+
+<div class="tags_list">
+
+## 14: UNAVAILABLE {#unavailable}
+
+{% include notitle [conditionally-retryable-fastbackoff](./_includes/tags.md#conditionally-retryable-fastbackoff) %}
+
+</div>
+
+Сервис в данный момент недоступен. Скорее всего, это временное состояние, которое можно исправить, повторив запрос после некоторой задержки. Обратите внимание, что повторять неидемпотентные операции не всегда безопасно.
+
+<div class="tags_list">
+
+## 15: DATA_LOSS {#data-loss}
+
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
+
+</div>
+
+Неустранимая потеря или повреждение данных.
+
+<div class="tags_list">
+
+## 16: UNAUTHENTICATED {#unauthenticated}
+
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
+
+</div>
+
+Запрос не содержит действительных учётных данных для аутентификации операции.
+
+Проверить использующийся токен. С актуальным токеном повторить запрос.

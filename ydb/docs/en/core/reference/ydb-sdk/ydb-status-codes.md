@@ -1,7 +1,265 @@
 # Status codes from the {{ ydb-short-name }} server
 
+[//]: # (Information from https://GitHub.com/ydb-platform/ydb-go-sdk/blob/master/retry/errors_data_test.go)
 
-## 400000: SUCCESS
+#|
+||
+Code
+|
+Status
+|
+Retryability
+|
+Backoff strategy
+|
+Recreate session
+||
+
+||
+[400000](#success)
+|
+[SUCCESS](#success)
+|
+–
+|
+–
+|
+–
+||
+
+||
+[400010](#bad-request)
+|
+[BAD_REQUEST](#bad-request)
+|
+non-retryable
+|
+–
+|
+no
+||
+
+||
+[400020](#unauthorized)
+|
+[UNAUTHORIZED](#unauthorized)
+|
+non-retryable
+|
+–
+|
+no
+||
+
+||
+[400030](#internal-error)
+|
+[INTERNAL_ERROR](#internal-error)
+|
+non-retryable
+|
+–
+|
+no
+||
+
+||
+[400040](#aborted)
+|
+[ABORTED](#aborted)
+|
+retryable
+|
+fast
+|
+no
+||
+
+||
+[400050](#unavailable)
+|
+[UNAVAILABLE](#unavailable)
+|
+retryable
+|
+fast
+|
+no
+||
+
+||
+[400060](#overloaded)
+|
+[OVERLOADED](#overloaded)
+|
+retryable
+|
+slow
+|
+no
+||
+
+||
+[400070](#scheme-error)
+|
+[SCHEME_ERROR](#scheme-error)
+|
+non-retryable
+|
+–
+|
+no
+||
+
+||
+[400080](#generic-error)
+|
+[GENERIC_ERROR](#generic-error)
+|
+non-retryable
+|
+–
+|
+no
+||
+
+||
+[400090](#timeout)
+|
+[TIMEOUT](#timeout)
+|
+non-retryable
+<!-- conditionally-retryable -->
+<!-- TODO: Why is it non-retryable ? -->
+|
+–
+|
+no
+||
+
+||
+[400100](#bad-session)
+|
+[BAD_SESSION](#bad-session)
+|
+retryable
+|
+instant
+|
+yes
+||
+
+||
+[400120](#precondition-failed)
+|
+[PRECONDITION_FAILED](#precondition-failed)
+|
+non-retryable
+|
+–
+|
+no
+||
+
+||
+[400130](#already-exists)
+|
+[ALREADY_EXISTS](#already-exists)
+|
+non-retryable
+|
+–
+|
+no
+||
+
+||
+[400140](#not-found)
+|
+[NOT_FOUND](#not-found)
+|
+non-retryable
+|
+–
+|
+no
+||
+
+||
+[400150](#session-expired)
+|
+[SESSION_EXPIRED](#session-expired)
+|
+conditionally-retryable
+|
+instant
+|
+yes
+||
+
+||
+[400160](#cancelled)
+|
+[CANCELLED](#cancelled)
+|
+non-retryable
+<!-- retryable -->
+|
+fast
+|
+no
+||
+
+||
+[400170](#undetermined)
+|
+[UNDETERMINED](#undetermined)
+|
+conditionally-retryable
+|
+fast
+|
+no
+||
+
+||
+[400180](#unsupported)
+|
+[UNSUPPORTED](#unsupported)
+|
+non-retryable
+|
+–
+|
+no
+||
+
+||
+[400190](#session-busy)
+|
+[SESSION_BUSY](#session-busy)
+|
+retryable
+|
+fast
+|
+yes
+||
+
+||
+[400200](#external-error)
+|
+[EXTERNAL_ERROR](#external-error)
+|
+non-retryable
+|
+–
+|
+no
+||
+|#
+
+## 400000: SUCCESS {#success}
 
 The query was processed successfully.
 
@@ -9,7 +267,7 @@ No response required. Continue application execution.
 
 <div class="tags_list">
 
-## 400010: BAD_REQUEST
+## 400010: BAD_REQUEST {#bad-request}
 
 {% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
 
@@ -21,7 +279,7 @@ Correct the query.
 
 <div class="tags_list">
 
-## 400020: UNAUTHORIZED
+## 400020: UNAUTHORIZED {#unauthorized}
 
 {% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
 
@@ -33,7 +291,7 @@ Request access from the DB administrator.
 
 <div class="tags_list">
 
-## 400030: INTERNAL_ERROR
+## 400030: INTERNAL_ERROR {#internal-error}
 
 {% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
 
@@ -45,9 +303,9 @@ Contact the developers.
 
 <div class="tags_list">
 
-## 400040: ABORTED
+## 400040: ABORTED {#aborted}
 
-{% include notitle [retryable](./_includes/tags.md#retryable) %}
+{% include notitle [retryable-fast](./_includes/tags.md#retryable-fastbackoff) %}
 
 </div>
 
@@ -57,9 +315,9 @@ Retry the entire transaction.
 
 <div class="tags_list">
 
-## 400050: UNAVAILABLE
+## 400050: UNAVAILABLE {#unavailable}
 
-{% include notitle [retryable](./_includes/tags.md#retryable) %}
+{% include notitle [retryable-fastbackoff](./_includes/tags.md#retryable-fastbackoff) %}
 
 </div>
 
@@ -69,9 +327,9 @@ Retry the last action (query).
 
 <div class="tags_list">
 
-## 400060: OVERLOADED
+## 400060: OVERLOADED {#overloaded}
 
-{% include notitle [retryable](./_includes/tags.md#retryable) %}
+{% include notitle [retryable-slowbackoff](./_includes/tags.md#retryable-slowbackoff) %}
 
 </div>
 
@@ -81,7 +339,7 @@ Retry the last action (query), reduce the rate of queries.
 
 <div class="tags_list">
 
-## 400070: SCHEME_ERROR
+## 400070: SCHEME_ERROR {#scheme-error}
 
 {% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
 
@@ -93,7 +351,7 @@ Correct the query or schema.
 
 <div class="tags_list">
 
-## 400080: GENERIC_ERROR
+## 400080: GENERIC_ERROR {#generic-error}
 
 {% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
 
@@ -105,7 +363,7 @@ See the detailed error message and contact the developers.
 
 <div class="tags_list">
 
-## 400090: TIMEOUT
+## 400090: TIMEOUT {#timeout}
 
 {% include notitle [conditionally-retryable](./_includes/tags.md#conditionally-retryable) %}
 
@@ -117,9 +375,9 @@ If idempotent, retry the query.
 
 <div class="tags_list">
 
-## 400100: BAD_SESSION
+## 400100: BAD_SESSION {#bad-session}
 
-{% include notitle [retryable](./_includes/tags.md#retryable) %}
+{% include notitle [retryable-instant](./_includes/tags.md#retryable) %}
 
 </div>
 
@@ -129,9 +387,9 @@ Re-create a session.
 
 <div class="tags_list">
 
-## 400120: PRECONDITION_FAILED
+## 400120: PRECONDITION_FAILED {#precondition-failed}
 
-{% include notitle [conditionally-retryable](./_includes/tags.md#conditionally-retryable) %}
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
 
 </div>
 
@@ -141,7 +399,7 @@ Correct the state or query and retry.
 
 <div class="tags_list">
 
-## 400130: ALREADY_EXISTS
+## 400130: ALREADY_EXISTS {#already-exists}
 
 [//]: # (TODO: Verify the description)
 {% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
@@ -154,21 +412,21 @@ The response depends on the application logic.
 
 <div class="tags_list">
 
-## 400140: NOT_FOUND
+## 400140: NOT_FOUND {#not-found}
 
 {% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
 
 </div>
 
-The database object is not fond in the {{ ydb-short-name }} database.
+The database object is not found in the {{ ydb-short-name }} database.
 
 The response depends on the application logic.
 
 <div class="tags_list">
 
-## 400150: SESSION_EXPIRED
+## 400150: SESSION_EXPIRED {#session-expired}
 
-{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
+{% include notitle [conditionally-retryable-instant](./_includes/tags.md#conditionally-retryable) %}
 
 </div>
 
@@ -178,17 +436,21 @@ Re-create a session.
 
 <div class="tags_list">
 
-## 400160: CANCELLED
+## 400160: CANCELLED {#cancelled}
 
-{% include notitle [retryable](./_includes/tags.md#retryable) %}
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
 
 </div>
 
+The request was cancelled on the server. For example, a user cancelled the long-running query in the [Embedded UI](../embedded-ui/index.md) or the query included the [cancel_after](../../dev/timeouts.md#cancel) timeout option.
+
+If the query took too much time to complete, try to optimize the query. If you used the cancel_after timeout option, increase the timeout value.
+
 <div class="tags_list">
 
-## 400170: UNDETERMINED
+## 400170: UNDETERMINED {#undetermined}
 
-{% include notitle [conditionally-retryable](./_includes/tags.md#conditionally-retryable) %}
+{% include notitle [conditionally-retryable-fastbackoff](./_includes/tags.md#conditionally-retryable-fastbackoff) %}
 
 </div>
 
@@ -198,18 +460,21 @@ For idempotent transactions, you can retry the entire transaction after a small 
 
 <div class="tags_list">
 
-## 400180: UNSUPPORTED
+## 400180: UNSUPPORTED {#unsupported}
 
 {% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
 
 </div>
 
+The query is not supported by {{ ydb-short-name }} either because support for such queries is not implemented yet or not enabled in {{ ydb-short-name }} configuration.
+
+Correct the query or enable support for such queries in {{ ydb-short-name }}.
 
 <div class="tags_list">
 
-## 400190: SESSION_BUSY
+## 400190: SESSION_BUSY {#session-busy}
 
-{% include notitle [retryable](./_includes/tags.md#retryable) %}
+{% include notitle [retryable-fastbackoff](./_includes/tags.md#retryable-fastbackoff) %}
 
 </div>
 
@@ -219,13 +484,17 @@ Re-create the session.
 
 <div class="tags_list">
 
-## 400200: EXTERNAL_ERROR
+## 400200: EXTERNAL_ERROR {#external-error}
+
+{% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
 
 </div>
+
+An error occurred in an external system, for example when processing a federated query or importing data from an external data source.
+
+See the detailed error message and contact the developers.
 
 
 ## See also
 
 [Questions and answers: Errors](../../faq/errors.md)
-
-

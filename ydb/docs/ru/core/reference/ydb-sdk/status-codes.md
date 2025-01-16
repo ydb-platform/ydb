@@ -1,23 +1,12 @@
 # Статусы завершения
 
-When an error occurs, {{ ydb-short-name }} SDK returns an error object that includes status codes. The returned status code may come from the {{ ydb-short-name }} server, gRPC transport, or the SDK itself.
+Когда возникает ошибка, YDB SDK возвращает объект ошибки, который включает статусы завершения. Возвращаемый статус завершения может исходить от сервера YDB, транспорта gRPC или самого SDK.
 
-Status codes within the range of 400000-400999 are {{ ydb-short-name }} server codes that are identical for all {{ ydb-short-name }} SDKs. Refer to [{#T}](./ydb-status-codes.md).
+Статусы завершения в диапазоне 400000–400999 — это статусы сервера YDB, которые одинаковы для всех SDK {{ ydb-short-name }}. Смотрите [{#T}](./ydb-status-codes.md).
 
-Status codes within the range of 401000-401999 are SDK-specific codes. For more information about SDK-specific codes, refer to the following articles:
+Статусы завершения в диапазоне 401000–401999 относятся к кодам, специфичным для SDK. Для получения дополнительной информации об этих статусах, относящихся к конкретному SDK, обратитесь к соответствующей документации SDK.
 
-- [{#T}](./cpp-status-codes.md)
-- [{#T}](./c-sharp-status-codes.md)
-- [{#T}](./go-status-codes.md)
-- [{#T}](./java-status-codes.md)
-- [{#T}](./nodejs-status-codes.md)
-- [{#T}](./php-status-codes.md)
-- [{#T}](./python-status-codes.md)
-- [{#T}](./rust-status-codes.md)
-
-
-For more information about gRPC status codes, see the [gRPC documentation](https://grpc.io/docs/guides/status-codes/).
-
+Для получения дополнительной информации о статусах завершения gRPC см.  [документацию gRPC](https://grpc.io/docs/guides/status-codes/).
 
 ## Дополнительная информация
 

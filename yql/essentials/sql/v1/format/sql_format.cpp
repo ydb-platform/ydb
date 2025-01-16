@@ -303,6 +303,47 @@ void SplitByStatements(TTokenIterator begin, TTokenIterator end, TVector<TTokenI
     }
 }
 
+bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr& lexer, TVector<TString>& statements, NYql::TIssues& issues) {
+    TParsedTokenList allTokens;
+    auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
+        if (token.Name != "EOF") {
+            allTokens.push_back(token);
+        }
+    };
+
+    if (!lexer->Tokenize(query, "Query", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+        return false;
+    }
+
+    TVector<TTokenIterator> statementsTokens;
+    SplitByStatements(allTokens.begin(), allTokens.end(), statementsTokens);
+
+    for (size_t i = 1; i < statementsTokens.size(); ++i) {
+        TStringBuilder currentQueryBuilder;
+        for (auto it = statementsTokens[i - 1]; it != statementsTokens[i]; ++it) {
+            currentQueryBuilder << it->Content;
+        }
+        TString statement = currentQueryBuilder;
+        statement = StripStringLeft(statement);
+
+        bool isBlank = true;
+        for (auto c : statement) {
+            if (c != ';') {
+                isBlank = false;
+                break;
+            }
+        };
+
+        if (isBlank) {
+            continue;
+        }
+
+        statements.push_back(statement);
+    }
+
+    return true;
+}
+
 enum class EScope {
     Default,
     TypeName,
@@ -3207,41 +3248,15 @@ public:
         }
 
         auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
-        TParsedTokenList allTokens;
-        auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
-            if (token.Name != "EOF") {
-                allTokens.push_back(token);
-            }
-        };
-
-        if (!lexer->Tokenize(query, "Query", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+        TVector<TString> statements;
+        if (!SplitQueryToStatements(query, lexer, statements, issues)) {
             return false;
         }
 
-        TVector<TTokenIterator> statements;
-        SplitByStatements(allTokens.begin(), allTokens.end(), statements);
         TStringBuilder finalFormattedQuery;
         bool prevAddLine = false;
         TMaybe<ui32> prevStmtCoreAltCase;
-        for (size_t i = 1; i < statements.size(); ++i) {
-            TStringBuilder currentQueryBuilder;
-            for (auto it = statements[i - 1]; it != statements[i]; ++it) {
-                currentQueryBuilder << it->Content;
-            }
-
-            TString currentQuery = currentQueryBuilder;
-            currentQuery = StripStringLeft(currentQuery);
-            bool isBlank = true;
-            for (auto c : currentQuery) {
-                if (c != ';') {
-                    isBlank = false;
-                    break;
-                }
-            };
-
-            if (isBlank) {
-                continue;
-            }
+        for (const TString& currentQuery : statements) {
 
             TVector<NSQLTranslation::TParsedToken> comments;
             TParsedTokenList parsedTokens, stmtTokens;
@@ -3395,6 +3410,29 @@ THashSet<TString> GetKeywords() {
     }
 
     return res;
+}
+
+bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, NYql::TIssues& issues,
+    const NSQLTranslation::TTranslationSettings& settings) {
+    auto lexer = NSQLTranslationV1::MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
+
+    TVector<TString> parts;
+    if (!SplitQueryToStatements(query, lexer, parts, issues)) {
+        return false;
+    }
+
+    for (auto& currentQuery : parts) {
+        NYql::TIssues parserIssues;
+        auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings.AnsiLexer, settings.Antlr4Parser, settings.TestAntlr4, settings.Arena);
+        if (!message) {
+            // Skip empty statements
+            continue;
+        }
+
+        statements.push_back(std::move(currentQuery));
+    }
+    
+    return true;
 }
 
 } // namespace NSQLFormat

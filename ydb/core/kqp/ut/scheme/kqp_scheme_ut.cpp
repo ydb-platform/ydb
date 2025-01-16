@@ -7455,7 +7455,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = R"(
                 --!syntax_v1
-                $a = "a";
+                -- Comment 1
+                $a = "a"; -- Comment 2
+                -- Comment 3
+
+                -- Comment 4
                 $b = $a;
                 $c = ($x) -> {
                     -- Comments
@@ -7463,7 +7467,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 };
 
                 CREATE TRANSFER `/Root/transfer1`
-                  FROM `/Root/topic` TO `/Root/table` USING ($lll) -> { RETURN $c($lll); }
+                  FROM `/Root/topic` TO `/Root/table` USING ($lll) -> { RETURN $c($lll); 
+                    -- Comment 5
+                  }
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root"

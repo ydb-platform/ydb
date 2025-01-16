@@ -1804,3 +1804,54 @@ Y_UNIT_TEST(AnsiLexer) {
     TSetup setup(/* ansiLexer = */ true);
     setup.Run(cases);
 }
+
+Y_UNIT_TEST(QuerySplit) {
+    TString query = R"(
+    ;
+    -- Comment 1
+    SELECT * From Input; -- Comment 2
+    -- Comment 3
+    $a = "a";
+
+    -- Comment 9
+    ;
+
+    -- Comment 10
+
+    -- Comment 8
+
+    $b = ($x) -> {
+      -- comment 4
+      return /* Comment 5 */ $x;
+      -- Comment 6
+    };
+
+    // Comment 7
+
+
+
+    )";
+
+    TVector<TString> statements;
+    NYql::TIssues issues;
+    google::protobuf::Arena Arena;
+    NSQLTranslation::TTranslationSettings settings;
+    settings.Arena = &Arena;
+
+    UNIT_ASSERT(NSQLFormat::SplitQueryToStatements(query, statements, issues, settings));
+
+    UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
+
+    UNIT_ASSERT_VALUES_EQUAL(statements[0], "-- Comment 1\n    SELECT * From Input; -- Comment 2\n");
+    UNIT_ASSERT_VALUES_EQUAL(statements[1], R"(-- Comment 3
+    $a = "a";)");
+    UNIT_ASSERT_VALUES_EQUAL(statements[2], R"(-- Comment 10
+
+    -- Comment 8
+
+    $b = ($x) -> {
+      -- comment 4
+      return /* Comment 5 */ $x;
+      -- Comment 6
+    };)");
+}

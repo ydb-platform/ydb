@@ -4,6 +4,7 @@
 #include "abstract/manager.h"
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/tx/tiering/tier/identifier.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
@@ -23,7 +24,7 @@ class TManager {
 private:
     ui64 TabletId = 0;
     NActors::TActorId TabletActorId;
-    TString TierName;
+    TExternalStorageId TierId;
     NActors::TActorId StorageActorId;
     std::optional<NKikimrSchemeOp::TS3Settings> S3Settings;
 public:
@@ -32,7 +33,7 @@ public:
         return *S3Settings;
     }
 
-    TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TString& tierName);
+    TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TExternalStorageId& tierId);
 
     bool IsReady() const {
         return !!S3Settings;
@@ -48,21 +49,25 @@ private:
     friend class TTierRef;
     class TTierRefGuard: public TMoveOnly {
     private:
-        YDB_READONLY_DEF(TString, TierName);
+        NTiers::TExternalStorageId TierId;
         TTiersManager* Owner;
 
     public:
-        TTierRefGuard(const TString& tierName, TTiersManager& owner);
+        const NTiers::TExternalStorageId& GetTierId() const {
+            return TierId;
+        }
+
+        TTierRefGuard(const NTiers::TExternalStorageId& tierId, TTiersManager& owner);
         ~TTierRefGuard();
 
         TTierRefGuard(TTierRefGuard&& other)
-            : TierName(other.TierName)
+            : TierId(other.TierId)
             , Owner(other.Owner) {
             other.Owner = nullptr;
         }
         TTierRefGuard& operator=(TTierRefGuard&& other) {
             std::swap(Owner, other.Owner);
-            std::swap(TierName, other.TierName);
+            std::swap(TierId, other.TierId);
             return *this;
         }
     };
@@ -70,7 +75,7 @@ private:
 private:
     class TActor;
     friend class TActor;
-    using TManagers = std::map<TString, NTiers::TManager>;
+    using TManagers = std::map<NTiers::TExternalStorageId, NTiers::TManager>;
 
     ui64 TabletId = 0;
     const TActorId TabletActorId;
@@ -78,19 +83,19 @@ private:
     IActor* Actor = nullptr;
     TManagers Managers;
 
-    using TTierRefCount = THashMap<TString, TPositiveControlInteger>;
+    using TTierRefCount = THashMap<NTiers::TExternalStorageId, TPositiveControlInteger>;
     using TTierRefsByPathId = THashMap<ui64, std::vector<TTierRefGuard>>;
     YDB_READONLY_DEF(TTierRefCount, TierRefCount);
     YDB_READONLY_DEF(TTierRefsByPathId, UsedTiers);
 
-    using TTierByName = THashMap<TString, NTiers::TTierConfig>;
-    YDB_READONLY_DEF(TTierByName, TierConfigs);
+    using TTierById = THashMap<NTiers::TExternalStorageId, NTiers::TTierConfig>;
+    YDB_READONLY_DEF(TTierById, TierConfigs);
     YDB_READONLY_DEF(std::shared_ptr<NMetadata::NSecret::TSnapshot>, Secrets);
 
 private:
     void OnConfigsUpdated(bool notifyShard = true);
-    void RegisterTier(const TString& name);
-    void UnregisterTier(const TString& name);
+    void RegisterTier(const NTiers::TExternalStorageId& name);
+    void UnregisterTier(const NTiers::TExternalStorageId& name);
 
 public:
     TTiersManager(const ui64 tabletId, const TActorId& tabletActorId, std::function<void(const TActorContext& ctx)> shardCallback = {})
@@ -100,21 +105,21 @@ public:
         , Secrets(std::make_shared<NMetadata::NSecret::TSnapshot>(TInstant::Zero())) {
     }
     TActorId GetActorId() const;
-    void EnablePathId(const ui64 pathId, const THashSet<TString>& usedTiers);
+    void EnablePathId(const ui64 pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers);
     void DisablePathId(const ui64 pathId);
 
     void UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
-    void UpdateTierConfig(const NTiers::TTierConfig& config, const TString& tierName, const bool notifyShard = true);
+    void UpdateTierConfig(const NTiers::TTierConfig& config, const NTiers::TExternalStorageId& tierId, const bool notifyShard = true);
     bool AreConfigsComplete() const;
 
     TString DebugString();
 
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
     TTiersManager& Stop(const bool needStopActor);
-    virtual const std::map<TString, NTiers::TManager>& GetManagers() const override {
+    virtual const std::map<NTiers::TExternalStorageId, NTiers::TManager>& GetManagers() const override {
         return Managers;
     }
-    virtual const NTiers::TManager* GetManagerOptional(const TString& tierId) const override;
+    virtual const NTiers::TManager* GetManagerOptional(const NTiers::TExternalStorageId& tierId) const override;
 };
 
 }

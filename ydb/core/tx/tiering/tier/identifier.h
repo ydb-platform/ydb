@@ -20,6 +20,9 @@ public:
     TString ToString() const {
         return ConfigPath;
     }
+    friend IOutputStream& operator<<(IOutputStream& out, const TExternalStorageId& storageId) {
+        return out << storageId.ToString();
+    }
 
     std::strong_ordering operator<=>(const TExternalStorageId& other) const {
         if (ConfigPath < other.ConfigPath) {

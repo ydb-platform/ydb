@@ -174,6 +174,7 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cleanup_borrowed.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cleanup_in_rs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cleanup_tx.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cleanup_uncommitted.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__column_stats.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__compact_borrowed.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__compaction.cpp

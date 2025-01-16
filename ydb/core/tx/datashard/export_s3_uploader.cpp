@@ -244,7 +244,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     const TString& GetCurrentChangefeedName() const {
-        return Changefeeds.at(IndexExportedChangefeed).ChangefeedDescription.GetName();
+        return Changefeeds.at(IndexExportedChangefeed).ChangefeedDescription.Getname();
     }
 
     void UploadChangefeed() {

@@ -83,6 +83,11 @@ static void SetChangefeedDescriptionOptions(NKikimrSchemeOp::TDescribeOptions& o
     opts.SetShowPrivateTable(true);
 }
 
+static void SetTopicDescriptionOptions(NKikimrSchemeOp::TDescribeOptions& opts) {
+    SetTableDescriptionOptions(opts);
+    opts.SetShowPrivateTable(true);
+}
+
 static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const TPathId& pathId, NKikimrSchemeOp::TDescribeOptions& opts) {
     auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId, opts);
     auto record = desc->GetRecord();
@@ -99,6 +104,12 @@ static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, c
 static NKikimrSchemeOp::TPathDescription GetChangefeedDescription(TSchemeShard* ss, const TPathId& pathId) {
     NKikimrSchemeOp::TDescribeOptions opts;
     SetChangefeedDescriptionOptions(opts);
+    return GetDescription(ss, pathId, opts);
+}
+
+static NKikimrSchemeOp::TPathDescription GetTopicDescription(TSchemeShard* ss, const TPathId& pathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    SetTopicDescriptionOptions(opts);
     return GetDescription(ss, pathId, opts);
 }
 
@@ -171,7 +182,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 auto cdcPathDesc =  GetChangefeedDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
                 for (const auto& child : cdcPathDesc.GetChildren()) {
                     if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-                        *task.AddChangefeedUnderlyingTopics() = GetChangefeedDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
+                        *task.AddChangefeedUnderlyingTopics() = GetTopicDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
                     }
                 }
             }

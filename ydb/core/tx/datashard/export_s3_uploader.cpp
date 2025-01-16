@@ -884,7 +884,7 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
-    TVector<TChangefeedExportDescriptions> Changefeeds;
+    const TVector<TChangefeedExportDescriptions> Changefeeds;
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 

@@ -944,7 +944,11 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         Ydb::Table::ChangefeedDescription changefeedDesc;
         Ydb::Topic::DescribeTopicResult topic;
         FillChangefeedDescription(changefeedDesc, cdcStreams[i]);
-        FillTopicDescription(topic, persQueuesTPathDesc[i].GetPersQueueGroup());
+        Ydb::StatusIds_StatusCode status;
+        TString error;
+        FillTopicDescription(topic, persQueuesTPathDesc[i].GetPersQueueGroup(),
+        persQueuesTPathDesc[i].GetSelf(),
+        cdcStreams[i].GetName(), status, error);
         changefeedsExportDescs.emplace_back(changefeedDesc, topic);
     }
 

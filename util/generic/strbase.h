@@ -310,20 +310,71 @@ public:
 #endif
 
     template <typename TDerived2, typename TTraits2>
-    friend constexpr std::strong_ordering operator<=>(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
-        return compare(s1, s2) <=> 0;
+    friend constexpr bool operator<(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
+        return compare(s1, s2) < 0;
     }
 
-    friend constexpr std::strong_ordering operator<=>(const TSelf& s1, TStringView s2) noexcept {
-        return compare(s1, s2) <=> 0;
+    friend constexpr bool operator<(const TSelf& s1, TStringView s2) noexcept {
+        return compare(s1, s2) < 0;
     }
 
-    friend constexpr std::strong_ordering operator<=>(const TSelf& s, const TCharType* pc) noexcept {
-        return compare(s, pc) <=> 0;
+    friend constexpr bool operator<(const TSelf& s, const TCharType* pc) noexcept {
+        return compare(s, pc) < 0;
     }
 
-    friend constexpr std::strong_ordering operator<=>(const TCharType* pc, const TSelf& s) noexcept {
-        return compare(pc, s) <=> 0;
+    friend constexpr bool operator<(const TCharType* pc, const TSelf& s) noexcept {
+        return compare(pc, s) < 0;
+    }
+
+    template <typename TDerived2, typename TTraits2>
+    friend constexpr bool operator<=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
+        return compare(s1, s2) <= 0;
+    }
+
+    friend constexpr bool operator<=(const TSelf& s1, TStringView s2) noexcept {
+        return compare(s1, s2) <= 0;
+    }
+
+    friend constexpr bool operator<=(const TSelf& s, const TCharType* pc) noexcept {
+        return compare(s, pc) <= 0;
+    }
+
+    friend constexpr bool operator<=(const TCharType* pc, const TSelf& s) noexcept {
+        return compare(pc, s) <= 0;
+    }
+
+    template <typename TDerived2, typename TTraits2>
+    friend constexpr bool operator>(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
+        return compare(s1, s2) > 0;
+    }
+
+    friend constexpr bool operator>(const TSelf& s1, TStringView s2) noexcept {
+        return compare(s1, s2) > 0;
+    }
+
+    friend constexpr bool operator>(const TSelf& s, const TCharType* pc) noexcept {
+        return compare(s, pc) > 0;
+    }
+
+    friend constexpr bool operator>(const TCharType* pc, const TSelf& s) noexcept {
+        return compare(pc, s) > 0;
+    }
+
+    template <typename TDerived2, typename TTraits2>
+    friend constexpr bool operator>=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
+        return compare(s1, s2) >= 0;
+    }
+
+    friend constexpr bool operator>=(const TSelf& s1, TStringView s2) noexcept {
+        return compare(s1, s2) >= 0;
+    }
+
+    friend constexpr bool operator>=(const TSelf& s, const TCharType* pc) noexcept {
+        return compare(s, pc) >= 0;
+    }
+
+    friend constexpr bool operator>=(const TCharType* pc, const TSelf& s) noexcept {
+        return compare(pc, s) >= 0;
     }
 
     // ~~ Read access ~~

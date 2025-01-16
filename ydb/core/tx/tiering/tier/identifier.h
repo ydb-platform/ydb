@@ -22,7 +22,13 @@ public:
     }
 
     std::strong_ordering operator<=>(const TExternalStorageId& other) const {
-        return ConfigPath <=> other.ConfigPath;
+        if (ConfigPath < other.ConfigPath) {
+            return std::strong_ordering::less;
+        }
+        if (ConfigPath > other.ConfigPath) {
+            return std::strong_ordering::greater;
+        }
+        return std::strong_ordering::equal;
     }
     bool operator==(const TExternalStorageId& other) const {
         return ConfigPath == other.ConfigPath;

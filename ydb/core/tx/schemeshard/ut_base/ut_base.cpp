@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::Finished,
-                            NLs::PathVersionEqual(5)});
+                            NLs::PathVersionEqual(6)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                            {NLs::Finished,
                             NLs::PathVersionEqual(3)});
@@ -844,7 +844,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::ChildrenCount(1)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
-                           {NLs::PathVersionEqual(13),
+                           {NLs::PathVersionEqual(14),
                             NLs::ChildrenCount(5)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table1"),
@@ -1119,7 +1119,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, {txId, txId-1 , txId-2});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
-                           {NLs::PathVersionEqual(7),
+                           {NLs::PathVersionEqual(8),
                             NLs::Finished,
                             NLs::PathExist,
                             NLs::PathsInsideDomain(9),
@@ -1149,7 +1149,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                NLs::Finished});
 
         auto dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
-                                              {NLs::PathVersionEqual(11),
+                                              {NLs::PathVersionEqual(13),
                                                NLs::PathExist,
                                                NLs::Finished,
                                                NLs::PathExist,
@@ -1169,7 +1169,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
-                           {NLs::PathVersionEqual(15),
+                           {NLs::PathVersionEqual(18),
                             NLs::PathExist,
                             NLs::Finished,
                             NLs::PathsInsideDomain(25),
@@ -1245,7 +1245,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
-                           {NLs::PathVersionEqual(19),
+                           {NLs::PathVersionEqual(22),
                             NLs::PathExist,
                             NLs::Finished,
                             NLs::PathsInsideDomain(27),
@@ -1816,7 +1816,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::Finished,
-                            NLs::PathVersionEqual(5),
+                            NLs::PathVersionEqual(6),
                             NLs::ChildrenCount(1)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table1"),
                            {NLs::Finished,
@@ -2361,12 +2361,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
-                            NLs::PathVersionEqual(5),
+                            NLs::PathVersionEqual(6),
                             NLs::ChildrenCount(1)});
 
         auto dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                               {NLs::Finished,
-                                               NLs::PathVersionEqual(5),
+                                               NLs::PathVersionEqual(6),
                                                NLs::ChildrenCount(1),
                                                NLs::ShardsInsideDomain(3)});
 
@@ -2375,7 +2375,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
-                            NLs::PathVersionEqual(7),
+                            NLs::PathVersionEqual(8),
                             NLs::ChildrenCount(0)});
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
@@ -2451,7 +2451,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         auto dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                               {NLs::Finished,
-                                               NLs::PathVersionEqual(5),
+                                               NLs::PathVersionEqual(6),
                                                NLs::ChildrenCount(1)});
 
         AsyncDropTable(runtime, ++txId, "/MyRoot/DirA", "Table1");
@@ -2809,11 +2809,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::NoChildren});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::Finished,
-                            NLs::PathVersionEqual(5),
+                            NLs::PathVersionEqual(6),
                             NLs::ChildrenCount(1)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/SubDirA"),
                            {NLs::Finished,
-                            NLs::PathVersionEqual(5),
+                            NLs::PathVersionEqual(6),
                             NLs::ChildrenCount(1)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/SubDirA/AAA"),
                            {NLs::Finished,
@@ -10353,7 +10353,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir"),
                            {NLs::NotFinished,
-                           NLs::PathVersionEqual(3),
+                           NLs::PathVersionEqual(4),
                            NLs::ChildrenCount(1)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir/Table"),
@@ -10387,7 +10387,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir"),
                            {NLs::Finished,
-                           NLs::PathVersionEqual(5),
+                           NLs::PathVersionEqual(6),
                            NLs::ChildrenCount(1)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir/Table"),

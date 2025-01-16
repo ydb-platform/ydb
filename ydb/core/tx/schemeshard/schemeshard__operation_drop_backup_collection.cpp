@@ -47,7 +47,7 @@ public:
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside();
-        parentDirPtr->DecAliveChildren();
+        DecAliveChildrenDirect(OperationId, parentDirPtr, context); // for correct discard of ChildrenExist prop
         context.SS->TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Sub(1);
 
         ++parentDirPtr->DirAlterVersion;

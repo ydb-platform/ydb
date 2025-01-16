@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
                                 "(return pgmReturn)"
                                 ")", key, value, path.c_str());
 
-        env.GetClient().FlatQuery(query, res);
+        env.GetClient().FlatQuery(&env.GetRuntime(), query, res);
     }
 
     Y_UNIT_TEST(Boot) {
@@ -432,7 +432,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             expectedResponse.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
             expectedResponse.SetProxyErrorCode(NTxProxy::TResultStatus::DomainLocalityError);
 
-            env.GetClient().FlatQuery("("
+            env.GetClient().FlatQuery(&env.GetRuntime(), "("
                 "(let row0_ '('('key (Uint64 '42))))"
                 "(let cols_ '('value))"
                 "(let select0_ (SelectRow '/dc-1/SimpleTable row0_ cols_))"
@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             expectedResponse.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
             expectedResponse.SetProxyErrorCode(NTxProxy::TResultStatus::DomainLocalityError);
 
-            env.GetClient().FlatQuery("("
+            env.GetClient().FlatQuery(&env.GetRuntime(), "("
                 "(let row0_ '('('key (Uint64 '42))))"
                 "(let cols_ '('value))"
                 "(let select0_ (SelectRow '/dc-1/USER_1/SimpleTable row0_ cols_))"
@@ -533,7 +533,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         {
             NKikimrMiniKQL::TResult result;
-            env.GetClient().FlatQuery("("
+            env.GetClient().FlatQuery(&env.GetRuntime(), "("
                 "(let row0_ '('('key (Uint64 '42))))"
                 "(let cols_ '('value))"
                 "(let select0_ (SelectRow '/dc-1/USER_0/dir/dir_0/table row0_ cols_))"

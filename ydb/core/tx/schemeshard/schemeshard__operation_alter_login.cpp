@@ -54,6 +54,7 @@ public:
 
                     auto response = context.SS->LoginProvider.CreateUser(
                         {.User = createUser.GetUser(), .Password = createUser.GetPassword(), .CanLogin = canLogin});
+
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
@@ -117,7 +118,10 @@ public:
                             db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
                         }
 
-                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::IsEnabled>(sid.Type, sid.IsEnabled);
+                        if (request.CanLogin != NLogin::TLoginProvider::ETypeOfLogin::Undefined) {
+                            db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::IsEnabled>(sid.Type, sid.IsEnabled);
+                        }
+
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);

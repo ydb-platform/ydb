@@ -194,11 +194,6 @@ public:
         const TJobId& jobId,
         const TGetJobFailContextOptions& options = {}) override;
 
-    TString GetJobStderrWithRetries(
-        const TOperationId& operationId,
-        const TJobId& jobId,
-        const TGetJobStderrOptions& options = {}) override;
-
     IFileReaderPtr GetJobStderr(
         const TOperationId& operationId,
         const TJobId& jobId,
@@ -208,13 +203,8 @@ public:
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) override;
 
-    // SkyShare
-
-    NHttpClient::IHttpResponsePtr SkyShareTable(
-        const std::vector<TYPath>& tablePaths,
-        const TSkyShareTableOptions& options = {}) override;
-
     // Files
+
     std::unique_ptr<IInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,
@@ -344,8 +334,6 @@ public:
         const TGetTablePartitionsOptions& options = {}) override;
 
     ui64 GenerateTimestamp() override;
-
-    TAuthorizationInfo WhoAmI() override;
 
 private:
     const TClientContext Context_;

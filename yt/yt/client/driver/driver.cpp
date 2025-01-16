@@ -397,9 +397,12 @@ public:
             REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, true,  false);
             REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, true,  false);
             REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, true,  false);
+
+            // TODO(arkady-e1ppa): flags past command name might be complete rubbish -- think them through later.
             REGISTER_ALL(TStartDistributedWriteSessionCommand,    "start_distributed_write_session",      Null,    Structured, true, false);
             REGISTER_ALL(TFinishDistributedWriteSessionCommand,   "finish_distributed_write_session",     Null,    Null,       true, false);
             REGISTER_ALL(TWriteTableFragmentCommand,               "distributed_write_table_partition",    Tabular, Structured, true, true );
+            REGISTER_ALL(TForsakeChaosCoordinator,         "forsake_chaos_coordinator",       Null,       Null,       true,  true);
         }
 
 #undef REGISTER

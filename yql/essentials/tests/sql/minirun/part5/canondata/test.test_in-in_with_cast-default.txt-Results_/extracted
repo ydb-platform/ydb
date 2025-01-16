@@ -1,0 +1,23 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:3:5: Warning: At function: SqlIn
+            	    Null in (100500) as `void`,
+	    ^
+                <tmp_path>/program.sql:<main>:3:5: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    Null in (100500) as `void`,
+	    ^
+        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:4:20: Warning: At function: SqlIn
+            	    Just(cast(1 as Uint8)) in (23, Null, 32, Null, 255) as byte_wrap_match,
+	                   ^
+                <tmp_path>/program.sql:<main>:4:20: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    Just(cast(1 as Uint8)) in (23, Null, 32, Null, 255) as byte_wrap_match,
+	                   ^

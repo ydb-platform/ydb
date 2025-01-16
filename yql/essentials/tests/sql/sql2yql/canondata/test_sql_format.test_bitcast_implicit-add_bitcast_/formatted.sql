@@ -1,5 +1,3 @@
-USE plato;
-
 SELECT
     1ul + 1
 ; -- warn

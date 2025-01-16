@@ -48,7 +48,7 @@ public:
         const auto load = new LoadInst(valueType, statePtr, "load", block);
         const auto state = PHINode::Create(valueType, 2U, "state", main);
         state->addIncoming(load, block);
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
+        BranchInst::Create(init, main, IsInvalid(load, block, context), block);
 
         block = init;
 
@@ -79,7 +79,7 @@ public:
 
         block = work;
         const auto item = GetNodeValue(Flow, ctx, block);
-        BranchInst::Create(pass, good, IsSpecial(item, block), block);
+        BranchInst::Create(pass, good, IsSpecial(item, block, context), block);
 
         block = pass;
         result->addIncoming(item, block);

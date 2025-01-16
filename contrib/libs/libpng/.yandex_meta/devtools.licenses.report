@@ -29,20 +29,6 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-SKIP     LicenseRef-scancode-free-unknown 0245dc9406ea6d91bc41a0b69235973f
-BELONGS ya.make
-    # we have no contrib in libpng directory
-    License text:
-        that are distributed with libpng, have other copyright owners, and are
-        released under other open source licenses.
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-free-unknown
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
-    Files with this license:
-        AUTHORS [51:52]
-
 KEEP     Libpng               147dc0e952990823ef472540ecd32e49
 BELONGS ya.make
 FILE_INCLUDE TRADEMARK found in files: TRADEMARK at line 1
@@ -120,8 +106,8 @@ BELONGS ya.make
 
 KEEP     Libpng               3a05dbc8218dced9bf7960ae06850ddd
 BELONGS ya.make
-FILE_IGNORE include/png.h found in files: arm/arm_init.c at line 10, arm/filter_neon.S at line 10, arm/filter_neon_intrinsics.c at line 11, arm/palette_neon_intrinsics.c at line 10, intel/filter_sse2_intrinsics.c at line 11, intel/intel_init.c at line 11, mips/filter_msa_intrinsics.c at line 10, mips/mips_init.c at line 10, png.c at line 11, pngconf.h at line 13, pngdebug.h at line 11, pngerror.c at line 11, pngget.c at line 11, pnginfo.h at line 11, pngmem.c at line 11, pngpread.c at line 11, pngpriv.h at line 11, pngread.c at line 11, pngrio.c at line 11, pngrtran.c at line 11, pngrutil.c at line 11, pngset.c at line 11, pngstruct.h at line 11, pngtrans.c at line 11, pngwio.c at line 11, pngwrite.c at line 11, pngwtran.c at line 11, pngwutil.c at line 11, powerpc/filter_vsx_intrinsics.c at line 9, powerpc/powerpc_init.c at line 10
-FILE_IGNORE png.h found in files: arm/arm_init.c at line 10, arm/filter_neon.S at line 10, arm/filter_neon_intrinsics.c at line 11, arm/palette_neon_intrinsics.c at line 10, intel/filter_sse2_intrinsics.c at line 11, intel/intel_init.c at line 11, mips/filter_msa_intrinsics.c at line 10, mips/mips_init.c at line 10, png.c at line 11, pngconf.h at line 13, pngdebug.h at line 11, pngerror.c at line 11, pngget.c at line 11, pnginfo.h at line 11, pngmem.c at line 11, pngpread.c at line 11, pngpriv.h at line 11, pngread.c at line 11, pngrio.c at line 11, pngrtran.c at line 11, pngrutil.c at line 11, pngset.c at line 11, pngstruct.h at line 11, pngtrans.c at line 11, pngwio.c at line 11, pngwrite.c at line 11, pngwtran.c at line 11, pngwutil.c at line 11, powerpc/filter_vsx_intrinsics.c at line 9, powerpc/powerpc_init.c at line 10
+FILE_IGNORE include/png.h found in files: arm/arm_init.c at line 10, arm/filter_neon.S at line 8, arm/filter_neon_intrinsics.c at line 11, arm/palette_neon_intrinsics.c at line 10, intel/filter_sse2_intrinsics.c at line 11, intel/intel_init.c at line 11, mips/filter_mmi_inline_assembly.c at line 8, mips/filter_msa_intrinsics.c at line 10, mips/mips_init.c at line 11, png.c at line 11, pngconf.h at line 13, pngdebug.h at line 11, pngerror.c at line 11, pngget.c at line 11, pnginfo.h at line 11, pngmem.c at line 11, pngpread.c at line 11, pngpriv.h at line 11, pngread.c at line 11, pngrio.c at line 11, pngrtran.c at line 11, pngrutil.c at line 11, pngset.c at line 11, pngstruct.h at line 11, pngtrans.c at line 11, pngwio.c at line 11, pngwrite.c at line 11, pngwtran.c at line 11, pngwutil.c at line 11, powerpc/filter_vsx_intrinsics.c at line 9, powerpc/powerpc_init.c at line 10
+FILE_IGNORE png.h found in files: arm/arm_init.c at line 10, arm/filter_neon.S at line 8, arm/filter_neon_intrinsics.c at line 11, arm/palette_neon_intrinsics.c at line 10, intel/filter_sse2_intrinsics.c at line 11, intel/intel_init.c at line 11, mips/filter_mmi_inline_assembly.c at line 8, mips/filter_msa_intrinsics.c at line 10, mips/mips_init.c at line 11, png.c at line 11, pngconf.h at line 13, pngdebug.h at line 11, pngerror.c at line 11, pngget.c at line 11, pnginfo.h at line 11, pngmem.c at line 11, pngpread.c at line 11, pngpriv.h at line 11, pngread.c at line 11, pngrio.c at line 11, pngrtran.c at line 11, pngrutil.c at line 11, pngset.c at line 11, pngstruct.h at line 11, pngtrans.c at line 11, pngwio.c at line 11, pngwrite.c at line 11, pngwtran.c at line 11, pngwutil.c at line 11, powerpc/filter_vsx_intrinsics.c at line 9, powerpc/powerpc_init.c at line 10
     License text:
          * This code is released under the libpng license.
          * For conditions of distribution and use, see the disclaimer
@@ -133,13 +119,14 @@ FILE_IGNORE png.h found in files: arm/arm_init.c at line 10, arm/filter_neon.S a
         Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
     Files with this license:
         arm/arm_init.c [8:10]
-        arm/filter_neon.S [8:10]
+        arm/filter_neon.S [6:8]
         arm/filter_neon_intrinsics.c [9:11]
         arm/palette_neon_intrinsics.c [8:10]
         intel/filter_sse2_intrinsics.c [9:11]
         intel/intel_init.c [9:11]
+        mips/filter_mmi_inline_assembly.c [6:8]
         mips/filter_msa_intrinsics.c [8:10]
-        mips/mips_init.c [8:10]
+        mips/mips_init.c [9:11]
         png.c [9:11]
         pngconf.h [11:13]
         pngdebug.h [9:11]
@@ -218,18 +205,6 @@ BELONGS ya.make
     Files with this license:
         CHANGES [2692:2692]
 
-KEEP     libpng-2.0           70f7ac29617c1f96c3c72a8706953d6f
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: LICENSE at line 1
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: libpng-2.0
-        Score           : 95.76
-        Match type      : TEXT
-        Links           : http://www.libpng.org/pub/png/src/libpng-LICENSE.txt, https://spdx.org/licenses/libpng-2.0
-    Files with this license:
-        LICENSE [1:42]
-
 SKIP     LicenseRef-scancode-free-unknown 7223032bb9df755f6ce7298a13e95cee
 BELONGS ya.make
     # we have no contrib in libpng directory
@@ -260,7 +235,7 @@ FILE_IGNORE png.h found in files: INSTALL at line 464
     Files with this license:
         INSTALL [462:464]
 
-KEEP     libpng-2.0           7c3a35240ba33b0bb5f250afdd076b27
+KEEP     libpng-2.0           7799c593fa0c34cd88d48e7a212af031
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
@@ -309,6 +284,21 @@ BELONGS ya.make
         Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
     Files with this license:
         LICENSE [5:5]
+
+SKIP     LicenseRef-scancode-free-unknown 95502569dcf2568eaa3effc6d65a8c30
+BELONGS ya.make
+    # Regards ci and contrib directories which we do not store
+    License text:
+        of the tools-generated files that are distributed with libpng, have
+        other copyright owners, and are released under other open source
+        licenses.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        AUTHORS [59:61]
 
 KEEP     Libpng               a1fa29c834710a6f595de023fcd8738f
 BELONGS ya.make
@@ -360,6 +350,18 @@ FILE_INCLUDE LICENSE found in files: README at line 111
     Files with this license:
         README [110:111]
 
+KEEP     MIT                  c77269c6dd6f51bfbe84805b0c8a235f
+BELONGS ya.make
+    License text:
+          Relicensed the CI scripts to the MIT License.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        CHANGES [6160:6160]
+
 KEEP     Libpng               c8298e366a3ed11e6a851c27f5f62556
 BELONGS ya.make
     License text:
@@ -370,7 +372,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
     Files with this license:
-        AUTHORS [48:48]
+        AUTHORS [56:56]
 
 SKIP     LicenseRef-scancode-free-unknown d21cb537845df6d3bd33063822351d5a
 BELONGS ya.make
@@ -469,6 +471,18 @@ BELONGS ya.make
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
     Files with this license:
         LICENSE [64:71]
+
+KEEP     libpng-2.0           fc1063e930ad717bd4ffddde10b75b8c
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 1
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: libpng-2.0
+        Score           : 95.76
+        Match type      : TEXT
+        Links           : http://www.libpng.org/pub/png/src/libpng-LICENSE.txt, https://spdx.org/licenses/libpng-2.0
+    Files with this license:
+        LICENSE [1:42]
 
 KEEP     Libpng               fc125ac8e86409d9543ae23600641ce9
 BELONGS ya.make

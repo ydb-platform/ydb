@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mkql_match_recognize_save_load.h"
+#include "mkql_match_recognize_version.h"
 
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
@@ -295,7 +296,10 @@ public:
        }
 
         void Load(TMrInputSerializer& serializer) {
-            serializer(Container, FromIndex, ToIndex, NfaIndex_);
+            serializer(Container, FromIndex, ToIndex);
+            if (serializer.GetStateVersion() >= 2U) {
+                serializer(NfaIndex_);
+            }
         }
 
     private:

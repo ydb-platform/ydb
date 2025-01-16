@@ -16,7 +16,7 @@ class RightlibSync:
     failed_comment_mark = "<!--RightLibSyncFailed-->"
     rightlib_check_status_name = "rightlib-merge"
 
-    def __init__(self, repo, base_branch, head_branch,  token):
+    def __init__(self, repo, base_branch, head_branch, token):
         self.repo_name = repo
         self.base_branch = base_branch
         self.head_branch = head_branch
@@ -180,7 +180,9 @@ class RightlibSync:
         else:
             pr_body = f"PR was created by rightlib sync script"
 
-        pr = self.repo.create_pull(self.base_branch, dev_branch_name, title=pr_title, body=pr_body)
+        pr = self.repo.create_pull(
+            self.base_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True
+        )
         pr.add_to_labels(self.pr_label_rightlib)
 
     def sync(self):

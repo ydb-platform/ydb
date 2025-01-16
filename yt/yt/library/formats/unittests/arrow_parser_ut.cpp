@@ -16,11 +16,9 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/writer.h>
 
-namespace NYT {
-
+namespace NYT::NFormats {
 namespace {
 
-using namespace NFormats;
 using namespace NTableClient;
 using namespace NYTree;
 using namespace NYson;
@@ -350,7 +348,7 @@ void TestArrowParserWithDictionary(bool addExtraValues = false)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "integer")), 1);
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(1, "integer")), 2);
@@ -373,7 +371,7 @@ TEST(TArrowParserTest, Simple)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "integer")), 1);
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(1, "integer")), 2);
@@ -394,7 +392,7 @@ TEST(TArrowParserTest, Optional)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "opt")), 1);
     ASSERT_TRUE(IsNull(collectedRows.GetRowValue(1, "opt")));
@@ -421,7 +419,7 @@ TEST(TArrowParserTest, Bool)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetBoolean(collectedRows.GetRowValue(0, "bool")), true);
     ASSERT_EQ(GetBoolean(collectedRows.GetRowValue(1, "bool")), false);
@@ -443,7 +441,7 @@ TEST(TArrowParserTest, String)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "integer")), 1);
     ASSERT_EQ(GetString(collectedRows.GetRowValue(0, "string")), "foo");
@@ -548,7 +546,7 @@ TEST(TArrowParserTest, SeveralIntArrays)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 5u);
+    ASSERT_EQ(collectedRows.Size(), 5);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "integer")), 1);
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(1, "integer")), 2);
@@ -677,7 +675,7 @@ TEST(TArrowParserTest, BlockingInput)
     }
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "integer")), 1);
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(1, "integer")), 2);
@@ -687,4 +685,4 @@ TEST(TArrowParserTest, BlockingInput)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT
+} // namespace NYT::NFormats

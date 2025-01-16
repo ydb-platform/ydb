@@ -21,6 +21,8 @@
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
+#include <yt/yt/client/signature/signature.h>
+
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/row_base.h>
 #include <yt/yt/client/table_client/row_buffer.h>
@@ -792,7 +794,7 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFuture<TDistributedWriteSessionPtr> TClientBase::StartDistributedWriteSession(
+TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteSession(
     const NYPath::TRichYPath& path,
     const TDistributedWriteSessionStartOptions& options)
 {
@@ -804,21 +806,28 @@ TFuture<TDistributedWriteSessionPtr> TClientBase::StartDistributedWriteSession(
     FillRequest(req.Get(), path, options);
 
     return req->Invoke()
-        .ApplyUnique(BIND([] (TRsp&& result) -> TDistributedWriteSessionPtr {
-            return ConvertTo<TDistributedWriteSessionPtr>(TYsonString(result->session()));
+        .ApplyUnique(BIND([] (TRsp&& result) -> TDistributedWriteSessionWithCookies {
+            std::vector<TSignedWriteFragmentCookiePtr> cookies;
+            cookies.reserve(result->signed_cookies().size());
+            for (const auto& cookie : result->signed_cookies()) {
+                cookies.push_back(ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(cookie)));
+            }
+            return TDistributedWriteSessionWithCookies{
+                .Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(result->signed_session())),
+                .Cookies = std::move(cookies),
+            };
         }));
 }
 
 TFuture<void> TClientBase::FinishDistributedWriteSession(
-    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.FinishDistributedWriteSession();
 
-    FillRequest(req.Get(), std::move(session), options);
-
+    FillRequest(req.Get(), sessionWithResults, options);
     return req->Invoke().AsVoid();
 }
 

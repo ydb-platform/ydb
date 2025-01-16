@@ -3818,7 +3818,7 @@ bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom&
     return true;
 }
 
-bool TSqlTranslation::RoleParameters(const std::vector<TRule_create_user_option>& optionsList, TRoleParameters& result, bool isCreateUser) {
+bool TSqlTranslation::RoleParameters(const std::vector<TRule_create_user_option>& optionsList, TRoleParameters& result) {
     enum class ECreateUserOption {
         Login,
         Password
@@ -3885,10 +3885,6 @@ bool TSqlTranslation::RoleParameters(const std::vector<TRule_create_user_option>
     };
 
     result = TRoleParameters{};
-
-    if (isCreateUser) {
-        result.CanLogin = TRoleParameters::ETypeOfLogin::NoLogin;
-    }
 
     for (const auto& option : optionsList) {
         if (!ParseCreateUserOption(option, result)) {

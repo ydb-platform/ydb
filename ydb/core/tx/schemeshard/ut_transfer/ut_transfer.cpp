@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
 
     Y_UNIT_TEST(Create) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -52,9 +52,25 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         });
     }
 
+    Y_UNIT_TEST(Create_Disabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(false));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"),
+          {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Transfer"), {
+            NLs::PathNotExist
+        });
+    }
+
     Y_UNIT_TEST(CreateSequential) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -80,7 +96,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
 
     Y_UNIT_TEST(CreateInParallel) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -116,7 +132,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
 
     Y_UNIT_TEST(CreateDropRecreate) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -145,7 +161,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
 
     Y_UNIT_TEST(CreateWithoutCredentials) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -170,7 +186,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
 
     Y_UNIT_TEST(CreateWrongConfig) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -195,7 +211,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
 
     Y_UNIT_TEST(ConsistencyLevel) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -266,7 +282,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
 
     Y_UNIT_TEST(Alter) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);

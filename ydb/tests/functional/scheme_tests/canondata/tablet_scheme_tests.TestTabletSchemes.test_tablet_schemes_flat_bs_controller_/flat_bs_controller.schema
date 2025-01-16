@@ -125,6 +125,11 @@
                 "ColumnId": 25,
                 "ColumnName": "ConfigVersion",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 26,
+                "ColumnName": "ShredState",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -154,7 +159,8 @@
                     22,
                     23,
                     24,
-                    25
+                    25,
+                    26
                 ],
                 "RoomID": 0,
                 "Codec": 0,

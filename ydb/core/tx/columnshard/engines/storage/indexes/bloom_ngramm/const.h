@@ -10,6 +10,12 @@ public:
     static constexpr ui32 MaxHashesCount = 8;
     static constexpr ui32 MinFilterSizeBytes = 128;
     static constexpr ui32 MaxFilterSizeBytes = 1 << 20;
+    static constexpr ui32 MinRecordsCount = 128;
+    static constexpr ui32 MaxRecordsCount = 1000000;
+
+    static bool CheckRecordsCount(const ui32 value) {
+        return MinRecordsCount <= value && value <= MaxRecordsCount;
+    }
 
     static bool CheckNGrammSize(const ui32 value) {
         return MinNGrammSize <= value && value <= MaxNGrammSize;
@@ -26,6 +32,7 @@ public:
     static TString GetHashesCountIntervalString();
     static TString GetFilterSizeBytesIntervalString();
     static TString GetNGrammSizeIntervalString();
+    static TString GetRecordsCountIntervalString();
 };
 
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

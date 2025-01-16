@@ -2147,6 +2147,8 @@ public:
         return LogThrottlers[type];
     };
 
+    void OnTableCreated(TTransactionContext& txc, const TActorContext& ctx);
+
 private:
     ///
     class TLoanReturnTracker {

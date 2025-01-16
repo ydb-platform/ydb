@@ -600,7 +600,7 @@ void TSolomonExporter::DoHandleShard(
             YT_LOG_DEBUG("Timestamp query arguments are missing; returning last value");
 
             int gridFactor = gridStep / Config_->GridStep;
-            for (auto i = static_cast<int>(Window_.size()) - 1; i >= 0; --i) {
+            for (auto i = std::ssize(Window_) - 1; i >= 0; --i) {
                 auto [iteration, time] = Window_[i];
                 if (iteration % gridFactor == 0) {
                     readWindow.emplace_back(std::vector<int>{Registry_->IndexOf(iteration / gridFactor)}, time);

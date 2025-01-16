@@ -26,6 +26,7 @@ class TChangesWithAppend;
 class TCompactColumnEngineChanges;
 class TCleanupPortionsColumnEngineChanges;
 class TCleanupTablesColumnEngineChanges;
+class TRemovePortionsChange;
 
 namespace NDataSharing {
 class TDestinationSession;
@@ -52,6 +53,7 @@ class TColumnEngineForLogs: public IColumnEngine {
     friend class NDataSharing::TDestinationSession;
     friend class NEngineLoading::TEngineShardingInfoReader;
     friend class NEngineLoading::TEngineCountersReader;
+    friend class TRemovePortionsChange;
 
 private:
     bool ActualizationStarted = false;

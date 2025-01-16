@@ -267,14 +267,15 @@ void TWriteTableCommand::Register(TRegistrar registrar)
         .Default(1_MB);
 }
 
-TFuture<ITableWriterPtr> TWriteTableCommand::CreateTableWriter(
-    const ICommandContextPtr& context) const
+NApi::ITableWriterPtr TWriteTableCommand::CreateTableWriter(
+    const ICommandContextPtr& context)
 {
     PutMethodInfoInTraceContext("write_table");
 
-    return context->GetClient()->CreateTableWriter(
+    return WaitFor(context->GetClient()->CreateTableWriter(
         Path,
-        Options);
+        Options))
+            .ValueOrThrow();
 }
 
 void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
@@ -289,8 +290,7 @@ void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
     Options.PingAncestors = true;
     Options.Config = config;
 
-    auto apiWriter = WaitFor(CreateTableWriter(context))
-        .ValueOrThrow();
+    auto apiWriter = CreateTableWriter(context);
 
     auto schemalessWriter = CreateSchemalessFromApiWriterAdapter(std::move(apiWriter));
 

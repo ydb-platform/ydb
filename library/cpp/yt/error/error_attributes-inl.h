@@ -12,9 +12,9 @@ template <class T>
     requires CConvertibleFromAttributeValue<T>
 T TErrorAttributes::Get(TStringBuf key) const
 {
-    auto yson = GetValue(key);
+    auto value = GetValue(key);
     try {
-        return NYT::FromErrorAttributeValue<T>(yson);
+        return NYT::FromErrorAttributeValue<T>(value);
     } catch (const std::exception& ex) {
         ThrowCannotParseAttributeException(key, ex);
     }
@@ -29,7 +29,7 @@ typename TOptionalTraits<T>::TOptional TErrorAttributes::Find(TStringBuf key) co
         return typename TOptionalTraits<T>::TOptional();
     }
     try {
-        return NYT::FromErrorAttributeValue<T>(value);
+        return NYT::FromErrorAttributeValue<T>(*value);
     } catch (const std::exception& ex) {
         ThrowCannotParseAttributeException(key, ex);
     }
@@ -55,10 +55,10 @@ template <class T>
     requires CConvertibleFromAttributeValue<T>
 T TErrorAttributes::GetAndRemove(const TKey& key, const T& defaultValue)
 {
-    auto result = Find<T>(key);
-    if (result) {
+    auto value = Find<T>(key);
+    if (value) {
         Remove(key);
-        return *result;
+        return *value;
     } else {
         return defaultValue;
     }
@@ -68,11 +68,11 @@ template <class T>
     requires CConvertibleFromAttributeValue<T>
 typename TOptionalTraits<T>::TOptional TErrorAttributes::FindAndRemove(const TKey& key)
 {
-    auto result = Find<T>(key);
-    if (result) {
+    auto value = Find<T>(key);
+    if (value) {
         Remove(key);
     }
-    return result;
+    return value;
 }
 
 template <CMergeableDictionary TDictionary>

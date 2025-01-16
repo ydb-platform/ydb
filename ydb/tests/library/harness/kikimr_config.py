@@ -157,6 +157,7 @@ class KikimrConfigGenerator(object):
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             kafka_api_port=None,
             metadata_section=None,
+            column_shard_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -282,11 +283,12 @@ class KikimrConfigGenerator(object):
             self.yaml_config['pqconfig']['require_credentials_in_new_protocol'] = False
             self.yaml_config['pqconfig']['root'] = '/Root/PQ'
             self.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = False
-
         if pq_client_service_types:
             self.yaml_config['pqconfig']['client_service_type'] = []
             for service_type in pq_client_service_types:
                 self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
+        if column_shard_config:
+            self.yaml_config["column_shard_config"] = column_shard_config
 
         self.yaml_config['grpc_config']['services'].extend(extra_grpc_services)
 

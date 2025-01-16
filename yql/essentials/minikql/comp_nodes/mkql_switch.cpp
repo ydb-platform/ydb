@@ -292,7 +292,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         ctx.Ctx = &*ctx.Func->arg_begin();
@@ -393,7 +392,7 @@ public:
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
         const auto result = PHINode::Create(valueType, Handlers.size() + 2U, "result", exit);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -457,8 +456,8 @@ public:
 
             const auto item = GetNodeValue(Flow, ctx, block);
 
-            const auto finsh = IsFinish(item, block);
-            const auto yield = IsYield(item, block);
+            const auto finsh = IsFinish(item, block, context);
+            const auto yield = IsYield(item, block, context);
             const auto special = BinaryOperator::CreateOr(finsh, yield, "special", block);
 
             const auto fin = SelectInst::Create(finsh, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "fin", block);
@@ -512,7 +511,7 @@ public:
 
                 if (const auto offset = Handlers[i].ResultVariantOffset) {
                     const auto good = BasicBlock::Create(context, (TString("good_") += ToString(i)).c_str(), ctx.Func);
-                    BranchInst::Create(next, good, IsSpecial(output, block), block);
+                    BranchInst::Create(next, good, IsSpecial(output, block, context), block);
                     block = good;
 
                     const auto unpack = Handlers[i].IsOutputVariant ? GetVariantParts(output, ctx, block) : std::make_pair(ConstantInt::get(indexType, 0), output);
@@ -522,7 +521,7 @@ public:
                     BranchInst::Create(exit, block);
                 } else {
                     result->addIncoming(output, block);
-                    BranchInst::Create(next, exit, IsSpecial(output, block), block);
+                    BranchInst::Create(next, exit, IsSpecial(output, block, context), block);
                 }
             }
 
@@ -826,7 +825,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 

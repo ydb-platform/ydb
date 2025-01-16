@@ -606,7 +606,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             TMaybe<TRoleParameters> roleParams;
             const auto& options = node.GetBlock4();
 
-            if (options.size() > 0) {
+            {
                 roleParams.ConstructInPlace();
                 std::vector<TRule_create_user_option> opts;
                 opts.reserve(options.size());
@@ -614,9 +614,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     opts.push_back(opt.GetRule_create_user_option1());
                 }
 
-                bool isCreateUser = true;
-
-                if (!RoleParameters(opts, *roleParams, isCreateUser)) {
+                if (!RoleParameters(opts, *roleParams)) {
                     return false;
                 }
             }
@@ -659,9 +657,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                         opts.push_back(opt.GetRule_create_user_option1());
                     }
 
-                    bool isCreateUser = false;
-
-                    if (!RoleParameters(opts, roleParams, isCreateUser)) {
+                    if (!RoleParameters(opts, roleParams)) {
                         return false;
                     }
                     stmt = BuildAlterUser(pos, service, cluster, roleName, roleParams, Ctx.Scoped);

@@ -68,7 +68,7 @@ bool TTieringProcessContext::AddPortion(
             Counters.OnPortionToEvict(info->GetTotalBlobBytes(), *dWait);
         }
         it->second.back().GetTask()->AddPortionToEvict(info, std::move(features));
-        AFL_VERIFY(!it->second.back().GetTask()->HasPortionsToRemove())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
+        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToRemove().HasPortions())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
     }
     return true;
 }

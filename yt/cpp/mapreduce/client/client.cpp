@@ -1233,7 +1233,7 @@ TAuthorizationInfo TClient::WhoAmI()
     return RequestWithRetry<TAuthorizationInfo>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this] (TMutationId /*mutationId*/) {
-            return RawClient_->WhoAmI();
+            return NRawClient::WhoAmI(Context_);
         });
 }
 
@@ -1360,7 +1360,7 @@ TNode::TListType TClient::SkyShareTable(
         response = RequestWithRetry<NHttpClient::IHttpResponsePtr>(
             ClientRetryPolicy_->CreatePolicyForGenericRequest(),
             [this, &tablePaths, &options] (TMutationId /*mutationId*/) {
-                return RawClient_->SkyShareTable(tablePaths, options);
+                return NRawClient::SkyShareTable(Context_, tablePaths, options);
             });
         TWaitProxy::Get()->Sleep(TDuration::Seconds(5));
     } while (response->GetStatusCode() != 200);

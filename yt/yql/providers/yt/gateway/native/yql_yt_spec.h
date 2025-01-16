@@ -97,7 +97,6 @@ inline void FillOperationSpec(NYT::TUserOperationSpecBase<TDerived>& spec, const
     if (auto val = execCtx->Options_.Config()->CoreDumpPath.Get()) {
         spec.CoreTablePath(*val);
     }
-    
 }
 
 template <class TExecParamsPtr>

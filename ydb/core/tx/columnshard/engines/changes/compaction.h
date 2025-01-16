@@ -56,11 +56,6 @@ public:
         return SwitchedPortions;
     }
 
-    void AddSwitchedPortion(const TPortionInfo::TConstPtr& portion) {
-        SwitchedPortions.emplace_back(portion);
-        PortionsToAccess->AddPortion(portion);
-    }
-
     static TString StaticTypeName() {
         return "CS::GENERAL";
     }

@@ -2,11 +2,13 @@ import os
 
 import yatest.common
 
-from test_utils import pytest_generate_tests_by_template, DATA_PATH, SQLRUN_PATH, SQL_FLAGS
+from test_utils import pytest_generate_tests_by_template, SQLRUN_PATH, SQL_FLAGS
+
+DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 
 
 def pytest_generate_tests(metafunc):
-    return pytest_generate_tests_by_template('.sql', metafunc)
+    return pytest_generate_tests_by_template('.sql', metafunc, data_path=DATA_PATH)
 
 
 def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format, test_double_format):

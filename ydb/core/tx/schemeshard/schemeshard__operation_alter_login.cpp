@@ -2,6 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include <ydb/library/security/util.h>
 #include <ydb/core/protos/auth.pb.h>
 
 namespace {
@@ -40,7 +41,9 @@ public:
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[createUser.GetUser()];
-                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
+                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
+                                                                           Schema::LoginSids::SidHash,
+                                                                           Schema::LoginSids::CreatedAt>(sid.Type, sid.Hash, ToInstant(sid.CreatedAt).MilliSeconds());
                         if (securityConfig.HasAllUsersGroup()) {
                             auto response = context.SS->LoginProvider.AddGroupMembership({
                                 .Group = securityConfig.GetAllUsersGroup(),
@@ -90,7 +93,8 @@ public:
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[group];
-                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType>(sid.Type);
+                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
+                                                                           Schema::LoginSids::CreatedAt>(sid.Type, ToInstant(sid.CreatedAt).MilliSeconds());
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                     }
                     break;
@@ -221,7 +225,7 @@ public:
             TPathElement::TPtr path = context.SS->PathsById.at(pathId);
             if (path->Owner == user) {
                 auto pathStr = TPath::Init(pathId, context.SS).PathString();
-                return {.Error = TStringBuilder() << 
+                return {.Error = TStringBuilder() <<
                     "User " << user << " owns " << pathStr << " and can't be removed"};
             }
         }
@@ -260,7 +264,7 @@ public:
         for (const TString& group : removeUserResponse.TouchedGroups) {
             db.Table<Schema::LoginSidMembers>().Key(group, user).Delete();
         }
-        
+
         return {}; // success
     }
 

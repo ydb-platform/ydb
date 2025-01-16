@@ -12,9 +12,10 @@ from yql_utils import execute, get_tables, get_files, get_http_files, \
     normalize_result
 from yqlrun import YQLRun
 
-from test_utils import get_config, get_parameters_json, DATA_PATH
-from test_file_common import run_file, run_file_no_cache, get_gateways_config
+from test_utils import get_config, get_parameters_json
+from test_file_common import run_file, run_file_no_cache, get_gateways_config, get_sql_query
 
+DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 MINIRUN_PATH = yql_binary_path('yql/essentials/tools/minirun/minirun')
 
@@ -23,10 +24,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if get_gateway_cfg_suffix() != '' and what not in ('Results','LLVM'):
         pytest.skip('non-trivial gateways.conf')
 
-    if suite != "compute_range":
-        pytest.skip('TODO:' + suite)
-
-    config = get_config(suite, case, cfg)
+    config = get_config(suite, case, cfg, data_path = DATA_PATH)
 
     xfail = is_xfail(config)
     if xfail and what != 'Results':
@@ -40,21 +38,23 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if is_with_final_result_issues(config):
         extra_final_args += ['--with-final-issues']
     (res, tables_res) = run_file('pure', suite, case, cfg, config, yql_http_file_server, MINIRUN_PATH,
-                                 extra_args=extra_final_args, allow_llvm=False)
+                                 extra_args=extra_final_args, allow_llvm=False, data_path=DATA_PATH)
 
     to_canonize = []
-    assert os.path.exists(res.results_file)
+    assert xfail or os.path.exists(res.results_file)
     assert not tables_res
 
     if what == 'Results':
-        if not xfail:
-            if do_custom_query_check(res, sql_query):
-                return None
+        if xfail:
+            return None
 
-            stable_result_file(res)
-            to_canonize.append(yatest.common.canonical_file(res.results_file))
-            if res.std_err:
-                to_canonize.append(normalize_source_code_path(res.std_err))
+        if do_custom_query_check(res, sql_query):
+            return None
+
+        stable_result_file(res)
+        to_canonize.append(yatest.common.canonical_file(res.results_file))
+        if res.std_err:
+            to_canonize.append(normalize_source_code_path(res.std_err))
 
     if what == 'Debug':
         to_canonize = [yatest.common.canonical_file(res.opt_file, diff_tool=ASTDIFF_PATH)]
@@ -64,7 +64,8 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         files = get_files(suite, config, DATA_PATH)
         http_files = get_http_files(suite, config, DATA_PATH)
         http_files_urls = yql_http_file_server.register_files({}, http_files)
-        parameters = get_parameters_json(suite, config)
+        parameters = get_parameters_json(suite, config, DATA_PATH)
+        query_sql = get_sql_query('pure', suite, case, config, DATA_PATH) if is_llvm else None
 
         yqlrun = YQLRun(
             prov='pure',
@@ -76,8 +77,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
 
         opt_res, opt_tables_res = execute(
             yqlrun,
-            program=res.opt if not is_llvm else None,
-            program_file=program_sql if is_llvm else None,
+            program=res.opt if not is_llvm else query_sql,
             run_sql=is_llvm,
             files=files,
             urls=http_files_urls,

@@ -45,6 +45,10 @@ public:
     using TFactory = NObjectFactory::TObjectFactory<IIndexMeta, TString>;
     using TProto = NKikimrSchemeOp::TOlapIndexDescription;
 
+    bool IsInplaceData() const {
+        return StorageId == NBlobOperations::TGlobal::LocalMetadataStorageId;
+    }
+
     IIndexMeta() = default;
     IIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId)
         : IndexName(indexName)

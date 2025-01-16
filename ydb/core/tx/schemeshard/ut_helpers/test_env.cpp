@@ -549,6 +549,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
     app.SetEnableExportChecksums(true);
+    app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

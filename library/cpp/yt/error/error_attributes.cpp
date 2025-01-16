@@ -9,7 +9,7 @@ namespace NYT {
 
 std::vector<TErrorAttributes::TKey> TErrorAttributes::ListKeys() const
 {
-    std::vector<TString> keys;
+    std::vector<TKey> keys;
     keys.reserve(Map_.size());
     for (const auto& [key, value] : Map_) {
         keys.push_back(key);
@@ -27,10 +27,12 @@ std::vector<TErrorAttributes::TKeyValuePair> TErrorAttributes::ListPairs() const
     return pairs;
 }
 
-TErrorAttributes::TValue TErrorAttributes::FindValue(TStringBuf key) const
+std::optional<TErrorAttribute::TValue> TErrorAttributes::FindValue(TStringBuf key) const
 {
     auto it = Map_.find(key);
-    return it == Map_.end() ? TValue{} : it->second;
+    return it == Map_.end()
+        ? std::nullopt
+        : std::optional(it->second);
 }
 
 void TErrorAttributes::SetValue(const TKey& key, const TValue& value)
@@ -54,7 +56,7 @@ TErrorAttributes::TValue TErrorAttributes::GetValue(TStringBuf key) const
     if (!result) {
         ThrowNoSuchAttributeException(key);
     }
-    return result;
+    return *result;
 }
 
 void TErrorAttributes::Clear()

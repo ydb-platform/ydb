@@ -41,7 +41,7 @@ public:
         const auto result = PHINode::Create(item->getType(), 2, "result", pass);
         result->addIncoming(item, block);
 
-        BranchInst::Create(pass, work, IsSpecial(item, block), block);
+        BranchInst::Create(pass, work, IsSpecial(item, block, context), block);
 
         block = work;
         codegenItem->CreateSetValue(ctx, block, item);
@@ -206,7 +206,6 @@ protected:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -236,7 +235,7 @@ protected:
         BranchInst::Create(done, good, icmp, block);
         block = good;
 
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
         GetNodeValue(valuePtr, NewItem, ctx, block);
 
         BranchInst::Create(done, block);

@@ -248,6 +248,8 @@ namespace NKikimr {
         TControlWrapper ThrottlingMaxSstCount;
         TControlWrapper ThrottlingMinInplacedSize;
         TControlWrapper ThrottlingMaxInplacedSize;
+        TControlWrapper ThrottlingMinOccupancyPerMille;
+        TControlWrapper ThrottlingMaxOccupancyPerMille;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

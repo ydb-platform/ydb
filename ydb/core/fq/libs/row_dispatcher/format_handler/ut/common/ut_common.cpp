@@ -154,7 +154,7 @@ TBaseFixture::TBaseFixture()
     : TTypeParser(__LOCATION__, {})
     , MemoryInfo("TBaseFixture alloc")
     , HolderFactory(std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemoryInfo))
-    , Runtime(1)
+    , Runtime(1, true)
 {
     NKikimr::EnableYDBBacktraceFormat();
     signal(SIGSEGV, &SegmentationFaultHandler);

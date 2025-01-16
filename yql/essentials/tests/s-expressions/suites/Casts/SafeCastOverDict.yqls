@@ -1,7 +1,6 @@
 (
 
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 (let res_sink (DataSink 'result))
 
 # Dict<Int32, String> -> Dict<Uint8, Utf8> (full)

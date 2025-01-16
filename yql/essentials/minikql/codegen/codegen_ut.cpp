@@ -194,8 +194,6 @@ Function *CreateUseExternalFromGeneratedFunction128(const ICodegen::TPtr& codege
     llvm::Argument* retArg = nullptr;
     if (codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {
         retArg = &*args++;
-        retArg->addAttr(Attribute::StructRet);
-        retArg->addAttr(Attribute::NoAlias);
     }
 
     auto ArgX = args++;   // Get the arg 1.

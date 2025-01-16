@@ -93,6 +93,7 @@ namespace NKikimr {
         void OnKickEmergencyPutQueue();
 
     private:
+        TIntrusivePtr<TVDiskContext> VCtx;
         std::shared_ptr<THull> Hull;
         NMonGroup::TSkeletonOverloadGroup Mon;
         std::unique_ptr<TEmergencyQueue> EmergencyQueue;

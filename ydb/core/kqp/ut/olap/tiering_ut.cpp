@@ -19,6 +19,9 @@ protected:
 
 protected:
     virtual void UnevictAll() = 0;
+    virtual TString GetTierPathOverride() const {
+        return "/Root/tier1";
+    }
 
 public:
     void RunTest() {
@@ -68,7 +71,7 @@ public:
             UNIT_ASSERT_GT(columnRawBytes, 0);
         }
 
-        TestHelper->SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
+        TestHelper->SetTiering("/Root/olapStore/olapTable", GetTierPathOverride(), "timestamp");
         csController->WaitActualization(TDuration::Seconds(5));
 
         {
@@ -118,6 +121,13 @@ class TTestEvictionResetTiering : public TTestEvictionBase {
     }
 };
 
+class TTestEvictionWithStrippedEdsPath : public TTestEvictionResetTiering  {
+    private:
+    TString GetTierPathOverride() const {
+        return "Root/tier1";
+    }
+};
+
 class TTestEvictionIncreaseDuration : public TTestEvictionBase {
     private:
     void UnevictAll() {
@@ -135,6 +145,10 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
     Y_UNIT_TEST(EvictionIncreaseDuration) {
         TTestEvictionIncreaseDuration().RunTest();
+    }
+
+    Y_UNIT_TEST(EvictionWithStrippedEdsPath) {
+        TTestEvictionWithStrippedEdsPath().RunTest();
     }
 
     Y_UNIT_TEST(TieringValidation) {

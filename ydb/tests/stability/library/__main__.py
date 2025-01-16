@@ -89,7 +89,7 @@ class StabilityCluster:
             node.ssh_command("sudo service nemesis stop", raise_on_error=False)
 
     def deploy_ydb(self):
-        self._stop_nemesis()
+        self.stop_nemesis()
         self.kikimr_cluster.start()
 
         # cleanup nemesis logs
@@ -174,6 +174,7 @@ def parse_args():
             "deploy_tools",
             "start_nemesis",
             "stop_nemesis",
+            "start_all_workloads",
             "start_workload_simple_queue_row",
             "start_workload_simple_queue_column",
             "start_workload_olap_workload",
@@ -199,6 +200,20 @@ def main():
             stability_cluster.deploy_ydb()
         if action == "deploy_tools":
             stability_cluster.deploy_tools()
+        if action == "start_all_workloads":
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                node.ssh_command(
+                    'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
+                    raise_on_error=True
+                )
+                node.ssh_command(
+                    'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
+                    raise_on_error=True
+                )
+                node.ssh_command(
+                    'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
+                    raise_on_error=True
+                )
         if action == "start_workload_simple_queue_row":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(

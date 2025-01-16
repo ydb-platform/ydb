@@ -1,0 +1,130 @@
+cluster_uuid: "ydb:ydb-sas-testing"
+static_erasure: block-4-2
+static_pdisk_type: SSD
+use_new_style_kikimr_cfg: true
+need_txt_files: false
+cms:
+  sentinel_config:
+    enable: True
+hosts:
+- name: ydb-sas-testing-0000.search.yandex.net
+  rack: "1"
+  drives: &drives
+  - path: /dev/disk/by-partlabel/kikimr_ssd_01
+    type: SSD
+  - path: /dev/disk/by-partlabel/kikimr_ssd_02
+    type: SSD
+  - path: /dev/disk/by-partlabel/kikimr_ssd_03
+    type: SSD
+  - path: /dev/disk/by-partlabel/kikimr_ssd_04
+    type: SSD
+  - path: /dev/disk/by-partlabel/kikimr_ssd_05
+    type: SSD
+  - path: /dev/disk/by-partlabel/kikimr_ssd_06
+    type: SSD
+- name: ydb-sas-testing-0001.search.yandex.net
+  rack: "2"
+  drives: *drives
+- name: ydb-sas-testing-0002.search.yandex.net
+  rack: "3"
+  drives: *drives
+- name: ydb-sas-testing-0003.search.yandex.net
+  rack: "4"
+  drives: *drives
+- name: ydb-sas-testing-0004.search.yandex.net
+  rack: "5"
+  drives: *drives
+- name: ydb-sas-testing-0005.search.yandex.net
+  rack: "6"
+  drives: *drives
+- name: ydb-sas-testing-0006.search.yandex.net
+  rack: "7"
+  drives: *drives
+- name: ydb-sas-testing-0007.search.yandex.net
+  rack: "8"
+  drives: *drives
+domains:
+- domain_name: Root
+  domain_id: 1
+  plan_resolution: 10
+  dynamic_slots: 1
+  storage_pool_kinds:
+  - kind: ssd
+    erasure: block-4-2
+    filter_properties:
+      type: SSD
+  databases:
+  - name: db1
+    storage_units:
+      - count: 16
+        kind: ssd
+    compute_units:
+      - count: 8
+        kind: slot
+        zone: sas
+kqp:
+  enable: True
+  kqp_allow_new_engine: "true"
+features:
+  EnableSystemViews: True
+  EnableSchemeBoard: True
+  EnableSchemeBoardCache: True
+column_shard_config:
+  disabled_on_scheme_shard: false
+grpc:
+  services:
+  - yql
+  - scripting
+  - cms
+  - discovery
+  - legacy
+  - experimental
+  - pq
+  - clickhouse_internal
+sys:
+  executors:
+    batch:
+      spin_threshold: 1
+      threads: 7
+    ic:
+      spin_threshold: 10
+      threads: 3
+    io:
+      threads: 2
+    system:
+      spin_threshold: 1
+      threads: 9
+    user:
+      spin_threshold: 1
+      threads: 16
+  scheduler:
+    resolution: 64
+shared_cache:
+  memory_limit: 128000000000
+pq:
+  enabled: True
+log:
+  default: 5
+  syslog: True
+  entries:
+  - level: 7
+    name: HIVE
+  - level: 7
+    name: LOCAL
+  - level: 7
+    name: BS_CONTROLLER
+  - level: 5
+    name: TX_PROXY
+  - level: 5
+    name: TX_DATASHARD
+  - level: 7
+    name: FLAT_TX_SCHEMESHARD
+  - level: 7
+    name: TENANT_SLOT_BROKER
+  - level: 6
+    name: BS_REPL
+profiles:
+- channels:
+  - storage_pool_kind: ssd
+  - storage_pool_kind: ssd
+  - storage_pool_kind: ssd

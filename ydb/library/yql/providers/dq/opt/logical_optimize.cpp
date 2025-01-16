@@ -226,45 +226,46 @@ protected:
     }
 
     // Recursively walk join tree and replace right-side of StreamLookupJoin
-    ui32 RewriteStreamJoinTuple(ui32 leftIdx, const TCoEquiJoin& equiJoin, const TCoEquiJoinTuple& joinTuple, std::vector<TExprNode::TPtr>& args, TExprContext& ctx, bool& changed) {
-        Y_ENSURE(leftIdx < args.size());
-        auto rightIdx = leftIdx + 1;
+    ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEquiJoinTuple& joinTuple, std::vector<TExprNode::TPtr>& args, TExprContext& ctx, bool& changed) {
+        // recursion depth O(args.size())
+        Y_ENSURE(idx < args.size());
+        // handle left side
         if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
-            rightIdx = RewriteStreamJoinTuple(leftIdx, equiJoin, joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
+            idx = RewriteStreamJoinTuple(idx, equiJoin, joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
+        } else {
+            ++idx;
         }
+        // handle right side
         if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
-            return RewriteStreamJoinTuple(rightIdx, equiJoin, joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
+            return RewriteStreamJoinTuple(idx, equiJoin, joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
         }
-        Y_ENSURE(rightIdx < args.size());
-        do { // not a loop
-            if (!IsStreamLookup(joinTuple)) {
-                break;
-            }
-            auto right = equiJoin.Arg(rightIdx).Cast<TCoEquiJoinInput>();
-            auto rightList = right.List();
-            if (auto maybeExtractMembers = rightList.Maybe<TCoExtractMembers>()) {
-                rightList = maybeExtractMembers.Cast().Input();
-            }
-            TExprNode::TPtr lookupSourceWrap;
-            if (auto maybeSource = rightList.Maybe<TDqSourceWrap>()) {
-                lookupSourceWrap = LookupSourceFromSource(maybeSource.Cast(), ctx).Ptr();
-            } else if (auto maybeRead = rightList.Maybe<TDqReadWrap>()) {
-                lookupSourceWrap = LookupSourceFromRead(maybeRead.Cast(), ctx).Ptr();
-            } else {
-                break;
-            }
-            changed = true;
-            args[rightIdx] =
-                Build<TCoEquiJoinInput>(ctx, joinTuple.Pos())
-                    .List(lookupSourceWrap)
-                    .Scope(right.Scope())
-                .Done().Ptr();
-        } while(0);
-        return rightIdx + 1;
+        Y_ENSURE(idx < args.size());
+        if (!IsStreamLookup(joinTuple)) {
+            return idx + 1;
+        }
+        auto right = equiJoin.Arg(idx).Cast<TCoEquiJoinInput>();
+        auto rightList = right.List();
+        if (auto maybeExtractMembers = rightList.Maybe<TCoExtractMembers>()) {
+            rightList = maybeExtractMembers.Cast().Input();
+        }
+        TExprNode::TPtr lookupSourceWrap;
+        if (auto maybeSource = rightList.Maybe<TDqSourceWrap>()) {
+            lookupSourceWrap = LookupSourceFromSource(maybeSource.Cast(), ctx).Ptr();
+        } else if (auto maybeRead = rightList.Maybe<TDqReadWrap>()) {
+            lookupSourceWrap = LookupSourceFromRead(maybeRead.Cast(), ctx).Ptr();
+        } else {
+            return idx + 1;
+        }
+        changed = true;
+        args[idx] =
+            Build<TCoEquiJoinInput>(ctx, joinTuple.Pos())
+                .List(lookupSourceWrap)
+                .Scope(right.Scope())
+            .Done().Ptr();
+        return idx + 1;
     }
 
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
-        Y_UNUSED(ctx);
         const auto equiJoin = node.Cast<TCoEquiJoin>();
         auto argCount = equiJoin.ArgCount();
         const auto joinTuple = equiJoin.Arg(argCount - 2).Cast<TCoEquiJoinTuple>();

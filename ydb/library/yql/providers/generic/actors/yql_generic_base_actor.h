@@ -91,12 +91,6 @@ namespace NYql::NDq {
         };
 
         struct TEvRetry: NActors::TEventLocal<TEvRetry, EvRetry> {
-            explicit TEvRetry(ui32 nextRetries)
-                : NextRetries(nextRetries)
-            {
-            }
-
-            ui32 NextRetries;
         };
 
     protected: // TODO move common logic here

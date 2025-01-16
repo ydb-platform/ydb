@@ -223,10 +223,10 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Become(&TThis::StateUploadPermissions);
     }
 
-    void PutDescription(const google::protobuf::Message& desc, TString key, TString& checksum, auto stateFunc) {
+    void PutDescription(const google::protobuf::Message& desc, const TString& key, TString& checksum, const auto& stateFunc) {
         google::protobuf::TextFormat::PrintToString(desc, &Buffer);
         if (EnableChecksums) {
-            checksum = ComputeExportChecksum(Buffer);
+            checksum = ComputeChecksum(Buffer);
         }
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(key);
@@ -255,13 +255,11 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             this->Become(&TThis::StateUploadData);
             return;
         }
-        const auto& changefeed = Changefeeds[IndexExportedChangefeed].ChangefeedDescription;
-        PutChangefeedDescription(changefeed, GetCurrentChangefeedName());
+        PutChangefeedDescription(Changefeeds[IndexExportedChangefeed].ChangefeedDescription, GetCurrentChangefeedName());
     }
 
     void UploadTopic() {
-        const auto& topic = Changefeeds[IndexExportedChangefeed].Topic;
-        PutTopicDescription(topic, GetCurrentChangefeedName());
+        PutTopicDescription(Changefeeds[IndexExportedChangefeed].Topic, GetCurrentChangefeedName());
     }
 
     void UploadMetadata() {
@@ -353,12 +351,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         }
 
         auto nextStep = [this]() {
-            if (IndexExportedChangefeed == Changefeeds.size()) {
-                ChangefeedsUploaded = true;
-                this->Become(&TThis::StateUploadData);
-            } else {
-                UploadTopic();
-            }
+            UploadTopic();
         };
         if (EnableChecksums) {
             TString checksumKey = ChecksumKey(Settings.GetChangefeedKey(GetCurrentChangefeedName()));
@@ -943,12 +936,14 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     for (int i = 0; i < changefeedsCount; ++i) {
         Ydb::Table::ChangefeedDescription changefeedDesc;
         Ydb::Topic::DescribeTopicResult topic;
-        FillChangefeedDescription(changefeedDesc, cdcStreams[i]);
+        const auto& cdcStream = cdcStreams[i];
+        const auto& persQueueTPathDesc = persQueuesTPathDesc[i];
+        FillChangefeedDescription(changefeedDesc, cdcStream);
         Ydb::StatusIds_StatusCode status;
         TString error;
-        FillTopicDescription(topic, persQueuesTPathDesc[i].GetPersQueueGroup(),
-        persQueuesTPathDesc[i].GetSelf(),
-        cdcStreams[i].GetName(), status, error);
+        FillTopicDescription(topic, persQueueTPathDesc.GetPersQueueGroup(),
+        persQueueTPathDesc.GetSelf(),
+        cdcStream.GetName(), status, error);
         changefeedsExportDescs.emplace_back(changefeedDesc, topic);
     }
 

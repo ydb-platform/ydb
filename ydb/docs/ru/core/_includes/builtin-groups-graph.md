@@ -16,22 +16,27 @@ METADATA-READERS --> DATA-READERS & DDL-ADMINS
 USERS --> METADATA-READERS & DDL-ADMINS & ACCESS-ADMINS
 
     DATA-READERS["<b>DATA-READERS</b>
-    +SelectRow"]
+    +SelectRow"
+    ]
 
     DATA-WRITERS["<b>DATA-WRITERS</b>
     +UpdateRow
-    +EraseRow"]
+    +EraseRow"
+    ]
 
     METADATA-READERS["<b>METADATA-READERS</b>
     +DescribeSchema
-    +ReadAttributes"]
+    +ReadAttributes"
+    ]
 
     DATABASE-ADMINS["<b>DATABASE-ADMINS</b>
     +CreateDatabase
-    +DropDatabase"]
+    +DropDatabase"
+    ]
 
     ACCESS-ADMINS["<b>ACCESS-ADMINS</b>
-    +GrantAccessRights"]
+    +GrantAccessRights"
+    ]
 
     DDL-ADMINS["<b>DDL-ADMINS</b>
     +CreateDirectory
@@ -39,9 +44,12 @@ USERS --> METADATA-READERS & DDL-ADMINS & ACCESS-ADMINS
     +CreateQueue
     +WriteAttributes
     +AlterSchema
-    +RemoveSchema"]
+    +RemoveSchema"
+    ]
 
-    USERS[<b>USERS</b>]
+    USERS[<b>USERS</b>
+    +ConnectDatabase
+    ]
     ADMINS[<b>ADMINS</b>]
 ```
 

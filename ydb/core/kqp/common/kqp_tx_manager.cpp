@@ -146,8 +146,9 @@ public:
         return ShardsInfo.at(shardId).State;
     }
 
-    void SetState(ui64 shardId, EShardState state) override {
-        ShardsInfo.at(shardId).State = state;
+    void SetError(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.State = EShardState::ERROR;
     }
 
     void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) override {

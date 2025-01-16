@@ -1678,13 +1678,11 @@ public:
             LOG_W(logMsg);
         }
 
-        TString reason = TStringBuilder() << msg.Message << "; " << msg.SubIssues.ToString();
-
         if (ExecuterId) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.StatusCode, reason);
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.StatusCode, msg.Issues);
             Send(ExecuterId, abortEv.Release(), IEventHandle::FlagTrackDelivery);
         } else {
-            ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), logMsg, MessageFromIssues(msg.SubIssues));
+            ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), logMsg, MessageFromIssues(msg.Issues));
         }
     }
 

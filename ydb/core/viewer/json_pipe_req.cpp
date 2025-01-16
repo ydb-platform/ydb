@@ -1,4 +1,5 @@
 #include "json_pipe_req.h"
+#include "log.h"
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
@@ -811,6 +812,13 @@ TString TViewerPipeClient::MakeForward(const std::vector<ui32>& nodes) {
 void TViewerPipeClient::RequestDone(ui32 requests) {
     if (requests == 0) {
         return;
+    }
+    if (requests > Requests) {
+        BLOG_ERROR("Requests count mismatch: " << requests << " > " << Requests);
+        if (Span) {
+            Span.Event("Requests count mismatch");
+        }
+        requests = Requests;
     }
     Requests -= requests;
     if (!DelayedRequests.empty()) {

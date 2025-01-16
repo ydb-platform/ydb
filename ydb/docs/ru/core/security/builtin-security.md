@@ -2,7 +2,7 @@
 
 "Встроенная" настройка безопасности применяется автоматически при первом запуске кластера {{ ydb-short-name }}, если секция настроек безопасности в конфигурации кластера ([секция `security_config`](../reference/configuration/index.md#security)) не содержит явных настроек.
 
-Применение "встроенной" конфигурации безопасности выключается по [флагу `domains_config.disable_builtin_security`](../reference/configuration/index.md#domains-config).
+Применение "встроенной" конфигурации безопасности выключается по [флагу `domains_config.disable_builtin_security`](../reference/configuration/index.md#domains_config.disable_builtin_security).
 
 "Встроенная" настройка безопасности добавляет в систему суперпользователя, а также реализует набор ролей безопасности для удобного управления пользователями.
 

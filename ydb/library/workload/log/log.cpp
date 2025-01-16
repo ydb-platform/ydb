@@ -50,12 +50,9 @@ std::string TLogGenerator::GetDDLQueries() const {
     }
 
     ss << "PRIMARY KEY(";
-    ss << "ts, ";
+    ss << "ts";
     for (size_t i = 1; i < Params.KeyColumnsCnt; ++i) {
-        ss << "c" << i;
-        if (i + 1 < Params.KeyColumnsCnt) {
-            ss << ", ";
-        }
+        ss << ", c" << i;
     }
     ss << ")) WITH (";
 

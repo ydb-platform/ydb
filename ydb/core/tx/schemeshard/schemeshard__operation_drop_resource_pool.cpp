@@ -24,7 +24,7 @@ public:
         const TPathId& pathId = txState->TargetPathId;
         const TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
         const TPathElement::TPtr parentDirPtr = context.SS->PathsById.at(pathPtr->ParentPathId);
-    
+
         NIceDb::TNiceDb db(context.GetDB());
 
         Y_ABORT_UNLESS(!pathPtr->Dropped());
@@ -34,7 +34,7 @@ public:
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside();
-        parentDirPtr->DecAliveChildren();
+        DecAliveChildrenDirect(OperationId, parentDirPtr, context); // for correct discard of ChildrenExist prop
         context.SS->TabletCounters->Simple()[COUNTER_RESOURCE_POOL_COUNT].Sub(1);
 
         ++parentDirPtr->DirAlterVersion;

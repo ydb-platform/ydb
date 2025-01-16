@@ -304,9 +304,6 @@ private:
 
         auto block = main;
 
-        const auto placeholder = NYql::NCodegen::ETarget::Windows == ctx.Codegen.GetEffectiveTarget() ?
-            new AllocaInst(valueType, 0U, "placeholder", block) : nullptr;
-
         const auto statePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, static_cast<const IComputationNode*>(this)->GetIndex())}, "state_ptr", block);
         const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
@@ -326,17 +323,9 @@ private:
 
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::Get));
 
-        Value* input;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto getType = FunctionType::get(valueType, {stateArg->getType(), pos->getType()}, false);
-            const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
-            input = CallInst::Create(getType, getPtr, {stateArg, pos}, "input", block);
-        } else {
-            const auto getType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), placeholder->getType(), pos->getType()}, false);
-            const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
-            CallInst::Create(getType, getPtr, {stateArg, placeholder, pos}, "", block);
-            input = new LoadInst(valueType, placeholder, "input", block);
-        }
+        const auto getType = FunctionType::get(valueType, {stateArg->getType(), pos->getType()}, false);
+        const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
+        const auto input = CallInst::Create(getType, getPtr, {stateArg, pos}, "input", block);
 
         const auto special = SwitchInst::Create(input, good, 2U, block);
         special->addCase(GetYield(context), back);
@@ -469,7 +458,7 @@ public:
             block = good;
 
             const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::Add));
-            const auto addArg = WrapArgumentForWindows(item, ctx, block);
+            const auto addArg = item;
             const auto addType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), addArg->getType()}, false);
             const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "add", block);
             CallInst::Create(addType, addPtr, {stateArg, addArg}, "", block);
@@ -812,7 +801,7 @@ private:
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(ptrValueType) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(context);
@@ -883,8 +872,7 @@ private:
 
             const auto used = GetMemoryUsed(MemLimit, ctx, block);
 
-            const auto stream = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-                new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+            const auto stream = static_cast<Value*>(containerArg);
 
             BranchInst::Create(loop, block);
 

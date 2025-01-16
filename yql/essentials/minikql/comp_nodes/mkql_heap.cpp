@@ -84,18 +84,9 @@ public:
         const auto idxType = Type::getInt32Ty(context);
 
         Value* array = nullptr;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
-        } else {
-            const auto arrayPtr = new AllocaInst(valueType, 0U, "array_ptr", block);
-            new StoreInst(list, arrayPtr, block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {fact->getType(), arrayPtr->getType(), arrayPtr->getType(), itemsPtr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funType, funcPtr, {fact, arrayPtr, arrayPtr, itemsPtr}, "", block);
-            array = new LoadInst(valueType, arrayPtr, "array", block);
-        }
+        const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+        array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
 
         result->addIncoming(array, block);
 
@@ -269,18 +260,9 @@ public:
         const auto idxType = Type::getInt32Ty(context);
 
         Value* array = nullptr;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
-        } else {
-            const auto arrayPtr = new AllocaInst(valueType, 0U, "array_ptr", block);
-            new StoreInst(list, arrayPtr, block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {fact->getType(), arrayPtr->getType(), arrayPtr->getType(), itemsPtr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funType, funcPtr, {fact, arrayPtr, arrayPtr, itemsPtr}, "", block);
-            array = new LoadInst(valueType, arrayPtr, "array", block);
-        }
+        const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+        array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
 
         result->addIncoming(array, block);
 

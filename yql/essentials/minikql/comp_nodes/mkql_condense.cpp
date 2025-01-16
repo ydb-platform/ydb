@@ -352,7 +352,7 @@ private:
             return f;
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
@@ -373,8 +373,7 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        const auto container = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+        const auto container = static_cast<Value*>(containerArg);
 
         const auto state = new LoadInst(stateType, statePtr, "state", block);
 

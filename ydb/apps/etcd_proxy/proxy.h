@@ -27,7 +27,7 @@ private:
 
     int Discovery();
     int InitDatabase();
-    int StartGrpc();
+    int StartServer();
 
     static THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
     static TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();

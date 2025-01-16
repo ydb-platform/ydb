@@ -14,6 +14,10 @@ PEERDIR(
     ydb/core/keyvalue
 )
 
+RESOURCE(
+    ydb/apps/etcd_proxy/service/update.sql update.sql
+    ydb/apps/etcd_proxy/service/upsert.sql upsert.sql
+)
 END()
 
 RECURSE_FOR_TESTS(

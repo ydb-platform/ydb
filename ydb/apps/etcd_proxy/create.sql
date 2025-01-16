@@ -9,7 +9,7 @@ CREATE TABLE huidig
     PRIMARY KEY (`key`)
 );
 
-CREATE TABLE verleeden
+CREATE TABLE verhaal
 (
     `key` Bytes NOT NULL,
     `created` Int64 NOT NULL,

@@ -1,4 +1,6 @@
 #include "etcd_impl.h"
+#include "events.h"
+#include "../appdata.h"
 
 #include <ydb/public/api/grpc/etcd/rpc.pb.h>
 
@@ -10,6 +12,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/mind/local.h>
 #include <ydb/core/protos/local.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/tx.h>
 
 
 namespace NKikimr::NGRpcService {
@@ -40,6 +43,18 @@ using namespace Ydb;
 // COPY_PRIMITIVE_FIELD
 
 namespace {
+
+TString DecrementKey(TString key) {
+    for (auto i = key.size(); i > 0u;) {
+        if (const auto k = key[--i]) {
+            key[i] = k - '\x01';
+            return key;
+        } else {
+            key[i] = '\xFF';
+        }
+    }
+    return TString();
+}
 
 void CopyProtobuf(const etcdserverpb::RangeRequest &from, NKikimrKeyValue::ReadRangeRequest *to) {
     to->mutable_range()->set_from_key_inclusive(from.key());
@@ -102,26 +117,20 @@ template <typename TDerived>
 class TBaseEtcdRequest {
 protected:
     void OnBootstrap() {
+/*
         auto self = static_cast<TDerived*>(this);
         if (const auto& userToken = self->Request_->GetSerializedToken()) {
             UserToken = new NACLib::TUserToken(userToken);
         }
-        SendNavigateRequest();
+        ParseGrpcRequest();
+        SendDatabaseRequest();
+*/
     }
 
-    void SendNavigateRequest() {
-        auto self = static_cast<TDerived*>(this);
-        auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        auto& entry = req->ResultSet.emplace_back();
-        entry.Path = ::NKikimr::SplitPath("/Root/mydb/kvtable");
-        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
-        entry.ShowPrivatePath = true;
-        entry.SyncVersion = false;
-        req->UserToken = UserToken;
-        req->DatabaseName = self->Request_->GetDatabaseName().GetOrElse("");
-        auto ev = new TEvTxProxySchemeCache::TEvNavigateKeySet(req.Release());
-        self->Send(MakeSchemeCacheID(), ev, 0, 0, self->Span_.GetTraceId());
-    }
+    virtual bool ParseGrpcRequest() = 0;
+    virtual std::pair<TString, NYdb::TParams> MakeQueryAndParams() const = 0;
+
+    virtual void ReplyWith(const NYdb::TResultSets& results) = 0;
 
     bool OnNavigateKeySetResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, ui32 access) {
         auto self = static_cast<TDerived*>(this);
@@ -477,8 +486,27 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
-        this->OnBootstrap();
+
+        this->ParseGrpcRequest();
         this->Become(&TEtcdRequestGrpc::StateFunc);
+
+        SendDatabaseRequest();
+    }
+private:
+    void SendDatabaseRequest() {
+        const auto& query = this->MakeQueryAndParams();
+
+        Cerr << __func__ << Endl << query.first << Endl;
+
+        const auto self = this->SelfId();
+        const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
+        NEtcd::AppData()->Client->ExecuteQuery(query.first, NYdb::NQuery::TTxControl::NoTx(), query.second).Subscribe([self, ass](const auto& future) {
+            const auto res = future.GetValueSync();
+            if (res.IsSuccess())
+                ass->Send(self, new NEtcd::TEvQueryResult(res.GetResultSets()));
+            else
+                ass->Send(self, new NEtcd::TEvQueryError(res.GetIssues()));
+        });
     }
 protected:
     STFUNC(StateFunc) {
@@ -487,9 +515,19 @@ protected:
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TKVRequest::TResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(NEtcd::TEvQueryResult, Handle);
+            hFunc(NEtcd::TEvQueryError, Handle);
         default:
             return TBase::StateFuncBase(ev);
         }
+    }
+
+    void Handle(NEtcd::TEvQueryResult::TPtr &ev) {
+        this->ReplyWith(ev->Get()->Results);
+    }
+
+    void Handle(NEtcd::TEvQueryError::TPtr &ev) {
+        Cerr << __func__ << ' ' << ev->Get()->Issues.ToString() << Endl;
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
@@ -585,6 +623,93 @@ class TRangeRequest
 public:
     using TBase = TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest, TEvKeyValue::TEvReadRange, NACLib::SelectRow>;
     using TBase::TBase;
+private:
+    bool ParseGrpcRequest() final {
+        Revision = NEtcd::AppData()->Revision.fetch_add(1L);
+
+        const auto &rec = *GetProtoRequest();
+        Key = rec.key();
+        RangeEnd = DecrementKey(rec.range_end());
+        KeysOnly = rec.keys_only();
+        CountOnly = rec.count_only();
+        Limit = rec.limit();
+        Revision = rec.revision();
+        MinCreateRevision = rec.min_create_revision();
+        MaxCreateRevision = rec.max_create_revision();
+        MinModificateRevision = rec.min_mod_revision();
+        MaxModificateRevision = rec.max_mod_revision();
+        return !Key.empty();
+    }
+
+    std::pair<TString, NYdb::TParams> MakeQueryAndParams() const final {
+        TStringBuilder sql;
+        sql << "declare $Key as String;" << Endl;
+        sql << "select ";
+        if (CountOnly)
+            sql << "count(*)";
+        else if (KeysOnly)
+            sql << "`key`";
+        else
+            sql << "`key`,`value`,`created`,`modified`,`version`,`lease`";
+        sql << Endl << "from ";
+        const bool fromHistory = Revision || MinCreateRevision || MaxCreateRevision || MinModificateRevision || MaxModificateRevision;
+        sql << (fromHistory ? "verhaal" : "huidig") << Endl;
+        sql << " where ";
+        if (RangeEnd.empty())
+            sql << "`key` = $Key";
+        else if (RangeEnd == Key)
+            sql << "startswith(`key`,$Key)";
+        if (Limit)
+            sql << "LIMIT " << Limit;
+
+        sql << ';' << Endl;
+
+        auto params = NYdb::TParamsBuilder()
+            .AddParam("$Key").String(Key).Build()
+            .Build();
+
+        return {sql, params};
+    }
+
+    void ReplyWith(const NYdb::TResultSets& results) final {
+        etcdserverpb::RangeResponse response;
+        const auto header = response.mutable_header();
+        header->set_revision(Revision);
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+
+        if (!results.empty()) {
+            auto parser = NYdb::TResultSetParser(results.front());
+            if (CountOnly) {
+                if (parser.TryNextRow()) {
+                    response.set_count(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
+                }
+            } else if (KeysOnly) {
+                while (parser.TryNextRow()) {
+                    response.add_kvs()->set_key(NYdb::TValueParser(parser.GetValue(0)).GetString());
+                }
+            } else {
+                while (parser.TryNextRow()) {
+                    const auto kvs = response.add_kvs();
+                    kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
+                    kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
+                    kvs->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
+                    kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
+                    kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
+                    kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+                }
+            }
+        }
+        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+    }
+
+    TString Key, RangeEnd;
+    bool KeysOnly, CountOnly;
+    i64 Limit;
+    i64 Revision;
+    i64 MinCreateRevision, MaxCreateRevision;
+    i64 MinModificateRevision, MaxModificateRevision;
 };
 
 class TPutRequest
@@ -592,6 +717,77 @@ class TPutRequest
 public:
     using TBase = TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest, TEvKeyValue::TEvExecuteTransaction, NACLib::UpdateRow>;
     using TBase::TBase;
+private:
+    bool ParseGrpcRequest() final {
+        Revision = NEtcd::AppData()->Revision.fetch_add(1L);
+
+        auto &rec = *GetProtoRequest();
+        Key = rec.key();
+        Value = rec.value();
+        Lease = rec.lease();
+        GetPrevious = rec.prev_kv();
+        IgnoreValue = rec.ignore_value();
+        IgnoreLease = rec.ignore_lease();
+        return !Key.empty();
+    }
+
+    std::pair<TString, NYdb::TParams> MakeQueryAndParams() const final {
+        TStringBuilder sql;
+        sql << "declare $Revision as Int64;" << Endl;
+        sql << "declare $Key as String;" << Endl;
+        if (!IgnoreValue)
+            sql << "declare $Value as String;" << Endl;
+        if (!IgnoreLease)
+            sql << "declare $Lease as Int64;" << Endl;
+
+        const bool update = IgnoreValue || IgnoreLease;
+        sql << Endl << NResource::Find(update ? "update.sql" : "upsert.sql") << Endl;
+
+        if (GetPrevious) {
+            sql << "select `value`, `created`, `modified`, `version`,`lease` from `huidig` where `key` = $Key;" << Endl;
+        }
+
+        sql << Endl << "do $up" << (update ? "date" : "sert") << "($Revision,$Key," << (IgnoreValue ? "NULL" : "$Value") << ',' << (IgnoreLease ? "NULL" : "$Lease") << ");" << Endl;
+
+        auto params = NYdb::TParamsBuilder()
+            .AddParam("$Key").String(Key).Build()
+            .AddParam("$Revision").Int64(Revision).Build()
+            .AddParam("$Value").String(Value).Build()
+            .AddParam("$Lease").Int64(Lease).Build()
+            .Build();
+
+        return {sql, params};
+    }
+
+    void ReplyWith(const NYdb::TResultSets& results) final {
+        etcdserverpb::PutResponse response;
+        const auto header = response.mutable_header();
+        header->set_revision(Revision);
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+
+        if (GetPrevious && !results.empty()) {
+            if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
+                const auto prev = response.mutable_prev_kv();
+                prev->set_key(Key);
+                prev->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
+                prev->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
+                prev->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
+                prev->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
+                prev->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+            }
+        }
+
+        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+    }
+
+    i64 Revision;
+    TString Key, Value;
+    bool GetPrevious = false;
+    bool IgnoreValue = false;
+    bool IgnoreLease = false;
+    i64 Lease = 0LL;
 };
 
 class TDeleteRangeRequest
@@ -599,6 +795,41 @@ class TDeleteRangeRequest
 public:
     using TBase = TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest, TEvKeyValue::TEvExecuteTransaction, NACLib::EraseRow>;
     using TBase::TBase;
+private:
+    bool ParseGrpcRequest() final {
+        Revision = NEtcd::AppData()->Revision.fetch_add(1L);
+
+        auto &rec = *GetProtoRequest();
+        Y_UNUSED(rec);
+        return true;
+    }
+
+    std::pair<TString, NYdb::TParams> MakeQueryAndParams() const final {
+        TStringBuilder sql;
+        sql << "declare $Key as String;" << Endl;
+///////
+        auto params = NYdb::TParamsBuilder()
+            .AddParam("$Key")
+                .String(Key)
+                .Build()
+            .Build();
+
+
+        return {sql, params};
+    }
+
+    void ReplyWith(const NYdb::TResultSets&) final {
+        etcdserverpb::DeleteRangeResponse response;
+        const auto header = response.mutable_header();
+        header->set_revision(Revision);
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+    }
+
+    i64 Revision;
+    TString Key, RangeEnd;
 };
 
 }

@@ -9,7 +9,6 @@
 #include <ydb/library/actors/interconnect/poller_actor.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/apps/etcd_proxy/service/grpc_service.h>
 #include <ydb/core/grpc_services/base/base.h>
 
@@ -31,33 +30,14 @@ void TProxy::OnTerminate(int) {
 int TProxy::Init() {
     ActorSystem->Start();
     ActorSystem->Register(NActors::CreateProcStatCollector(TDuration::Seconds(7), AppData.MetricRegistry));
-
     Poller = ActorSystem->Register(NActors::CreatePollerActor());
-//    const NKikimrConfig::TAppConfig config;
-//    const auto grpc = NKikimr::NGRpcService::CreateGRpcRequestProxySimple(config);
-//    GrpcProxy = ActorSystem->Register(NKikimr::NGRpcService::CreateGRpcRequestProxySimple(config));
-  //  const auto id = NKikimr::NGRpcService::CreateGRpcRequestProxyId(0);
-
-/*
-    auto grpcReqProxy = Config.HasGRpcConfig() && Config.GetGRpcConfig().GetSkipSchemeCheck()
-                ? NGRpcService::CreateGRpcRequestProxySimple(Config)
-                : NGRpcService::CreateGRpcRequestProxy(Config);
-            setup->LocalServices.push_back(std::pair<TActorId,
-                                           TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(i),
-                                                           TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
-                                                                          appData->UserPoolId))); */
-    if (const auto res = Discovery()) {
-        return res;
-    }
-
-    return 0;
+    return Discovery();
 }
 
 int TProxy::Discovery() {
     NYdb::TDriverConfig config;
     config.SetEndpoint(Endpoint);
     config.SetDatabase(Database);
-
     const auto driver = NYdb::TDriver(config);
     auto client = NYdb::NDiscovery::TDiscoveryClient(driver);
     const auto res = client.ListEndpoints().GetValueSync();
@@ -65,7 +45,13 @@ int TProxy::Discovery() {
         TStringBuilder str;
         str << res.GetEndpointsInfo().front().Address << ':' << res.GetEndpointsInfo().front().Port;
         Endpoint = str;
-        Cerr << __func__ << ' ' << Endpoint << Endl;
+
+        NYdb::TDriverConfig config;
+        config.SetEndpoint(Endpoint);
+        config.SetDatabase(Database);
+        const auto driver = NYdb::TDriver(config);
+        AppData.Client = std::make_shared<NYdb::NQuery::TQueryClient>(driver);
+
         return 0;
     } else {
         Cerr << res.GetIssues().ToString() << Endl;
@@ -73,18 +59,33 @@ int TProxy::Discovery() {
     }
 }
 
-int TProxy::StartGrpc() {
+int TProxy::StartServer() {
+    const auto res = AppData.Client->ExecuteQuery("select coalesce(max(`modified`), 0L) + 1L from `verhaal`;", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    if (res.IsSuccess()) {
+        if (auto result = res.GetResultSetParser(0); result.TryNextRow()) {
+            const auto revision = NYdb::TValueParser(result.GetValue(0)).GetInt64();
+            Cout << "The current revision is " << revision << '.' << Endl;
+            AppData.Revision.store(revision);
+        } else {
+            Cout << "Unexpected result of get max revision." << Endl;
+            return 1;
+        }
+    } else {
+        Cout << res.GetIssues().ToString() << Endl;
+        return 1;
+    }
+
     NYdbGrpc::TServerOptions opts;
     opts.SetPort(ListeningPort);
 
     GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts, Counters);
     GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdGRpcService(ActorSystem.get(), Counters));
     GRpcServer->Start();
-
+    Cout << "Etcd service over " << Database << " on " << Endpoint << " was started." << Endl;
     return 0;
 }
 
-int TProxy::Run() try {
+int TProxy::Run() {
     if (const auto res = Init()) {
         return res;
     }
@@ -93,41 +94,25 @@ int TProxy::Run() try {
             return res;
         }
     } else {
-        if (const auto res = StartGrpc()) {
+        if (const auto res = StartServer()) {
             return res;
         }
-#ifndef NDEBUG
-        Cout << "Started" << Endl;
-#endif
-        while (!Quit) {
-            Sleep(TDuration::MilliSeconds(101));
-        }
-#ifndef NDEBUG
-        Cout << Endl << "Finished" << Endl;
-#endif
+        do
+            Sleep(TDuration::MilliSeconds(97));
+        while (!Quit);
     }
     return Shutdown();
 }
-catch (const yexception& e) {
-    Cerr << e.what() << Endl;
-    return 1;
-}
 
 int TProxy::InitDatabase() {
-    NYdb::TDriverConfig config;
-    config.SetEndpoint(Endpoint);
-    config.SetDatabase(Database);
-
-    const auto driver = NYdb::TDriver(config);
-    auto client = NYdb::NQuery::TQueryClient(driver);
-
     const auto query = NResource::Find("create.sql");
-    const auto res = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    const auto res = AppData.Client->ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
     if (res.IsSuccess()) {
+        Cout << "Database " << Database << " on " << Endpoint << " was initialized." << Endl;
         return 0;
     } else {
-        Cerr << res.GetIssues().ToString() << Endl;
+        Cout << res.GetIssues().ToString() << Endl;
         return 1;
     }
 }
@@ -140,7 +125,8 @@ int TProxy::Shutdown() {
 }
 
 TProxy::TProxy(int argc, char** argv)
-    : Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>()) {
+    : Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
+{
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     bool useStdErr = false;
     bool mlock = false;

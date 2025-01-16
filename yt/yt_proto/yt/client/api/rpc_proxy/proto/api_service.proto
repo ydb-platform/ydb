@@ -498,6 +498,8 @@ message TReqLookupRows
 
     required TRowsetDescriptor rowset_descriptor = 200;
 
+    optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 12;
+
     reserved 5;
     reserved 6;
 }
@@ -566,6 +568,8 @@ message TReqMultiLookup
         required TRowsetDescriptor rowset_descriptor = 6;
 
         required int32 attachment_count = 7;
+
+        optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 8;
     }
 
     repeated TSubrequest subrequests = 1;

@@ -134,9 +134,9 @@ namespace NWilson {
 
             NMonitoring::TDynamicCounters::TCounterPtr DroppedSpansCounter;
             NMonitoring::TDynamicCounters::TCounterPtr SentSpansCounter;
-            NMonitoring::TDynamicCounters::TCounterPtr SentSpansBytes;
-            NMonitoring::TDynamicCounters::TCounterPtr SentSpanBatchesOk;
-            NMonitoring::TDynamicCounters::TCounterPtr SentSpanBatchesErr;
+            NMonitoring::TDynamicCounters::TCounterPtr SentBytesCounter;
+            NMonitoring::TDynamicCounters::TCounterPtr SentSpanBatchesOkCounter;
+            NMonitoring::TDynamicCounters::TCounterPtr SentSpanBatchesErrCounter;
 
         public:
             TWilsonUploader(TWilsonUploaderParams params)
@@ -154,9 +154,9 @@ namespace NWilson {
                 , CurrentBatch(MaxSpansInBatch, MaxBytesInBatch, ServiceName)
                 , DroppedSpansCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderDroppedSpans", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
                 , SentSpansCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentSpans", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
-                , SentSpansBytes(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentSpansBytes", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
-                , SentSpanBatchesOk(params.Counters ? params.Counters->GetSubgroup("sensor", "WilsonUploaderSentSpanBatches")->GetNamedCounter("status", "ok", "true") : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
-                , SentSpanBatchesErr(params.Counters ? params.Counters->GetSubgroup("sensor", "WilsonUploaderSentSpanBatches")->GetNamedCounter("status", "err", "true") : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
+                , SentBytesCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentBytes", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
+                , SentSpanBatchesOkCounter(params.Counters ? params.Counters->GetSubgroup("sensor", "WilsonUploaderSentSpanBatches")->GetNamedCounter("status", "ok", "true") : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
+                , SentSpanBatchesErrCounter(params.Counters ? params.Counters->GetSubgroup("sensor", "WilsonUploaderSentSpanBatches")->GetNamedCounter("status", "err", "true") : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
             {}
 
             ~TWilsonUploader() {
@@ -309,7 +309,7 @@ namespace NWilson {
                         << " Name# " << span.name());
                 }
                 SentSpansCounter->Add(batch.SizeSpans);
-                SentSpansBytes->Add(batch.SizeBytes);
+                SentBytesCounter->Add(batch.SizeBytes);
 
                 NextSendTimestamp = now + TDuration::MicroSeconds((batch.SizeSpans * 1'000'000) / MaxSpansPerSecond);
                 SpansSizeBytes -= batch.SizeBytes;
@@ -344,13 +344,13 @@ namespace NWilson {
                     auto node = std::unique_ptr<TExportRequestData>(static_cast<TExportRequestData*>(tag));
                     ALOG_TRACE(WILSON_SERVICE_ID, "finished export request " << (void*)node.get());
                     if (!node->Status.ok()) {
-                        SentSpanBatchesErr->Inc();
+                        SentSpanBatchesErrCounter->Inc();
                         LastCommitTraceErrStr = node->Status.error_message();
 
                         ALOG_ERROR(WILSON_SERVICE_ID,
                             "failed to commit traces: " << node->Status.error_message());
                     } else {
-                        SentSpanBatchesOk->Inc();
+                        SentSpanBatchesOkCounter->Inc();
                     }
 
                     --ExportRequestsCount;
@@ -423,7 +423,7 @@ namespace NWilson {
                         str << "Current batch queue size: " << BatchQueue.size();
                     }
                     PARA() {
-                        str << "Sent spans: " << SentSpansBytes->Val();
+                        str << "Sent spans: " << SentBytesCounter->Val();
                     }
                     PARA() {
                         str << "Dropped spans: " << DroppedSpansCounter->Val();

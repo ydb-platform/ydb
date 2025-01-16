@@ -53,16 +53,16 @@ namespace NYql::NConnector {
             });
         }
 
-        virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request) override {
-            return UnaryCall<NApi::TDescribeTableRequest, NApi::TDescribeTableResponse>(request, &NApi::Connector::Stub::AsyncDescribeTable);
+        virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request, TDuration timeout = {}) override {
+            return UnaryCall<NApi::TDescribeTableRequest, NApi::TDescribeTableResponse>(request, &NApi::Connector::Stub::AsyncDescribeTable, timeout);
         }
 
-        virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request) override {
-            return ServerSideStreamingCall<NApi::TListSplitsRequest, NApi::TListSplitsResponse>(request, &NApi::Connector::Stub::AsyncListSplits);
+        virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request, TDuration timeout = {}) override {
+            return ServerSideStreamingCall<NApi::TListSplitsRequest, NApi::TListSplitsResponse>(request, &NApi::Connector::Stub::AsyncListSplits, timeout);
         }
 
-        virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request) override {
-            return ServerSideStreamingCall<NApi::TReadSplitsRequest, NApi::TReadSplitsResponse>(request, &NApi::Connector::Stub::AsyncReadSplits);
+        virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request, TDuration timeout = {}) override {
+            return ServerSideStreamingCall<NApi::TReadSplitsRequest, NApi::TReadSplitsResponse>(request, &NApi::Connector::Stub::AsyncReadSplits, timeout);
         }
 
         ~TClientGRPC() {
@@ -80,7 +80,7 @@ namespace NYql::NConnector {
         template <class TRequest, class TResponse>
         TAsyncResult<TResponse> UnaryCall(
             const TRequest& request,
-            typename NYdbGrpc::TSimpleRequestProcessor<NApi::Connector::Stub, TRequest, TResponse>::TAsyncRequest rpc) {
+            typename NYdbGrpc::TSimpleRequestProcessor<NApi::Connector::Stub, TRequest, TResponse>::TAsyncRequest rpc, TDuration timeout = {}) {
             auto context = GrpcClient_->CreateContext();
             if (!context) {
                 throw yexception() << "Client is being shutted down";
@@ -95,7 +95,7 @@ namespace NYql::NConnector {
                 std::move(request),
                 std::move(callback),
                 rpc,
-                {},
+                { .Timeout = timeout },
                 context.get());
 
             return promise.GetFuture();
@@ -104,7 +104,8 @@ namespace NYql::NConnector {
         template <class TRequest, class TResponse>
         TIteratorAsyncResult<IStreamIterator<TResponse>> ServerSideStreamingCall(
             const TRequest& request,
-            TStreamRpc<NApi::Connector::Stub, TRequest, TResponse, NYdbGrpc::TStreamRequestReadProcessor> rpc) {
+            TStreamRpc<NApi::Connector::Stub, TRequest, TResponse, NYdbGrpc::TStreamRequestReadProcessor> rpc,
+            TDuration timeout = {}) {
             using TStreamProcessorPtr = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
             using TStreamInitResult = std::pair<NYdbGrpc::TGrpcStatus, TStreamProcessorPtr>;
 
@@ -121,7 +122,7 @@ namespace NYql::NConnector {
                     promise.SetValue({std::move(status), streamProcessor});
                 },
                 rpc,
-                {},
+                { .Timeout = timeout },
                 context.get());
 
             // TODO: async handling YQ-2513

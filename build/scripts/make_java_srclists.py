@@ -7,7 +7,7 @@ import argparse
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 import java_pack_to_file as jcov
-
+from autotar_gendirs import unpack_dir
 
 def writelines(f, rng):
     f.writelines(item + '\n' for item in rng)
@@ -100,6 +100,12 @@ def main():
 
     src_sorter = SourcesSorter(args.moddir)
     for src in src_sorter.sort_args(remaining_args):
+        # Handle archived sources here
+        if src.endswith(".gentar"):
+            unpack_dir(src, os.path.dirname(src))
+            continue
+
+        # Handle regular souce files there
         if src.endswith(".java"):
             java.append(src)
             kotlin.append(src)

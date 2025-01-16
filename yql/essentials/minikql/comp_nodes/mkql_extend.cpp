@@ -566,19 +566,10 @@ public:
         const auto factory = ctx.GetFactory();
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(IsStream ? &THolderFactory::ExtendStream : &THolderFactory::ExtendList<false>));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {factory->getType(), array->getType(), size->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto res = CallInst::Create(funType, funcPtr, {factory, array, size}, "res", block);
-            return res;
-        } else {
-            const auto retPtr = new AllocaInst(valueType, 0U, "ret_ptr", block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {factory->getType(), retPtr->getType(), array->getType(), size->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funType, funcPtr, {factory, retPtr, array, size}, "", block);
-            const auto res = new LoadInst(valueType, retPtr, "res", block);
-            return res;
-        }
+        const auto funType = FunctionType::get(valueType, {factory->getType(), array->getType(), size->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+        const auto res = CallInst::Create(funType, funcPtr, {factory, array, size}, "res", block);
+        return res;
     }
 #endif
 private:

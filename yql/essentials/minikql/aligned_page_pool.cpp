@@ -1,7 +1,7 @@
 #include "aligned_page_pool.h"
-#include "util/string/builder.h"
 
 #include <util/generic/yexception.h>
+#include <util/stream/file.h>
 #include <util/string/cast.h>
 #include <util/system/align.h>
 #include <util/system/compiler.h>
@@ -25,6 +25,30 @@ constexpr ui32 MaxMidSize = (1u << MidLevels) * TAlignedPagePool::POOL_PAGE_SIZE
 static_assert(MaxMidSize == 64 * 1024 * 1024, "Upper memory block 64 Mb");
 
 namespace {
+
+size_t GetMemoryMapsCount() {
+    size_t lineCount = 0;
+    TString line;
+#if defined(_unix_)
+    TFileInput file("/proc/self/maps");
+    while (file.ReadLine(line)) ++lineCount;
+#endif
+    return lineCount;
+}
+
+ui64 GetMaxMemoryMaps() {
+    ui64 maxMapCount = 0;
+#if defined(_unix_)
+    maxMapCount = FromString<ui64>(TFileInput("/proc/sys/vm/max_map_count").ReadAll());
+#endif
+    return maxMapCount;
+}
+
+TString GetMemoryMapsString() {
+    TStringStream ss;
+    ss << " (maps: " << GetMemoryMapsCount() << " vs " << GetMaxMemoryMaps() << ")";
+    return ss.Str();
+}
 
 template<typename T, bool SysAlign>
 class TGlobalPools;
@@ -146,9 +170,15 @@ public:
 
     void DoMunmap(void* addr, size_t size) {
         if (Y_UNLIKELY(0 != T::Munmap(addr, size))) {
+            TStringStream mmaps;
+            const auto lastError = LastSystemError();
+            if (lastError == ENOMEM) {
+                mmaps << GetMemoryMapsString();
+            }
+
             ythrow yexception() << "Munmap(0x"
                 << IntToString<16>(reinterpret_cast<uintptr_t>(addr))
-                << ", " << size << ") failed: " << LastSystemErrorText();
+                << ", " << size << ") failed: " << LastSystemErrorText(lastError) << mmaps.Str();
         }
 
         i64 prev = TotalMmappedBytes.fetch_sub(size);
@@ -493,7 +523,14 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
         auto allocSize = size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE;
         void* mem = globalPool.DoMmap(allocSize);
         if (Y_UNLIKELY(MAP_FAILED == mem)) {
-            ythrow yexception() << "Mmap failed to allocate " << (size + POOL_PAGE_SIZE) << " bytes: " << LastSystemErrorText();
+            TStringStream mmaps;
+            const auto lastError = LastSystemError();
+            if (lastError == ENOMEM) {
+                mmaps << GetMemoryMapsString();
+            }
+
+            ythrow yexception() << "Mmap failed to allocate " << (size + POOL_PAGE_SIZE) << " bytes: "
+                << LastSystemErrorText(lastError) << mmaps.Str();
         }
 
         res = AlignUp(mem, POOL_PAGE_SIZE);
@@ -641,7 +678,13 @@ void* GetAlignedPage(ui64 size) {
     auto allocSize = Max<ui64>(MaxMidSize, size);
     void* mem = pool.DoMmap(allocSize);
     if (Y_UNLIKELY(MAP_FAILED == mem)) {
-        ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: " << LastSystemErrorText();
+        TStringStream mmaps;
+        const auto lastError = LastSystemError();
+        if (lastError == ENOMEM) {
+            mmaps << GetMemoryMapsString();
+        }
+
+        ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: " << LastSystemErrorText(lastError) << mmaps.Str();
     }
 
     if (size < MaxMidSize) {

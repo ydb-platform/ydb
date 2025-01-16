@@ -63,7 +63,7 @@ PEERDIR(
     yql/essentials/utils/failure_injector
     ydb/public/sdk/cpp/client/ydb_driver
     yql/essentials/core/url_preprocessing
-    yt/yql/providers/yt/comp_nodes/dq
+    yt/yql/providers/yt/comp_nodes/dq/llvm14
     yt/yql/providers/yt/comp_nodes/llvm14
     yt/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/dq_task_preprocessor

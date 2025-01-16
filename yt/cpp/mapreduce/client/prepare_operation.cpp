@@ -20,11 +20,9 @@ TOperationPreparationContext::TOperationPreparationContext(
     const TStructuredJobTableList& structuredInputs,
     const TStructuredJobTableList& structuredOutputs,
     const IRawClientPtr& rawClient,
-    const TClientContext& context,
     const IClientRetryPolicyPtr& retryPolicy,
     TTransactionId transactionId)
     : RawClient_(rawClient)
-    , Context_(context)
     , RetryPolicy_(retryPolicy)
     , TransactionId_(transactionId)
     , InputSchemas_(structuredInputs.size())
@@ -44,11 +42,9 @@ TOperationPreparationContext::TOperationPreparationContext(
     TVector<TRichYPath> inputs,
     TVector<TRichYPath> outputs,
     const IRawClientPtr& rawClient,
-    const TClientContext& context,
     const IClientRetryPolicyPtr& retryPolicy,
     TTransactionId transactionId)
     : RawClient_(rawClient)
-    , Context_(context)
     , RetryPolicy_(retryPolicy)
     , TransactionId_(transactionId)
     , InputSchemas_(inputs.size())
@@ -77,17 +73,17 @@ int TOperationPreparationContext::GetOutputCount() const
 const TVector<TTableSchema>& TOperationPreparationContext::GetInputSchemas() const
 {
     TVector<::NThreading::TFuture<TNode>> schemaFutures;
-    NRawClient::THttpRawBatchRequest batch(Context_.Config);
+    auto batch = RawClient_->CreateRawBatchRequest();
     for (int tableIndex = 0; tableIndex < static_cast<int>(InputSchemas_.size()); ++tableIndex) {
         if (InputSchemasLoaded_[tableIndex]) {
             schemaFutures.emplace_back();
             continue;
         }
         Y_ABORT_UNLESS(Inputs_[tableIndex]);
-        schemaFutures.push_back(batch.Get(TransactionId_, Inputs_[tableIndex]->Path_ + "/@schema", TGetOptions{}));
+        schemaFutures.push_back(batch->Get(TransactionId_, Inputs_[tableIndex]->Path_ + "/@schema", TGetOptions{}));
     }
 
-    batch.ExecuteBatch(RetryPolicy_->CreatePolicyForGenericRequest(), Context_);
+    batch->ExecuteBatch();
 
     for (int tableIndex = 0; tableIndex < static_cast<int>(InputSchemas_.size()); ++tableIndex) {
         if (schemaFutures[tableIndex].Initialized()) {

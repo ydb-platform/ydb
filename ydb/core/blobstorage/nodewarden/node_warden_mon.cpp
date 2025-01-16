@@ -346,12 +346,13 @@ void TNodeWarden::RenderLocalDrives(IOutputStream& out) {
                         TABLED() { out << (initialData ? "true" : "<b style='color: red'>false</b>"); }
                         TABLED() { out << (onlineData ? "true" : "<b style='color: red'>false</b>"); }
                         NPDisk::TDriveData *data = initialData ? initialData : onlineData ? onlineData : nullptr;
-                        Y_ABORT_UNLESS(data);
-                        TABLED() { out << data->Path; }
-                        TABLED() { out << data->SerialNumber.Quote(); }
-                        TABLED() {
-                            out << NPDisk::DeviceTypeStr(data->DeviceType, true);
-                            out << (data->IsMock ? "(mock)" : "");
+                        if (data) {
+                            TABLED() { out << data->Path; }
+                            TABLED() { out << data->SerialNumber.Quote(); }
+                            TABLED() {
+                                out << NPDisk::DeviceTypeStr(data->DeviceType, true);
+                                out << (data->IsMock ? "(mock)" : "");
+                            }
                         }
                     }
                     out << "\n";

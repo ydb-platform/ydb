@@ -557,7 +557,6 @@ public:
 
         const auto width = Types_.size();
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt64Ty(context);
         const auto arrayType = ArrayType::get(valueType, width);
@@ -575,9 +574,7 @@ public:
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
-        const auto getCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(indexType, { valueType }, false):
-            FunctionType::get(indexType, { ptrValueType }, false);
+        const auto getCountType = FunctionType::get(indexType, { valueType }, false);
         const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
@@ -633,7 +630,7 @@ public:
         block = good;
 
         const auto countValue = getres.second.back()(ctx, block);
-        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(countValue, ctx, block) }, "height", block);
+        const auto height = CallInst::Create(getCount, { countValue }, "height", block);
 
         ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
 
@@ -867,18 +864,9 @@ public:
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto asScalarFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TAsScalarWrapper::AsScalar));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto asScalarType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), ctx.Ctx->getType()}, false);
-            const auto asScalarFuncPtr = CastInst::Create(Instruction::IntToPtr, asScalarFunc, PointerType::getUnqual(asScalarType), "function", block);
-            return CallInst::Create(asScalarType, asScalarFuncPtr, {self, value, ctx.Ctx}, "scalar", block);
-        } else {
-            const auto valuePtr = new AllocaInst(value->getType(), 0U, "value", block);
-            new StoreInst(value, valuePtr, block);
-            const auto asScalarType = FunctionType::get(Type::getVoidTy(context), {self->getType(), valuePtr->getType(), valuePtr->getType(), ctx.Ctx->getType()}, false);
-            const auto asScalarFuncPtr = CastInst::Create(Instruction::IntToPtr, asScalarFunc, PointerType::getUnqual(asScalarType), "function", block);
-            CallInst::Create(asScalarType, asScalarFuncPtr, {self, valuePtr, valuePtr, ctx.Ctx}, "", block);
-            return new LoadInst(value->getType(), valuePtr, "result", block);
-        }
+        const auto asScalarType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), ctx.Ctx->getType()}, false);
+        const auto asScalarFuncPtr = CastInst::Create(Instruction::IntToPtr, asScalarFunc, PointerType::getUnqual(asScalarType), "function", block);
+        return CallInst::Create(asScalarType, asScalarFuncPtr, {self, value, ctx.Ctx}, "scalar", block);
     }
 #endif
 private:
@@ -932,20 +920,9 @@ public:
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto replicateFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TReplicateScalarWrapper::Replicate));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto replicateType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), count->getType(), ctx.Ctx->getType()}, false);
-            const auto replicateFuncPtr = CastInst::Create(Instruction::IntToPtr, replicateFunc, PointerType::getUnqual(replicateType), "function", block);
-            return CallInst::Create(replicateType, replicateFuncPtr, {self, value, count, ctx.Ctx}, "replicate", block);
-        } else {
-            const auto valuePtr = new AllocaInst(value->getType(), 0U, "value", block);
-            const auto countPtr = new AllocaInst(count->getType(), 0U, "count", block);
-            new StoreInst(value, valuePtr, block);
-            new StoreInst(count, countPtr, block);
-            const auto replicateType = FunctionType::get(Type::getVoidTy(context), {self->getType(), valuePtr->getType(), valuePtr->getType(), countPtr->getType(), ctx.Ctx->getType()}, false);
-            const auto replicateFuncPtr = CastInst::Create(Instruction::IntToPtr, replicateFunc, PointerType::getUnqual(replicateType), "function", block);
-            CallInst::Create(replicateType, replicateFuncPtr, {self, valuePtr, valuePtr, countPtr, ctx.Ctx}, "", block);
-            return new LoadInst(value->getType(), valuePtr, "result", block);
-        }
+        const auto replicateType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), count->getType(), ctx.Ctx->getType()}, false);
+        const auto replicateFuncPtr = CastInst::Create(Instruction::IntToPtr, replicateFunc, PointerType::getUnqual(replicateType), "function", block);
+        return CallInst::Create(replicateType, replicateFuncPtr, {self, value, count, ctx.Ctx}, "replicate", block);
     }
 #endif
 private:

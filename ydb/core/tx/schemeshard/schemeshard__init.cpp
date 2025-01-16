@@ -4114,7 +4114,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             if (!path->IsRoot()) {
                 const bool isBackupTable = Self->IsBackupTable(item.first);
-                parent->IncAliveChildren(1, isBackupTable);
+                parent->IncAliveChildrenPrivate(isBackupTable);
                 inclusiveDomainInfo->IncPathsInside(1, isBackupTable);
             }
 

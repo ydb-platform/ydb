@@ -1,6 +1,6 @@
 # Список объектов
 
-Команда `scheme ls` позволяет получить список объектов в базе данных:
+Команда `scheme ls` позволяет получить список [схемных объектов](../../../../concepts/glossary.md#scheme-object) в базе данных:
 
 ```bash
 {{ ydb-cli }} [connection options] scheme ls [path] [-lR1]

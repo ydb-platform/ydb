@@ -327,6 +327,10 @@ public:
         const TGetTablePartitionsOptions& options = {}) = 0;
 
     virtual ui64 GenerateTimestamp() = 0;
+
+    // Batch
+
+    virtual IRawBatchRequestPtr CreateRawBatchRequest() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1851,7 +1851,8 @@ public:
         auto ev = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
 
         YQL_ENSURE(commitInfo.Coordinator);
-        ev->Record.SetCoordinatorID(commitInfo.Coordinator);
+        Coordinator = commitInfo.Coordinator;
+        ev->Record.SetCoordinatorID(*Coordinator);
 
         auto& transaction = *ev->Record.MutableTransaction();
         auto& affectedSet = *transaction.MutableAffectedSet();
@@ -1874,12 +1875,12 @@ public:
 
         NDataIntegrity::LogIntegrityTrails("PlannedTx", *TxId, {}, TlsActivationContext->AsActorContext(), "BufferActor");
 
-        CA_LOG_D("Execute planned transaction, coordinator: " << commitInfo.Coordinator
+        CA_LOG_D("Execute planned transaction, coordinator: " << *Coordinator
             << ", volitale: " << ((transaction.GetFlags() & TEvTxProxy::TEvProposeTransaction::FlagVolatile) != 0)
             << ", shards: " << affectedSet.size());
         Send(
             MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(ev.Release(), commitInfo.Coordinator, /* subscribe */ true));
+            new TEvPipeCache::TEvForward(ev.Release(), *Coordinator, /* subscribe */ true));
     }
 
     void Close() {
@@ -1954,6 +1955,7 @@ public:
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
+                TxPlanned = true;
                 break;
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
@@ -2050,6 +2052,31 @@ public:
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+
+        if (Coordinator == ev->Get()->TabletId) {
+            if (ev->Get()->NotDelivered) {
+                ReplyErrorAndDie(
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                    TStringBuilder() << "Failed to deviler message to coordinator.",
+                    {});
+                return;
+            }
+
+            if (TxPlanned) {
+                // Already planned
+                return;
+            }
+
+            ReplyErrorAndDie(
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
+                    TStringBuilder() << "Failed to deviler message to coordinator.",
+                    {});
+            return;
+        }
+
+
         ReplyErrorAndDie(
             NYql::NDqProto::StatusIds::UNAVAILABLE,
             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
@@ -2496,6 +2523,8 @@ private:
     bool InconsistentTx = false;
 
     bool IsImmediateCommit = false;
+    bool TxPlanned = false;
+    std::optional<ui64> Coordinator;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NMiniKQL::TTypeEnvironment TypeEnv;

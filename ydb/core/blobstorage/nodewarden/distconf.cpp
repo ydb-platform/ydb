@@ -34,10 +34,13 @@ namespace NKikimr::NStorage {
 
         // generate initial drive set and query stored configuration
         if (IsSelfStatic) {
-            EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
-                DrivesToRead.push_back(drive.GetPath());
-            });
-            std::sort(DrivesToRead.begin(), DrivesToRead.end());
+            if (BaseConfig.GetSelfManagementConfig().GetEnabled()) {
+                // read this only if it is possibly enabled
+                EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+                    DrivesToRead.push_back(drive.GetPath());
+                });
+                std::sort(DrivesToRead.begin(), DrivesToRead.end());
+            }
             ReadConfig();
         } else {
             StorageConfigLoaded = true;
@@ -90,6 +93,10 @@ namespace NKikimr::NStorage {
                     Y_ABORT("ConfigComposite format incorrect: %s", ex.what());
                 }
             }
+
+            SelfManagementEnabled = (!IsSelfStatic || BaseConfig.GetSelfManagementConfig().GetEnabled()) &&
+                config.GetSelfManagementConfig().GetEnabled() &&
+                config.GetGeneration();
 
             StorageConfig.emplace(config);
             if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
@@ -292,14 +299,13 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::ReportStorageConfigToNodeWarden(ui64 cookie) {
         Y_ABORT_UNLESS(StorageConfig);
         const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        const bool distconfEnabled = StorageConfig->GetSelfManagementConfig().GetEnabled();
-        const NKikimrBlobStorage::TStorageConfig *config = distconfEnabled
+        const NKikimrBlobStorage::TStorageConfig *config = SelfManagementEnabled
             ? &StorageConfig.value()
             : &BaseConfig;
-        const NKikimrBlobStorage::TStorageConfig *proposedConfig = ProposedStorageConfig && distconfEnabled
+        const NKikimrBlobStorage::TStorageConfig *proposedConfig = ProposedStorageConfig && SelfManagementEnabled
             ? &ProposedStorageConfig.value()
             : nullptr;
-        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*config, proposedConfig);
+        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*config, proposedConfig, SelfManagementEnabled);
         Send(wardenId, ev.release(), 0, cookie);
     }
 

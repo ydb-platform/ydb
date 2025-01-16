@@ -808,7 +808,7 @@ TProtobufElement TProtobufField::GetElement(bool insideRepeated) const
         });
     } else {
         return std::make_unique<TProtobufScalarElement>(TProtobufScalarElement{
-            static_cast<TProtobufScalarElement::TType>(GetType()),
+            static_cast<TProtobufElementType>(GetType()),
             GetEnumYsonStorageType()
         });
     }

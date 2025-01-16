@@ -11,6 +11,7 @@
 #include <yt/cpp/mapreduce/http/retry_request.h>
 
 #include <yt/cpp/mapreduce/interface/fluent.h>
+#include <yt/cpp/mapreduce/interface/fwd.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
@@ -923,6 +924,11 @@ ui64 THttpRawClient::GenerateTimestamp()
     config.IsHeavy = true;
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
     return NodeFromYsonString(responseInfo->GetResponse()).AsUint64();
+}
+
+IRawBatchRequestPtr THttpRawClient::CreateRawBatchRequest()
+{
+    return MakeIntrusive<NRawClient::THttpRawBatchRequest>(Context_, /*retryPolicy*/ nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -14,6 +14,11 @@ void SetupSingletonConfigParameter(TYsonStructParameter<TTCMallocConfigPtr>& par
     parameter.DefaultNew();
 }
 
+void SetupSingletonConfigParameter(TYsonStructParameter<TDynamicTCMallocConfigPtr>& parameter)
+{
+    parameter.DefaultNew();
+}
+
 void ConfigureSingleton(const TTCMallocConfigPtr& config)
 {
     TTCMallocManager::Configure(config);
@@ -21,7 +26,7 @@ void ConfigureSingleton(const TTCMallocConfigPtr& config)
 
 void ReconfigureSingleton(
     const TTCMallocConfigPtr& config,
-    const TTCMallocConfigPtr& dynamicConfig)
+    const TDynamicTCMallocConfigPtr& dynamicConfig)
 {
     TTCMallocManager::Configure(config->ApplyDynamic(dynamicConfig));
 }
@@ -29,7 +34,7 @@ void ReconfigureSingleton(
 YT_DEFINE_RECONFIGURABLE_SINGLETON(
     "tcmalloc",
     TTCMallocConfig,
-    TTCMallocConfig);
+    TDynamicTCMallocConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

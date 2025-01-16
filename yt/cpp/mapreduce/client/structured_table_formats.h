@@ -69,7 +69,7 @@ using TStructuredJobTableList = TVector<TStructuredJobTable>;
 TString JobTablePathString(const TStructuredJobTable& jobTable);
 TStructuredJobTableList ToStructuredJobTableList(const TVector<TStructuredTablePath>& tableList);
 
-TStructuredJobTableList CanonizeStructuredTableList(const TClientContext& context, const TVector<TStructuredTablePath>& tableList);
+TStructuredJobTableList CanonizeStructuredTableList(const IRawClientPtr& rawClient, const TVector<TStructuredTablePath>& tableList);
 TVector<TRichYPath> GetPathList(
     const TStructuredJobTableList& tableList,
     const TMaybe<TVector<TTableSchema>>& schemaInferenceResult,

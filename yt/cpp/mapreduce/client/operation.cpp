@@ -225,11 +225,10 @@ TStructuredJobTableList ApplyProtobufColumnFilters(
     }
 
     auto isDynamic = NRawClient::BatchTransform(
-        CreateDefaultRequestRetryPolicy(preparer.GetContext().Config),
-        preparer.GetContext(),
+        preparer.GetClient()->GetRawClient(),
         tableList,
-        [&] (NRawClient::THttpRawBatchRequest& batch, const auto& table) {
-            return batch.Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
+        [&] (IRawBatchRequestPtr batch, const auto& table) {
+            return batch->Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
         });
 
     auto newTableList = tableList;
@@ -281,8 +280,8 @@ TSimpleOperationIo CreateSimpleOperationIo(
         structuredJob,
         preparer,
         options,
-        CanonizeStructuredTableList(preparer.GetContext(), GetStructuredInputs(spec)),
-        CanonizeStructuredTableList(preparer.GetContext(), GetStructuredOutputs(spec)),
+        CanonizeStructuredTableList(preparer.GetClient()->GetRawClient(), GetStructuredInputs(spec)),
+        CanonizeStructuredTableList(preparer.GetClient()->GetRawClient(), GetStructuredOutputs(spec)),
         hints,
         nodeReaderFormat,
         GetColumnsUsedInOperation(spec));
@@ -304,8 +303,8 @@ TSimpleOperationIo CreateSimpleOperationIo(
         }
     };
 
-    auto inputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer.GetContext(), spec.GetInputs());
-    auto outputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer.GetContext(), spec.GetOutputs());
+    auto inputs = NRawClient::CanonizeYPaths(preparer.GetClient()->GetRawClient(), spec.GetInputs());
+    auto outputs = NRawClient::CanonizeYPaths(preparer.GetClient()->GetRawClient(), spec.GetOutputs());
 
     VerifyHasElements(inputs, "input");
     VerifyHasElements(outputs, "output");
@@ -318,7 +317,6 @@ TSimpleOperationIo CreateSimpleOperationIo(
             inputs,
             outputs,
             preparer.GetClient()->GetRawClient(),
-            preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
         &inputs,
@@ -497,7 +495,6 @@ TSimpleOperationIo CreateSimpleOperationIoHelper(
             structuredInputs,
             structuredOutputs,
             preparer.GetClient()->GetRawClient(),
-            preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
         &structuredInputs,
@@ -644,7 +641,7 @@ TNode BuildAutoMergeSpec(const TAutoMergeSpec& options)
     return result;
 }
 
-TNode BuildJobProfilerSpec(const TJobProfilerSpec& profilerSpec)
+[[maybe_unused]] TNode BuildJobProfilerSpec(const TJobProfilerSpec& profilerSpec)
 {
     TNode result;
     if (profilerSpec.ProfilingBinary_) {
@@ -1635,9 +1632,9 @@ void ExecuteMapReduce(
     TMapReduceOperationSpec spec = spec_;
 
     TMapReduceOperationIo operationIo;
-    auto structuredInputs = CanonizeStructuredTableList(preparer->GetContext(), spec.GetStructuredInputs());
-    auto structuredMapOutputs = CanonizeStructuredTableList(preparer->GetContext(), spec.GetStructuredMapOutputs());
-    auto structuredOutputs = CanonizeStructuredTableList(preparer->GetContext(), spec.GetStructuredOutputs());
+    auto structuredInputs = CanonizeStructuredTableList(preparer->GetClient()->GetRawClient(), spec.GetStructuredInputs());
+    auto structuredMapOutputs = CanonizeStructuredTableList(preparer->GetClient()->GetRawClient(), spec.GetStructuredMapOutputs());
+    auto structuredOutputs = CanonizeStructuredTableList(preparer->GetClient()->GetRawClient(), spec.GetStructuredOutputs());
 
     const bool inferOutputSchema = options.InferOutputSchema_.GetOrElse(preparer->GetContext().Config->InferTableSchema);
 
@@ -1688,7 +1685,6 @@ void ExecuteMapReduce(
                 structuredInputs,
                 mapperOutput,
                 preparer->GetClient()->GetRawClient(),
-                preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),
             &structuredInputs,
@@ -1758,7 +1754,6 @@ void ExecuteMapReduce(
                     inputs,
                     outputs,
                     preparer->GetClient()->GetRawClient(),
-                    preparer->GetContext(),
                     preparer->GetClientRetryPolicy(),
                     preparer->GetTransactionId()),
                 &inputs,
@@ -1824,7 +1819,6 @@ void ExecuteMapReduce(
                 structuredInputs,
                 structuredOutputs,
                 preparer->GetClient()->GetRawClient(),
-                preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),
             &structuredInputs,
@@ -1904,9 +1898,9 @@ void ExecuteRawMapReduce(
     YT_LOG_DEBUG("Starting raw map-reduce operation (PreparationId: %v)",
         preparer->GetPreparationId());
     TMapReduceOperationIo operationIo;
-    operationIo.Inputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.GetInputs());
-    operationIo.MapOutputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.GetMapOutputs());
-    operationIo.Outputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.GetOutputs());
+    operationIo.Inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.GetInputs());
+    operationIo.MapOutputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.GetMapOutputs());
+    operationIo.Outputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.GetOutputs());
 
     VerifyHasElements(operationIo.Inputs, "inputs");
     VerifyHasElements(operationIo.Outputs, "outputs");
@@ -1953,8 +1947,8 @@ void ExecuteSort(
 {
     YT_LOG_DEBUG("Starting sort operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto inputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.Inputs_);
-    auto output = NRawClient::CanonizeYPath(nullptr, preparer->GetContext(), spec.Output_);
+    auto inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.Inputs_);
+    auto output = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.Output_);
 
     if (options.CreateOutputTables_) {
         CheckInputTablesExist(*preparer, inputs);
@@ -2002,8 +1996,8 @@ void ExecuteMerge(
 {
     YT_LOG_DEBUG("Starting merge operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto inputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.Inputs_);
-    auto output = NRawClient::CanonizeYPath(nullptr, preparer->GetContext(), spec.Output_);
+    auto inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.Inputs_);
+    auto output = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.Output_);
 
     if (options.CreateOutputTables_) {
         CheckInputTablesExist(*preparer, inputs);
@@ -2052,7 +2046,7 @@ void ExecuteErase(
 {
     YT_LOG_DEBUG("Starting erase operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto tablePath = NRawClient::CanonizeYPath(nullptr, preparer->GetContext(), spec.TablePath_);
+    auto tablePath = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.TablePath_);
 
     TNode specNode = BuildYsonNodeFluently()
     .BeginMap()
@@ -2088,8 +2082,8 @@ void ExecuteRemoteCopy(
 {
     YT_LOG_DEBUG("Starting remote copy operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto inputs = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.Inputs_);
-    auto output = NRawClient::CanonizeYPath(nullptr, preparer->GetContext(), spec.Output_);
+    auto inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.Inputs_);
+    auto output = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.Output_);
 
     if (options.CreateOutputTables_) {
         CreateOutputTable(*preparer, output);
@@ -2343,7 +2337,7 @@ public:
         : OperationImpl_(std::move(operationImpl))
     { }
 
-    void PrepareRequest(NRawClient::THttpRawBatchRequest* batchRequest) override
+    void PrepareRequest(IRawBatchRequest* batchRequest) override
     {
         auto filter = TOperationAttributeFilter()
             .Add(EOperationAttribute::State)

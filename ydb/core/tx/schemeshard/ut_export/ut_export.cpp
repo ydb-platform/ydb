@@ -2461,9 +2461,9 @@ partitioning_settings {
     class ChangefeedGenerator {
     public:
         ChangefeedGenerator(const ui64 count, const TS3Mock& s3Mock)
-        : Count(count)
-        , S3Mock(s3Mock)
-        , Changefeeds(GenChangefeeds())
+            : Count(count)
+            , S3Mock(s3Mock)
+            , Changefeeds(GenChangefeeds())
         {}
 
         const TVector<TString>& GetChangefeeds() {
@@ -2488,7 +2488,6 @@ partitioning_settings {
         }
 
     private:
-
         static TString GenChangefeedName(const ui64 num) {
             return TStringBuilder() << "update_feed" << num;
         }

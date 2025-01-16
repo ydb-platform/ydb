@@ -223,7 +223,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         this->Become(&TThis::StateUploadPermissions);
     }
 
-    template<typename T>
+    template <typename T>
     void PutDescription(const google::protobuf::Message& desc, const TString& key, TString& checksum, T stateFunc) {
         google::protobuf::TextFormat::PrintToString(desc, &Buffer);
         if (EnableChecksums) {
@@ -243,8 +243,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         PutDescription(topic, Settings.GetTopicKey(changefeedName), TopicChecksum, &TThis::StateUploadTopic);
     }
 
-    TString GetCurrentChangefeedName() {
-        return Changefeeds[IndexExportedChangefeed].ChangefeedDescription.Getname();
+    const TString& GetCurrentChangefeedName() const {
+        return Changefeeds.at(IndexExportedChangefeed).ChangefeedDescription.GetName();
     }
 
     void UploadChangefeed() {
@@ -935,17 +935,17 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     changefeedsExportDescs.reserve(changefeedsCount);
 
     for (int i = 0; i < changefeedsCount; ++i) {
-        Ydb::Table::ChangefeedDescription changefeedDesc;
+        Ydb::Table::ChangefeedDescription changefeed;
+        const auto& cdcStream = cdcStreams.at(i);
+        FillChangefeedDescription(changefeed, cdcStream);
+
         Ydb::Topic::DescribeTopicResult topic;
-        const auto& cdcStream = cdcStreams[i];
-        const auto& persQueueTPathDesc = persQueuesTPathDesc[i];
-        FillChangefeedDescription(changefeedDesc, cdcStream);
-        Ydb::StatusIds_StatusCode status;
+        const auto& pq = persQueuesTPathDesc.at(i);
+        Ydb::StatusIds::StatusCode status;
         TString error;
-        FillTopicDescription(topic, persQueueTPathDesc.GetPersQueueGroup(),
-        persQueueTPathDesc.GetSelf(),
-        cdcStream.GetName(), status, error);
-        changefeedsExportDescs.emplace_back(changefeedDesc, topic);
+        FillTopicDescription(topic, pq.GetPersQueueGroup(), pq.GetSelf(), cdcStream.GetName(), status, error);
+
+        changefeedsExportDescs.emplace_back(changefeed, topic);
     }
 
     auto permissions = (Task.GetShardNum() == 0)

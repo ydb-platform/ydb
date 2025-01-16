@@ -58,6 +58,7 @@ message TKeyValueRequest {
         }
         optional EStorageChannel StorageChannel = 3; // (default = MAIN)
         optional EPriority Priority = 4; // (default = REALTIME)
+        optional bytes KeyToCache = 5; // used in PQ
         optional ETactic Tactic = 6 [default = MAX_THROUGHPUT]; // mandatory, used for non-inline puts only
         repeated EStorageChannel AutoselectChannel = 7; // when filled, channel is selected automatically from this set
     }

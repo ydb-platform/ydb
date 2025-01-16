@@ -926,13 +926,13 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
-    const auto& persQueuesTPathDesc = Task.GetChangefeedUnderlyingTopics();
+    const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
     const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
-    Y_ASSERT(persQueuesTPathDesc.size() == cdcStreams.size());
+    Y_ASSERT(persQueues.size() == cdcStreams.size());
 
     const int changefeedsCount = cdcStreams.size();
-    TVector <TChangefeedExportDescriptions> changefeedsExportDescs;
-    changefeedsExportDescs.reserve(changefeedsCount);
+    TVector <TChangefeedExportDescriptions> changefeeds;
+    changefeeds.reserve(changefeedsCount);
 
     for (int i = 0; i < changefeedsCount; ++i) {
         Ydb::Table::ChangefeedDescription changefeed;
@@ -940,12 +940,12 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         FillChangefeedDescription(changefeed, cdcStream);
 
         Ydb::Topic::DescribeTopicResult topic;
-        const auto& pq = persQueuesTPathDesc.at(i);
+        const auto& pq = persQueues.at(i);
         Ydb::StatusIds::StatusCode status;
         TString error;
         FillTopicDescription(topic, pq.GetPersQueueGroup(), pq.GetSelf(), cdcStream.GetName(), status, error);
 
-        changefeedsExportDescs.emplace_back(changefeed, topic);
+        changefeeds.emplace_back(changefeed, topic);
     }
 
     auto permissions = (Task.GetShardNum() == 0)
@@ -963,7 +963,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     metadata.AddFullBackup(backup);
 
     return new TS3Uploader(
-        dataShard, txId, Task, std::move(scheme), std::move(changefeedsExportDescs), std::move(permissions), metadata.Serialize());
+        dataShard, txId, Task, std::move(scheme), std::move(changefeeds), std::move(permissions), metadata.Serialize());
 }
 
 } // NDataShard

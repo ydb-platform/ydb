@@ -2466,7 +2466,7 @@ partitioning_settings {
             , Changefeeds(GenChangefeeds())
         {}
 
-        const TVector<TString>& GetChangefeeds() {
+        const TVector<TString>& GetChangefeeds() const {
             return Changefeeds;
         }
 

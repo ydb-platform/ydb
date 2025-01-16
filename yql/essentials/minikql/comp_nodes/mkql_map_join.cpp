@@ -1544,7 +1544,7 @@ private:
         const auto valueType = Type::getInt128Ty(context);
         const auto arrayType = ArrayType::get(valueType, this->OutputRepresentations.size());
         const auto keysType = IsTuple ? ArrayType::get(valueType, this->LeftKeyColumns.size()) : nullptr;
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, containerType, PointerType::getUnqual(valueType)}, false);
@@ -1564,11 +1564,9 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        const auto stream = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, streamArg, "load_stream", false, block) : static_cast<Value*>(streamArg);
+        const auto stream = static_cast<Value*>(streamArg);
 
-        const auto dict = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, dictArg, "load_dict", false, block) : static_cast<Value*>(dictArg);
+        const auto dict = static_cast<Value*>(dictArg);
 
         const auto zero = ConstantInt::get(valueType, 0);
         const auto fsok = ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok));
@@ -1701,7 +1699,7 @@ private:
         const auto valueType = Type::getInt128Ty(context);
         const auto arrayType = ArrayType::get(valueType, this->OutputRepresentations.size());
         const auto keysType = IsTuple ? ArrayType::get(valueType, this->LeftKeyColumns.size()) : nullptr;
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
@@ -1723,11 +1721,9 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        const auto stream = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, streamArg, "load_stream", false, block) : static_cast<Value*>(streamArg);
+        const auto stream = static_cast<Value*>(streamArg);
 
-        const auto dict = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, dictArg, "load_dict", false, block) : static_cast<Value*>(dictArg);
+        const auto dict = static_cast<Value*>(dictArg);
 
         const auto zero = ConstantInt::get(valueType, 0);
         const auto fsok = ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok));

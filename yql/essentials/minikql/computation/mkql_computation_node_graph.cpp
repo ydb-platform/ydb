@@ -814,8 +814,8 @@ public:
         : Codegen((NYql::NCodegen::ICodegen::IsCodegenAvailable() && opts.OptLLVM != "OFF") || GetEnv(TString("MKQL_FORCE_USE_LLVM")) ? NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native) : NYql::NCodegen::ICodegen::TPtr())
 #endif
     {
-    /// TODO: Enable JIT for AARCH64
-#if defined(__aarch64__)
+    /// TODO: Enable JIT for AARCH64/Win
+#if defined(__aarch64__) || defined(_win_)
         Codegen = {};
 #endif
 

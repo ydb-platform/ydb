@@ -601,6 +601,20 @@
             "uri": "https://{canondata_backend}/1936273/dc5c7fc322621a2828a94006237d3583f38248e5/resource.tar.gz#test.test_join-inmem_by_uncomparable_tuples-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[join-yql-19192-default.txt-Debug]": [
+        {
+            "checksum": "b9c6aea35bc8b70c987653997335369d",
+            "size": 746,
+            "uri": "https://{canondata_backend}/1814674/dfd418faf4299c20acfad523d570f8cfb90f89ea/resource.tar.gz#test.test_join-yql-19192-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[join-yql-19192-default.txt-Results]": [
+        {
+            "checksum": "6e4f62a8d64ea7bbe1a05464bcb80ba4",
+            "size": 1233,
+            "uri": "https://{canondata_backend}/1814674/dfd418faf4299c20acfad523d570f8cfb90f89ea/resource.tar.gz#test.test_join-yql-19192-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[library-library_yqls--Debug]": [
         {
             "checksum": "b2bab6a1ef79eb44b255b25d32270957",

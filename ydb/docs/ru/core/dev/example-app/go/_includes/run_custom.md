@@ -4,15 +4,9 @@
 
 Выполните команду по следующему образцу:
 
-<<<<<<< HEAD
-``` bash
-( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-sdk/examples && \
-go run . -ydb="<endpoint>/<database>" )
-=======
 ```bash
-( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-examples && \
+( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-sdk/examples && \
 go run ./basic -ydb="<endpoint>?database=<database>" )
->>>>>>> main
 ```
 
 где
@@ -25,6 +19,6 @@ go run ./basic -ydb="<endpoint>?database=<database>" )
 Например:
 
 ```bash
-( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-examples && \
+( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-sdk/examples && \
 go run ./basic -ydb="grpcs://ydb.example.com:2135/somepath/somelocation" )
 ```

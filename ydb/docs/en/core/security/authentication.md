@@ -2,17 +2,57 @@
 
 Once a network connection is established, the server starts to accept client requests with authentication information for processing. The server uses it to identify the client's account and to verify access to execute the query.
 
+{% note info %}
+
+An authentication client refers to a user undergoing the authentication process when accessing {{ ydb-short-name }}. Examples of clients include the SDK or CLI.
+
+{% endnote %}
+
 The following authentication modes are supported:
 
-* Anonymous access is enabled by default and available immediately when you [install the cluster](../devops/index.md).
-* [Authentication through a third-party IAM provider](#iam), for example, [Yandex Identity and Access Management]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/iam/){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/){% endif %}.
+* [Anonymous](#anonymous) authentication.
 * Authentication by [username and password](#static-credentials).
+* [LDAP](#ldap-auth-provider) authentication.
+* [Authentication through a third-party IAM provider](#iam), for example, [Yandex Identity and Access Management](https://cloud.yandex.com/en/docs/iam/).
 
-## Anonymous authentication
+## Anonymous authentication {#anonymous}
 
 Anonymous authentication allows you to connect to {{ ydb-short-name }} without specifying any credentials like username and password. This type of access should be used only for educational purposes in local databases that cannot be accessed over the network.
 
+However, if a user or token is specified, the corresponding authentication mode will work with subsequent authorization.
+
+{% note warning %}
+
+Anonymous authentication should be used only for informational purposes for local databases that do not have access over the network.
+
+{% endnote %}
+
 To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/index.md#auth).
+
+## Authenticating by username and password {#static-credentials}
+
+This type of access implies that each database user has a username and password.
+Only digits and lowercase Latin letters can be used in usernames. Passwords are not restricted; even empty passwords can be used.
+
+The username and hashed password are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. In authentication mode, only the system administrator can use a username and password pair to access the table.
+
+A token is returned in response to the username and password. Tokens have a default lifetime of 12 hours. To rotate tokens, the client, such as the [SDK](../reference/ydb-sdk/index.md), independently accesses the authentication service. Tokens accelerate authentication and enhance security.
+
+Authentication by username and password includes the following steps:
+
+1. The client accesses the database and presents their username and password to the {{ ydb-short-name }} authentication service.
+1. The service validates authentication data. If the data matches, it generates a token and returns it to the authentication service.
+1. The client accesses the database, presenting their token as authentication data.
+
+To enable username/password authentication, use `true` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/index.md#auth).
+
+To learn how to manage roles and users, see [{#T}](../security/authorization.md).
+
+## LDAP directory integration {#ldap-auth-provider}
+
+{{ ydb-short-name }} supports authentication and authorization via an [LDAP directory](https://en.wikipedia.org/wiki/LDAP). To use this feature, an LDAP directory service must be deployed and accessible from the {{ ydb-short-name }} servers.
+
+Examples of supported LDAP implementations include [OpenLDAP](https://openldap.org/) and [Active Directory](https://azure.microsoft.com/en-us/products/active-directory/).
 
 ## Authentication through a third-party IAM provider {#iam}
 
@@ -40,33 +80,6 @@ When choosing the authentication mode among those supported by the server and en
 The token to specify in request parameters can be obtained in the IAM system that the specific {{ ydb-short-name }} deployment is associated with. In particular, {{ ydb-short-name }} in {{ yandex-cloud }} uses Yandex.Passport OAuth and {{ yandex-cloud }} service accounts. When using {{ ydb-short-name }} in a corporate context, a company's standard centralized authentication system may be used.
 
 When using modes in which the {{ ydb-short-name }} client accesses the IAM system, the IAM URL that provides an API for issuing tokens can be set additionally. By default, existing SDKs and CLIs attempt to access the {{ yandex-cloud }} IAM API hosted at `iam.api.cloud.yandex.net:443`.
-
-## Authenticating by username and password {#static-credentials}
-
-This type of access implies that each database user has a username and password.
-Only digits and lowercase Latin letters can be used in usernames. Passwords are not restricted; even empty passwords can be used.
-
-The username and hashed password are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. In authentication mode, only the system administrator can use a username and password pair to access the table.
-
-A token is returned in response to the username and password. Tokens have a default lifetime of 12 hours. To rotate tokens, the client, such as the [SDK](../reference/ydb-sdk/index.md), independently accesses the authentication service. Tokens accelerate authentication and enhance security.
-
-Authentication by username and password includes the following steps:
-
-1. The client accesses the database and presents their username and password to the {{ ydb-short-name }} authentication service.
-1. The authentication service passes authentication data to the {{ ydb-short-name }} authentication component.
-1. The component validates authentication data. If the data matches, it generates a token and returns it to the authentication service.
-1. The authentication system returns the token to the client.
-1. The client accesses the database, presenting their token as authentication data.
-
-To enable username/password authentication, use `true` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/index.md#auth).
-
-To learn how to manage roles and users, see [{#T}](../security/access-management.md).
-
-## LDAP directory integration {#ldap-auth-provider}
-
-{{ ydb-short-name }} supports authentication and authorization via an [LDAP directory](https://en.wikipedia.org/wiki/LDAP). To use this feature, an LDAP directory service must be deployed and accessible from the {{ ydb-short-name }} servers.
-
-Examples of supported LDAP implementations include [OpenLDAP](https://openldap.org/) and [Active Directory](https://azure.microsoft.com/en-us/products/active-directory/).
 
 ### Authentication
 

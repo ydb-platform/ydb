@@ -149,7 +149,7 @@ domains_config:
 
 #|
 || Параметр | Описание ||
-|| `disable_builtin_security`<a name="domains_config.disable_builtin_security"/> | Не выполнять ["встроенные" настройки безопасности](../../security/builtin-security.md).
+|| <a name="domains_config.disable_builtin_security"></a> `disable_builtin_security` | Не выполнять ["встроенные" настройки безопасности](../../security/builtin-security.md).
 "Встроенная" настройка включает автоматическое создание суперпользователя `root`, набора "встроенных" пользовательских групп и выдачу прав доступа этим группам на корне кластера.
 
 Эфемерный флаг, не попадает в конфигурацию, сохраняемую в кластере.

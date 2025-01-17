@@ -134,7 +134,6 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   ydb-library-login
   library-login-protos
   ydb-library-protobuf_printer
-  ydb_cli-dump-util
   yql-essentials-minikql
   providers-common-proto
   ydb-services-bg_tasks
@@ -317,7 +316,6 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_validate_ttl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_xxport__helpers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/user_attributes.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export_scheme_uploader.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import_scheme_getter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/defs.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/operation_queue_timer.h

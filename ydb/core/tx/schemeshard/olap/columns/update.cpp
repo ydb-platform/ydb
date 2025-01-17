@@ -198,7 +198,7 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
 
 bool TOlapColumnBase::ApplySerializerFromColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
     if (GetColumnFamilyId().has_value()) {
-        SetSerializer(columnFamilies.GetByIdVerified(GetColumnFamilyId().value())->GetSerializerContainer());
+        SetSerializer(columnFamilies.GetByIdVerified(GetColumnFamilyId().value())->GetSerializerContainerOptional());
     } else {
         TString familyName = "default";
         const TOlapColumnFamily* columnFamily = columnFamilies.GetByName(familyName);
@@ -210,7 +210,7 @@ bool TOlapColumnBase::ApplySerializerFromColumnFamily(const TOlapColumnFamiliesD
         }
 
         ColumnFamilyId = columnFamily->GetId();
-        SetSerializer(columnFamilies.GetByIdVerified(columnFamily->GetId())->GetSerializerContainer());
+        SetSerializer(columnFamilies.GetByIdVerified(columnFamily->GetId())->GetSerializerContainerOptional());
     }
     return true;
 }

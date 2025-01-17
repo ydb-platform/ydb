@@ -169,15 +169,15 @@ namespace NKqp {
                                             << "` and in right value `" << rhs.GetSerializerClassName() << "`";
             return false;
         }
-        if (CompressionType.has_value() && rhs.GetCompressionType().has_value() && CompressionType.value() != rhs.GetCompressionType().value()) {
+        if (CompressionType.has_value() && rhs.HasCompressionType() && CompressionType.value() != rhs.GetCompressionTypeUnsafe()) {
             errorMessage = TStringBuilder() << "different compression type: in left value `"
                                             << NArrow::CompressionToString(CompressionType.value()) << "` and in right value `"
-                                            << NArrow::CompressionToString(rhs.GetCompressionType().value()) << "`";
+                                            << NArrow::CompressionToString(rhs.GetCompressionTypeUnsafe()) << "`";
             return false;
-        } else if (CompressionType.has_value() && !rhs.GetCompressionType().has_value()) {
+        } else if (CompressionType.has_value() && !rhs.HasCompressionType()) {
             errorMessage = TStringBuilder() << "compression type is set in left value, but not set in right value";
             return false;
-        } else if (!CompressionType.has_value() && rhs.GetCompressionType().has_value()) {
+        } else if (!CompressionType.has_value() && rhs.HasCompressionType()) {
             errorMessage = TStringBuilder() << "compression type is not set in left value, but set in right value";
             return false;
         }
@@ -302,8 +302,8 @@ namespace NKqp {
     TString TTestHelper::TColumnTableBase::BuildAlterCompressionQuery(const TString& columnName, const TCompression& compression) const {
         auto str = TStringBuilder() << "ALTER OBJECT `" << Name << "` (TYPE " << GetObjectType() << ") SET";
         str << " (ACTION=ALTER_COLUMN, NAME=" << columnName << ", `SERIALIZER.CLASS_NAME`=`" << compression.GetSerializerClassName() << "`,";
-        if (compression.GetCompressionType().has_value()) {
-            auto codec = NArrow::CompressionFromProto(compression.GetCompressionType().value());
+        if (compression.HasCompressionType()) {
+            auto codec = NArrow::CompressionFromProto(compression.GetCompressionTypeUnsafe());
             Y_VERIFY(codec.has_value());
             str << " `COMPRESSION.TYPE`=`" << NArrow::CompressionToString(codec.value()) << "`";
         }

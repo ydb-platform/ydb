@@ -297,8 +297,9 @@ inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
 }
 
 inline bool HasAppData() {
-    return !!NActors::TlsActivationContext && NActors::TlsActivationContext->ExecutorThread.ActorSystem &&
-           NActors::TlsActivationContext->ExecutorThread.ActorSystem->AppData<TAppData>();
+    return !!NActors::TlsActivationContext
+        && NActors::TlsActivationContext->ExecutorThread.ActorSystem
+        && NActors::TlsActivationContext->ExecutorThread.ActorSystem->AppData<TAppData>();
 }
 
 inline TAppData& AppDataVerified() {

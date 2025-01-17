@@ -108,8 +108,8 @@ namespace NKikimr {
             vDisk->LevelCompaction = true;
             vDisk->MaxLogoBlobDataSize = Conf.UseDisk ? CHUNK_SIZE / 3 : MEM_CHUNK_SIZE / 3;
 
-            ObtainTenantKey(&conf->TenantKey, keyConfig);
-            ObtainStaticKey(&conf->StaticKey);
+            ObtainTenantKeys(&conf->TenantKeys, keyConfig);
+            ObtainStaticKeys(&conf->StaticKeys);
 
             return conf;
         }

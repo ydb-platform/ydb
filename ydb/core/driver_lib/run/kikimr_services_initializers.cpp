@@ -951,8 +951,8 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         nodeWardenConfig->SelfManagementConfig.emplace(Config.GetSelfManagementConfig());
     }
 
-    ObtainTenantKey(&nodeWardenConfig->TenantKey, Config.GetKeyConfig());
-    ObtainStaticKey(&nodeWardenConfig->StaticKey);
+    ObtainTenantKeys(&nodeWardenConfig->TenantKeys, Config.GetKeyConfig());
+    ObtainStaticKeys(&nodeWardenConfig->StaticKeys);
     ObtainPDiskKey(&nodeWardenConfig->PDiskKey, Config.GetPDiskKeyConfig());
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeBlobStorageNodeWardenID(NodeId),

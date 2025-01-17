@@ -296,7 +296,7 @@ namespace NYql::NDq {
             }
 
             Request = std::move(request);
-            RetryState = std::shared_ptr<ILookupRetryState>(RetryPolicy->CreateRetryState().release());
+            RetryState = std::shared_ptr<ILookupRetryState>(RetryPolicy->CreateRetryState());
             SendRequest();
         }
 

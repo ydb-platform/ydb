@@ -1505,7 +1505,7 @@ TRuntimeNode TProgramBuilder::FromBlocks(TRuntimeNode flow) {
 
 TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode stream) {
     MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected WideStream as input type");
-    if constexpr (RuntimeVersion < 54U) {
+    if constexpr (RuntimeVersion < 55U) {
         // Preserve the old behaviour for ABI compatibility.
         // Emit (FromFlow (WideFromBlocks (ToFlow (<stream>)))) to
         // process the flow in favor to the given stream following

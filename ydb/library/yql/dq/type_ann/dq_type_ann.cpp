@@ -651,7 +651,6 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         ctx
     );
     if (!outputRowType) {
-        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), "DqCnStreamLookup: Failed to annotate output row type"));
         return TStatus::Error;
     }
     if (!EnsureConvertibleTo<ui64>(cnStreamLookup.MaxCachedRows().Ref(), "MaxCachedRows", ctx) ||

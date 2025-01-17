@@ -140,6 +140,7 @@ target_sources(yt-yt-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/public.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/adapters.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/table_output.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/timestamped_schema_helpers.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/blob_reader.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/check_schema_compatibility.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/chunk_stripe_statistics.cpp

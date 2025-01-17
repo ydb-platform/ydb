@@ -63,6 +63,8 @@ protected:
     virtual bool ParseGrpcRequest() = 0;
     virtual std::pair<TString, NYdb::TParams> MakeQueryAndParams() const = 0;
     virtual void ReplyWith(const NYdb::TResultSets& results) = 0;
+
+    i64 Revision;
 };
 
 template <typename TDerived, typename TRequest, bool IsOperation>
@@ -302,8 +304,7 @@ protected:
         }
     }
 
-    void HandleForget(TRpcServices::TEvForgetOperation::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
+    void HandleForget(TRpcServices::TEvForgetOperation::TPtr&, const TActorContext &ctx) {
         static_cast<TDerived*>(this)->OnForgetOperation(ctx);
     }
 private:
@@ -316,16 +317,16 @@ protected:
     NWilson::TSpan Span_;
 };
 
-template <typename TDerived, typename TRequest, typename TKVRequest, NACLib::EAccessRights AccessRights>
+template <typename TDerived, typename TRequest, NACLib::EAccessRights AccessRights>
 class TEtcdRequestGrpc
     : public TEtcdOperationRequestActor<TDerived, TRequest>
-    , public TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest, TKVRequest, AccessRights>>
+    , public TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest, AccessRights>>
 {
 public:
     using TBase = TEtcdOperationRequestActor<TDerived, TRequest>;
     using TBase::TBase;
 
-    friend class TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest, TKVRequest, AccessRights>>;
+    friend class TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest, AccessRights>>;
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
@@ -365,14 +366,13 @@ private:
 };
 
 class TRangeRequest
-    : public TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest,
-            TEvKeyValue::TEvReadRange, NACLib::SelectRow> {
+    : public TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest, NACLib::SelectRow> {
 public:
-    using TBase = TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest, TEvKeyValue::TEvReadRange, NACLib::SelectRow>;
+    using TBase = TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest, NACLib::SelectRow>;
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::AppData()->Revision.fetch_add(1L);
+        Revision = NEtcd::AppData()->Revision.load();
 
         const auto &rec = *GetProtoRequest();
         Key = rec.key();
@@ -380,12 +380,12 @@ private:
         KeysOnly = rec.keys_only();
         CountOnly = rec.count_only();
         Limit = rec.limit();
-        Revision = rec.revision();
+        KeyRevision = rec.revision();
         MinCreateRevision = rec.min_create_revision();
         MaxCreateRevision = rec.max_create_revision();
         MinModificateRevision = rec.min_mod_revision();
         MaxModificateRevision = rec.max_mod_revision();
-        return !Key.empty();
+        return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
     std::pair<TString, NYdb::TParams> MakeQueryAndParams() const final {
@@ -454,15 +454,15 @@ private:
     TString Key, RangeEnd;
     bool KeysOnly, CountOnly;
     i64 Limit;
-    i64 Revision;
+    i64 KeyRevision;
     i64 MinCreateRevision, MaxCreateRevision;
     i64 MinModificateRevision, MaxModificateRevision;
 };
 
 class TPutRequest
-    : public TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest, TEvKeyValue::TEvExecuteTransaction, NACLib::UpdateRow> {
+    : public TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest, NACLib::UpdateRow> {
 public:
-    using TBase = TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest, TEvKeyValue::TEvExecuteTransaction, NACLib::UpdateRow>;
+    using TBase = TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest, NACLib::UpdateRow>;
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
@@ -529,7 +529,6 @@ private:
         this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
     }
 
-    i64 Revision;
     TString Key, Value;
     bool GetPrevious = false;
     bool IgnoreValue = false;
@@ -538,17 +537,19 @@ private:
 };
 
 class TDeleteRangeRequest
-    : public TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest, TEvKeyValue::TEvExecuteTransaction, NACLib::EraseRow> {
+    : public TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest, NACLib::EraseRow> {
 public:
-    using TBase = TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest, TEvKeyValue::TEvExecuteTransaction, NACLib::EraseRow>;
+    using TBase = TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest, NACLib::EraseRow>;
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
         Revision = NEtcd::AppData()->Revision.fetch_add(1L);
 
-        auto &rec = *GetProtoRequest();
-        Y_UNUSED(rec);
-        return true;
+        const auto &rec = *GetProtoRequest();
+        Key = rec.key();
+        RangeEnd = DecrementKey(rec.range_end());
+        GetPrevious = rec.prev_kv();
+        return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
     std::pair<TString, NYdb::TParams> MakeQueryAndParams() const final {
@@ -556,12 +557,8 @@ private:
         sql << "declare $Key as String;" << Endl;
 ///////
         auto params = NYdb::TParamsBuilder()
-            .AddParam("$Key")
-                .String(Key)
-                .Build()
+            .AddParam("$Key").String(Key).Build()
             .Build();
-
-
         return {sql, params};
     }
 
@@ -575,8 +572,8 @@ private:
         this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
     }
 
-    i64 Revision;
     TString Key, RangeEnd;
+    bool GetPrevious = false;
 };
 
 }

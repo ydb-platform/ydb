@@ -479,7 +479,7 @@ void TEtcdGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TL
 void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
-#define SETUP_METHOD_RAW(methodName, rlMode, requestType, serviceType, serviceName, counterName)    \
+#define SETUP_METHOD_RAW(methodName, rlMode, serviceType, serviceName, counterName)    \
     MakeIntrusive<NGRpcService::TGRpcRequest<                                                              \
         etcdserverpb::Y_CAT(methodName, Request),                                                       \
         etcdserverpb::Y_CAT(methodName, Response),                                                       \
@@ -492,11 +492,7 @@ void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                                \
             ActorSystem->Register(Make##methodName(new TEtcdRequestOperationCall<                              \
                 etcdserverpb::Y_CAT(methodName, Request),                                                \
-                etcdserverpb::Y_CAT(methodName, Response)>(reqCtx, TRequestAuxSettings {                 \
-                        .RlMode = TRateLimiterMode::rlMode,                                                 \
-                        .RequestType = NJaegerTracing::ERequestType::requestType,                         \
-                    }              \
-                )                   \
+                etcdserverpb::Y_CAT(methodName, Response)>(reqCtx)                   \
             ));           \
         },                                                                                                      \
         &etcdserverpb::serviceName::AsyncService::Y_CAT(Request, methodName),          \
@@ -505,18 +501,12 @@ void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                                  \
     )->Run()
 
-    #define SETUP_ETCD_KV_METHOD(methodName, requestType) \
-        SETUP_METHOD_RAW( \
-            methodName, \
-            Rps, \
-            requestType, \
-            Etcd, \
-            KV, \
-            etcd \
-        )
-    SETUP_ETCD_KV_METHOD(Range, ETCD_RANGE);
-    SETUP_ETCD_KV_METHOD(Put, ETCD_PUT);
-    SETUP_ETCD_KV_METHOD(DeleteRange, ETCD_DELETE_RANGE);
+    #define SETUP_ETCD_KV_METHOD(methodName) \
+        SETUP_METHOD_RAW(methodName,Rps,Etcd,KV,etcd)
+
+    SETUP_ETCD_KV_METHOD(Range);
+    SETUP_ETCD_KV_METHOD(Put);
+    SETUP_ETCD_KV_METHOD(DeleteRange);
 
     #undef SETUP_ETCD_KV_METHOD
     #undef SETUP_METHOD_RAW

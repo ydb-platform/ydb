@@ -27,18 +27,20 @@ To do this in your [Yandex Cloud console](https://console.yandex.cloud):
 4. Create an [API key](https://yandex.cloud/en/docs/iam/operations/sa/create-access-key) for this service account.
    For the key, select Scope - yc.ydb.topics.manage, you can also set a description and expiration date.
 
-Authentication is required to work with Yandex Cloud, see authentication examples [below](#authentication-in-cloud-examples). 
+Authentication is required to work with Yandex Cloud, see authentication examples [below](#authentication-in-cloud-examples).
 
 ## Kafka API Usage Examples
 
 ### Reading
 
 When reading, the distinctive features of the Kafka API are:
+
 - absence of support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option;
 - only one partition assignment strategy - roundrobin;
 - no ability to read without a pre-created consumer group
 
 Therefore, in the consumer configuration, you must always specify the **consumer group name** and the parameters:
+
 - `check.crc=false`
 - `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
 
@@ -65,7 +67,7 @@ For examples of how to set up authentication, see the section [Authentication Ex
     --group my-group \
     --from-beginning \
     --consumer-property check.crcs=false \
-    --consumer-property partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor 
+    --consumer-property partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor
   ```
 
 - kcat
@@ -157,16 +159,16 @@ For examples of how to set up authentication, see the section [Authentication Ex
 
   ```java
     public class YdbKafkaApiReadExample {
-    
+   
         public static void main(String[] args) throws Exception {
             final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment()
                     .enableCheckpointing(5000, CheckpointingMode.AT_LEAST_ONCE);
-    
+   
             Configuration config = new Configuration();
             config.set(CheckpointingOptions.CHECKPOINT_STORAGE, "filesystem");
             config.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, "file:///path/to/your/checkpoints");
             env.configure(config);
-    
+   
             KafkaSource<String> kafkaSource = KafkaSource.<String>builder()
                     .setBootstrapServers("localhost:9092")
                     .setProperty(ConsumerConfig.CHECK_CRCS_CONFIG, "false")
@@ -176,9 +178,9 @@ For examples of how to set up authentication, see the section [Authentication Ex
                     .setBounded(OffsetsInitializer.latest())
                     .setValueOnlyDeserializer(new SimpleStringSchema())
                             .build();
-    
+   
             env.fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "kafka-source").print();
-    
+   
             env.execute("YDB Kafka API example read app");
         }
     }
@@ -192,9 +194,11 @@ For examples of how to set up authentication, see the section [Authentication Ex
 
 ##### Unexpected error in join group response
 
-Full text of an exception `Unexpected error in join group response: This most likely occurs because of a request being malformed by the client library or the message was sent to an incompatible broker. See the broker logs for more details.`.
+Full text of an exception: `Unexpected error in join group response:
+This most likely occurs because of a request being malformed by the client library
+or the message was sent to an incompatible broker. See the broker logs for more details.`.
 
-Most likely it means that consumer group is not specified or if specified it does not exist in YDB cluster. 
+Most likely it means that consumer group is not specified or if specified it does not exist in YDB cluster.
 
 Solution: create consumer group in YDB using [CLI](../ydb-cli/topic-consumer-add) or [SDK](../ydb-sdk/topic#alter-topic)
 
@@ -232,7 +236,7 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
   echo "test message" | kcat -P \
     -b <ydb-endpoint> \
     -t <topic-name> \
-    -k key 
+    -k key
   ```
 
 - Java
@@ -274,7 +278,7 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
               .config(conf)
               .appName("Simple Application")
               .getOrCreate();
-  
+ 
         spark
               .createDataset(List.of("spark-1", "spark-2", "spark-3", "spark-4"), Encoders.STRING())
               .write()
@@ -304,10 +308,10 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
   ```java
   public class YdbKafkaApiProduceExample {
       private static final String TOPIC = "my-topic";
-  
+ 
       public static void main(String[] args) throws Exception {
           final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-  
+ 
           Sink<String> kafkaSink = KafkaSink.<String>builder()
                   .setBootstrapServers("localhost:9092") // assuming ydb is running locally with kafka proxy on 9092 port
                   .setRecordSerializer(KafkaRecordSerializationSchema.builder()
@@ -318,12 +322,12 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
                   .setRecordSerializer((el, ctx, ts) -> new ProducerRecord<>(TOPIC, el.getBytes()))
                   .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
                           .build();
-  
+ 
           env.setParallelism(1)
                   .fromSequence(0, 10)
                   .map(i -> i + "")
                   .sinkTo(kafkaSink);
-  
+ 
           // Execute program, beginning computation.
           env.execute("ydb_kafka_api_write_example");
       }
@@ -376,11 +380,13 @@ Currently, the only available authentication mechanism with Kafka API in YDB Top
 Instructions on how to try working with the Kafka API over YDB Topics in Yandex Cloud are [above](#how-to-try-kafka-api-in-cloud).
 
 For authentication, add the following values to the Kafka connection parameters:
+
 - `security.protocol` with value `SASL_SSL`
 - `sasl.mechanism` with value `PLAIN`
 - `sasl.jaas.config` with value `org.apache.kafka.common.security.plain.PlainLoginModule required username="@<path_to_database>" password="<Service Account API Key>";`
 
 Below are examples of reading from a cloud topic, where:
+
 - <path_to_database> is the path to the database from the topic page in YDS Yandex Cloud
   ![path_to_database_example](./_assets/path_to_db_in_yds_cloud_ui.png)
 - <kafka_api_endpoint> is the Kafka API Endpoint from the description page of YDS Yandex Cloud. It should be used as `bootstrap.servers`
@@ -400,7 +406,7 @@ Note: in path_to_database the username is not specified, only @ is indicated, fo
     --consumer-property partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor \
     --consumer-property security.protocol=SASL_SSL \
     --consumer-property sasl.mechanism=PLAIN \
-    --consumer-property "sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"@<path_to_database>\" password=\"<api_key>\";" 
+    --consumer-property "sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"@<path_to_database>\" password=\"<api_key>\";"
   ```
 
 - kcat
@@ -432,7 +438,7 @@ Note: in path_to_database the username is not specified, only @ is indicated, fo
 
   props.put("check.crcs", false);
   props.put("partition.assignment.strategy", RoundRobinAssignor.class.getName());
-  
+ 
   props.put("security.protocol", "SASL_SSL");
   props.put("sasl.mechanism", "PLAIN");
   props.put("sasl.jaas.config", "sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"@<path_to_database>\" password=\"<api_key>\";");
@@ -454,11 +460,13 @@ Note: in path_to_database the username is not specified, only @ is indicated, fo
 #### Examples with Authentication in a local database
 
 To test working with authentication in a local database:
+
 1. Create a user. [How to do this in YQL](https://ydb.tech/docs/ru/yql/reference/syntax/create-user). [How to execute YQL from CLI](https://ydb.tech/docs/ru/reference/ydb-cli/yql).
 2. Connect to the Kafka API as shown in the examples below. In all examples, it is assumed that:
-- YDB is running locally with the environment variable YDB_KAFKA_PROXY_PORT=9092, meaning that the Kafka API is available at localhost:9092. You can run YDB in Docker for instance as described [here](https://ydb.tech/docs/ru/quickstart#install).
-- <username> is the username you specified when creating the user.
-- <password> is the user's password you specified when creating the user.
+
+   - YDB is running locally with the environment variable YDB_KAFKA_PROXY_PORT=9092, meaning that the Kafka API is available at localhost:9092. You can run YDB in Docker for instance as described [here](https://ydb.tech/docs/ru/quickstart#install).
+   - <username> is the username you specified when creating the user.
+   - <password> is the user's password you specified when creating the user.
 
 Examples are shown for reading, but the same configuration parameters work for writing to a topic as well.
 
@@ -473,7 +481,7 @@ Examples are shown for reading, but the same configuration parameters work for w
     --consumer-property partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor \
     --consumer-property security.protocol=SASL_PLAINTEXT \
     --consumer-property sasl.mechanism=PLAIN \
-    --consumer-property "sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"<username>\" password=\"<password>\";" 
+    --consumer-property "sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"<username>\" password=\"<password>\";"
   ```
 
 - kcat
@@ -505,7 +513,7 @@ Examples are shown for reading, but the same configuration parameters work for w
 
   props.put("check.crcs", false);
   props.put("partition.assignment.strategy", RoundRobinAssignor.class.getName());
-  
+ 
   props.put("security.protocol", "SASL_PLAINTEXT");
   props.put("sasl.mechanism", "PLAIN");
   props.put("sasl.jaas.config", "sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"<username>\" password=\"<password>\";");

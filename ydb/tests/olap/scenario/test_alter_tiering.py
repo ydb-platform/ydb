@@ -56,8 +56,8 @@ class S3:
         self._server.start()
         return f'http://localhost:{port}'
 
-    def is_server_started(self) -> str:
-        pass
+    def is_server_started(self) -> bool:
+        return self._server is not None
 
     def _make_s3_resource(self, access_key, secret_key, endpoint) -> boto3.Session:
         session = boto3.Session(

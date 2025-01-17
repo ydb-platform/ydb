@@ -1503,12 +1503,28 @@ TRuntimeNode TProgramBuilder::FromBlocks(TRuntimeNode flow) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode flow) {
-    auto outputItems = ValidateBlockFlowType(flow.GetStaticType());
+TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode stream) {
+    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected WideStream as input type");
+    if constexpr (RuntimeVersion < 54U) {
+        // Preserve the old behaviour for ABI compatibility.
+        // Emit (FromFlow (WideFromBlocks (ToFlow (<stream>)))) to
+        // process the flow in favor to the given stream following
+        // the older MKQL ABI.
+        // FIXME: Drop the branch below, when the time comes.
+        const auto inputFlow = ToFlow(stream);
+        auto outputItems = ValidateBlockFlowType(inputFlow.GetStaticType());
+        outputItems.pop_back();
+        TType* outputMultiType = NewMultiType(outputItems);
+        TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
+        callableBuilder.Add(inputFlow);
+        const auto outputFlow = TRuntimeNode(callableBuilder.Build(), false);
+        return FromFlow(outputFlow);
+    }
+    auto outputItems = ValidateBlockStreamType(stream.GetStaticType());
     outputItems.pop_back();
     TType* outputMultiType = NewMultiType(outputItems);
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
-    callableBuilder.Add(flow);
+    TCallableBuilder callableBuilder(Env, __func__, NewStreamType(outputMultiType));
+    callableBuilder.Add(stream);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

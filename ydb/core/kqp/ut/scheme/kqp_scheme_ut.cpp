@@ -7618,9 +7618,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = Sprintf(R"(
                 --!syntax_v1
+                $a = "a"; -- CA
+                ; -- C1
+                $b = () -> { -- CB
+                    return $a;
+                };
                 CREATE TRANSFER `/Root/transfer1`
                   FROM `/Root/topic` TO `/Root/table` USING ($x) -> {
-                    RETURN $x;
+                    -- CL
+                    RETURN $b($x);
                   }
                   WITH (
                     ENDPOINT = "%s",

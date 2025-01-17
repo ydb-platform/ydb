@@ -1832,13 +1832,12 @@ Y_UNIT_TEST(QuerySplit) {
 
     )";
 
+    TSetup setup;
+
     TVector<TString> statements;
     NYql::TIssues issues;
-    google::protobuf::Arena Arena;
-    NSQLTranslation::TTranslationSettings settings;
-    settings.Arena = &Arena;
 
-    UNIT_ASSERT(NSQLFormat::SplitQueryToStatements(query, statements, issues, settings));
+    UNIT_ASSERT(NSQLFormat::SplitQueryToStatements(query, statements, issues, setup.Settings));
 
     UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
 

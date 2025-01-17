@@ -12,11 +12,10 @@ using TCases = TVector<std::pair<TString, TString>>;
 
 struct TSetup {
     TSetup(bool ansiLexer = false) {
-        NSQLTranslation::TTranslationSettings settings;
-        settings.Arena = &Arena;
-        settings.Antlr4Parser = true;
-        settings.AnsiLexer = ansiLexer;
-        Formatter = NSQLFormat::MakeSqlFormatter(settings);
+        Settings.Arena = &Arena;
+        Settings.Antlr4Parser = true;
+        Settings.AnsiLexer = ansiLexer;
+        Formatter = NSQLFormat::MakeSqlFormatter(Settings);
     }
 
     void Run(const TCases& cases, NSQLFormat::EFormatMode mode = NSQLFormat::EFormatMode::Pretty) {
@@ -42,6 +41,7 @@ struct TSetup {
         }
     }
 
+    NSQLTranslation::TTranslationSettings Settings;
     google::protobuf::Arena Arena;
     NSQLFormat::ISqlFormatter::TPtr Formatter;
 };

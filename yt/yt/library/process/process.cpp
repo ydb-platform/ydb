@@ -615,7 +615,7 @@ private:
 #else
     pid_t DoSpawnChildVFork()
     {
-        // NB: fork() copy-on-write cause undefined behaviour when run concurrently with
+        // NB: Fork() copy-on-write cause undefined behaviour when run concurrently with
         // Disk IO on O_DIRECT file descriptor. vfork don't suffer from the same issue.
         // NB: vfork() blocks parent until child executes new program or exits.
         int pid = vfork();

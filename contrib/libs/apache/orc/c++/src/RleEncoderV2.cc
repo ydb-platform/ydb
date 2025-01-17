@@ -41,11 +41,11 @@ namespace orc {
     if (!reuseHist) {
       // histogram that store the encoded bit requirement for each values.
       // maximum number of bits that can encoded is 32 (refer FixedBitSizes)
-      memset(histgram, 0, FixedBitSizes::SIZE * sizeof(int32_t));
+      memset(histgram_, 0, FixedBitSizes::SIZE * sizeof(int32_t));
       // compute the histogram
       for (size_t i = offset; i < (offset + length); i++) {
         uint32_t idx = encodeBitWidth(findClosestNumBits(data[i]));
-        histgram[idx] += 1;
+        histgram_[idx] += 1;
       }
     }
 
@@ -53,7 +53,7 @@ namespace orc {
 
     // return the bits required by pth percentile length
     for (int32_t i = HIST_LEN - 1; i >= 0; i--) {
-      perLen -= histgram[i];
+      perLen -= histgram_[i];
       if (perLen < 0) {
         return decodeBitWidth(static_cast<uint32_t>(i));
       }
@@ -64,13 +64,13 @@ namespace orc {
   RleEncoderV2::RleEncoderV2(std::unique_ptr<BufferedOutputStream> outStream, bool hasSigned,
                              bool alignBitPacking)
       : RleEncoder(std::move(outStream), hasSigned),
-        alignedBitPacking(alignBitPacking),
-        prevDelta(0) {
+        alignedBitPacking_(alignBitPacking),
+        prevDelta_(0) {
     literals = new int64_t[MAX_LITERAL_SIZE];
-    gapVsPatchList = new int64_t[MAX_LITERAL_SIZE];
-    zigzagLiterals = hasSigned ? new int64_t[MAX_LITERAL_SIZE] : nullptr;
-    baseRedLiterals = new int64_t[MAX_LITERAL_SIZE];
-    adjDeltas = new int64_t[MAX_LITERAL_SIZE];
+    gapVsPatchList_ = new int64_t[MAX_LITERAL_SIZE];
+    zigzagLiterals_ = hasSigned ? new int64_t[MAX_LITERAL_SIZE] : nullptr;
+    baseRedLiterals_ = new int64_t[MAX_LITERAL_SIZE];
+    adjDeltas_ = new int64_t[MAX_LITERAL_SIZE];
   }
 
   void RleEncoderV2::write(int64_t val) {
@@ -80,39 +80,39 @@ namespace orc {
     }
 
     if (numLiterals == 1) {
-      prevDelta = val - literals[0];
+      prevDelta_ = val - literals[0];
       literals[numLiterals++] = val;
 
       if (val == literals[0]) {
-        fixedRunLength = 2;
-        variableRunLength = 0;
+        fixedRunLength_ = 2;
+        variableRunLength_ = 0;
       } else {
-        fixedRunLength = 0;
-        variableRunLength = 2;
+        fixedRunLength_ = 0;
+        variableRunLength_ = 2;
       }
       return;
     }
 
     int64_t currentDelta = val - literals[numLiterals - 1];
     EncodingOption option = {};
-    if (prevDelta == 0 && currentDelta == 0) {
+    if (prevDelta_ == 0 && currentDelta == 0) {
       // case 1: fixed delta run
       literals[numLiterals++] = val;
 
-      if (variableRunLength > 0) {
+      if (variableRunLength_ > 0) {
         // if variable run is non-zero then we are seeing repeating
         // values at the end of variable run in which case fixed Run
         // length is 2
-        fixedRunLength = 2;
+        fixedRunLength_ = 2;
       }
-      fixedRunLength++;
+      fixedRunLength_++;
 
       // if fixed run met the minimum condition and if variable
       // run is non-zero then flush the variable run and shift the
       // tail fixed runs to start of the buffer
-      if (fixedRunLength >= MIN_REPEAT && variableRunLength > 0) {
+      if (fixedRunLength_ >= MIN_REPEAT && variableRunLength_ > 0) {
         numLiterals -= MIN_REPEAT;
-        variableRunLength -= (MIN_REPEAT - 1);
+        variableRunLength_ -= (MIN_REPEAT - 1);
 
         determineEncoding(option);
         writeValues(option);
@@ -124,7 +124,7 @@ namespace orc {
         numLiterals = MIN_REPEAT;
       }
 
-      if (fixedRunLength == MAX_LITERAL_SIZE) {
+      if (fixedRunLength_ == MAX_LITERAL_SIZE) {
         option.encoding = DELTA;
         option.isFixedDelta = true;
         writeValues(option);
@@ -137,8 +137,8 @@ namespace orc {
     // if fixed run length is non-zero and if it satisfies the
     // short repeat conditions then write the values as short repeats
     // else use delta encoding
-    if (fixedRunLength >= MIN_REPEAT) {
-      if (fixedRunLength <= MAX_SHORT_REPEAT_LENGTH) {
+    if (fixedRunLength_ >= MIN_REPEAT) {
+      if (fixedRunLength_ <= MAX_SHORT_REPEAT_LENGTH) {
         option.encoding = SHORT_REPEAT;
       } else {
         option.encoding = DELTA;
@@ -149,20 +149,20 @@ namespace orc {
 
     // if fixed run length is <MIN_REPEAT and current value is
     // different from previous then treat it as variable run
-    if (fixedRunLength > 0 && fixedRunLength < MIN_REPEAT && val != literals[numLiterals - 1]) {
-      variableRunLength = fixedRunLength;
-      fixedRunLength = 0;
+    if (fixedRunLength_ > 0 && fixedRunLength_ < MIN_REPEAT && val != literals[numLiterals - 1]) {
+      variableRunLength_ = fixedRunLength_;
+      fixedRunLength_ = 0;
     }
 
     // after writing values re-initialize the variables
     if (numLiterals == 0) {
       initializeLiterals(val);
     } else {
-      prevDelta = val - literals[numLiterals - 1];
+      prevDelta_ = val - literals[numLiterals - 1];
       literals[numLiterals++] = val;
-      variableRunLength++;
+      variableRunLength_++;
 
-      if (variableRunLength == MAX_LITERAL_SIZE) {
+      if (variableRunLength_ == MAX_LITERAL_SIZE) {
         determineEncoding(option);
         writeValues(option);
       }
@@ -172,7 +172,7 @@ namespace orc {
   void RleEncoderV2::computeZigZagLiterals(EncodingOption& option) {
     assert(isSigned);
     for (size_t i = 0; i < numLiterals; i++) {
-      zigzagLiterals[option.zigzagLiteralsCount++] = zigZag(literals[i]);
+      zigzagLiterals_[option.zigzagLiteralsCount++] = zigZag(literals[i]);
     }
   }
 
@@ -207,7 +207,7 @@ namespace orc {
 
     for (size_t i = 0; i < numLiterals; i++) {
       // if value is above mask then create the patch and record the gap
-      if (baseRedLiterals[i] > mask) {
+      if (baseRedLiterals_[i] > mask) {
         size_t gap = i - prev;
         if (gap > maxGap) {
           maxGap = gap;
@@ -219,12 +219,12 @@ namespace orc {
         gapIdx++;
 
         // extract the most significant bits that are over mask bits
-        int64_t patch = baseRedLiterals[i] >> option.brBits95p;
+        int64_t patch = baseRedLiterals_[i] >> option.brBits95p;
         patchList.push_back(patch);
         patchIdx++;
 
         // strip off the MSB to enable safe bit packing
-        baseRedLiterals[i] &= mask;
+        baseRedLiterals_[i] &= mask;
       }
     }
 
@@ -268,13 +268,13 @@ namespace orc {
       int64_t g = gapList[gapIdx++];
       int64_t p = patchList[patchIdx++];
       while (g > 255) {
-        gapVsPatchList[option.gapVsPatchListCount++] = (255L << option.patchWidth);
+        gapVsPatchList_[option.gapVsPatchListCount++] = (255L << option.patchWidth);
         i++;
         g -= 255;
       }
 
       // store patch value in LSBs and gap in MSBs
-      gapVsPatchList[option.gapVsPatchListCount++] = ((g << option.patchWidth) | p);
+      gapVsPatchList_[option.gapVsPatchListCount++] = ((g << option.patchWidth) | p);
     }
   }
 
@@ -287,7 +287,7 @@ namespace orc {
     if (isSigned) {
       computeZigZagLiterals(option);
     }
-    int64_t* currentZigzagLiterals = isSigned ? zigzagLiterals : literals;
+    int64_t* currentZigzagLiterals = isSigned ? zigzagLiterals_ : literals;
     option.zzBits100p = percentileBits(currentZigzagLiterals, 0, numLiterals, 1.0);
     return currentZigzagLiterals;
   }
@@ -318,7 +318,7 @@ namespace orc {
     int64_t initialDelta = literals[1] - literals[0];
     int64_t currDelta = 0;
     int64_t deltaMax = 0;
-    adjDeltas[option.adjDeltasCount++] = initialDelta;
+    adjDeltas_[option.adjDeltasCount++] = initialDelta;
 
     for (size_t i = 1; i < numLiterals; i++) {
       const int64_t l1 = literals[i];
@@ -332,8 +332,8 @@ namespace orc {
 
       option.isFixedDelta &= (currDelta == initialDelta);
       if (i > 1) {
-        adjDeltas[option.adjDeltasCount++] = std::abs(currDelta);
-        deltaMax = std::max(deltaMax, adjDeltas[i - 1]);
+        adjDeltas_[option.adjDeltasCount++] = std::abs(currDelta);
+        deltaMax = std::max(deltaMax, adjDeltas_[i - 1]);
       }
     }
 
@@ -407,15 +407,15 @@ namespace orc {
       // patching is done only on base reduced values.
       // remove base from literals
       for (size_t i = 0; i < numLiterals; i++) {
-        baseRedLiterals[option.baseRedLiteralsCount++] = (literals[i] - option.min);
+        baseRedLiterals_[option.baseRedLiteralsCount++] = (literals[i] - option.min);
       }
 
       // 95th percentile width is used to determine max allowed value
       // after which patching will be done
-      option.brBits95p = percentileBits(baseRedLiterals, 0, numLiterals, 0.95);
+      option.brBits95p = percentileBits(baseRedLiterals_, 0, numLiterals, 0.95);
 
       // 100th percentile is used to compute the max patch width
-      option.brBits100p = percentileBits(baseRedLiterals, 0, numLiterals, 1.0, true);
+      option.brBits100p = percentileBits(baseRedLiterals_, 0, numLiterals, 1.0, true);
 
       // after base reducing the values, if the difference in bits between
       // 95th percentile and 100th percentile value is zero then there
@@ -440,31 +440,8 @@ namespace orc {
   }
 
   uint64_t RleEncoderV2::flush() {
-    if (numLiterals != 0) {
-      EncodingOption option = {};
-      if (variableRunLength != 0) {
-        determineEncoding(option);
-        writeValues(option);
-      } else if (fixedRunLength != 0) {
-        if (fixedRunLength < MIN_REPEAT) {
-          variableRunLength = fixedRunLength;
-          fixedRunLength = 0;
-          determineEncoding(option);
-          writeValues(option);
-        } else if (fixedRunLength >= MIN_REPEAT && fixedRunLength <= MAX_SHORT_REPEAT_LENGTH) {
-          option.encoding = SHORT_REPEAT;
-          writeValues(option);
-        } else {
-          option.encoding = DELTA;
-          option.isFixedDelta = true;
-          writeValues(option);
-        }
-      }
-    }
-
-    outputStream->BackUp(static_cast<int>(bufferLength - bufferPosition));
+    finishEncode();
     uint64_t dataSize = outputStream->flush();
-    bufferLength = bufferPosition = 0;
     return dataSize;
   }
 
@@ -488,7 +465,7 @@ namespace orc {
       }
 
       numLiterals = 0;
-      prevDelta = 0;
+      prevDelta_ = 0;
     }
   }
 
@@ -506,8 +483,8 @@ namespace orc {
 
     uint32_t header = getOpCode(SHORT_REPEAT);
 
-    fixedRunLength -= MIN_REPEAT;
-    header |= fixedRunLength;
+    fixedRunLength_ -= MIN_REPEAT;
+    header |= fixedRunLength_;
     header |= ((numBytesRepeatVal - 1) << 3);
 
     writeByte(static_cast<char>(header));
@@ -517,40 +494,40 @@ namespace orc {
       writeByte(static_cast<char>(b));
     }
 
-    fixedRunLength = 0;
+    fixedRunLength_ = 0;
   }
 
   void RleEncoderV2::writeDirectValues(EncodingOption& option) {
     // write the number of fixed bits required in next 5 bits
     uint32_t fb = option.zzBits100p;
-    if (alignedBitPacking) {
+    if (alignedBitPacking_) {
       fb = getClosestAlignedFixedBits(fb);
     }
 
     const uint32_t efb = encodeBitWidth(fb) << 1;
 
     // adjust variable run length
-    variableRunLength -= 1;
+    variableRunLength_ -= 1;
 
     // extract the 9th bit of run length
-    const uint32_t tailBits = (variableRunLength & 0x100) >> 8;
+    const uint32_t tailBits = (variableRunLength_ & 0x100) >> 8;
 
     // create first byte of the header
     const char headerFirstByte = static_cast<char>(getOpCode(DIRECT) | efb | tailBits);
 
     // second byte of the header stores the remaining 8 bits of runlength
-    const char headerSecondByte = static_cast<char>(variableRunLength & 0xff);
+    const char headerSecondByte = static_cast<char>(variableRunLength_ & 0xff);
 
     // write header
     writeByte(headerFirstByte);
     writeByte(headerSecondByte);
 
     // bit packing the zigzag encoded literals
-    int64_t* currentZigzagLiterals = isSigned ? zigzagLiterals : literals;
+    int64_t* currentZigzagLiterals = isSigned ? zigzagLiterals_ : literals;
     writeInts(currentZigzagLiterals, 0, numLiterals, fb);
 
     // reset run length
-    variableRunLength = 0;
+    variableRunLength_ = 0;
   }
 
   void RleEncoderV2::writePatchedBasedValues(EncodingOption& option) {
@@ -565,16 +542,16 @@ namespace orc {
     const uint32_t efb = encodeBitWidth(option.brBits95p) << 1;
 
     // adjust variable run length, they are one off
-    variableRunLength -= 1;
+    variableRunLength_ -= 1;
 
     // extract the 9th bit of run length
-    const uint32_t tailBits = (variableRunLength & 0x100) >> 8;
+    const uint32_t tailBits = (variableRunLength_ & 0x100) >> 8;
 
     // create first byte of the header
     const char headerFirstByte = static_cast<char>(getOpCode(PATCHED_BASE) | efb | tailBits);
 
     // second byte of the header stores the remaining 8 bits of runlength
-    const char headerSecondByte = static_cast<char>(variableRunLength & 0xff);
+    const char headerSecondByte = static_cast<char>(variableRunLength_ & 0xff);
 
     // if the min value is negative toggle the sign
     const bool isNegative = (option.min < 0);
@@ -618,15 +595,15 @@ namespace orc {
     // base reduced literals are bit packed
     uint32_t closestFixedBits = getClosestFixedBits(option.brBits95p);
 
-    writeInts(baseRedLiterals, 0, numLiterals, closestFixedBits);
+    writeInts(baseRedLiterals_, 0, numLiterals, closestFixedBits);
 
     // write patch list
     closestFixedBits = getClosestFixedBits(option.patchGapWidth + option.patchWidth);
 
-    writeInts(gapVsPatchList, 0, option.patchLength, closestFixedBits);
+    writeInts(gapVsPatchList_, 0, option.patchLength, closestFixedBits);
 
     // reset run length
-    variableRunLength = 0;
+    variableRunLength_ = 0;
   }
 
   void RleEncoderV2::writeDeltaValues(EncodingOption& option) {
@@ -634,7 +611,7 @@ namespace orc {
     uint32_t fb = option.bitsDeltaMax;
     uint32_t efb = 0;
 
-    if (alignedBitPacking) {
+    if (alignedBitPacking_) {
       fb = getClosestAlignedFixedBits(fb);
     }
 
@@ -642,14 +619,14 @@ namespace orc {
       // if fixed run length is greater than threshold then it will be fixed
       // delta sequence with delta value 0 else fixed delta sequence with
       // non-zero delta value
-      if (fixedRunLength > MIN_REPEAT) {
+      if (fixedRunLength_ > MIN_REPEAT) {
         // ex. sequence: 2 2 2 2 2 2 2 2
-        len = fixedRunLength - 1;
-        fixedRunLength = 0;
+        len = fixedRunLength_ - 1;
+        fixedRunLength_ = 0;
       } else {
         // ex. sequence: 4 6 8 10 12 14 16
-        len = variableRunLength - 1;
-        variableRunLength = 0;
+        len = variableRunLength_ - 1;
+        variableRunLength_ = 0;
       }
     } else {
       // fixed width 0 is used for long repeating values.
@@ -658,8 +635,8 @@ namespace orc {
         fb = 2;
       }
       efb = encodeBitWidth(fb) << 1;
-      len = variableRunLength - 1;
-      variableRunLength = 0;
+      len = variableRunLength_ - 1;
+      variableRunLength_ = 0;
     }
 
     // extract the 9th bit of run length
@@ -687,13 +664,13 @@ namespace orc {
       writeVslong(option.fixedDelta);
     } else {
       // store the first value as delta value using zigzag encoding
-      writeVslong(adjDeltas[0]);
+      writeVslong(adjDeltas_[0]);
 
       // adjacent delta values are bit packed. The length of adjDeltas array is
       // always one less than the number of literals (delta difference for n
       // elements is n-1). We have already written one element, write the
       // remaining numLiterals - 2 elements here
-      writeInts(adjDeltas, 1, numLiterals - 2, fb);
+      writeInts(adjDeltas_, 1, numLiterals - 2, fb);
     }
   }
 
@@ -776,7 +753,33 @@ namespace orc {
 
   void RleEncoderV2::initializeLiterals(int64_t val) {
     literals[numLiterals++] = val;
-    fixedRunLength = 1;
-    variableRunLength = 1;
+    fixedRunLength_ = 1;
+    variableRunLength_ = 1;
+  }
+
+  void RleEncoderV2::finishEncode() {
+    if (numLiterals != 0) {
+      EncodingOption option = {};
+      if (variableRunLength_ != 0) {
+        determineEncoding(option);
+        writeValues(option);
+      } else if (fixedRunLength_ != 0) {
+        if (fixedRunLength_ < MIN_REPEAT) {
+          variableRunLength_ = fixedRunLength_;
+          fixedRunLength_ = 0;
+          determineEncoding(option);
+          writeValues(option);
+        } else if (fixedRunLength_ >= MIN_REPEAT && fixedRunLength_ <= MAX_SHORT_REPEAT_LENGTH) {
+          option.encoding = SHORT_REPEAT;
+          writeValues(option);
+        } else {
+          option.encoding = DELTA;
+          option.isFixedDelta = true;
+          writeValues(option);
+        }
+      }
+    }
+
+    RleEncoder::finishEncode();
   }
 }  // namespace orc

@@ -34,12 +34,39 @@ struct THeapSizeLimitConfig
     std::optional<TString> MemoryProfileDumpPath;
     std::optional<TString> MemoryProfileDumpFilenameSuffix;
 
+    void ApplyDynamicInplace(const TDynamicHeapSizeLimitConfigPtr& dynamicConfig);
+    THeapSizeLimitConfigPtr ApplyDynamic(const TDynamicHeapSizeLimitConfigPtr& dynamicConfig) const;
+
     REGISTER_YSON_STRUCT(THeapSizeLimitConfig);
 
     static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(THeapSizeLimitConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TDynamicHeapSizeLimitConfig
+    : public NYTree::TYsonStruct
+{
+    std::optional<double> ContainerMemoryRatio;
+    std::optional<i64> ContainerMemoryMargin;
+
+    std::optional<bool> Hard;
+
+    std::optional<bool> DumpMemoryProfileOnViolation;
+
+    std::optional<TDuration> MemoryProfileDumpTimeout;
+
+    std::optional<TString> MemoryProfileDumpPath;
+    std::optional<TString> MemoryProfileDumpFilenameSuffix;
+
+    REGISTER_YSON_STRUCT(TDynamicHeapSizeLimitConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TDynamicHeapSizeLimitConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -66,7 +93,7 @@ struct TTCMallocConfig
 
     THeapSizeLimitConfigPtr HeapSizeLimit;
 
-    TTCMallocConfigPtr ApplyDynamic(const TTCMallocConfigPtr& dynamicConfig) const;
+    TTCMallocConfigPtr ApplyDynamic(const TDynamicTCMallocConfigPtr& dynamicConfig) const;
 
     REGISTER_YSON_STRUCT(TTCMallocConfig);
 
@@ -74,6 +101,34 @@ struct TTCMallocConfig
 };
 
 DEFINE_REFCOUNTED_TYPE(TTCMallocConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TDynamicTCMallocConfig
+    : public NYTree::TYsonStruct
+{
+    std::optional<i64> AggressiveReleaseThreshold;
+
+    std::optional<double> AggressiveReleaseThresholdRatio;
+
+    std::optional<i64> AggressiveReleaseSize;
+    std::optional<TDuration> AggressiveReleasePeriod;
+
+    std::optional<i64> GuardedSamplingRate;
+
+    std::optional<i64> ProfileSamplingRate;
+    std::optional<i64> MaxPerCpuCacheSize;
+    std::optional<i64> MaxTotalThreadCacheBytes;
+    std::optional<i64> BackgroundReleaseRate;
+
+    TDynamicHeapSizeLimitConfigPtr HeapSizeLimit;
+
+    REGISTER_YSON_STRUCT(TDynamicTCMallocConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TDynamicTCMallocConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

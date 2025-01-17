@@ -170,6 +170,16 @@ namespace {
             }
         }
 
+        if constexpr (std::is_same_v<NImport::TImportFromS3Response, T>) {
+            if (settings.NoACL_) {
+                freeText << "NoACL: " << settings.NoACL_ << Endl;
+            }
+            
+            if (settings.SkipChecksumValidation_) {
+                freeText << "SkipChecksumValidation: " << settings.SkipChecksumValidation_ << Endl;
+            }
+        }
+
         if (!status.GetIssues().Empty()) {
             freeText << "Issues: " << Endl;
             for (const auto& issue : status.GetIssues()) {

@@ -1119,7 +1119,7 @@ public:
             FuncRegistry = FuncRegistryHolder.Get();
         }
 
-        SessionCtx = MakeIntrusive<TKikimrSessionContext>(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
+        SessionCtx = MakeIntrusive<TKikimrSessionContext>(FuncRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
         SessionCtx->SetDatabase(database);
         SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());

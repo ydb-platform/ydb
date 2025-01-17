@@ -832,54 +832,53 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             TRuntimeNode mapDirectOutputs;
             if (hasMap) {
                 const auto& mapper = ytMapReduce.Mapper().Cast<TCoLambda>();
-                if (const auto arg = mapper.Args().Arg(0).Raw(); arg != mapper.Body().Raw()) {
-                    values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
-                        ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
+                const auto arg = mapper.Args().Arg(0).Raw();
+                values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
+                    ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
 
-                    if (ETypeAnnotationKind::Multi == GetSeqItemType(*ytMapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0).Ref().GetTypeAnn()).GetKind())
-                        values = ExpandFlow(values, ctx);
+                if (ETypeAnnotationKind::Multi == GetSeqItemType(*ytMapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0).Ref().GetTypeAnn()).GetKind())
+                    values = ExpandFlow(values, ctx);
 
-                    NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMapReduce.Mapper().Ref().UniqueId());
+                NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMapReduce.Mapper().Ref().UniqueId());
 
-                    const auto& body = ytMapReduce.Mapper().Cast<TCoLambda>().Body().Ref();
-                    values = NCommon::MkqlBuildExpr(body, innerCtx);
+                const auto& body = ytMapReduce.Mapper().Cast<TCoLambda>().Body().Ref();
+                values = NCommon::MkqlBuildExpr(body, innerCtx);
 
-                    const auto& mapOutItemType = GetSeqItemType(*body.GetTypeAnn());
-                    if (const auto mapOutputTypeSetting = NYql::GetSetting(ytMapReduce.Settings().Ref(), EYtSettingType::MapOutputType)) {
-                        if (ETypeAnnotationKind::Multi == mapOutItemType.GetKind()) {
-                            values = NarrowFlow(values, *AS_TYPE(TStructType, NCommon::BuildType(body, *mapOutputTypeSetting->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder)), ctx);
-                        }
+                const auto& mapOutItemType = GetSeqItemType(*body.GetTypeAnn());
+                if (const auto mapOutputTypeSetting = NYql::GetSetting(ytMapReduce.Settings().Ref(), EYtSettingType::MapOutputType)) {
+                    if (ETypeAnnotationKind::Multi == mapOutItemType.GetKind()) {
+                        values = NarrowFlow(values, *AS_TYPE(TStructType, NCommon::BuildType(body, *mapOutputTypeSetting->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder)), ctx);
                     }
+                }
 
-                    values = ToList(values, ctx);
+                values = ToList(values, ctx);
 
-                    if (mapOutItemType.GetKind() == ETypeAnnotationKind::Variant) {
-                        auto tupleType = mapOutItemType.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
-                        YQL_ENSURE(tupleType->GetSize() > 0);
-                        mapDirectOutputsCount = tupleType->GetSize() - 1;
-                        YQL_ENSURE(mapDirectOutputsCount < outputsCount);
+                if (mapOutItemType.GetKind() == ETypeAnnotationKind::Variant) {
+                    auto tupleType = mapOutItemType.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
+                    YQL_ENSURE(tupleType->GetSize() > 0);
+                    mapDirectOutputsCount = tupleType->GetSize() - 1;
+                    YQL_ENSURE(mapDirectOutputsCount < outputsCount);
 
-                        values = ctx.ProgramBuilder.Collect(values);
+                    values = ctx.ProgramBuilder.Collect(values);
 
-                        mapDirectOutputs = ctx.ProgramBuilder.OrderedFlatMap(values, [&](TRuntimeNode mapOut) {
-                            return ctx.ProgramBuilder.VisitAll(mapOut, [&](ui32 index, TRuntimeNode varitem) {
-                                if (index == 0) {
-                                    return ctx.ProgramBuilder.NewEmptyOptional(ctx.ProgramBuilder.NewOptionalType(outputItemType));
-                                }
-                                return ctx.ProgramBuilder.NewOptional(ctx.ProgramBuilder.NewVariant(varitem, index - 1, outputItemType));
-                            });
+                    mapDirectOutputs = ctx.ProgramBuilder.OrderedFlatMap(values, [&](TRuntimeNode mapOut) {
+                        return ctx.ProgramBuilder.VisitAll(mapOut, [&](ui32 index, TRuntimeNode varitem) {
+                            if (index == 0) {
+                                return ctx.ProgramBuilder.NewEmptyOptional(ctx.ProgramBuilder.NewOptionalType(outputItemType));
+                            }
+                            return ctx.ProgramBuilder.NewOptional(ctx.ProgramBuilder.NewVariant(varitem, index - 1, outputItemType));
                         });
+                    });
 
-                        auto toReduceType = NCommon::BuildType(body, *tupleType->GetItems().front(), ctx.ProgramBuilder);
-                        values = ctx.ProgramBuilder.OrderedFlatMap(values, [&](TRuntimeNode mapOut) {
-                            return ctx.ProgramBuilder.VisitAll(mapOut, [&](ui32 index, TRuntimeNode varitem) {
-                                if (index == 0) {
-                                    return ctx.ProgramBuilder.NewOptional(varitem);
-                                }
-                                return ctx.ProgramBuilder.NewEmptyOptional(ctx.ProgramBuilder.NewOptionalType(toReduceType));
-                            });
+                    auto toReduceType = NCommon::BuildType(body, *tupleType->GetItems().front(), ctx.ProgramBuilder);
+                    values = ctx.ProgramBuilder.OrderedFlatMap(values, [&](TRuntimeNode mapOut) {
+                        return ctx.ProgramBuilder.VisitAll(mapOut, [&](ui32 index, TRuntimeNode varitem) {
+                            if (index == 0) {
+                                return ctx.ProgramBuilder.NewOptional(varitem);
+                            }
+                            return ctx.ProgramBuilder.NewEmptyOptional(ctx.ProgramBuilder.NewOptionalType(toReduceType));
                         });
-                    }
+                    });
                 }
             }
 

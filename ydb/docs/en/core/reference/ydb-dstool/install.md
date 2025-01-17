@@ -1,33 +1,55 @@
-# Installing {{ ydb-short-name }} DSTool
+# Installing the {{ ydb-short-name }} DSTool
 
-To install and configure {{ ydb-short-name }} DSTool:
+<!-- markdownlint-disable blanks-around-fences -->
 
-1. Install the `ydb-dstool` Python package:
+{% list tabs %}
 
-   ```bash
-   pip install ydb-dstool
-   ```
+- Linux
 
-1. Configure the environment:
+    {% include  [unix_install](./_includes/unix_install.md) %}
 
-   ```bash
-   export PATH=${PATH}:${HOME}/.local/bin
-   ```
+- macOS
 
-1. Test it by running the command that shows cluster information:
+    {% include  [unix_install](./_includes/unix_install.md) %}
 
-   ```bash
-   ydb-dstool -e <bs_endpoint> cluster list
-   ```
+- Windows
 
-   * `bs_endpoint`: URI of the interface for {{ ydb-short-name }} cluster distributed storage management. The interface is accessible over HTTP on any cluster node on port 8765 by default. URI example: `http://localhost:8765`.
+    To install the {{ ydb-short-name }} DSTool, follow these steps:
 
-   Result:
+    1. Run the command:
 
-   ```text
-   ┌───────┬───────┬───────┬────────┬────────┬───────┬────────┐
-   │ Hosts │ Nodes │ Pools │ Groups │ VDisks │ Boxes │ PDisks │
-   ├───────┼───────┼───────┼────────┼────────┼───────┼────────┤
-   │ 8     │ 16    │ 1     │ 5      │ 40     │ 1     │ 32     │
-   └───────┴───────┴───────┴────────┴────────┴───────┴────────┘
-   ```
+        - in **PowerShell**:
+
+            ```powershell
+            iex (New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows')
+            ```
+
+        - in **CMD**:
+
+            ```cmd
+            @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows'))"
+            ```
+
+    1. Specify whether to add `ydb-dstool` to the `PATH` environment variable:
+
+        ```text
+        Add ydb-dstool installation dir to your PATH? [Y/n]
+        ```
+
+    1. To update the environment variables, restart the command shell.
+
+        {% note info %}
+
+        The {{ ydb-short-name }} DSTool uses Unicode characters in the output of some commands. If these characters aren't displayed correctly in the Windows console, switch the encoding to UTF-8:
+
+        ```cmd
+        chcp 65001
+        ```
+
+        {% endnote %}
+
+    1. Test it by running the command that shows cluster information:
+
+        {% include [test step](./_includes/test.md) %}
+
+{% endlist %}

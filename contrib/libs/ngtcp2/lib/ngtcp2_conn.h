@@ -337,15 +337,15 @@ typedef struct ngtcp2_early_transport_params {
 } ngtcp2_early_transport_params;
 
 ngtcp2_static_ringbuf_def(dcid_bound, NGTCP2_MAX_BOUND_DCID_POOL_SIZE,
-                          sizeof(ngtcp2_dcid));
+                          sizeof(ngtcp2_dcid))
 ngtcp2_static_ringbuf_def(dcid_unused, NGTCP2_MAX_DCID_POOL_SIZE,
-                          sizeof(ngtcp2_dcid));
+                          sizeof(ngtcp2_dcid))
 ngtcp2_static_ringbuf_def(dcid_retired, NGTCP2_MAX_DCID_RETIRED_SIZE,
-                          sizeof(ngtcp2_dcid));
+                          sizeof(ngtcp2_dcid))
 ngtcp2_static_ringbuf_def(path_challenge, 4,
-                          sizeof(ngtcp2_path_challenge_entry));
+                          sizeof(ngtcp2_path_challenge_entry))
 
-ngtcp2_objalloc_decl(strm, ngtcp2_strm, oplent);
+ngtcp2_objalloc_decl(strm, ngtcp2_strm, oplent)
 
 struct ngtcp2_conn {
   ngtcp2_objalloc frc_objalloc;

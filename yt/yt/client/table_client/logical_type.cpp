@@ -325,9 +325,9 @@ i64 TDecimalLogicalType::GetMemoryUsage() const
     return sizeof(*this);
 }
 
-i64 TDecimalLogicalType::GetMemoryUsage(i64 limit) const
+i64 TDecimalLogicalType::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
     return sizeof(*this);
 }
@@ -389,17 +389,17 @@ i64 TOptionalLogicalType::GetMemoryUsage() const
     }
 }
 
-i64 TOptionalLogicalType::GetMemoryUsage(i64 limit) const
+i64 TOptionalLogicalType::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
     if (Element_->GetMetatype() == ELogicalMetatype::Simple) {
-        // NB: see TOptionalLogicalType::GetMemoryUsage().
+        // NB: See TOptionalLogicalType::GetMemoryUsage().
         return 0;
-    } else if (auto sizeOfThis = static_cast<i64>(sizeof(*this)); sizeOfThis >= limit) {
+    } else if (auto sizeOfThis = static_cast<i64>(sizeof(*this)); sizeOfThis >= threshold) {
         return sizeof(*this);
     } else {
-        return sizeOfThis + Element_->GetMemoryUsage(limit - sizeOfThis);
+        return sizeOfThis + Element_->GetMemoryUsage(threshold - sizeOfThis);
     }
 }
 
@@ -433,9 +433,9 @@ i64 TSimpleLogicalType::GetMemoryUsage() const
     return 0;
 }
 
-i64 TSimpleLogicalType::GetMemoryUsage(i64 limit) const
+i64 TSimpleLogicalType::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
     return 0;
 }
@@ -472,14 +472,14 @@ i64 TListLogicalType::GetMemoryUsage() const
     return sizeof(*this) + Element_->GetMemoryUsage();
 }
 
-i64 TListLogicalType::GetMemoryUsage(i64 limit) const
+i64 TListLogicalType::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
-    if (auto sizeOfThis = static_cast<i64>(sizeof(*this)); sizeOfThis >= limit) {
+    if (auto sizeOfThis = static_cast<i64>(sizeof(*this)); sizeOfThis >= threshold) {
         return sizeOfThis;
     } else {
-        return sizeOfThis + Element_->GetMemoryUsage(limit - sizeOfThis);
+        return sizeOfThis + Element_->GetMemoryUsage(threshold - sizeOfThis);
     }
 }
 
@@ -727,16 +727,16 @@ i64 TStructLogicalTypeBase::GetMemoryUsage() const
     return usage;
 }
 
-i64 TStructLogicalTypeBase::GetMemoryUsage(i64 limit) const
+i64 TStructLogicalTypeBase::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
     auto usage = static_cast<i64>(sizeof(*this) + sizeof(TStructField) * Fields_.size());
     for (const auto& field : Fields_) {
-        if (usage >= limit) {
+        if (usage >= threshold) {
             return usage;
         }
-        usage += field.Type->GetMemoryUsage(limit - usage);
+        usage += field.Type->GetMemoryUsage(threshold - usage);
     }
     return usage;
 }
@@ -799,16 +799,16 @@ i64 TTupleLogicalTypeBase::GetMemoryUsage() const
     return usage;
 }
 
-i64 TTupleLogicalTypeBase::GetMemoryUsage(i64 limit) const
+i64 TTupleLogicalTypeBase::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
     auto usage = static_cast<i64>(sizeof(*this) + sizeof(TLogicalTypePtr) * Elements_.size());
     for (const auto& element : Elements_) {
-        if (usage >= limit) {
+        if (usage >= threshold) {
             return usage;
         }
-        usage += element->GetMemoryUsage(limit - usage);
+        usage += element->GetMemoryUsage(threshold - usage);
     }
     return usage;
 }
@@ -867,19 +867,19 @@ i64 TDictLogicalType::GetMemoryUsage() const
     return sizeof(*this) + Key_->GetMemoryUsage() + Value_->GetMemoryUsage();
 }
 
-i64 TDictLogicalType::GetMemoryUsage(i64 limit) const
+i64 TDictLogicalType::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
     auto usage = static_cast<i64>(sizeof(*this));
-    if (usage >= limit) {
+    if (usage >= threshold) {
         return usage;
     }
-    usage += Key_->GetMemoryUsage(limit - usage);
-    if (usage >= limit) {
+    usage += Key_->GetMemoryUsage(threshold - usage);
+    if (usage >= threshold) {
         return usage;
     }
-    usage += Value_->GetMemoryUsage(limit - usage);
+    usage += Value_->GetMemoryUsage(threshold - usage);
     return usage;
 }
 
@@ -965,15 +965,15 @@ i64 TTaggedLogicalType::GetMemoryUsage() const
     return sizeof(*this) + GetElement()->GetMemoryUsage();
 }
 
-i64 TTaggedLogicalType::GetMemoryUsage(i64 limit) const
+i64 TTaggedLogicalType::GetMemoryUsage(i64 threshold) const
 {
-    YT_ASSERT(limit > 0);
+    YT_ASSERT(threshold > 0);
 
     auto usage = static_cast<i64>(sizeof(*this));
-    if (usage >= limit) {
+    if (usage >= threshold) {
         return usage;
     }
-    usage += GetElement()->GetMemoryUsage(limit - usage);
+    usage += GetElement()->GetMemoryUsage(threshold - usage);
     return usage;
 }
 

@@ -481,9 +481,7 @@ namespace NKikimr::NStorage {
                     // issue notification to node warden
                     if (StorageConfig && StorageConfig->GetGeneration() &&
                             StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration()) {
-                        const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-                        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*StorageConfig, &ProposedStorageConfig.value());
-                        Send(wardenId, ev.release(), 0, cookie);
+                        ReportStorageConfigToNodeWarden(cookie);
                         ++task.AsyncOperationsPending;
                         ++ProposedStorageConfigCookieUsage;
                     }

@@ -92,7 +92,8 @@ auto AddToExpectedRecords(TVector<NSc::TValue>& expectedRecords, const TProcesse
         tags["direction"] = ToString(TProcessedRequestsAggregator::ETrafficType::ingress);
         expectedRecords.push_back(CreateMeteringBillingRecord(
             attrs.FolderId, attrs.ResourceId,
-            "ymq.traffic.v1", "" /*fqdn*/, TInstant::Now(), attrs.RequestSizeInBytes, "byte", tags
+            "ymq.traffic.v1", "" /*fqdn*/, TInstant::Now(), attrs.RequestSizeInBytes, "byte", tags,
+            attrs.QueueTags
         ));
     }
     {
@@ -102,7 +103,8 @@ auto AddToExpectedRecords(TVector<NSc::TValue>& expectedRecords, const TProcesse
         tags["direction"] = ToString(TProcessedRequestsAggregator::ETrafficType::egress);
         expectedRecords.push_back(CreateMeteringBillingRecord(
             attrs.FolderId, attrs.ResourceId,
-            "ymq.traffic.v1", "" /*fqdn*/, TInstant::Now(), attrs.ResponseSizeInBytes, "byte", tags
+            "ymq.traffic.v1", "" /*fqdn*/, TInstant::Now(), attrs.ResponseSizeInBytes, "byte", tags,
+            attrs.QueueTags
         ));
     }
     {
@@ -111,7 +113,8 @@ auto AddToExpectedRecords(TVector<NSc::TValue>& expectedRecords, const TProcesse
         tags["queue_type"] = ToString(TProcessedRequestsAggregator::EQueueType::other);
         expectedRecords.push_back(CreateMeteringBillingRecord(
             attrs.FolderId, attrs.ResourceId,
-            "ymq.requests.v1", "" /*fqdn*/, TInstant::Now(), attrs.RequestSizeInBytes, "request", tags
+            "ymq.requests.v1", "" /*fqdn*/, TInstant::Now(), attrs.RequestSizeInBytes, "request", tags,
+            attrs.QueueTags
         ));
     }
 }

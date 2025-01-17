@@ -174,6 +174,7 @@ namespace NKikimr::NStorage {
 
         const bool IsSelfStatic = false;
         TIntrusivePtr<TNodeWardenConfig> Cfg;
+        bool SelfManagementEnabled = false;
 
         // currently active storage config
         std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
@@ -292,6 +293,7 @@ namespace NKikimr::NStorage {
         void Halt(); // cease any distconf activity, unbind and reject any bindings
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void HandleConfigConfirm(STATEFN_SIG);
+        void ReportStorageConfigToNodeWarden(ui64 cookie);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing

@@ -141,6 +141,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(ThrottlingLevel0SstCount, false);
                 COUNTER_INIT_IF_EXTENDED(ThrottlingAllLevelsInplacedSize, false);
                 COUNTER_INIT_IF_EXTENDED(ThrottlingOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingLogChunkCount, false);
             }
 
             COUNTER_DEF(EmergencyMovedPatchQueueItems);
@@ -165,6 +166,7 @@ public:                                                                         
             COUNTER_DEF(ThrottlingLevel0SstCount);
             COUNTER_DEF(ThrottlingAllLevelsInplacedSize);
             COUNTER_DEF(ThrottlingOccupancyPerMille);
+            COUNTER_DEF(ThrottlingLogChunkCount);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

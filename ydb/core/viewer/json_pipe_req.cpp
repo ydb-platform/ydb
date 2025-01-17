@@ -1,4 +1,5 @@
 #include "json_pipe_req.h"
+#include "log.h"
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
@@ -22,40 +23,37 @@ TViewerPipeClient::TViewerPipeClient(NWilson::TTraceId traceId) {
     }
 }
 
-TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName)
-    : Viewer(viewer)
-    , Event(ev)
-{
-    TCgiParameters params = Event->Get()->Request.GetParams();
-    if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before('?'), ' ') == "application/json") {
-        NJson::TJsonValue jsonData;
-        if (NJson::ReadJsonTree(Event->Get()->Request.GetPostContent(), &jsonData)) {
-            if (jsonData.IsMap()) {
-                for (const auto& [key, value] : jsonData.GetMap()) {
-                    switch (value.GetType()) {
-                        case NJson::EJsonValueType::JSON_STRING:
-                        case NJson::EJsonValueType::JSON_INTEGER:
-                        case NJson::EJsonValueType::JSON_UINTEGER:
-                        case NJson::EJsonValueType::JSON_DOUBLE:
-                        case NJson::EJsonValueType::JSON_BOOLEAN:
-                            params.InsertUnescaped(key, value.GetStringRobust());
-                            break;
-                        default:
-                            break;
-                    }
+void TViewerPipeClient::BuildParamsFromJson(TStringBuf data) {
+    NJson::TJsonValue jsonData;
+    if (NJson::ReadJsonTree(data, &jsonData)) {
+        if (jsonData.IsMap()) {
+            for (const auto& [key, value] : jsonData.GetMap()) {
+                switch (value.GetType()) {
+                    case NJson::EJsonValueType::JSON_STRING:
+                    case NJson::EJsonValueType::JSON_INTEGER:
+                    case NJson::EJsonValueType::JSON_UINTEGER:
+                    case NJson::EJsonValueType::JSON_DOUBLE:
+                    case NJson::EJsonValueType::JSON_BOOLEAN:
+                        Params.InsertUnescaped(key, value.GetStringRobust());
+                        break;
+                    default:
+                        break;
                 }
             }
         }
     }
-    InitConfig(params);
+}
+
+void TViewerPipeClient::SetupTracing(const TString& handlerName) {
+    auto request = GetRequest();
     NWilson::TTraceId traceId;
-    TStringBuf traceparent = Event->Get()->Request.GetHeader("traceparent");
+    TStringBuf traceparent = request.GetHeader("traceparent");
     if (traceparent) {
         traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
     }
-    TStringBuf wantTrace = Event->Get()->Request.GetHeader("X-Want-Trace");
-    TStringBuf traceVerbosity = Event->Get()->Request.GetHeader("X-Trace-Verbosity");
-    TStringBuf traceTTL = Event->Get()->Request.GetHeader("X-Trace-TTL");
+    TStringBuf wantTrace = request.GetHeader("X-Want-Trace");
+    TStringBuf traceVerbosity = request.GetHeader("X-Trace-Verbosity");
+    TStringBuf traceTTL = request.GetHeader("X-Trace-TTL");
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
         ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
         if (traceVerbosity) {
@@ -71,64 +69,35 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     }
     if (traceId) {
         Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), handlerName ? "http " + handlerName : "http viewer", NWilson::EFlags::AUTO_END};
-        Span.Attribute("request_type", TString(Event->Get()->Request.GetUri().Before('?')));
-        Span.Attribute("request_params", TString(Event->Get()->Request.GetUri().After('?')));
+        TString uri = request.GetUri();
+        Span.Attribute("request_type", TString(TStringBuf(uri).Before('?')));
+        Span.Attribute("request_params", TString(TStringBuf(uri).After('?')));
     }
+}
+
+TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName)
+    : Viewer(viewer)
+    , Event(ev)
+{
+    Params = Event->Get()->Request.GetParams();
+    if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/json") {
+        BuildParamsFromJson(Event->Get()->Request.GetPostContent());
+    }
+    InitConfig(Params);
+    SetupTracing(handlerName);
 }
 
 TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, const TString& handlerName)
     : Viewer(viewer)
     , HttpEvent(ev)
 {
-    TCgiParameters params(HttpEvent->Get()->Request->URL.After('?'));
+    Params = TCgiParameters(HttpEvent->Get()->Request->URL.After('?'));
     NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/json") {
-        NJson::TJsonValue jsonData;
-        if (NJson::ReadJsonTree(HttpEvent->Get()->Request->Body, &jsonData)) {
-            if (jsonData.IsMap()) {
-                for (const auto& [key, value] : jsonData.GetMap()) {
-                    switch (value.GetType()) {
-                        case NJson::EJsonValueType::JSON_STRING:
-                        case NJson::EJsonValueType::JSON_INTEGER:
-                        case NJson::EJsonValueType::JSON_UINTEGER:
-                        case NJson::EJsonValueType::JSON_DOUBLE:
-                        case NJson::EJsonValueType::JSON_BOOLEAN:
-                            params.InsertUnescaped(key, value.GetStringRobust());
-                            break;
-                        default:
-                            break;
-                    }
-                }
-            }
-        }
+        BuildParamsFromJson(HttpEvent->Get()->Request->Body);
     }
-    InitConfig(params);
-    NWilson::TTraceId traceId;
-    TStringBuf traceparent = headers.Get("traceparent");
-    if (traceparent) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
-    }
-    TStringBuf wantTrace = headers.Get("X-Want-Trace");
-    TStringBuf traceVerbosity = headers.Get("X-Trace-Verbosity");
-    TStringBuf traceTTL = headers.Get("X-Trace-TTL");
-    if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
-        ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
-        if (traceVerbosity) {
-            verbosity = FromStringWithDefault<ui8>(traceVerbosity, verbosity);
-            verbosity = std::min(verbosity, NWilson::TTraceId::MAX_VERBOSITY);
-        }
-        ui32 ttl = Max<ui32>();
-        if (traceTTL) {
-            ttl = FromStringWithDefault<ui32>(traceTTL, ttl);
-            ttl = std::min(ttl, NWilson::TTraceId::MAX_TIME_TO_LIVE);
-        }
-        traceId = NWilson::TTraceId::NewTraceId(verbosity, ttl);
-    }
-    if (traceId) {
-        Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), handlerName ? "http " + handlerName : "http viewer", NWilson::EFlags::AUTO_END};
-        Span.Attribute("request_type", TString(HttpEvent->Get()->Request->GetURI()));
-        Span.Attribute("request_params", TString(HttpEvent->Get()->Request->URL.After('?')));
-    }
+    InitConfig(Params);
+    SetupTracing(handlerName);
 }
 
 TActorId TViewerPipeClient::ConnectTabletPipe(NNodeWhiteboard::TTabletId tabletId) {
@@ -812,6 +781,13 @@ void TViewerPipeClient::RequestDone(ui32 requests) {
     if (requests == 0) {
         return;
     }
+    if (requests > Requests) {
+        BLOG_ERROR("Requests count mismatch: " << requests << " > " << Requests);
+        if (Span) {
+            Span.Event("Requests count mismatch");
+        }
+        requests = Requests;
+    }
     Requests -= requests;
     if (!DelayedRequests.empty()) {
         SendDelayedRequests();
@@ -917,6 +893,9 @@ bool TViewerPipeClient::NeedToRedirect() {
 }
 
 void TViewerPipeClient::PassAway() {
+    if (Span) {
+        Span.EndError("unterminated span");
+    }
     std::sort(SubscriptionNodeIds.begin(), SubscriptionNodeIds.end());
     SubscriptionNodeIds.erase(std::unique(SubscriptionNodeIds.begin(), SubscriptionNodeIds.end()), SubscriptionNodeIds.end());
     for (TNodeId nodeId : SubscriptionNodeIds) {

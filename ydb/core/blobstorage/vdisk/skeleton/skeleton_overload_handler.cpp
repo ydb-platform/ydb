@@ -185,6 +185,7 @@ namespace NKikimr {
         ui64 CurrentSstCount = 0;
         ui64 CurrentInplacedSize = 0;
         ui64 CurrentOccupancy = 0;
+        ui64 CurrentLogChunkCount = 0;
 
         TInstant CurrentTime;
         ui64 CurrentSpeedLimit = 0;
@@ -228,12 +229,25 @@ namespace NKikimr {
             return LinearInterpolation(CurrentOccupancy, minOccupancy, maxOccupancy, deviceSpeed);
         }
 
-        ui64 CalcCurrentSpeedLimit() const {
+        ui64 CalcLogChunkCountSpeedLimit() const {
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
+            ui64 maxLogChunkCount = (ui64)VCfg->ThrottlingMaxLogChunkCount;
+
+            return LinearInterpolation(CurrentLogChunkCount, minLogChunkCount, maxLogChunkCount, deviceSpeed);
+        }
+
+        ui64 CalcSpeedLimit() const {
             ui64 sstCountSpeedLimit = CalcSstCountSpeedLimit();
             ui64 inplacedSizeSpeedLimit = CalcInplacedSizeSpeedLimit();
             ui64 occupancySpeedLimit = CalcOccupancySpeedLimit();
+            ui64 logChunkCountSpeedLimit = CalcLogChunkCountSpeedLimit();
 
-            return std::min(occupancySpeedLimit, std::min(sstCountSpeedLimit, inplacedSizeSpeedLimit));
+            return std::min({
+                sstCountSpeedLimit,
+                inplacedSizeSpeedLimit,
+                occupancySpeedLimit,
+                logChunkCountSpeedLimit});
         }
 
     public:
@@ -271,7 +285,9 @@ namespace NKikimr {
             return AvailableBytes;
         }
 
-        void UpdateState(TInstant now, ui64 sstCount, ui64 inplacedSize, float occupancy) {
+        void UpdateState(TInstant now, ui64 sstCount, ui64 inplacedSize,
+            float occupancy, ui32 logChunkCount)
+        {
             bool prevActive = IsActive();
 
             CurrentSstCount = sstCount;
@@ -282,6 +298,9 @@ namespace NKikimr {
 
             CurrentOccupancy = occupancy * 1'000'000;
             Mon.ThrottlingOccupancyPerMille() = occupancy * 1000;
+
+            CurrentLogChunkCount = logChunkCount;
+            Mon.ThrottlingLogChunkCount() = logChunkCount;
 
             Mon.ThrottlingIsActive() = (ui64)IsActive();
 
@@ -294,7 +313,7 @@ namespace NKikimr {
                     CurrentTime = now;
                     AvailableBytes = 0;
                 }
-                CurrentSpeedLimit = CalcCurrentSpeedLimit();
+                CurrentSpeedLimit = CalcSpeedLimit();
             }
 
             Mon.ThrottlingCurrentSpeedLimit() = CurrentSpeedLimit;
@@ -380,7 +399,7 @@ namespace NKikimr {
             float occupancy = 1.f - VCtx->GetOutOfSpaceState().GetFreeSpaceShare();
 
             auto now = ctx.Now();
-            ThrottlingController->UpdateState(now, sstCount, dataInplacedSize, occupancy);
+            ThrottlingController->UpdateState(now, sstCount, dataInplacedSize, occupancy, LogChunkCount);
 
             if (ThrottlingController->IsActive()) {
                 ThrottlingController->UpdateTime(now);
@@ -454,6 +473,10 @@ namespace NKikimr {
 
     void TOverloadHandler::OnKickEmergencyPutQueue() {
         KickInFlight = false;
+    }
+
+    void TOverloadHandler::SetLogChunkCount(ui32 logChunkCount) {
+        LogChunkCount = logChunkCount;
     }
 
     template <class TEv>

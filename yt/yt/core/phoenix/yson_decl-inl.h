@@ -6,7 +6,7 @@
 
 #include <library/cpp/yt/yson/public.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -24,7 +24,7 @@ class TYsonSerializeBaseTypesRegistrar;
 #define PHOENIX_DECLARE_YSON_DUMPABLE_MIXIN__PROLOGUE(type) \
 private: \
     template <class TThis> \
-    friend class ::NYT::NPhoenix2::NDetail::TYsonSerializeBaseTypesRegistrar
+    friend class ::NYT::NPhoenix::NDetail::TYsonSerializeBaseTypesRegistrar
 
 #define PHOENIX_DECLARE_YSON_DUMPABLE_MIXIN(type) \
     PHOENIX_DECLARE_YSON_DUMPABLE_MIXIN__PROLOGUE(type); \
@@ -36,4 +36,4 @@ private: \
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix

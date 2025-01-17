@@ -575,9 +575,10 @@ namespace NKikimr {
     {
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> Config;
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> ProposedConfig;
+        bool SelfManagementEnabled;
 
         TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config,
-                const NKikimrBlobStorage::TStorageConfig *proposedConfig);
+                const NKikimrBlobStorage::TStorageConfig *proposedConfig, bool selfManagementEnabled);
         ~TEvNodeWardenStorageConfig();
     };
 

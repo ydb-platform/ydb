@@ -54,7 +54,7 @@ namespace NKikimr {
 
             static ui64 keySalt = 0;
             ui64 salt = ++keySalt;
-            TString baseDir = Runtime.GetTempDir();
+            TString baseDir = conf.DiskPath ? conf.DiskPath : Runtime.GetTempDir();
 
             if (Conf.UseDisk) {
                 MakeDirIfNotExist(baseDir.c_str());
@@ -62,7 +62,7 @@ namespace NKikimr {
 
             PDiskPath = TStringBuilder() << baseDir << "pdisk_1.dat";
 
-            if (!Mock) {
+            if (!Mock && conf.FormatDisk) {
                 FormatPDisk(PDiskPath,
                     Conf.DiskSize, Conf.SectorSize, Conf.ChunkSize, PDiskGuid,
                     0x123 + salt, 0x456 + salt, 0x789 + salt, mainKey,

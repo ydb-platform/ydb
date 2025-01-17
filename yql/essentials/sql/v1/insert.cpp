@@ -300,6 +300,10 @@ public:
         Update = std::move(update);
     }
 
+    void ResetIsBatch(bool isBatch) {
+        IsBatch = isBatch;
+    }
+
     bool DoInit(TContext& ctx, ISource* src) override {
         TTableList tableList;
         TNodePtr values;
@@ -347,6 +351,10 @@ public:
             options = L(options, Q(Y(Q("update"), Update->Build(ctx))));
         }
 
+        if (IsBatch) {
+            options = L(options, Q(Y(Q("is_batch"), Q("true"))));
+        }
+
         auto write = BuildWriteTable(Pos, "values", Table, Mode, std::move(options), Scoped);
         if (!write->Init(ctx, FakeSource.Get())) {
             return false;
@@ -379,6 +387,7 @@ protected:
     TSourcePtr Update;
     TSourcePtr FakeSource;
     TNodePtr Options;
+    bool IsBatch = false;
 };
 
 EWriteColumnMode ToWriteColumnsMode(ESQLWriteColumnMode sqlWriteColumnMode) {
@@ -398,9 +407,25 @@ TNodePtr BuildUpdateColumns(TPosition pos, TScopedStatePtr scoped, const TTableR
     return writeNode;
 }
 
+TNodePtr BuildBatchUpdate(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr values, TSourcePtr source, TNodePtr options) {
+    YQL_ENSURE(values, "Invalid values node");
+    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, scoped, table, EWriteColumnMode::Update, nullptr, options);
+    writeNode->ResetSource(std::move(source));
+    writeNode->ResetUpdate(std::move(values));
+    writeNode->ResetIsBatch(true);
+    return writeNode;
+}
+
 TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source, TNodePtr options) {
     TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, scoped, table, EWriteColumnMode::Delete, nullptr, options);
     writeNode->ResetSource(std::move(source));
+    return writeNode;
+}
+
+TNodePtr BuildBatchDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source, TNodePtr options) {
+    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, scoped, table, EWriteColumnMode::Delete, nullptr, options);
+    writeNode->ResetSource(std::move(source));
+    writeNode->ResetIsBatch(true);
     return writeNode;
 }
 

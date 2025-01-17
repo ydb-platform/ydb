@@ -8,7 +8,7 @@ namespace NKikimr::NGRpcService {
     class IRequestOpCtx;
     class IFacilityProvider;
 
-    NActors::IActor* DoRange(IRequestOpCtx* p);
-    NActors::IActor* DoPut(IRequestOpCtx* p);
-    NActors::IActor* DoDeleteRange(IRequestOpCtx* p);
+    NActors::IActor* MakeRange(IRequestOpCtx* p);
+    NActors::IActor* MakePut(IRequestOpCtx* p);
+    NActors::IActor* MakeDeleteRange(IRequestOpCtx* p);
 } // NKikimr::NGRpcService

@@ -6,7 +6,6 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
 #include <ydb/apps/etcd_proxy/service/grpc_service.h>
@@ -24,13 +23,12 @@ namespace NEtcd {
 std::atomic<bool> TProxy::Quit;
 
 void TProxy::OnTerminate(int) {
-    Quit = true;
+    Quit.store(true);
 }
 
 int TProxy::Init() {
     ActorSystem->Start();
     ActorSystem->Register(NActors::CreateProcStatCollector(TDuration::Seconds(7), AppData.MetricRegistry));
-    Poller = ActorSystem->Register(NActors::CreatePollerActor());
     return Discovery();
 }
 
@@ -51,6 +49,7 @@ int TProxy::Discovery() {
         config.SetDatabase(Database);
         const auto driver = NYdb::TDriver(config);
         AppData.Client = std::make_shared<NYdb::NQuery::TQueryClient>(driver);
+        AppData.MetricRegistry = NMonitoring::TMetricRegistry::SharedInstance();
 
         return 0;
     } else {
@@ -154,7 +153,6 @@ TProxy::TProxy(int argc, char** argv)
     actorSystemSetup->LocalServices.emplace_back(loggerSettings->LoggerActorId, NActors::TActorSetupCmd(loggerActor, NActors::TMailboxType::HTSwap, 0));
 
     ActorSystem = std::make_unique<NActors::TActorSystem>(actorSystemSetup, &AppData, loggerSettings);
-    AppData.MetricRegistry = NMonitoring::TMetricRegistry::SharedInstance();
 }
 
 TIntrusivePtr<NActors::NLog::TSettings> TProxy::BuildLoggerSettings() {

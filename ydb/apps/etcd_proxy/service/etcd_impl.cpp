@@ -653,8 +653,8 @@ private:
             sql << "`key`,`value`,`created`,`modified`,`version`,`lease`";
         sql << Endl << "from ";
         const bool fromHistory = Revision || MinCreateRevision || MaxCreateRevision || MinModificateRevision || MaxModificateRevision;
-        sql << (fromHistory ? "verhaal" : "huidig") << Endl;
-        sql << " where ";
+        sql << '`' << (fromHistory ? "verhaal" : "huidig") << '`' << Endl;
+        sql << "where ";
         if (RangeEnd.empty())
             sql << "`key` = $Key";
         else if (RangeEnd == Key)
@@ -834,18 +834,15 @@ private:
 
 }
 
-NActors::IActor* DoRange(IRequestOpCtx* p) {
-    Cerr << __func__ << Endl;
+NActors::IActor* MakeRange(IRequestOpCtx* p) {
     return new TRangeRequest(p);
 }
 
-NActors::IActor* DoPut(IRequestOpCtx* p) {
-    Cerr << __func__ << Endl;
+NActors::IActor* MakePut(IRequestOpCtx* p) {
     return new TPutRequest(p);
 }
 
-NActors::IActor* DoDeleteRange(IRequestOpCtx* p) {
-    Cerr << __func__ << Endl;
+NActors::IActor* MakeDeleteRange(IRequestOpCtx* p) {
     return new TDeleteRangeRequest(p);
 }
 

@@ -420,17 +420,13 @@ public:
         TEtcdRequestWrapperImpl<
             TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TEtcdRequestCall<TReq, TResp, IsOperation>>>;
 
-    template <typename TCallback>
-    TEtcdRequestCall(NYdbGrpc::IRequestContextBase* ctx, TCallback&& cb, TRequestAuxSettings auxSettings = {})
+    TEtcdRequestCall(NYdbGrpc::IRequestContextBase* ctx, TRequestAuxSettings auxSettings = {})
         : TBase(ctx)
-        , PassMethod(std::forward<TCallback>(cb))
         , AuxSettings(std::move(auxSettings))
     { }
 
-    void Pass(const IFacilityProvider&) override try {
-        PassMethod(this);
-    } catch (const std::exception& ex) {
-        this->RaiseIssue(NYql::TIssue{TStringBuilder() << "unexpected exception: " << ex.what()});
+    void Pass(const IFacilityProvider&) override {
+        Y_ABORT("unimplemented");
     }
 
     TRateLimiterMode GetRlMode() const override {
@@ -462,7 +458,6 @@ public:
     }
 
 private:
-    std::function<NActors::IActor*(TRequestIface*)> PassMethod;
     const TRequestAuxSettings AuxSettings;
 };
 
@@ -484,7 +479,7 @@ void TEtcdGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TL
 void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
-#define SETUP_METHOD_RAW(methodName, method, rlMode, requestType, serviceType, serviceName, counterName)    \
+#define SETUP_METHOD_RAW(methodName, rlMode, requestType, serviceType, serviceName, counterName)    \
     MakeIntrusive<NGRpcService::TGRpcRequest<                                                              \
         etcdserverpb::Y_CAT(methodName, Request),                                                       \
         etcdserverpb::Y_CAT(methodName, Response),                                                       \
@@ -495,11 +490,9 @@ void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         CQ,                                                                                                     \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                                      \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                                \
-            Cerr << Y_STRINGIZE(methodName) " >> " Y_STRINGIZE(method) << Endl;                            \
-            ActorSystem->Register(method(new TEtcdRequestOperationCall<                              \
+            ActorSystem->Register(Make##methodName(new TEtcdRequestOperationCall<                              \
                 etcdserverpb::Y_CAT(methodName, Request),                                                \
-                etcdserverpb::Y_CAT(methodName, Response)>(reqCtx, &method,                             \
-                    TRequestAuxSettings {                                            \
+                etcdserverpb::Y_CAT(methodName, Response)>(reqCtx, TRequestAuxSettings {                 \
                         .RlMode = TRateLimiterMode::rlMode,                                                 \
                         .RequestType = NJaegerTracing::ERequestType::requestType,                         \
                     }              \
@@ -512,19 +505,18 @@ void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                                  \
     )->Run()
 
-    #define SETUP_ETCD_KV_METHOD(methodName, method, requestType) \
+    #define SETUP_ETCD_KV_METHOD(methodName, requestType) \
         SETUP_METHOD_RAW( \
             methodName, \
-            method, \
             Rps, \
             requestType, \
             Etcd, \
             KV, \
             etcd \
         )
-    SETUP_ETCD_KV_METHOD(Range, DoRange, ETCD_RANGE);
-    SETUP_ETCD_KV_METHOD(Put, DoPut, ETCD_PUT);
-    SETUP_ETCD_KV_METHOD(DeleteRange, DoDeleteRange, ETCD_DELETE_RANGE);
+    SETUP_ETCD_KV_METHOD(Range, ETCD_RANGE);
+    SETUP_ETCD_KV_METHOD(Put, ETCD_PUT);
+    SETUP_ETCD_KV_METHOD(DeleteRange, ETCD_DELETE_RANGE);
 
     #undef SETUP_ETCD_KV_METHOD
     #undef SETUP_METHOD_RAW

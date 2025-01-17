@@ -16,7 +16,7 @@ public:
     int Run();
 
 private:
-    static std::atomic<bool> Quit;
+    static std::atomic_bool Quit;
     static void OnTerminate(int);
     NSignals::TSignalHandler<SIGINT, &TProxy::OnTerminate> SignalSIGINT;
     NSignals::TSignalHandler<SIGTERM, &TProxy::OnTerminate> SignalSIGTERM;
@@ -38,9 +38,6 @@ private:
     std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
     const ::NMonitoring::TDynamicCounterPtr Counters;
 
-    NActors::TActorId Poller;
-    NActors::TActorId Listener;
-    NActors::TActorId DatabaseProxy;
     // arguments
     bool Initialize_ = false;
     TString Database, Endpoint;

@@ -21,8 +21,8 @@ permissions                 Modify permissions
 ├─ list                     List permissions
 ├─ revoke                   Revoke permission (aliases: remove)
 ├─ set                      Set permissions
-├─ clear-inheritance        Set to do not inherit permissions from the parent
-└─ set-inheritance          Set to inherit permissions from the parent
+├─ clear-inheritance        Do not inherit permissions from the parent
+└─ set-inheritance          Inherit permissions from the parent
 ```
 
 All commands have an additional parameter, which is not critical for them:
@@ -164,7 +164,7 @@ Command syntax:
 
 Parameters:
 `<path>` — the full path from the root of the cluster to the object whose permissions need to be modified;
-`<owner>` — the name of the new owner of the specified object, may be a user or a group.
+`<owner>` — the name of the new owner (a user or a group) of the specified object.
 
 Example of a `chown` command:
 

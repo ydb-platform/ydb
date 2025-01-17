@@ -24,7 +24,7 @@ REVOKE [GRANT OPTION FOR] {{permission_name} [, ...] | ALL [PRIVILEGES]} ON {pat
   REVOKE 'ydb.generic.read' ON `/shop_db/orders` FROM user1;
   ```
 
-  The same command, using the keyword
+  The same command, using the keyword:
 
   ```yql
   REVOKE SELECT ON `/shop_db/orders` FROM user1;

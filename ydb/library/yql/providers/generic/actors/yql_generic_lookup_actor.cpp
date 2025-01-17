@@ -99,8 +99,12 @@ namespace NYql::NDq {
             , RetryPolicy(
                     ILookupRetryPolicy::GetExponentialBackoffPolicy(
                         /* retryClassFunction */
-                        [](const NYdbGrpc::TGrpcStatus&) {
-                            return ERetryErrorClass::ShortRetry; // TODO tweak
+                        [](const NYdbGrpc::TGrpcStatus& status) {
+                            if (NConnector::GrpcStatusNeedsRetry(status))
+                                return ERetryErrorClass::ShortRetry;
+                            if (status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED)
+                                return ERetryErrorClass::ShortRetry; // TODO LongRetry?
+                            return ERetryErrorClass::NoRetry;
                         },
                         /* minDelay */ TDuration::MilliSeconds(1),
                         /* minLongRetryDelay */ TDuration::MilliSeconds(500),
@@ -416,15 +420,11 @@ namespace NYql::NDq {
         }
 
         static void SendRetryOrError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, std::shared_ptr<ILookupRetryState> retryState) {
-            if (NConnector::GrpcStatusNeedsRetry(status) || status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED) {
-                auto nextRetry = retryState->GetNextRetryDelay(status);
-                if (nextRetry) {
-                    // <<< TODO tune/tweak
-                    YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;
-                    actorSystem->Schedule(*nextRetry, new IEventHandle(selfId, selfId, new TEvLookupRetry()));
-                    return;
-                }
-                YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry count exceed limit";
+            auto nextRetry = retryState->GetNextRetryDelay(status);
+            if (nextRetry) {
+                YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;
+                actorSystem->Schedule(*nextRetry, new IEventHandle(selfId, selfId, new TEvLookupRetry()));
+                return;
             }
             SendError(actorSystem, selfId, NConnector::ErrorFromGRPCStatus(status));
         }

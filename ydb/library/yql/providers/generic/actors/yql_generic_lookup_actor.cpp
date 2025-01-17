@@ -421,10 +421,6 @@ namespace NYql::NDq {
                 if (nextRetry) {
                     // <<< TODO tune/tweak
                     YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;
-                    if (status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED) {
-                        // if error was deadline, retry only once
-                        //retriesRemaining = 0; // TODO tune/tweak
-                    }
                     actorSystem->Schedule(*nextRetry, new IEventHandle(selfId, selfId, new TEvLookupRetry()));
                     return;
                 }

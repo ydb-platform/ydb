@@ -87,8 +87,11 @@ public:
         }
         const auto& params(Event->Get()->Request.GetParams());
         TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        if (Database) {
-            RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(Database), TBase::SelfId(), EBoardLookupMode::Second));
+
+        if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) {
+            TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef());
+        } else if (Database) {
+            RequestStateStorageEndpointsLookup(Database);
             Become(&TThis::StateRequestedLookup, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
             return;
         }
@@ -102,13 +105,7 @@ public:
         if (params.Has("path")) {
             TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
             IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), IsBase64Encode);
-            THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
-            if (!Event->Get()->UserToken.empty()) {
-                request->Record.SetUserToken(Event->Get()->UserToken);
-            }
-            NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
-            record->SetPath(params.Get("path"));
-            TBase::Send(MakeTxProxyID(), request.Release());
+            RequestTxProxyDescribe(params.Get("path"));
             Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();
@@ -133,6 +130,7 @@ public:
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(ev);
         CheckPath();
+        RequestDone();
     }
 
     TString GetColumnValue(const TCell& cell, const NKikimrSchemeOp::TColumnDescription& type) {
@@ -322,14 +320,13 @@ public:
                 }
             }
         }
-        if (Tablets.empty()) {
-            ReplyAndPassAway();
-        } else {
+        if (!Tablets.empty()) {
             TBase::Bootstrap();
             for (auto tablet : Tablets) {
                 Request->Record.AddFilterTabletId(tablet.first);
             }
         }
+        RequestDone();
     }
 
     virtual void FilterResponse(NKikimrWhiteboard::TEvTabletStateResponse& response) override {

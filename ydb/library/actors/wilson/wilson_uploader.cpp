@@ -155,8 +155,8 @@ namespace NWilson {
                 , DroppedSpansCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderDroppedSpans", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
                 , SentSpansCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentSpans", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
                 , SentBytesCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentBytes", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
-                , SentSpanBatchesOkCounter(params.Counters ? params.Counters->GetSubgroup("sensor", "WilsonUploaderSentSpanBatches")->GetNamedCounter("status", "ok", "true") : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
-                , SentSpanBatchesErrCounter(params.Counters ? params.Counters->GetSubgroup("sensor", "WilsonUploaderSentSpanBatches")->GetNamedCounter("status", "err", "true") : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
+                , SentSpanBatchesOkCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentSpanBatchesOk", "true") : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
+                , SentSpanBatchesErrCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentSpanBatchesErr", "true") : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
             {}
 
             ~TWilsonUploader() {

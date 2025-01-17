@@ -4,6 +4,7 @@ PY3TEST()
 ENV(YDB_HARD_MEMORY_LIMIT_BYTES="107374182400")
 
 TEST_SRCS(
+    test_clickbench.py
     test_tpch.py
 )
 
@@ -22,6 +23,10 @@ PEERDIR(
 DEPENDS(
     ydb/apps/ydb
     ydb/apps/ydbd
+)
+
+DATA(
+    arcadia/ydb/tests/functional/clickbench/data/hits.csv
 )
 
 FORK_TEST_FILES()

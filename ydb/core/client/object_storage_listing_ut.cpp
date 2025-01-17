@@ -780,7 +780,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         PrepareS3Data(cleverServer.GetRuntime(), annoyingClient);
 
 #ifdef NDEBUG
-        const int N_ROWS = 10000;
+        const int N_ROWS = NSan::PlainOrUnderSanitizer(1000, 200);
 #else
         const int N_ROWS = NSan::PlainOrUnderSanitizer(1000, 200);
 #endif

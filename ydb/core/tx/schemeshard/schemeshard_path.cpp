@@ -922,6 +922,20 @@ const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsTable() || Path.Base()->IsView()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path type is not supported in exports"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
+}
+
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
     if (Failed) {
         return *this;

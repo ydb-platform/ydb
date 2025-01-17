@@ -616,7 +616,7 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 10, ctx)) {
+    if (!EnsureArgsCount(*input, 11, ctx)) {
         return TStatus::Error;
     }
     if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_LeftLabel), ctx)) {

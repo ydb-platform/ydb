@@ -347,7 +347,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
 
     auto& config = *op.MutablePartitionConfig();
-    config.SetShadowData(true);
+    config.SetShadowData(false);
 
     auto& policy = *config.MutablePartitioningPolicy();
     policy.SetSizeToSplit(0); // disable auto split/merge

@@ -34,7 +34,7 @@ struct TTopicSessionMetrics {
         ReconnectRate = PartitionGroup->GetCounter("ReconnectRate", true);
         RestartSessionByOffsets = PartitionGroup->GetCounter("RestartSessionByOffsets", true);
         SessionDataRate = PartitionGroup->GetCounter("SessionDataRate", true);
-        WaitEventTimeMs = PartitionGroup->GetHistogram("WaitEventTimeMs", NMonitoring:::ExplicitHistogram({5, 20, 100, 500, 2000}));
+        WaitEventTimeMs = PartitionGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
         UnreadBytes = PartitionGroup->GetCounter("UnreadBytes");
     }
 

@@ -11,12 +11,14 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 
 message TEvGetAddressRequest {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
-    repeated uint32 PartitionIds = 2;
+    repeated uint32 PartitionId = 2 [deprecated=true];
+    repeated uint32 PartitionIds = 3;
 }
 
 message TEvPartitionAddress {
-    repeated uint32 PartitionIds = 1;
+    repeated uint32 PartitionId = 1 [deprecated=true];
     NActorsProto.TActorId ActorId = 2;
+    repeated uint32 PartitionIds = 3;
 }
 
 message TEvGetAddressResponse {
@@ -57,6 +59,7 @@ message TEvNewDataArrived {
 
 message TEvStopSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
+    uint32 PartitionId = 2 [deprecated=true];
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

@@ -710,7 +710,7 @@ private:
             buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.ChildBegin);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
-        buildInfo.Sample.Sent = true;
+        buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
     }
 
     void ClearAfterFill(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {
@@ -812,7 +812,6 @@ private:
         buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
         buildInfo.Cluster2Shards.clear();
         Y_ASSERT(buildInfo.InProgressShards.empty());
-        Y_ASSERT(buildInfo.DoneShards.empty());
         return !buildInfo.ToUploadShards.empty();
     }
 
@@ -873,6 +872,9 @@ private:
     }
 
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {
+            return false;
+        }
         if (InitSingleKMeans(buildInfo)) {
             LOG_D("FillIndex::SingleKMeans::Start " << buildInfo.KMeansTreeToDebugStr());
         }
@@ -882,7 +884,7 @@ private:
 
         LOG_D("FillIndex::SendVectorIndex::Done " << buildInfo.KMeansTreeToDebugStr());
         if (!buildInfo.Sample.Rows.empty()) {
-            if (!buildInfo.Sample.Sent) {
+            if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
                 LOG_D("FillIndex::SendSample::Start " << buildInfo.KMeansTreeToDebugStr());
                 SendUploadSampleKRequest(buildInfo);
                 return false;
@@ -923,6 +925,8 @@ private:
         if (buildInfo.KMeans.NextLevel()) {
             LOG_D("FillIndex::NextLevel::Start " << buildInfo.KMeansTreeToDebugStr());
             PersistKMeansState(txc, buildInfo);
+            NIceDb::TNiceDb db{txc.DB};
+            Self->PersistBuildIndexUploadReset(db, buildInfo);
             ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
             Progress(BuildId);
             return false;
@@ -968,10 +972,8 @@ public:
         Y_ABORT_UNLESS(buildInfoPtr);
         auto& buildInfo = *buildInfoPtr->Get();
 
-        LOG_I("TTxBuildProgress: Resume"
-              << ": id# " << BuildId);
-        LOG_D("TTxBuildProgress: Resume"
-              << ": " << buildInfo);
+        LOG_I("TTxBuildProgress: Resume: id# " << BuildId);
+        LOG_D("TTxBuildProgress: Resume: " << buildInfo);
 
         switch (buildInfo.State) {
         case TIndexBuildInfo::EState::Invalid:
@@ -1059,7 +1061,6 @@ public:
                 Self->PersistBuildIndexApplyTxId(db, buildInfo);
                 Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
                 Self->PersistBuildIndexApplyTxDone(db, buildInfo);
-                Self->PersistBuildIndexUploadReset(db, buildInfo);
                 Self->PersistBuildIndexProcessed(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
@@ -1250,8 +1251,7 @@ public:
     {}
 
     bool DoExecute(TTransactionContext& , const TActorContext& ctx) override {
-        LOG_I("TTxReply : TTxBilling"
-              << ", buildIndexId# " << BuildIndexId);
+        LOG_I("TTxReply : TTxBilling, id# " << BuildIndexId);
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildIndexId);
         if (!buildInfoPtr) {
@@ -1303,8 +1303,7 @@ public:
         const auto& tabletId = PipeRetry.TabletId;
         const auto& shardIdx = Self->GetShardIdx(tabletId);
 
-        LOG_I("TTxReply : PipeRetry"
-              << ", buildIndexId# " << buildId
+        LOG_I("TTxReply : PipeRetry, id# " << buildId
               << ", tabletId# " << tabletId
               << ", shardIdx# " << shardIdx);
 
@@ -1352,9 +1351,7 @@ public:
         case TIndexBuildInfo::EState::Rejection_Applying:
         case TIndexBuildInfo::EState::Rejection_Unlocking:
         case TIndexBuildInfo::EState::Rejected:
-            LOG_D("TTxReply : PipeRetry"
-                  << " superfluous event"
-                  << ", buildIndexId# " << buildId
+            LOG_D("TTxReply : PipeRetry superfluous event, id# " << buildId
                   << ", tabletId# " << tabletId
                   << ", shardIdx# " << shardIdx);
             break;
@@ -1378,7 +1375,7 @@ public:
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto& record = SampleK->Get()->Record;
 
-        LOG_I("TTxReply : TEvSampleKResponse, Id# " << record.GetId());
+        LOG_I("TTxReply : TEvSampleKResponse, id# " << record.GetId());
 
         const auto buildId = TIndexBuildId(record.GetId());
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
@@ -1531,7 +1528,7 @@ public:
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto& record = Local->Get()->Record;
 
-        LOG_I("TTxReply : TEvLocalKMeansResponse, Id# " << record.GetId());
+        LOG_I("TTxReply : TEvLocalKMeansResponse, id# " << record.GetId());
 
         const auto buildId = TIndexBuildId(record.GetId());
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
@@ -1656,7 +1653,7 @@ public:
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto& record = Reshuffle->Get()->Record;
 
-        LOG_I("TTxReply : TEvReshuffleKMeansResponse, Id# " << record.GetId());
+        LOG_I("TTxReply : TEvReshuffleKMeansResponse, id# " << record.GetId());
 
         const auto buildId = TIndexBuildId(record.GetId());
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
@@ -1780,7 +1777,7 @@ public:
     bool DoExecute([[maybe_unused]] TTransactionContext& txc, [[maybe_unused]] const TActorContext& ctx) override {
         auto& record = Upload->Get()->Record;
 
-        LOG_I("TTxReply : TEvUploadSampleKResponse, Id# " << record.GetId());
+        LOG_I("TTxReply : TEvUploadSampleKResponse, id# " << record.GetId());
 
         const auto buildId = TIndexBuildId(record.GetId());
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
@@ -1796,6 +1793,7 @@ public:
         switch (const auto state = buildInfo.State; state) {
         case TIndexBuildInfo::EState::Filling:
         {
+            Y_ABORT_UNLESS(buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload);
             NIceDb::TNiceDb db(txc.DB);
 
             TBillingStats stats{record.GetUploadRows(), record.GetUploadBytes(), 0, 0};
@@ -1809,7 +1807,7 @@ public:
 
             auto status = record.GetUploadStatus();
             if (status == Ydb::StatusIds::SUCCESS) {
-                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Filling);
+                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Done;
                 Progress(buildId);
             } else {
                 NYql::TIssues issues;
@@ -1859,8 +1857,7 @@ public:
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const NKikimrTxDataShard::TEvBuildIndexProgressResponse& record = ShardProgress->Get()->Record;
 
-        LOG_I("TTxReply : TEvBuildIndexProgressResponse"
-              << ", buildIndexId# " << record.GetBuildIndexId());
+        LOG_I("TTxReply : TEvBuildIndexProgressResponse, id# " << record.GetBuildIndexId());
 
         const auto buildId = TIndexBuildId(record.GetBuildIndexId());
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);

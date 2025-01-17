@@ -3181,9 +3181,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 }
                 return maxParent;
             }();
-            Y_ASSERT(minParent <= parentFrom);
-            Y_ASSERT(parentFrom <= parentTo);
-            Y_ASSERT(parentTo <= maxParent);
+            Y_VERIFY_DEBUG_S(minParent <= parentFrom, "minParent(" << minParent << ") > parentFrom(" << parentFrom << ")");
+            Y_VERIFY_DEBUG_S(parentFrom <= parentTo, "parentFrom(" << parentFrom << ") > parentTo(" << parentTo << ")");
+            Y_VERIFY_DEBUG_S(parentTo <= maxParent, "parentTo(" << parentTo << ") > maxParent(" << maxParent << ")");
             return {parentFrom, parentTo};
         }
 
@@ -3306,7 +3306,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TRows Rows;
         ui64 MaxProbability = std::numeric_limits<ui64>::max();
-        bool Sent = false;
+        enum class EState {
+            Collect = 0,
+            Upload,
+            Done,
+        };
+        EState State = EState::Collect;
 
         bool MakeWeakTop(ui64 k) {
             // 2 * k is needed to make it linear, 2 * N at all.
@@ -3338,7 +3343,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         void Clear() {
             Rows.clear();
             MaxProbability = std::numeric_limits<ui64>::max();
-            Sent = false;
+            State = EState::Collect;
         }
 
         void Set(ui64 probability, TString data) {
@@ -3363,7 +3368,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return TStringBuilder()
             << KMeans.ToStr() << ", "
             << "{ Rows = " << Sample.Rows.size()
-            << ", Sent = " << Sample.Sent << " }, "
+            << ", Sample = " << Sample.State << " }, "
             << "{ Done = " << DoneShards.size()
             << ", ToUpload = " << ToUploadShards.size()
             << ", InProgress = " << InProgressShards.size() << " }";
@@ -3573,6 +3578,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
         TSerializedTableRange bound{range};
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
+            "AddShardStatus id# " << Id << " shard " << shardIdx << " range " << KMeans.RangeToDebugStr(bound));
         AddParent(bound, shardIdx);
         Shards.emplace(
             shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck)));

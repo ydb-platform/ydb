@@ -10,7 +10,8 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    SIZE(MEDIUM)
+    SIZE(LARGE)
+    TAG(ya:fat)
 ENDIF()
 
 PEERDIR(
@@ -27,6 +28,7 @@ PEERDIR(
 
 SRCS(
     ut_index_build_reboots.cpp
+    ut_vector_index_build_reboots.cpp
 )
 
 YQL_LAST_ABI_VERSION()

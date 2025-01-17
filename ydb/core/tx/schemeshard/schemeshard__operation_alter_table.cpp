@@ -144,11 +144,16 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     const TSubDomainInfo& subDomain = *path.DomainInfo();
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
+    const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
+        .EnableTablePgTypes = context.SS->EnableTablePgTypes,
+        .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
+        .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+    };
 
 
     TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
         table, copyAlter, *appData->TypeRegistry, limits, subDomain,
-        context.SS->EnableTablePgTypes, context.SS->EnableTableDatetime64, errStr, localSequences);
+        featureFlags, errStr, localSequences);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;

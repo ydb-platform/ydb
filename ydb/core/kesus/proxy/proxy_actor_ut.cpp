@@ -1,4 +1,6 @@
 #include "ut_helpers.h"
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 namespace NKikimr {
 namespace NKesus {
@@ -55,6 +57,39 @@ Y_UNIT_TEST_SUITE(TProxyActorTest) {
         auto req5 = ctx.Runtime->AllocateEdgeActor(1);
         auto req5cookie = ctx.SendAttachSession(42, req5, 1, 0, "", 42);
         ctx.ExpectAttachSessionResult(req5, req5cookie, Ydb::StatusIds::BAD_SESSION);
+    }
+
+    Y_UNIT_TEST(TestDisconnectWhileAttaching) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        auto& runtime = *ctx.Runtime;
+
+        TBlockEvents<TEvKesus::TEvRegisterProxy> blockedRegister(runtime);
+
+        auto req1 = runtime.AllocateEdgeActor(1);
+        auto req1cookie = ctx.SendAttachSession(42, req1, 0, 0, "", 111);
+
+        runtime.WaitFor("blocked registrations", [&]{ return blockedRegister.size() >= 1; });
+
+        // drop link between 2 nodes
+        {
+            runtime.Send(
+                new IEventHandle(
+                    runtime.GetInterconnectProxy(0, 1),
+                    TActorId(),
+                    new TEvInterconnect::TEvDisconnect()),
+                0, true);
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
+            runtime.DispatchEvents(options);
+        }
+
+        ctx.ExpectProxyError(req1, req1cookie, Ydb::StatusIds::UNAVAILABLE);
+
+        // Proxy must not crash due to unexpected registration after a disconnect
+        blockedRegister.Stop().Unblock();
+        runtime.SimulateSleep(TDuration::Seconds(1));
     }
 }
 

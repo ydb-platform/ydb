@@ -90,7 +90,7 @@ void TDataShardUserDb::UpsertRow(
         }
 
         auto addExtendedOp = [&scheme, &tableInfo, &extendedOps](const ui64 columnTag, const ui64& columnValue) {
-            const NScheme::TTypeInfo vtype = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
+            const NScheme::TTypeId vtype = scheme.GetColumnInfo(tableInfo, columnTag)->PType.GetTypeId();
             const char* ptr = static_cast<const char*>(static_cast<const void*>(&columnValue));
             TRawTypeValue rawTypeValue(ptr, sizeof(ui64), vtype);
             NIceDb::TUpdateOp extOp(columnTag, NTable::ECellOp::Set, rawTypeValue);
@@ -321,6 +321,11 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const
     Y_VERIFY_S(localTid, "Unexpected failure to find table " << tableId << " in datashard " << Self.TabletID());
 
     if (!Db.HasOpenTx(localTid, lockId)) {
+        if (Db.HasRemovedTx(localTid, lockId)) {
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Committing removed changes lockId# " << lockId << " tid# " << localTid << " shard# " << Self.TabletID());
+            Self.IncCounter(COUNTER_REMOVED_COMMITTED_TXS);
+        }
         return;
     }
 

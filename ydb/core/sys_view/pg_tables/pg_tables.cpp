@@ -22,7 +22,7 @@ class TPgTablesScan : public NKikimr::NSysView::TScanActorBase<TPgTablesScan> {
 private:
     TCell MakePgCell(const Schema::PgColumn& column, const TString& value, TVector<TString>& cellData) {
         NYql::NUdf::TStringRef ref;
-        auto convert = NPg::PgNativeBinaryFromNativeText(value, NPg::PgTypeIdFromTypeDesc(column._ColumnTypeInfo.GetTypeDesc()));
+        auto convert = NPg::PgNativeBinaryFromNativeText(value, NPg::PgTypeIdFromTypeDesc(column._ColumnTypeInfo.GetPgTypeDesc()));
         if (convert.Error) {
             ConvertError_ = *convert.Error;
             return TCell();

@@ -634,6 +634,47 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         });
     }
 
+    Y_UNIT_TEST(SimpleWriteReadWithGetChannelStatus) {
+        TString tablePath = "/Root/mydb/kvtable";
+        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
+            Ydb::KeyValue::GetStorageChannelStatusRequest getStatusRequest;
+            getStatusRequest.set_path(tablePath);
+            getStatusRequest.add_storage_channel(0);
+            getStatusRequest.add_storage_channel(1);
+            getStatusRequest.add_storage_channel(2);
+            Ydb::KeyValue::GetStorageChannelStatusResponse getStatusResponse;
+            grpc::ClientContext getStatusCtx;
+            AdjustCtxForDB(getStatusCtx);
+            stub->GetStorageChannelStatus(&getStatusCtx, getStatusRequest, &getStatusResponse);
+            UNIT_ASSERT_CHECK_STATUS(getStatusResponse.operation(), Ydb::StatusIds::SUCCESS);
+
+            Write(tablePath, 0, "key", "value", 0, stub);
+
+            Ydb::KeyValue::GetStorageChannelStatusRequest getStatusRequest2;
+            getStatusRequest2.set_path(tablePath);
+            getStatusRequest2.add_storage_channel(0);
+            getStatusRequest2.add_storage_channel(1);
+            getStatusRequest2.add_storage_channel(2);
+            Ydb::KeyValue::GetStorageChannelStatusResponse getStatusResponse2;
+            grpc::ClientContext getStatusCtx2;
+            AdjustCtxForDB(getStatusCtx2);
+            stub->GetStorageChannelStatus(&getStatusCtx2, getStatusRequest2, &getStatusResponse2);
+            UNIT_ASSERT_CHECK_STATUS(getStatusResponse2.operation(), Ydb::StatusIds::SUCCESS);
+
+            Ydb::KeyValue::ReadRequest readRequest;
+            readRequest.set_path(tablePath);
+            readRequest.set_partition_id(0);
+            readRequest.set_key("key");
+            Ydb::KeyValue::ReadResponse readResponse;
+            Ydb::KeyValue::ReadResult readResult;
+
+            grpc::ClientContext readCtx;
+            AdjustCtxForDB(readCtx);
+            stub->Read(&readCtx, readRequest, &readResponse);
+            UNIT_ASSERT_CHECK_STATUS(readResponse.operation(), Ydb::StatusIds::SUCCESS);
+        });
+    }
+
     Y_UNIT_TEST(SimpleWriteReadOverrun) {
         TString tablePath = "/Root/mydb/kvtable";
         MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){

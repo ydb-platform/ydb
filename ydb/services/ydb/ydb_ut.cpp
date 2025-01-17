@@ -4967,7 +4967,7 @@ Ydb::Table::ExecuteQueryResult ExecYql(std::shared_ptr<grpc::Channel> channel, c
     NYql::IssuesFromMessage(deferred.issues(), issues);
     issues.PrintTo(Cerr);
 
-    UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::SUCCESS);
 
     Ydb::Table::ExecuteQueryResult result;
     Y_ABORT_UNLESS(deferred.result().UnpackTo(&result));
@@ -4975,7 +4975,7 @@ Ydb::Table::ExecuteQueryResult ExecYql(std::shared_ptr<grpc::Channel> channel, c
 }
 
 void CheckYqlDecimalValues(std::shared_ptr<grpc::Channel> channel, const TString &sessionId, const TString &yql,
-                           TVector<std::pair<i64, ui64>> vals)
+                           TVector<std::pair<i64, ui64>> vals, ui64 scale)
 {
     auto result = ExecYql(channel, sessionId, yql);
     UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1);
@@ -4983,7 +4983,7 @@ void CheckYqlDecimalValues(std::shared_ptr<grpc::Channel> channel, const TString
     TVector<std::pair<ui64, ui64>> halves;
     for (auto &pr : vals) {
         NYql::NDecimal::TInt128 val = pr.first;
-        val *= Power(10, NScheme::DECIMAL_SCALE);
+        val *= Power(10ull, scale);
         if (val >= 0)
             val += pr.second;
         else
@@ -5013,18 +5013,23 @@ void CreateTable(std::shared_ptr<grpc::Channel> channel,
     UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::SUCCESS);
 }
 
-void CreateTable(std::shared_ptr<grpc::Channel> channel)
+void CreateTableDecimal(std::shared_ptr<grpc::Channel> channel)
 {
     Ydb::Table::CreateTableRequest request;
     request.set_path("/Root/table-1");
+    auto &col = *request.add_columns();
+    col.set_name("key");
+    col.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT32);
     auto &col1 = *request.add_columns();
-    col1.set_name("key");
-    col1.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT32);
-    auto &col2 = *request.add_columns();
-    col2.set_name("value");
-    auto &decimalType = *col2.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type();
-    decimalType.set_precision(NScheme::DECIMAL_PRECISION);
-    decimalType.set_scale(NScheme::DECIMAL_SCALE);
+    col1.set_name("value1");
+    auto &decimalType1 = *col1.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type();
+    decimalType1.set_precision(1);
+    decimalType1.set_scale(0);
+    auto &col35 = *request.add_columns();
+    col35.set_name("value35");
+    auto &decimalType35 = *col35.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type();
+    decimalType35.set_precision(35);
+    decimalType35.set_scale(10);
     request.add_primary_key("key");
 
     CreateTable(channel, request);
@@ -5039,19 +5044,25 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
             = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
         TString sessionId = CreateSession(channel);
 
-        CreateTable(channel);
+        CreateTableDecimal(channel);
 
         ExecYql(channel, sessionId,
-                "UPSERT INTO `/Root/table-1` (key, value) VALUES "
-                "(1, CAST(\"1\" as DECIMAL(22,9))),"
-                "(2, CAST(\"22.22\" as DECIMAL(22,9))),"
-                "(3, CAST(\"9999999999999.999999999\" as DECIMAL(22,9)));");
+                "UPSERT INTO `/Root/table-1` (key, value1, value35) VALUES "
+                "(1, CAST(\"1\" as DECIMAL(1,0)), CAST(\"1234567890.1234567891\" as DECIMAL(35,10))),"
+                "(2, CAST(\"2\" as DECIMAL(1,0)), CAST(\"2234567890.1234567891\" as DECIMAL(35,10))),"
+                "(3, CAST(\"3\" as DECIMAL(1,0)), CAST(\"3234567890.1234567891\" as DECIMAL(35,10)));");
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=1;",
-                              {{1, 0}});
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value1 FROM `/Root/table-1` WHERE key=1;",
+                              {{1, 0}}, 0);
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
-                              {{1, 0}, {22, 220000000}, {9999999999999, 999999999}});
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value1 FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
+                              {{1, 0}, {2, 0}, {3, 0}}, 0);
+
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value35 FROM `/Root/table-1` WHERE key=1;",
+                              {{1234567890, 1234567891}}, 10);
+
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value35 FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
+                              {{1234567890, 1234567891}, {2234567890, 1234567891}, {3234567890, 1234567891}}, 10);
     }
 
     Y_UNIT_TEST(NegativeValues) {
@@ -5062,19 +5073,26 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
             = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
         TString sessionId = CreateSession(channel);
 
-        CreateTable(channel);
+        CreateTableDecimal(channel);
 
         ExecYql(channel, sessionId,
-                "UPSERT INTO `/Root/table-1` (key, value) VALUES "
-                "(1, CAST(\"-1\" as DECIMAL(22,9))),"
-                "(2, CAST(\"-22.22\" as DECIMAL(22,9))),"
-                "(3, CAST(\"-9999999999999.999999999\" as DECIMAL(22,9)));");
+                "UPSERT INTO `/Root/table-1` (key, value1, value35) VALUES "
+                "(1, CAST(\"-1\" as DECIMAL(1,0)), CAST(\"-1234567890.1234567891\" as DECIMAL(35,10))),"
+                "(2, CAST(\"-2\" as DECIMAL(1,0)), CAST(\"-2234567890.1234567891\" as DECIMAL(35,10))),"
+                "(3, CAST(\"-3\" as DECIMAL(1,0)), CAST(\"-3234567890.1234567891\" as DECIMAL(35,10)));");
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=1;",
-                              {{-1, 0}});
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value1 FROM `/Root/table-1` WHERE key=1;",
+                              {{-1, 0}}, 0);
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
-                              {{-1, 0}, {-22, 220000000}, {-9999999999999, 999999999}});
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value1 FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
+                              {{-1, 0}, {-2, 0}, {-3, 0}}, 0);
+
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value35 FROM `/Root/table-1` WHERE key=1;",
+                              {{-1234567890, 1234567891}} ,10);
+
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value35 FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
+                              {{-1234567890, 1234567891}, {-2234567890, 1234567891}, {-3234567890, 1234567891}}, 10);
+
     }
 
     Y_UNIT_TEST(DecimalKey) {
@@ -5090,8 +5108,8 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
         auto &col1 = *request.add_columns();
         col1.set_name("key");
         auto &decimalType = *col1.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type();
-        decimalType.set_precision(NScheme::DECIMAL_PRECISION);
-        decimalType.set_scale(NScheme::DECIMAL_SCALE);
+        decimalType.set_precision(22);
+        decimalType.set_scale(9);
         auto &col2 = *request.add_columns();
         col2.set_name("value");
         col2.mutable_type()->CopyFrom(col1.type());
@@ -5110,33 +5128,33 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
         )");
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"1\" as DECIMAL(22,9));",
-                              {{1, 0}});
+                              {{1, 0}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"22.22\" as DECIMAL(22,9));",
-                              {{22, 220000000}});
+                              {{22, 220000000}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"9999999999999.999999999\" as DECIMAL(22,9));",
-                              {{9999999999999, 999999999}});
+                              {{9999999999999, 999999999}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-1\" as DECIMAL(22,9));",
-                              {{-1, 0}});
+                              {{-1, 0}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-22.22\" as DECIMAL(22,9));",
-                              {{-22, 220000000}});
+                              {{-22, 220000000}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-9999999999999.999999999\" as DECIMAL(22,9));",
-                              {{-9999999999999, 999999999}});
+                              {{-9999999999999, 999999999}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key >= CAST(\"-22.22\" as DECIMAL(22,9))",
                               {{-22, 220000000}, {-1, 0},
-                               {1, 0}, {22, 220000000}, {9999999999999, 999999999}});
+                               {1, 0}, {22, 220000000}, {9999999999999, 999999999}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key < CAST(\"-22.22\" as DECIMAL(22,9))",
-                              {{-9999999999999, 999999999}});
+                              {{-9999999999999, 999999999}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key > CAST(\"-22.222\" as DECIMAL(22,9)) AND key < CAST(\"22.222\" as DECIMAL(22,9))",
                               {{-22, 220000000}, {-1, 0},
-                               {1, 0}, {22, 220000000}});
+                               {1, 0}, {22, 220000000}}, 9);
     }
 }
 

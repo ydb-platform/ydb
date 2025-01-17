@@ -3,6 +3,7 @@
 #include "http.h"
 #include "util.h"
 
+#include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/protos/msgbus.pb.h>
@@ -921,6 +922,227 @@ public:
     }
 };
 
+class TScaleRecommenderManip : public TActorBootstrapped<TScaleRecommenderManip> {
+private:
+    TTenantsManager::TTenant::TPtr Tenant;
+    ui64 HiveId;
+    TActorId HivePipe;
+
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    {
+        return NKikimrServices::TActivity::CMS_TENANTS_MANAGER;
+    }
+
+    TScaleRecommenderManip(TTenantsManager::TTenant::TPtr tenant)
+        : Tenant(tenant)
+        , HiveId(0)
+    {}
+
+    void Bootstrap(const TActorContext &ctx) {
+        BLOG_D("TScaleRecommenderManip(" << Tenant->Path << ")::Bootstrap");
+
+        Become(&TThis::StateResolveHive);
+        ResolveHive(ctx);
+    } 
+
+    void ResolveHive(const TActorContext &ctx) const {
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = Tenant->Path;
+
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        entry.Path = NKikimr::SplitPath(Tenant->Path);
+
+        ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+    }
+
+    STFUNC(StateResolveHive) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+        default:
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
+                   ev->GetTypeRewrite(), ev->ToString().data());
+            break;
+        }
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext &ctx) {
+        const auto& request = ev->Get()->Request;
+
+        if (request->ResultSet.empty()) {
+            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
+                        "TScaleRecommenderManip got empty results during resolving "
+                        << Tenant->Path);
+            Finish();
+            return;
+        }
+
+        const auto& entry = request->ResultSet.front();
+
+        if (request->ErrorCount > 0) {
+            switch (entry.Status) {
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+                    break;
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+                default:
+                    LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
+                                "TScaleRecommenderManip got entry with error during resolving "
+                                << Tenant->Path
+                                << ", entry# " << entry.ToString());
+                    Finish();
+                    return;
+            }
+        }
+
+
+        auto domainInfo = entry.DomainInfo;
+        if (!domainInfo || !domainInfo->Params.HasHive()) {
+            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
+                        "TScaleRecommenderManip resolved tenant "
+                        << Tenant->Path 
+                        << " that has no hive"
+                        << ", entry# " << entry.ToString());
+            Finish();
+            return;
+        }
+
+        HiveId = domainInfo->Params.GetHive();
+        Become(&TThis::StateWork);
+        ConfigureScaleRecommender(ctx);
+    }
+
+    void ConfigureScaleRecommender(const TActorContext &ctx) {
+        OpenHivePipe(ctx);
+
+        auto request = std::make_unique<TEvHive::TEvConfigureScaleRecommender>();
+        auto& record = request->Record;
+        record.MutableDomainKey()->SetSchemeShard(Tenant->DomainId.OwnerId);
+        record.MutableDomainKey()->SetPathId(Tenant->DomainId.LocalPathId);
+        for (const auto& p : Tenant->ScaleRecommenderPolicies->policies()) {
+            switch (p.GetPolicyCase()) {
+                case Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy::kTargetTrackingPolicy: {
+                    auto* hivePolicy = record.MutablePolicies()->AddPolicies()->MutableTargetTrackingPolicy();
+                    switch (p.target_tracking_policy().GetTargetCase()) {
+                        case Ydb::Cms::
+                            ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy::kAverageCpuUtilizationPercent:
+                            hivePolicy->SetAverageCpuUtilizationPercent(p.target_tracking_policy().average_cpu_utilization_percent());
+                            break;
+                        default:
+                            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
+                                "TScaleRecommenderManip got unknown taget for target tracking policy for "
+                                << Tenant->Path 
+                                << ", policy# " << p.target_tracking_policy().ShortDebugString());
+                            Finish();
+                            break;
+                    }
+                    break;
+                }
+                default:
+                    LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
+                        "TScaleRecommenderManip got unknown scale policy for "
+                        << Tenant->Path 
+                        << ", policies# " << Tenant->ScaleRecommenderPolicies->ShortDebugString());
+                    Finish();
+                    return;
+            }
+        }
+
+        LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
+                    "Send TEvHive::TEvConfigureScaleRecommender: "
+                    << request->Record.ShortDebugString());
+
+        NTabletPipe::SendData(ctx, HivePipe, request.release());
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvHive::TEvConfigureScaleRecommenderReply, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+
+        default:
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
+                   ev->GetTypeRewrite(), ev->ToString().data());
+            break;
+        }
+    }
+
+    void Handle(TEvHive::TEvConfigureScaleRecommenderReply::TPtr& ev, const TActorContext& ctx) {
+        switch (ev->Get()->Record.GetStatus()) {
+            case NKikimrProto::OK:
+                Tenant->ScaleRecommenderPoliciesConfirmed = true;
+                Finish();
+                break;
+            case NKikimrProto::ERROR:
+            case NKikimrProto::ALREADY:
+            case NKikimrProto::TIMEOUT:
+            case NKikimrProto::RACE:
+            case NKikimrProto::NODATA:
+            case NKikimrProto::BLOCKED:
+            case NKikimrProto::NOTREADY:
+            case NKikimrProto::OVERRUN:
+            case NKikimrProto::TRYLATER:
+            case NKikimrProto::TRYLATER_TIME:
+            case NKikimrProto::TRYLATER_SIZE:
+            case NKikimrProto::DEADLINE:
+            case NKikimrProto::CORRUPTED:
+            case NKikimrProto::SCHEDULED:
+            case NKikimrProto::OUT_OF_SPACE:
+            case NKikimrProto::VDISK_ERROR_STATE:
+            case NKikimrProto::INVALID_OWNER:
+            case NKikimrProto::INVALID_ROUND:
+            case NKikimrProto::RESTART:
+            case NKikimrProto::NOT_YET:
+            case NKikimrProto::NO_GROUP:
+            case NKikimrProto::UNKNOWN:
+                LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
+                            "TScaleRecommenderManip got error reply during configuring hive for "
+                            << Tenant->Path 
+                            << ", reply# " << ev->Get()->Record.ShortDebugString());
+                Finish();
+                break;
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            OnPipeDestroyed(ctx);
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&, const TActorContext& ctx) {
+        OnPipeDestroyed(ctx);
+    }
+
+    void OnPipeDestroyed(const TActorContext &ctx) {
+        if (HivePipe) {
+            NTabletPipe::CloseClient(ctx, HivePipe);
+            HivePipe = TActorId();
+        }
+        ConfigureScaleRecommender(ctx);
+    }
+
+    void OpenHivePipe(const TActorContext &ctx) {
+        Y_ABORT_UNLESS(HiveId);
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = FastConnectRetryPolicy();
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, HiveId, pipeConfig);
+        HivePipe = ctx.ExecutorThread.RegisterActor(pipe);
+    }
+
+    void Finish() {
+        if (Tenant->ScaleRecommenderPoliciesWorker == this->SelfId()) {
+            Tenant->ScaleRecommenderPoliciesWorker = TActorId();
+        }
+        PassAway();
+    }
+};
+
 THashMap<ui64, TString> TSubDomainManip::IssuesMap;
 
 } // anonymous namespace
@@ -1214,6 +1436,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
     , IsExternalStatisticsAggregator(false)
     , IsExternalBackupController(false)
     , AreResourcesShared(false)
+    , ScaleRecommenderPoliciesConfirmed(false)
 {
 }
 
@@ -1820,6 +2043,19 @@ void TTenantsManager::DeleteTenantPools(TTenant::TPtr tenant, const TActorContex
     }
 }
 
+void TTenantsManager::CongifureScaleRecommender(TTenant::TPtr tenant, const TActorContext &ctx)
+{
+    Y_ABORT_UNLESS(tenant->IsConfiguring() || tenant->IsRunning());
+
+    if (tenant->ScaleRecommenderPoliciesConfirmed) {
+        return;
+    }
+
+    if (tenant->ScaleRecommenderPolicies && tenant->IsExternalHive && !tenant->ScaleRecommenderPoliciesWorker) {
+        tenant->ScaleRecommenderPoliciesWorker = ctx.RegisterWithSameMailbox(new TScaleRecommenderManip(tenant));
+    }
+}
+
 void TTenantsManager::RequestTenantResources(TTenant::TPtr tenant, const TActorContext &ctx)
 {
     if (!TenantSlotBrokerPipe)
@@ -1944,6 +2180,10 @@ void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDataba
     if (tenant->DatabaseQuotas) {
         status.mutable_database_quotas()->CopyFrom(*tenant->DatabaseQuotas);
     }
+
+    if (tenant->ScaleRecommenderPolicies && !tenant->ScaleRecommenderPolicies->policies().empty()) {
+        status.mutable_scale_recommender_policies()->CopyFrom(*tenant->ScaleRecommenderPolicies);
+    }
 }
 
 void TTenantsManager::FillTenantAllocatedSlots(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status,
@@ -2039,6 +2279,8 @@ void TTenantsManager::ProcessTenantActions(TTenant::TPtr tenant, const TActorCon
         // Process slots allocation.
         if (!tenant->SlotsAllocationConfirmed)
             RequestTenantResources(tenant, ctx);
+        // Deliver scale recommender policies.
+        CongifureScaleRecommender(tenant, ctx);
     } else if (tenant->State == TTenant::REMOVING_UNITS) {
         RequestTenantResources(tenant, ctx);
     } else if (tenant->State == TTenant::REMOVING_SUBDOMAIN) {
@@ -2336,6 +2578,13 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
             .Update(NIceDb::TUpdate<Schema::Tenants::DatabaseQuotas>(serialized));
     }
 
+    if (tenant->ScaleRecommenderPolicies) {
+        TString serialized;
+        Y_ABORT_UNLESS(tenant->ScaleRecommenderPolicies->SerializeToString(&serialized));
+        db.Table<Schema::Tenants>().Key(tenant->Path)
+            .Update(NIceDb::TUpdate<Schema::Tenants::ScaleRecommenderPolicies>(serialized));
+    }
+
     for (auto &pr : tenant->StoragePools) {
         auto &pool = *pr.second;
 
@@ -2448,6 +2697,11 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         if (tenantRowset.HaveValue<Schema::Tenants::DatabaseQuotas>()) {
             auto& deserialized = tenant->DatabaseQuotas.ConstructInPlace();
             Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(deserialized, tenantRowset.GetValue<Schema::Tenants::DatabaseQuotas>()));
+        }
+
+        if (tenantRowset.HaveValue<Schema::Tenants::ScaleRecommenderPolicies>()) {
+            auto& deserialized = tenant->ScaleRecommenderPolicies.ConstructInPlace();
+            Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(deserialized, tenantRowset.GetValue<Schema::Tenants::ScaleRecommenderPolicies>()));
         }
 
         if (tenantRowset.HaveValue<Schema::Tenants::CreateIdempotencyKey>()) {
@@ -2933,6 +3187,23 @@ void TTenantsManager::DbUpdateDatabaseQuotas(TTenant::TPtr tenant,
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Tenants>().Key(tenant->Path)
         .Update(NIceDb::TUpdate<Schema::Tenants::DatabaseQuotas>(serialized));
+}
+
+void TTenantsManager::DbUpdateScaleRecommenderPolicies(TTenant::TPtr tenant,
+                                                       const Ydb::Cms::ScaleRecommenderPolicies &policies,
+                                                       TTransactionContext &txc,
+                                                       const TActorContext &ctx)
+{
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
+                "Update scale recommender policies for " << tenant->Path
+                << " policies = " << policies.DebugString());
+
+    TString serialized;
+    Y_ABORT_UNLESS(policies.SerializeToString(&serialized));
+
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::Tenants>().Key(tenant->Path)
+        .Update(NIceDb::TUpdate<Schema::Tenants::ScaleRecommenderPolicies>(serialized));
 }
 
 void TTenantsManager::Handle(TEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx)

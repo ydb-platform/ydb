@@ -166,7 +166,7 @@ public:
             break;
         }
         case TTypeParser::ETypeKind::Decimal: {
-            Builder.Decimal(TString(token));
+            Builder.Decimal(TDecimalValue(TString(token), Parser.GetDecimal().Precision, Parser.GetDecimal().Scale));
             break;
         }
         case TTypeParser::ETypeKind::Optional: {

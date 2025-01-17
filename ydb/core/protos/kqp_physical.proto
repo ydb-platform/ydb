@@ -60,10 +60,18 @@ message TKqpPhyColumnId {
     string Name = 2;
 }
 
+message TKqpPhyColumnTypeParam {
+    oneof TypeParam {
+        string PgTypeName = 1;    
+        Ydb.DecimalType Decimal = 2;
+    }
+}
+
 message TKqpPhyColumn {
+
     TKqpPhyColumnId Id = 1;
     uint32 TypeId = 2;
-    string PgTypeName = 3;
+    optional TKqpPhyColumnTypeParam TypeParam = 3;
     oneof DefaultKind {
         string DefaultFromSequence = 4;
         Ydb.TypedValue DefaultFromLiteral = 5;

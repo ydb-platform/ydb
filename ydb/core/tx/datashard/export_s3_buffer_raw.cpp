@@ -1,7 +1,7 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "export_common.h"
 #include "export_s3_buffer_raw.h"
+#include "type_serialization.h"
 
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/library/binary_json/read.h>
@@ -114,7 +114,7 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             serialized = cell.ToStream<i64>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Decimal:
-            serialized = DecimalToStream(cell.AsValue<std::pair<ui64, i64>>(), out, ErrorString);
+            serialized = DecimalToStream(cell.AsValue<std::pair<ui64, i64>>(), out, ErrorString, column.Type);
             break;
         case NScheme::NTypeIds::DyNumber:
             serialized = DyNumberToStream(cell.AsBuf(), out, ErrorString);
@@ -131,7 +131,7 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             out << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(cell.AsBuf())) << '"';
             break;
         case NScheme::NTypeIds::Pg:
-            serialized = PgToStream(cell.AsBuf(), column.Type.GetTypeDesc(), out, ErrorString);
+            serialized = PgToStream(cell.AsBuf(), column.Type, out, ErrorString);
             break;
         case NScheme::NTypeIds::Uuid:
             serialized = UuidToStream(cell.AsValue<std::pair<ui64, ui64>>(), out, ErrorString);

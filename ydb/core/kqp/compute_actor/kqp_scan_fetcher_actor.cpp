@@ -45,14 +45,11 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "META:" << meta.DebugString();
     KeyColumnTypes.reserve(Meta.GetKeyColumnTypes().size());
     for (size_t i = 0; i < Meta.KeyColumnTypesSize(); i++) {
-        auto typeId = Meta.GetKeyColumnTypes().at(i);
-        KeyColumnTypes.push_back(NScheme::TTypeInfo(
-            (NScheme::TTypeId)typeId,
-            (typeId == NScheme::NTypeIds::Pg) ?
-            NPg::TypeDescFromPgTypeId(
-                Meta.GetKeyColumnTypeInfos().at(i).GetPgTypeId()
-            ) : nullptr
-        ));
+        NScheme::TTypeId typeId = Meta.GetKeyColumnTypes().at(i);
+        NScheme::TTypeInfo typeInfo = NScheme::NTypeIds::IsParametrizedType(typeId) ?
+            NScheme::TypeInfoFromProto(typeId,Meta.GetKeyColumnTypeInfos().at(i)) :
+            NScheme::TTypeInfo(typeId);
+        KeyColumnTypes.push_back(typeInfo);
     }
 }
 

@@ -177,7 +177,7 @@ struct TReadTableRequest : public TThrRefBase {
         , RequestVersion(tx.HasApiVersion() ? tx.GetApiVersion() : (ui32)NKikimrTxUserProxy::TReadTableTransaction::UNSPECIFIED)
     {
         for (auto &col : tx.GetColumns()) {
-            Columns.emplace_back(col, 0, NScheme::TTypeInfo(0));
+            Columns.emplace_back(col, 0, NScheme::TTypeInfo());
         }
 
         if (tx.HasSnapshotStep() && tx.HasSnapshotTxId()) {

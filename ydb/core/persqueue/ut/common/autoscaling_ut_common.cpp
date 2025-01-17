@@ -62,18 +62,22 @@ void DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp:
     Sleep(TDuration::Seconds(1));
 }
 
-void SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition, TString boundary) {
+void SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition, const TString& boundary) {
     SplitPartition(setup.GetRuntime(), txId, partition, boundary);
 }
 
-void SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, TString boundary) {
+void SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topicName, const ui32 partition, const TString& boundary) {
     ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
-    scheme.SetName(TEST_TOPIC);
+    scheme.SetName(topicName);
     auto* split = scheme.AddSplit();
     split->SetPartition(partition);
     split->SetSplitBoundary(boundary);
 
     DoRequest(runtime, txId, scheme);
+}
+
+void SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, const TString& boundary) {
+    SplitPartition(runtime, txId, TEST_TOPIC, partition, boundary);
 }
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight) {

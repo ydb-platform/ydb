@@ -66,6 +66,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTieringInColumnShard)
     FEATURE_FLAG_SETTER(EnableMetadataObjectsOnServerless)
     FEATURE_FLAG_SETTER(EnableOlapCompression)
+    FEATURE_FLAG_SETTER(EnableParameterizedDecimal)
 
 #undef FEATURE_FLAG_SETTER
 };

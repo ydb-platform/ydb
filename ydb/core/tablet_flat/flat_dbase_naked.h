@@ -781,6 +781,16 @@ namespace NTable {
             }
         }
 
+    public:
+        TDbRuntimeStats GetRuntimeStats() const {
+            TDbRuntimeStats stats;
+            for (auto& pr : Tables) {
+                // TODO: use a lazy aggregate to balance many idle tables vs frequent updates
+                stats += pr.second->RuntimeStats();
+            }
+            return stats;
+        }
+
     private:
         const TIntrusivePtr<TKeyRangeCacheNeedGCList> GCList;
         const TTxStamp Weak;    /* db bootstrap upper stamp         */

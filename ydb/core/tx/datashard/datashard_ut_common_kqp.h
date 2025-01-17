@@ -182,6 +182,10 @@ namespace NKqpHelpers {
         return FormatResult(response);
     }
 
+    inline auto KqpSimpleStaleRoSend(TTestActorRuntime& runtime, const TString& query, const TString& database = {}) {
+        return KqpSimpleSend(runtime, query, true, database);
+    }
+
     inline TString KqpSimpleStaleRoExec(TTestActorRuntime& runtime, const TString& query, const TString& database = {}) {
         return KqpSimpleExec(runtime, query, true, database);
     }

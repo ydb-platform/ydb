@@ -12,8 +12,6 @@ ELSE()
 ENDIF()
 
 SRCS(
-    datetime_ut.cpp
-    decimal_ut.cpp
     flat_cxx_database_ut.cpp
     ut_db_iface.cpp
     ut_db_scheme.cpp
@@ -41,6 +39,8 @@ SRCS(
     ut_comp_gen.cpp
     ut_compaction.cpp
     ut_compaction_multi.cpp
+    ut_datetime.cpp
+    ut_decimal.cpp    
     ut_charge.cpp
     ut_part.cpp
     ut_part_multi.cpp

@@ -225,7 +225,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
 
         ui64 keyBytes = 0;
         for (size_t i = 0; i < tableInfo.KeyColumnTypes.size(); ++i) {
-            const auto type = tableInfo.KeyColumnTypes.at(i);
+            const NScheme::TTypeId type = tableInfo.KeyColumnTypes.at(i).GetTypeId();
             const auto& cell = KeyCells.GetCells().at(i);
             keyBytes += cell.Size();
             Key.emplace_back(cell.AsRef(), type);
@@ -282,7 +282,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
                         return false;
                     }
 
-                    Value.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(cell.AsRef(), column->Type));
+                    Value.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(cell.AsRef(), column->Type.GetTypeId()));
                 }
 
                 break;

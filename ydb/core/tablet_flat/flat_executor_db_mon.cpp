@@ -86,7 +86,7 @@ public:
                                 vals.emplace_back();
                                 TBuffer& buf = vals.back();
                                 buf.Assign(reinterpret_cast<const char*>(&v), sizeof(v));
-                                key.emplace_back(buf.Data(), buf.Size(), NScheme::TTypeInfo(type));
+                                key.emplace_back(buf.Data(), buf.Size(), type);
                                 break;
                             }
                             case NScheme::NTypeIds::Uint64:
@@ -95,7 +95,7 @@ public:
                                 vals.emplace_back();
                                 TBuffer& buf = vals.back();
                                 buf.Assign(reinterpret_cast<const char*>(&v), sizeof(v));
-                                key.emplace_back(buf.Data(), buf.Size(), NScheme::TTypeInfo(type));
+                                key.emplace_back(buf.Data(), buf.Size(), type);
                                 break;
                             }
                             case NScheme::NTypeIds::String:
@@ -104,7 +104,7 @@ public:
                                 vals.emplace_back();
                                 TBuffer& buf = vals.back();
                                 buf.Assign(val.data(), val.size());
-                                key.emplace_back(buf.Data(), buf.Size(), NScheme::TTypeInfo(type));
+                                key.emplace_back(buf.Data(), buf.Size(), type);
                                 break;
                             }
                             default:
@@ -128,7 +128,10 @@ public:
                     str << "<tr>";
                     for (ui32 column : columns) {
                         const auto &columnInfo = tableInfo->Columns.find(column)->second;
-                        str << "<th>" << column << ":" << columnInfo.Name << "</th>";
+                        str << "<th>" 
+                            << column << ":" << NScheme::TypeName(columnInfo.PType, columnInfo.PTypeMod) 
+                            << " " << columnInfo.Name
+                        << "</th>";
                     }
                     str << "</tr>";
                     str << "</thead>";
@@ -229,12 +232,17 @@ public:
                                             str << "(DyNumber) " << number;
                                             break;
                                         }
+                                        case NScheme::NTypeIds::Decimal: {
+                                            tuple.Types[i].GetDecimalType().CellValueToStream(tuple.Columns[i].AsValue<std::pair<ui64, i64>>(), str);
+                                            break;
+                                        }
                                         case NScheme::NTypeIds::Pg: {
-                                            str << "(Pg) " << NPg::PgTypeNameFromTypeDesc(tuple.Types[i].GetTypeDesc());
+                                            auto convert = NPg::PgNativeTextFromNativeBinary(tuple.Columns[i].AsBuf(), tuple.Types[i].GetPgTypeDesc());
+                                            str << EncodeHtmlPcdata(!convert.Error ? convert.Str : *convert.Error);
                                             break;
                                         }
                                         default:
-                                            str << "<i>unknown type " << tuple.Types[i].GetTypeId() << "</i>";
+                                            str << "<i>unknown type " << NScheme::TypeName(tuple.Types[i]) << "</i>";
                                             break;
                                         }
                                     }

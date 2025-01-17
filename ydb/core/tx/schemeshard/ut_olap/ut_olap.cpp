@@ -784,4 +784,26 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLsPathId(runtime, 2, NLs::PathStringEqual(""));
 #endif
     }
+
+    Y_UNIT_TEST(Decimal) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"_(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "data" Type: "Decimal(35,9)" }
+                    KeyColumnNames: "timestamp"
+                }
+            }
+        )_");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
+    }    
 }

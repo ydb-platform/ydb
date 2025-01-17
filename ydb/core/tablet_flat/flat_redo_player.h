@@ -263,7 +263,7 @@ namespace NRedo {
             Y_ABORT_UNLESS(maxSz >= sizeof(TValue), "Buffer to small");
             const TValue* vp = (const TValue*)buf;
             Y_ABORT_UNLESS(maxSz >= sizeof(TValue) + vp->Size, "Value size execeeds the buffer size");
-            val = vp->IsNull() ? TRawTypeValue() : TRawTypeValue(vp + 1, vp->Size, NScheme::TTypeInfo(vp->TypeId));
+            val = vp->IsNull() ? TRawTypeValue() : TRawTypeValue(vp + 1, vp->Size, vp->TypeId);
             return sizeof(TValue) + vp->Size;
         }
 
@@ -286,7 +286,7 @@ namespace NRedo {
             const TUpdate* up = (const TUpdate*)buf;
             Y_ABORT_UNLESS(maxSz >= sizeof(TUpdate) + up->Val.Size, "Value size execeeds the buffer size");
             bool null = TCellOp::HaveNoPayload(up->CellOp) || up->Val.IsNull();
-            uo = TUpdateOp(up->Tag, up->CellOp, null ? TRawTypeValue() : TRawTypeValue(up + 1, up->Val.Size, NScheme::TTypeInfo(up->Val.TypeId)));
+            uo = TUpdateOp(up->Tag, up->CellOp, null ? TRawTypeValue() : TRawTypeValue(up + 1, up->Val.Size, up->Val.TypeId));
 
             Y_ABORT_UNLESS(up->CellOp == ELargeObj::Inline || (up->CellOp == ELargeObj::Extern && up->Val.Size == sizeof(ui32)));
 

@@ -148,58 +148,49 @@ public:
             }
             const auto& colInfo = *colInfoPtr;
 
-            i32 typmod = -1;
-            if (typeInProto.type_id()) {
-                // TODO check Arrow types
-            } else if (typeInProto.has_decimal_type() && colInfo.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
-                int precision = typeInProto.decimal_type().precision();
-                int scale = typeInProto.decimal_type().scale();
-                if (precision != NScheme::DECIMAL_PRECISION || scale != NScheme::DECIMAL_SCALE) {
-                    errorMessage = Sprintf("Unsupported Decimal(%d,%d) for column %s: expected Decimal(%d,%d)",
-                                           precision, scale,
-                                           name.c_str(),
-                                           NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
+            TString columnTypeName = NScheme::TypeName(colInfo.PType, colInfo.PTypeMod);
 
-                    return false;
-                }
-            } else if (typeInProto.has_pg_type()) {
-                const auto& typeName = typeInProto.pg_type().type_name();
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-                if (!typeDesc) {
-                    errorMessage = Sprintf("Unknown pg type for column %s: %s",
-                                           name.c_str(), typeName.c_str());
-                    return false;
-                }
+            TString parseProtoError;
+            NScheme::TTypeInfoMod inTypeInfoMod;
+            if (!NScheme::TypeInfoFromProto(typeInProto, inTypeInfoMod, parseProtoError)){
+                errorMessage = Sprintf("Type parse error for column %s: %s",
+                    name.c_str(), parseProtoError.c_str());
+                return false;
+            }
+            const NScheme::TTypeInfo& inTypeInfo = inTypeInfoMod.TypeInfo;
 
-                const auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-                if (typeInRequest != colInfo.PType) {
-                    errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
-                                           name.c_str(), NScheme::TypeName(colInfo.PType).c_str(),
-                                           NScheme::TypeName(typeInRequest).c_str());
-                    return false;
-                }
+            TString inTypeName = NScheme::TypeName(inTypeInfo, inTypeInfo.GetPgTypeMod(colInfo.PTypeMod));
 
-                if (!colInfo.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeDesc)) {
-                    const auto result = NPg::BinaryTypeModFromTextTypeMod(colInfo.PTypeMod, typeDesc);
-                    if (result.Error) {
-                        errorMessage = Sprintf("Invalid typemod for column %s: type %s, error %s",
-                            name.c_str(), NScheme::TypeName(colInfo.PType, colInfo.PTypeMod).c_str(),
-                            result.Error->c_str());
+            if (inTypeInfo != colInfo.PType) {
+                errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                    inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
+                return false;
+            }
+
+            i32 pgTypeMod = -1;
+            if (typeInProto.has_pg_type()) {
+                if (!colInfo.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(inTypeInfo.GetPgTypeDesc())) {
+                    if (inTypeInfoMod.TypeMod != colInfo.PTypeMod) {
+                        errorMessage = Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
+                            inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), colInfo.PTypeMod.c_str());
                         return false;
                     }
-                    typmod = result.Typmod;
+
+                    const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, inTypeInfo.GetPgTypeDesc());
+                    if (result.Error) {
+                        errorMessage = Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
+                           inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str());
+                        return false;
+                    }
+                    pgTypeMod = result.Typmod;
                 }
-            } else {
-                errorMessage = Sprintf("Unexpected type for column %s: expected %s",
-                                       name.c_str(), NScheme::TypeName(colInfo.PType).c_str());
-                return false;
             }
 
             KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), colInfo.KeyOrder + 1));
             KeyColumnTypes[colInfo.KeyOrder] = colInfo.PType;
 
             bool notNull = notNullColumns.contains(colInfo.Name);
-            KeyColumnPositions[colInfo.KeyOrder] = NTxProxy::TFieldDescription{colInfo.Id, colInfo.Name, static_cast<ui32>(pos), colInfo.PType, typmod, notNull};
+            KeyColumnPositions[colInfo.KeyOrder] = NTxProxy::TFieldDescription{colInfo.Id, colInfo.Name, static_cast<ui32>(pos), colInfo.PType, pgTypeMod, notNull};
             keyColumnsLeft.erase(colInfo.Name);
         }
 
@@ -567,17 +558,27 @@ public:
         auto& ioStats = stats.ReadIOStat;
 
         const auto getPgTypeFromColMeta = [](const auto &colMeta) {
-            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.Type.GetTypeDesc()),
+            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.Type.GetPgTypeDesc()),
                                  colMeta.PTypeMod);
         };
 
         const auto getTypeFromColMeta = [&](const auto &colMeta) {
-            if (colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+            const NScheme::TTypeInfo& typeInfo = colMeta.Type;
+            switch (typeInfo.GetTypeId()) {
+            case NScheme::NTypeIds::Pg: {
                 return NYdb::TTypeBuilder().Pg(getPgTypeFromColMeta(colMeta)).Build();
-            } else {
-                return NYdb::TTypeBuilder()
-                    .Primitive((NYdb::EPrimitiveType)colMeta.Type.GetTypeId())
+            }
+            case NScheme::NTypeIds::Decimal: {
+                return NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(
+                        typeInfo.GetDecimalType().GetPrecision(), 
+                        typeInfo.GetDecimalType().GetScale()))
                     .Build();
+            }
+            default :{
+                return NYdb::TTypeBuilder()
+                    .Primitive((NYdb::EPrimitiveType)typeInfo.GetTypeId())
+                    .Build();
+            }
             }
         };
 
@@ -602,18 +603,32 @@ public:
                     );
                     const auto& cell = row[i];
                     vb.AddMember(colMeta.Name);
-                    if (colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg)
-                    {
-                        const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetTypeDesc());
+                    switch (colMeta.Type.GetTypeId()) {
+                    case NScheme::NTypeIds::Pg: {
+                        const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetPgTypeDesc());
                         if (pgResult.Error) {
                             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "PgNativeTextFromNativeBinary error " << *pgResult.Error);
                         }
                         const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
                         vb.Pg(pgValue);
+                        break;
                     }
-                    else
-                    {
+                    case NScheme::NTypeIds::Decimal: {
+                        using namespace NYql::NDecimal;
+    
+                        const auto loHi = cell.AsValue<std::pair<ui64, i64>>();
+                        Ydb::Value valueProto;
+                        valueProto.set_low_128(loHi.first);
+                        valueProto.set_high_128(loHi.second);
+                        const NYdb::TDecimalValue decimal(valueProto, 
+                            {static_cast<ui8>(colMeta.Type.GetDecimalType().GetPrecision()), static_cast<ui8>(colMeta.Type.GetDecimalType().GetScale())});
+                        vb.Decimal(decimal);
+                        break;
+                    }
+                    default: {
                         ProtoValueFromCell(vb, colMeta.Type, cell);
+                        break;
+                    }
                     }
                     sz += cell.Size();
                 }

@@ -2296,6 +2296,10 @@ public:
         PassAway();
     }
 
+    void HandleFinalCleanup(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        ReplyProcessError(ev, Ydb::StatusIds::BAD_SESSION, "Session is under shutdown");
+    }
+
     STFUNC(ReadyState) {
         try {
             switch (ev->GetTypeRewrite()) {
@@ -2427,6 +2431,7 @@ public:
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
+                hFunc(TEvKqp::TEvQueryRequest, HandleFinalCleanup);
             }
         } catch (const yexception& ex) {
             InternalError(ex.what());

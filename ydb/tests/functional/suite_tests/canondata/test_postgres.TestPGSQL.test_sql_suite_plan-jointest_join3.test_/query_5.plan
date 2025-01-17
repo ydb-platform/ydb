@@ -29,8 +29,8 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "precompute_3_0",
-                                        "Node Type": "Limit-InnerJoin (MapJoin)-Filter-TablePointLookup-ConstantExpr-Filter-ConstantExpr",
+                                        "CTE Name": "precompute_4_0",
+                                        "Node Type": "Limit-InnerJoin (MapJoin)-ConstantExpr-Filter-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -45,18 +45,23 @@
                                                 "Condition": "x.k = p_1.k",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 2
+                                                        "InternalOperatorId": 3
                                                     },
                                                     {
-                                                        "InternalOperatorId": 5
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_3_0"
+                                            },
+                                            {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 4
                                                     }
                                                 ],
                                                 "Name": "Filter",
@@ -65,7 +70,7 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
                                                 "Name": "TablePointLookup",
@@ -78,20 +83,6 @@
                                                 "Inputs": [],
                                                 "Iterator": "precompute_4_0",
                                                 "Name": "Iterator"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 6
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.p_1.k)"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_3_0"
                                             }
                                         ],
                                         "PlanNodeId": 23,
@@ -142,7 +133,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "LeftJoin (MapJoin)-Filter",
+                                        "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
                                                 "Condition": "p_1.k = c.k",
@@ -151,19 +142,10 @@
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
-                                                "Name": "LeftJoin (MapJoin)"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
                                                         "ExternalPlanNodeId": 12
                                                     }
                                                 ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.k)"
+                                                "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
                                         "PlanNodeId": 15,

@@ -184,6 +184,9 @@ public:
 
     const absl::flat_hash_set<ui64>& GetOpenTxs() const;
     size_t GetOpenTxCount() const;
+    size_t GetTxsWithDataCount() const;
+    size_t GetCommittedTxCount() const;
+    size_t GetRemovedTxCount() const;
 
     TPartView GetPartView(const TLogoBlobID &bundle) const
     {
@@ -239,6 +242,8 @@ public:
     {
         return Stat_;
     }
+
+    TTableRuntimeStats RuntimeStats() const noexcept;
 
     ui64 GetMemSize(TEpoch epoch = TEpoch::Max()) const noexcept
     {
@@ -363,6 +368,8 @@ private:
     TTransactionSet RemovedTransactions;
     TTransactionSet DecidedTransactions;
     TIntrusivePtr<ITableObserver> TableObserver;
+
+    ui64 RemovedCommittedTxs = 0;
 
 private:
     struct TRollbackRemoveTxRef {

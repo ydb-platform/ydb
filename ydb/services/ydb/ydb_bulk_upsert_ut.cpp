@@ -477,7 +477,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
 
             auto res = client.BulkUpsert("/Root/Logs", rows.Build()).GetValueSync();
             Cerr << res.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Type mismatch for column App: expected Utf8, got Uint64");
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Type mismatch, got type Uint64 for column App, but expected Utf8");
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
         }
 
@@ -497,7 +497,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
 
             auto res = client.BulkUpsert("/Root/Logs", rows.Build()).GetValueSync();
             Cerr << res.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Type mismatch for column Message: expected Utf8, got Uint64");
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Type mismatch, got type Uint64 for column Message, but expected Utf8");
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
         }
 
@@ -577,6 +577,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                     .AddNullableColumn("Column_JsonDocument", EPrimitiveType::JsonDocument)
                     .AddNullableColumn("Column_DyNumber", EPrimitiveType::DyNumber)
                     .AddNullableColumn("Column_Decimal",  TDecimalType(22, 9))
+                    .AddNullableColumn("Column_Decimal35",  TDecimalType(35, 10))
 // These types are not currently supported for table columns
 //                    .AddNullableColumn("Column_Int8",  EPrimitiveType::Int8)
 //                    .AddNullableColumn("Column_Int16",  EPrimitiveType::Int16)
@@ -590,8 +591,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
             auto result = session.CreateTable("/Root/Types", tableBuilder.Build()).ExtractValueSync();
 
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            Cerr << result.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -626,13 +626,13 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                         .AddMember("Column_JsonDocument").JsonDocument("{}")
                         .AddMember("Column_DyNumber").DyNumber("123")
 //                        .AddMember("Column_Uuid").Uuid("")
-                        .AddMember("Column_Decimal").Decimal(TDecimalValue("99.95"))
+                        .AddMember("Column_Decimal").Decimal(TDecimalValue("99.95", 22, 9))
+                        .AddMember("Column_Decimal35").Decimal(TDecimalValue("555555555555555.95", 35, 10))
                     .EndStruct();
             rows.EndList();
 
             auto res = client.BulkUpsert("/Root/Types", rows.Build()).GetValueSync();
-            Cerr << res.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
 
         // With Optionals
@@ -668,13 +668,13 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                         .AddMember("Column_JsonDocument").OptionalJsonDocument("{}")
                         .AddMember("Column_DyNumber").OptionalDyNumber("42")
 //                        .AddMember("Column_Uuid").OptionalUuid("")
-                        .AddMember("Column_Decimal").Decimal(TDecimalValue("99.95"))
+                        .AddMember("Column_Decimal").Decimal(TDecimalValue("99.95", 22, 9))
+                        .AddMember("Column_Decimal35").Decimal(TDecimalValue("555555555555555.95", 35, 10))
                     .EndStruct();
             rows.EndList();
 
             auto res = client.BulkUpsert("/Root/Types", rows.Build()).GetValueSync();
-            Cerr << res.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
     }
 
@@ -799,6 +799,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
             tableBuilder
                     .AddNullableColumn("Key", EPrimitiveType::Uint32)
                     .AddNullableColumn("Value_Decimal",     TDecimalType(22, 9))
+                    .AddNullableColumn("Value_Decimal35",     TDecimalType(35, 10))
                     .AddNullableColumn("Value_Date",        EPrimitiveType::Date)
                     .AddNullableColumn("Value_DateTime",    EPrimitiveType::Datetime)
                     .AddNullableColumn("Value_Timestamp",   EPrimitiveType::Timestamp)
@@ -820,7 +821,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
 
         {
             TString table = "/Root/TestInvalidData";
-            TDecimalValue val("0");
+            TDecimalValue val("0", 22, 9);
             val.Low_ = 0;
             val.Hi_ =  11000000000000000000ULL;
             TValueBuilder rows;

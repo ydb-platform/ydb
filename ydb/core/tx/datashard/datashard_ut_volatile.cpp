@@ -3020,10 +3020,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // We need to fill table with some data
         Cerr << "========= Upserting initial values =========" << Endl;
-        KqpSimpleExec(runtime, R"(
-            UPSERT INTO `/Root/table` (key, subkey, value)
-            VALUES (1, 1), (11, 11)
-            )");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value)
+                VALUES (1, 1), (11, 11)
+                )"),
+            "<empty>");
 
         TForceVolatileProposeArbiter forceArbiter(runtime, shards.at(0));
         TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime,
@@ -3078,6 +3080,206 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         Cerr << "... split txId# " << txId << " started" << Endl;
         WaitTxNotification(server, sender, txId);
         Cerr << "... split finished" << Endl;
+    }
+
+    Y_UNIT_TEST(DistributedUpsertRestartBeforePrepare) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        Cerr << "========= Creating the table =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key uint32, value uint32, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        // We need to fill table with some data
+        Cerr << "========= Upserting initial values =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value)
+                VALUES (1, 1), (11, 11)
+                )"),
+            "<empty>");
+
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> blockedPrepare(runtime);
+
+        Cerr << "========= Starting upsert 1 =========" << Endl;
+        auto upsertFuture1 = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table` (key, value)
+            VALUES (2, 2), (12, 12);
+            )");
+
+        runtime.WaitFor("prepare requests", [&]{ return blockedPrepare.size() >= 2; });
+        UNIT_ASSERT_VALUES_EQUAL(blockedPrepare.size(), 2u);
+
+        blockedPrepare.Stop();
+
+        Cerr << "========= Restarting shard 1 =========" << Endl;
+        GracefulRestartTablet(runtime, shards.at(0), sender);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(runtime.WaitFuture(std::move(upsertFuture1))),
+            "ERROR: UNAVAILABLE");
+    }
+
+    Y_UNIT_TEST(DistributedUpsertRestartAfterPrepare) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        Cerr << "========= Creating the table =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key uint32, value uint32, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        // We need to fill table with some data
+        Cerr << "========= Upserting initial values =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value)
+                VALUES (1, 1), (11, 11)
+                )"),
+            "<empty>");
+
+        TBlockEvents<TEvDataShard::TEvProposeTransactionResult> blockedPrepare(runtime);
+
+        Cerr << "========= Starting upsert 1 =========" << Endl;
+        auto upsertFuture1 = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table` (key, value)
+            VALUES (2, 2), (12, 12);
+            )");
+
+        runtime.WaitFor("prepare results", [&]{ return blockedPrepare.size() >= 2; });
+        UNIT_ASSERT_VALUES_EQUAL(blockedPrepare.size(), 2u);
+
+        for (auto& ev : blockedPrepare) {
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED);
+        }
+
+        // Unblock prepare results and restart the first shard
+        blockedPrepare.Stop().Unblock();
+
+        Cerr << "========= Restarting shard 1 =========" << Endl;
+        GracefulRestartTablet(runtime, shards.at(0), sender);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(runtime.WaitFuture(std::move(upsertFuture1))),
+            "ERROR: ABORTED");
+    }
+
+    Y_UNIT_TEST(DistributedUpsertRestartAfterPlan) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        Cerr << "========= Creating the table =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key uint32, value uint32, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        // We need to fill table with some data
+        Cerr << "========= Upserting initial values =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value)
+                VALUES (1, 1), (11, 11)
+                )"),
+            "<empty>");
+
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime);
+
+        Cerr << "========= Starting upsert 1 =========" << Endl;
+        auto upsertFuture1 = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table` (key, value)
+            VALUES (2, 2), (12, 12);
+            )");
+
+        runtime.WaitFor("shard plans", [&]{ return blockedPlan.size() >= 2; });
+        UNIT_ASSERT_VALUES_EQUAL(blockedPlan.size(), 2u);
+
+        // Block TEvPrivate::TEvProgressTransaction for shard1
+        auto shard1actor = ResolveTablet(runtime, shards.at(0));
+        TBlockEvents<IEventHandle> blockedProgress(runtime,
+            [&](const TAutoPtr<IEventHandle>& ev) {
+                return ev->GetRecipientRewrite() == shard1actor &&
+                    ev->GetTypeRewrite() == EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0;
+            });
+
+        // Unblock prepare results and restart the first shard
+        blockedPlan.Stop().Unblock();
+        runtime.WaitFor("blocked progress", [&]{ return blockedProgress.size() >= 1; });
+        UNIT_ASSERT_VALUES_EQUAL(blockedProgress.size(), 1u);
+
+        Cerr << "... sleeping for 1 second" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        Cerr << "========= Restarting shard 1 =========" << Endl;
+        GracefulRestartTablet(runtime, shards.at(0), sender);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(runtime.WaitFuture(std::move(upsertFuture1))),
+            "ERROR: ABORTED");
+
+        Cerr << "========= Checking table =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table`
+                ORDER BY key;
+            )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 11 } items { uint32_value: 11 } }");
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)

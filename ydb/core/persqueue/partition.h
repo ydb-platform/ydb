@@ -417,6 +417,9 @@ private:
     void HandleOnInit(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx);
     void HandleOnInit(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx);
     void HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext& ctx);
+    void HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx);
+    void HandleOnInit(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx);
 
     void ChangePlanStepAndTxId(ui64 step, ui64 txId);
 
@@ -527,10 +530,10 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
-            HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, HandleOnInit);
 
-            HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, Handle);
-            HFuncTraced(TEvPQ::TEvGetWriteInfoError, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, HandleOnInit);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoError, HandleOnInit);
             HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
         default:
@@ -622,6 +625,7 @@ private:
         ui64 CurOffset;
         bool OldPartsCleared;
         bool HeadCleared;
+        bool FirstCommitWriteOperations = true;
     };
 
     static void RemoveMessages(TMessageQueue& src, TMessageQueue& dst);
@@ -961,6 +965,10 @@ private:
                            TEvKeyValue::TEvRequest* request,
                            const TActorContext& ctx);
     ui32 RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request);
+
+    void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
+
+    size_t WriteNewSizeFromSupportivePartitions = 0;
 };
 
 } // namespace NKikimr::NPQ

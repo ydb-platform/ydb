@@ -15,7 +15,7 @@ namespace builtins
     types::str upper(types::str const &s);
 
     DEFINE_FUNCTOR(pythonic::builtins::str, upper);
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

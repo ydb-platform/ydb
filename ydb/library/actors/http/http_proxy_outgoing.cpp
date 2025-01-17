@@ -8,29 +8,33 @@ class TOutgoingConnectionActor : public NActors::TActor<TOutgoingConnectionActor
 public:
     using TBase = NActors::TActor<TOutgoingConnectionActor<TSocketImpl>>;
     using TSelf = TOutgoingConnectionActor<TSocketImpl>;
+    using TBase::Send;
+    using TBase::Schedule;
+    using TBase::SelfId;
+
     const TActorId Owner;
-    const TActorId Poller;
     SocketAddressType Address;
+    TString Destination;
     TActorId RequestOwner;
     THttpOutgoingRequestPtr Request;
     THttpIncomingResponsePtr Response;
     TInstant LastActivity;
     TDuration ConnectionTimeout = CONNECTION_TIMEOUT;
+    bool AllowConnectionReuse = false;
     NActors::TPollerToken::TPtr PollerToken;
 
-    TOutgoingConnectionActor(const TActorId& owner, const TActorId& poller)
+    TOutgoingConnectionActor(const TActorId& owner)
         : TBase(&TSelf::StateWaiting)
         , Owner(owner)
-        , Poller(poller)
     {
     }
 
     static constexpr char ActorName[] = "OUT_CONNECTION_ACTOR";
 
-    void Die(const NActors::TActorContext& ctx) override {
-        ctx.Send(Owner, new TEvHttpProxy::TEvHttpConnectionClosed(ctx.SelfID));
+    void PassAway() override {
+        Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionClosed(SelfId(), Destination));
         TSocketImpl::Shutdown(); // to avoid errors when connection already closed
-        TBase::Die(ctx);
+        TBase::PassAway();
     }
 
     TString GetSocketName() {
@@ -45,61 +49,67 @@ public:
         return builder;
     }
 
-    void ReplyAndDie(const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "-> (" << Response->Status << " " << Response->Message << ")");
-        ctx.Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
+    void ReplyAndPassAway() {
+        ALOG_DEBUG(HttpLog, GetSocketName() << "-> (" << Response->Status << " " << Response->Message << ")");
+        Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
         RequestOwner = TActorId();
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
-        ctx.Send(Owner, sensors.Release());
-        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "connection closed");
-        Die(ctx);
+        Send(Owner, sensors.Release());
+        if (!AllowConnectionReuse || Response->IsConnectionClose()) {
+            ALOG_DEBUG(HttpLog, GetSocketName() << "connection closed");
+            PassAway();
+        } else {
+            ALOG_DEBUG(HttpLog, GetSocketName() << "connection available for reuse");
+            Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionAvailable(SelfId(), Destination));
+        }
     }
 
-    void ReplyErrorAndDie(const NActors::TActorContext& ctx, const TString& error) {
-        LOG_ERROR_S(ctx, HttpLog, GetSocketName() << "connection closed with error: " << error);
+    void ReplyErrorAndPassAway(const TString& error) {
+        ALOG_ERROR(HttpLog, GetSocketName() << "connection closed with error: " << error);
         if (RequestOwner) {
-            ctx.Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, error));
+            Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, error));
             RequestOwner = TActorId();
             THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
-            ctx.Send(Owner, sensors.Release());
-            Die(ctx);
+            Send(Owner, sensors.Release());
+            PassAway();
         }
     }
 
 protected:
-    void FailConnection(const NActors::TActorContext& ctx, const TString& error) {
+    void FailConnection(const TString& error) {
         if (Request) {
-            return ReplyErrorAndDie(ctx, error);
+            return ReplyErrorAndPassAway(error);
         }
         return TBase::Become(&TOutgoingConnectionActor::StateFailed);
     }
 
-    void Connect(const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "connecting");
+    void Connect() {
+        ALOG_DEBUG(HttpLog, GetSocketName() << "connecting");
         TSocketImpl::Create(Address->SockAddr()->sa_family);
         TSocketImpl::SetNonBlock();
         TSocketImpl::SetTimeout(ConnectionTimeout);
         int res = TSocketImpl::Connect(Address);
-        RegisterPoller(ctx);
+        RegisterPoller();
         switch (-res) {
         case 0:
-            return OnConnect(ctx);
+            return OnConnect();
         case EINPROGRESS:
         case EAGAIN:
             return TBase::Become(&TOutgoingConnectionActor::StateConnecting);
         default:
-            return ReplyErrorAndDie(ctx, strerror(-res));
+            return ReplyErrorAndPassAway(strerror(-res));
         }
     }
 
-    void FlushOutput(const NActors::TActorContext& ctx) {
+    void FlushOutput() {
         if (Request != nullptr) {
             Request->Finish();
             while (auto size = Request->Size()) {
                 bool read = false, write = false;
                 ssize_t res = TSocketImpl::Send(Request->Data(), size, read, write);
                 if (res > 0) {
-                   Request->ChopHead(res);
+                    LastActivity = NActors::TActivationContext::Now();
+                    Request->ChopHead(res);
                 } else if (-res == EINTR) {
                     continue;
                 } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
@@ -113,31 +123,28 @@ protected:
                     }
                     break;
                 } else {
-                    if (!res) {
-                        ReplyAndDie(ctx);
-                    } else {
-                        ReplyErrorAndDie(ctx, strerror(-res));
-                    }
+                    ReplyErrorAndPassAway(res == 0 ? "ConnectionClosed" : strerror(-res));
                     break;
                 }
             }
         }
     }
 
-    void PullInput(const NActors::TActorContext& ctx) {
+    void PullInput() {
         for (;;) {
             if (Response == nullptr) {
                 Response = new THttpIncomingResponse(Request);
             }
             if (!Response->EnsureEnoughSpaceAvailable()) {
-                return ReplyErrorAndDie(ctx, "Not enough space in socket buffer");
+                return ReplyErrorAndPassAway("Not enough space in socket buffer");
             }
             bool read = false, write = false;
             ssize_t res = TSocketImpl::Recv(Response->Pos(), Response->Avail(), read, write);
             if (res > 0) {
+                LastActivity = NActors::TActivationContext::Now();
                 Response->Advance(res);
                 if (Response->IsDone() && Response->IsReady()) {
-                    return ReplyAndDie(ctx);
+                    return ReplyAndPassAway();
                 }
             } else if (-res == EINTR) {
                 continue;
@@ -152,22 +159,22 @@ protected:
                 }
                 return;
             } else {
-                if (!res) {
+                if (res == 0) {
                     Response->ConnectionClosed();
                 }
                 if (Response->IsDone() && Response->IsReady()) {
-                    return ReplyAndDie(ctx);
+                    return ReplyAndPassAway();
                 }
-                return ReplyErrorAndDie(ctx, strerror(-res));
+                return ReplyErrorAndPassAway(res == 0 ? "ConnectionClosed" : strerror(-res));
             }
         }
     }
 
-    void RegisterPoller(const NActors::TActorContext& ctx) {
-        ctx.Send(Poller, new NActors::TEvPollerRegister(TSocketImpl::Socket, ctx.SelfID, ctx.SelfID));
+    void RegisterPoller() {
+        Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(TSocketImpl::Socket, SelfId(), SelfId()));
     }
 
-    void OnConnect(const NActors::TActorContext& ctx) {
+    void OnConnect() {
         bool read = false, write = false;
         if (int res = TSocketImpl::OnConnect(read, write); res != 1) {
             if (-res == EAGAIN) {
@@ -176,13 +183,13 @@ protected:
                 }
                 return;
             } else {
-                return ReplyErrorAndDie(ctx, strerror(-res));
+                return ReplyErrorAndPassAway(strerror(-res));
             }
         }
-        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "outgoing connection opened");
+        ALOG_DEBUG(HttpLog, GetSocketName() << "outgoing connection opened");
         TBase::Become(&TOutgoingConnectionActor::StateConnected);
-        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "<- (" << Request->Method << " " << Request->URL << ")");
-        ctx.Send(ctx.SelfID, new NActors::TEvPollerReady(nullptr, true, true));
+        ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << Request->Method << " " << Request->URL << ")");
+        Send(SelfId(), new NActors::TEvPollerReady(nullptr, true, true));
     }
 
     static int GetPort(SocketAddressType address) {
@@ -206,129 +213,147 @@ protected:
         }
     }
 
-    void HandleResolving(TEvHttpProxy::TEvResolveHostResponse::TPtr event, const NActors::TActorContext& ctx) {
-        LastActivity = ctx.Now();
+    void HandleResolving(TEvHttpProxy::TEvResolveHostResponse::TPtr& event) {
+        LastActivity = NActors::TActivationContext::Now();
         if (!event->Get()->Error.empty()) {
-            return FailConnection(ctx, event->Get()->Error);
+            return FailConnection(event->Get()->Error);
         }
         Address = event->Get()->Address;
         if (GetPort(Address) == 0) {
             SetPort(Address, Request->Secure ? 443 : 80);
         }
-        Connect(ctx);
+        Connect();
     }
 
-    void HandleConnecting(NActors::TEvPollerReady::TPtr, const NActors::TActorContext& ctx) {
-        LastActivity = ctx.Now();
+    void HandleConnecting(NActors::TEvPollerReady::TPtr&) {
+        LastActivity = NActors::TActivationContext::Now();
         int res = TSocketImpl::GetError();
         if (res == 0) {
-            OnConnect(ctx);
+            OnConnect();
         } else {
-            FailConnection(ctx, TStringBuilder() << strerror(res));
+            FailConnection(TStringBuilder() << strerror(res));
         }
     }
 
-    void HandleConnecting(NActors::TEvPollerRegisterResult::TPtr ev, const NActors::TActorContext& ctx) {
+    void HandleConnecting(NActors::TEvPollerRegisterResult::TPtr& ev) {
         PollerToken = std::move(ev->Get()->PollerToken);
-        LastActivity = ctx.Now();
+        LastActivity = NActors::TActivationContext::Now();
         int res = TSocketImpl::GetError();
         if (res == 0) {
-            OnConnect(ctx);
+            OnConnect();
         } else {
-            FailConnection(ctx, TStringBuilder() << strerror(res));
+            FailConnection(TStringBuilder() << strerror(res));
         }
     }
 
-    void HandleWaiting(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
-        LastActivity = ctx.Now();
+    void HandleWaiting(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
         Request = std::move(event->Get()->Request);
+        Destination = Request->GetDestination();
         TSocketImpl::SetHost(TString(Request->Host));
-        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "resolving " << TSocketImpl::Host);
+        ALOG_DEBUG(HttpLog, GetSocketName() << "resolving " << TSocketImpl::Host);
         Request->Timer.Reset();
         RequestOwner = event->Sender;
-        ctx.Send(Owner, new TEvHttpProxy::TEvResolveHostRequest(TSocketImpl::Host));
+        Send(Owner, new TEvHttpProxy::TEvResolveHostRequest(TSocketImpl::Host));
         if (event->Get()->Timeout) {
             ConnectionTimeout = event->Get()->Timeout;
         }
-        ctx.Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
-        LastActivity = ctx.Now();
+        AllowConnectionReuse = event->Get()->AllowConnectionReuse;
+        Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
+        LastActivity = NActors::TActivationContext::Now();
         TBase::Become(&TOutgoingConnectionActor::StateResolving);
     }
 
-    void HandleConnected(NActors::TEvPollerReady::TPtr event, const NActors::TActorContext& ctx) {
-        LastActivity = ctx.Now();
+    void HandleConnected(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
+        Request = std::move(event->Get()->Request);
+        Request->Timer.Reset();
+        Response = nullptr;
+        RequestOwner = event->Sender;
+        if (event->Get()->Timeout) {
+            ConnectionTimeout = event->Get()->Timeout;
+        }
+        AllowConnectionReuse = event->Get()->AllowConnectionReuse;
+        Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
+        LastActivity = NActors::TActivationContext::Now();
+        ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << Request->Method << " " << Request->URL << ")");
+        FlushOutput();
+        PullInput();
+    }
+
+    void HandleConnected(NActors::TEvPollerReady::TPtr& event) {
+        LastActivity = NActors::TActivationContext::Now();
         if (event->Get()->Write && RequestOwner) {
-            FlushOutput(ctx);
+            FlushOutput();
         }
         if (event->Get()->Read && RequestOwner) {
-            PullInput(ctx);
+            PullInput();
         }
     }
 
-    void HandleConnected(NActors::TEvPollerRegisterResult::TPtr ev, const NActors::TActorContext& ctx) {
+    void HandleConnected(NActors::TEvPollerRegisterResult::TPtr& ev) {
         PollerToken = std::move(ev->Get()->PollerToken);
-        LastActivity = ctx.Now();
-        PullInput(ctx);
-        FlushOutput(ctx);
+        LastActivity = NActors::TActivationContext::Now();
+        PullInput();
+        FlushOutput();
     }
 
-    void HandleFailed(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    void HandleFailed(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
         Request = std::move(event->Get()->Request);
         RequestOwner = event->Sender;
-        ReplyErrorAndDie(ctx, "Failed");
+        ReplyErrorAndPassAway("Failed");
     }
 
-    void HandleTimeout(const NActors::TActorContext& ctx) {
-        TDuration inactivityTime = ctx.Now() - LastActivity;
+    void HandleTimeout() {
+        TDuration inactivityTime = NActors::TActivationContext::Now() - LastActivity;
         if (inactivityTime >= ConnectionTimeout) {
-            FailConnection(ctx, "Connection timed out");
+            FailConnection("Connection timed out");
         } else {
-            ctx.Schedule(Min(ConnectionTimeout - inactivityTime, TDuration::MilliSeconds(100)), new NActors::TEvents::TEvWakeup());
+            Schedule(Min(ConnectionTimeout - inactivityTime, TDuration::MilliSeconds(100)), new NActors::TEvents::TEvWakeup());
         }
     }
 
-    STFUNC(StateWaiting) {
+    STATEFN(StateWaiting) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvHttpProxy::TEvHttpOutgoingRequest, HandleWaiting);
-            CFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
+            hFunc(TEvHttpProxy::TEvHttpOutgoingRequest, HandleWaiting);
+            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
         }
     }
 
-    STFUNC(StateResolving) {
+    STATEFN(StateResolving) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvHttpProxy::TEvResolveHostResponse, HandleResolving);
-            CFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
+            hFunc(TEvHttpProxy::TEvResolveHostResponse, HandleResolving);
+            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
         }
     }
 
-    STFUNC(StateConnecting) {
+    STATEFN(StateConnecting) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NActors::TEvPollerReady, HandleConnecting);
-            CFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
-            HFunc(NActors::TEvPollerRegisterResult, HandleConnecting);
+            hFunc(NActors::TEvPollerReady, HandleConnecting);
+            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
+            hFunc(NActors::TEvPollerRegisterResult, HandleConnecting);
         }
     }
 
-    STFUNC(StateConnected) {
+    STATEFN(StateConnected) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NActors::TEvPollerReady, HandleConnected);
-            CFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
-            HFunc(NActors::TEvPollerRegisterResult, HandleConnected);
+            hFunc(NActors::TEvPollerReady, HandleConnected);
+            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
+            hFunc(NActors::TEvPollerRegisterResult, HandleConnected);
+            hFunc(TEvHttpProxy::TEvHttpOutgoingRequest, HandleConnected);
         }
     }
 
-    STFUNC(StateFailed) {
+    STATEFN(StateFailed) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvHttpProxy::TEvHttpOutgoingRequest, HandleFailed);
+            hFunc(TEvHttpProxy::TEvHttpOutgoingRequest, HandleFailed);
         }
     }
 };
 
-NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure, const TActorId& poller) {
+NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure) {
     if (secure) {
-        return new TOutgoingConnectionActor<TSecureSocketImpl>(owner, poller);
+        return new TOutgoingConnectionActor<TSecureSocketImpl>(owner);
     } else {
-        return new TOutgoingConnectionActor<TPlainSocketImpl>(owner, poller);
+        return new TOutgoingConnectionActor<TPlainSocketImpl>(owner);
     }
 }
 

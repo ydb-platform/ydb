@@ -124,7 +124,7 @@ void AddReadRule(
     NYdb::TDriver& driver,
     const TString& streamName);
 
+std::vector<std::pair<ui64, TString>> UVPairParser(const NUdf::TUnboxedValue& item);
 std::vector<TString> UVParser(const NUdf::TUnboxedValue& item);
-std::vector<TString> UVParserWithMetadatafields(const NUdf::TUnboxedValue& item);
 
 }

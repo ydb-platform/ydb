@@ -7,8 +7,11 @@
   - cublasLt.h
   - cublas_v2.h
   - cuda.h
+  - cuda/std/atomic
+  - cuda/std/array
   - cuda/std/cassert
   - cuda/std/cmath
+  - cuda/std/complex
   - cuda/std/cstddef
   - cuda/std/cstdint
   - cuda/std/functional
@@ -41,6 +44,7 @@
   - cusparse.h
   - cusparseLt.h
   - device_atomic_functions.h
+  - device_launch_parameters.h
   - device_types.h
   - driver_types.h
   - host_defines.h
@@ -48,6 +52,7 @@
   - math_constants.h
   - mma.h
   - npp.h
+  - nppdefs.h
   - nppi.h
   - nv/target
   - nvToolsExt.h

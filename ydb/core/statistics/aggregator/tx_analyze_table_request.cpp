@@ -21,7 +21,7 @@ struct TStatisticsAggregator::TTxAnalyzeTableRequest : public TTxBase {
         auto& record = request->Record;
         record.SetOperationId(operationId);
         auto& table = *record.MutableTable();
-        PathIdFromPathId(operationTable.PathId, table.MutablePathId());
+        operationTable.PathId.ToProto(table.MutablePathId());
         TVector<ui32> columnTags = Scan<ui32>(SplitString(operationTable.ColumnTags, ","));
         table.MutableColumnTags()->Add(columnTags.begin(), columnTags.end());
         return request;

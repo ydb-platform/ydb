@@ -2,7 +2,7 @@
 // windows/basic_overlapped_handle.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -22,6 +22,7 @@
   || defined(GENERATING_DOCUMENTATION)
 
 #include <cstddef>
+#include <utility>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/detail/io_object_impl.hpp>
@@ -29,10 +30,6 @@
 #include <boost/asio/detail/win_iocp_handle_service.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/execution_context.hpp>
-
-#if defined(BOOST_ASIO_HAS_MOVE)
-# include <utility>
-#endif // defined(BOOST_ASIO_HAS_MOVE)
 
 #include <boost/asio/detail/push_options.hpp>
 
@@ -100,10 +97,10 @@ public:
    */
   template <typename ExecutionContext>
   explicit basic_overlapped_handle(ExecutionContext& context,
-      typename constraint<
+      constraint_t<
         is_convertible<ExecutionContext&, execution_context&>::value,
         defaulted_constraint
-      >::type = defaulted_constraint())
+      > = defaulted_constraint())
     : impl_(0, 0, context)
   {
   }
@@ -146,9 +143,9 @@ public:
   template <typename ExecutionContext>
   basic_overlapped_handle(ExecutionContext& context,
       const native_handle_type& native_handle,
-      typename constraint<
+      constraint_t<
         is_convertible<ExecutionContext&, execution_context&>::value
-      >::type = 0)
+      > = 0)
     : impl_(0, 0, context)
   {
     boost::system::error_code ec;
@@ -156,7 +153,6 @@ public:
     boost::asio::detail::throw_error(ec, "assign");
   }
 
-#if defined(BOOST_ASIO_HAS_MOVE) || defined(GENERATING_DOCUMENTATION)
   /// Move-construct an overlapped handle from another.
   /**
    * This constructor moves a handle from one object to another.
@@ -208,10 +204,10 @@ public:
    */
   template<typename Executor1>
   basic_overlapped_handle(basic_overlapped_handle<Executor1>&& other,
-      typename constraint<
+      constraint_t<
         is_convertible<Executor1, Executor>::value,
         defaulted_constraint
-      >::type = defaulted_constraint())
+      > = defaulted_constraint())
     : impl_(std::move(other.impl_))
   {
   }
@@ -228,18 +224,17 @@ public:
    * constructor.
    */
   template<typename Executor1>
-  typename constraint<
+  constraint_t<
     is_convertible<Executor1, Executor>::value,
     basic_overlapped_handle&
-  >::type operator=(basic_overlapped_handle<Executor1>&& other)
+  > operator=(basic_overlapped_handle<Executor1>&& other)
   {
     impl_ = std::move(other.impl_);
     return *this;
   }
-#endif // defined(BOOST_ASIO_HAS_MOVE) || defined(GENERATING_DOCUMENTATION)
 
   /// Get the executor associated with the object.
-  const executor_type& get_executor() BOOST_ASIO_NOEXCEPT
+  const executor_type& get_executor() noexcept
   {
     return impl_.get_executor();
   }
@@ -444,9 +439,9 @@ protected:
 
 private:
   // Disallow copying and assignment.
-  basic_overlapped_handle(const basic_overlapped_handle&) BOOST_ASIO_DELETED;
+  basic_overlapped_handle(const basic_overlapped_handle&) = delete;
   basic_overlapped_handle& operator=(
-      const basic_overlapped_handle&) BOOST_ASIO_DELETED;
+      const basic_overlapped_handle&) = delete;
 };
 
 } // namespace windows

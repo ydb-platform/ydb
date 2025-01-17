@@ -49,8 +49,9 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                     }
 
                     PROPERTIES("Status") {
-                        PROPERTY("Disk", DiskIsFull ? "Full" : "Normal");
-                        PROPERTY("Quota", WaitingForSubDomainQuota(ctx) ? "Out of space" : "Normal");
+                        PROPERTY("State", NKikimrPQ::ETopicPartitionStatus_Name(PartitionConfig->GetStatus()));
+                        PROPERTY("Disk", (DiskIsFull ? "Full" : "Normal"));
+                        PROPERTY("Quota", (WaitingForSubDomainQuota(ctx) ? "Out of space" : "Normal"));
                     }
 
                     PROPERTIES("Information") {
@@ -59,6 +60,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         PROPERTY("StartOffset", StartOffset);
                         PROPERTY("EndOffset", EndOffset);
                         PROPERTY("LastOffset", Head.GetNextOffset());
+                        PROPERTY("Last message WriteTimestamp", EndWriteTimestamp.ToRfc822String());
                         PROPERTY("HeadOffset", Head.Offset << ", count: " << Head.GetCount());
                     }
                 }
@@ -239,8 +241,8 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.WriteTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.CreateTimestamp);}
                                     TABLED() {out << (d.second.GetReadOffset());}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadWriteTimestamp());}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadCreateTimestamp());}
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadWriteTimestamp(EndOffset));}
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadCreateTimestamp(EndOffset));}
                                     TABLED() {out << (d.second.ReadOffsetRewindSum);}
                                     TABLED() {out << d.second.ActiveReads;}
                                     TABLED() {out << d.second.Subscriptions;}

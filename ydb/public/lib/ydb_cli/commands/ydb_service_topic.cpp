@@ -779,9 +779,10 @@ namespace NYdb::NConsoleClient {
                            });
 
         // TODO(shmel1k@): improve help.
-        config.Opts->AddLongOption('c', "consumer", "Consumer name.")
-            .Required()
+        config.Opts->AddLongOption('c', "consumer", "Consumer name. If not set, then you need to specify partitions through --partition-ids to read without consumer")
+            .Optional()
             .StoreResult(&Consumer_);
+
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
             .StoreResult(&File_);
@@ -862,7 +863,11 @@ namespace NYdb::NConsoleClient {
     NTopic::TReadSessionSettings TCommandTopicRead::PrepareReadSessionSettings() {
         NTopic::TReadSessionSettings settings;
         settings.AutoPartitioningSupport(true);
-        settings.ConsumerName(Consumer_);
+        if (Consumer_) {
+            settings.ConsumerName(Consumer_);
+        } else {
+            settings.WithoutConsumer();
+        }
         // settings.ReadAll(); // TODO(shmel1k@): change to read only original?
         if (Timestamp_.Defined()) {
             settings.ReadFromTimestamp(*Timestamp_);
@@ -884,6 +889,11 @@ namespace NYdb::NConsoleClient {
         if (!IsStreamingFormat(MessagingFormat) && (Limit_.Defined() && (Limit_ <= 0 || Limit_ > 500))) {
             throw TMisuseException() << "OutputFormat " << MessagingFormat << " is not compatible with "
                                      << "limit less and equal '0' or more than '500': '" << *Limit_ << "' was given";
+        }
+
+        // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used. 
+        if (!Consumer_ && !PartitionIds_) {
+            throw TMisuseException() << "Please specify either --consumer or --partition-ids to read without consumer";
         }
     }
 

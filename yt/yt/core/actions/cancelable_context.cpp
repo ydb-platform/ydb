@@ -25,7 +25,8 @@ public:
     void Invoke(TClosure callback) override
     {
         YT_ASSERT(callback);
-        auto guard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
+
+        auto currentTokenGuard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
 
         if (Context_->Canceled_) {
             callback.Reset();
@@ -50,9 +51,43 @@ public:
             }));
     }
 
+    void Invoke(TMutableRange<TClosure> callbacks) override
+    {
+        auto currentTokenGuard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
+
+        std::vector<TClosure> capturedCallbacks;
+        capturedCallbacks.reserve(callbacks.size());
+        for (auto& callback : callbacks) {
+            capturedCallbacks.push_back(std::move(callback));
+        }
+
+        if (Context_->Canceled_) {
+            capturedCallbacks.clear();
+            return;
+        }
+
+        return UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
+            [
+                this,
+                this_ = MakeStrong(this),
+                capturedCallbacks = std::move(capturedCallbacks)
+            ] () mutable {
+                auto currentTokenGuard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
+
+                if (Context_->Canceled_) {
+                    capturedCallbacks.clear();
+                    return;
+                }
+
+                TCurrentInvokerGuard guard(this);
+                for (const auto& callback : capturedCallbacks) {
+                    callback();
+                }
+            }));
+    }
+
 private:
     const TCancelableContextPtr Context_;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////

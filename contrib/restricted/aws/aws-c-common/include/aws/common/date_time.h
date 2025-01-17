@@ -8,6 +8,8 @@
 
 #include <time.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 #define AWS_DATE_TIME_STR_MAX_LEN 100
 #define AWS_DATE_TIME_STR_MAX_BASIC_LEN 20
 
@@ -155,5 +157,6 @@ AWS_COMMON_API bool aws_date_time_dst(const struct aws_date_time *dt, bool local
 AWS_COMMON_API time_t aws_date_time_diff(const struct aws_date_time *a, const struct aws_date_time *b);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_DATE_TIME_H */

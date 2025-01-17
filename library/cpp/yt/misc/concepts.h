@@ -30,6 +30,15 @@ public:
         (!NoExcept || IsNoThrowInvocable_);
 };
 
+template <class T>
+struct TIsEmpty
+    : public T
+{
+    int Dummy;
+
+    static constexpr bool Value = (sizeof(TIsEmpty) == sizeof(int));
+};
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -77,7 +86,15 @@ template <class T>
 concept CConstRawPtr = CRawPtr<T> && CConst<decltype(*std::declval<T>())>;
 
 template <class T>
-concept CMutRawPtr = CRawPtr<T> && !CConstRawPtr<T>;
+concept CMutableRawPtr = CRawPtr<T> && !CConstRawPtr<T>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+constexpr bool IsEmptyClass()
+{
+    return NDetail::TIsEmpty<T>::Value;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

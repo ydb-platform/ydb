@@ -45,7 +45,7 @@ namespace numpy
     fs.read((char *)res.buffer, sizeof(typename dtype::type) * count);
     return res;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

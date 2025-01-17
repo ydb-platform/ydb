@@ -46,6 +46,7 @@ message TIssuesIds {
 // core errors
         CORE_GC_NODES_LIMIT_EXCEEDED = 1500;
         CORE_GC_STRINGS_LIMIT_EXCEEDED = 1501;
+        CORE_RUNTIME_ERROR = 1502;
 
 // kikimr
         KIKIMR_LOCKS_INVALIDATED = 2001;
@@ -194,6 +195,10 @@ message TIssuesIds {
 // pg
         PG_NO_LOCKING_SUPPORT = 7000;
         PG_COMPAT = 7001;
+
+// CBO
+        CBO_ENUM_LIMIT_REACHED = 8000;
+        CBO_MISSING_TABLE_STATS = 8001;
 
 // range [200000, 399999) reserved for KiKiMR issue codes, do not use!
 

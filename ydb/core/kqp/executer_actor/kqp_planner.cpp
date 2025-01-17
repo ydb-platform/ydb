@@ -85,6 +85,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     : TxId(args.TxId)
     , LockTxId(args.LockTxId)
     , LockNodeId(args.LockNodeId)
+    , LockMode(args.LockMode)
     , ExecuterId(args.Executer)
     , Snapshot(args.Snapshot)
     , Database(args.Database)
@@ -110,6 +111,8 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , ResourceManager_(args.ResourceManager_)
     , CaFactory_(args.CaFactory_)
     , BlockTrackingMode(args.BlockTrackingMode)
+    , ArrayBufferMinFillPercentage(args.ArrayBufferMinFillPercentage)
+    , VerboseMemoryLimitException(args.VerboseMemoryLimitException)
 {
     if (GUCSettings) {
         SerializedGUCSettings = GUCSettings->SerializeToString();
@@ -206,6 +209,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetLockTxId(*LockTxId);
         request.SetLockNodeId(LockNodeId);
     }
+    if (LockMode) {
+        request.SetLockMode(*LockMode);
+    }
     ActorIdToProto(ExecuterId, request.MutableExecuterActorId());
 
     if (Deadline) {
@@ -216,6 +222,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
         NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(TasksGraph, task, /* serializeAsyncIoSettings = */ true);
+        if (ArrayBufferMinFillPercentage) {
+            serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
+        }
         request.AddTasks()->Swap(serializedTask);
     }
 
@@ -259,6 +268,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
         if (UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode >= 0) {
             request.SetQueryCpuShare(UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode / 100.0);
+        }
+        if (UserRequestContext->PoolConfig->ResourceWeight >= 0) {
+            request.SetResourceWeight(UserRequestContext->PoolConfig->ResourceWeight);
         }
     }
 
@@ -468,7 +480,11 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
         TxInfo = MakeIntrusive<NRm::TTxState>(
             TxId, TInstant::Now(), ResourceManager_->GetCounters(),
-            UserRequestContext->PoolId, memoryPoolPercent, Database);
+            UserRequestContext->PoolId, memoryPoolPercent, Database, VerboseMemoryLimitException);
+    }
+
+    if (ArrayBufferMinFillPercentage) {
+        taskDesc->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
     }
 
     auto startResult = CaFactory_->CreateKqpComputeActor({
@@ -476,6 +492,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .TxId = TxId,
         .LockTxId = LockTxId,
         .LockNodeId = LockNodeId,
+        .LockMode = LockMode,
         .Task = taskDesc,
         .TxInfo = TxInfo,
         .RuntimeSettings = settings,

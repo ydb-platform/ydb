@@ -27,7 +27,7 @@ public:
     ~TConnection();
 
     NRpc::IChannelPtr CreateChannel(bool sticky);
-    NRpc::IChannelPtr CreateChannelByAddress(const TString& address);
+    NRpc::IChannelPtr CreateChannelByAddress(const std::string& address);
 
     const TConnectionConfigPtr& GetConfig();
 

@@ -51,7 +51,6 @@ public:
 
         const auto indexType = Type::getInt64Ty(context);
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
 
@@ -64,9 +63,7 @@ public:
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
-        const auto getCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(indexType, { valueType }, false):
-            FunctionType::get(indexType, { ptrValueType }, false);
+        const auto getCountType = FunctionType::get(indexType, { valueType }, false);
         const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -75,7 +72,7 @@ public:
         const auto load = new LoadInst(valueType, statePtr, "load", block);
         const auto state = PHINode::Create(valueType, 2U, "state", main);
         state->addIncoming(load, block);
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
+        BranchInst::Create(init, main, IsInvalid(load, block, context), block);
 
         block = init;
 
@@ -117,7 +114,12 @@ public:
 
 
         block = test;
-        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(getres.second.back()(ctx, block), ctx, block) }, "height", block);
+
+        const auto countValue = getres.second.back()(ctx, block);
+        const auto height = CallInst::Create(getCount, { countValue }, "height", block);
+
+        ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
+
         const auto part = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, count, height, "part", block);
         const auto decr = BinaryOperator::CreateSub(count, height, "decr", block);
         count->addIncoming(decr, block);
@@ -201,6 +203,8 @@ public:
 
                 const auto slice = CallInst::Create(sliceType, slicePtr, {ctx.GetFactory(), value, offset}, "slice", block);
 
+                ValueCleanup(EValueRepresentation::Any, value, ctx, block);
+
                 output->addIncoming(slice, block);
                 BranchInst::Create(exit, block);
 
@@ -214,9 +218,8 @@ public:
 #endif
 private:
     static NUdf::TUnboxedValuePod SliceBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
-        NUdf::TUnboxedValue b(block);
-        auto& datum = TArrowBlock::From(b).GetDatum();
-        return datum.is_scalar() ? b.Release() : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), offset, datum.array()->length - offset));
+        const auto& datum = TArrowBlock::From(block).GetDatum();
+        return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), offset, datum.array()->length - offset));
     }
 
     void RegisterDependencies() const final {
@@ -266,7 +269,6 @@ public:
 
         const auto indexType = Type::getInt64Ty(context);
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
 
@@ -279,9 +281,7 @@ public:
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
-        const auto getCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(indexType, { valueType }, false):
-            FunctionType::get(indexType, { ptrValueType }, false);
+        const auto getCountType = FunctionType::get(indexType, { valueType }, false);
         const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -290,7 +290,7 @@ public:
         const auto load = new LoadInst(valueType, statePtr, "load", block);
         const auto state = PHINode::Create(valueType, 2U, "state", main);
         state->addIncoming(load, block);
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
+        BranchInst::Create(init, main, IsInvalid(load, block, context), block);
 
         block = init;
 
@@ -325,7 +325,11 @@ public:
 
         block = good;
 
-        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(getres.second.back()(ctx, block), ctx, block) }, "height", block);
+        const auto countValue = getres.second.back()(ctx, block);
+        const auto height = CallInst::Create(getCount, { countValue }, "height", block);
+
+        ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
+
         const auto part = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, count, height, "part", block);
         const auto decr = BinaryOperator::CreateSub(count, height, "decr", block);
 
@@ -395,6 +399,8 @@ public:
 
                 const auto slice = CallInst::Create(sliceType, slicePtr, {ctx.GetFactory(), value, size}, "slice", block);
 
+                ValueCleanup(EValueRepresentation::Any, value, ctx, block);
+
                 output->addIncoming(slice, block);
                 BranchInst::Create(exit, block);
 
@@ -408,9 +414,8 @@ public:
 #endif
 private:
     static NUdf::TUnboxedValuePod SliceBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
-        NUdf::TUnboxedValue b(block);
-        auto& datum = TArrowBlock::From(b).GetDatum();
-        return datum.is_scalar() ? b.Release() : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), 0ULL, offset));
+        const auto& datum = TArrowBlock::From(block).GetDatum();
+        return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), 0ULL, offset));
     }
 
     void RegisterDependencies() const final {

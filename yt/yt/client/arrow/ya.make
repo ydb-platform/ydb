@@ -10,7 +10,7 @@ SRCS(
 
 PEERDIR(
     yt/yt/client
-    yt/yt/client/arrow/fbs
+    yt/yt/library/formats
 )
 
 END()

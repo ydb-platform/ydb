@@ -93,7 +93,7 @@ private:
             issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
             Issues.AddIssues({issue});
             *ExecutionTimeoutCounter += 1;
-            Finish(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED);
+            Finish(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED, true);
         })
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
     })
@@ -279,7 +279,7 @@ private:
         Send(ev->Sender, response.Release());
     }
 
-    void Finish(NYql::NDqProto::StatusIds::StatusCode statusCode)
+    void Finish(NYql::NDqProto::StatusIds::StatusCode statusCode, bool timeout = false)
     {
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << " with status=" << static_cast<int>(statusCode) << " issues=" << Issues.ToString();
         if (Finished) {
@@ -292,6 +292,7 @@ private:
             }
             IssuesToMessage(Issues, result.MutableIssues());
             result.SetStatusCode(statusCode);
+            result.SetTimeout(timeout);
             Send(ControlId, MakeHolder<TEvQueryResponse>(std::move(result)));
             Finished = true;
         }

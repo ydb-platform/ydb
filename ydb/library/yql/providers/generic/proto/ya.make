@@ -4,7 +4,7 @@ ONLY_TAGS(CPP_PROTO)
 
 PEERDIR(
     ydb/library/yql/providers/generic/connector/api/service/protos
-    ydb/library/yql/providers/generic/connector/api/common
+    yql/essentials/providers/common/proto
 )
 
 SRCS(

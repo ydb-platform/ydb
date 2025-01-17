@@ -106,6 +106,9 @@ public:
     }
 
     virtual ui64 GetSize() const = 0;
+    virtual TString DebugString() const {
+        return TStringBuilder() << "size=" << GetSize();
+    }
 };
 
 class TTrivialNormalizerTask: public INormalizerTask {
@@ -170,6 +173,7 @@ public:
     class INormalizerComponent {
     private:
         YDB_ACCESSOR(bool, IsRepair, false);
+        YDB_ACCESSOR(bool, IsDryRun, false);
         YDB_ACCESSOR_DEF(TString, UniqueDescription);
         YDB_ACCESSOR(TString, UniqueId, TGUID::CreateTimebased().AsUuidString());
 

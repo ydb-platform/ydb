@@ -13,37 +13,22 @@ TTpchWorkloadGenerator::TTpchWorkloadGenerator(const TTpchWorkloadParams& params
     , Params(params)
 {}
 
-TString TTpchWorkloadGenerator::DoGetDDLQueries() const {
-    auto schema = NResource::Find("tpch_schema.sql");
-    TString floatType;
-    switch (Params.GetFloatMode()) {
-    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
-        floatType = "Double";
-        break;
-    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
-        floatType = "Decimal(12,2)";
-        break;
-    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
-        floatType = "Decimal(" + ::ToString(NKikimr::NScheme::DECIMAL_PRECISION)
-                     + "," + ::ToString(NKikimr::NScheme::DECIMAL_SCALE) + ")";
-        break;
-    }
-    SubstGlobal(schema, "{float_type}", floatType);
-    return schema;
+TString TTpchWorkloadGenerator::GetTablesYaml() const {
+    return NResource::Find("tpch_schema.yaml");
 }
 
-TVector<TString> TTpchWorkloadGenerator::GetTablesList() const {
-    return {
-        "customer",
-        "lineitem",
-        "nation",
-        "orders",
-        "part",
-        "partsupp",
-        "region",
-        "supplier"
-    };
+TWorkloadGeneratorBase::TSpecialDataTypes TTpchWorkloadGenerator::GetSpecialDataTypes() const {
+    switch (Params.GetFloatMode()) {
+    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
+        return {{"float_type", "Double"}};
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
+        return {{"float_type", "Decimal(12,2)"}};
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
+        return {{"float_type", "Decimal(" + ::ToString(NKikimr::NScheme::DECIMAL_PRECISION)
+                     + "," + ::ToString(NKikimr::NScheme::DECIMAL_SCALE) + ")"}};
+    }
 }
+
 
 THolder<IWorkloadQueryGenerator> TTpchWorkloadParams::CreateGenerator() const {
     return MakeHolder<TTpchWorkloadGenerator>(*this);

@@ -70,6 +70,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableParameterizedDecimal, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicAutopartitioningForCDC, std::nullopt);
         OPTION(std::optional<bool>, EnableBackupService, std::nullopt);
+        OPTION(std::optional<bool>, EnableTopicTransfer, std::nullopt);
 
         #undef OPTION
     };

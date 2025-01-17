@@ -24,6 +24,7 @@ SRCS(
     ydb_federation_discovery.proto
     persqueue_error_codes_v1.proto
     ydb_auth.proto
+    ydb_debug.proto
     ydb_persqueue_v1.proto
     ydb_persqueue_cluster_discovery.proto
     ydb_clickhouse_internal.proto

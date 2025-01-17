@@ -25,9 +25,12 @@ protected:
     virtual void OnAbortEmergency() override {
         NeedGranuleStatusProvide = false;
     }
+    virtual NDataLocks::ELockCategory GetLockCategory() const override {
+        return NDataLocks::ELockCategory::Compaction;
+    }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
         const THashSet<ui64> pathIds = { GranuleMeta->GetPathId() };
-        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), pathIds);
+        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), pathIds, GetLockCategory());
     }
 
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) override {
@@ -51,11 +54,6 @@ public:
 
     const std::vector<TPortionInfo::TConstPtr>& GetSwitchedPortions() const {
         return SwitchedPortions;
-    }
-
-    void AddSwitchedPortion(const TPortionInfo::TConstPtr& portion) {
-        SwitchedPortions.emplace_back(portion);
-        PortionsToAccess->AddPortion(portion);
     }
 
     static TString StaticTypeName() {

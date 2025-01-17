@@ -82,7 +82,7 @@ public:
     {
     }
 
-    ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
+    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         std::vector<std::vector<TPath>> parts;
         std::optional<ui64> mbLimitHint;
         bool hasDirectories = false;
@@ -108,6 +108,7 @@ public:
         }
 
         constexpr ui64 maxTaskRatio = 20;
+        auto maxPartitions = settings.MaxPartitions;
         if (!maxPartitions || (mbLimitHint && maxPartitions > *mbLimitHint / maxTaskRatio)) {
             maxPartitions = std::max(*mbLimitHint / maxTaskRatio, ui64{1});
             YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
@@ -223,7 +224,7 @@ public:
             }
 
             rows = size / 1024; // magic estimate
-            return primaryKey 
+            return primaryKey
                 ? TOptimizerStatistics(BaseTable, rows, cols, size, size, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(*primaryKey)))
                 : TOptimizerStatistics(BaseTable, rows, cols, size, size);
         } else {
@@ -231,7 +232,7 @@ public:
         }
     }
 
-    TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& ) override {
         if (const auto& maybeS3ReadObject = TMaybeNode<TS3ReadObject>(read)) {
             const auto& s3ReadObject = maybeS3ReadObject.Cast();
             YQL_ENSURE(s3ReadObject.Ref().GetTypeAnn(), "No type annotation for node " << s3ReadObject.Ref().Content());
@@ -394,7 +395,7 @@ public:
                     TExprContext ctx;
                     srcDesc.SetRowType(NCommon::WriteTypeToYson(ctx.MakeType<TStructExprType>(rowTypeItems), NYT::NYson::EYsonFormat::Text));
                 }
- 
+
                 if (auto predicate = parseSettings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
                     TStringBuilder err;
                     if (!SerializeFilterPredicate(predicate, srcDesc.mutable_predicate(), err)) {

@@ -240,7 +240,7 @@ void TLegacyReadLimit::InitMove(NProto::TReadLimit&& readLimit)
 size_t TLegacyReadLimit::SpaceUsed() const
 {
     return sizeof(*this) +
-        ReadLimit_.SpaceUsed() - sizeof(ReadLimit_) +
+        ReadLimit_.SpaceUsedLong() - sizeof(ReadLimit_) +
         Key_.GetSpaceUsed() - sizeof(Key_);
 }
 

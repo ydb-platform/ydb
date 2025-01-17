@@ -36,3 +36,12 @@ message FetchStorageConfigResponse {
 message FetchStorageConfigResult {
     string yaml_config = 1;
 }
+
+message BootstrapClusterRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string self_assembly_uuid = 2;
+}
+
+message BootstrapClusterResponse {
+    Ydb.Operations.Operation operation = 1;
+}

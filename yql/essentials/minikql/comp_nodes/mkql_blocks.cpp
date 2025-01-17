@@ -149,7 +149,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto second_cond = BasicBlock::Create(context, "second_cond", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -208,7 +208,7 @@ public:
         BranchInst::Create(second_cond, work, next, block);
 
         block = second_cond;
-        
+
         const auto read_allocated_size = new LoadInst(indexType, allocatedSizePtr, "read_allocated_size", block);
         const auto read_max_allocated_size = new LoadInst(indexType, maxAllocatedSizePtr, "read_max_allocated_size", block);
         const auto next2 = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULE, read_allocated_size, read_max_allocated_size, "next2", block);
@@ -383,7 +383,7 @@ public:
             if (auto item = s.GetValue(ctx.HolderFactory); !item.IsInvalid())
                 return item;
 
-            if (const auto input = Flow_->GetValue(ctx).Release(); input.IsSpecial())
+            if (const auto input = Flow_->GetValue(ctx); input.IsSpecial())
                 return input;
             else
                 s.Reset(input);
@@ -402,7 +402,7 @@ public:
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(make, work, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, work, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -427,14 +427,14 @@ public:
         const auto result = PHINode::Create(valueType, 2U, "result", done);
         result->addIncoming(value, block);
 
-        BranchInst::Create(read, done, IsInvalid(value, block), block);
+        BranchInst::Create(read, done, IsInvalid(value, block, context), block);
 
         block = read;
 
         const auto input = GetNodeValue(Flow_, ctx, block);
         result->addIncoming(input, block);
 
-        BranchInst::Create(done, init, IsSpecial(input, block), block);
+        BranchInst::Create(done, init, IsSpecial(input, block, context), block);
 
         block = init;
 
@@ -442,6 +442,8 @@ public:
         const auto setType = FunctionType::get(valueType, {statePtrType, valueType}, false);
         const auto setPtr = CastInst::Create(Instruction::IntToPtr, setFunc, PointerType::getUnqual(setType), "set", block);
         CallInst::Create(setType, setPtr, {stateArg, input }, "", block);
+
+        ValueCleanup(EValueRepresentation::Any, input, ctx, block);
 
         BranchInst::Create(work, block);
 
@@ -475,8 +477,7 @@ private:
         }
 
         void Reset(const NUdf::TUnboxedValuePod block) {
-            const NUdf::TUnboxedValue v(block);
-            const auto& datum = TArrowBlock::From(v).GetDatum();
+            const auto& datum = TArrowBlock::From(block).GetDatum();
             MKQL_ENSURE(datum.is_arraylike(), "Expecting array as FromBlocks argument");
             MKQL_ENSURE(Arrays_.empty(), "Not all input is processed");
             if (datum.is_array()) {
@@ -556,7 +557,6 @@ public:
 
         const auto width = Types_.size();
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt64Ty(context);
         const auto arrayType = ArrayType::get(valueType, width);
@@ -574,9 +574,7 @@ public:
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
-        const auto getCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(indexType, { valueType }, false):
-            FunctionType::get(indexType, { ptrValueType }, false);
+        const auto getCountType = FunctionType::get(indexType, { valueType }, false);
         const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
@@ -586,7 +584,7 @@ public:
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -632,7 +630,9 @@ public:
         block = good;
 
         const auto countValue = getres.second.back()(ctx, block);
-        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(countValue, ctx, block) }, "height", block);
+        const auto height = CallInst::Create(getCount, { countValue }, "height", block);
+
+        ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
 
         new StoreInst(height, countPtr, block);
         new StoreInst(ConstantInt::get(indexType, 0), indexPtr, block);
@@ -671,7 +671,7 @@ public:
                 const auto index = ConstantInt::get(indexType, idx);
                 const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {  ConstantInt::get(indexType, 0), index }, "pointer", block);
 
-                BranchInst::Create(call, init, HasValue(pointer, block), block);
+                BranchInst::Create(call, init, HasValue(pointer, block, context), block);
 
                 block = init;
 
@@ -864,18 +864,9 @@ public:
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto asScalarFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TAsScalarWrapper::AsScalar));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto asScalarType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), ctx.Ctx->getType()}, false);
-            const auto asScalarFuncPtr = CastInst::Create(Instruction::IntToPtr, asScalarFunc, PointerType::getUnqual(asScalarType), "function", block);
-            return CallInst::Create(asScalarType, asScalarFuncPtr, {self, value, ctx.Ctx}, "scalar", block);
-        } else {
-            const auto valuePtr = new AllocaInst(value->getType(), 0U, "value", block);
-            new StoreInst(value, valuePtr, block);
-            const auto asScalarType = FunctionType::get(Type::getVoidTy(context), {self->getType(), valuePtr->getType(), valuePtr->getType(), ctx.Ctx->getType()}, false);
-            const auto asScalarFuncPtr = CastInst::Create(Instruction::IntToPtr, asScalarFunc, PointerType::getUnqual(asScalarType), "function", block);
-            CallInst::Create(asScalarType, asScalarFuncPtr, {self, valuePtr, valuePtr, ctx.Ctx}, "", block);
-            return new LoadInst(value->getType(), valuePtr, "result", block);
-        }
+        const auto asScalarType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), ctx.Ctx->getType()}, false);
+        const auto asScalarFuncPtr = CastInst::Create(Instruction::IntToPtr, asScalarFunc, PointerType::getUnqual(asScalarType), "function", block);
+        return CallInst::Create(asScalarType, asScalarFuncPtr, {self, value, ctx.Ctx}, "scalar", block);
     }
 #endif
 private:
@@ -929,20 +920,9 @@ public:
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto replicateFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TReplicateScalarWrapper::Replicate));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto replicateType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), count->getType(), ctx.Ctx->getType()}, false);
-            const auto replicateFuncPtr = CastInst::Create(Instruction::IntToPtr, replicateFunc, PointerType::getUnqual(replicateType), "function", block);
-            return CallInst::Create(replicateType, replicateFuncPtr, {self, value, count, ctx.Ctx}, "replicate", block);
-        } else {
-            const auto valuePtr = new AllocaInst(value->getType(), 0U, "value", block);
-            const auto countPtr = new AllocaInst(count->getType(), 0U, "count", block);
-            new StoreInst(value, valuePtr, block);
-            new StoreInst(count, countPtr, block);
-            const auto replicateType = FunctionType::get(Type::getVoidTy(context), {self->getType(), valuePtr->getType(), valuePtr->getType(), countPtr->getType(), ctx.Ctx->getType()}, false);
-            const auto replicateFuncPtr = CastInst::Create(Instruction::IntToPtr, replicateFunc, PointerType::getUnqual(replicateType), "function", block);
-            CallInst::Create(replicateType, replicateFuncPtr, {self, valuePtr, valuePtr, countPtr, ctx.Ctx}, "", block);
-            return new LoadInst(value->getType(), valuePtr, "result", block);
-        }
+        const auto replicateType = FunctionType::get(Type::getInt128Ty(context), {self->getType(), value->getType(), count->getType(), ctx.Ctx->getType()}, false);
+        const auto replicateFuncPtr = CastInst::Create(Instruction::IntToPtr, replicateFunc, PointerType::getUnqual(replicateType), "function", block);
+        return CallInst::Create(replicateType, replicateFuncPtr, {self, value, count, ctx.Ctx}, "replicate", block);
     }
 #endif
 private:
@@ -953,9 +933,8 @@ private:
     }
 
     arrow::Datum DoReplicate(const NUdf::TUnboxedValuePod val, const NUdf::TUnboxedValuePod cnt, TComputationContext& ctx) const {
-        const NUdf::TUnboxedValue v(val), c(cnt);
-        const auto value = TArrowBlock::From(v).GetDatum().scalar();
-        const ui64 count = TArrowBlock::From(c).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        const auto value = TArrowBlock::From(val).GetDatum().scalar();
+        const ui64 count = TArrowBlock::From(cnt).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
 
         const auto reader = MakeBlockReader(TTypeInfoHelper(), Type_);
         const auto builder = MakeArrayBuilder(TTypeInfoHelper(), Type_, ctx.ArrowMemoryPool, count, &ctx.Builder->GetPgBuilder());
@@ -1041,7 +1020,7 @@ public:
         const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -1171,7 +1150,7 @@ public:
             }
             s.FillArrays();
         }
-        
+
         const auto sliceSize = s.Slice();
         for (size_t i = 0; i < width; ++i) {
             output[i] = s.Get(sliceSize, HolderFactory_, i);

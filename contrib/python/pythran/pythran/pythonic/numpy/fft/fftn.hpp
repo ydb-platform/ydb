@@ -27,12 +27,12 @@ namespace numpy
       }
 
       template <size_t K, size_t S>
-          types::array < long,
+          types::array_tuple < long,
           K<S ? K : S> normalize_axes(types::none_type const &)
       {
         if (S == 1)
           return {-1}; // FIXME: understand why this is needed
-        types::array < long, K<S ? K : S> result;
+        types::array_tuple < long, K<S ? K : S> result;
         for (size_t i = 0; i < std::min(K, S); ++i)
           result[i] = (long)i;
         return result;
@@ -50,7 +50,7 @@ namespace numpy
     template <class T, class pS, class Axes, class Norm>
     types::ndarray<typename std::enable_if<std::is_integral<T>::value,
                                            std::complex<double>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &in_array, types::none_type s,
          Axes const &axes, Norm const &norm)
     {
@@ -61,7 +61,7 @@ namespace numpy
     template <class T, class pS, class Axes, class Norm>
     types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
                                            std::complex<T>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &in_array, types::none_type s,
          Axes const &axes, Norm const &norm)
     {
@@ -76,7 +76,7 @@ namespace numpy
     template <class T, class pS, class Axes, class Norm>
     types::ndarray<
         typename std::enable_if<types::is_complex<T>::value, T>::type,
-        types::array<long, std::tuple_size<pS>::value>>
+        types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &in_array, types::none_type s,
          Axes const &axes, Norm const &norm)
     {
@@ -93,7 +93,7 @@ namespace numpy
               class Norm>
     types::ndarray<typename std::enable_if<std::is_integral<T>::value,
                                            std::complex<double>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s,
          Axes const &axes, Norm const &norm)
     {
@@ -105,7 +105,7 @@ namespace numpy
               class Norm>
     types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
                                            std::complex<T>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s,
          Axes const &axes, Norm const &norm)
     {
@@ -123,7 +123,7 @@ namespace numpy
               class Norm>
     types::ndarray<
         typename std::enable_if<types::is_complex<T>::value, T>::type,
-        types::array<long, std::tuple_size<pS>::value>>
+        types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s,
          Axes const &axes, Norm const &norm)
     {

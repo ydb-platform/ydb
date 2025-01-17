@@ -1,6 +1,7 @@
 #include "ydb_root_common.h"
 #include "ydb_profile.h"
 #include "ydb_admin.h"
+#include "ydb_debug.h"
 #include "ydb_service_auth.h"
 #include "ydb_service_discovery.h"
 #include "ydb_service_export.h"
@@ -52,6 +53,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandYql>());
     AddCommand(std::make_unique<TCommandTopic>());
     AddCommand(std::make_unique<TCommandWorkload>());
+    AddCommand(std::make_unique<TCommandDebug>());
 }
 
 void TClientCommandRootCommon::ValidateSettings() {
@@ -580,7 +582,9 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
         throw TMisuseException() << "Missing required option 'endpoint'.";
     }
 
-    if (config.Database.empty()) {
+    if (config.Database.empty() && config.AllowEmptyDatabase) {
+        // just skip the Database check
+    } else if (config.Database.empty()) {
         throw TMisuseException()
             << "Missing required option 'database'.";
     } else if (!config.Database.StartsWith('/')) {

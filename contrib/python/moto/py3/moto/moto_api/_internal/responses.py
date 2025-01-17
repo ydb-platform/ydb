@@ -54,7 +54,7 @@ class MotoAPIResponse(BaseResponse):
                         if not attr.startswith("_"):
                             try:
                                 json.dumps(getattr(instance, attr))
-                            except TypeError:
+                            except (TypeError, AttributeError):
                                 pass
                             else:
                                 inst_result[attr] = getattr(instance, attr)
@@ -106,3 +106,11 @@ class MotoAPIResponse(BaseResponse):
 
         moto_api_backend.unset_transition(model_name)
         return 201, {}, ""
+
+    def seed(self, req, full_url, headers):
+        self.setup_class(req, full_url, headers)
+        from . import mock_random
+
+        a = self._get_param("a")
+        mock_random.seed(int(a))
+        return 200, {}, ""

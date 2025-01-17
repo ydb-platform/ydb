@@ -34,7 +34,7 @@ RECURSE(
     workload
     workload
     yaml_config
-    yaml_config
+    yaml_json
     ycloud
     yql
 )

@@ -22,8 +22,7 @@ namespace builtins
     // FIXME : There is a dangling reference as data.begin() is ! the one
     // from data "saved" in the "iter" struct
     template <class T>
-    iter<T>::iter(T data)
-        : iterator(data.begin()), _end(data.end()), data(data)
+    iter<T>::iter(T data) : iterator(data.begin()), _end(data.end()), data(data)
     {
     }
 
@@ -44,7 +43,7 @@ namespace builtins
     {
       return _end;
     }
-  }
+  } // namespace details
 
   /// iter implementation
 
@@ -55,7 +54,7 @@ namespace builtins
   {
     return {std::forward<T>(t)};
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

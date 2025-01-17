@@ -12,7 +12,7 @@ namespace numpy
   typename T::dtype trace(T const &expr, int offset = 0);
 
   DEFINE_FUNCTOR(pythonic::numpy, trace)
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -69,6 +69,10 @@ class QueryOnlineReadOnly(BaseQueryTxMode):
     def name(self):
         return self._name
 
+    def with_allow_inconsistent_reads(self) -> "QueryOnlineReadOnly":
+        self.allow_inconsistent_reads = True
+        return self
+
     def to_proto(self) -> ydb_query_pb2.OnlineModeSettings:
         return ydb_query_pb2.OnlineModeSettings(allow_inconsistent_reads=self.allow_inconsistent_reads)
 

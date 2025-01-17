@@ -2,8 +2,6 @@ GTEST(unittester-client-table-client)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-ALLOCATOR(YT)
-
 SRCS(
     columnar_statistics_ut.cpp
     columnar_ut.cpp

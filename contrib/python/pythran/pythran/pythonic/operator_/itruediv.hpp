@@ -3,8 +3,8 @@
 
 #include "pythonic/include/operator_/itruediv.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/operator_/truediv.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -16,20 +16,22 @@ namespace operator_
     return truediv(a, std::forward<B>(b));
   }
   template <class A, class B>
-  auto itruediv(A &a, B &&b) -> typename std::enable_if<
-      std::is_same<A, decltype(truediv(a, std::forward<B>(b)))>::value,
-      A &>::type
+  auto itruediv(A &a, B &&b) ->
+      typename std::enable_if<
+          std::is_same<A, decltype(truediv(a, std::forward<B>(b)))>::value,
+          A &>::type
   {
     return a = truediv(a, std::forward<B>(b));
   }
   template <class A, class B>
-  auto itruediv(A &a, B &&b) -> typename std::enable_if<
-      !std::is_same<A, decltype(truediv(a, std::forward<B>(b)))>::value,
-      decltype(truediv(a, std::forward<B>(b)))>::type
+  auto itruediv(A &a, B &&b) ->
+      typename std::enable_if<
+          !std::is_same<A, decltype(truediv(a, std::forward<B>(b)))>::value,
+          decltype(truediv(a, std::forward<B>(b)))>::type
   {
     return truediv(a, std::forward<B>(b));
   }
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

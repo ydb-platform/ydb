@@ -4095,8 +4095,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                     Key Int32,
                     Fk Int32,
                     Value String,
+                    Value2 String,
                     PRIMARY KEY (Key, Fk),
-                    INDEX Index GLOBAL ON (Value)
+                    INDEX Index GLOBAL ON (Value),
+                    INDEX ByPk GLOBAL ON (Key)
                 );
             )").GetValueSync());
 
@@ -4125,6 +4127,17 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
         AssertSuccessResult(result);
         AssertTableReads(result, "/Root/ComplexKey", 2);
+
+        result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            SELECT Key, Fk, Value FROM `/Root/ComplexKey`
+            WHERE Key = 2
+            ORDER BY Value DESC, Value2 DESC
+            LIMIT 1;
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
+        AssertSuccessResult(result);
+        AssertTableReads(result, "/Root/ComplexKey", 2);
+        AssertTableReads(result, "/Root/ComplexKey/ByPk/indexImplTable", 0);
     }
 
     Y_UNIT_TEST(MultipleBroadcastJoin) {
@@ -4322,7 +4335,46 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(SequentialReadsPragma, Enabled) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
+        NYdb::NTable::TExecDataQuerySettings querySettings;
+        querySettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        TString query = R"(
+            SELECT Key, Data FROM `/Root/EightShard` 
+                WHERE Text = "Value1" 
+                ORDER BY Key 
+                LIMIT 1;
+        )";
+
+        if (Enabled) {
+            TString pragma = TString(R"(
+                PRAGMA ydb.MaxSequentialReadsInFlight = "1";
+            )");
+
+            query = pragma + query;
+        }
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), querySettings).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([[[101u];[1]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        for (const auto& phase : stats.query_phases()) {
+            for (const auto& access : phase.table_access()) {
+                if (access.name() == "/Root/EightShard") {
+                    if (Enabled) {
+                        UNIT_ASSERT_LT(access.partitions_count(), 8);
+                    } else {
+                        UNIT_ASSERT_EQUAL(access.partitions_count(), 8);
+                    }
+                }
+            }
+        }
+    }
 
 }
 

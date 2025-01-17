@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_RANDOM_SAMPLE_HPP
 #define PYTHONIC_INCLUDE_RANDOM_SAMPLE_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/random/random.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 #include "pythonic/include/types/list.hpp"
 
@@ -17,7 +17,7 @@ namespace random
   sample(Iterable &&s, size_t k);
 
   DEFINE_FUNCTOR(pythonic::random, sample);
-}
+} // namespace random
 PYTHONIC_NS_END
 
 #endif

@@ -190,12 +190,14 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset,
 }
 
 void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map, const ui64 ssId,
-                       TTestContext& context, const bool requireAuth, bool kill) {
-    PQBalancerPrepare(topic, map, ssId, *context.Runtime, context.BalancerTabletId, context.Edge, requireAuth, kill);
+                       TTestContext& context, const bool requireAuth, bool kill, const THashSet<TString>& xtraConsumers) {
+    PQBalancerPrepare(topic, map, ssId, *context.Runtime, context.BalancerTabletId, context.Edge, requireAuth, kill,
+                      xtraConsumers);
 }
 
 void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map, const ui64 ssId,
-                       TTestActorRuntime& runtime, ui64 balancerTabletId, TActorId edge, const bool requireAuth, bool kill) {
+                       TTestActorRuntime& runtime, ui64 balancerTabletId, TActorId edge, const bool requireAuth, bool kill,
+                       const THashSet<TString>& xtraConsumers) {
     TAutoPtr<IEventHandle> handle;
     static int version = 0;
     ++version;
@@ -227,6 +229,9 @@ void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::p
             request->Record.SetPath("/Root/" + topic);
             request->Record.SetSchemeShardId(ssId);
             request->Record.MutableTabletConfig()->AddReadRules("client");
+            for (const auto& c : xtraConsumers) {
+                request->Record.MutableTabletConfig()->AddReadRules(c);
+            };
             request->Record.MutableTabletConfig()->SetRequireAuthWrite(requireAuth);
             request->Record.MutableTabletConfig()->SetRequireAuthRead(requireAuth);
 
@@ -920,7 +925,7 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
         UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
         auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
 
-        UNIT_ASSERT_EQUAL(res.ResultSize(), settings.ResCount);
+        UNIT_ASSERT_VALUES_EQUAL(res.ResultSize(), settings.ResCount);
         ui64 off = settings.Offset;
 
         for (ui32 i = 0; i < settings.ResCount; ++i) {
@@ -930,10 +935,10 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
                     UNIT_ASSERT_EQUAL((ui64)r.GetOffset(), off);
                 }
                 UNIT_ASSERT(r.GetSourceId().size() == 9 && r.GetSourceId().StartsWith("sourceid"));
-                UNIT_ASSERT_EQUAL(ui32(r.GetData()[0]), off);
-                UNIT_ASSERT_EQUAL(ui32((unsigned char)r.GetData().back()), r.GetSeqNo() % 256);
+                UNIT_ASSERT_VALUES_EQUAL(ui32(r.GetData()[0]), off);
+                UNIT_ASSERT_VALUES_EQUAL(ui32((unsigned char)r.GetData().back()), r.GetSeqNo() % 256);
                 ++off;
-            } else {
+            } else if (settings.Offsets.size() > i) {
                 UNIT_ASSERT(settings.Offsets[i] == (i64)r.GetOffset());
             }
         }

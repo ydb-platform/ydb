@@ -1,7 +1,12 @@
 #include "helpers.h"
+#include "percpu.h"
 #include "private.h"
+#include "producer.h"
+#include "sensor_set.h"
 
 #include <yt/yt/core/http/http.h>
+
+#include <yt/yt/core/misc/ref_counted_tracker.h>
 
 #include <library/cpp/monlib/encode/json/json.h>
 #include <library/cpp/monlib/encode/spack/spack_v1.h>
@@ -71,6 +76,38 @@ TOutputEncodingContext CreateOutputEncodingContextFromHeaders(const THeadersPtr&
     }
 
     return context;
+}
+
+i64 GetCountersBytesAlive()
+{
+    auto* tracker = TRefCountedTracker::Get();
+    i64 usage = 0;
+
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TSimpleCounter>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TPerCpuCounter>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TCounterState>());
+
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TSimpleTimeCounter>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TPerCpuTimeCounter>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TTimeCounterState>());
+
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TSimpleGauge>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TPerCpuGauge>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TGaugeState>());
+
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TSimpleSummary<double>>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TPerCpuSummary<double>>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TSimpleSummary<TDuration>>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TPerCpuSummary<TDuration>>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TSummaryState>());
+
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TProducerState>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<THistogram>());
+
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TTimerSummaryState>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<THistogramState>());
+
+    return usage;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -14,7 +14,7 @@ namespace builtins
       -> decltype(types::make_tuple(t0 / t1, t0 % t1));
 
   DEFINE_FUNCTOR(pythonic::builtins, divmod);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

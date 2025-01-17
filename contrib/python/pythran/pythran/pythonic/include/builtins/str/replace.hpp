@@ -17,7 +17,7 @@ namespace builtins
                        long count = std::numeric_limits<long>::max());
 
     DEFINE_FUNCTOR(pythonic::builtins::str, replace);
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

@@ -7,6 +7,7 @@
 #include "http.h"
 
 #include <ydb/core/cms/console/validators/registry.h>
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/core/base/feature_flags.h>
 
 #include <ydb/library/yaml_config/yaml_config.h>
@@ -67,6 +68,72 @@ bool TConfigsManager::CheckConfig(const NKikimrConsole::TConfigsConfig &config,
     return true;
 }
 
+TConfigsManager::TValidateConfigResult TConfigsManager::ValidateConfigAndReplaceMetadata(const TString &config, bool force, bool allowUnknownFields) {
+    TValidateConfigResult result;
+    try {
+        if (!force) {
+            auto metadata = NYamlConfig::GetMetadata(config);
+            result.Cluster = metadata.Cluster.value_or(TString("unknown"));
+            result.Version = metadata.Version.value_or(0);
+        } else {
+            result.Cluster = ClusterName;
+            result.Version = YamlVersion;
+        }
+
+        result.UpdatedConfig = NYamlConfig::ReplaceMetadata(config, NYamlConfig::TMetadata{
+                .Version = result.Version + 1,
+                .Cluster = result.Cluster,
+            });
+
+        result.HasForbiddenUnknown = false;
+        if (result.UpdatedConfig != YamlConfig || YamlDropped) {
+            result.Modify = true;
+
+            auto tree = NFyaml::TDocument::Parse(result.UpdatedConfig);
+            auto resolved = NYamlConfig::ResolveAll(tree);
+
+            if (ClusterName != result.Cluster) {
+                ythrow yexception() << "ClusterName mismatch";
+            }
+
+            if (result.Version != YamlVersion) {
+                ythrow yexception() << "Version mismatch";
+            }
+
+            TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
+
+            std::vector<TString> errors;
+            for (auto& [_, config] : resolved.Configs) {
+                auto cfg = NYamlConfig::YamlToProto(
+                    config.second,
+                    true,
+                    true,
+                    unknownFieldsCollector);
+                NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
+                if (result == NKikimr::NConfig::EValidationResult::Error) {
+                    ythrow yexception() << errors.front();
+                }
+            }
+
+            const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
+
+            for (const auto& [path, info] : unknownFieldsCollector->GetUnknownKeys()) {
+                if (deprecatedPaths.contains(path)) {
+                    result.DeprecatedFields[path] = info;
+                } else {
+                    result.UnknownFields[path] = info;
+                }
+            }
+
+            result.HasForbiddenUnknown = !result.UnknownFields.empty() && !allowUnknownFields;
+            result.ValidationFinished = true;
+        }
+    } catch (const yexception &e) {
+        result.ErrorReason = e.what();
+    }
+    return result;
+}
+
 void TConfigsManager::Bootstrap(const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsManager::Bootstrap");
@@ -99,6 +166,7 @@ void TConfigsManager::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
 void TConfigsManager::Detach()
 {
     Send(ConfigsProvider, new TEvents::TEvPoisonPill);
+    Send(CommitActor, new TEvents::TEvPoisonPill);
     PassAway();
 }
 
@@ -996,6 +1064,14 @@ void TConfigsManager::HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TP
         /* newConfig = */ ev->Get()->Record.GetRequest().config(),
         /* reason = */ "Unauthorized.",
         /* success = */ false);
+}
+
+void TConfigsManager::SendInReply(const TActorId& sender, const TActorId& icSession, std::unique_ptr<IEventBase> ev, ui64 cookie) {
+    auto h = std::make_unique<IEventHandle>(sender, SelfId(), ev.release(), 0, cookie);
+    if (icSession) {
+        h->Rewrite(TEvInterconnect::EvForward, icSession);
+    }
+    TActivationContext::Send(h.release());
 }
 
 } // namespace NKikimr::NConsole

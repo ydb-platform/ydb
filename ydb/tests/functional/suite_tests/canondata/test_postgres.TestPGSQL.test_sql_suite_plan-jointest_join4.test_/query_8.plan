@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[Arg.tt1.tt1_id,Arg.tt1.joincol,Arg.tt2.tt2_id]"
                                             },
                                             {
                                                 "Condition": "tt1.joincol = tt2.joincol",
@@ -89,6 +89,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join4.test_plan/tt2",
                                                                                         "ReadColumns": [
                                                                                             "joincol",
                                                                                             "tt2_id"
@@ -130,6 +131,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_jointest/join4.test_plan/tt1",
                                                                         "ReadColumns": [
                                                                             "joincol",
                                                                             "tt1_id"

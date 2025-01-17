@@ -25,7 +25,7 @@ using namespace NJobTrackerClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, JobShellStructuredLogger, "JobShell");
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, JobShellStructuredLogger, "JobShell");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -490,6 +490,21 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.WithMonitoringDescriptor; })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "from_time",
+        [] (TThis* command) -> auto& { return command->Options.FromTime; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "to_time",
+        [] (TThis* command) -> auto& { return command->Options.ToTime; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "continuation_token",
+        [] (TThis* command) -> auto& { return command->Options.ContinuationToken; })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<TJobId>(
         "job_competition_id",
         [] (TThis* command) -> auto& { return command->Options.JobCompetitionId; })
@@ -593,6 +608,7 @@ void TListJobsCommand::DoExecute(ICommandContextPtr context)
                 }
             })
             .Item("errors").Value(result.Errors)
+            .Item("continuation_token").Value(result.ContinuationToken)
         .EndMap());
 }
 

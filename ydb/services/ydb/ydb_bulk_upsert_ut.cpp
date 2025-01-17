@@ -962,10 +962,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         for (ui32 i = 0; i < 256; ++i) {
             {
                 auto res = TestUpsertRow(client, "/Root/ui8", i, 42);
-                if (i <= 127)
-                    UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
-                else
-                    UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
             }
 
             {

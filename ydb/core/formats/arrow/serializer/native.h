@@ -103,6 +103,20 @@ public:
         Options.use_threads = false;
         Options.memory_pool = pool;
     }
+
+    arrow::Compression::type GetCodecType() const {
+        if (Options.codec) {
+            return Options.codec->compression_type();
+        }
+        return arrow::Compression::type::UNCOMPRESSED;
+    }
+
+    std::optional<i32> GetCodecLevel() const {
+        if (Options.codec && arrow::util::Codec::SupportsCompressionLevel(Options.codec->compression_type())) {
+            return Options.codec->compression_level();
+        }
+        return {};
+    }
 };
 
 }

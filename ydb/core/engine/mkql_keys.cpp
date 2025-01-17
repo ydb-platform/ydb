@@ -251,8 +251,10 @@ THolder<TKeyDesc> ExtractEraseRow(TCallable& callable, const TTypeEnvironment& e
 #define MAKE_PRIMITIVE_TYPE_CELL(type, layout) \
     case NUdf::TDataType<type>::Id: return MakeCell<layout>(value);
 
-TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
-    const TTypeEnvironment& env, bool copy,
+
+template<typename TStringBackend>
+TCell MakeCellImpl(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
+    const TStringBackend& env, bool copy,
     i32 typmod, TMaybe<TString>* error)
 {
     if (!value)
@@ -299,6 +301,21 @@ TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
     std::memcpy(val.Data(), ref.Data(), ref.Size());
     return TCell(val.Data(), val.Size());
 }
+
+TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
+    const TTypeEnvironment& env, bool copy,
+    i32 typmod, TMaybe<TString>* error)
+{
+    return MakeCellImpl(type, value, env, copy, typmod, error);
+}
+
+TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
+    const TStringProviderBackend& env, bool copy,
+    i32 typmod, TMaybe<TString>* error)
+{
+    return MakeCellImpl(type, value, env, copy, typmod, error);
+}
+
 
 #undef MAKE_PRIMITIVE_TYPE_CELL
 

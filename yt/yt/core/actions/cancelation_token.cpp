@@ -9,150 +9,20 @@ namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TAnyCancelationToken::TStorage::Set(void* ptr) noexcept
+struct TNullToken
 {
-    std::construct_at<void*>(reinterpret_cast<void**>(Storage_), ptr);
-}
-
-void TAnyCancelationToken::TStorage::Set() noexcept
-{
-    std::construct_at(Storage_);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TAnyCancelationToken::TVTable::TDtor TAnyCancelationToken::TVTable::Dtor() const noexcept
-{
-    return Dtor_;
-}
-
-TAnyCancelationToken::TVTable::TCopyCtor TAnyCancelationToken::TVTable::CopyCtor() const noexcept
-{
-    return CopyCtor_;
-}
-
-TAnyCancelationToken::TVTable::TMoveCtor TAnyCancelationToken::TVTable::MoveCtor() const noexcept
-{
-    return MoveCtor_;
-}
-
-TAnyCancelationToken::TVTable::TIsCancelationRequested TAnyCancelationToken::TVTable::IsCancelationRequested() const noexcept
-{
-    return IsCancelationRequested_;
-}
-
-TAnyCancelationToken::TVTable::TCancellationError TAnyCancelationToken::TVTable::GetCancelationError() const noexcept
-{
-    return CancellationError_;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TAnyCancelationToken::TAnyCancelationToken(TAnyCancelationToken&& other) noexcept
-    : VTable_(other.VTable_)
-{
-    if (VTable_) {
-        auto moveCtor = VTable_->MoveCtor();
-        moveCtor(Storage_, std::move(other.Storage_));
-
-        other.VTable_ = nullptr;
-    }
-}
-
-TAnyCancelationToken& TAnyCancelationToken::operator= (TAnyCancelationToken&& other) noexcept
-{
-    if (this == &other) {
-        return *this;
-    }
-
-    Reset();
-
-    VTable_ = other.VTable_;
-
-    if (VTable_) {
-        auto moveCtor = VTable_->MoveCtor();
-        moveCtor(Storage_, std::move(other.Storage_));
-
-        other.VTable_ = nullptr;
-    }
-
-    return *this;
-}
-
-TAnyCancelationToken::TAnyCancelationToken(const TAnyCancelationToken& other) noexcept
-    : VTable_(other.VTable_)
-{
-    if (VTable_) {
-        auto copyCtor = VTable_->CopyCtor();
-        copyCtor(Storage_, other.Storage_);
-    }
-}
-
-TAnyCancelationToken& TAnyCancelationToken::operator= (const TAnyCancelationToken& other) noexcept
-{
-    if (this == &other) {
-        return *this;
-    }
-
-    Reset();
-    VTable_ = other.VTable_;
-
-    if (VTable_) {
-        auto copyCtor = VTable_->CopyCtor();
-        copyCtor(Storage_, other.Storage_);
-    }
-
-    return *this;
-}
-
-TAnyCancelationToken::operator bool() const noexcept
-{
-    return VTable_ != nullptr;
-}
-
-TAnyCancelationToken::~TAnyCancelationToken()
-{
-    Reset();
-}
-
-bool TAnyCancelationToken::IsCancelationRequested() const noexcept
-{
-    if (!VTable_) {
+    friend bool TagInvoke(TTagInvokeTag<IsCancelationRequested>, const TNullToken&) noexcept
+    {
         return false;
     }
 
-    return VTable_->IsCancelationRequested()(Storage_);
-}
-
-const TError& TAnyCancelationToken::GetCancelationError() const noexcept
-{
-    YT_VERIFY(VTable_);
-    return VTable_->GetCancelationError()(Storage_);
-}
-
-void TAnyCancelationToken::Reset() noexcept
-{
-    if (VTable_) {
-        auto dtor = VTable_->Dtor();
-        dtor(Storage_);
-        VTable_ = nullptr;
+    friend const TError& TagInvoke(TTagInvokeTag<GetCancelationError>, const TNullToken&) noexcept
+    {
+        YT_ABORT();
     }
-}
+};
 
-////////////////////////////////////////////////////////////////////////////////
-
-NConcurrency::TFlsSlot<TAnyCancelationToken> GlobalToken = {};
-
-////////////////////////////////////////////////////////////////////////////////
-
-TCurrentCancelationTokenGuard::TCurrentCancelationTokenGuard(TAnyCancelationToken nextToken)
-    : PrevToken_(std::exchange(*GlobalToken, std::move(nextToken)))
-{ }
-
-TCurrentCancelationTokenGuard::~TCurrentCancelationTokenGuard()
-{
-    std::exchange(*GlobalToken, std::move(PrevToken_));
-}
+static_assert(CCancelationToken<TNullToken>);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -160,14 +30,14 @@ struct TTokenForCancelableContext
 {
     TCancelableContextPtr Context;
 
-    bool IsCancelationRequested() const noexcept
+    friend bool TagInvoke(TTagInvokeTag<IsCancelationRequested>, const TTokenForCancelableContext& token) noexcept
     {
-        return Context->IsCanceled();
+        return token.Context->IsCanceled();
     }
 
-    const TError& GetCancelationError() const
+    friend const TError& TagInvoke(TTagInvokeTag<GetCancelationError>, const TTokenForCancelableContext& token)
     {
-        return Context->GetCancelationError();
+        return token.Context->GetCancelationError();
     }
 };
 
@@ -183,14 +53,14 @@ struct TTokenForFuture
 
     TFutureState<void>* FutureState;
 
-    bool IsCancelationRequested() const noexcept
+    friend bool TagInvoke(TTagInvokeTag<IsCancelationRequested>, const TTokenForFuture& token) noexcept
     {
-        return FutureState->IsCanceled();
+        return token.FutureState->IsCanceled();
     }
 
-    const TError& GetCancelationError() const
+    friend const TError& TagInvoke(TTagInvokeTag<GetCancelationError>, const TTokenForFuture& token)
     {
-        return FutureState->GetCancelationError();
+        return token.FutureState->GetCancelationError();
     }
 };
 
@@ -210,8 +80,37 @@ TCurrentCancelationTokenGuard MakeCancelableContextCurrentTokenGuard(const TCanc
 
 ////////////////////////////////////////////////////////////////////////////////
 
+NConcurrency::TFlsSlot<TAnyCancelationToken> GlobalToken = {};
+
+namespace {
+
+void EnsureInitialized()
+{
+    [[unlikely]] if (!GlobalToken.IsInitialized()) {
+        *GlobalToken = TNullToken{};
+    }
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+TCurrentCancelationTokenGuard::TCurrentCancelationTokenGuard(TAnyCancelationToken nextToken)
+{
+    EnsureInitialized();
+    PrevToken_ = std::exchange(*GlobalToken, std::move(nextToken));
+}
+
+TCurrentCancelationTokenGuard::~TCurrentCancelationTokenGuard()
+{
+    std::exchange(*GlobalToken, std::move(PrevToken_));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 const TAnyCancelationToken& GetCurrentCancelationToken()
 {
+    EnsureInitialized();
     return *GlobalToken;
 }
 

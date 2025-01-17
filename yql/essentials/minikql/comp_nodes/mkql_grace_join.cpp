@@ -1,3 +1,4 @@
+#include "mkql_counters.h"
 #include "mkql_grace_join.h"
 #include "mkql_grace_join_imp.h"
 
@@ -567,7 +568,7 @@ public:
         IComputationWideFlowNode* flowLeft, IComputationWideFlowNode* flowRight,
         EJoinKind joinKind,  EAnyJoinSettings anyJoinSettings, const std::vector<ui32>& leftKeyColumns, const std::vector<ui32>& rightKeyColumns,
         const std::vector<ui32>& leftRenames, const std::vector<ui32>& rightRenames,
-        const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, const THolderFactory & holderFactory,
+        const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, TComputationContext& ctx,
         const bool isSelfJoin, bool isSpillingAllowed)
     :  TBase(memInfo)
     ,   FlowLeft(flowLeft)
@@ -577,8 +578,8 @@ public:
     ,   RightKeyColumns(rightKeyColumns)
     ,   LeftRenames(leftRenames)
     ,   RightRenames(rightRenames)
-    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::RightSemi || joinKind == EJoinKind::RightOnly)))
-    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly)))
+    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::RightSemi || joinKind == EJoinKind::RightOnly)))
+    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly)))
     ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>())
     ,   JoinCompleted(std::make_unique<bool>(false))
     ,   PartialJoinCompleted(std::make_unique<bool>(false))
@@ -592,6 +593,11 @@ public:
         if (IsSelfJoin_) {
             LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
             RightPacker->BatchSize = std::numeric_limits<ui64>::max();
+        }
+        if (ctx.CountersProvider) {
+            // id will be assigned externally in future versions
+            TString id = TString(Operator_Join) + "0";
+            CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
         }
     }
 
@@ -637,12 +643,15 @@ private:
     }
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
+        LogMemoryUsage();
         switch(mode) {
             case EOperatingMode::InMemory: {
+                YQL_LOG(INFO) << (const void *)&*JoinedTablePtr << "# switching Memory mode to InMemory";
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::Spilling: {
+                YQL_LOG(INFO) << (const void *)&*JoinedTablePtr << "# switching Memory mode to Spilling";
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 auto spiller = ctx.SpillerFactory->CreateSpiller();
                 RightPacker->TablePtr->InitializeBucketSpillers(spiller);
@@ -650,6 +659,16 @@ private:
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
+                YQL_LOG(INFO) << (const void *)&*JoinedTablePtr << "# switching Memory mode to ProcessSpilled";
+                SpilledBucketsJoinOrder.reserve(GraceJoin::NumberOfBuckets);
+                for (ui32 i = 0; i < GraceJoin::NumberOfBuckets; ++i) SpilledBucketsJoinOrder.push_back(i);
+
+                std::sort(SpilledBucketsJoinOrder.begin(), SpilledBucketsJoinOrder.end(), [&](ui32 lhs, ui32 rhs) {
+                    auto lhs_in_memory = LeftPacker->TablePtr->IsBucketInMemory(lhs) + RightPacker->TablePtr->IsBucketInMemory(lhs);
+                    auto rhs_in_memory = LeftPacker->TablePtr->IsBucketInMemory(rhs) + RightPacker->TablePtr->IsBucketInMemory(rhs);
+
+                    return lhs_in_memory > rhs_in_memory;
+                });
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 break;
             }
@@ -688,6 +707,7 @@ private:
                             *valPtr = NYql::NUdf::TUnboxedValue();
                         }
                     }
+                    CounterOutputRows_.Inc();
                     return EFetchResult::One;
                 }
             }
@@ -729,6 +749,7 @@ private:
                             *valPtr = *RightPacker->TuplePtrs[RightRenames[2 * i]];
                         }
                     }
+                    CounterOutputRows_.Inc();
                     return EFetchResult::One;
                 }
             }
@@ -770,6 +791,8 @@ private:
                 *valPtr = valsRight[RightRenames[2 * i]];
             }
         }
+
+        CounterOutputRows_.Inc();
     }
 
     void LogMemoryUsage() const {
@@ -824,9 +847,6 @@ private:
             if (isYield == EFetchResult::One)
                 return isYield;
             if (IsSpillingAllowed && ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
-                LogMemoryUsage();
-                YQL_LOG(INFO) << (const void *)&*JoinedTablePtr << "# switching Memory mode to Spilling";
-
                 SwitchMode(EOperatingMode::Spilling, ctx);
                 return EFetchResult::Yield;
             }
@@ -842,14 +862,18 @@ private:
                     << " HaveLeft " << *HaveMoreLeftRows << " LeftPacked " << LeftPacker->TuplesBatchPacked << " LeftBatch " << LeftPacker->BatchSize
                     << " HaveRight " << *HaveMoreRightRows << " RightPacked " << RightPacker->TuplesBatchPacked << " RightBatch " << RightPacker->BatchSize
                     ;
+
+                auto& leftTable = *LeftPacker->TablePtr;
+                auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
+                if (IsSpillingAllowed && ctx.SpillerFactory && !JoinedTablePtr->TryToPreallocateMemoryForJoin(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows)) {
+                    SwitchMode(EOperatingMode::Spilling, ctx);
+                    return EFetchResult::Yield;
+                }
+
                 *PartialJoinCompleted = true;
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();
-                if ( SelfJoinSameKeys_ ) {
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
-                } else {
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
-                }
+                JoinedTablePtr->Join(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                 JoinedTablePtr->ResetIterator();
                 LeftPacker->EndTime = std::chrono::system_clock::now();
                 RightPacker->EndTime = std::chrono::system_clock::now();
@@ -861,8 +885,22 @@ private:
     }
 
     bool TryToReduceMemoryAndWait() {
-        bool isWaitingLeftForReduce = LeftPacker->TablePtr->TryToReduceMemoryAndWait();
-        bool isWaitingRightForReduce = RightPacker->TablePtr->TryToReduceMemoryAndWait();
+        if (!IsSpillingFinished()) return true;
+        i32 largestBucketsPairIndex = 0;
+        ui64 largestBucketsPairSize = 0;
+        for (ui32 bucket = 0; bucket < GraceJoin::NumberOfBuckets; ++bucket) {
+
+            ui64 leftBucketSize = LeftPacker->TablePtr->GetSizeOfBucket(bucket);
+            ui64 rightBucketSize = RightPacker->TablePtr->GetSizeOfBucket(bucket);
+            ui64 totalSize = leftBucketSize + rightBucketSize;
+            if (totalSize > largestBucketsPairSize) {
+                largestBucketsPairSize = totalSize;
+                largestBucketsPairIndex = bucket;
+            }
+        }
+
+        bool isWaitingLeftForReduce = LeftPacker->TablePtr->TryToReduceMemoryAndWait(largestBucketsPairIndex);
+        bool isWaitingRightForReduce = RightPacker->TablePtr->TryToReduceMemoryAndWait(largestBucketsPairIndex);
 
         return isWaitingLeftForReduce || isWaitingRightForReduce;
     }
@@ -893,7 +931,7 @@ EFetchResult DoCalculateWithSpilling(TComputationContext& ctx, NUdf::TUnboxedVal
         if ((cnt++ % GraceJoin::SpillingRowLimit) == 0) {
             if (!HasMemoryForProcessing() && !IsSpillingFinalized) {
                 bool isWaitingForReduce = TryToReduceMemoryAndWait();
-     
+
                 if (isWaitingForReduce) return EFetchResult::Yield;
             }
         }
@@ -912,7 +950,6 @@ EFetchResult DoCalculateWithSpilling(TComputationContext& ctx, NUdf::TUnboxedVal
         }
         if (!IsReadyForSpilledDataProcessing()) return EFetchResult::Yield;
 
-        YQL_LOG(INFO) << (const void *)&*JoinedTablePtr << "# switching to ProcessSpilled";
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
         return EFetchResult::Finish;
     }
@@ -920,56 +957,58 @@ EFetchResult DoCalculateWithSpilling(TComputationContext& ctx, NUdf::TUnboxedVal
 }
 
 EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const* output) {
-    while (NextBucketToJoin != GraceJoin::NumberOfBuckets) {
+    while (SpilledBucketsJoinOrderCurrentIndex != GraceJoin::NumberOfBuckets) {
         UpdateSpilling();
         if (IsRestoringSpilledBuckets()) return EFetchResult::Yield;
 
-        if (LeftPacker->TablePtr->IsSpilledBucketWaitingForExtraction(NextBucketToJoin)) {
-            LeftPacker->TablePtr->PrepareBucket(NextBucketToJoin);
+        ui32 nextBucketToJoin = SpilledBucketsJoinOrder[SpilledBucketsJoinOrderCurrentIndex];
+
+        if (LeftPacker->TablePtr->IsSpilledBucketWaitingForExtraction(nextBucketToJoin)) {
+            LeftPacker->TablePtr->PrepareBucket(nextBucketToJoin);
         }
 
-        if (RightPacker->TablePtr->IsSpilledBucketWaitingForExtraction(NextBucketToJoin)) {
-            RightPacker->TablePtr->PrepareBucket(NextBucketToJoin);
-        } 
-
-        if (!LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
-            LeftPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
+        if (RightPacker->TablePtr->IsSpilledBucketWaitingForExtraction(nextBucketToJoin)) {
+            RightPacker->TablePtr->PrepareBucket(nextBucketToJoin);
         }
 
-        if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
-            RightPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
-        } 
+        if (!LeftPacker->TablePtr->IsBucketInMemory(nextBucketToJoin)) {
+            LeftPacker->TablePtr->StartLoadingBucket(nextBucketToJoin);
+        }
 
-        if (LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin) && RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
+        if (!RightPacker->TablePtr->IsBucketInMemory(nextBucketToJoin)) {
+            RightPacker->TablePtr->StartLoadingBucket(nextBucketToJoin);
+        }
+
+        if (LeftPacker->TablePtr->IsBucketInMemory(nextBucketToJoin) && RightPacker->TablePtr->IsBucketInMemory(nextBucketToJoin)) {
             if (*PartialJoinCompleted) {
-                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData, NextBucketToJoin + 1)) {
+                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData, nextBucketToJoin + 1)) {
                     UnpackJoinedData(output);
                     return EFetchResult::One;
                 }
 
                 LeftPacker->TuplesBatchPacked = 0;
-                LeftPacker->TablePtr->ClearBucket(NextBucketToJoin); // Clear content of returned bucket
-                LeftPacker->TablePtr->ShrinkBucket(NextBucketToJoin);
+                LeftPacker->TablePtr->ClearBucket(nextBucketToJoin); // Clear content of returned bucket
+                LeftPacker->TablePtr->ShrinkBucket(nextBucketToJoin);
 
                 RightPacker->TuplesBatchPacked = 0;
-                RightPacker->TablePtr->ClearBucket(NextBucketToJoin); // Clear content of returned bucket
-                RightPacker->TablePtr->ShrinkBucket(NextBucketToJoin);
+                RightPacker->TablePtr->ClearBucket(nextBucketToJoin); // Clear content of returned bucket
+                RightPacker->TablePtr->ShrinkBucket(nextBucketToJoin);
 
                 JoinedTablePtr->Clear();
                 JoinedTablePtr->ResetIterator();
                 *PartialJoinCompleted = false;
 
-                NextBucketToJoin++;
+                SpilledBucketsJoinOrderCurrentIndex++;
             } else {
                 *PartialJoinCompleted = true;
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();
                 if ( SelfJoinSameKeys_ ) {
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, NextBucketToJoin, NextBucketToJoin+1);
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, nextBucketToJoin, nextBucketToJoin+1);
                 } else {
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, NextBucketToJoin, NextBucketToJoin+1);
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, nextBucketToJoin, nextBucketToJoin+1);
                 }
-                
+
                 JoinedTablePtr->ResetIterator();
                 LeftPacker->EndTime = std::chrono::system_clock::now();
                 RightPacker->EndTime = std::chrono::system_clock::now();
@@ -1006,7 +1045,9 @@ private:
 
     bool IsSpillingFinalized = false;
 
-    ui32 NextBucketToJoin = 0;
+    NYql::NUdf::TCounter CounterOutputRows_;
+    ui32 SpilledBucketsJoinOrderCurrentIndex = 0;
+    std::vector<ui32> SpilledBucketsJoinOrder;
 };
 
 class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWrapper> {
@@ -1085,7 +1126,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -1129,7 +1170,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
             state = ctx.HolderFactory.Create<TGraceJoinSpillingSupportState>(
                 FlowLeft, FlowRight, JoinKind, AnyJoinSettings_, LeftKeyColumns, RightKeyColumns,
                 LeftRenames, RightRenames, LeftColumnsTypes, RightColumnsTypes,
-                ctx.HolderFactory, IsSelfJoin_, IsSpillingAllowed);
+                ctx, IsSelfJoin_, IsSpillingAllowed);
         }
 
         IComputationWideFlowNode *const  FlowLeft;
@@ -1169,7 +1210,7 @@ IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNod
 
     const auto leftFlowComponents = GetWideComponents(AS_TYPE(TFlowType, leftFlowNode));
     const ui32 rawJoinKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
-    
+
 
     const auto flowLeft = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 0));
     IComputationWideFlowNode* flowRight = nullptr;
@@ -1233,7 +1274,7 @@ IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFacto
 
 IComputationNode* WrapGraceSelfJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
-    
+
     return WrapGraceJoinCommon(callable, ctx, true, HasSpillingFlag(callable));
 }
 

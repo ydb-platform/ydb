@@ -30,6 +30,7 @@ END()
 
 RECURSE(
     arrow
+    yt_arrow_converter_interface
 )
 
 RECURSE_FOR_TESTS(

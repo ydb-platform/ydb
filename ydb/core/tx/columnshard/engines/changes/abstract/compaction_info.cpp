@@ -5,7 +5,6 @@
 namespace NKikimr::NOlap {
 
 bool TPlanCompactionInfo::Finish() {
-    AFL_VERIFY(Count);
     return --Count == 0;
 }
 

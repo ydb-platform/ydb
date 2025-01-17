@@ -2,8 +2,7 @@
 
 namespace NYql {
 
-ui64 TDqIntegrationBase::Partition(const TDqSettings&, size_t, const TExprNode&,
-    TVector<TString>&, TString*, TExprContext&, bool) {
+ui64 TDqIntegrationBase::Partition(const TExprNode&, TVector<TString>&, TString*, TExprContext&, const TPartitionSettings& ) {
     return 0;
 }
 
@@ -22,7 +21,7 @@ TMaybe<ui64> TDqIntegrationBase::EstimateReadSize(ui64, ui32, const TVector<cons
     return Nothing();
 }
 
-TExprNode::TPtr TDqIntegrationBase::WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext&) {
+TExprNode::TPtr TDqIntegrationBase::WrapRead(const TExprNode::TPtr& read, TExprContext&, const TWrapReadSettings& ) {
     return read;
 }
 
@@ -75,7 +74,7 @@ void TDqIntegrationBase::FillTransformSettings(const TExprNode&, ::google::proto
 void TDqIntegrationBase::Annotate(const TExprNode&, THashMap<TString, TString>&) {
 }
 
-bool TDqIntegrationBase::PrepareFullResultTableParams(const TExprNode&, TExprContext&, THashMap<TString, TString>&, THashMap<TString, TString>&) {
+bool TDqIntegrationBase::PrepareFullResultTableParams(const TExprNode&, TExprContext&, THashMap<TString, TString>&, THashMap<TString, TString>&, const TMaybe<TColumnOrder>&) {
     return false;
 }
 
@@ -91,6 +90,9 @@ bool TDqIntegrationBase::FillSinkPlanProperties(const NNodes::TExprBase&, TMap<T
 }
 
 void TDqIntegrationBase::ConfigurePeepholePipeline(bool, const THashMap<TString, TString>&, TTransformationPipeline*) {
+}
+
+void TDqIntegrationBase::NotifyDqTimeout() {
 }
 
 } // namespace NYql

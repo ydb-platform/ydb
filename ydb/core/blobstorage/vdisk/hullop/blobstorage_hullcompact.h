@@ -323,7 +323,7 @@ namespace NKikimr {
         THullCompaction(THullCtxPtr hullCtx,
                         const std::shared_ptr<TLevelIndexRunTimeCtx> &rtCtx,
                         THugeBlobCtxPtr hugeBlobCtx,
-                        ui32 minREALHugeBlobInBytes,
+                        ui32 minHugeBlobInBytes,
                         TIntrusivePtr<TFreshSegment> freshSegment,
                         std::shared_ptr<TFreshSegmentSnapshot> freshSegmentSnap,
                         TBarriersSnapshot &&barriersSnap,
@@ -346,7 +346,7 @@ namespace NKikimr {
             , Hmp(CreateHandoffMap<TKey, TMemRec>(HullCtx, rtCtx->RunHandoff, rtCtx->SkeletonId))
             , Gcmp(CreateGcMap<TKey, TMemRec>(HullCtx, mergeElementsApproximation, allowGarbageCollection))
             , It(it)
-            , Worker(HullCtx, PDiskCtx, std::move(hugeBlobCtx), minREALHugeBlobInBytes, rtCtx->LevelIndex, it,
+            , Worker(HullCtx, PDiskCtx, std::move(hugeBlobCtx), minHugeBlobInBytes, rtCtx->LevelIndex, it,
                 static_cast<bool>(FreshSegment), firstLsn, lastLsn, restoreDeadline, partitionKey)
             , CompactionID(TAppData::RandomProvider->GenRand64())
             , SkeletonId(rtCtx->SkeletonId)

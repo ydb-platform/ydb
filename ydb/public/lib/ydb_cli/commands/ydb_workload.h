@@ -103,6 +103,7 @@ protected:
     THolder<NScheme::TSchemeClient> SchemeClient;
     THolder<NQuery::TQueryClient> QueryClient;
     int Type = 0;
+    bool DryRun = false;
 };
 
 class TWorkloadCommandInit final: public TWorkloadCommandBase {

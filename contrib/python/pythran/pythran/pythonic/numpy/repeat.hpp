@@ -3,17 +3,17 @@
 
 #include "pythonic/include/numpy/repeat.hpp"
 
+#include "pythonic/builtins/None.hpp"
+#include "pythonic/types/ndarray.hpp"
 #include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/numpy_conversion.hpp"
-#include "pythonic/types/ndarray.hpp"
-#include "pythonic/builtins/None.hpp"
 
 PYTHONIC_NS_BEGIN
 
 namespace numpy
 {
   template <class T, class pS>
-  types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+  types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
   repeat(types::ndarray<T, pS> const &expr, long repeats, long axis)
   {
     constexpr auto N = std::tuple_size<pS>::value;
@@ -25,7 +25,7 @@ namespace numpy
                                         1L, std::multiplies<long>());
     shape[axis] *= repeats;
 
-    types::ndarray<T, types::array<long, std::tuple_size<pS>::value>> out(
+    types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>> out(
         shape, builtins::None);
     auto out_iter = out.fbegin();
     for (auto iter = expr.fbegin(), end = expr.fend(); iter != end;
@@ -48,7 +48,7 @@ namespace numpy
   }
 
   NUMPY_EXPR_TO_NDARRAY0_IMPL(repeat);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

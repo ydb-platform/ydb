@@ -20,7 +20,7 @@ namespace builtins
     long find(types::str const &s, types::str const &value);
 
     DEFINE_FUNCTOR(pythonic::builtins::str, find);
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

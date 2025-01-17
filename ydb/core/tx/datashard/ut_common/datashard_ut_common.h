@@ -394,9 +394,9 @@ enum class EShadowDataMode {
     Enabled,
 };
 
-enum class EReplicationConsistency: int {
-    Strong = 1,
-    Weak = 2,
+enum class EConsistencyLevel: int {
+    Global = 1,
+    Row = 2,
 };
 
 struct TShardedTableOptions {
@@ -486,7 +486,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(std::optional<ui64>, ExecutorCacheSize, std::nullopt);
     TABLE_OPTION(std::optional<ui32>, DataTxCacheSize, std::nullopt);
     TABLE_OPTION(bool, Replicated, false);
-    TABLE_OPTION(std::optional<EReplicationConsistency>, ReplicationConsistency, std::nullopt);
+    TABLE_OPTION(std::optional<EConsistencyLevel>, ReplicationConsistencyLevel, std::nullopt);
     TABLE_OPTION(TAttributes, Attributes, {});
     TABLE_OPTION(bool, Sequences, false);
     TABLE_OPTION(bool, AllowSystemColumnNames, false);
@@ -597,6 +597,10 @@ void ApplyChanges(
         NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus expected =
             NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
 
+TRowVersion CommitWrites(
+        TTestActorRuntime& runtime,
+        const TVector<TString>& tables,
+        ui64 writeTxId);
 TRowVersion CommitWrites(
         Tests::TServer::TPtr server,
         const TVector<TString>& tables,
@@ -709,8 +713,14 @@ ui64 AsyncAlterTakeIncrementalBackup(
 ui64 AsyncAlterRestoreIncrementalBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TString& srcTableName,
-        const TString& dstTableName);
+        const TString& srcTablePath,
+        const TString& dstTablePath);
+
+ui64 AsyncAlterRestoreMultipleIncrementalBackups(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TVector<TString>& srcTablePaths,
+        const TString& dstTablePAth);
 
 struct TReadShardedTableState {
     TActorId Sender;
@@ -718,6 +728,12 @@ struct TReadShardedTableState {
     TString Result;
 };
 
+TReadShardedTableState StartReadShardedTable(
+        TTestActorRuntime& runtime,
+        const TString& path,
+        TRowVersion snapshot = TRowVersion::Max(),
+        bool pause = true,
+        bool ordered = true);
 TReadShardedTableState StartReadShardedTable(
         Tests::TServer::TPtr server,
         const TString& path,
@@ -729,6 +745,10 @@ void ResumeReadShardedTable(
         Tests::TServer::TPtr server,
         TReadShardedTableState& state);
 
+TString ReadShardedTable(
+        TTestActorRuntime& runtime,
+        const TString& path,
+        TRowVersion snapshot = TRowVersion::Max());
 TString ReadShardedTable(
         Tests::TServer::TPtr server,
         const TString& path,

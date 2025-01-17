@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/array2string.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
 #include "pythonic/types/str.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -18,7 +18,7 @@ namespace numpy
     oss << std::forward<E>(a);
     return oss.str();
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -63,9 +63,11 @@ PEERDIR(
     library/cpp/yson
     yql/essentials/core/pg_settings
     yql/essentials/core/sql_types
+    yql/essentials/core/issue
     yql/essentials/minikql/dom
     yql/essentials/parser/pg_catalog
     yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/public/issue
     yql/essentials/public/udf
     yql/essentials/public/udf/tz
     yql/essentials/types/binary_json

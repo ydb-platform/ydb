@@ -9,12 +9,13 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E, class S>
-  typename std::enable_if<std::is_scalar<E>::value,
-                          types::array<long, std::tuple_size<S>::value>>::type
+  typename std::enable_if<
+      std::is_scalar<E>::value,
+      types::array_tuple<long, std::tuple_size<S>::value>>::type
   unravel_index(E const &expr, S const &shape, types::str const &order = "C");
 
   DEFINE_FUNCTOR(pythonic::numpy, unravel_index);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

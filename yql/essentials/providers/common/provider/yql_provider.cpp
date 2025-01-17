@@ -225,6 +225,7 @@ NYson::EYsonFormat GetYsonFormat(const IDataProvider::TFillSettings& fillSetting
 TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> temporary;
+    TMaybeNode<TCoAtom> isBatch;
     TMaybeNode<TExprList> columns;
     TMaybeNode<TExprList> returningList;
     TMaybeNode<TCoAtomList> primaryKey;
@@ -347,6 +348,8 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
             } else if (name == "returning") {
                 YQL_ENSURE(tuple.Value().Maybe<TExprList>());
                 returningList = tuple.Value().Cast<TExprList>();
+            } else if (name == "is_batch") {
+                isBatch = Build<TCoAtom>(ctx, node.Pos()).Value("true").Done();
             } else {
                 other.push_back(tuple);
             }
@@ -380,6 +383,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TWriteTableSettings ret(otherSettings);
     ret.Mode = mode;
     ret.Temporary = temporary;
+    ret.IsBatch = isBatch;
     ret.Columns = columns;
     ret.ReturningList = returningList;
     ret.PrimaryKey = primaryKey;

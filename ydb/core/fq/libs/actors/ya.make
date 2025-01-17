@@ -44,6 +44,7 @@ PEERDIR(
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/events
     ydb/core/fq/libs/grpc
+    ydb/core/fq/libs/metrics
     ydb/core/fq/libs/private_client
     ydb/core/fq/libs/rate_limiter/utils
     ydb/core/fq/libs/result_formatter
@@ -72,7 +73,6 @@ PEERDIR(
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/provider/exec
     ydb/library/yql/providers/dq/worker_manager/interface
-    ydb/library/yql/providers/generic/connector/api/common
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/pq/cm_client

@@ -401,7 +401,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
 
                 auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, it->second, cleanedInputs, inputAliases);
 
-                auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/aggregate.yql");
+                auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/aggregate.yqls");
                 YQL_ENSURE(exportsPtr);
                 const auto& exports = exportsPtr->Symbols();
 
@@ -494,8 +494,9 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(TPositionHand
                     });
 
                     ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                    auto status = ExpandApply(traits, traits, ctx);
+                    auto status = ExpandApplyNoRepeat(traits, traits, ctx);
                     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+
                     switch (factoryIndex) {
                     case 0:
                         countAllTraits = traits;
@@ -818,7 +819,9 @@ TExprNode::TPtr NormalizeColumnOrder(const TExprNode::TPtr& node, const TColumnO
 }
 
 TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TColumnOrder>& columnOrders,
-    TExprNode::TListType children, TExprContext& ctx, TOptimizeContext& optCtx) {
+    TExprNode::TListType children, TExprContext& ctx, TOptimizeContext& optCtx)
+{
+    YQL_ENSURE(node.IsCallable({"UnionAllPositional", "UnionMergePositional"}));
     auto targetColumnOrder = optCtx.Types->LookupColumnOrder(node);
     YQL_ENSURE(targetColumnOrder);
 
@@ -828,7 +831,7 @@ TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TC
         child = NormalizeColumnOrder(child, childColumnOrder, *targetColumnOrder, ctx);
     }
 
-    auto res = ctx.NewCallable(node.Pos(), "UnionAll", std::move(children));
+    auto res = ctx.NewCallable(node.Pos(), node.IsCallable("UnionAllPositional") ? "UnionAll" : "UnionMerge", std::move(children));
     return KeepColumnOrder(res, node, ctx, *optCtx.Types);
 }
 
@@ -1020,7 +1023,7 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
 void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalExtTypes,
     TUsedColumns& usedColumns, TOptimizeContext& optCtx) {
     for (auto& x : usedColumns) {
-        TStringBuf alias;
+        TString alias;
         TStringBuf column = NTypeAnnImpl::RemoveAlias(x.first, alias);
 
         bool foundColumn = false;
@@ -1575,7 +1578,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
             for (auto e: leftIdxs) {
                 newIndexes.emplace(e);
             }
-            
+
             auto cartesian = JoinColumns(pos, current, with, nullptr, {}, ctx);
             if (joinType == "cross") {
                 stackInputIdxs.emplace_back(std::move(newIndexes));
@@ -2789,8 +2792,9 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
 
                     auto traits = ctx.ReplaceNodes(lambda->TailPtr(), replaces);
                     ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                    auto status = ExpandApply(traits, traits, ctx);
+                    auto status = ExpandApplyNoRepeat(traits, traits, ctx);
                     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+
                     value = traits;
                 } else {
                     ythrow yexception() << "Not supported function: " << name;
@@ -3222,7 +3226,7 @@ TExprNode::TPtr EnumerateForExtColumns(TPositionHandle pos, const TExprNode::TPt
 TExprNode::TPtr ApplyOffsetLimitOverEnumerated(TPositionHandle pos, const TExprNode::TPtr& list,
     const TExprNode::TPtr& offsetValue, const TExprNode::TPtr& limitValue, TExprContext& ctx) {
     auto arg = ctx.NewArgument(pos, "row");
-    auto member = ctx.NewCallable(pos, "SafeCast", { 
+    auto member = ctx.NewCallable(pos, "SafeCast", {
         ctx.NewCallable(pos, "Member", { arg, ctx.NewAtom(pos, "_yql_row_number") }),
         ctx.NewAtom(pos, "Int64")});
     auto int8type = ctx.NewCallable(pos, "PgType", { ctx.NewAtom(pos, "int8")});
@@ -3898,7 +3902,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
 
                 auto directions = BuildSortDirections(node->Pos(), sort, ctx);
                 if (!finalExtTypes) {
-                    list = BuildSort(node->Pos(), list, directions, sortLambdaRoot, sortLambda->HeadPtr(), ctx);    
+                    list = BuildSort(node->Pos(), list, directions, sortLambdaRoot, sortLambda->HeadPtr(), ctx);
                 } else if (onlyOneSetItem && finalExtTypes) {
                     finalSortDirections = directions;
                     finalSortLambda = sortLambda;

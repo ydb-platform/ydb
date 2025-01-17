@@ -170,7 +170,7 @@ void TListCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("path", &TThis::Path);
 
-    // NB: default value is an empty filter in contrast to GetCommand, for which it is the universal filter.
+    // NB: Default value is an empty filter in contrast to GetCommand, for which it is the universal filter.
     // Refer to YT-5543 for details.
     registrar.ParameterWithUniversalAccessor<TAttributeFilter>(
         "attributes",
@@ -596,6 +596,13 @@ void TMoveCommand::Register(TRegistrar registrar)
         "preserve_owner",
         [] (TThis* command) -> auto& {
             return command->Options.PreserveOwner;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_acl",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAcl;
         })
         .Optional(/*init*/ false);
 

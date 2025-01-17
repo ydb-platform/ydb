@@ -11,8 +11,8 @@ namespace NYT::NProfiling {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSimpleGauge
-    : public IGaugeImpl
-    , public ISummaryImpl
+    : public IGauge
+    , public ISummary
 {
 public:
     void Update(double value) override;
@@ -31,8 +31,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSimpleTimeGauge
-    : public ITimeGaugeImpl
-    , public ITimerImpl
+    : public ITimeGauge
+    , public ITimer
 {
 public:
     void Update(TDuration value) override;
@@ -51,7 +51,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSimpleCounter
-    : public ICounterImpl
+    : public ICounter
 {
 public:
     void Increment(i64 delta) override;
@@ -67,7 +67,7 @@ static_assert(sizeof(TSimpleCounter) == 32);
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSimpleTimeCounter
-    : public ITimeCounterImpl
+    : public ITimeCounter
 {
 public:
     void Add(TDuration delta) override;
@@ -84,7 +84,7 @@ static_assert(sizeof(TSimpleTimeCounter) == 32);
 
 template <class T>
 class TSimpleSummary
-    : public ISummaryImplBase<T>
+    : public ISummaryBase<T>
 {
 public:
     void Record(T value) override;
@@ -104,8 +104,8 @@ DECLARE_REFCOUNTED_CLASS(THistogram)
 std::vector<double> GenerateGenericBucketBounds();
 
 class THistogram
-    : public ISummaryImplBase<TDuration>
-    , public IHistogramImpl
+    : public ISummaryBase<TDuration>
+    , public IHistogram
 {
 public:
     explicit THistogram(const TSensorOptions& options);

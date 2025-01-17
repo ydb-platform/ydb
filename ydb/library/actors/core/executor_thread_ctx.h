@@ -11,8 +11,7 @@
 
 namespace NActors {
     class TGenericExecutorThread;
-    class TBasicExecutorPool;
-    class TIOExecutorPool;
+    class IExecutorPool;
 
     enum class EThreadState : ui64 {
         None,
@@ -123,7 +122,7 @@ namespace NActors {
     struct TExecutorThreadCtx : public TGenericExecutorThreadCtx {
         using TBase = TGenericExecutorThreadCtx;
 
-        TBasicExecutorPool *OwnerExecutorPool = nullptr;
+        IExecutorPool *OwnerExecutorPool = nullptr;
 
         void SetWork() {
             ExchangeState(EThreadState::Work);
@@ -186,7 +185,7 @@ namespace NActors {
             }
         };
 
-        std::atomic<TBasicExecutorPool*> ExecutorPools[MaxPoolsForSharedThreads];
+        std::atomic<IExecutorPool*> ExecutorPools[MaxPoolsForSharedThreads];
         std::atomic<i64> RequestsForWakeUp = 0;
         ui32 NextPool = 0;
 

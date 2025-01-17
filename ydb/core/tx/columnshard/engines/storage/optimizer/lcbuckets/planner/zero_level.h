@@ -9,6 +9,8 @@ private:
     using TBase = IPortionsLevel;
     const TLevelCounters LevelCounters;
     const TDuration DurationToDrop;
+    const ui64 ExpectedBlobsSize;
+    const ui64 PortionsCountAvailable;
     class TOrderedPortion {
     private:
         YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
@@ -79,7 +81,7 @@ private:
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
         for (auto&& i : Portions) {
-            if (locksManager->IsLocked(*i.GetPortion())) {
+            if (locksManager->IsLocked(*i.GetPortion(), NDataLocks::ELockCategory::Compaction)) {
                 return true;
             }
         }
@@ -91,11 +93,13 @@ private:
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 
 public:
-    TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters, const TDuration durationToDrop)
+    TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters,
+        const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable)
         : TBase(levelIdx, nextLevel)
         , LevelCounters(levelCounters)
         , DurationToDrop(durationToDrop)
-    {
+        , ExpectedBlobsSize(expectedBlobsSize)
+        , PortionsCountAvailable(portionsCountAvailable) {
     }
 };
 

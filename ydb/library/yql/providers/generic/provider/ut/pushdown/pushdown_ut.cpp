@@ -74,7 +74,7 @@ struct TFakeDatabaseResolver: public IDatabaseAsyncResolver {
 };
 
 struct TFakeGenericClient: public NConnector::IClient {
-    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request) {
+    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request, TDuration) override {
         UNIT_ASSERT_VALUES_EQUAL(request.table(), "test_table");
         NConnector::TResult<NConnector::NApi::TDescribeTableResponse> result;
         auto& resp = result.Response.emplace();
@@ -123,7 +123,7 @@ struct TFakeGenericClient: public NConnector::IClient {
         return NThreading::MakeFuture<NConnector::TDescribeTableAsyncResult::value_type>(std::move(result));
     }
 
-    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request) {
+    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
         try {
             throw std::runtime_error("ListSplits unimplemented");
@@ -132,7 +132,7 @@ struct TFakeGenericClient: public NConnector::IClient {
         }
     }
 
-    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request) {
+    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
         try {
             throw std::runtime_error("ReadSplits unimplemented");
@@ -162,7 +162,7 @@ public:
         UNIT_ASSERT(genericDataSource != Types->DataSourceMap.end());
         auto dqIntegration = genericDataSource->second->GetDqIntegration();
         UNIT_ASSERT(dqIntegration);
-        auto newRead = dqIntegration->WrapRead(TDqSettings(), input.Ptr(), ctx);
+        auto newRead = dqIntegration->WrapRead(input.Ptr(), ctx, IDqIntegration::TWrapReadSettings{});
         BuildSettings(newRead, dqIntegration, ctx);
         return newRead;
     }
@@ -230,13 +230,13 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
 
             auto* cluster = GatewaysCfg.MutableGeneric()->AddClusterMapping();
             cluster->SetName("test_cluster");
-            cluster->SetKind(NConnector::NApi::POSTGRESQL);
+            cluster->SetKind(NYql::EGenericDataSourceKind::POSTGRESQL);
             cluster->MutableEndpoint()->set_host("host");
             cluster->MutableEndpoint()->set_port(42);
             cluster->MutableCredentials()->mutable_basic()->set_username("user");
             cluster->MutableCredentials()->mutable_basic()->set_password("password");
             cluster->SetDatabaseName("database");
-            cluster->SetProtocol(NConnector::NApi::NATIVE);
+            cluster->SetProtocol(NYql::EGenericProtocol::NATIVE);
         }
 
         GenericState = MakeIntrusive<TGenericState>(

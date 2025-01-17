@@ -23,7 +23,7 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -75,7 +75,7 @@ public:
             BIND_NO_PROPAGATE(&TServer::Shutdown, MakeWeak(this), /*graceful*/ true),
             /*priority*/ GrpcServerShutdownPriority))
         , LibraryLock_(TDispatcher::Get()->GetLibraryLock())
-        , Profiler_(GrpcServerProfiler.WithTag("name", Config_->ProfilingName))
+        , Profiler_(GrpcServerProfiler().WithTag("name", Config_->ProfilingName))
         , CompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue()->UnwrapUnsafe())
     {
         Profiler_.AddFuncGauge("/call_handler_count", MakeStrong(this), [this] {

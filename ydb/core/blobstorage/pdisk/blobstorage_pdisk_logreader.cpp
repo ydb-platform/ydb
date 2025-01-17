@@ -797,12 +797,30 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
             P_LOG(PRI_NOTICE, LR018, SelfInfo() << " In ProcessSectorSet got !restorator.GoodSectorFlags",
                     (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
         } else {
-           Y_VERIFY_S(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx, SelfInfo()
-                   << " File# " << __FILE__
-                   << " Line# " << __LINE__
-                   << " LogEndChunkIdx# " << LogEndChunkIdx
-                   << " LogEndSectorIdx# " << LogEndSectorIdx);
-            if (!(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx)) {
+            bool outsideLogEnd = ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx;
+            
+            if (!outsideLogEnd) {
+                // If read invalid data from the log (but not outside this owner's log bounds), check if the owner is on quarantine.
+                TGuard<TMutex> guard(PDisk->StateMutex);
+                TOwnerData &ownerData = PDisk->OwnerData[Owner];
+
+                if (ownerData.OnQuarantine) {
+                    P_LOG(PRI_WARN, LR019, SelfInfo()
+                        << " In ProcessSectorSet got !restorator.GoodSectorFlags with owner on quarantine",
+                            (LogEndChunkIdx, LogEndChunkIdx), (LogEndSectorIdx, LogEndSectorIdx));
+                    ReplyOk();
+                    return true;
+                }
+            }
+
+            Y_VERIFY_S(outsideLogEnd, SelfInfo()
+                    << " File# " << __FILE__
+                    << " Line# " << __LINE__
+                    << " LogEndChunkIdx# " << LogEndChunkIdx
+                    << " LogEndSectorIdx# " << LogEndSectorIdx);
+
+            if (outsideLogEnd) {
+                // It's ok.
                 P_LOG(PRI_WARN, LR004, SelfInfo()
                     << " In ProcessSectorSet got !restorator.GoodSectorFlags outside the LogEndSector",
                         (LogEndChunkIdx, LogEndChunkIdx), (LogEndSectorIdx, LogEndSectorIdx));
@@ -1111,6 +1129,10 @@ void TLogReader::ReplyOk() {
     Result->Status = NKikimrProto::OK;
     Result->NextPosition = IsInitial ? LastGoodToWriteLogPosition : TLogPosition::Invalid();
     Result->IsEndOfLog = true;
+    if (IsInitial) {
+        Result->LastGoodChunkIdx = ChunkIdx; 
+        Result->LastGoodSectorIdx = SectorIdx; 
+    }
     Reply();
 }
 

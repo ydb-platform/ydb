@@ -63,19 +63,21 @@ public:
     ui32 ConsumerCount = 0;
     bool Direct = false;
     TString ConsumerPrefix;
-    size_t MessageSize;
-    size_t MessageRate;
-    size_t ByteRate;
+    size_t MessageSizeBytes;
+    size_t MessagesPerSec;
+    size_t BytesPerSec;
     ui32 Codec;
     TString TableName;
     ui32 TablePartitionCount = 1;
     bool UseTransactions = false;
-    size_t CommitPeriod = 10;
+    size_t CommitPeriodSeconds = 1;
+    size_t TxCommitIntervalMs = 0;
     size_t CommitMessages = 1'000'000;
-    bool OnlyTopicInTx = false;
+    bool OnlyTopicInTx = true;
     bool OnlyTableInTx = false;
-    bool UseTableSelect = true;
+    bool UseTableSelect = false;
     bool ReadWithoutConsumer = false;
+    bool UseCpuTimestamp = false;
 
 protected:
     void CreateTopic(const TString& database,

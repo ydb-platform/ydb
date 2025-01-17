@@ -184,6 +184,7 @@ void TReadQueryResultCommand::DoExecute(ICommandContextPtr context)
         context->GetOutputFormat(),
         rowset->GetNameTable(),
         {rowset->GetSchema()},
+        {Options.Columns},
         context->Request().OutputStream,
         /*enableContextSaving*/ false,
         New<TControlAttributesConfig>(),

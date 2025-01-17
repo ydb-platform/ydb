@@ -6,8 +6,6 @@ SPLIT_FACTOR(20)
 
 SIZE(MEDIUM)
 
-TIMEOUT(600)
-
 SRCS(
     defaults.h
     gen_restarts.cpp

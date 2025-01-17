@@ -9,15 +9,16 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  types::ndarray<long, types::array<long, 1>> argsort(E const &expr,
-                                                      types::none_type, types::none_type)
+  types::ndarray<long, types::array_tuple<long, 1>>
+  argsort(E const &expr, types::none_type, types::none_type)
   {
     auto out = functor::array{}(expr).flat();
     return argsort(out);
   }
 
   template <class T, class pS, class Sorter>
-  types::ndarray<long, pS> _argsort(types::ndarray<T, pS> const &a, long axis, Sorter sorter)
+  types::ndarray<long, pS> _argsort(types::ndarray<T, pS> const &a, long axis,
+                                    Sorter sorter)
   {
     constexpr auto N = std::tuple_size<pS>::value;
     if (axis < 0)
@@ -36,7 +37,7 @@ namespace numpy
         std::iota(iter_indices, iter_indices + step, 0L);
         // sort the index using the value from a
         sorter(iter_indices, iter_indices + step,
-                [a_base](long i1, long i2) { return a_base[i1] < a_base[i2]; });
+               [a_base](long i1, long i2) { return a_base[i1] < a_base[i2]; });
       }
     } else {
       auto out_shape = sutils::getshape(a);
@@ -54,9 +55,9 @@ namespace numpy
       for (long i = 0; i < n; i++) {
         auto a_base = a.fbegin() + ith;
         sorter(buffer, buffer + buffer_size,
-                [a_base, stepper](long i1, long i2) {
-                  return a_base[i1 * stepper] < a_base[i2 * stepper];
-                });
+               [a_base, stepper](long i1, long i2) {
+                 return a_base[i1 * stepper] < a_base[i2 * stepper];
+               });
 
         for (long j = 0; j < buffer_size; ++j)
           indices.buffer[ith + j * stepper] = buffer[j];
@@ -72,20 +73,23 @@ namespace numpy
   }
 
   template <class T, class pS>
-  types::ndarray<long, pS> argsort(types::ndarray<T, pS> const &a, long axis, types::none_type) {
+  types::ndarray<long, pS> argsort(types::ndarray<T, pS> const &a, long axis,
+                                   types::none_type)
+  {
     return _argsort(a, axis, ndarray::quicksorter());
   }
 
   template <class T, class pS>
-  types::ndarray<long, pS> argsort(types::ndarray<T, pS> const &a, long axis, types::str const& kind)
+  types::ndarray<long, pS> argsort(types::ndarray<T, pS> const &a, long axis,
+                                   types::str const &kind)
   {
-      if (kind == "mergesort")
-        return _argsort(a, axis, ndarray::mergesorter());
-      else if (kind == "heapsort")
-        return _argsort(a, axis, ndarray::heapsorter());
-      else if (kind == "stable")
-        return _argsort(a, axis, ndarray::stablesorter());
-      return _argsort(a, axis, ndarray::quicksorter());
+    if (kind == "mergesort")
+      return _argsort(a, axis, ndarray::mergesorter());
+    else if (kind == "heapsort")
+      return _argsort(a, axis, ndarray::heapsorter());
+    else if (kind == "stable")
+      return _argsort(a, axis, ndarray::stablesorter());
+    return _argsort(a, axis, ndarray::quicksorter());
   }
 
   NUMPY_EXPR_TO_NDARRAY0_IMPL(argsort);

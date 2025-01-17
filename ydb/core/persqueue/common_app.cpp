@@ -10,7 +10,7 @@ THtmlPart::THtmlPart(IOutputStream& str)
 THtmlPart::~THtmlPart() {
 }
 
-THtmlAppPage::THtmlAppPage(IOutputStream& str, const TString& title)
+THtmlAppPage::THtmlAppPage(IOutputStream& str, const TString& /*title*/)
     : THtmlPart(str) {
     Str << R"(
     <STYLE>

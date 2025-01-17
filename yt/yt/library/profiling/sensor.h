@@ -9,7 +9,7 @@
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 #include <library/cpp/yt/memory/weak_ptr.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
@@ -52,7 +52,7 @@ private:
     friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    ICounterImplPtr Counter_;
+    ICounterPtr Counter_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -69,7 +69,7 @@ private:
     friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    ITimeCounterImplPtr Counter_;
+    ITimeCounterPtr Counter_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -86,7 +86,7 @@ private:
     friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    IGaugeImplPtr Gauge_;
+    IGaugePtr Gauge_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -103,7 +103,7 @@ private:
     friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    ITimeGaugeImplPtr Gauge_;
+    ITimeGaugePtr Gauge_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -119,7 +119,7 @@ private:
     template <bool>
     friend class NDetail::TProfiler;
 
-    ISummaryImplPtr Summary_;
+    ISummaryPtr Summary_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -135,7 +135,7 @@ private:
     template <bool>
     friend class NDetail::TProfiler;
 
-    ITimerImplPtr Timer_;
+    ITimerPtr Timer_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -174,7 +174,7 @@ private:
     template <bool>
     friend class NDetail::TProfiler;
 
-    IHistogramImplPtr Histogram_;
+    IHistogramPtr Histogram_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -191,7 +191,7 @@ private:
     friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    IHistogramImplPtr Histogram_;
+    IHistogramPtr Histogram_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -252,12 +252,12 @@ template <bool UseWeakPtr>
 class TRegistryHolderBase
 {
 public:
-    explicit TRegistryHolderBase(const IRegistryImplPtr& impl = nullptr);
+    explicit TRegistryHolderBase(const IRegistryPtr& impl = nullptr);
 
-    const IRegistryImplPtr& GetRegistry() const;
+    const IRegistryPtr& GetRegistry() const;
 
 private:
-    IRegistryImplPtr Impl_;
+    IRegistryPtr Impl_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -266,12 +266,12 @@ template <>
 class TRegistryHolderBase<true>
 {
 public:
-    explicit TRegistryHolderBase(const IRegistryImplPtr& impl = nullptr);
+    explicit TRegistryHolderBase(const IRegistryPtr& impl = nullptr);
 
-    IRegistryImplPtr GetRegistry() const;
+    IRegistryPtr GetRegistry() const;
 
 private:
-    TWeakPtr<IRegistryImpl> Impl_;
+    TWeakPtr<IRegistry> Impl_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -301,7 +301,7 @@ public:
     static constexpr auto DefaultNamespace = "yt";
 
     TProfiler(
-        const IRegistryImplPtr& impl,
+        const IRegistryPtr& impl,
         const std::string& prefix,
         const std::string& _namespace = DefaultNamespace);
 
@@ -309,7 +309,7 @@ public:
         const std::string& prefix,
         const std::string& _namespace = DefaultNamespace,
         const TTagSet& tags = {},
-        const IRegistryImplPtr& impl = nullptr,
+        const IRegistryPtr& impl = nullptr,
         TSensorOptions options = {});
 
     TProfiler WithPrefix(const std::string& prefix) const;

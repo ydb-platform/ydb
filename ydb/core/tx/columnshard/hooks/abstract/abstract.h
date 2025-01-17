@@ -1,10 +1,11 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
-#include <ydb/core/tx/tiering/snapshot.h>
-#include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
@@ -24,6 +25,7 @@ namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IBlobsGCAction;
 class TPortionInfo;
+class TDataAccessorsResult;
 namespace NIndexes {
 class TIndexMetaContainer;
 }
@@ -61,6 +63,9 @@ public:
     };
 
 protected:
+    virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {
+        return {};
+    }
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return;
     }
@@ -85,7 +90,10 @@ protected:
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
 
-    virtual TDuration DoGetPingCheckPeriod(const TDuration defaultValue) const {
+    virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const {
         return defaultValue;
     }
     virtual TDuration DoGetOverridenGCPeriod(const TDuration defaultValue) const {
@@ -97,10 +105,7 @@ protected:
     virtual TDuration DoGetActualizationTasksLag(const TDuration defaultValue) const {
         return defaultValue;
     }
-    virtual ui64 DoGetReduceMemoryIntervalLimit(const ui64 defaultValue) const {
-        return defaultValue;
-    }
-    virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 defaultValue) const {
+    virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 defaultValue) const {
         return defaultValue;
     }
     virtual ui64 DoGetReadSequentiallyBufferSize(const ui64 defaultValue) const {
@@ -109,7 +114,7 @@ protected:
     virtual ui64 DoGetSmallPortionSizeDetector(const ui64 defaultValue) const {
         return defaultValue;
     }
-    virtual TDuration DoGetReadTimeoutClean(const TDuration defaultValue) const {
+    virtual TDuration DoGetMaxReadStaleness(const TDuration defaultValue) const {
         return defaultValue;
     }
     virtual TDuration DoGetGuaranteeIndexationInterval(const TDuration defaultValue) const {
@@ -130,6 +135,12 @@ protected:
     virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration defaultValue) const {
         return defaultValue;
     }
+    virtual ui64 DoGetMemoryLimitScanPortion(const ui64 defaultValue) const {
+        return defaultValue;
+    }
+    virtual const NOlap::NSplitter::TSplitSettings& DoGetBlobSplitSettings(const NOlap::NSplitter::TSplitSettings& defaultValue) const {
+        return defaultValue;
+    }
 
 private:
     inline static const NKikimrConfig::TColumnShardConfig DefaultConfig = {};
@@ -142,15 +153,31 @@ private:
     }
 
 public:
+    const NOlap::NSplitter::TSplitSettings& GetBlobSplitSettings(
+        const NOlap::NSplitter::TSplitSettings& defaultValue = Default<NOlap::NSplitter::TSplitSettings>()) {
+        return DoGetBlobSplitSettings(defaultValue);
+    }
+
     virtual void OnRequestTracingChanges(
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }
 
+    virtual NKikimrProto::EReplyStatus OverrideBlobPutResultOnWrite(const NKikimrProto::EReplyStatus originalStatus) const {
+        return originalStatus;
+    }
+
+    ui64 GetMemoryLimitScanPortion() const {
+        return DoGetMemoryLimitScanPortion(GetConfig().GetMemoryLimitScanPortion());
+    }
     virtual bool CheckPortionForEvict(const NOlap::TPortionInfo& portion) const;
 
-    TDuration GetPingCheckPeriod() const {
-        const TDuration defaultValue = 0.6 * GetReadTimeoutClean();
-        return DoGetPingCheckPeriod(defaultValue);
+    TDuration GetStalenessLivetimePing(const TDuration defValue) const {
+        const auto val = DoGetStalenessLivetimePing();
+        if (!val || defValue < *val) {
+            return defValue;
+        } else {
+            return *val;
+        }
     }
 
     virtual bool IsBackgroundEnabled(const EBackground /*id*/) const {
@@ -168,6 +195,11 @@ public:
     virtual void OnSelectShardingFilter() {
     }
 
+    ui64 GetLimitForPortionsMetadataAsk() const {
+        const ui64 defaultValue = GetConfig().GetLimitForPortionsMetadataAsk();
+        return DoGetLimitForPortionsMetadataAsk(defaultValue);
+    }
+
     TDuration GetCompactionActualizationLag() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetCompactionActualizationLagMs());
         return DoGetCompactionActualizationLag(defaultValue);
@@ -183,13 +215,9 @@ public:
         return DoGetActualizationTasksLag(defaultValue);
     }
 
-    ui64 GetReduceMemoryIntervalLimit() const {
-        const ui64 defaultValue = NOlap::TGlobalLimits::DefaultReduceMemoryIntervalLimit;
-        return DoGetReduceMemoryIntervalLimit(defaultValue);
-    }
-    ui64 GetRejectMemoryIntervalLimit() const {
-        const ui64 defaultValue = NOlap::TGlobalLimits::DefaultRejectMemoryIntervalLimit;
-        return DoGetRejectMemoryIntervalLimit(defaultValue);
+    ui64 GetMetadataRequestSoftMemoryLimit() const {
+        const ui64 defaultValue = 100 * (1 << 20);
+        return DoGetMetadataRequestSoftMemoryLimit(defaultValue);
     }
     virtual bool NeedForceCompactionBacketsConstruction() const {
         return false;
@@ -216,6 +244,8 @@ public:
     virtual void OnStatisticsUsage(const NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) {
     }
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {
+    }
+    virtual void OnTieringMetadataActualized() {
     }
     virtual void OnMaxValueUsage() {
     }
@@ -251,9 +281,16 @@ public:
     }
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
-    TDuration GetReadTimeoutClean() const {
+    TDuration GetMaxReadStaleness() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
-        return DoGetReadTimeoutClean(defaultValue);
+        return DoGetMaxReadStaleness(defaultValue);
+    }
+    TDuration GetMaxReadStalenessInMem() const {
+        return 0.9 * GetMaxReadStaleness();
+    }
+    TDuration GetUsedSnapshotLivetime() const {
+        const TDuration defaultValue = 0.6 * GetMaxReadStaleness();
+        return DoGetUsedSnapshotLivetime(defaultValue);
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
         return EOptimizerCompactionWeightControl::Force;
@@ -274,10 +311,8 @@ public:
         return nullptr;
     }
 
-    virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const {
-        static std::shared_ptr<NColumnShard::NTiers::TConfigsSnapshot> result =
-            std::make_shared<NColumnShard::NTiers::TConfigsSnapshot>(TInstant::Now());
-        return result;
+    virtual THashMap<TString, NColumnShard::NTiers::TTierConfig> GetOverrideTierConfigs() const {
+        return {};
     }
 
     virtual void OnSwitchToWork(const ui64 tabletId) {
@@ -287,6 +322,13 @@ public:
     virtual void OnCleanupActors(const ui64 tabletId) {
         Y_UNUSED(tabletId);
     }
+
+    virtual void OnAfterLocalTxCommitted(const NActors::TActorContext& ctx, const NColumnShard::TColumnShard& shard, const TString& txInfo) {
+        Y_UNUSED(ctx);
+        Y_UNUSED(shard);
+        Y_UNUSED(txInfo);
+    }
+
 };
 
 class TControllers {

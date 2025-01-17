@@ -53,30 +53,6 @@ TBulkDataGeneratorList TTpcdsWorkloadDataInitializerGenerator::DoGetBulkInitialD
     return TBulkDataGeneratorList(gens.begin(), gens.end());
 }
 
-TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TPositions TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::CalcCountToGenerate(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum, bool useState) {
-    static const TSet<ui32> allowedModules{1, 2, 4};
-    TPositions result;
-    const auto* tdef = getTdefsByNumber(tableNum);
-    if (!tdef) {
-        return result;
-    }
-    split_work(tableNum, &result.FirstRow, &result.Count);
-    if (useState && owner.StateProcessor && owner.StateProcessor->GetState().contains(tdef->name)) {
-        result.Position = owner.StateProcessor->GetState().at(tdef->name).Position;
-
-        //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
-        while (result.Position && !allowedModules.contains((result.FirstRow + result.Position) % 6)) {
-            --result.Position;
-        }
-    }
-    //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
-    while (result.FirstRow > 1 && !allowedModules.contains((result.FirstRow + result.Position) % 6)) {
-        --result.FirstRow;
-        ++result.Count;
-    }
-    return result;
-}
-
 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::TContext(const TBulkDataGenerator& owner, int tableNum)
     : Owner(owner)
     , TableNum(tableNum)
@@ -95,25 +71,27 @@ TStringBuilder& TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TCon
 }
 
 void TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::AppendPortions(TDataPortions& result) {
-    const auto name = getTdefsByNumber(TableNum)->name;
+    const auto* tdef = getTdefsByNumber(TableNum);
+    const auto name = tdef->name;
     const auto path = Owner.GetFullTableName(name);
+    auto* stateProcessor = (tdef->flags & FL_CHILD) ? nullptr : Owner.Owner.StateProcessor.Get();
     if (Builder) {
         Builder->EndList();
         result.push_back(MakeIntrusive<TDataPortionWithState>(
-            Owner.Owner.StateProcessor.Get(),
+            stateProcessor,
             path,
             name,
             Builder->Build(),
-            Start - 1,
+            Start - Owner.FirstRow,
             Count
         ));
     } else if (Csv) {
         result.push_back(MakeIntrusive<TDataPortionWithState>(
-            Owner.Owner.StateProcessor.Get(),
+            stateProcessor,
             path,
             name,
             TDataPortion::TCsv(std::move(Csv), TWorkloadGeneratorBase::PsvFormatString),
-            Start - 1,
+            Start - Owner.FirstRow,
             Count
         ));
     }
@@ -124,10 +102,41 @@ TString TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::GetFullTable
 }
 
 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum)
-    : IBulkDataGenerator(getTdefsByNumber(tableNum)->name, CalcCountToGenerate(owner, tableNum, true).Count)
+    : IBulkDataGenerator(getTdefsByNumber(tableNum)->name, 0)
     , TableNum(tableNum)
     , Owner(owner)
-{}
+{
+    static const TSet<ui32> allowedModules{1, 2, 4};
+    const auto* tdef = getTdefsByNumber(TableNum);
+    if (!tdef) {
+        return;
+    }
+    ds_key_t rowsCount;
+    split_work(TableNum, &FirstRow, &rowsCount);
+    //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
+    while (FirstRow > 1 && !allowedModules.contains(FirstRow % 6)) {
+        --FirstRow;
+        ++rowsCount;
+    }
+    if (owner.StateProcessor) {
+        if (const auto* state = MapFindPtr(Owner.StateProcessor->GetState(), tdef->name)) {
+            StartPosition = state->Position;
+
+            //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
+            while (StartPosition && !allowedModules.contains((1 + StartPosition) % 6)) {
+                --StartPosition;
+            }
+            if (StartPosition) {
+                FirstPortion = MakeIntrusive<TDataPortion>(
+                    GetFullTableName(tdef->name),
+                    TDataPortion::TSkip(),
+                    StartPosition
+                );
+            }
+        }
+    }
+    Size = rowsCount;
+}
 
 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::GenerateDataPortion() {
     TDataPortions result;
@@ -143,30 +152,24 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpcds
     }
 
     auto g = Guard(Lock);
-    auto positions = CalcCountToGenerate(Owner, TableNum, !Generated);
     if (!Generated) {
-        Generated = positions.Position;
-        result.push_back(MakeIntrusive<TDataPortion>(
-            GetFullTableName(tdef->name),
-            TDataPortion::TSkip(),
-            Generated
-        ));
-        if (const ui32 toSkip = positions.FirstRow + positions.Position - 1) {
+        Generated = StartPosition;
+        if (const auto toSkip = FirstRow + StartPosition - 1) {
             row_skip(TableNum, toSkip);
             if (tdef->flags & FL_PARENT) {
                 row_skip(tdef->nParam, toSkip);
             }
         }
-        if (tdef->flags & FL_SMALL) {
-            resetCountCount();
-        }
+    }
+    if (FirstPortion) {
+        result.emplace_back(std::move(FirstPortion));
     }
     const auto count = GetSize() > Generated ? std::min(ui64(GetSize() - Generated), Owner.Params.BulkSize) : 0;
     if (!count) {
         return result;
     }
     ctxs.front().SetCount(count);
-    ctxs.front().SetStart(positions.FirstRow + Generated);
+    ctxs.front().SetStart(FirstRow + Generated);
     Generated += count;
     GenerateRows(ctxs, std::move(g));
     for(auto& ctx: ctxs) {

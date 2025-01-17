@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_DISPATCH_INDEX_HPP
 #define PYTHONIC_INCLUDE_DISPATCH_INDEX_HPP
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/include/operator_/indexOf.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 

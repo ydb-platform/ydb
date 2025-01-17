@@ -1,0 +1,13 @@
+RESOURCES_LIBRARY()
+
+TOOLCHAIN(mold)
+VERSION(2.34.1)
+
+DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(MOLD_ROOT mold.json)
+
+LDFLAGS(
+    -fuse-ld=mold
+    --ld-path=${MOLD_ROOT_RESOURCE_GLOBAL}/bin/ld.mold
+)
+
+END()

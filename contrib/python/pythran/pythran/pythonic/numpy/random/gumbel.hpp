@@ -28,9 +28,9 @@ namespace numpy
     }
 
     inline auto gumbel(double loc, double scale, long size)
-        -> decltype(gumbel(loc, scale, types::array<long, 1>{{size}}))
+        -> decltype(gumbel(loc, scale, types::array_tuple<long, 1>{{size}}))
     {
-      return gumbel(loc, scale, types::array<long, 1>{{size}});
+      return gumbel(loc, scale, types::array_tuple<long, 1>{{size}});
     }
 
     inline double gumbel(double loc, double scale, types::none_type d)

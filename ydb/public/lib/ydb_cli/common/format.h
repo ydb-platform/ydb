@@ -109,6 +109,7 @@ public:
         YDB_ACCESSOR(EDataFormat, Format, EDataFormat::Pretty);
         YDB_ACCESSOR(std::function<bool()>, IsInterrupted, []() { return false; });
         YDB_ACCESSOR(size_t, MaxWidth, 0);
+        YDB_ACCESSOR(size_t, MaxRowsCount, 0);
         YDB_FLAG_ACCESSOR(CsvWithHeader, false);
         YDB_READONLY(IOutputStream*, Output, &Cout);
     public:

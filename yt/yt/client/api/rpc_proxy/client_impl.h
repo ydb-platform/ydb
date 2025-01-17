@@ -130,9 +130,9 @@ public:
         const TAlterReplicationCardOptions& options = {}) override;
 
     // Distributed table client
-    TFuture<ITableWriterPtr> CreateFragmentTableWriter(
-        const TFragmentWriteCookiePtr& cookie,
-        const TFragmentTableWriterOptions& options) override;
+    TFuture<ITableFragmentWriterPtr> CreateTableFragmentWriter(
+        const TSignedWriteFragmentCookiePtr& cookie,
+        const TTableFragmentWriterOptions& options) override;
 
     // Queues.
     TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
@@ -570,7 +570,7 @@ public:
 
     // Shuffle service client
     TFuture<TShuffleHandlePtr> StartShuffle(
-        const TString& account,
+        const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) override;

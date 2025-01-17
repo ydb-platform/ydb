@@ -101,6 +101,16 @@ Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consist
 
 The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transaction-implementation).
 
+### Interactive transactions {#interactive-transaction}
+
+The term **interactive transactions** refers to transactions that are split into multiple queries and involve data processing by an application between these queries. For example:
+
+1. Select some data.
+1. Process the selected data in the application.
+1. Update some data in the database.
+1. Commit the transaction in a separate query.
+
+
 ### Multi-version concurrency control {#mvcc}
 
 [**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](mvcc.md).
@@ -155,6 +165,20 @@ A **column family** or **column group** is a feature that allows storing a subse
 
 **Time to live** or **TTL** is a mechanism for automatically removing old rows from a table asynchronously in the background. It is explained in a separate article [{#T}](ttl.md).
 
+### View {#view}
+
+A **view** logically represents a table formed by a given query. The view itself contains no data. The content of a view is generated every time you SELECT from it. Thus, any changes in the underlying tables are reflected immediately in the view.
+
+There are user-defined and system-defined views.
+
+#### User-defined view {#user-view}
+
+A **user-defined view** is created by a user with the [{#T}](../yql/reference/syntax/create-view.md) statement.  For more information, see [{#T}](../concepts/datamodel/view.md).
+
+#### System view {#system-view}
+
+A **system view** is for monitoring the DB status. System views are located in the .sys directory in the root of the database tree. It is explained in a separate article [{#T}](../dev/system-views.md).
+
 ### Topic {#topic}
 
 A **topic** is a persistent queue that can be used for reliable asynchronous communications between various systems via message passing. {{ ydb-short-name }} provides the infrastructure to ensure "exactly once" semantics in such communications, which ensures that there are both no lost messages and no accidental duplicates.
@@ -198,6 +222,14 @@ A **consumer** is an entity that reads messages from a topic.
 #### Replica object {#replica-object}
 
 **Replica object** is a mirror copy of the replicated object, automatically created by an [asynchronous replication instance](#async-replication-instance). Replica objects are typically read-only.
+
+### Coordination node {#coordination-node}
+
+A **coordination node** is a schema object that allows client applications to create semaphores for coordinating their actions. Learn more about [coordination nodes](./datamodel/coordination-node.md).
+
+#### Semaphore {#semaphore}
+
+A **semaphore** is an object within a [coordination node](#coordination-node) that provides a synchronization mechanism for distributed applications. Semaphores can be persistent or ephemeral and support operations like creation, acquisition, release, and monitoring. Learn more about [semaphores in {{ ydb-short-name }}](./datamodel/coordination-node.md#semaphore).
 
 ### YQL {#yql}
 
@@ -254,6 +286,20 @@ The **actor system interconnect** or **interconnect** is the [cluster's](#cluste
 #### Local {#local}
 
 A **Local** is an [actor service](#actor-service) running on each [node](#node). It directly manages the [tablets](#tablet) on its node and interacts with [Hive](#hive). It registers with Hive and receives commands to launch tablets.
+
+#### Actor system pool {#actor-system-pool}
+
+The **actor system pool** is a [thread pool](https://en.wikipedia.org/wiki/Thread_pool) used to run [actors](#actor). Each [node](#node) operates multiple pools to coarsely separate resources between different types of activities. A typical set of pools includes:
+
+- **System**: A pool that handles internal operations within {{ ydb-short-name }} node. It serves system [tablets](#tablet), [state storage](#state-storage), [distributed storage](#distributed-storage) I/O, and so on.
+
+- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [KQP](#kqp).
+
+- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [KQP](#kqp) background operations like backups, data compaction, and garbage collection.
+
+- **IO**: A pool for tasks involving blocking operations, such as authentication or writing logs to files.
+
+- **IC**: A pool for [interconnect](#actor-system-interconnect), responsible for system calls related to data transfers across the network, data serialization, message splitting and merging.
 
 ### Tablet implementation {#tablet-implementation}
 
@@ -558,7 +604,7 @@ MiniKQL is a low-level language. The system's end users only see queries in the 
 
 #### KQP {#kqp}
 
-**KQP** is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
+**KQP** or **Query Processor** is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
 
 ### Global schema {#global-schema}
 

@@ -235,7 +235,7 @@ TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx,
             .Table(streamLookup.Table())
             .LookupKeys(streamLookup.LookupKeys())
             .Columns(usedColumns.Cast())
-            .LookupStrategy(streamLookup.LookupStrategy())
+            .Settings(streamLookup.Settings())
             .Done();
     }
 

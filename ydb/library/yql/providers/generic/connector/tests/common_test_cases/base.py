@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Dict
 import functools
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import GenericSettings
@@ -13,26 +13,26 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Gen
 @dataclass
 class BaseTestCase:
     name_: str
-    data_source_kind: EDataSourceKind.ValueType
+    data_source_kind: EGenericDataSourceKind.ValueType
     pragmas: Dict[str, str]
-    protocol: EProtocol
+    protocol: EGenericProtocol
 
     @property
     def name(self) -> str:
         match self.data_source_kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 # ClickHouse has two kinds of network protocols: NATIVE and HTTP,
                 # so we append protocol name to the test case name
-                return f'{self.name_}_{EProtocol.Name(self.protocol)}'
-            case EDataSourceKind.MS_SQL_SERVER:
+                return f'{self.name_}_{EGenericProtocol.Name(self.protocol)}'
+            case EGenericDataSourceKind.MS_SQL_SERVER:
                 return self.name_
-            case EDataSourceKind.MYSQL:
+            case EGenericDataSourceKind.MYSQL:
                 return self.name_
-            case EDataSourceKind.ORACLE:
+            case EGenericDataSourceKind.ORACLE:
                 return self.name_
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 return self.name_
-            case EDataSourceKind.YDB:
+            case EGenericDataSourceKind.YDB:
                 return self.name_
             case _:
                 raise Exception(f'invalid data source: {self.data_source_kind}')
@@ -45,17 +45,17 @@ class BaseTestCase:
         '''
         # FIXME: do not hardcode databases here
         match self.data_source_kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 return Database(self.name, self.data_source_kind)
-            case EDataSourceKind.MS_SQL_SERVER:
+            case EGenericDataSourceKind.MS_SQL_SERVER:
                 return Database("master", self.data_source_kind)
-            case EDataSourceKind.MYSQL:
+            case EGenericDataSourceKind.MYSQL:
                 return Database("db", self.data_source_kind)
-            case EDataSourceKind.ORACLE:
+            case EGenericDataSourceKind.ORACLE:
                 return Database(self.name, self.data_source_kind)
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 return Database(self.name, self.data_source_kind)
-            case EDataSourceKind.YDB:
+            case EGenericDataSourceKind.YDB:
                 return Database("local", self.data_source_kind)
 
     @functools.cached_property
@@ -65,17 +65,17 @@ class BaseTestCase:
         so we provide a random table name instead where necessary.
         '''
         match self.data_source_kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 return self.name_  # without protocol
-            case EDataSourceKind.MS_SQL_SERVER:
+            case EGenericDataSourceKind.MS_SQL_SERVER:
                 return self.name
-            case EDataSourceKind.MYSQL:
+            case EGenericDataSourceKind.MYSQL:
                 return self.name
-            case EDataSourceKind.ORACLE:
+            case EGenericDataSourceKind.ORACLE:
                 return self.name
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 return 't' + make_random_string(8)
-            case EDataSourceKind.YDB:
+            case EGenericDataSourceKind.YDB:
                 return self.name
             case _:
                 raise Exception(f'invalid data source: {self.data_source_kind}')
@@ -90,34 +90,34 @@ class BaseTestCase:
     @property
     def generic_settings(self) -> GenericSettings:
         match self.data_source_kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     clickhouse_clusters=[
-                        GenericSettings.ClickHouseCluster(database=self.database.name, protocol=EProtocol.NATIVE)
+                        GenericSettings.ClickHouseCluster(database=self.database.name, protocol=EGenericProtocol.NATIVE)
                     ],
                 )
-            case EDataSourceKind.MS_SQL_SERVER:
+            case EGenericDataSourceKind.MS_SQL_SERVER:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     ms_sql_server_clusters=[GenericSettings.MsSQLServerCluster(database=self.database.name)],
                 )
-            case EDataSourceKind.MYSQL:
+            case EGenericDataSourceKind.MYSQL:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     mysql_clusters=[GenericSettings.MySQLCluster(database=self.database.name)],
                 )
-            case EDataSourceKind.ORACLE:
+            case EGenericDataSourceKind.ORACLE:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     oracle_clusters=[GenericSettings.OracleCluster(database=self.database.name, service_name=None)],
                 )
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     postgresql_clusters=[GenericSettings.PostgreSQLCluster(database=self.database.name, schema=None)],
                 )
-            case EDataSourceKind.YDB:
+            case EGenericDataSourceKind.YDB:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     ydb_clusters=[GenericSettings.YdbCluster(database=self.database.name)],

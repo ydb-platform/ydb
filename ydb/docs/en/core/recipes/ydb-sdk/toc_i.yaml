@@ -39,6 +39,16 @@ items:
   href: bulk-upsert.md
 - name: Setting up the transaction execution mode
   href: tx-control.md
+- name: Coordination
+  items:
+  - name: Distributed lock
+    href: distributed-lock.md
+  - name: Leader election
+    href: leader-election.md
+  - name: Service discovery
+    href: service-discovery.md
+  - name: Configuration publication
+    href: config-publication.md
 - name: Troubleshooting
   items:
   - name: Overview

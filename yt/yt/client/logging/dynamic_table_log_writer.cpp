@@ -26,7 +26,10 @@
 
 #include <yt/yt/core/misc/proc.h>
 
+#include <library/cpp/yt/misc/static_initializer.h>
+
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <library/cpp/yt/threading/atomic_object.h>
 
@@ -50,7 +53,7 @@ using namespace NYson;
 // We use this logger to (try our best) to avoid perpetual log message production.
 // Currently it is impossible to disable logging along a chain of invocations completely,
 // so some induced log messages will loop back into our writer.
-YT_DEFINE_GLOBAL(const NLogging::TLogger, SystemLogger, SystemLoggingCategoryName);
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, SystemLogger, SystemLoggingCategoryName);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -168,7 +171,7 @@ private:
     // at once. Changing this would require modifying the logging event pipeline significantly.
     i64 WriteImpl(const TLogEvent& event) override
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         // This writer has its own buffer, so we reimplement some of the log manager logic :(
         auto backlogWeight = BacklogWeight_.load(std::memory_order::relaxed);
@@ -214,7 +217,7 @@ private:
 
     void RotateBuffer()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         if (CurrentBuffer_.empty()) {
             return;
@@ -234,7 +237,7 @@ private:
     // This is important to avoid log reordering.
     void DoFlush()
     {
-        VERIFY_INVOKER_AFFINITY(Invoker_);
+        YT_ASSERT_INVOKER_AFFINITY(Invoker_);
 
         TBuffer bufferToFlush;
 
@@ -290,7 +293,7 @@ private:
 
     i64 DoFlushIteration(const TSharedRef& ysonRows)
     {
-        VERIFY_INVOKER_AFFINITY(Invoker_);
+        YT_ASSERT_INVOKER_AFFINITY(Invoker_);
 
         auto client = ClientHolder_->Client.Acquire();
 
@@ -402,17 +405,17 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void RegisterDynamicTableLogWriterFactory()
-{
-    TLogManager::Get()->RegisterWriterFactory(
-        TString(TDynamicTableLogWriterConfig::WriterType),
-        GetDynamicTableLogWriterFactory());
-}
-
 IDynamicTableLogWriterFactoryPtr GetDynamicTableLogWriterFactory()
 {
     return LeakyRefCountedSingleton<TDynamicTableLogWriterFactory>();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_STATIC_INITIALIZER(
+    TLogManager::Get()->RegisterWriterFactory(
+        TString(TDynamicTableLogWriterConfig::WriterType),
+        GetDynamicTableLogWriterFactory()));
 
 ////////////////////////////////////////////////////////////////////////////////
 

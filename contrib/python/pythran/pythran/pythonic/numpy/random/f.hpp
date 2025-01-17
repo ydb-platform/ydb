@@ -31,10 +31,11 @@ namespace numpy
       return result;
     }
 
-    inline auto f(double dfnum, double dfden, long size)
-        -> decltype(f(dfnum, dfden, types::array<long, 1>{{size}}))
+    inline auto f(double dfnum, double dfden,
+                  long size) -> decltype(f(dfnum, dfden,
+                                           types::array_tuple<long, 1>{{size}}))
     {
-      return f(dfnum, dfden, types::array<long, 1>{{size}});
+      return f(dfnum, dfden, types::array_tuple<long, 1>{{size}});
     }
 
     inline double f(double dfnum, double dfden, types::none_type d)

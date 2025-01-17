@@ -133,6 +133,9 @@ struct TAggInfo {
     std::vector<ui32> ArgsColumns;
 };
 
+std::vector<TType*> ValidateBlockStreamType(const TType* streamType, bool unwrap = true);
+std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = true);
+
 class TProgramBuilder : public TTypeBuilder {
 public:
     TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false);
@@ -255,9 +258,9 @@ public:
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
-    TRuntimeNode BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
-        EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
-        const TArrayRef<const ui32>& leftKeyDrops, TType* returnType);
+    TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
+        const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
+        const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, bool rightAny, TType* returnType);
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);
@@ -709,12 +712,15 @@ public:
     TRuntimeNode MatchRecognizeCore(
         TRuntimeNode inputStream,
         const TUnaryLambda& getPartitionKeySelectorNode,
-        const TArrayRef<TStringBuf>& partitionColumns,
-        const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures,
+        const TArrayRef<TStringBuf>& partitionColumnNames,
+        const TVector<TStringBuf>& measureColumnNames,
+        const TVector<TBinaryLambda>& getMeasures,
         const NYql::NMatchRecognize::TRowPattern& pattern,
-        const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines,
+        const TVector<TStringBuf>& defineVarNames,
+        const TVector<TTernaryLambda>& getDefines,
         bool streamingMode,
-        const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo
+        const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo,
+        NYql::NMatchRecognize::ERowsPerMatch rowsPerMatch
     );
 
     TRuntimeNode TimeOrderRecover(
@@ -754,7 +760,7 @@ protected:
     TRuntimeNode BuildWideSkipTakeBlocks(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode BuildBlockLogical(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
     TRuntimeNode BuildExtend(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists);
-    
+
     TRuntimeNode BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
 
 private:

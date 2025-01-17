@@ -10,6 +10,8 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
+#include <library/cpp/yt/misc/cast.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -203,7 +205,7 @@ template <class T>
     requires TEnumTraits<T>::IsEnum && (!TEnumTraits<T>::IsBitEnum)
 void FromProto(T* original, int serialized)
 {
-    *original = static_cast<T>(serialized);
+    *original = CheckedEnumCast<T>(serialized);
 }
 
 template <class T>
@@ -217,7 +219,7 @@ template <class T>
     requires TEnumTraits<T>::IsBitEnum
 void FromProto(T* original, ui64 serialized)
 {
-    *original = static_cast<T>(serialized);
+    *original = CheckedEnumCast<T>(serialized);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -574,7 +576,7 @@ void TRefCountedProto<TProto>::RegisterExtraSpace()
     auto spaceUsed = TProto::SpaceUsed();
     YT_ASSERT(static_cast<size_t>(spaceUsed) >= sizeof(TProto));
     YT_ASSERT(ExtraSpace_ == 0);
-    ExtraSpace_ = TProto::SpaceUsed() - sizeof (TProto);
+    ExtraSpace_ = TProto::SpaceUsed() - sizeof(TProto);
     auto cookie = GetRefCountedTypeCookie<TRefCountedProto<TProto>>();
     TRefCountedTrackerFacade::AllocateSpace(cookie, ExtraSpace_);
 }

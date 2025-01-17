@@ -38,6 +38,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (snapshot.IsZero()) {
         snapshot = Self->GetLastTxSnapshot();
     }
+    TScannerConstructorContext context(snapshot, request.HasItemsLimit() ? request.GetItemsLimit() : 0, request.GetReverse());
     const auto scanId = request.GetScanId();
     const ui64 txId = request.GetTxId();
     const ui32 scanGen = request.GetGeneration();
@@ -62,17 +63,45 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.PathId = request.GetLocalPathId();
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
-        bool isIndex = false;
-        std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
-            const ui64 itemsLimit = request.HasItemsLimit() ? request.GetItemsLimit() : 0;
-            auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
-            isIndex = !sysViewPolicy;
-            if (!sysViewPolicy) {
-                return std::unique_ptr<IScannerConstructor>(new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, request.GetReverse()));
+
+        const TString defaultReader =
+            [&]() {
+            const TString defGlobal =
+                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "PLAIN";
+            if (Self->HasIndex()) {
+                return Self->GetIndexAs<TColumnEngineForLogs>()
+                    .GetVersionedIndex()
+                    .GetLastSchema()
+                    ->GetIndexInfo()
+                    .GetScanReaderPolicyName()
+                    .value_or(defGlobal);
             } else {
-                return sysViewPolicy->CreateConstructor(snapshot, itemsLimit, request.GetReverse());
+                return defGlobal;
             }
         }();
+        std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
+            auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
+            if (!sysViewPolicy) {
+                auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(
+                    request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader, context);
+                if (!constructor) {
+                    return std::unique_ptr<IScannerConstructor>();
+                }
+                return std::unique_ptr<IScannerConstructor>(constructor.Release());
+            } else {
+                return sysViewPolicy->CreateConstructor(context);
+            }
+        }();
+        if (!scannerConstructor) {
+            return SendError("cannot build scanner", AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
+        }
+        {
+            auto cursorConclusion = scannerConstructor->BuildCursorFromProto(request.GetScanCursor());
+            if (cursorConclusion.IsFail()) {
+                return SendError("cannot build scanner cursor", cursorConclusion.GetErrorMessage(), ctx);
+            }
+            read.SetScanCursor(cursorConclusion.DetachResult());
+        }
         read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
         read.StatsMode = request.GetStatsMode();
 
@@ -110,7 +139,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
     TStringBuilder detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
-        detailedInfo << " read metadata: (" << *readMetadataRange << ")"
+        detailedInfo << " read metadata: (" << readMetadataRange->DebugString() << ")"
                      << " req: " << request;
     }
 
@@ -125,10 +154,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TComputeShardingPolicy shardingPolicy;
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
-    auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(), Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId,
+    auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
+        Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId,
         txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters()));
+    Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);
 }
 
 }   // namespace NKikimr::NOlap::NReader

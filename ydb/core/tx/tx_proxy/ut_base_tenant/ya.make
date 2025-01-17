@@ -3,11 +3,9 @@ UNITTEST_FOR(ydb/core/tx/tx_proxy)
 FORK_SUBTESTS()
 
 IF (WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

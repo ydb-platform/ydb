@@ -453,6 +453,9 @@ struct TEvReadLogResult : public TEventLocal<TEvReadLogResult, TEvBlobStorage::E
     TLogPosition Position;
     TLogPosition NextPosition;
     bool IsEndOfLog;
+    ui32 LastGoodChunkIdx = 0;
+    ui64 LastGoodSectorIdx = 0;
+
     TStatusFlags StatusFlags;
     TString ErrorReason;
     TOwner Owner;
@@ -976,38 +979,12 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
     class TBufBackedUpParts : public IParts {
     public:
         TBufBackedUpParts(TTrackableBuffer &&buf)
-            : Buffers({std::move(buf)})
+            : Buffer(std::move(buf))
         {}
 
         virtual TDataRef operator[] (ui32 i) const override {
-            Y_DEBUG_ABORT_UNLESS(i < Buffers.size());
-            return TDataRef(Buffers[i].Data(), Buffers[i].Size());
-        }
-
-        virtual ui32 Size() const override {
-            return Buffers.size();
-        }
-
-        void AppendBuffer(TTrackableBuffer&& buffer) {
-            Buffers.push_back(std::move(buffer));
-        }
-
-    private:
-        TVector<TTrackableBuffer> Buffers;
-    };
-
-    ///////////////////// TStrokaBackedUpParts //////////////////////////////
-    class TStrokaBackedUpParts : public IParts {
-    public:
-        TStrokaBackedUpParts(TString &buf)
-            : Buf()
-        {
-            Buf.swap(buf);
-        }
-
-        virtual TDataRef operator[] (ui32 i) const override {
             Y_DEBUG_ABORT_UNLESS(i == 0);
-            return TDataRef(Buf.data(), (ui32)Buf.size());
+            return TDataRef(Buffer.Data(), Buffer.Size());
         }
 
         virtual ui32 Size() const override {
@@ -1015,7 +992,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
         }
 
     private:
-        TString Buf;
+        TTrackableBuffer Buffer;
     };
 
     ///////////////////// TAlignedParts //////////////////////////////
@@ -1024,6 +1001,11 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
         size_t FullSize;
 
     public:
+        TAlignedParts(TString&& data)
+            : Data(std::move(data))
+            , FullSize(Data.size())
+        {}
+
         TAlignedParts(TString&& data, size_t fullSize)
             : Data(std::move(data))
             , FullSize(fullSize)
@@ -1046,7 +1028,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
         }
     };
 
-    ///////////////////// TAlignedParts //////////////////////////////
+    ///////////////////// TRopeAlignedParts //////////////////////////////
     class TRopeAlignedParts : public IParts {
         TRope Data; // we shall keep the rope here to prevent it from being freed
         TVector<TDataRef> Refs;
@@ -1567,7 +1549,7 @@ struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStora
 struct TPDiskCtx {
     TActorSystem * const ActorSystem = nullptr;
     const ui32 PDiskId = 0;
-    const TActorId PDiskActor; 
+    const TActorId PDiskActor;
     // TPDiskMon * const Mon = nullptr; TODO implement it
 
     TPDiskCtx() = default;

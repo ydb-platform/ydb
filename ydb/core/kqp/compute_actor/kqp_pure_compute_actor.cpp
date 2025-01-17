@@ -20,6 +20,7 @@ TKqpComputeActor::TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqPro
     , ComputeCtx(settings.StatsMode)
     , FederatedQuerySetup(federatedQuerySetup)
     , BlockTrackingMode(mode)
+    , ArrayBufferMinFillPercentage(memoryLimits.ArrayBufferMinFillPercentage)
 {
     InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
@@ -77,7 +78,7 @@ void TKqpComputeActor::DoBootstrap() {
     auto wakeupCallback = [this]{ ContinueExecute(); };
     auto errorCallback = [this](const TString& error){ SendError(error); };
     try {
-        PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, std::move(wakeupCallback), std::move(errorCallback)));
+        PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
         InternalError((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
         return;
@@ -173,7 +174,7 @@ void TKqpComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool 
             // TODO: CpuTime
         }
 
-        if (auto* x = ScanData->ProfileStats.get()) {
+        if (ScanData->ProfileStats) {
             // save your profile stats here
         }
     }

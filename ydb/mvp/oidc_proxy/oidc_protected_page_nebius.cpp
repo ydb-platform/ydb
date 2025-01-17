@@ -1,7 +1,5 @@
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/actors/http/http.h>
-#include <ydb/library/security/util.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/mvp_log.h>
@@ -9,8 +7,7 @@
 #include "context.h"
 #include "oidc_protected_page_nebius.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 THandlerSessionServiceCheckNebius::THandlerSessionServiceCheckNebius(const NActors::TActorId& sender,
                                                                      const NHttp::THttpIncomingRequestPtr& request,
@@ -19,71 +16,64 @@ THandlerSessionServiceCheckNebius::THandlerSessionServiceCheckNebius(const NActo
     : THandlerSessionServiceCheck(sender, request, httpProxyId, settings)
 {}
 
-void THandlerSessionServiceCheckNebius::StartOidcProcess(const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckNebius::StartOidcProcess(const NActors::TActorContext&) {
     NHttp::THeaders headers(Request->Headers);
-    LOG_DEBUG_S(ctx, EService::MVP, "Start OIDC process");
+    BLOG_D("Start OIDC process");
 
     NHttp::TCookies cookies(headers.Get("Cookie"));
-    TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
-    TStringBuf sessionCookieValue = cookies.Get(sessionCookieName);
-    if (!sessionCookieValue.Empty()) {
-        LOG_DEBUG_S(ctx, EService::MVP, "Using session cookie (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
-    }
+    TStringBuf sessionCookieValue = GetCookie(cookies, CreateNameSessionCookie(Settings.ClientId));
+    TStringBuf impersonatedCookieValue = GetCookie(cookies, CreateNameImpersonatedCookie(Settings.ClientId));
 
-
-    TString sessionToken;
-    try {
-        Base64StrictDecode(sessionCookieValue, sessionToken);
-    } catch (std::exception& e) {
-        LOG_DEBUG_S(ctx, EService::MVP, "Base64Decode session cookie: " << e.what());
-        sessionToken.clear();
-    }
-
+    TString sessionToken = DecodeToken(sessionCookieValue);
     if (sessionToken) {
-        ExchangeSessionToken(sessionToken, ctx);
-    } else {
-        RequestAuthorizationCode(ctx);
-    }
-}
-
-void THandlerSessionServiceCheckNebius:: HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-    if (!event->Get()->Response) {
-        LOG_DEBUG_S(ctx, EService::MVP, "Getting access token: Bad Request");
-        NHttp::THeadersBuilder responseHeaders;
-        responseHeaders.Set("Content-Type", "text/plain");
-        NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-        Die(ctx);
-    } else {
-        NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-        LOG_DEBUG_S(ctx, EService::MVP, "Getting access token: " << response->Status);
-        if (response->Status == "200") {
-            TString iamToken;
-            static const NJson::TJsonReaderConfig JsonConfig;
-            NJson::TJsonValue requestData;
-            bool success = NJson::ReadJsonTree(response->Body, &JsonConfig, &requestData);
-            if (success) {
-                iamToken = requestData["access_token"].GetStringSafe({});
-                const TString authHeader = IAM_TOKEN_SCHEME + iamToken;
-                ForwardUserRequest(authHeader, ctx);
-                return;
-            }
-        } else if (response->Status == "400" || response->Status == "401") {
-            RequestAuthorizationCode(ctx);
-            return;
+        TString impersonatedToken = DecodeToken(impersonatedCookieValue);
+        if (impersonatedToken) {
+            ExchangeImpersonatedToken(sessionToken, impersonatedToken);
+        } else {
+            ExchangeSessionToken(sessionToken);
         }
-        // don't know what to do, just forward response
-        NHttp::THttpOutgoingResponsePtr httpResponse;
-        NHttp::THeadersBuilder responseHeaders;
-        responseHeaders.Parse(response->Headers);
-        httpResponse = Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body);
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-        Die(ctx);
+    } else{
+        RequestAuthorizationCode();
     }
 }
 
-void THandlerSessionServiceCheckNebius::ExchangeSessionToken(const TString sessionToken, const NActors::TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, EService::MVP, "Exchange session token");
+void THandlerSessionServiceCheckNebius::HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
+    if (!event->Get()->Response) {
+        BLOG_D("Getting access token: Bad Request");
+        NHttp::THeadersBuilder responseHeaders;
+        SetCORS(Request, &responseHeaders);
+        responseHeaders.Set("Content-Type", "text/plain");
+        return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error));
+    }
+
+    NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
+    BLOG_D("Getting access token: " << response->Status << " " << response->Message);
+    if (response->Status == "200") {
+        TString iamToken;
+        static const NJson::TJsonReaderConfig JsonConfig;
+        NJson::TJsonValue requestData;
+        bool success = NJson::ReadJsonTree(response->Body, &JsonConfig, &requestData);
+        if (success) {
+            iamToken = requestData["access_token"].GetStringSafe({});
+            const TString authHeader = IAM_TOKEN_SCHEME + iamToken;
+            return ForwardUserRequest(authHeader);
+        }
+    } else if (response->Status == "400" || response->Status == "401") {
+        BLOG_D("Getting access token: " << response->Body);
+        if (tokenExchangeType == ETokenExchangeType::ImpersonatedToken) {
+            return ClearImpersonatedCookie();
+        } else {
+            return RequestAuthorizationCode();
+        }
+    }
+    // don't know what to do, just forward response
+    NHttp::THeadersBuilder responseHeaders;
+    responseHeaders.Parse(response->Headers);
+    ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
+}
+
+void THandlerSessionServiceCheckNebius::SendTokenExchangeRequest(const TCgiParameters& params, const ETokenExchangeType exchangeType) {
+    tokenExchangeType = exchangeType;
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetExchangeEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
 
@@ -93,27 +83,54 @@ void THandlerSessionServiceCheckNebius::ExchangeSessionToken(const TString sessi
         token = tokenator->GetToken(Settings.SessionServiceTokenName);
     }
     httpRequest->Set("Authorization", token); // Bearer included
-    TStringBuilder body;
-    body << "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
-            << "&requested_token_type=urn:ietf:params:oauth:token-type:access_token"
-            << "&subject_token_type=urn:ietf:params:oauth:token-type:session_token"
-            << "&subject_token=" << sessionToken;
-    httpRequest->Set<&NHttp::THttpRequest::Body>(body);
+    httpRequest->Set<&NHttp::THttpRequest::Body>(params());
 
-    ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
-
+    Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerSessionServiceCheckNebius::StateExchange);
 }
 
-void THandlerSessionServiceCheckNebius::RequestAuthorizationCode(const NActors::TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, EService::MVP, "Request authorization code");
-    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings);
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
+void THandlerSessionServiceCheckNebius::ExchangeSessionToken(const TString& sessionToken) {
+    BLOG_D("Exchange session token");
+    TCgiParameters params;
+    params.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
+    params.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
+    params.emplace("subject_token_type", "urn:ietf:params:oauth:token-type:session_token");
+    params.emplace("subject_token", sessionToken);
+
+    SendTokenExchangeRequest(params, ETokenExchangeType::SessionToken);
 }
 
-void THandlerSessionServiceCheckNebius::ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure) {
-    THandlerSessionServiceCheck::ForwardUserRequest(authHeader, ctx, secure);
+void THandlerSessionServiceCheckNebius::ExchangeImpersonatedToken(const TString& sessionToken, const TString& impersonatedToken) {
+    BLOG_D("Exchange impersonated token");
+    TCgiParameters params;
+    params.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
+    params.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
+    params.emplace("subject_token_type", "urn:ietf:params:oauth:token-type:jwt");
+    params.emplace("subject_token", impersonatedToken);
+    params.emplace("actor_token", sessionToken);
+    params.emplace("actor_token_type", "urn:ietf:params:oauth:token-type:session_token");
+
+    SendTokenExchangeRequest(params, ETokenExchangeType::ImpersonatedToken);
+}
+
+void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie() {
+    TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
+    BLOG_D("Clear impersonated cookie (" << impersonatedCookieName << ") and retry");
+    NHttp::THeadersBuilder responseHeaders;
+    SetCORS(Request, &responseHeaders);
+    responseHeaders.Set("Set-Cookie", ClearSecureCookie(impersonatedCookieName));
+    responseHeaders.Set("Location", Request->URL);
+    ReplyAndPassAway(Request->CreateResponse("307", "Temporary Redirect", responseHeaders));
+}
+
+void THandlerSessionServiceCheckNebius::RequestAuthorizationCode() {
+    BLOG_D("Request authorization code");
+    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings);
+    ReplyAndPassAway(std::move(httpResponse));
+}
+
+void THandlerSessionServiceCheckNebius::ForwardUserRequest(TStringBuf authHeader, bool secure) {
+    THandlerSessionServiceCheck::ForwardUserRequest(authHeader, secure);
     Become(&THandlerSessionServiceCheckNebius::StateWork);
 }
 
@@ -124,5 +141,4 @@ bool THandlerSessionServiceCheckNebius::NeedSendSecureHttpRequest(const NHttp::T
     return false;
 }
 
-} // NOIDC
-} // NMVP
+} // NMVP::NOIDC

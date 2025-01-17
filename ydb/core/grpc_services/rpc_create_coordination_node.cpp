@@ -1,5 +1,6 @@
 #include "service_coordination.h"
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include "rpc_scheme_base.h"
 #include "rpc_common/rpc_common.h"

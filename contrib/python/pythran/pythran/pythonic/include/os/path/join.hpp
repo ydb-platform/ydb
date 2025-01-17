@@ -13,11 +13,11 @@ namespace os
     T join(T &&head);
 
     template <class T, class... Types>
-    types::str join(T &&head, Types &&... tail);
+    types::str join(T &&head, Types &&...tail);
 
     DEFINE_FUNCTOR(pythonic::os::path, join);
-  }
-}
+  } // namespace path
+} // namespace os
 PYTHONIC_NS_END
 
 #endif

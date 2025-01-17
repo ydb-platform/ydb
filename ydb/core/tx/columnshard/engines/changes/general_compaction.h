@@ -7,7 +7,8 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
+class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges,
+                                          public NColumnShard::TMonitoringObjectsCounter<TGeneralCompactColumnEngineChanges> {
 private:
     YDB_ACCESSOR(ui64, PortionExpectedSize, 1.5 * (1 << 20));
     using TBase = TCompactColumnEngineChanges;

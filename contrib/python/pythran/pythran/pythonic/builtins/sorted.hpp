@@ -64,7 +64,7 @@ namespace builtins
       pdqsort(out.begin(), out.end());
     return out;
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

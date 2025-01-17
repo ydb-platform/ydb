@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import itertools
 import logging
 import ssl
-from types import TracebackType
-from typing import Iterable, Iterator, Optional, Type
+import types
+import typing
 
 from .._backends.auto import AutoBackend
 from .._backends.base import SOCKET_OPTION, AsyncNetworkBackend, AsyncNetworkStream
@@ -20,7 +22,7 @@ RETRIES_BACKOFF_FACTOR = 0.5  # 0s, 0.5s, 1s, 2s, 4s, etc.
 logger = logging.getLogger("httpcore.connection")
 
 
-def exponential_backoff(factor: float) -> Iterator[float]:
+def exponential_backoff(factor: float) -> typing.Iterator[float]:
     """
     Generate a geometric sequence that has a ratio of 2 and starts with 0.
 
@@ -37,15 +39,15 @@ class AsyncHTTPConnection(AsyncConnectionInterface):
     def __init__(
         self,
         origin: Origin,
-        ssl_context: Optional[ssl.SSLContext] = None,
-        keepalive_expiry: Optional[float] = None,
+        ssl_context: ssl.SSLContext | None = None,
+        keepalive_expiry: float | None = None,
         http1: bool = True,
         http2: bool = False,
         retries: int = 0,
-        local_address: Optional[str] = None,
-        uds: Optional[str] = None,
-        network_backend: Optional[AsyncNetworkBackend] = None,
-        socket_options: Optional[Iterable[SOCKET_OPTION]] = None,
+        local_address: str | None = None,
+        uds: str | None = None,
+        network_backend: AsyncNetworkBackend | None = None,
+        socket_options: typing.Iterable[SOCKET_OPTION] | None = None,
     ) -> None:
         self._origin = origin
         self._ssl_context = ssl_context
@@ -59,7 +61,7 @@ class AsyncHTTPConnection(AsyncConnectionInterface):
         self._network_backend: AsyncNetworkBackend = (
             AutoBackend() if network_backend is None else network_backend
         )
-        self._connection: Optional[AsyncConnectionInterface] = None
+        self._connection: AsyncConnectionInterface | None = None
         self._connect_failed: bool = False
         self._request_lock = AsyncLock()
         self._socket_options = socket_options
@@ -208,13 +210,13 @@ class AsyncHTTPConnection(AsyncConnectionInterface):
     # These context managers are not used in the standard flow, but are
     # useful for testing or working with connection instances directly.
 
-    async def __aenter__(self) -> "AsyncHTTPConnection":
+    async def __aenter__(self) -> AsyncHTTPConnection:
         return self
 
     async def __aexit__(
         self,
-        exc_type: Optional[Type[BaseException]] = None,
-        exc_value: Optional[BaseException] = None,
-        traceback: Optional[TracebackType] = None,
+        exc_type: type[BaseException] | None = None,
+        exc_value: BaseException | None = None,
+        traceback: types.TracebackType | None = None,
     ) -> None:
         await self.aclose()

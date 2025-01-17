@@ -1814,7 +1814,8 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                 || TCoApply::Match(node.Get())
                 || TCoSwitch::Match(node.Get())
                 || node->IsCallable("DqReplicate")
-                || TCoPartitionsByKeys::Match(node.Get());
+                || TCoPartitionByKeyBase::Match(node.Get())
+                || TCoChopper::Match(node.Get());
         }
     );
 
@@ -1831,6 +1832,15 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                     }
                     return candidate;
                 }
+
+                auto callableType = candidate.Get()->Head().GetTypeAnn()->Cast<TCallableExprType>();
+                for (const auto& arg : callableType->GetArguments()) {
+                    if (arg.Type->GetKind() == ETypeAnnotationKind::Stream &&
+                        arg.Flags & NUdf::ICallablePayload::TArgumentFlags::NoYield) {
+                        return candidate;
+                    }
+                }
+
                 if (!udfSupportsYield) {
                     while (TCoApply::Match(candidate.Get())) {
                         candidate = candidate->HeadPtr();
@@ -1852,9 +1862,14 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                     return node;
                 }
             }
-        } else if (TCoPartitionsByKeys::Match(candidate.Get())) {
-            const auto handlerChild = candidate->Child(TCoPartitionsByKeys::idx_ListHandlerLambda);
+        } else if (TCoPartitionByKeyBase::Match(candidate.Get())) {
+            const auto handlerChild = candidate->Child(TCoPartitionByKeyBase::idx_ListHandlerLambda);
             if (auto node = FindNonYieldTransparentNodeImpl(handlerChild->TailPtr(), udfSupportsYield, TNodeSet{&handlerChild->Head().Head()})) {
+                return node;
+            }
+        } else if (TCoChopper::Match(candidate.Get())) {
+            const auto handlerChild = candidate->Child(TCoChopper::idx_Handler);
+            if (auto node = FindNonYieldTransparentNodeImpl(handlerChild->TailPtr(), udfSupportsYield, TNodeSet{&handlerChild->Head().Tail()})) {
                 return node;
             }
         }
@@ -2216,7 +2231,13 @@ TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf pre
     return result;
 }
 
-bool CheckSupportedTypes(const TTypeAnnotationNode::TListType& typesToCheck, const TSet<TString>& supportedTypes, const TSet<NUdf::EDataSlot>& supportedDataTypes, std::function<void(const TString&)> unsupportedTypeHandler) {
+bool CheckSupportedTypes(
+    const TTypeAnnotationNode::TListType& typesToCheck,
+    const TSet<TString>& supportedTypes,
+    const TSet<NUdf::EDataSlot>& supportedDataTypes,
+    std::function<void(const TString&)> unsupportedTypeHandler,
+    bool allowNestedOptionals
+) {
     TSet<ETypeAnnotationKind> supported;
     for (const auto &e: supportedTypes) {
         if (e == "pg") {
@@ -2272,7 +2293,11 @@ bool CheckSupportedTypes(const TTypeAnnotationNode::TListType& typesToCheck, con
         auto el = stack.back();
         stack.pop_back();
         if (el->GetKind() == ETypeAnnotationKind::Optional) {
-            stack.push_back(el->Cast<TOptionalExprType>()->GetItemType());
+            auto elInnerType = el->Cast<TOptionalExprType>()->GetItemType();
+            if (!allowNestedOptionals && elInnerType->GetKind() == ETypeAnnotationKind::Optional) {
+                unsupportedTypeHandler(TStringBuilder() << "nested optionals are unsupported");
+            }
+            stack.push_back(elInnerType);
             continue;
         }
         if (!supported.contains(el->GetKind())) {

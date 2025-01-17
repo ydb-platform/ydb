@@ -22,8 +22,9 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
-static constexpr size_t BufferSize = 64_KB;
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+constexpr size_t BufferSize = 64_KB;
+const char* LogrotateTimestampSuffixFormat = ".%Y%m%d-%H%M%S";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -270,16 +271,16 @@ private:
 
     std::vector<TString> ListFiles() const
     {
-        auto files = NFS::EnumerateFiles(DirectoryName_);
+        auto files = NFS::EnumerateFiles(DirectoryName_, /*depth*/ 1, /*sortByName*/ true);
         std::erase_if(files, [&] (const TString& s) {
             return !s.StartsWith(FileNamePrefix_);
         });
         if (Config_->UseTimestampSuffix) {
             // Rotated files are suffixed with the date, decreasing with the age of file.
-            std::sort(files.begin(), files.end(), std::greater<TString>());
-        } else {
-            // Rotated files are suffixed with the number, increasing with the age of file.
-            std::sort(files.begin(), files.end());
+            std::reverse(files.begin(), files.end());
+        } else if (Config_->UseLogrotateCompatibleTimestampSuffix) {
+            // Rotated files are suffixed with the date (excluding first), decreasing with the age of file.
+            std::reverse(files.begin() + 1, files.end());
         }
         return files;
     }
@@ -304,7 +305,14 @@ private:
 
     void RenameFiles(const std::vector<TString>& fileNames)
     {
-        if (Config_->UseTimestampSuffix) {
+        if (Config_->UseTimestampSuffix || fileNames.empty()) {
+            return;
+        }
+        if (Config_->UseLogrotateCompatibleTimestampSuffix) {
+            auto newFileName = FileNamePrefix_ + TInstant::Now().FormatLocalTime(LogrotateTimestampSuffixFormat);
+            auto oldPath = NFS::CombinePaths(DirectoryName_, fileNames[0]);
+            auto newPath = NFS::CombinePaths(DirectoryName_, newFileName);
+            NFS::Rename(oldPath, newPath);
             return;
         }
 

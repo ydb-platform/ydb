@@ -31,6 +31,13 @@ logging.getLogger("ydb.tests.library.harness.kikimr_runner").setLevel("INFO")
 logging.getLogger("library.python.retry").setLevel("ERROR")
 
 
+def plain_or_under_sanitizer_wrapper(plain, sanitized):
+    try:
+        return plain_or_under_sanitizer(plain, sanitized)
+    except Exception:
+        return plain
+
+
 class BaseTenant(abc.ABC):
     def __init__(
             self,
@@ -215,14 +222,14 @@ class BaseTenant(abc.ABC):
             {"subsystem": "worker_manager", "sensor": "ActiveWorkers"})
         return result if result is not None else 0
 
-    def wait_worker_count(self, node_index, activity, expected_count, timeout=plain_or_under_sanitizer(30, 150)):
+    def wait_worker_count(self, node_index, activity, expected_count, timeout=plain_or_under_sanitizer_wrapper(30, 150)):
         deadline = time.time() + timeout
         while True:
             count = self.get_actor_count(node_index, activity)
             if count >= expected_count:
                 break
             assert time.time() < deadline, "Wait actor count failed"
-            time.sleep(plain_or_under_sanitizer(0.5, 2))
+            time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
         pass
 
     def get_mkql_limit(self, node_index):
@@ -267,7 +274,7 @@ class BaseTenant(abc.ABC):
                 self.wait_bootstrap(n)
             assert self.get_actor_count(n, "GRPC_PROXY") > 0, "Node {} died".format(n)
 
-    def wait_bootstrap(self, node_index=None, wait_time=plain_or_under_sanitizer(90, 400)):
+    def wait_bootstrap(self, node_index=None, wait_time=plain_or_under_sanitizer_wrapper(90, 400)):
         if node_index is None:
             for n in self.kikimr_cluster.nodes:
                 self.wait_bootstrap(n, wait_time)
@@ -280,13 +287,13 @@ class BaseTenant(abc.ABC):
                     if self.get_actor_count(node_index, "GRPC_PROXY") == 0:
                         continue
                 except Exception:
-                    time.sleep(plain_or_under_sanitizer(0.3, 2))
+                    time.sleep(plain_or_under_sanitizer_wrapper(0.3, 2))
                     continue
                 break
             self.bootstraped_nodes.add(node_index)
             logging.debug("Node {} has been bootstrapped".format(node_index))
 
-    def wait_discovery(self, node_index=None, wait_time=plain_or_under_sanitizer(30, 150)):
+    def wait_discovery(self, node_index=None, wait_time=plain_or_under_sanitizer_wrapper(30, 150)):
         if node_index is None:
             for n in self.kikimr_cluster.nodes:
                 self.wait_discovery(n, wait_time)
@@ -301,12 +308,12 @@ class BaseTenant(abc.ABC):
                     if peer_count is None or peer_count < self.node_count:
                         continue
                 except Exception:
-                    time.sleep(plain_or_under_sanitizer(0.3, 2))
+                    time.sleep(plain_or_under_sanitizer_wrapper(0.3, 2))
                     continue
                 break
             logging.debug("Node {} discovery finished".format(node_index))
 
-    def wait_workers(self, worker_count, wait_time=plain_or_under_sanitizer(30, 150)):
+    def wait_workers(self, worker_count, wait_time=plain_or_under_sanitizer_wrapper(30, 150)):
         ca_count = worker_count * 2  # we count 2x CAs
         deadline = time.time() + wait_time
         while True:
@@ -357,7 +364,7 @@ class BaseTenant(abc.ABC):
                                                       expect_counters_exist=expect_counters_exist)
 
     def wait_completed_checkpoints(self, query_id, checkpoints_count,
-                                   timeout=plain_or_under_sanitizer(30, 150),
+                                   timeout=plain_or_under_sanitizer_wrapper(30, 150),
                                    expect_counters_exist=False):
         deadline = time.time() + timeout
         while True:
@@ -365,9 +372,9 @@ class BaseTenant(abc.ABC):
             if completed >= checkpoints_count:
                 break
             assert time.time() < deadline, "Wait zero checkpoint failed, actual completed: " + str(completed)
-            time.sleep(plain_or_under_sanitizer(0.5, 2))
+            time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
-    def wait_zero_checkpoint(self, query_id, timeout=plain_or_under_sanitizer(30, 150),
+    def wait_zero_checkpoint(self, query_id, timeout=plain_or_under_sanitizer_wrapper(30, 150),
                              expect_counters_exist=False):
         self.wait_completed_checkpoints(query_id, 1, timeout, expect_counters_exist)
 

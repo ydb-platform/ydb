@@ -26,7 +26,7 @@ namespace numpy
   {
     return false;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

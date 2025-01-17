@@ -23,16 +23,16 @@ REQUIREMENTS(
 
 DATA(
     arcadia/contrib/ydb/docs/ru/core/postgresql/_includes/functions.md
-    arcadia/contrib/ydb/library/yql/cfg/udf_test
+    arcadia/yql/essentials/cfg/udf_test
     arcadia/yql/essentials/mount
 )
 
 PEERDIR(
-    contrib/ydb/library/yql/tests/common/test_framework
+    yql/essentials/tests/common/test_framework
 )
 
 DEPENDS(
-    contrib/ydb/library/yql/tools/yqlrun
+    yql/tools/yqlrun
     yql/essentials/udfs/common/re2
 )
 

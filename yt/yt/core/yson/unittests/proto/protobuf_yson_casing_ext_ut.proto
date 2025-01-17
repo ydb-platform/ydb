@@ -5,3 +5,9 @@ message TExternalProtobuf
     optional int32 SomeField = 1;
     optional int32 AnotherField123 = 2;
 }
+
+message TOtherExternalProtobuf
+{
+    optional int32 SomeField = 1;
+    optional int32 AnotherField123 = 2;
+}

@@ -45,7 +45,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.col1,row.col2]"
                                             },
                                             {
                                                 "Inputs": [
@@ -54,7 +54,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.b > item.c Or item.a > item.b"
+                                                "Predicate": "item.b > item.c OR item.a > item.b"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -65,6 +65,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/sqllogictest_select1-3.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

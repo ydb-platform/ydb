@@ -49,7 +49,7 @@ void TDefaultValueBuilder::Terminate(const char* message) const {
         }
 
         Rethrow_ = true;
-        ythrow yexception() << fullMessage;
+        throw TTerminateException() << fullMessage;
     }
 
     Cerr << fullMessage << Flush;
@@ -239,7 +239,7 @@ void TDefaultValueBuilder::ExportArrowBlock(NUdf::TUnboxedValuePod value, ui32 c
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::ImportArrowBlock(ArrowArray* arrays, ui32 chunkCount, bool isScalar, const NUdf::IArrowType& type) const {
-    const auto dataType = static_cast<const TArrowType&>(type).GetType();   
+    const auto dataType = static_cast<const TArrowType&>(type).GetType();
     if (isScalar) {
         if (chunkCount != 1) {
             UdfTerminate("Bad chunkCount value");

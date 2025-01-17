@@ -16,6 +16,7 @@
 #include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
+#include <library/cpp/yt/misc/static_initializer.h>
 
 #include <google/protobuf/duration.pb.h>
 #include <google/protobuf/message.h>
@@ -373,17 +374,15 @@ struct IProtobufExtensionRegistry
 };
 
 #define REGISTER_PROTO_EXTENSION(type, tag, name) \
-    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterProtoExtension) = [] { \
+    YT_STATIC_INITIALIZER( \
         NYT::IProtobufExtensionRegistry::Get()->AddAction([] { \
             const auto* descriptor = type::default_instance().GetDescriptor(); \
-            NYT::IProtobufExtensionRegistry::Get()->RegisterDescriptor({ \
+            ::NYT::IProtobufExtensionRegistry::Get()->RegisterDescriptor({ \
                 .MessageDescriptor = descriptor, \
                 .Tag = tag, \
-                .Name = #name \
+                .Name = #name, \
             });\
-        }); \
-        return nullptr; \
-    } ();
+        }));
 
 //! Finds and deserializes an extension of the given type. Fails if no matching
 //! extension is found.
@@ -546,6 +545,25 @@ class TProtobufOutputStreamAdaptor
 {
 public:
     explicit TProtobufOutputStreamAdaptor(IOutputStream* stream);
+};
+
+class TProtobufZeroCopyOutputStream
+    : public ::google::protobuf::io::ZeroCopyOutputStream
+{
+public:
+    explicit TProtobufZeroCopyOutputStream(IZeroCopyOutput* stream);
+
+    bool Next(void** data, int* size) override;
+    void BackUp(int count) override;
+    int64_t ByteCount() const override;
+
+    void ThrowOnError() const;
+
+private:
+    IZeroCopyOutput* const Stream_;
+
+    std::exception_ptr Error_;
+    i64 ByteCount_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

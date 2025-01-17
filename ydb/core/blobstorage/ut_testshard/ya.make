@@ -1,7 +1,6 @@
 UNITTEST()
 
     SIZE(MEDIUM)
-    TIMEOUT(600)
 
     SRCS(
         main.cpp

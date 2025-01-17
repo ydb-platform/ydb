@@ -124,6 +124,10 @@ public:
                     Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
                 } else {
                     ctx.Error(Pos) << "Source used in expression should contain one concrete column";
+                    if (RefPos) {
+                        ctx.Error(*RefPos) << "Source is used here";
+                    }
+
                     return false;
                 }
             }
@@ -565,6 +569,10 @@ public:
                 Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
             } else {
                 ctx.Error(Pos) << "Source used in expression should contain one concrete column";
+                if (RefPos) {
+                    ctx.Error(*RefPos) << "Source is used here";
+                }
+
                 return false;
             }
         }
@@ -912,7 +920,7 @@ TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service
 }
 
 static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool assume, const char* sqlConstruction) {
-    if (assume && !expr->GetColumnName()) {
+    if (assume && !expr->IsPlainColumn()) {
         ctx.Error(expr->GetPos()) << "Only column names can be used in " << sqlConstruction;
         return false;
     }
@@ -925,7 +933,7 @@ static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool ass
         ctx.Error(expr->GetPos()) << "Unable to " << sqlConstruction << " aggregated values";
         return false;
     }
-    if (expr->GetColumnName()) {
+    if (expr->IsPlainColumn()) {
         return true;
     }
     if (expr->GetOpName().empty()) {
@@ -1858,6 +1866,10 @@ public:
     bool IsMissingInProjection(TContext& ctx, const TColumnNode& column) const {
         TString columnName = FullColumnName(column);
         if (Columns.Real.contains(columnName) || Columns.Artificial.contains(columnName)) {
+            return false;
+        }
+
+        if (!ctx.SimpleColumns && Columns.QualifiedAll && !columnName.Contains('.')) {
             return false;
         }
 
@@ -2800,7 +2812,11 @@ public:
     TNodePtr Build(TContext& ctx) override {
         TPtr res;
         if (QuantifierAll) {
-            res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+            if (ctx.EmitUnionMerge) {
+                res = ctx.PositionalUnionAll ? Y("UnionMergePositional") : Y("UnionMerge");
+            } else {
+                res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+            }
         } else {
             res = ctx.PositionalUnionAll ? Y("UnionPositional") : Y("Union");
         }
@@ -2848,8 +2864,8 @@ private:
 };
 
 TSourcePtr BuildUnion(
-    TPosition pos, 
-    TVector<TSourcePtr>&& sources, 
+    TPosition pos,
+    TVector<TSourcePtr>&& sources,
     bool quantifierAll,
     const TWriteSettings& settings
 ) {

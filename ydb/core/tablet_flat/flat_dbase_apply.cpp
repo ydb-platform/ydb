@@ -97,6 +97,9 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
         Y_ABORT_UNLESS(ui32(cache) <= 2, "Invalid pages cache policy value");
+        if (family.Cache != cache && cache == ECache::Ever) {
+            ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
+        }
         changes |= ChangeTableSetting(table, family.Cache, cache);
         changes |= ChangeTableSetting(table, family.Codec, codec);
         changes |= ChangeTableSetting(table, family.Small, small);

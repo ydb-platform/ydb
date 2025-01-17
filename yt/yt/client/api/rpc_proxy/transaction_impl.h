@@ -235,12 +235,12 @@ public:
         const NYPath::TYPath& path,
         const NApi::TJournalWriterOptions& options) override;
 
-    TFuture<TDistributedWriteSessionPtr> StartDistributedWriteSession(
+    TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options = {}) override;
 
     TFuture<void> FinishDistributedWriteSession(
-        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options = {}) override;
 
     // Custom methods.

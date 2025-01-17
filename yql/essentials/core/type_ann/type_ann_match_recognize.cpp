@@ -10,11 +10,11 @@ MatchRecognizeWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &output, TCo
     if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    const auto& source = input->ChildRef(0);
+    const auto source = input->Child(0);
     auto& partitionKeySelector = input->ChildRef(1);
-    const auto& partitionColumns = input->ChildRef(2);
-    const auto& sortTraits = input->ChildRef(3);
-    const auto& params = input->ChildRef(4);
+    const auto partitionColumns = input->Child(2);
+    const auto sortTraits = input->Child(3);
+    const auto params = input->Child(4);
     Y_UNUSED(source, sortTraits);
     auto status = ConvertToLambda(partitionKeySelector, ctx.Expr, 1, 1);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
@@ -31,11 +31,22 @@ MatchRecognizeWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &output, TCo
 
     //merge measure columns, came from params, with partition columns to form output row type
     auto outputTableColumns = params->GetTypeAnn()->Cast<TStructExprType>()->GetItems();
-    for (size_t i = 0; i != partitionColumns->ChildrenSize(); ++i) {
-        outputTableColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
-                partitionColumns->ChildRef(i)->Content(),
-                partitionKeySelectorItemTypes[i]
-        ));
+    if (const auto rowsPerMatch = params->Child(1);
+        "RowsPerMatch_OneRow" == rowsPerMatch->Content()) {
+        for (size_t i = 0; i != partitionColumns->ChildrenSize(); ++i) {
+            outputTableColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
+                    partitionColumns->Child(i)->Content(),
+                    partitionKeySelectorItemTypes[i]
+            ));
+        }
+    } else if ("RowsPerMatch_AllRows" == rowsPerMatch->Content()) {
+        const auto& inputTableColumns = GetSeqItemType(source->GetTypeAnn())->Cast<TStructExprType>()->GetItems();
+        for (const auto& column : inputTableColumns) {
+            outputTableColumns.push_back(ctx.Expr.MakeType<TItemExprType>(column->GetName(), column->GetItemType()));
+        }
+    } else {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(rowsPerMatch->Pos()), "Unknown RowsPerMatch option"));
+        return IGraphTransformer::TStatus::Error;
     }
     const auto outputTableRowType = ctx.Expr.MakeType<TStructExprType>(outputTableColumns);
     input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(outputTableRowType));
@@ -48,7 +59,7 @@ MatchRecognizeParamsWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &outpu
     if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    const auto& measures = input->ChildRef(0);
+    const auto measures = input->Child(0);
     input->SetTypeAnn(measures->GetTypeAnn());
     return IGraphTransformer::TStatus::Ok;
 }
@@ -77,10 +88,10 @@ MatchRecognizeMeasuresWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& out
     if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    const auto& inputRowType = input->ChildRef(0);
-    const auto& pattern = input->ChildRef(1);
-    const auto& names = input->ChildRef(2);
-    const size_t FirstLambdaIndex = 3;
+    const auto inputRowType = input->Child(0);
+    const auto pattern = input->Child(1);
+    const auto names = input->Child(2);
+    constexpr size_t FirstLambdaIndex = 3;
 
     if (!EnsureTupleOfAtoms(*names, ctx.Expr))  {
         return IGraphTransformer::TStatus::Error;
@@ -119,7 +130,7 @@ MatchRecognizeMeasuresWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& out
             return IGraphTransformer::TStatus::Error;
         }
         if (auto type = lambda->GetTypeAnn()) {
-            items.push_back(ctx.Expr.MakeType<TItemExprType>(names->ChildRef(i)->Content(), type));
+            items.push_back(ctx.Expr.MakeType<TItemExprType>(names->Child(i)->Content(), type));
         } else {
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -143,9 +154,9 @@ MatchRecognizeDefinesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& outp
     if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    const auto& inputRowType = input->ChildRef(0);
-    const auto& pattern = input->ChildRef(1);
-    const auto& names = input->ChildRef(2);
+    const auto inputRowType = input->Child(0);
+    const auto pattern = input->Child(1);
+    const auto names = input->Child(2);
     const size_t FirstLambdaIndex = 3;
 
     if (!EnsureTupleOfAtoms(*names, ctx.Expr))  {
@@ -176,7 +187,7 @@ MatchRecognizeDefinesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& outp
         }
         if (auto type = lambda->GetTypeAnn()) {
             if (IsBoolLike(*type)) {
-                items.push_back(ctx.Expr.MakeType<TItemExprType>(names->ChildRef(i)->Content(), type));
+                items.push_back(ctx.Expr.MakeType<TItemExprType>(names->Child(i)->Content(), type));
             } else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), "DEFINE expression must be a predicate"));
                 return IGraphTransformer::TStatus::Error;
@@ -200,18 +211,18 @@ bool ValidateSettings(const TExprNode::TPtr& settings, TExprContext& ctx) {
         return false;
     }
 
-    const auto streamingMode = settings->ChildRef(0);
+    const auto streamingMode = settings->Child(0);
     if (!EnsureTupleOfAtoms(*streamingMode, ctx)) {
         return false;
     }
     if (!EnsureArgsCount(*streamingMode, 2, ctx)) {
         return false;
     }
-    if (streamingMode->ChildRef(0)->Content() != "Streaming") {
+    if (streamingMode->Child(0)->Content() != "Streaming") {
         ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), "Expected Streaming setting"));
         return false;
     }
-    const auto mode = streamingMode->ChildRef(1)->Content();
+    const auto mode = streamingMode->Child(1)->Content();
     if (mode != "0" and mode != "1") {
         ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder() << "Expected 0 or 1, but got: " << mode));
         return false;
@@ -231,11 +242,11 @@ MatchRecognizeCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    const auto& source = input->ChildRef(0);
+    const auto source = input->Child(0);
     auto& partitionKeySelector = input->ChildRef(1);
-    const auto& partitionColumns = input->ChildRef(2);
-    const auto& params = input->ChildRef(3);
-    const auto& settings = input->ChildRef(4);
+    const auto partitionColumns = input->Child(2);
+    const auto params = input->Child(3);
+    const auto settings = input->Child(4);
     if (not params->IsCallable("MatchRecognizeParams")) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(params->Pos()), "Expected MatchRecognizeParams"));
         return IGraphTransformer::TStatus::Error;
@@ -248,9 +259,9 @@ MatchRecognizeCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     if (!EnsureFlowType(*source, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    const auto& inputRowType = GetSeqItemType(source->GetTypeAnn());
-    const auto& define = params->ChildRef(4);
-    if (not inputRowType->Equals(*define->ChildRef(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType())) {
+    const auto inputRowType = GetSeqItemType(source->GetTypeAnn());
+    const auto define = params->Child(4);
+    if (not inputRowType->Equals(*define->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType())) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Expected the same input row type as for DEFINE"));
         return IGraphTransformer::TStatus::Error;
     }
@@ -279,11 +290,22 @@ MatchRecognizeCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     }
 
     auto outputTableColumns = params->GetTypeAnn()->Cast<TStructExprType>()->GetItems();
-    for (size_t i = 0; i != partitionColumns->ChildrenSize(); ++i) {
-        outputTableColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
-                partitionColumns->ChildRef(i)->Content(),
-                partitionKeySelectorItemTypes[i]
-        ));
+    if (const auto rowsPerMatch = params->Child(1);
+        "RowsPerMatch_OneRow" == rowsPerMatch->Content()) {
+        for (size_t i = 0; i != partitionColumns->ChildrenSize(); ++i) {
+            outputTableColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
+                    partitionColumns->Child(i)->Content(),
+                    partitionKeySelectorItemTypes[i]
+            ));
+        }
+    } else if ("RowsPerMatch_AllRows" == rowsPerMatch->Content()) {
+        const auto& inputTableColumns = GetSeqItemType(source->GetTypeAnn())->Cast<TStructExprType>()->GetItems();
+        for (const auto& column : inputTableColumns) {
+            outputTableColumns.push_back(ctx.Expr.MakeType<TItemExprType>(column->GetName(), column->GetItemType()));
+        }
+    } else {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(rowsPerMatch->Pos()), "Unknown RowsPerMatch option"));
+        return IGraphTransformer::TStatus::Error;
     }
     const auto outputTableRowType = ctx.Expr.MakeType<TStructExprType>(outputTableColumns);
     input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputTableRowType));

@@ -38,11 +38,11 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
 
     THead head;
     head.Offset = 100;
-    TString value(100_KB, 'a');
     head.AddBatch(TBatch(head.Offset, 0));
     for (ui32 i = 0; i < 50; ++i) {
+        TString value(100_KB, 'a');
         head.AddBlob(TClientBlob(
-            "sourceId" + TString(1,'a' + rand() % 26), i + 1, value, TMaybe<TPartData>(),
+            "sourceId" + TString(1,'a' + rand() % 26), i + 1, std::move(value), TMaybe<TPartData>(),
             TInstant::MilliSeconds(i + 1),  TInstant::MilliSeconds(i + 1), 1, "", ""
         ));
         if (!headCompacted)
@@ -64,8 +64,9 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     newHead.Offset = head.GetNextOffset();
     newHead.AddBatch(TBatch(newHead.Offset, 0));
     for (ui32 i = 0; i < 10; ++i) {
+        TString value(100_KB, 'a');
         newHead.AddBlob(TClientBlob(
-            "sourceId2", i + 1, value, TMaybe<TPartData>(),
+            "sourceId2", i + 1, std::move(value), TMaybe<TPartData>(),
             TInstant::MilliSeconds(i + 1000), TInstant::MilliSeconds(i + 1000), 1, "", ""
         ));
         all.push_back(newHead.GetLastBatch().Blobs.back()); //newHead always glued
@@ -82,8 +83,9 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         UNIT_ASSERT(!blob.IsComplete());
         UNIT_ASSERT(blob.IsNextPart("sourceId3", 1, i, &error));
         TMaybe<TPartData> partData = TPartData(i, parts, value2.size());
+        TString v = value2;
         TClientBlob clientBlob(
-            "soruceId3", 1, value2, std::move(partData),
+            "soruceId3", 1, std::move(v), std::move(partData),
             TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 1, "", ""
         );
         all.push_back(clientBlob);
@@ -173,11 +175,11 @@ Y_UNIT_TEST(TestPartitionedBigTest) {
 }
 
 Y_UNIT_TEST(TestBatchPacking) {
-    TString value(10, 'a');
     TBatch batch;
     for (ui32 i = 0; i < 100; ++i) {
+    TString value(10, 'a');
         batch.AddBlob(TClientBlob(
-            "sourceId1", i + 1, value, TMaybe<TPartData>(),
+            "sourceId1", i + 1, std::move(value), TMaybe<TPartData>(),
             TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "", ""
         ));
     }

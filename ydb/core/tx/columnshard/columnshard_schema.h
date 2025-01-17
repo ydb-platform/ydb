@@ -781,10 +781,8 @@ struct Schema : NIceDb::Schema {
         db.Table<SchemaPresetInfo>().Key(id).Delete();
     }
 
-    static void SaveTableInfo(NIceDb::TNiceDb& db, const ui64 pathId, const TString tieringUsage) {
-        db.Table<TableInfo>().Key(pathId).Update(
-            NIceDb::TUpdate<TableInfo::TieringUsage>(tieringUsage)
-        );
+    static void SaveTableInfo(NIceDb::TNiceDb& db, const ui64 pathId) {
+        db.Table<TableInfo>().Key(pathId).Update();
     }
 
 
@@ -1072,6 +1070,12 @@ public:
         MetadataProto = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
     }
 
+    TColumnChunkLoadContextV2(const ui64 pathId, const ui64 portionId, const NKikimrTxColumnShard::TIndexPortionAccessor& proto)
+        : PathId(pathId)
+        , PortionId(portionId)
+        , MetadataProto(proto.SerializeAsString()) {
+    }
+
     std::vector<TColumnChunkLoadContextV1> BuildRecordsV1() const {
         std::vector<TColumnChunkLoadContextV1> records;
         NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
@@ -1116,6 +1120,15 @@ public:
     TIndexChunk BuildIndexChunk() const {
         AFL_VERIFY(BlobData);
         return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, *BlobData);
+    }
+
+    TIndexChunk BuildIndexChunk(const TPortionInfo& portionInfo) const {
+        if (BlobData) {
+            return BuildIndexChunk();
+        } else {
+            AFL_VERIFY(!!BlobRange);
+            return BuildIndexChunk(portionInfo.GetMeta().GetBlobIdxVerified(BlobRange->BlobId));
+        }
     }
 
     template <class TSource>

@@ -23,6 +23,7 @@ PEERDIR(
     yql/essentials/public/issue
     library/cpp/digest/md5
     yql/essentials/parser/pg_catalog/proto
+    yql/essentials/utils/log
 )
 
 END()

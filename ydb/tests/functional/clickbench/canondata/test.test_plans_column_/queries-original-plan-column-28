@@ -35,7 +35,7 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-Filter",
+                                                "Node Type": "TopSort-Filter-Aggregate",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
@@ -59,11 +59,20 @@
                                                     {
                                                         "Inputs": [
                                                             {
-                                                                "ExternalPlanNodeId": 2
+                                                                "InternalOperatorId": 2
                                                             }
                                                         ],
                                                         "Name": "Filter",
                                                         "Predicate": "item.Count0 > 100000"
+                                                    },
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 2
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Final"
                                                     }
                                                 ],
                                                 "PlanNodeId": 3,
@@ -80,14 +89,15 @@
                                                                 "Node Type": "Aggregate-Filter-TableFullScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1,1),_yql_agg_2: MIN(item.Referer,state._yql_agg_2)}",
+                                                                        "Aggregation": "{[SUM(Size),Inc()],SUM(1),MIN(item.Referer)}",
                                                                         "GroupBy": "item.key",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
                                                                             }
                                                                         ],
-                                                                        "Name": "Aggregate"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
                                                                     },
                                                                     {
                                                                         "Inputs": [
@@ -96,11 +106,13 @@
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
-                                                                        "Predicate": "Referer != "
+                                                                        "Predicate": "Referer != \"\"",
+                                                                        "Pushdown": "True"
                                                                     },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/local/clickbench/plans/column/hits",
                                                                         "ReadColumns": [
                                                                             "Referer"
                                                                         ],

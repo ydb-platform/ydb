@@ -13,7 +13,7 @@ namespace io
     {
       USING_FUNCTOR(writelines, builtins::file::functor::writelines);
     }
-  }
-}
+  } // namespace _io
+} // namespace io
 PYTHONIC_NS_END
 #endif

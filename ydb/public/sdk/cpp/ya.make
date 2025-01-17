@@ -15,11 +15,13 @@ RECURSE(
     client/impl/ydb_internal/value_helpers
     client/impl/ydb_stats
     client/resources
+    client/ydb_bsconfig
     client/ydb_common_client
     client/ydb_common_client/impl
     client/ydb_coordination
     client/ydb_coordination/ut
     client/ydb_datastreams
+    client/ydb_debug
     client/ydb_discovery
     client/ydb_driver
     client/ydb_driver/ut

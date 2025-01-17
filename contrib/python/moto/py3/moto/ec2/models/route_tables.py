@@ -1,5 +1,6 @@
 import ipaddress
-from moto.core import get_account_id, CloudFormationModel
+
+from moto.core import CloudFormationModel
 from .core import TaggedEC2Resource
 from ..exceptions import (
     DependencyViolationError,
@@ -7,6 +8,7 @@ from ..exceptions import (
     InvalidRouteTableIdError,
     InvalidAssociationIdError,
     InvalidDestinationCIDRBlockParameterError,
+    RouteAlreadyExistsError,
 )
 from ..utils import (
     EC2_RESOURCE_TO_PREFIX,
@@ -23,14 +25,16 @@ class RouteTable(TaggedEC2Resource, CloudFormationModel):
         self.ec2_backend = ec2_backend
         self.id = route_table_id
         self.vpc_id = vpc_id
-        self.main = main
-        self.main_association = random_subnet_association_id()
+        if main:
+            self.main_association_id = random_subnet_association_id()
+        else:
+            self.main_association_id = None
         self.associations = {}
         self.routes = {}
 
     @property
     def owner_id(self):
-        return get_account_id()
+        return self.ec2_backend.account_id
 
     @staticmethod
     def cloudformation_name_type():
@@ -43,14 +47,14 @@ class RouteTable(TaggedEC2Resource, CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         from ..models import ec2_backends
 
         properties = cloudformation_json["Properties"]
 
         vpc_id = properties["VpcId"]
-        ec2_backend = ec2_backends[region_name]
+        ec2_backend = ec2_backends[account_id][region_name]
         route_table = ec2_backend.create_route_table(vpc_id=vpc_id)
         return route_table
 
@@ -62,7 +66,7 @@ class RouteTable(TaggedEC2Resource, CloudFormationModel):
         if filter_name == "association.main":
             # Note: Boto only supports 'true'.
             # https://github.com/boto/boto/issues/1742
-            if self.main:
+            if self.main_association_id is not None:
                 return "true"
             else:
                 return "false"
@@ -73,7 +77,7 @@ class RouteTable(TaggedEC2Resource, CloudFormationModel):
         elif filter_name == "association.route-table-id":
             return self.id
         elif filter_name == "association.route-table-association-id":
-            return self.associations.keys()
+            return self.all_associations_ids
         elif filter_name == "association.subnet-id":
             return self.associations.values()
         elif filter_name == "route.gateway-id":
@@ -84,6 +88,14 @@ class RouteTable(TaggedEC2Resource, CloudFormationModel):
             ]
         else:
             return super().get_filter_value(filter_name, "DescribeRouteTables")
+
+    @property
+    def all_associations_ids(self):
+        # NOTE(yoctozepto): Doing an explicit copy to not touch the original.
+        all_associations = set(self.associations)
+        if self.main_association_id is not None:
+            all_associations.add(self.main_association_id)
+        return all_associations
 
 
 class RouteTableBackend:
@@ -184,7 +196,7 @@ class RouteTableBackend:
     def replace_route_table_association(self, association_id, route_table_id):
         # Idempotent if association already exists.
         new_route_table = self.get_route_table(route_table_id)
-        if association_id in new_route_table.associations:
+        if association_id in new_route_table.all_associations_ids:
             return association_id
 
         # Find route table which currently has the association, error if none.
@@ -193,11 +205,19 @@ class RouteTableBackend:
         )
         if not route_tables_by_association_id:
             raise InvalidAssociationIdError(association_id)
+        previous_route_table = route_tables_by_association_id[0]
 
         # Remove existing association, create new one.
-        previous_route_table = route_tables_by_association_id[0]
-        subnet_id = previous_route_table.associations.pop(association_id, None)
-        return self.associate_route_table(route_table_id, subnet_id)
+        new_association_id = random_subnet_association_id()
+        if previous_route_table.main_association_id == association_id:
+            previous_route_table.main_association_id = None
+            new_route_table.main_association_id = new_association_id
+        else:
+            association_target_id = previous_route_table.associations.pop(
+                association_id
+            )
+            new_route_table.associations[new_association_id] = association_target_id
+        return new_association_id
 
 
 # TODO: refractor to isloate class methods from backend logic
@@ -253,7 +273,7 @@ class Route(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         from ..models import ec2_backends
 
@@ -268,7 +288,7 @@ class Route(CloudFormationModel):
         pcx_id = properties.get("VpcPeeringConnectionId")
 
         route_table_id = properties["RouteTableId"]
-        ec2_backend = ec2_backends[region_name]
+        ec2_backend = ec2_backends[account_id][region_name]
         route_table = ec2_backend.create_route(
             route_table_id=route_table_id,
             destination_cidr_block=properties.get("DestinationCidrBlock"),
@@ -323,11 +343,10 @@ class RouteBackend:
                 elif EC2_RESOURCE_TO_PREFIX["vpc-endpoint"] in gateway_id:
                     gateway = self.get_vpc_end_point(gateway_id)
 
-            try:
-                if destination_cidr_block:
-                    ipaddress.IPv4Network(str(destination_cidr_block), strict=False)
-            except ValueError:
-                raise InvalidDestinationCIDRBlockParameterError(destination_cidr_block)
+            if destination_cidr_block:
+                self.__validate_destination_cidr_block(
+                    destination_cidr_block, route_table
+                )
 
             if nat_gateway_id is not None:
                 nat_gateway = self.nat_gateways.get(nat_gateway_id)
@@ -440,3 +459,25 @@ class RouteBackend:
         if not deleted:
             raise InvalidRouteError(route_table_id, cidr)
         return deleted
+
+    def __validate_destination_cidr_block(self, destination_cidr_block, route_table):
+        """
+        Utility function to check the destination CIDR block
+        Will validate the format and check for overlap with existing routes
+        """
+        try:
+            ip_v4_network = ipaddress.IPv4Network(
+                str(destination_cidr_block), strict=False
+            )
+        except ValueError:
+            raise InvalidDestinationCIDRBlockParameterError(destination_cidr_block)
+
+        if not route_table.routes:
+            return
+        for route in route_table.routes.values():
+            if not route.destination_cidr_block:
+                continue
+            if not route.local and ip_v4_network.overlaps(
+                ipaddress.IPv4Network(str(route.destination_cidr_block))
+            ):
+                raise RouteAlreadyExistsError(destination_cidr_block)

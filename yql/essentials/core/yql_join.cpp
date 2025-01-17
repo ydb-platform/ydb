@@ -319,8 +319,16 @@ namespace {
                 }
             }
             else if (option.IsAtom("forceSortedMerge") || option.IsAtom("forceStreamLookup")) {
-                if (!EnsureTupleSize(*child, 1, ctx)) {
-                    return IGraphTransformer::TStatus::Error;
+                if (option.IsAtom("forceStreamLookup")) {
+                    if (child->ChildrenSize() % 2 == 0) {
+                        ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
+                                    "streamlookup() expects KEY VALUE... pairs"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                } else {
+                    if (!EnsureTupleSize(*child, 1, ctx)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
                 }
                 if (hasJoinStrategyHint) {
                     ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
@@ -1351,9 +1359,14 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
     }
 
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
-    
-    if (HasSetting(linkSettings, "forceStreamLookup")) {
+
+    if (auto streamlookup = GetSetting(linkSettings, "forceStreamLookup")) {
+        YQL_ENSURE(result.JoinAlgoOptions.empty());
         result.JoinAlgo = EJoinAlgoType::StreamLookupJoin;
+        auto size = streamlookup->ChildrenSize();
+        for (decltype(size) i = 1; i < size; ++i) {
+            result.JoinAlgoOptions.push_back(TString(streamlookup->Child(i)->Content()));
+        }
     }
 
     if (HasSetting(linkSettings, "compact")) {

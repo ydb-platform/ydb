@@ -176,7 +176,7 @@ public:
 
         if constexpr (Interruptable) {
             const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
-            BranchInst::Create(stop, next, IsEmpty(reset, block), block);
+            BranchInst::Create(stop, next, IsEmpty(reset, block, context), block);
             block = pass;
         }
 

@@ -5,12 +5,13 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
-#include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap::NReader {
+
+class TPartialReadResult;
 
 class TComputeShardingPolicy {
 private:
@@ -52,7 +53,8 @@ private:
     const TActorId ResourceSubscribeActorId;
     const TActorId ReadCoordinatorActorId;
     const TComputeShardingPolicy ComputeShardingPolicy;
-    TAtomic AbortFlag = 0;
+    std::shared_ptr<TAtomicCounter> AbortionFlag = std::make_shared<TAtomicCounter>(0);
+    std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
 
 public:
     template <class T>
@@ -62,11 +64,31 @@ public:
         return result;
     }
 
+    const std::shared_ptr<IScanCursor>& GetScanCursor() const {
+        return ReadMetadata->GetScanCursor();
+    }
+
+    const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
+        return ConstAbortionFlag;
+    }
+
     void AbortWithError(const TString& errorMessage) {
-        if (AtomicCas(&AbortFlag, 1, 0)) {
+        if (AbortionFlag->Inc() == 1) {
             NActors::TActivationContext::Send(
                 ScanActorId, std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(TConclusionStatus::Fail(errorMessage)));
         }
+    }
+
+    void Stop() {
+        AbortionFlag->Inc();
+    }
+
+    bool IsActive() const {
+        return AbortionFlag->Val() == 0;
+    }
+
+    bool IsAborted() const {
+        return AbortionFlag->Val();
     }
 
     bool IsReverse() const {
@@ -123,7 +145,8 @@ public:
         , ScanActorId(scanActorId)
         , ResourceSubscribeActorId(resourceSubscribeActorId)
         , ReadCoordinatorActorId(readCoordinatorActorId)
-        , ComputeShardingPolicy(computeShardingPolicy) {
+        , ComputeShardingPolicy(computeShardingPolicy)
+    {
         Y_ABORT_UNLESS(ReadMetadata);
     }
 };

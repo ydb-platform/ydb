@@ -100,12 +100,10 @@ struct IServiceContext
     virtual TMutationId GetMutationId() const = 0;
 
     //! Returns request service name.
-    // NB: Service name is supposed to be short, so SSO should work.
-    virtual std::string GetService() const = 0;
+    virtual const std::string& GetService() const = 0;
 
     //! Returns request method name.
-    // NB: Method name is supposed to be short, so SSO should work.
-    virtual std::string GetMethod() const = 0;
+    virtual const std::string& GetMethod() const = 0;
 
     //! Returns request realm id.
     virtual TRealmId GetRealmId() const = 0;

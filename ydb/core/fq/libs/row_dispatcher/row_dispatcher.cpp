@@ -1,6 +1,9 @@
 #include "row_dispatcher.h"
-#include "common.h"
+
+#include "actors_factory.h"
 #include "coordinator.h"
+#include "leader_election.h"
+#include "probes.h"
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -8,24 +11,27 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
-#include <ydb/library/yql/public/purecalc/common/interface.h>
+#include <yql/essentials/public/purecalc/common/interface.h>
 
-#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/mon/mon.h>
 
-#include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/fq/libs/row_dispatcher/leader_election.h>
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
+#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 
 #include <util/generic/queue.h>
 #include <util/stream/format.h>
 
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+
 namespace NFq {
 
 using namespace NActors;
+
+LWTRACE_USING(FQ_ROW_DISPATCHER_PROVIDER);
 
 namespace {
 
@@ -39,16 +45,15 @@ struct TRowDispatcherMetrics {
         ErrorsCount = Counters->GetCounter("ErrorsCount", true);
         ClientsCount = Counters->GetCounter("ClientsCount");
         RowsSent = Counters->GetCounter("RowsSent", true);
-        NewClients = Counters->GetCounter("NewClients", true);
+        NodesReconnect = Counters->GetCounter("NodesReconnect", true);
     }
 
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr ErrorsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr ClientsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsSent;
-    ::NMonitoring::TDynamicCounters::TCounterPtr NewClients;
+    ::NMonitoring::TDynamicCounters::TCounterPtr NodesReconnect;
 };
-
 
 struct TEvPrivate {
     // Event ids
@@ -72,20 +77,45 @@ struct TEvPrivate {
     };
 };
 
+struct TQueryStatKey {
+    TString QueryId;
+    TString ReadGroup;
+
+    size_t Hash() const noexcept {
+        ui64 hash = std::hash<TString>()(QueryId);
+        hash = CombineHashes<ui64>(hash, std::hash<TString>()(ReadGroup));
+        return hash;
+    }
+    bool operator==(const TQueryStatKey& other) const {
+        return QueryId == other.QueryId && ReadGroup == other.ReadGroup;
+    }
+};
+
+struct TQueryStatKeyHash {
+    size_t operator()(const TQueryStatKey& k) const {
+        return k.Hash();
+    }
+};
+
 struct TAggQueryStat {
     NYql::TCounters::TEntry ReadBytes;
     NYql::TCounters::TEntry UnreadBytes;
-};
-
-struct TQueryState {
     NYql::TCounters::TEntry UnreadRows;
-    NYql::TCounters::TEntry UnreadBytes;
     NYql::TCounters::TEntry ReadLagMessages;
     bool IsWaiting = false;
+
+    void Add(const TTopicSessionClientStatistic& stat) {
+        ReadBytes.Add(NYql::TCounters::TEntry(stat.ReadBytes));
+        UnreadBytes.Add(NYql::TCounters::TEntry(stat.UnreadBytes));
+        UnreadRows.Add(NYql::TCounters::TEntry(stat.UnreadRows));
+        ReadLagMessages.Add(NYql::TCounters::TEntry(stat.ReadLagMessages));
+        IsWaiting = IsWaiting || stat.IsWaiting;
+    }        
 };
 
 ui64 UpdateMetricsPeriodSec = 60;
-ui64 PrintStateToLogPeriodSec = 300;
+ui64 PrintStateToLogPeriodSec = 600;
+ui64 PrintStateToLogSplitSize = 512000;
 ui64 MaxSessionBufferSizeBytes = 16000000;
 
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
@@ -102,6 +132,9 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         bool operator==(const ConsumerSessionKey& other) const {
             return ReadActorId == other.ReadActorId && PartitionId == other.PartitionId;
         }
+        TString ToString() const {
+            return TString::Join(ReadActorId.ToString(), "/", ::ToString(PartitionId));
+        }
     };
 
     struct ConsumerSessionKeyHash {
@@ -111,20 +144,22 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     };
 
     struct TopicSessionKey {
+        TString ReadGroup;
         TString Endpoint;
         TString Database;
         TString TopicPath;
         ui64 PartitionId;
 
         size_t Hash() const noexcept {
-            ui64 hash = std::hash<TString>()(Endpoint);
+            ui64 hash = std::hash<TString>()(ReadGroup);
+            hash = CombineHashes<ui64>(hash, std::hash<TString>()(Endpoint));
             hash = CombineHashes<ui64>(hash, std::hash<TString>()(Database));
             hash = CombineHashes<ui64>(hash, std::hash<TString>()(TopicPath));
             hash = CombineHashes<ui64>(hash, std::hash<ui64>()(PartitionId));
             return hash;
         }
         bool operator==(const TopicSessionKey& other) const {
-            return Endpoint == other.Endpoint && Database == other.Database
+            return ReadGroup == other.ReadGroup && Endpoint == other.Endpoint && Database == other.Database
                 && TopicPath == other.TopicPath && PartitionId == other.PartitionId;
         }
     };
@@ -154,10 +189,16 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
                 TDuration Delay; // The first time retry will be done instantly.
         };
 
+        struct TCounters {
+            ui64 Connected = 0;
+            ui64 Disconnected = 0;
+        };
+
         struct TNodeState {
             bool Connected = false;
             bool RetryScheduled = false;
             TMaybe<TRetryState> RetryState;
+            TCounters Counters;
         };
     public:
         void Init(const NActors::TActorId& selfId) {
@@ -195,11 +236,13 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             auto& state = Nodes[nodeId];
             state.Connected = true;
             state.RetryState = Nothing();
+            state.Counters.Connected++;
         }
 
         void HandleNodeDisconnected(ui32 nodeId) {
             auto& state = Nodes[nodeId];
             state.Connected = false;
+            state.Counters.Disconnected++;
             if (state.RetryScheduled) {
                 return;
             }
@@ -215,7 +258,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         void PrintInternalState(TStringStream& stream) const {
             stream << "Nodes states: \n"; 
             for (const auto& [nodeId, state] : Nodes) {
-               stream << "  id " << nodeId << " connected " << state.Connected << " retry scheduled " << state.RetryScheduled << "\n";
+                stream << "  id " << nodeId << " connected " << state.Connected << " retry scheduled " << state.RetryScheduled
+                    << " connected count " << state.Counters.Connected << " disconnected count " << state.Counters.Disconnected << "\n";
             }
         }
 
@@ -227,14 +271,14 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     struct TAggregatedStats{
         NYql::TCounters::TEntry AllSessionsReadBytes;
-        TMap<TString, TAggQueryStat> LastQueryStats;
+        THashMap<TQueryStatKey, TMaybe<TAggQueryStat>, TQueryStatKeyHash> LastQueryStats;
         TDuration LastUpdateMetricsPeriod;
     };
 
     NConfig::TRowDispatcherConfig Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
-    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     TYqSharedResources::TPtr YqSharedResources;
+    TActorId CompileServiceActorId;
     TMaybe<TActorId> CoordinatorActorId;
     ui64 CoordinatorGeneration = 0;
     TSet<TActorId> CoordinatorChangedSubscribers;
@@ -244,8 +288,10 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TString Tenant;
     NFq::NRowDispatcher::IActorFactory::TPtr ActorFactory;
     const ::NMonitoring::TDynamicCounterPtr Counters;
+    const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     TRowDispatcherMetrics Metrics;
     NYql::IPqGateway::TPtr PqGateway;
+    NActors::TMon* Monitoring;
     TNodesTracker NodesTracker;
     TAggregatedStats AggrStats; 
 
@@ -287,13 +333,13 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         ConsumerCounters Counters;
         bool PendingGetNextBatch = false;
         bool PendingNewDataArrived = false;
-        TopicSessionClientStatistic Stat;
+        TTopicSessionClientStatistic Stat;
         ui64 Generation;
     };
 
     struct SessionInfo {
         TMap<TActorId, TAtomicSharedPtr<ConsumerInfo>> Consumers;   // key - ReadActor actor id
-        TopicSessionCommonStatistic Stat;                           // Increments
+        TTopicSessionCommonStatistic Stat;                           // Increments
         NYql::TCounters::TEntry AggrReadBytes;
     };
 
@@ -301,9 +347,16 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TMap<TActorId, SessionInfo> Sessions;                         // key - TopicSession actor id
     };
 
+    struct ReadActorInfo {
+        TString InternalState;
+        TInstant RequestTime;
+        TInstant ResponseTime;
+    };
+
     THashMap<ConsumerSessionKey, TAtomicSharedPtr<ConsumerInfo>, ConsumerSessionKeyHash> Consumers;
     TMap<ui64, TAtomicSharedPtr<ConsumerInfo>> ConsumersByEventQueueId;
     THashMap<TopicSessionKey, TopicSessionInfo, TopicSessionKeyHash> TopicSessions;
+    TMap<TActorId, ReadActorInfo> ReadActorsInternalState;
 
 public:
     explicit TRowDispatcher(
@@ -314,7 +367,9 @@ public:
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        const NYql::IPqGateway::TPtr& pqGateway);
+        const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+        const NYql::IPqGateway::TPtr& pqGateway,
+        NActors::TMon* monitoring = nullptr);
 
     void Bootstrap();
 
@@ -336,11 +391,11 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvGetInternalStateResponse::TPtr& ev);
 
     void Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev);
     void Handle(const TEvPrivate::TEvTryConnect::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&);
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
     void Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&);
     void Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&);
     void Handle(const NMon::TEvHttpInfo::TPtr&);
@@ -348,8 +403,12 @@ public:
     void DeleteConsumer(const ConsumerSessionKey& key);
     void UpdateMetrics();
     TString GetInternalState();
+    TString GetReadActorsInternalState();
+    void UpdateReadActorsInternalState();
     template <class TEventPtr>
     bool CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, const TEventPtr& ev);
+    void SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax);
+    void PrintStateToLog();
 
     STRICT_STFUNC(
         StateFunc, {
@@ -367,9 +426,9 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionStatistic, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateResponse, Handle);
         hFunc(TEvPrivate::TEvTryConnect, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
-        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvHeartbeat, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
         hFunc(NFq::TEvPrivate::TEvUpdateMetrics, Handle);
@@ -386,18 +445,22 @@ TRowDispatcher::TRowDispatcher(
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+    const NYql::IPqGateway::TPtr& pqGateway,
+    NActors::TMon* monitoring)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , PureCalcProgramFactory(CreatePureCalcProgramFactory())
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
     , LogPrefix("RowDispatcher: ")
     , Tenant(tenant)
     , ActorFactory(actorFactory)
     , Counters(counters)
+    , CountersRoot(countersRoot)
     , Metrics(counters)
-    , PqGateway(pqGateway) {
+    , PqGateway(pqGateway)
+    , Monitoring(monitoring)
+{
 }
 
 void TRowDispatcher::Bootstrap() {
@@ -407,20 +470,24 @@ void TRowDispatcher::Bootstrap() {
     const auto& config = Config.GetCoordinator();
     auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters).release());
     Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, Counters).release());
+
+    CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
+
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
 
-    NActors::TMon* mon = NKikimr::AppData()->Mon;
-    if (mon) {
-        ::NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(actorsMonPage, "row_dispatcher", "Row Dispatcher", false,
+    if (Monitoring) {
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(FQ_ROW_DISPATCHER_PROVIDER));
+        ::NMonitoring::TIndexMonPage* actorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
+        Monitoring->RegisterActorPage(actorsMonPage, "row_dispatcher", "Row Dispatcher", false,
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
     }
     NodesTracker.Init(SelfId());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
+    LWPROBE(CoordinatorChanged, ev->Sender.ToString(), ev->Get()->Generation, ev->Get()->CoordinatorActorId.ToString(), CoordinatorGeneration, CoordinatorActorId->ToString());
     LOG_ROW_DISPATCHER_DEBUG("Coordinator changed, old leader " << CoordinatorActorId << ", new " << ev->Get()->CoordinatorActorId << " generation " << ev->Get()->Generation);
     if (ev->Get()->Generation < CoordinatorGeneration) {
         LOG_ROW_DISPATCHER_ERROR("New generation (" << ev->Get()->Generation << ") is less previous (" << CoordinatorGeneration << "), ignore updates");
@@ -438,7 +505,9 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
 }
 
 void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+    LWPROBE(NodeConnected, ev->Sender.ToString(), ev->Get()->NodeId);
     LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected, node id " << ev->Get()->NodeId);
+    Metrics.NodesReconnect->Inc();
     NodesTracker.HandleNodeConnected(ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
@@ -446,7 +515,9 @@ void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev
 }
 
 void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+    LWPROBE(NodeDisconnected, ev->Sender.ToString(), ev->Get()->NodeId);
     LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
+    Metrics.NodesReconnect->Inc();
     NodesTracker.HandleNodeDisconnected(ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
@@ -454,9 +525,18 @@ void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TP
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString() << ", reason " << ev->Get()->Reason);
-    for (auto& [actorId, consumer] : Consumers) {
-        consumer->EventsQueue.HandleUndelivered(ev);
+    LWPROBE(UndeliveredStart, ev->Sender.ToString(), ev->Get()->Reason, ev->Cookie);
+    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, from " << ev->Sender << ", reason " << ev->Get()->Reason);
+    for (auto& [key, consumer] : Consumers) {
+        if (ev->Cookie != consumer->Generation) {       // Several partitions in one read_actor have different Generation.
+            LWPROBE(UndeliveredSkipGeneration, ev->Sender.ToString(), ev->Get()->Reason, ev->Cookie, consumer->Generation);
+            continue;
+        }
+        if (consumer->EventsQueue.HandleUndelivered(ev) == NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
+            LWPROBE(UndeliveredDeleteConsumer, ev->Sender.ToString(), ev->Get()->Reason, ev->Cookie, key.ToString());
+            DeleteConsumer(key);
+            break;
+        }
     }
 }
 
@@ -465,11 +545,13 @@ void TRowDispatcher::Handle(TEvPrivate::TEvCoordinatorPing::TPtr&) {
     if (!CoordinatorActorId) {
         return;
     }
+    LWPROBE(CoordinatorPing, CoordinatorActorId->ToString());
     LOG_ROW_DISPATCHER_TRACE("Send ping to " << *CoordinatorActorId);
     Send(*CoordinatorActorId, new NActors::TEvents::TEvPing());
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr&) {
+    LWPROBE(Pong);
     LOG_ROW_DISPATCHER_TRACE("NActors::TEvents::TEvPong");
 }
 
@@ -480,6 +562,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscrib
     if (!CoordinatorActorId) {
         return;
     }
+    LWPROBE(CoordinatorChangesSubscribe, ev->Sender.ToString(), CoordinatorGeneration, CoordinatorActorId->ToString());
     Send(ev->Sender, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(*CoordinatorActorId, CoordinatorGeneration), IEventHandle::FlagTrackDelivery);
 }
 
@@ -494,7 +577,9 @@ void TRowDispatcher::UpdateMetrics() {
     }
 
     AggrStats.AllSessionsReadBytes = NYql::TCounters::TEntry();
-    AggrStats.LastQueryStats.clear();
+    for (auto& [queryId, stat] : AggrStats.LastQueryStats) {
+        stat = Nothing();
+    }
 
     for (auto& [key, sessionsInfo] : TopicSessions) {
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
@@ -504,18 +589,37 @@ void TRowDispatcher::UpdateMetrics() {
             sessionInfo.Stat.Clear();
 
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
-                auto& stat = AggrStats.LastQueryStats[consumer->QueryId];
-                stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
-                stat.ReadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.ReadBytes));
+                auto& stat = AggrStats.LastQueryStats[TQueryStatKey{consumer->QueryId, key.ReadGroup}];
+                if (!stat) {
+                    stat = TAggQueryStat();
+                }
+                stat->Add(consumer->Stat);
                 consumer->Stat.Clear();
             }
         }
     }
-    for (const auto& [queryId, stat] : AggrStats.LastQueryStats) {
-        auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
-        queryGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
-        queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
+    THashSet<TQueryStatKey, TQueryStatKeyHash> toDelete;
+    for (const auto& [key, stats] : AggrStats.LastQueryStats) {
+        if (!stats) {
+            toDelete.insert(key);
+            continue;
+        }
+        SetQueryMetrics(key, stats->UnreadBytes.Max, stats->UnreadBytes.Avg, stats->ReadLagMessages.Max);
     }
+    for (const auto& key : toDelete) {
+         SetQueryMetrics(key, 0, 0, 0);
+         Metrics.Counters->RemoveSubgroup("query_id", key.QueryId);
+         AggrStats.LastQueryStats.erase(key);
+    }
+    PrintStateToLog();
+}
+
+void TRowDispatcher::SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax) {
+    auto queryGroup = Metrics.Counters->GetSubgroup("query_id", queryKey.QueryId);
+    auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(queryKey.ReadGroup));
+    topicGroup->GetCounter("MaxUnreadBytes")->Set(unreadBytesMax);
+    topicGroup->GetCounter("AvgUnreadBytes")->Set(unreadBytesAvg);
+    topicGroup->GetCounter("MaxReadLag")->Set(readLagMessagesMax);
 }
 
 TString TRowDispatcher::GetInternalState() {
@@ -543,24 +647,22 @@ TString TRowDispatcher::GetInternalState() {
     };
     str << "Consumers count: " << Consumers.size() << "\n";
     str << "TopicSessions count: " << TopicSessions.size() << "\n";
+    str << "Max session buffer size: " << toHuman(MaxSessionBufferSizeBytes) << "\n";
     str << "DataRate (all sessions): ";
     printDataRate(AggrStats.AllSessionsReadBytes);
     str << "\n";
 
-    TMap<TString, TQueryState> queryState;
-    TMap<TString, ui64> sessionCountByQuery;
+    THashMap<TQueryStatKey, TAggQueryStat, TQueryStatKeyHash> queryState;
+    THashMap<TQueryStatKey, ui64, TQueryStatKeyHash> sessionCountByQuery;
     ui64 unreadBytesSum = 0;
 
-    for (auto& [key, sessionsInfo] : TopicSessions) {
+    for (auto& [sessionKey, sessionsInfo] : TopicSessions) {
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             unreadBytesSum += sessionInfo.Stat.UnreadBytes;
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
-                ++sessionCountByQuery[consumer->QueryId];
-                auto& stat = queryState[consumer->QueryId];
-                stat.UnreadRows.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadRows));
-                stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
-                stat.ReadLagMessages.Add(NYql::TCounters::TEntry(consumer->Stat.ReadLagMessages));
-                stat.IsWaiting = stat.IsWaiting || consumer->Stat.IsWaiting;
+                auto key = TQueryStatKey{consumer->QueryId, sessionKey.ReadGroup};
+                ++sessionCountByQuery[key];
+                queryState[key].Add(consumer->Stat);
             }
         }
     }
@@ -570,26 +672,38 @@ TString TRowDispatcher::GetInternalState() {
     }
 
     str << "Queries:\n";
-    for (const auto& [queryId, stat]: queryState) {
-        const auto& aggStat = AggrStats.LastQueryStats[queryId];
-        auto sessionsBufferSumSize = sessionCountByQuery[queryId] * MaxSessionBufferSizeBytes;
+    for (const auto& [queryStatKey, stat]: queryState) {
+        auto [queryId, readGroup] = queryStatKey;
+        const auto& aggStat = AggrStats.LastQueryStats[queryStatKey];
+        auto sessionsBufferSumSize = sessionCountByQuery[queryStatKey] * MaxSessionBufferSizeBytes;
         auto used = sessionsBufferSumSize ? (stat.UnreadBytes.Sum * 100.0 / sessionsBufferSumSize) : 0.0;
-        str << "  " << queryId << " buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.UnreadBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.UnreadBytes.Max) << " data rate";
-        printDataRate(aggStat.ReadBytes);
+        str << "  " << queryId << " / " << readGroup << ": buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.UnreadBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.UnreadBytes.Max) << " data rate";
+        if (aggStat) {
+            printDataRate(aggStat->ReadBytes);
+        }
         str << " waiting " << stat.IsWaiting << " max read lag " << stat.ReadLagMessages.Max;
         str << "\n";
     }
     str << "TopicSessions:\n";
     for (auto& [key, sessionsInfo] : TopicSessions) {
-        str << "  " << key.TopicPath << " / " << key.PartitionId;
+        str << "  " << key.TopicPath << " / " << key.PartitionId  << " / " << key.ReadGroup;
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             str << " / " << LeftPad(actorId, 32)
                 << " data rate " << toHumanDR(sessionInfo.AggrReadBytes.Sum) << " unread bytes " << toHuman(sessionInfo.Stat.UnreadBytes)
                 << " offset " << LeftPad(sessionInfo.Stat.LastReadedOffset, 12) << " restarts by offsets " << sessionInfo.Stat.RestartSessionByOffsets << "\n";
+            ui64 maxInitialOffset = 0;
+            ui64 minInitialOffset = std::numeric_limits<ui64>::max();
+
+            for (const auto& [formatName, formatStats] : sessionInfo.Stat.FormatHandlers) {
+                str << "    " << formatName 
+                    << " parse and filter lantecy  " << formatStats.ParseAndFilterLatency
+                    << " (parse " << formatStats.ParserStats.ParserLatency << ", filter " << formatStats.FilterStats.FilterLatency << ")\n";
+            }
+
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
                 str << "    " << consumer->QueryId << " " << LeftPad(readActorId, 32) << " unread bytes "
                     << toHuman(consumer->Stat.UnreadBytes) << " (" << leftPad(consumer->Stat.UnreadRows) << " rows) "
-                    << " offset " << leftPad(consumer->Stat.Offset)
+                    << " offset " << leftPad(consumer->Stat.Offset) << " init offset " << leftPad(consumer->Stat.InitialOffset)
                     << " get " << leftPad(consumer->Counters.GetNextBatch)
                     << " arr " << leftPad(consumer->Counters.NewDataArrived) << " btc " << leftPad(consumer->Counters.MessageBatch) 
                     << " pend get " <<  leftPad(consumer->PendingGetNextBatch) << " pend new " << leftPad(consumer->PendingNewDataArrived)
@@ -597,16 +711,57 @@ TString TRowDispatcher::GetInternalState() {
                     << " conn id " <<  consumer->Generation << " ";
                 str << " retry queue: ";
                 consumer->EventsQueue.PrintInternalState(str);
+
+                maxInitialOffset = std::max(maxInitialOffset, consumer->Stat.InitialOffset);
+                minInitialOffset = std::min(minInitialOffset, consumer->Stat.InitialOffset);
             }
+            str << "    initial offset max " << leftPad(maxInitialOffset) << " min " << leftPad(minInitialOffset) << "\n";;
         }
     }
     return str.Str();
 }
 
+TString TRowDispatcher::GetReadActorsInternalState() {
+    TStringStream str;
+    for (const auto& [_, internalState]: ReadActorsInternalState) {
+        str << "ResponseTime: " << internalState.ResponseTime << " " << internalState.InternalState << Endl;
+    }
+    return str.Str();
+}
+
+void TRowDispatcher::UpdateReadActorsInternalState() {
+    TSet<TActorId> ReadActors;
+    for (const auto& [key, _]: Consumers) {
+        ReadActors.insert(key.ReadActorId);
+    }
+
+    for(auto it = ReadActorsInternalState.begin(); it != ReadActorsInternalState.end();) {
+        if (!ReadActors.contains(it->first)) {
+            it = ReadActorsInternalState.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    auto now = TInstant::Now();
+    for (const auto& readActor: ReadActors) {
+        auto& internalStateInfo = ReadActorsInternalState[readActor];
+        if (now - internalStateInfo.RequestTime < TDuration::Seconds(30)) {
+            continue;
+        }
+        internalStateInfo.RequestTime = now;
+        Send(readActor, new NFq::TEvRowDispatcher::TEvGetInternalStateRequest{}, 0, 0);
+    }
+}
+
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
+    LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", read group " << ev->Get()->Record.GetSource().GetReadGroup() << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " part id " << ev->Get()->Record.GetPartitionId() << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
-    ++*Metrics.NewClients;
+    auto queryGroup = Metrics.Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
+    auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(ev->Get()->Record.GetSource().GetReadGroup()));
+    topicGroup->GetCounter("StartSession", true)->Inc();
+
+    LWPROBE(StartSession, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), ev->Get()->Record.GetQueryId(), ev->Get()->Record.ByteSizeLong());
 
     NodesTracker.AddNode(ev->Sender.NodeId());
     TMaybe<ui64> readOffset;
@@ -628,7 +783,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     }
     const auto& source = ev->Get()->Record.GetSource();
     TActorId sessionActorId;
-    TopicSessionKey topicKey{source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath(), ev->Get()->Record.GetPartitionId()};
+    TopicSessionKey topicKey{source.GetReadGroup(), source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath(), ev->Get()->Record.GetPartitionId()};
     TopicSessionInfo& topicSessionInfo = TopicSessions[topicKey];
     Y_ENSURE(topicSessionInfo.Sessions.size() <= 1);
 
@@ -640,21 +795,24 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     }
 
     if (topicSessionInfo.Sessions.empty()) {
-        LOG_ROW_DISPATCHER_DEBUG("Create new session, offset " << readOffset);
+        LOG_ROW_DISPATCHER_DEBUG("Create new session: read group " << source.GetReadGroup() << " topic " << source.GetTopicPath() 
+            << " part id " << ev->Get()->Record.GetPartitionId() << " offset " << readOffset);
         sessionActorId = ActorFactory->RegisterTopicSession(
+            source.GetReadGroup(),
             source.GetTopicPath(),
             source.GetEndpoint(),
             source.GetDatabase(),
             Config,
             SelfId(),
+            CompileServiceActorId,
             ev->Get()->Record.GetPartitionId(),
             YqSharedResources->UserSpaceYdbDriver,
             CreateCredentialsProviderFactoryForStructuredToken(
                 CredentialsFactory,
                 ev->Get()->Record.GetToken(),
                 source.GetAddBearerToToken()),
-            PureCalcProgramFactory,
             Counters,
+            CountersRoot,
             PqGateway,
             MaxSessionBufferSizeBytes
             );
@@ -680,6 +838,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvGetNextBatch from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
+    LWPROBE(GetNextBatch, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
     LOG_ROW_DISPATCHER_TRACE("Received TEvGetNextBatch from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
     if (!CheckSession(it->second, ev)) {
         return;
@@ -697,6 +856,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
         LOG_ROW_DISPATCHER_WARN("Wrong consumer, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
+    LWPROBE(Heartbeat, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
     LOG_ROW_DISPATCHER_TRACE("Received TEvHeartbeat from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
     CheckSession(it->second, ev);
 }
@@ -717,12 +877,12 @@ bool TRowDispatcher::CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, cons
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
-    LOG_ROW_DISPATCHER_DEBUG(GetInternalState());
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
         LOG_ROW_DISPATCHER_WARN("Ignore TEvStopSession from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
+    LWPROBE(StopSession, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
     if (!CheckSession(it->second, ev)) {
@@ -734,7 +894,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     auto consumerIt = Consumers.find(key);
     if (consumerIt == Consumers.end()) {
-        LOG_ROW_DISPATCHER_ERROR("Ignore (no consumer )DeleteConsumer, " << " read actor id " << key.ReadActorId << " part id " << key.PartitionId);
+        LOG_ROW_DISPATCHER_ERROR("Ignore (no consumer) DeleteConsumer, " << " read actor id " << key.ReadActorId << " part id " << key.PartitionId);
         return;
     }
 
@@ -746,6 +906,7 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     Send(new IEventHandle(consumerIt->second->TopicSessionId, consumer->ReadActorId, event.release(), 0));
 
     TopicSessionKey topicKey{
+        consumer->SourceParams.GetReadGroup(),
         consumer->SourceParams.GetEndpoint(),
         consumer->SourceParams.GetDatabase(),
         consumer->SourceParams.GetTopicPath(),
@@ -755,7 +916,7 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     Y_ENSURE(sessionInfo.Consumers.count(consumer->ReadActorId));
     sessionInfo.Consumers.erase(consumer->ReadActorId);
     if (sessionInfo.Consumers.empty()) {
-        LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill");
+        LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill to " << consumerIt->second->TopicSessionId);
         topicSessionInfo.Sessions.erase(consumerIt->second->TopicSessionId);
         Send(consumerIt->second->TopicSessionId, new NActors::TEvents::TEvPoisonPill());
         if (topicSessionInfo.Sessions.empty()) {
@@ -767,18 +928,8 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     Metrics.ClientsCount->Set(Consumers.size());
 }
 
-void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr& ev) {
-    LOG_ROW_DISPATCHER_WARN("Session closed, event queue id " << ev->Get()->EventQueueId);
-    for (auto& [consumerKey, consumer] : Consumers) {
-        if (consumer->EventQueueId != ev->Get()->EventQueueId) {
-            continue;
-        }
-        DeleteConsumer(consumerKey);
-        break;
-    }
-}
-
 void TRowDispatcher::Handle(const TEvPrivate::TEvTryConnect::TPtr& ev) {
+    LWPROBE(TryConnect, ev->Sender.ToString(), ev->Get()->NodeId);
     LOG_ROW_DISPATCHER_TRACE("TEvTryConnect to node id " << ev->Get()->NodeId);
     NodesTracker.TryConnect(ev->Get()->NodeId);
 }
@@ -786,10 +937,11 @@ void TRowDispatcher::Handle(const TEvPrivate::TEvTryConnect::TPtr& ev) {
 void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr& ev) {
     auto it = ConsumersByEventQueueId.find(ev->Get()->EventQueueId);
     if (it == ConsumersByEventQueueId.end()) {
-        LOG_ROW_DISPATCHER_WARN("No consumer with EventQueueId = " << ev->Get()->EventQueueId);
+        LOG_ROW_DISPATCHER_TRACE("No consumer with EventQueueId = " << ev->Get()->EventQueueId);
         return;
     }
     auto& sessionInfo = it->second;
+    LWPROBE(PrivateHeartbeat, ev->Sender.ToString(), sessionInfo->PartitionId, sessionInfo->QueryId, sessionInfo->Generation);
 
     bool needSend = sessionInfo->EventsQueue.Heartbeat();
     if (needSend) {
@@ -798,13 +950,14 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbea
     }
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {    
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
         LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvNewDataArrived from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
+    LWPROBE(NewDataArrived, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), it->second->QueryId, it->second->Generation, ev->Get()->Record.ByteSizeLong());
     LOG_ROW_DISPATCHER_TRACE("Forward TEvNewDataArrived from " << ev->Sender << " to " << ev->Get()->ReadActorId << " query id " << it->second->QueryId);
     it->second->PendingNewDataArrived = true;
     it->second->Counters.NewDataArrived++;
@@ -818,6 +971,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvMessageBatch  from " << ev->Sender);
         return;
     }
+    LWPROBE(MessageBatch, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), it->second->QueryId, it->second->Generation, ev->Get()->Record.ByteSizeLong());
     LOG_ROW_DISPATCHER_TRACE("Forward TEvMessageBatch from " << ev->Sender << " to " << ev->Get()->ReadActorId << " query id " << it->second->QueryId);
     Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     it->second->PendingGetNextBatch = false;
@@ -832,6 +986,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvSessionError from " << ev->Sender << " to " << ev->Get()->ReadActorId << " part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
+    LWPROBE(SessionError, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, it->second->Generation, ev->Get()->Record.ByteSizeLong());
     ++*Metrics.ErrorsCount;
     LOG_ROW_DISPATCHER_TRACE("Forward TEvSessionError from " << ev->Sender << " to " << ev->Get()->ReadActorId << " part id " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
     it->second->EventsQueue.Send(ev->Release().Release(), it->second->Generation);
@@ -846,26 +1001,45 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvStatistics from " << ev->Sender << " to " << ev->Get()->ReadActorId << " part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
+    LWPROBE(Statistics, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, it->second->Generation, ev->Get()->Record.ByteSizeLong());
     LOG_ROW_DISPATCHER_TRACE("Forward TEvStatus from " << ev->Sender << " to " << ev->Get()->ReadActorId << " part id " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
     it->second->EventsQueue.Send(ev->Release().Release(), it->second->Generation);
 }
 
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&) {
+    LWPROBE(UpdateMetrics);
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     UpdateMetrics();
 }
 
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&) {
-    LOG_ROW_DISPATCHER_DEBUG(GetInternalState());
+    LWPROBE(PrintStateToLog, PrintStateToLogPeriodSec);
+    PrintStateToLog();
     Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
 }
 
+void TRowDispatcher::PrintStateToLog() {
+    auto str = GetInternalState();
+    auto buf = TStringBuf(str);
+    i64 size = buf.size();
+    ui64 offset = 0;
+    while (size > 0) {
+        LOG_ROW_DISPATCHER_DEBUG(buf.SubString(offset, PrintStateToLogSplitSize));
+        offset += PrintStateToLogSplitSize;
+        size -= PrintStateToLogSplitSize;
+    }
+}
+
 void TRowDispatcher::Handle(const NMon::TEvHttpInfo::TPtr& ev) {
+    UpdateReadActorsInternalState();
     TStringStream str;
     HTML(str) {
         PRE() {
+            str << "Current Time: " << TInstant::Now() << Endl;
             str << "Current state:" << Endl;
             str << GetInternalState() << Endl;
+            str << "Read actors state: " << Endl;
+            str << GetReadActorsInternalState() << Endl;
             str << Endl;
         }
     }
@@ -874,8 +1048,22 @@ void TRowDispatcher::Handle(const NMon::TEvHttpInfo::TPtr& ev) {
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvSessionStatistic from " << ev->Sender);
-    const auto& key = ev->Get()->Stat.SessionKey;
-    TopicSessionKey sessionKey{key.Endpoint, key.Database, key.TopicPath, key.PartitionId};
+    const auto& stat = ev->Get()->Stat;
+    const auto& key = stat.SessionKey;
+
+    LWPROBE(SessionStatistic, 
+                ev->Sender.ToString(),
+                key.ReadGroup,
+                key.Endpoint,
+                key.Database,
+                key.TopicPath,
+                key.PartitionId,
+                stat.Common.ReadBytes,
+                stat.Common.UnreadBytes,
+                stat.Common.RestartSessionByOffsets,
+                stat.Common.ReadEvents,
+                stat.Common.LastReadedOffset);
+    TopicSessionKey sessionKey{key.ReadGroup, key.Endpoint, key.Database, key.TopicPath, key.PartitionId};
 
     auto sessionsIt = TopicSessions.find(sessionKey);
     if (sessionsIt == TopicSessions.end()) {
@@ -899,6 +1087,13 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
     }
 }
 
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetInternalStateResponse::TPtr& ev) {
+    LWPROBE(GetInternalState, ev->Sender.ToString(), ev->Get()->Record.ByteSizeLong());
+    auto& readActorInternalState = ReadActorsInternalState[ev->Sender];
+    readActorInternalState.InternalState = ev->Get()->Record.GetInternalState();
+    readActorInternalState.ResponseTime = TInstant::Now();
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -911,7 +1106,9 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+    const NYql::IPqGateway::TPtr& pqGateway,
+    NActors::TMon* monitoring)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
@@ -921,7 +1118,9 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         tenant,
         actorFactory,
         counters,
-        pqGateway));
+        countersRoot,
+        pqGateway,
+        monitoring));
 }
 
 } // namespace NFq

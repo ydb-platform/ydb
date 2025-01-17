@@ -6,6 +6,7 @@ SRCS(
     table_settings.cpp
     table_description.cpp
     table_profiles.cpp
+    topic_description.cpp
     ydb_convert.cpp
     tx_proxy_status.cpp
 )
@@ -20,6 +21,7 @@ PEERDIR(
     ydb/core/util
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
+    ydb/library/conclusion
     ydb/library/mkql_proto/protos
     yql/essentials/minikql/dom
     yql/essentials/public/udf

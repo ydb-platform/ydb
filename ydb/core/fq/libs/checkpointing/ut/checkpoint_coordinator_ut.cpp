@@ -417,6 +417,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         void SaveFailed(TCheckpointId checkpointId) {
             MockNodeStateSavedEvent(checkpointId, IngressActor);
             MockNodeStateSaveFailedEvent(checkpointId, EgressActor);
+            MockNodeStateSaveFailedEvent(checkpointId, MapActor);
 
             Cerr << "Waiting for TEvAbortCheckpointRequest (storage)" << Endl;
             ExpectEvent(StorageProxy, 

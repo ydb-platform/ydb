@@ -12,5 +12,5 @@ from
 where
     l_shipdate >= date '1994-01-01'
     and l_shipdate < date '1994-01-01' + interval '1' year
-    and l_discount between 0.01 - 0.0100001 and 0.01 + 0.0100001
+    and l_discount between 0.06 - 0.0100001 and 0.06 + 0.0100001
     and l_quantity < 24;

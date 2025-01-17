@@ -1,14 +1,17 @@
 import json
 
 from moto.core.responses import BaseResponse
-from moto.core.utils import amzn_request_id
+from moto.utilities.aws_headers import amzn_request_id
 from .models import stepfunction_backends
 
 
 class StepFunctionResponse(BaseResponse):
+    def __init__(self):
+        super().__init__(service_name="stepfunctions")
+
     @property
     def stepfunction_backend(self):
-        return stepfunction_backends[self.region]
+        return stepfunction_backends[self.current_account][self.region]
 
     @amzn_request_id
     def create_state_machine(self):

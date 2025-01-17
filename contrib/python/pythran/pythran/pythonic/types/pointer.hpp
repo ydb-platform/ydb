@@ -31,7 +31,7 @@ namespace types
   {
     return data[i];
   }
-}
+} // namespace types
 PYTHONIC_NS_END
 
 namespace std
@@ -56,7 +56,7 @@ namespace std
   {
     return t[I];
   }
-}
+} // namespace std
 
 #ifdef ENABLE_PYTHON_MODULE
 

@@ -80,26 +80,41 @@ The action can be performed if the checks are successful, and temporary locks ar
 
 ## Examples {#examples}
 
-The [ydbops](https://github.com/ydb-platform/ydbops) utility tool uses CMS for cluster maintenance without downtime. You can also use the CMS directly through the [gRPC API](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/grpc/draft/ydb_maintenance_v1.proto).
+The [ydbops](../../reference/ydbops/index.md) utility tool uses CMS for cluster maintenance without downtime. You can also use the CMS directly through the [gRPC API](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/grpc/draft/ydb_maintenance_v1.proto).
 
 ### Rolling restart {##rolling-restart}
 
 To perform a rolling restart of the entire cluster, you can use the command:
 
 ```bash
-$ ydbops restart --endpoint grpc://<cluster-fqdn> --availability-mode strong
+$ ydbops restart
 ```
 
-If your systemd unit name is different from the default one, you may need to override it with `--systemd-unit` flag.
+The default availability mode is `strong`. This mode minimizes the risk of availability loss. Use the `--availability-mode` parameter to override the default availability mode.
 
 The `ydbops` utility will automatically create a maintenance task to restart the entire cluster using the given availability mode. As it progresses, the `ydbops` will refresh the maintenance task and acquire exclusive locks on the nodes in the CMS until all nodes are restarted.
 
-### Take out a node for maintenance {#node-maintenance}
+### Take out a host for maintenance {#host-maintenance}
 
-{% note info "Functionality in development" %}
+To take out a host for maintenance, follow these steps:
 
-Functionality is expected in upcoming versions of the `ydbops`.
+1. Create a maintenance task using the command:
 
-{% endnote %}
+    ```bash
+    $ ydbops maintenance create --hosts=<fqdn> --duration=<seconds>
+    ```
 
-To take out a node for maintenance, you can use the `ydbops` utility. When taking a node out, the `ydbops` will acquire an exclusive lock on this node in CMS.
+    This command creates a maintenance task that will acquire an exclusive lock for `<seconds>` seconds on the host with the fully qualified domain name `<fqdn>`.
+2. After creating a task, refresh its state until the lock is taken, using the command:
+
+    ```bash
+    $ ydbops maintenance refresh --task-id=<id>
+    ```
+
+    This command refreshes the task with identifier `<id>` and attempts to acquire the required lock. When a `PERFORMED` response is received, proceed to the next step.
+3. Perform host maintenance while the lock is acquired.
+4. After the maintenance is complete, release the lock using the command:
+
+    ```bash
+    $ ydbops maintenance complete --task-id=<id> --hosts=<fqdn>
+    ```

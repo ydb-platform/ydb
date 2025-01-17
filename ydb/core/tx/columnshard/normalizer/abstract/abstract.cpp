@@ -77,7 +77,7 @@ void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
                 auto component = INormalizerComponent::TFactory::MakeHolder(i.GetClassName(), ctx);
                 AFL_VERIFY(component)("class_name", i.GetClassName());
                 auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(component.Release()));
-                normalizer->SetIsRepair(true).SetUniqueDescription(i.GetDescription());
+                normalizer->SetIsRepair(true).SetIsDryRun(i.GetDryRun()).SetUniqueDescription(i.GetDescription());
             }
         }
     }

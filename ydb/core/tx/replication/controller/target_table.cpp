@@ -29,7 +29,9 @@ class TTableWorkerRegistar: public TActorBootstrapped<TTableWorkerRegistar> {
                 continue;
             }
 
-            auto ev = MakeTEvRunWorker(ReplicationId, TargetId, partition.GetPartitionId(), ConnectionParams, SrcStreamPath, DstPathId);
+            auto ev = MakeRunWorkerEv(
+                ReplicationId, TargetId, partition.GetPartitionId(),
+                ConnectionParams, ConsistencySettings, SrcStreamPath, DstPathId);
             Send(Parent, std::move(ev));
         }
 
@@ -50,6 +52,7 @@ public:
             const TActorId& parent,
             const TActorId& proxy,
             const NKikimrReplication::TConnectionParams& connectionParams,
+            const NKikimrReplication::TConsistencySettings& consistencySettings,
             ui64 rid,
             ui64 tid,
             const TString& srcStreamPath,
@@ -57,6 +60,7 @@ public:
         : Parent(parent)
         , YdbProxy(proxy)
         , ConnectionParams(connectionParams)
+        , ConsistencySettings(consistencySettings)
         , ReplicationId(rid)
         , TargetId(tid)
         , SrcStreamPath(srcStreamPath)
@@ -82,6 +86,7 @@ private:
     const TActorId Parent;
     const TActorId YdbProxy;
     const NKikimrReplication::TConnectionParams ConnectionParams;
+    const NKikimrReplication::TConsistencySettings ConsistencySettings;
     const ui64 ReplicationId;
     const ui64 TargetId;
     const TString SrcStreamPath;
@@ -98,9 +103,10 @@ TTargetTableBase::TTargetTableBase(TReplication* replication, ETargetKind finalK
 
 IActor* TTargetTableBase::CreateWorkerRegistar(const TActorContext& ctx) const {
     auto replication = GetReplication();
+    const auto& config = replication->GetConfig();
     return new TTableWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetConfig().GetSrcConnectionParams(), replication->GetId(), GetId(),
-        BuildStreamPath(), GetDstPathId());
+        config.GetSrcConnectionParams(), config.GetConsistencySettings(),
+        replication->GetId(), GetId(), BuildStreamPath(), GetDstPathId());
 }
 
 TTargetTable::TTargetTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)

@@ -1,5 +1,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
 
 namespace {
 
@@ -14,7 +15,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TCreateTableIndex TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -245,7 +246,7 @@ public:
         context.OnComplete.ActivateTx(OperationId);
 
         dstPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;

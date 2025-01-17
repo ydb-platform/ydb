@@ -79,6 +79,9 @@ private:
     virtual TStatus HandleCreateBackupCollection(NNodes::TKiCreateBackupCollection node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterBackupCollection(NNodes::TKiAlterBackupCollection node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropBackupCollection(NNodes::TKiDropBackupCollection node, TExprContext& ctx) = 0;
+    virtual TStatus HandleBackup(NNodes::TKiBackup node, TExprContext& ctx) = 0;
+    virtual TStatus HandleBackupIncremental(NNodes::TKiBackupIncremental node, TExprContext& ctx) = 0;
+    virtual TStatus HandleRestore(NNodes::TKiRestore node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {
@@ -94,6 +97,7 @@ public:
         PGObject,
         Replication,
         BackupCollection,
+        Sequence,
     };
 
     struct TViewDescription {
@@ -124,6 +128,12 @@ public:
     TString GetTopicPath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Topic);
+        return Target;
+    }
+
+    TString GetSequencePath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Sequence);
         return Target;
     }
 

@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/ndarray/tolist.hpp"
 
+#include "pythonic/types/ndarray.hpp"
 #include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/numpy_conversion.hpp"
-#include "pythonic/types/ndarray.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -36,8 +36,8 @@ namespace numpy
     }
 
     NUMPY_EXPR_TO_NDARRAY0_IMPL(tolist);
-  }
-}
+  } // namespace ndarray
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -50,6 +50,7 @@ namespace NKikimr {
             EvUpdateDomain,
             EvRequestTabletDistribution,
             EvRequestScaleRecommendation,
+            EvConfigureScaleRecommender,
 
             // replies
             EvBootTabletReply = EvBootTablet + 512,
@@ -86,6 +87,7 @@ namespace NKikimr {
             EvUpdateDomainReply,
             EvResponseTabletDistribution,
             EvResponseScaleRecommendation,
+            EvConfigureScaleRecommenderReply,
 
             EvEnd
         };
@@ -710,8 +712,9 @@ namespace NKikimr {
         {
             TEvLockTabletExecutionLost() = default;
 
-            explicit TEvLockTabletExecutionLost(ui64 tabletId) {
+            explicit TEvLockTabletExecutionLost(ui64 tabletId, NKikimrHive::ELockLostReason reason) {
                 Record.SetTabletID(tabletId);
+                Record.SetReason(reason);
             }
         };
 
@@ -891,6 +894,12 @@ namespace NKikimr {
 
         struct TEvResponseScaleRecommendation : TEventPB<TEvResponseScaleRecommendation,
             NKikimrHive::TEvResponseScaleRecommendation, EvResponseScaleRecommendation> {};
+        
+        struct TEvConfigureScaleRecommender : TEventPB<TEvConfigureScaleRecommender,
+            NKikimrHive::TEvConfigureScaleRecommender, EvConfigureScaleRecommender> {};
+        
+        struct TEvConfigureScaleRecommenderReply : TEventPB<TEvConfigureScaleRecommenderReply,
+            NKikimrHive::TEvConfigureScaleRecommenderReply, EvConfigureScaleRecommenderReply> {};
     };
 
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);

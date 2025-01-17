@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                 Write = [
                     {
                         Type = type;
-                        Refs = [];
+                        Ref = [];
                     }
                 ]
             };
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
         const auto& write = res.Writes[0];
         UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(*write.Type), "\"type\"");
         UNIT_ASSERT(!write.Data);
-    }    
+    }
 
     Y_UNIT_TEST(RefsEmpty) {
         auto response = NYT::NodeFromYsonString(R"([
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                     {
                         Data = data;
                         Type = type;
-                        Refs = [];
+                        Ref = [];
                     }
                 ]
             };
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                     {
                         Data = data;
                         Type = type;
-                        Refs = [
+                        Ref = [
                             {
                                 "Reference" = [];
                                 "Remove" = %true;
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                     {
                         Data = data;
                         Type = type;
-                        Refs = [
+                        Ref = [
                             {
                                 "Reference" = [];
                                 "Remove" = %true;
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                     {
                         Data = data;
                         Type = type;
-                        Refs = [
+                        Ref = [
                             {
                                 "Reference" = ["foo";"bar"];
                                 "Remove" = %false;
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                     {
                         Data = data;
                         Type = type;
-                        Refs = [
+                        Ref = [
                             {
                                 "Columns" = ["col1";"col2"];
                                 "Reference" = [];

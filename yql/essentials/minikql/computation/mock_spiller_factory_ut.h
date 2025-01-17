@@ -12,8 +12,17 @@ public:
     }
 
     ISpiller::TPtr CreateSpiller() override {
-        return CreateMockSpiller();
+        auto new_spiller = CreateMockSpiller();
+        Spillers_.push_back(new_spiller);
+        return new_spiller;
     }
+
+    const std::vector<ISpiller::TPtr>& GetCreatedSpillers() const {
+        return Spillers_;
+    }
+
+private:
+    std::vector<ISpiller::TPtr> Spillers_;
 };
 
 } // namespace NKikimr::NMiniKQL

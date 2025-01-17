@@ -57,7 +57,10 @@ struct TKqpWorkerSettings {
     }
 };
 
+class TKqpQueryCache;
+
 IActor* CreateKqpSessionActor(const TActorId& owner,
+    TIntrusivePtr<TKqpQueryCache> queryCache,
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager_,
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory_,
     const TString& sessionId,

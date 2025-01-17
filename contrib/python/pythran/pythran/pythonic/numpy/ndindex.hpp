@@ -17,16 +17,16 @@ namespace numpy
   }
 
   template <size_t N>
-  ndindex_iterator<N>::ndindex_iterator(types::array<long, N> const &shape,
-                                        long first)
+  ndindex_iterator<N>::ndindex_iterator(
+      types::array_tuple<long, N> const &shape, long first)
       : index(first), shape(shape)
   {
   }
 
   template <size_t N>
-  types::array<long, N> ndindex_iterator<N>::operator*() const
+  types::array_tuple<long, N> ndindex_iterator<N>::operator*() const
   {
-    types::array<long, N> out;
+    types::array_tuple<long, N> out;
     long mult = 1;
     for (long j = N - 1; j > 0; j--) {
       out[j] = (index / mult) % shape[j];
@@ -74,7 +74,7 @@ namespace numpy
   }
 
   template <size_t N>
-  _ndindex<N>::_ndindex(types::array<long, N> const &shape)
+  _ndindex<N>::_ndindex(types::array_tuple<long, N> const &shape)
       : ndindex_iterator<N>(shape, 0), shape(shape),
         end_iter(shape, std::accumulate(shape.begin(), shape.end(), 1L,
                                         std::multiplies<long>()))
@@ -106,7 +106,7 @@ namespace numpy
   }
 
   template <size_t N>
-  _ndindex<N> ndindex(types::array<long, N> const &args)
+  _ndindex<N> ndindex(types::array_tuple<long, N> const &args)
   {
     return {args};
   }
@@ -115,7 +115,7 @@ namespace numpy
   {
     return {args};
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

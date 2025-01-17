@@ -14,7 +14,7 @@ namespace numpy
   {
     return eye(n, n, 0, d);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

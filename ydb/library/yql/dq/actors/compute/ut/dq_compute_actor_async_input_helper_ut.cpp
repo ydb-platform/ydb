@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TComputeActorAsyncInputHelperTest) {
         TDummyAsyncInputHelper helper("MyPrefix", 13, NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED);
         helper.AsyncInput = &input;
         TDqComputeActorMetrics metrics{NMonitoring::TDynamicCounterPtr{}};
-        TDqComputeActorWatermarks watermarks(NActors::TActorIdentity{NActors::TActorId{}}, TTxId{}, 7);
+        TDqComputeActorWatermarks watermarks("");
         auto result = helper.PollAsyncInput(metrics, watermarks, 20);
         UNIT_ASSERT(result && EResumeSource::CAPollAsync == *result);
     }

@@ -85,12 +85,12 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
         auto *msg = ev->Get();
-        ApplyGroupInfo(std::move(msg->Info), std::move(msg->StoragePoolCounters));
+        ApplyGroupInfo(std::move(msg->Info), std::move(msg->NodeLayoutInfo), std::move(msg->StoragePoolCounters));
     }
 
     void TBlobStorageGroupProxy::ApplyGroupInfo(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
-            TIntrusivePtr<TStoragePoolCounters>&& counters) {
-        Info = std::move(info);
+            TNodeLayoutInfoPtr nodeLayoutInfo, TIntrusivePtr<TStoragePoolCounters>&& counters) {
+        auto prevInfo = std::exchange(Info, std::move(info));
         if (Info) {
             if (Topology) {
                 Y_DEBUG_ABORT_UNLESS(Topology->EqualityCheck(Info->GetTopology()));
@@ -98,8 +98,16 @@ namespace NKikimr {
                 Topology = Info->PickTopology();
             }
         }
-        NodeLayoutInfo = nullptr;
-        Send(MonActor, new TEvBlobStorage::TEvConfigureProxy(Info));
+        NodeLayoutInfo = std::move(nodeLayoutInfo);
+        if (counters) {
+            StoragePoolCounters = std::move(counters);
+        }
+
+        if (prevInfo && Info && prevInfo->GroupGeneration == Info->GroupGeneration) {
+            return; // group did not actually change
+        }
+
+        Send(MonActor, new TEvBlobStorage::TEvConfigureProxy(Info, nullptr));
         if (Info) {
             Y_ABORT_UNLESS(!EncryptionMode || *EncryptionMode == Info->GetEncryptionMode());
             Y_ABORT_UNLESS(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase());
@@ -109,10 +117,6 @@ namespace NKikimr {
             LifeCyclePhase = Info->GetLifeCyclePhase();
             GroupKeyNonce = Info->GetGroupKeyNonce();
             CypherKey = *Info->GetCypherKey();
-            Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
-        }
-        if (counters) {
-            StoragePoolCounters = std::move(counters);
         }
         IsLimitedKeyless = false;
         if (Info && Info->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE) {
@@ -208,7 +212,7 @@ namespace NKikimr {
         Y_ABORT_UNLESS(Topology);
         Sessions->QueueConnectUpdate(Topology->GetOrderNumber(msg->VDiskId), msg->QueueId, msg->IsConnected,
             msg->ExtraBlockChecksSupport, msg->CostModel, *Topology);
-        MinREALHugeBlobInBytes = Sessions->GetMinREALHugeBlobInBytes();
+        MinHugeBlobInBytes = Sessions->GetMinHugeBlobInBytes();
         if (msg->IsConnected && (CurrentStateFunc() == &TThis::StateEstablishingSessions ||
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {
             SwitchToWorkWhenGoodToGo();
@@ -216,7 +220,7 @@ namespace NKikimr {
             SetStateEstablishingSessions();
         }
 
-        Y_DEBUG_ABORT_UNLESS(CurrentStateFunc() != &TThis::StateWork || MinREALHugeBlobInBytes);
+        Y_DEBUG_ABORT_UNLESS(CurrentStateFunc() != &TThis::StateWork || MinHugeBlobInBytes);
 
         if (const ui32 prev = std::exchange(NumUnconnectedDisks, Sessions->GetNumUnconnectedDisks()); prev != NumUnconnectedDisks) {
             NodeMon->IncNumUnconnected(NumUnconnectedDisks);
@@ -240,19 +244,8 @@ namespace NKikimr {
                     new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingPutRequests));
             StopGetBatchingEvent = static_cast<TEventHandle<TEvStopBatchingGetRequests>*>(
                     new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingGetRequests));
-            ApplyGroupInfo(std::exchange(Info, {}), std::exchange(StoragePoolCounters, {}));
+            ApplyGroupInfo(std::exchange(Info, {}), std::exchange(NodeLayoutInfo, {}), std::exchange(StoragePoolCounters, {}));
             CheckDeadlines();
-        }
-    }
-
-    void TBlobStorageGroupProxy::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        if (Info) {
-            std::unordered_map<ui32, TNodeLocation> map;
-            for (auto& info : ev->Get()->Nodes) {
-                map[info.NodeId] = std::move(info.Location);
-            }
-            NodeLayoutInfo = MakeIntrusive<TNodeLayoutInfo>(map[TlsActivationContext->ExecutorThread.ActorSystem->NodeId],
-                Info, map);
         }
     }
 

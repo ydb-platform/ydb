@@ -20,7 +20,7 @@ class TJsonWriter
 {
 public:
     TJsonWriter(IOutputStream* output, bool isPretty);
-    virtual ~TJsonWriter() override;
+    ~TJsonWriter() override;
 
     void Flush() override;
     void OnStringScalar(TStringBuf value) override;

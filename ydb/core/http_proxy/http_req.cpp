@@ -62,6 +62,7 @@
 #include <ydb/library/folder_service/events.h>
 
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
+#include <ydb/core/ymq/actor/serviceid.h>
 
 #include <ydb/library/http_proxy/error/error.h>
 
@@ -307,6 +308,14 @@ namespace NKikimr::NHttpProxy {
                             NYdb::EStatus(response.operation().status()),
                             std::move(issues)
                         );
+                        Ydb::Ymq::V1::QueueTags queueTags;
+                        response.operation().metadata().UnpackTo(&queueTags);
+                        for (const auto& [k, v] : queueTags.GetTags()) {
+                            if (!result->QueueTags.Get()) {
+                                result->QueueTags = MakeHolder<THashMap<TString, TString>>();
+                            }
+                            result->QueueTags->emplace(k, v);
+                        }
                         actorSystem->Send(actorId, result.Release());
                     }
                 );
@@ -373,6 +382,9 @@ namespace NKikimr::NHttpProxy {
                     );
                     HttpContext.ResponseData.IsYmq = true;
                     HttpContext.ResponseData.YmqHttpCode = 200;
+                    if (ev->Get()->QueueTags) {
+                        HttpContext.ResponseData.QueueTags = std::move(*ev->Get()->QueueTags);
+                    }
                     ReplyToHttpContext(ctx);
                 } else {
                     auto retryClass = NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());
@@ -438,8 +450,8 @@ namespace NKikimr::NHttpProxy {
                         << " CloudId: " << ev->Get()->CloudId
                         << " UserSid: " << ev->Get()->Sid;
                     );
-                    FolderId = ev->Get()->FolderId;
-                    CloudId = ev->Get()->CloudId;
+                    HttpContext.FolderId = FolderId = ev->Get()->FolderId;
+                    HttpContext.CloudId = CloudId = ev->Get()->CloudId;
                     UserSid = ev->Get()->Sid;
                     SendGrpcRequestNoDriver(ctx);
                 } else {
@@ -473,7 +485,8 @@ namespace NKikimr::NHttpProxy {
                             return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url");
                         }
                         CloudId = cloudIdAndResourceId.first;
-                        ResourceId = cloudIdAndResourceId.second;
+                        HttpContext.ResourceId = ResourceId = cloudIdAndResourceId.second;
+                        HttpContext.ResponseData.YmqIsFifo = queueUrl.EndsWith(".fifo");
                     }
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
@@ -508,39 +521,8 @@ namespace NKikimr::NHttpProxy {
                     SendGrpcRequestNoDriver(ctx);
                 } else {
                     auto requestHolder = MakeHolder<NKikimrClient::TSqsRequest>();
-                    NSQS::EAction action = NSQS::EAction::Unknown;
-                    if (Method == "CreateQueue") {
-                        action = NSQS::EAction::CreateQueue;
-                    } else if (Method == "GetQueueUrl") {
-                        action = NSQS::EAction::GetQueueUrl;
-                    } else if (Method == "SendMessage") {
-                        action = NSQS::EAction::SendMessage;
-                    } else if (Method == "ReceiveMessage") {
-                        action = NSQS::EAction::ReceiveMessage;
-                    } else if (Method == "GetQueueAttributes") {
-                        action = NSQS::EAction::GetQueueAttributes;
-                    } else if (Method == "ListQueues") {
-                        action = NSQS::EAction::ListQueues;
-                    } else if (Method == "DeleteMessage") {
-                        action = NSQS::EAction::DeleteMessage;
-                    } else if (Method == "PurgeQueue") {
-                        action = NSQS::EAction::PurgeQueue;
-                    } else if (Method == "DeleteQueue") {
-                        action = NSQS::EAction::DeleteQueue;
-                    } else if (Method == "ChangeMessageVisibility") {
-                        action = NSQS::EAction::ChangeMessageVisibility;
-                    } else if (Method == "SetQueueAttributes") {
-                        action = NSQS::EAction::SetQueueAttributes;
-                    } else if (Method == "SendMessageBatch") {
-                        action = NSQS::EAction::SendMessageBatch;
-                    }else if (Method == "DeleteMessageBatch") {
-                        action = NSQS::EAction::DeleteMessageBatch;
-                    } else if (Method == "ChangeMessageVisibilityBatch") {
-                        action = NSQS::EAction::ChangeMessageVisibilityBatch;
-                    } else if (Method == "ListDeadLetterSourceQueues") {
-                        action = NSQS::EAction::ListDeadLetterSourceQueues;
-                    }
 
+                    NSQS::EAction action = NSQS::ActionFromString(Method);
                     requestHolder->SetRequestId(HttpContext.RequestId);
 
                     NSQS::TAuthActorData data {
@@ -1078,6 +1060,9 @@ namespace NKikimr::NHttpProxy {
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(DeleteMessageBatch);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListDeadLetterSourceQueues);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ListQueueTags);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(TagQueue);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(UntagQueue);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
     }
 
@@ -1189,8 +1174,7 @@ namespace NKikimr::NHttpProxy {
                 response->Set(CRC32_HEADER, ToString(crc32(body.data(), body.size())));
                 response->Set<&NHttp::THttpResponse::ContentType>(contentType);
                 if (!request->Endpoint->CompressContentTypes.empty()) {
-                    contentType = contentType.Before(';');
-                    NHttp::Trim(contentType, ' ');
+                    contentType = NHttp::Trim(contentType.Before(';'), ' ');
                     if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
                         response->EnableCompression();
                     }
@@ -1247,6 +1231,41 @@ namespace NKikimr::NHttpProxy {
             strByMimeAws(ContentType),
             ResponseData.DumpBody(ContentType)
         );
+
+        if (ResponseData.IsYmq && ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
+            // Send request attributes to the metering actor
+            auto reportRequestAttributes = MakeHolder<NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
+
+            auto& requestAttributes = reportRequestAttributes->Data;
+
+            requestAttributes.HttpStatusCode = httpCode;
+            requestAttributes.IsFifo = ResponseData.YmqIsFifo;
+            requestAttributes.FolderId = FolderId;
+            requestAttributes.RequestSizeInBytes = Request->Size();
+            requestAttributes.ResponseSizeInBytes = response->Size();
+            requestAttributes.SourceAddress = SourceAddress;
+            requestAttributes.ResourceId = ResourceId;
+            requestAttributes.Action = NSQS::ActionFromString(MethodName);
+            for (const auto& [k, v] : ResponseData.QueueTags) {
+                requestAttributes.QueueTags[k] = v;
+            }
+
+            LOG_SP_DEBUG_S(
+                ctx,
+                NKikimrServices::HTTP_PROXY,
+                TStringBuilder() << "Send metering event."
+                << " HttpStatusCode: " << requestAttributes.HttpStatusCode
+                << " IsFifo: " << requestAttributes.IsFifo
+                << " FolderId: " << requestAttributes.FolderId
+                << " RequestSizeInBytes: " << requestAttributes.RequestSizeInBytes
+                << " ResponseSizeInBytes: " << requestAttributes.ResponseSizeInBytes
+                << " SourceAddress: " << requestAttributes.SourceAddress
+                << " ResourceId: " << requestAttributes.ResourceId
+                << " Action: " << requestAttributes.Action
+            );
+
+            ctx.Send(NSQS::MakeSqsMeteringServiceID(), reportRequestAttributes.Release());
+        }
 
         ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }

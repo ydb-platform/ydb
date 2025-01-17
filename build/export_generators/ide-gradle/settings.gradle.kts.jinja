@@ -1,9 +1,12 @@
 rootProject.name = "{{ project_name }}"
 
-{% for subdir in subdirs -%}
-{%-    set classname = subdir | replace("/", ":") -%}
+{%  for subdir in subdirs -%}
+{%-     set arcadia_subdir = arcadia_root + "/" + subdir -%}
+{%-     if arcadia_subdir != project_root -%}
+{%-         set classname = subdir | replace("/", ":") %}
 include(":{{ classname }}")
-project(":{{ classname }}").projectDir = file("{{ arcadia_root }}/{{ subdir }}")
-{% endfor -%}
+project(":{{ classname }}").projectDir = file("{{ arcadia_subdir }}")
+{%      endif -%}
+{%- endfor -%}
 
 {%- include "[generator]/debug.jinja" ignore missing -%}

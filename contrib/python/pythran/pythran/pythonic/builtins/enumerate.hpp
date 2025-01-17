@@ -29,8 +29,8 @@ namespace builtins
     }
 
     template <class Iterator>
-    enumerate_iterator<Iterator> &enumerate_iterator<Iterator>::
-    operator+=(long n)
+    enumerate_iterator<Iterator> &
+    enumerate_iterator<Iterator>::operator+=(long n)
     {
       value += n, iter += n;
       return *this;
@@ -42,29 +42,29 @@ namespace builtins
     // TODO : We could handle case with && without size if there is a
     // performances benefits
     template <class Iterator>
-    bool enumerate_iterator<Iterator>::
-    operator!=(enumerate_iterator<Iterator> const &other) const
+    bool enumerate_iterator<Iterator>::operator!=(
+        enumerate_iterator<Iterator> const &other) const
     {
       return !(*this == other);
     }
 
     template <class Iterator>
-    bool enumerate_iterator<Iterator>::
-    operator<(enumerate_iterator const &other) const
+    bool enumerate_iterator<Iterator>::operator<(
+        enumerate_iterator const &other) const
     {
       return iter < other.iter;
     }
 
     template <class Iterator>
-    bool enumerate_iterator<Iterator>::
-    operator==(enumerate_iterator<Iterator> const &other) const
+    bool enumerate_iterator<Iterator>::operator==(
+        enumerate_iterator<Iterator> const &other) const
     {
       return iter == other.iter;
     }
 
     template <class Iterator>
-    long enumerate_iterator<Iterator>::
-    operator-(enumerate_iterator<Iterator> const &other) const
+    long enumerate_iterator<Iterator>::operator-(
+        enumerate_iterator<Iterator> const &other) const
     {
       return iter - other.iter;
     }
@@ -100,7 +100,7 @@ namespace builtins
     {
       return end_iter;
     }
-  }
+  } // namespace details
 
   /// enumerate implementation
 
@@ -111,7 +111,7 @@ namespace builtins
   {
     return {std::forward<Iterable>(seq), first};
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

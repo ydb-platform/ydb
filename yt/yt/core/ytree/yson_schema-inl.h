@@ -40,6 +40,14 @@ concept CIsMapping = requires(T) {
 template <class T>
 concept CIsAssociativeArray = CIsArray<T> && CIsMapping<T>;
 
+template <class T>
+concept CHasWriteSchema = requires (
+    const T& parameter,
+    NYson::IYsonConsumer* consumer)
+{
+    parameter.WriteSchema(consumer);
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #define DEFINE_SCHEMA_FOR_SIMPLE_TYPE(type, name) \
@@ -89,7 +97,7 @@ void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
         .EndMap();
 }
 
-template <CYsonStructDerived T>
+template <CHasWriteSchema T>
 void WriteSchemaForNull(NYson::IYsonConsumer* consumer)
 {
     if constexpr (std::is_same_v<T, TYsonStruct>) {
@@ -104,7 +112,7 @@ void WriteSchemaForNull(NYson::IYsonConsumer* consumer)
     }
 }
 
-template <CYsonStructDerived T>
+template <CHasWriteSchema T>
 void WriteSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)
@@ -120,7 +128,7 @@ void WriteSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consu
         .EndMap();
 }
 
-template <CYsonStructDerived T>
+template <CHasWriteSchema T>
 void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
 {
     return value.WriteSchema(consumer);

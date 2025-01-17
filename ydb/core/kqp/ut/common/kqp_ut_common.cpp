@@ -123,7 +123,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
-    ServerSettings->FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
     ServerSettings->SetNodeCount(settings.NodeCount);
     ServerSettings->SetEnableKqpSpilling(enableSpilling);
     ServerSettings->SetEnableDataColumnForIndexTable(true);
@@ -526,12 +525,17 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKLOAD_SERVICE);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
         return true;
     });
+
+    if (settings.AuthToken) {
+        this->Client->GrantConnect(settings.AuthToken);
+    }
 
     if (settings.WithSampleTables) {
         RunCall([this] {
@@ -549,7 +553,7 @@ TString ReformatYson(const TString& yson) {
 }
 
 void CompareYson(const TString& expected, const TString& actual) {
-    UNIT_ASSERT_NO_DIFF(ReformatYson(expected), ReformatYson(actual));
+    UNIT_ASSERT_VALUES_EQUAL(ReformatYson(expected), ReformatYson(actual));
 }
 
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual) {
@@ -1387,6 +1391,44 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters) {
     }
 
     UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+}
+
+void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
+    int iterators = 0;
+    static const TString counterName = "DataShard/ReadIteratorsCount";
+
+    for (int i = 0; i < 10; i++, Sleep(TDuration::Seconds(1))) {
+        TTestActorRuntime* runtime = server.GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto shards = GetTableShards(&server, sender, path);
+        UNIT_ASSERT_C(shards.size() > 0, "Table: " << path << " has no shards");
+        iterators = 0;
+        for (auto x : shards) {
+            runtime->SendToPipe(
+                x,
+                sender,
+                new TEvTablet::TEvGetCounters,
+                0,
+                GetPipeConfigWithRetries());
+
+            auto ev = runtime->GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
+            UNIT_ASSERT(ev);
+
+            const NKikimrTabletBase::TEvGetCountersResponse& resp = ev->Get()->Record;
+            for (const auto& counter : resp.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+                if (counterName != counter.GetName()) {
+                    continue;
+                }
+
+                iterators += counter.GetValue();
+            }
+        }
+        if (iterators == 0) {
+            break;
+        }
+    }
+
+    UNIT_ASSERT_C(iterators == 0, "Unable to wait for proper read iterator count, it looks like cancelation doesn`t work (" << iterators << ")");
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {

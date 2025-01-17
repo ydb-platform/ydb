@@ -1,11 +1,13 @@
 #include "cs_helper.h"
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <yql/essentials/types/binary_json/write.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <ydb/library/actors/core/event.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+
+#include <yql/essentials/types/binary_json/write.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
@@ -89,7 +91,7 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
             Cerr << "\n";
         }
         UNIT_ASSERT_VALUES_EQUAL(op.status(), expectedStatus);
-        });
+    });
 
     TDispatchOptions options;
     options.CustomFinalCondition = [&]() {
@@ -226,7 +228,7 @@ void THelper::CreateSchemaOlapTablesWithStore(const TString tableSchema, TVector
 }
 
 void THelper::CreateOlapTablesWithStore(TVector<TString> tableNames /*= {"olapTable"}*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
-        CreateSchemaOlapTablesWithStore(GetTestTableSchema(), tableNames, storeName, storeShardsCount, tableShardsCount);
+    CreateSchemaOlapTablesWithStore(GetTestTableSchema(), tableNames, storeName, storeShardsCount, tableShardsCount);
 }
 
 void THelper::CreateSchemaOlapTables(const TString tableSchema, TVector<TString> tableNames, ui32 tableShardsCount) {
@@ -252,7 +254,7 @@ void THelper::CreateSchemaOlapTables(const TString tableSchema, TVector<TString>
 }
 
 void THelper::CreateOlapTables(TVector<TString> tableNames /*= {"olapTable"}*/, ui32 tableShardsCount /*= 3*/) {
-        CreateSchemaOlapTables(GetTestTableSchema(), tableNames, tableShardsCount);
+    CreateSchemaOlapTables(GetTestTableSchema(), tableNames, tableShardsCount);
 }
 
 // Clickbench table
@@ -260,7 +262,7 @@ void THelper::CreateOlapTables(TVector<TString> tableNames /*= {"olapTable"}*/, 
 std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() const {
     return std::make_shared<arrow::Schema>(
         std::vector<std::shared_ptr<arrow::Field>> {
-            arrow::field("WatchID", arrow::int64(), false),
+        arrow::field("WatchID", arrow::int64(), false),
             arrow::field("JavaEnable", arrow::int16(), false),
             arrow::field("Title", arrow::utf8(), false),
             arrow::field("GoodEvent", arrow::int16(), false),
@@ -428,7 +430,7 @@ std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 
 std::shared_ptr<arrow::Schema> TTableWithNullsHelper::GetArrowSchema() const {
     return std::make_shared<arrow::Schema>(
         std::vector<std::shared_ptr<arrow::Field>>{
-            arrow::field("id", arrow::int32(), false),
+        arrow::field("id", arrow::int32(), false),
             arrow::field("resource_id", arrow::utf8()),
             arrow::field("level", arrow::int32()),
             arrow::field("binary_str", arrow::binary()),

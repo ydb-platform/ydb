@@ -124,7 +124,7 @@ namespace types
     {
     }
   };
-}
+} // namespace types
 
 PYTHONIC_NS_END
 
@@ -181,7 +181,7 @@ namespace std
   {
     return t.get(std::integral_constant<size_t, I>{});
   }
-}
+} // namespace std
 
 /* type inference stuff { */
 #include "pythonic/include/types/combined.hpp"

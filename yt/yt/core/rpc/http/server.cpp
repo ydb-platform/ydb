@@ -116,7 +116,7 @@ public:
 
         YT_VERIFY(message.Size() >= 2);
         if (responseHeader.has_format()) {
-            auto format = CheckedEnumCast<EMessageFormat>(responseHeader.format());
+            auto format = FromProto<EMessageFormat>(responseHeader.format());
             Rsp_->GetHeaders()->Add("Content-Type", ToHttpContentType(format));
         }
 
@@ -370,6 +370,11 @@ private:
 
         rpcHeader->set_request_codec(ToProto(NCompression::ECodec::None));
         rpcHeader->set_response_codec(ToProto(NCompression::ECodec::None));
+
+        ToProto(
+            rpcHeader->MutableExtension(NRpc::NProto::TRequestHeader::tracing_ext),
+            NTracing::TryGetCurrentTraceContext(),
+            /*sendBaggage*/ false);
 
         return {};
     }

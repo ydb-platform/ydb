@@ -3,6 +3,8 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/tx/sequenceshard/public/events.h>
 
 namespace {
 
@@ -16,7 +18,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterSequence TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -161,7 +163,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterSequence TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

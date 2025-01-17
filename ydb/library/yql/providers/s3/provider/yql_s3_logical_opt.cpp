@@ -429,12 +429,6 @@ public:
             return TStatus::Error;
         }
 
-        const auto maxSize = State_->Configuration->MaxReadSizePerQuery;
-        if (totalSize > maxSize) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too large objects to read: " << totalSize << ", but limit is " << maxSize));
-            return TStatus::Error;
-        }
-
         if (count > 0) {
             YQL_CLOG(INFO, ProviderS3) << "Will read from S3 " << count << " files with total size " << totalSize << " bytes";
         }

@@ -1,0 +1,27 @@
+/* postgres can not */
+SELECT
+    CAST(TZDATE('1970-01-02,Europe/Moscow') AS TzDatetime),
+    CAST(TZDATE('1970-01-01,America/Los_Angeles') AS TzDatetime),
+    CAST(TZDATE('2105-12-31,Europe/Moscow') AS TzDatetime),
+    CAST(TZDATE('2105-12-31,America/Los_Angeles') AS TzDatetime),
+    CAST(TZDATE('1970-01-02,Europe/Moscow') AS TzTimestamp),
+    CAST(TZDATE('1970-01-01,America/Los_Angeles') AS TzTimestamp),
+    CAST(TZDATE('2105-12-31,Europe/Moscow') AS TzTimestamp),
+    CAST(TZDATE('2105-12-31,America/Los_Angeles') AS TzTimestamp),
+    CAST(TZDATETIME('1970-01-02T00:00:00,Europe/Moscow') AS TzDate),
+    CAST(TZDATETIME('1970-01-01T00:00:00,America/Los_Angeles') AS TzDate),
+    CAST(TZDATETIME('2106-01-01T02:59:59,Europe/Moscow') AS TzDate),
+    CAST(TZDATETIME('2105-12-31T15:59:59,America/Los_Angeles') AS TzDate),
+    CAST(TZDATETIME('1970-01-02T00:00:00,Europe/Moscow') AS TzTimestamp),
+    CAST(TZDATETIME('1970-01-01T00:00:00,America/Los_Angeles') AS TzTimestamp),
+    CAST(TZDATETIME('2106-01-01T02:59:59,Europe/Moscow') AS TzTimestamp),
+    CAST(TZDATETIME('2105-12-31T15:59:59,America/Los_Angeles') AS TzTimestamp),
+    CAST(TZTIMESTAMP('1970-01-02T00:00:00.000000,Europe/Moscow') AS TzDate),
+    CAST(TZTIMESTAMP('1970-01-01T00:00:00.000000,America/Los_Angeles') AS TzDate),
+    CAST(TZTIMESTAMP('2106-01-01T02:59:59.999999,Europe/Moscow') AS TzDate),
+    CAST(TZTIMESTAMP('2105-12-31T15:59:59.999999,America/Los_Angeles') AS TzDate),
+    CAST(TZTIMESTAMP('1970-01-02T00:00:00.000000,Europe/Moscow') AS TzDatetime),
+    CAST(TZTIMESTAMP('1970-01-01T00:00:00.000000,America/Los_Angeles') AS TzDatetime),
+    CAST(TZTIMESTAMP('2106-01-01T02:59:59.999999,Europe/Moscow') AS TzDatetime),
+    CAST(TZTIMESTAMP('2105-12-31T15:59:59.999999,America/Los_Angeles') AS TzDatetime)
+;

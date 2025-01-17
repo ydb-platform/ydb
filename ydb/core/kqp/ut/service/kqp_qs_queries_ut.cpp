@@ -11,6 +11,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/base/counters.h>
+#include <library/cpp/threading/local_executor/local_executor.h>
 
 #include <fmt/format.h>
 
@@ -54,7 +56,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         WaitForZeroSessions(counters);
     }
 
-    Y_UNIT_TEST(QueryOnClosedSession) {
+    void DoClosedSessionRemovedWhileActiveTest(bool withQuery) {
         auto kikimr = DefaultKikimrRunner();
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
@@ -75,10 +77,12 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
                 UNIT_ASSERT(allDoneOk);
 
-                auto execResult = session.ExecuteQuery("SELECT 1;",
-                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                if (withQuery) {
+                    auto execResult = session.ExecuteQuery("SELECT 1;",
+                        NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
-                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::BAD_SESSION);
+                    UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::BAD_SESSION);
+                }
             }
             // closed session must be removed from session pool
             {
@@ -86,8 +90,119 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 UNIT_ASSERT(result.GetSession().GetId() != id);
             }
+            UNIT_ASSERT_VALUES_EQUAL(db.GetActiveSessionCount(), 0);
         }
         WaitForZeroSessions(counters);
+    }
+
+    Y_UNIT_TEST(ClosedSessionRemovedWhileActiveWithQuery) {
+        // - Session is active (user gfot it)
+        // - server close it
+        // - user executes query (got BAD SESSION)
+        // - session should be removed from pool 
+        DoClosedSessionRemovedWhileActiveTest(true);
+    }
+
+/*  Not implemented in the sdk
+    Y_UNIT_TEST(ClosedSessionRemovedWhileActiveWithoutQuery) {
+        // - Session is active (user gfot it)
+        // - server close it
+        // - user do not executes any query
+        // - session should be removed from pool
+        DoClosedSessionRemovedWhileActiveTest(false);
+    }
+*/
+    // Copy paste from table service but with some modifications for query service
+    // Checks read iterators/session/sdk counters have expected values  
+    Y_UNIT_TEST(CloseSessionsWithLoad) {
+        auto kikimr = std::make_shared<TKikimrRunner>();
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
+
+        NYdb::NQuery::TQueryClient db = kikimr->GetQueryClient();
+
+        const ui32 SessionsCount = 50;
+        const TDuration WaitDuration = TDuration::Seconds(1);
+
+        TVector<NYdb::NQuery::TQueryClient::TSession> sessions;
+        for (ui32 i = 0; i < SessionsCount; ++i) {
+            auto sessionResult = db.GetSession().GetValueSync();
+            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+
+            sessions.push_back(sessionResult.GetSession());
+        }
+
+        NPar::LocalExecutor().RunAdditionalThreads(SessionsCount + 1);
+        NPar::LocalExecutor().ExecRange([&kikimr, sessions, WaitDuration](int id) mutable {
+            if (id == (i32)sessions.size()) {
+                Sleep(WaitDuration);
+                Cerr << "start sessions close....." << Endl;
+                auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr->GetEndpoint());
+                for (ui32 i = 0; i < sessions.size(); ++i) {
+                    bool allDoneOk = true;
+                    NTestHelpers::CheckDelete(clientConfig, sessions[i].GetId(), Ydb::StatusIds::SUCCESS, allDoneOk);
+                    UNIT_ASSERT(allDoneOk);
+                }
+
+                Cerr << "finished sessions close....." << Endl;
+                auto counters = GetServiceCounters(kikimr->GetTestServer().GetRuntime()->GetAppData(0).Counters,  "ydb");
+
+                ui64 pendingCompilations = 0;
+                do {
+                    Sleep(WaitDuration);
+                    pendingCompilations = counters->GetNamedCounter("name", "table.query.compilation.active_count", false)->Val();
+                    Cerr << "still compiling... " << pendingCompilations << Endl;
+                } while (pendingCompilations != 0);
+
+                ui64 pendingSessions = 0;
+                do {
+                    Sleep(WaitDuration);
+                    pendingSessions = counters->GetNamedCounter("name", "table.session.active_count", false)->Val();
+                    Cerr << "still active sessions ... " << pendingSessions << Endl;
+                } while (pendingSessions != 0);
+
+                return;
+            }
+
+            auto session = sessions[id];
+            TMaybe<TTransaction> tx;
+
+            while (true) {
+                if (tx) {
+                    auto result = tx->Commit().GetValueSync();
+                    if (!result.IsSuccess()) {
+                        return;
+                    }
+
+                    tx = {};
+                    continue;
+                }
+
+                auto query = Sprintf(R"(
+                    SELECT Key, Text, Data FROM `/Root/EightShard` WHERE Key=%1$d + 0;
+                    SELECT Key, Data, Text FROM `/Root/EightShard` WHERE Key=%1$d + 1;
+                    SELECT Text, Key, Data FROM `/Root/EightShard` WHERE Key=%1$d + 2;
+                    SELECT Text, Data, Key FROM `/Root/EightShard` WHERE Key=%1$d + 3;
+                    SELECT Data, Key, Text FROM `/Root/EightShard` WHERE Key=%1$d + 4;
+                    SELECT Data, Text, Key FROM `/Root/EightShard` WHERE Key=%1$d + 5;
+
+                    UPSERT INTO `/Root/EightShard` (Key, Text) VALUES
+                        (%2$dul, "New");
+                )", RandomNumber<ui32>(), RandomNumber<ui32>());
+
+                auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).GetValueSync();
+                if (!result.IsSuccess()) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_SESSION);
+                    Cerr << "received non-success status for session " << id << Endl;
+                    return;
+                }
+
+                tx = result.GetTransaction();
+            }
+        }, 0, SessionsCount + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+        WaitForZeroReadIterators(kikimr->GetTestServer(), "/Root/EightShard");
     }
 
     Y_UNIT_TEST(PeriodicTaskInSessionPool) {
@@ -166,6 +281,104 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::SUCCESS);
             }
         }
+        WaitForZeroSessions(counters);
+    }
+
+    // Check closed session removed while its in the session pool
+    Y_UNIT_TEST(ClosedSessionRemovedFromPool) {
+        auto kikimr = DefaultKikimrRunner();
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        {
+            auto db = kikimr.GetQueryClient();
+
+            TString id;
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetSession().GetId());
+                auto session = result.GetSession();
+                id = session.GetId();
+            }
+
+            bool allDoneOk = true;
+            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+
+            Sleep(TDuration::Seconds(5));
+
+            UNIT_ASSERT(allDoneOk);
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                auto newSession = result.GetSession();
+                UNIT_ASSERT_C(newSession.GetId() != id, "closed id: " << id << " new id: " << newSession.GetId());
+
+                auto execResult = newSession.ExecuteQuery("SELECT 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+        WaitForZeroSessions(counters);
+    }
+
+    // Attempt to trigger simultanous server side close and return session
+    // From sdk perspective check no dataraces
+    Y_UNIT_TEST(ReturnAndCloseSameTime) {
+        auto kikimr = DefaultKikimrRunner();
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        size_t iterations = 999;
+        auto db = kikimr.GetQueryClient();
+
+        NPar::LocalExecutor().RunAdditionalThreads(2);
+        while (iterations--) {
+            auto lim = iterations % 33;
+            TVector<NYdb::NQuery::TQueryClient::TSession> sessions;
+            TVector<TString> sids;
+            sessions.reserve(lim);
+            sids.reserve(lim);
+            for (size_t i = 0; i < lim; ++i) {
+                auto sessionResult = db.GetSession().GetValueSync();
+                UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+
+                sessions.push_back(sessionResult.GetSession());
+                sids.push_back(sessions.back().GetId());
+            }
+
+            if (iterations & 1) {
+                auto rng = std::default_random_engine {};
+                std::ranges::shuffle(sids, rng);
+            }
+
+            NPar::LocalExecutor().ExecRange([sessions{std::move(sessions)}, sids{std::move(sids)}, clientConfig](int id) mutable{
+                if (id == 0) {
+                    for (size_t i = 0; i < sessions.size(); i++) {
+                        auto s = std::move(sessions[i]);
+                        auto execResult = s.ExecuteQuery("SELECT 1;",
+                            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                        switch (execResult.GetStatus()) {
+                            case EStatus::SUCCESS:
+                            case EStatus::BAD_SESSION:
+                                break;
+                            default:
+                                UNIT_ASSERT_C(false, "unexpected status: " << execResult.GetStatus());
+                        }
+                    }
+                } else if (id == 1) {
+                    for (size_t i = 0; i < sids.size(); i++) {
+                        bool allDoneOk = true;
+                        NTestHelpers::CheckDelete(clientConfig, sids[i], Ydb::StatusIds::SUCCESS, allDoneOk);
+                        UNIT_ASSERT(allDoneOk);
+                    }
+                } else {
+                    Y_ABORT_UNLESS(false, "unexpected thread cxount");
+                }
+            }, 0, 2, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+        }
+
         WaitForZeroSessions(counters);
     }
 
@@ -1826,6 +2039,23 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             }
         };
 
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE USER user1 PASSWORD 'password1';
+            CREATE USER user2 PASSWORD 'password2';
+            CREATE USER user3 PASSWORD 'password3';
+            CREATE USER user4 PASSWORD 'password4';
+            CREATE USER user5 PASSWORD 'password5';
+            CREATE USER user6 PASSWORD 'password6';
+            CREATE USER user7 PASSWORD 'password7';
+            CREATE USER user8 PASSWORD 'password8';
+            CREATE USER user9 PASSWORD 'password9';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         auto result = db.ExecuteQuery(R"(
             GRANT ROW SELECT ON `/Root` TO user1;
         )", TTxControl::NoTx()).ExtractValueSync();
@@ -2334,6 +2564,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
 
         for (const auto& service: kikimr.GetTestServer().GetGRpcServer().GetServices()) {
             UNIT_ASSERT_VALUES_EQUAL(service->RequestsInProgress(), 0);
@@ -4241,7 +4472,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST_TWIN(TableSink_Oltp_Replace, UseSink) {
-        //UseSink = true;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(UseSink);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
@@ -4305,6 +4535,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/DataShard2` SELECT * FROM `/Root/DataShard`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            // Empty replace
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/DataShard2` SELECT * FROM `/Root/DataShard` WHERE Col2 == 'not exists';
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
@@ -5220,6 +5458,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[6u]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/DataShard` WHERE Col1 = "y";
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[2u]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 

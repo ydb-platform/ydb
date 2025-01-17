@@ -1022,9 +1022,11 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion :   Column<3, NScheme::NTypeIds::Uint64> {};
         struct IndexType :      Column<4, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; static constexpr Type Default = NKikimrSchemeOp::EIndexTypeInvalid; };
         struct State :          Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexState; static constexpr Type Default = NKikimrSchemeOp::EIndexStateInvalid; };
+        // One of the SpecializedIndexDescription protobufs serialized as a string.
+        struct Description :    Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State>;
+        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State, Description>;
     };
 
     struct MigratedTableIndex : Table<67> {
@@ -1043,9 +1045,11 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion :   Column<3, NScheme::NTypeIds::Uint64> {};
         struct IndexType :      Column<4, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; static constexpr Type Default = NKikimrSchemeOp::EIndexTypeInvalid; };
         struct State :          Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexState; static constexpr Type Default = NKikimrSchemeOp::EIndexStateInvalid; };
+        // One of the SpecializedIndexDescription protobufs serialized as a string.
+        struct Description :    Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State>;
+        using TColumns = TableColumns<PathId, AlterVersion, IndexType, State, Description>;
     };
 
     struct TableIndexKeys : Table<40> {
@@ -1171,6 +1175,8 @@ struct Schema : NIceDb::Schema {
         struct EndTime : Column<15, NScheme::NTypeIds::Uint64> {};
         struct PeerName : Column<16, NScheme::NTypeIds::Utf8> {};
 
+        struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1188,7 +1194,8 @@ struct Schema : NIceDb::Schema {
             UserSID,
             StartTime,
             EndTime,
-            PeerName
+            PeerName,
+            EnableChecksums
         >;
     };
 
@@ -1326,7 +1333,7 @@ struct Schema : NIceDb::Schema {
         struct AlterMainTableTxDone : Column<33, NScheme::NTypeIds::Bool> {};
 
         // Serialized as string NKikimrSchemeOp::TIndexCreationConfig protobuf.
-        struct CreationConfig : Column<34, NScheme::NTypeIds::String> { using Type = TString; };
+        struct CreationConfig : Column<34, NScheme::NTypeIds::String> {};
 
         struct ReadRowsBilled : Column<35, NScheme::NTypeIds::Uint64> {};
         struct ReadBytesBilled : Column<36, NScheme::NTypeIds::Uint64> {};
@@ -1440,7 +1447,7 @@ struct Schema : NIceDb::Schema {
         struct LocalShardIdx : Column<3, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
 
         struct Range : Column<4, NScheme::NTypeIds::String> { using Type = NKikimrTx::TKeyRange; };
-        struct LastKeyAck : Column<5, NScheme::NTypeIds::String> { using Type = TString; };
+        struct LastKeyAck : Column<5, NScheme::NTypeIds::String> {};
 
         struct Status : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrIndexBuilder::EBuildStatus; };
         struct Message : Column<7, NScheme::NTypeIds::Utf8> {};
@@ -1545,6 +1552,7 @@ struct Schema : NIceDb::Schema {
         struct DstPathLocalId : Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct Scheme : Column<6, NScheme::NTypeIds::String> {};
         struct Permissions : Column<11, NScheme::NTypeIds::String> {};
+        struct Metadata : Column<12, NScheme::NTypeIds::String> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1560,6 +1568,7 @@ struct Schema : NIceDb::Schema {
             DstPathLocalId,
             Scheme,
             Permissions,
+            Metadata,
             State,
             WaitTxId,
             NextIndexIdx,
@@ -1624,9 +1633,21 @@ struct Schema : NIceDb::Schema {
         struct SidName : Column<1, NScheme::NTypeIds::String> {};
         struct SidType : Column<2, NScheme::NTypeIds::Uint64> { using Type = NLoginProto::ESidType::SidType; };
         struct SidHash : Column<3, NScheme::NTypeIds::String> {};
+        struct LastSuccessfulAttempt : Column<4, NScheme::NTypeIds::Timestamp> {};
+        struct LastFailedAttempt : Column<5, NScheme::NTypeIds::Timestamp> {};
+        struct FailedAttemptCount : Column<6, NScheme::NTypeIds::Uint32> {using Type = ui32; static constexpr Type Default = 0;};
+        struct CreatedAt : Column<7, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<SidName>;
-        using TColumns = TableColumns<SidName, SidType, SidHash>;
+        using TColumns = TableColumns<
+            SidName,
+            SidType,
+            SidHash,
+            LastSuccessfulAttempt,
+            LastFailedAttempt,
+            FailedAttemptCount,
+            CreatedAt
+        >;
     };
 
     struct LoginSidMembers : Table<94> {
@@ -1775,7 +1796,7 @@ struct Schema : NIceDb::Schema {
         struct Location : Column<5, NScheme::NTypeIds::Utf8> {};
         struct Installation : Column<6, NScheme::NTypeIds::Utf8> {};
         struct Auth : Column<7, NScheme::NTypeIds::String> {};
-        struct ExternalTableReferences : Column<8, NScheme::NTypeIds::String> {};
+        struct ExternalTableReferences : Column<8, NScheme::NTypeIds::String> {};  // references from any scheme objects
         struct Properties : Column<9, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;

@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/ndarray/flatten.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -21,8 +21,8 @@ namespace numpy
     }
 
     NUMPY_EXPR_TO_NDARRAY0_IMPL(flatten);
-  }
-}
+  } // namespace ndarray
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

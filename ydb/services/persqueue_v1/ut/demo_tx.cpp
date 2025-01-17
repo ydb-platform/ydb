@@ -127,6 +127,8 @@ void TTxFixture::CreateTestServer()
         .SetEnableTopicServiceTx(true);
 
     Server.ConstructInPlace(settings);
+
+    Server->AnnoyingClient->GrantConnect(AUTH_TOKEN);
 }
 
 void TTxFixture::CreateTopic(const TString& topicName)

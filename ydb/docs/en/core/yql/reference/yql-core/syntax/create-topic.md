@@ -35,7 +35,7 @@ CREATE TOPIC `my_topic` (
 ### Full list of available topic consumer settings
 
 * `important`: Defines an important consumer. No data will be deleted from the topic until all the important consumers read them. Value type: `boolean`, default value: `false`.
-* `read_from`: Sets up the message write time starting from which the consumer will receive data. Data written before this time will not be read. Value type: `Datetime` OR `Timestamp` OR `integer` (unix-timestamp in the numeric format). Default value: `now`.
+* `read_from`: Sets up the message write time starting from which the consumer will receive data. Data written before this time will not be read. Value type: `Datetime` OR `Timestamp` OR `integer` (unix-timestamp in the numeric format). Default value: `0` (read from the earliest available message).
 
 {% if feature_topic_codecs %}
 * `supported_codecs`: List of [codecs](../../../../concepts/topic#message-codec) supported by the consumer.

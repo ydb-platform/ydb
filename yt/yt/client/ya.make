@@ -101,9 +101,14 @@ SRCS(
     security_client/public.cpp
     security_client/helpers.cpp
 
+    signature/signature.cpp
+    signature/validator.cpp
+    signature/generator.cpp
+
     table_client/public.cpp
     table_client/adapters.cpp
     table_client/table_output.cpp
+    table_client/timestamped_schema_helpers.cpp
     table_client/blob_reader.cpp
     table_client/check_schema_compatibility.cpp
     table_client/chunk_stripe_statistics.cpp
@@ -189,10 +194,6 @@ SRCS(
     complex_types/uuid_text.cpp
     complex_types/yson_format_conversion.cpp
 
-    zookeeper/packet.cpp
-    zookeeper/protocol.cpp
-    zookeeper/requests.cpp
-
     kafka/packet.cpp
     kafka/protocol.cpp
     kafka/requests.cpp
@@ -220,6 +221,7 @@ PEERDIR(
     yt/yt/library/quantile_digest
     yt/yt_proto/yt/client
     library/cpp/json
+    library/cpp/string_utils/base64
     contrib/libs/pfr
 )
 
@@ -236,6 +238,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     api/unittests
+    signature/unittests
     table_client/unittests
     unittests
 )

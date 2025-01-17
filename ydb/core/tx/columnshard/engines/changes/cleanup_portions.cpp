@@ -18,15 +18,23 @@ void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) cons
 }
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
+    AFL_VERIFY(FetchedDataAccessors);
+    PortionsToRemove.ApplyOnExecute(self, context, *FetchedDataAccessors);
+
     THashSet<ui64> pathIds;
     if (!self) {
         return;
     }
+    THashSet<ui64> usedPortionIds = PortionsToRemove.GetPortionIds();
+    auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
+
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
-    for (auto&& p : FetchedDataAccessors->GetPortions()) {
-        p.RemoveFromDatabase(context.DBWrapper);
-        p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
-        pathIds.emplace(p.GetPortionInfo().GetPathId());
+
+    for (auto&& p : PortionsToDrop) {
+        const auto& accessor = FetchedDataAccessors->GetPortionAccessorVerified(p->GetPortionId());
+        accessor.RemoveFromDatabase(context.DBWrapper);
+        accessor.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
+        pathIds.emplace(p->GetPathId());
     }
     for (auto&& i : blobIdsByStorage) {
         auto action = BlobsAction.GetRemoving(i.first);
@@ -37,6 +45,7 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
 }
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    PortionsToRemove.ApplyOnComplete(self, context, *FetchedDataAccessors);
     for (auto& portionInfo : PortionsToDrop) {
         if (!context.EngineLogs.ErasePortion(*portionInfo)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo->DebugString());

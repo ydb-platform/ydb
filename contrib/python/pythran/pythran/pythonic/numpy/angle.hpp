@@ -28,7 +28,7 @@ namespace numpy
   {
     return functor::angle_in_rad()(t);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -1,6 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/mediator)
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 PEERDIR(

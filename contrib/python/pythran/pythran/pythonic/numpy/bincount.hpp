@@ -42,10 +42,9 @@ namespace numpy
     length = std::max<long>(length, 1 + max(expr));
     typename std::enable_if<
         std::tuple_size<pS>::value == 1,
-        types::ndarray<decltype(std::declval<long>() *
-                                std::declval<typename E::dtype>()),
-                       types::pshape<long>>>::type
-    out(types::pshape<long>(length), 0L);
+        types::ndarray<
+            decltype(std::declval<long>() * std::declval<typename E::dtype>()),
+            types::pshape<long>>>::type out(types::pshape<long>(length), 0L);
     auto iweight = weights.begin();
     for (auto iter = expr.fbegin(), end = expr.fend(); iter != end;
          ++iter, ++iweight)
@@ -54,7 +53,7 @@ namespace numpy
   }
 
   NUMPY_EXPR_TO_NDARRAY0_IMPL(bincount);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

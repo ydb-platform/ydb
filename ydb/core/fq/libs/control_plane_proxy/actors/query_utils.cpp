@@ -17,6 +17,61 @@ TString MakeSecretKeyName(const TString& prefix, const TString& folderId, const 
     return TStringBuilder{} << prefix << "_" << folderId << "_" << name;
 }
 
+TString MakeCreateSecretObjectSql(const TString& name, const TString& value) {
+    using namespace fmt::literals;
+    return fmt::format(
+        R"(
+                UPSERT OBJECT {name} (TYPE SECRET) WITH value={value};
+            )",
+        "name"_a = EncloseAndEscapeString(name, '`'),
+        "value"_a = EncloseSecret(EncloseAndEscapeString(value, '"')));
+}
+
+TString MakeCreateSecretAccessObjectSql(const TString& name, const TString& sid) {
+    using namespace fmt::literals;
+    TString accessName = TStringBuilder{} << name << ":" << sid;
+    return fmt::format(
+        R"(
+            UPSERT OBJECT {name} (TYPE SECRET_ACCESS);
+        )",
+        "name"_a = EncloseAndEscapeString(accessName, '`'));
+}
+
+TString MakeCreateSecretAccessObjectsSql(const TString& name, const TVector<TString>& externalSourcesAccessSIDs) {
+    TStringBuilder result;
+    for (const auto& sid : externalSourcesAccessSIDs) {
+        result << MakeCreateSecretAccessObjectSql(name, sid);
+    }
+    return result;
+}
+
+TString MakeDropSecretObjectSql(const TString& name) {
+    using namespace fmt::literals;
+    return fmt::format(
+        R"(
+                DROP OBJECT {name} (TYPE SECRET);
+            )",
+        "name"_a = EncloseAndEscapeString(name, '`'));
+}
+
+TString MakeDropAccessSecretObjectSql(const TString& name, const TString& sid) {
+    using namespace fmt::literals;
+    TString accessName = TStringBuilder{} << name << ":" << sid;
+    return fmt::format(
+        R"(
+            DROP OBJECT {name} (TYPE SECRET_ACCESS);
+        )",
+        "name"_a = EncloseAndEscapeString(accessName, '`'));
+}
+
+TString MakeDropSecretAccessObjectsSql(const TString& name, const TVector<TString>& externalSourcesAccessSIDs) {
+    TStringBuilder result;
+    for (const auto& sid : externalSourcesAccessSIDs) {
+        result << MakeDropAccessSecretObjectSql(name, sid);
+    }
+    return result;
+}
+
 }
 
 TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& content,
@@ -100,33 +155,30 @@ TString SignAccountId(const TString& id, const TSigner::TPtr& signer) {
     return signer ? signer->SignAccountId(id) : TString{};
 }
 
+
+
 TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting& setting,
-                                const TString& name,
-                                const TSigner::TPtr& signer,
-                                const TString& folderId) {
-    using namespace fmt::literals;
-    TString secretObjects;
+                                        const TString& name,
+                                        const TSigner::TPtr& signer,
+                                        const TString& folderId,
+                                        const TVector<TString>& externalSourcesAccessSIDs) {
+    TStringBuilder result;
     auto serviceAccountId = ExtractServiceAccountId(setting);
-    if (serviceAccountId) {
-        secretObjects = signer ? fmt::format(
-            R"(
-                    UPSERT OBJECT {sa_secret_name} (TYPE SECRET) WITH value={signature};
-                )",
-            "sa_secret_name"_a = EncloseAndEscapeString(MakeSecretKeyName("f1", folderId, name), '`'),
-            "signature"_a       = EncloseSecret(EncloseAndEscapeString(SignAccountId(serviceAccountId, signer), '"'))) : std::string{};
+    if (serviceAccountId && signer) {
+        const TString saSecretName = MakeSecretKeyName("f1", folderId, name);
+        const TString signature = SignAccountId(serviceAccountId, signer);
+        result << MakeCreateSecretObjectSql(saSecretName, signature);
+        result << MakeCreateSecretAccessObjectsSql(saSecretName, externalSourcesAccessSIDs);
     }
 
     auto password = GetPassword(setting);
     if (password) {
-        secretObjects += fmt::format(
-                R"(
-                    UPSERT OBJECT {password_secret_name} (TYPE SECRET) WITH value={password};
-                )",
-            "password_secret_name"_a = EncloseAndEscapeString(MakeSecretKeyName("f2", folderId, name), '`'),
-            "password"_a = EncloseSecret(EncloseAndEscapeString(*password, '"')));
+        const TString passwordSecretName = MakeSecretKeyName("f2", folderId, name);
+        result << MakeCreateSecretObjectSql(passwordSecretName, *password);
+        result << MakeCreateSecretAccessObjectsSql(passwordSecretName, externalSourcesAccessSIDs);
     }
 
-    return secretObjects ? secretObjects : TMaybe<TString>{};
+    return result ? result : TMaybe<TString>{};
 }
 
 TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
@@ -257,7 +309,6 @@ TString MakeCreateExternalDataSourceQuery(
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().greenplum_cluster().database_name(), '"'),
                 "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true",
                 "schema"_a =  gpschema ? ", SCHEMA=" + EncloseAndEscapeString(gpschema, '"') : TString{});
-
         }
         break;
         case FederatedQuery::ConnectionSetting::kMysqlCluster: {
@@ -271,7 +322,15 @@ TString MakeCreateExternalDataSourceQuery(
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_id(), '"'),
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_name(), '"'),
                 "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true");
-
+        }
+        case FederatedQuery::ConnectionSetting::kLogging: {
+            properties = fmt::format(
+                R"(
+                    SOURCE_TYPE="Logging",
+                    FOLDER_ID={folder_id}
+                )",
+                "folder_id"_a = EncloseAndEscapeString(connectionContent.setting().logging().folder_id(), '"'));
+            break;
         }
         break;
     }
@@ -294,21 +353,14 @@ TString MakeCreateExternalDataSourceQuery(
                                   folderId));
 }
 
-TMaybe<TString> DropSecretObjectQuery(const TString& name, const TString& folderId) {
-    using namespace fmt::literals;
-    return fmt::format(
-            R"(
-                DROP OBJECT {secret_name1} (TYPE SECRET);
-                DROP OBJECT {secret_name2} (TYPE SECRET);
-                DROP OBJECT {secret_name3} (TYPE SECRET); -- for backward compatibility
-                DROP OBJECT {secret_name4} (TYPE SECRET); -- for backward compatibility
-                DROP OBJECT {secret_name5} (TYPE SECRET); -- for backward compatibility
-            )",
-        "secret_name1"_a = EncloseAndEscapeString(MakeSecretKeyName("f1", folderId, name), '`'),
-        "secret_name2"_a = EncloseAndEscapeString(MakeSecretKeyName("f2", folderId, name), '`'),
-        "secret_name3"_a = EncloseAndEscapeString(TStringBuilder{} << "k1" << name, '`'),
-        "secret_name4"_a = EncloseAndEscapeString(TStringBuilder{} << "k2" << name, '`'),
-        "secret_name5"_a = EncloseAndEscapeString(name, '`'));
+TMaybe<TString> DropSecretObjectQuery(const TString& name, const TString& folderId, const TVector<TString>& externalSourcesAccessSIDs) {
+    const TString secretName1 = MakeSecretKeyName("f1", folderId, name);
+    const TString secretName2 = MakeSecretKeyName("f2", folderId, name);
+    return TStringBuilder{}
+            << MakeDropSecretAccessObjectsSql(secretName1, externalSourcesAccessSIDs)
+            << MakeDropSecretObjectSql(secretName1)
+            << MakeDropSecretAccessObjectsSql(secretName2, externalSourcesAccessSIDs)
+            << MakeDropSecretObjectSql(secretName2);
 }
 
 TString MakeDeleteExternalDataTableQuery(const TString& tableName) {

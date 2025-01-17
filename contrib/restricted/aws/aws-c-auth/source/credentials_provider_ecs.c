@@ -145,7 +145,7 @@ static void s_ecs_finalize_get_credentials_query(struct aws_credentials_provider
     };
     if (aws_byte_buf_append_null_terminator(&ecs_user_data->current_result) == AWS_OP_SUCCESS) {
         credentials = aws_parse_credentials_from_json_document(
-            ecs_user_data->allocator, (const char *)ecs_user_data->current_result.buffer, &parse_options);
+            ecs_user_data->allocator, aws_byte_cursor_from_buf(&ecs_user_data->current_result), &parse_options);
     } else {
         AWS_LOGF_ERROR(
             AWS_LS_AUTH_CREDENTIALS_PROVIDER,

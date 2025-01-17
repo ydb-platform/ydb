@@ -10,6 +10,7 @@ TContainerCacheOnContext::TContainerCacheOnContext(TComputationMutables& mutable
     : Index(mutables.CurValueIndex++)
 {
     ++++mutables.CurValueIndex;
+    mutables.CachedValues.insert(mutables.CachedValues.end(), {Index, Index + 1, Index + 2});
 }
 
 NUdf::TUnboxedValuePod TContainerCacheOnContext::NewArray(TComputationContext& ctx, ui64 size, NUdf::TUnboxedValue*& items) const {
@@ -125,21 +126,12 @@ Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodeg
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateDirectArrayHolder));
         const auto size = ConstantInt::get(Type::getInt64Ty(context), sz);
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {fact->getType(), size->getType(), items->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto array = CallInst::Create(funType, funcPtr, {fact, size, items}, "array", block);
-            AddRefBoxed(array, ctx, block);
-            result->addIncoming(array, block);
-            new StoreInst(array, tpsecond, block);
-        } else {
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {fact->getType(), tpsecond->getType(), size->getType(), items->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funType, funcPtr, {fact, tpsecond, size, items}, "", block);
-            const auto array = new LoadInst(valueType, tpsecond, "array", block);
-            AddRefBoxed(array, ctx, block);
-            result->addIncoming(array, block);
-        }
+        const auto funType = FunctionType::get(valueType, {fact->getType(), size->getType(), items->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+        const auto array = CallInst::Create(funType, funcPtr, {fact, size, items}, "array", block);
+        AddRefBoxed(array, ctx, block);
+        result->addIncoming(array, block);
+        new StoreInst(array, tpsecond, block);
 
         BranchInst::Create(exit, block);
     }
@@ -188,19 +180,10 @@ public:
         const auto factory = ctx.GetFactory();
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::GetEmptyContainerLazy));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {factory->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto res = CallInst::Create(funType, funcPtr, {factory}, "res", block);
-            return res;
-        } else {
-            const auto retPtr = new AllocaInst(valueType, 0U, "ret_ptr", block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {factory->getType(), retPtr->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funType, funcPtr, {factory, retPtr}, "", block);
-            const auto res = new LoadInst(valueType, retPtr, "res", block);
-            return res;
-        }
+        const auto funType = FunctionType::get(valueType, {factory->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+        const auto res = CallInst::Create(funType, funcPtr, {factory}, "res", block);
+        return res;
     }
 #endif
 private:

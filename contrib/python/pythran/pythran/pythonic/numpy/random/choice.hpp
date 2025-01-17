@@ -46,8 +46,8 @@ namespace numpy
     }
 
     template <class T>
-    auto choice(long max, T &&size)
-        -> decltype(randint(0, max, std::forward<T>(size)))
+    auto choice(long max,
+                T &&size) -> decltype(randint(0, max, std::forward<T>(size)))
     {
       return randint(0, max, std::forward<T>(size));
     }

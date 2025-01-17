@@ -131,6 +131,9 @@ public:
     struct TArgumentFlags {
         enum {
             AutoMap = 0x01,
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 41)
+            NoYield = 0x02,
+#endif
         };
     };
 
@@ -321,7 +324,7 @@ public:
 public:
     // returns nullptr if type isn't supported
     virtual IArrowType::TPtr MakeArrowType(const TType* type) const = 0;
-    // The given ArrowSchema struct is released, even if this function fails. 
+    // The given ArrowSchema struct is released, even if this function fails.
     virtual IArrowType::TPtr ImportArrowType(ArrowSchema* schema) const = 0;
 };
 #endif

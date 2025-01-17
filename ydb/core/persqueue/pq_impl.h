@@ -136,7 +136,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //client request
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
-#define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, const TActorId& partActor, \
+#define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx);
     DESCRIBE_HANDLE(HandleGetMaxSeqNoRequest)
     DESCRIBE_HANDLE(HandleSetClientOffsetRequest)
@@ -148,7 +148,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
 #undef DESCRIBE_HANDLE
 
-#define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, const TActorId& partActor, \
+#define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,\
                                   const TActorId& pipeClient, const TActorId& sender);
 
@@ -274,7 +274,7 @@ private:
     // транзакции
     //
     THashMap<ui64, TDistributedTransaction> Txs;
-    TQueue<std::pair<ui64, ui64>> TxQueue;
+    TDeque<std::pair<ui64, ui64>> TxQueue;
     ui64 PlanStep = 0;
     ui64 PlanTxId = 0;
     ui64 ExecStep = 0;
@@ -284,10 +284,18 @@ private:
     TDeque<std::pair<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStep>>> EvPlanStepQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
     THashSet<ui64> DeleteTxs;
-    THashSet<ui64> ChangedTxs;
+    TSet<std::pair<ui64, ui64>> ChangedTxs;
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
     TMaybe<NKikimrPQ::TPartitions> PartitionsDataConfigTx;
+
+    // PLANNED -> CALCULATING -> CALCULATED -> WAIT_RS -> EXECUTING -> EXECUTED
+    THashMap<TDistributedTransaction::EState, TDeque<ui64>> TxsOrder;
+
+    void PushTxInQueue(TDistributedTransaction& tx, TDistributedTransaction::EState state);
+    void ChangeTxState(TDistributedTransaction& tx, TDistributedTransaction::EState newState);
+    bool TryChangeTxState(TDistributedTransaction& tx, TDistributedTransaction::EState newState);
+    bool CanExecute(const TDistributedTransaction& tx);
 
     bool WriteTxsInProgress = false;
 
@@ -336,6 +344,8 @@ private:
 
     void CheckTxState(const TActorContext& ctx,
                       TDistributedTransaction& tx);
+    void TryExecuteTxs(const TActorContext& ctx,
+                       TDistributedTransaction& tx);
 
     void WriteTx(TDistributedTransaction& tx, NKikimrPQ::TTransaction::EState state);
     void DeleteTx(TDistributedTransaction& tx);
@@ -433,6 +443,10 @@ private:
     void DeleteExpiredTransactions(const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
+    void SetTxCounters();
+    void SetTxCompleteLagCounter();
+    void SetTxInFlyCounter();
+
     bool CanProcessProposeTransactionQueue() const;
     bool CanProcessPlanStepQueue() const;
     bool CanProcessWriteTxs() const;
@@ -462,18 +476,22 @@ private:
                                            const TActorId& sender,
                                            const TActorContext& ctx);
     void HandleEventForSupportivePartition(const ui64 responseCookie,
+                                           NWilson::TTraceId traceId,
                                            const NKikimrClient::TPersQueuePartitionRequest& req,
                                            const TActorId& sender,
                                            const TActorContext& ctx);
     void HandleGetOwnershipRequestForSupportivePartition(const ui64 responseCookie,
+                                                         NWilson::TTraceId traceId,
                                                          const NKikimrClient::TPersQueuePartitionRequest& req,
                                                          const TActorId& sender,
                                                          const TActorContext& ctx);
     void HandleReserveBytesRequestForSupportivePartition(const ui64 responseCookie,
+                                                         NWilson::TTraceId traceId,
                                                          const NKikimrClient::TPersQueuePartitionRequest& req,
                                                          const TActorId& sender,
                                                          const TActorContext& ctx);
     void HandleWriteRequestForSupportivePartition(const ui64 responseCookie,
+                                                  NWilson::TTraceId traceId,
                                                   const NKikimrClient::TPersQueuePartitionRequest& req,
                                                   const TActorContext& ctx);
 
@@ -518,6 +536,8 @@ private:
     void BeginInitTransactions();
     void EndInitTransactions();
 
+    void InitTxsOrder();
+
     void EndReadConfig(const TActorContext& ctx);
 
     void AddCmdReadTransactionRange(TEvKeyValue::TEvRequest& request,
@@ -536,6 +556,11 @@ private:
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
 
     void UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const;
+
+    void ResendEvReadSetToReceivers(const TActorContext& ctx);
+    void ResendEvReadSetToReceiversForState(const TActorContext& ctx, NKikimrPQ::TTransaction::EState state);
+
+    void DeleteSupportivePartitions(const TActorContext& ctx);
 };
 
 

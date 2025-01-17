@@ -183,7 +183,7 @@ FROM Input MATCH_RECOGNIZE(
 )
 )";
             auto r = MatchRecognizeSqlToYql(stmt);
-            UNIT_ASSERT(not r.IsOk()); ///https://st.yandex-team.ru/YQL-16213
+            UNIT_ASSERT(r.IsOk());
         }
         { //default
             const auto stmt = R"(

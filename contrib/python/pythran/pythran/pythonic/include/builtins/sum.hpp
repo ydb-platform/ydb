@@ -3,8 +3,8 @@
 
 #include "pythonic/include/types/assignable.hpp"
 #include "pythonic/include/types/tuple.hpp"
-#include "pythonic/include/utils/int_.hpp"
 #include "pythonic/include/utils/functor.hpp"
+#include "pythonic/include/utils/int_.hpp"
 
 #include <numeric>
 
@@ -17,21 +17,22 @@ namespace builtins
   {
     template <class Tuple, size_t N>
     struct tuple_sum {
-      auto operator()(Tuple const &t)
-          -> decltype(std::get<N>(t) + tuple_sum<Tuple, N - 1>()(t));
+      auto operator()(Tuple const &t) -> decltype(std::get<N>(t) +
+                                                  tuple_sum<Tuple, N - 1>()(t));
     };
 
     template <class Tuple>
     struct tuple_sum<Tuple, 0> {
       auto operator()(Tuple const &t) -> decltype(std::get<0>(t));
     };
-  }
+  } // namespace details
 
   template <class Iterable, class T>
-  auto sum(Iterable s, T start) -> decltype(std::accumulate(
-      s.begin(), s.end(),
-      static_cast<typename assignable<decltype(start + *s.begin())>::type>(
-          start)));
+  auto sum(Iterable s, T start)
+      -> decltype(std::accumulate(
+          s.begin(), s.end(),
+          static_cast<typename assignable<decltype(start + *s.begin())>::type>(
+              start)));
 
   template <class Iterable>
   auto sum(Iterable s) -> decltype(sum(s, 0L))
@@ -40,10 +41,11 @@ namespace builtins
   }
 
   template <class... Types>
-  auto sum(std::tuple<Types...> const &t) -> decltype(
-      details::tuple_sum<std::tuple<Types...>, sizeof...(Types)-1>()(t))
+  auto sum(std::tuple<Types...> const &t)
+      -> decltype(details::tuple_sum<std::tuple<Types...>,
+                                     sizeof...(Types) - 1>()(t))
   {
-    return details::tuple_sum<std::tuple<Types...>, sizeof...(Types)-1>()(t);
+    return details::tuple_sum<std::tuple<Types...>, sizeof...(Types) - 1>()(t);
   }
 
   template <class T, size_t N, class V>
@@ -53,7 +55,7 @@ namespace builtins
   }
 
   DEFINE_FUNCTOR(pythonic::builtins, sum);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

@@ -7,6 +7,36 @@ namespace NYql {
 
 namespace {
 
+class TSharedTransformerProxy : public IGraphTransformer {
+public:
+    TSharedTransformerProxy(const std::shared_ptr<IGraphTransformer>& inner)
+        : Inner_(inner)
+    {}
+
+    TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+        return Inner_->Transform(input, output, ctx);
+    }
+
+    NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) {
+        return Inner_->GetAsyncFuture(input);
+    }
+
+    TStatus ApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+        return Inner_->ApplyAsyncChanges(input, output, ctx);
+    }
+
+    void Rewind() final {
+        return Inner_->Rewind();
+    }
+
+    TStatistics GetStatistics() const final {
+        return Inner_->GetStatistics();
+    }
+
+private:
+    const std::shared_ptr<IGraphTransformer> Inner_;
+};
+
 class TCompositeGraphTransformer : public TGraphTransformerBase {
 public:
     TCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes, bool doCheckArguments)
@@ -218,6 +248,10 @@ private:
 };
 
 } // namespace
+
+TAutoPtr<IGraphTransformer> MakeSharedTransformerProxy(const std::shared_ptr<IGraphTransformer>& inner) {
+    return new TSharedTransformerProxy(inner);
+}
 
 TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer(
     const std::function<bool(const TExprNode::TPtr& input, TExprContext& ctx)>& condition,

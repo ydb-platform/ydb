@@ -47,6 +47,7 @@ namespace NActors {
             HTSwap = 2, // other simple lf queue, suggested for low-contention case
             ReadAsFilled = 3, // wait-free queue, suggested for high-contention or latency critical
             TinyReadAsFilled = 4, // same as 3 but with lower overhead
+            LockFreeIntrusive = 5, // lock-free intrusive mailbox
             //Inplace;
             //Direct;
             //Virtual

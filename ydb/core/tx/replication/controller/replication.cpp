@@ -28,6 +28,11 @@ class TReplication::TImpl: public TLagProvider {
             : Ptr(iface)
         {
         }
+
+        inline ITarget* operator->() const {
+            Y_ABORT_UNLESS(Ptr);
+            return Ptr.Get();
+        }
     };
 
     void ResolveSecret(const TString& secretName, const TActorContext& ctx) {
@@ -74,7 +79,7 @@ class TReplication::TImpl: public TLagProvider {
 
     void ProgressTargets(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target.Ptr->Progress(ctx);
+            target->Progress(ctx);
         }
     }
 
@@ -89,6 +94,7 @@ public:
 
     template <typename... Args>
     ui64 AddTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) {
+        TargetTablePaths.clear();
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
         TLagProvider::AddPendingLag(id);
@@ -109,6 +115,23 @@ public:
 
     void RemoveTarget(ui64 id) {
         Targets.erase(id);
+        TargetTablePaths.clear();
+    }
+
+    const TVector<TString>& GetTargetTablePaths() const {
+        if (!TargetTablePaths) {
+            TargetTablePaths.reserve(Targets.size());
+            for (const auto& [_, target] : Targets) {
+                switch (target->GetKind()) {
+                case ETargetKind::Table:
+                case ETargetKind::IndexTable:
+                    TargetTablePaths.push_back(target->GetDstPath());
+                    break;
+                }
+            }
+        }
+
+        return TargetTablePaths;
     }
 
     void Progress(const TActorContext& ctx) {
@@ -167,7 +190,7 @@ public:
 
     void Shutdown(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target.Ptr->Shutdown(ctx);
+            target->Shutdown(ctx);
         }
 
         for (auto* x : TVector<TActorId*>{&SecretResolver, &TargetDiscoverer, &TenantResolver, &YdbProxy}) {
@@ -210,6 +233,7 @@ private:
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
     THashSet<ui64> PendingAlterTargets;
+    mutable TVector<TString> TargetTablePaths;
     TActorId SecretResolver;
     TActorId YdbProxy;
     TActorId TenantResolver;
@@ -257,6 +281,10 @@ TReplication::ITarget* TReplication::FindTarget(ui64 id) {
 
 void TReplication::RemoveTarget(ui64 id) {
     return Impl->RemoveTarget(id);
+}
+
+const TVector<TString>& TReplication::GetTargetTablePaths() const {
+    return Impl->GetTargetTablePaths();
 }
 
 void TReplication::Progress(const TActorContext& ctx) {

@@ -6,6 +6,8 @@
 
 #include <yt/yt/client/sequoia_client/public.h>
 
+#include <yt/yt/client/signature/signature.h>
+
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/logical_type.h>
@@ -407,6 +409,9 @@ void ToProto(
     if (result.ArchiveJobCount) {
         proto->set_archive_job_count(*result.ArchiveJobCount);
     }
+    if (result.ContinuationToken) {
+        proto->set_continuation_token(*result.ContinuationToken);
+    }
 
     ToProto(proto->mutable_statistics(), result.Statistics);
     ToProto(proto->mutable_errors(), result.Errors);
@@ -432,6 +437,11 @@ void FromProto(
         result->ArchiveJobCount = proto.archive_job_count();
     } else {
         result->ArchiveJobCount.reset();
+    }
+    if (proto.has_continuation_token()) {
+        result->ContinuationToken = proto.continuation_token();
+    } else {
+        result->ContinuationToken.reset();
     }
 
     FromProto(&result->Statistics, proto.statistics());
@@ -523,7 +533,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
         ? TColumnStableName(protoSchema.stable_name())
         : TColumnStableName(protoSchema.name()));
 
-    auto physicalType = CheckedEnumCast<EValueType>(protoSchema.type());
+    auto physicalType = FromProto<EValueType>(protoSchema.type());
 
     TLogicalTypePtr columnType;
     if (protoSchema.has_type_v3()) {
@@ -545,7 +555,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
                 << TErrorAttribute("type", protoSchema.type());
         }
     } else if (protoSchema.has_logical_type()) {
-        auto logicalType = CheckedEnumCast<ESimpleLogicalValueType>(protoSchema.logical_type());
+        auto logicalType = FromProto<ESimpleLogicalValueType>(protoSchema.logical_type());
         columnType = MakeLogicalType(logicalType, protoSchema.required());
         if (protoSchema.has_type() && GetPhysicalType(logicalType) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"logical_type\" and \"type\" do not match")
@@ -565,7 +575,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
     schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
     schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
     schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
-    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, FromProto<ESortOrder>));
     schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
     schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
 }
@@ -609,14 +619,11 @@ void ToProto(NProto::TTabletInfo* protoTabletInfo, const NTabletClient::TTabletI
 
 void FromProto(NTabletClient::TTabletInfo* tabletInfo, const NProto::TTabletInfo& protoTabletInfo)
 {
-    tabletInfo->TabletId =
-        FromProto<TTabletId>(protoTabletInfo.tablet_id());
+    tabletInfo->TabletId = FromProto<TTabletId>(protoTabletInfo.tablet_id());
     tabletInfo->MountRevision = FromProto<NHydra::TRevision>(protoTabletInfo.mount_revision());
-    tabletInfo->State = CheckedEnumCast<ETabletState>(protoTabletInfo.state());
+    tabletInfo->State = FromProto<ETabletState>(protoTabletInfo.state());
     tabletInfo->PivotKey = FromProto<NTableClient::TLegacyOwningKey>(protoTabletInfo.pivot_key());
-    if (protoTabletInfo.has_cell_id()) {
-        tabletInfo->CellId = FromProto<TTabletCellId>(protoTabletInfo.cell_id());
-    }
+    tabletInfo->CellId = FromProto<TTabletCellId>(protoTabletInfo.cell_id());
 }
 
 void ToProto(
@@ -636,6 +643,7 @@ void ToProto(
     protoStatistics->set_incomplete_input(statistics.IncompleteInput);
     protoStatistics->set_incomplete_output(statistics.IncompleteOutput);
     protoStatistics->set_memory_usage(statistics.MemoryUsage);
+    protoStatistics->set_total_grouped_row_count(statistics.TotalGroupedRowCount);
 
     ToProto(protoStatistics->mutable_inner_statistics(), statistics.InnerStatistics);
 }
@@ -657,6 +665,7 @@ void FromProto(
     statistics->IncompleteInput = protoStatistics.incomplete_input();
     statistics->IncompleteOutput = protoStatistics.incomplete_output();
     statistics->MemoryUsage = protoStatistics.memory_usage();
+    statistics->TotalGroupedRowCount = protoStatistics.total_grouped_row_count();
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
@@ -1314,7 +1323,7 @@ void FromProto(
     const NProto::TMultiTablePartition& protoMultiTablePartition)
 {
     for (const auto& range : protoMultiTablePartition.table_ranges()) {
-        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(range));
+        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(FromProto<TString>(range)));
     }
 
     if (protoMultiTablePartition.has_aggregate_statistics()) {
@@ -1373,7 +1382,7 @@ void FromProto(
 
     (*manifest)->SourcePath = protoManifest.source_path();
     (*manifest)->DestinationPath = protoManifest.destination_path();
-    (*manifest)->OrderedMode = CheckedEnumCast<EOrderedTableBackupMode>(protoManifest.ordered_mode());
+    (*manifest)->OrderedMode = FromProto<EOrderedTableBackupMode>(protoManifest.ordered_mode());
 }
 
 void ToProto(
@@ -1959,6 +1968,7 @@ void FillRequest(
     const TDistributedWriteSessionStartOptions& options)
 {
     ToProto(req->mutable_path(), path);
+    req->set_cookie_count(options.CookieCount);
 
     if (options.TransactionId) {
         ToProto(req->mutable_transactional_options(), options);
@@ -1971,6 +1981,7 @@ void ParseRequest(
     const TReqStartDistributedWriteSession& req)
 {
     *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+    mutableOptions->CookieCount = req.cookie_count();
     if (req.has_transactional_options()) {
         FromProto(mutableOptions, req.transactional_options());
     }
@@ -1980,19 +1991,31 @@ void ParseRequest(
 
 void FillRequest(
     TReqFinishDistributedWriteSession* req,
-    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)
 {
-    req->set_session(ConvertToYsonString(session).ToString());
+    YT_VERIFY(sessionWithResults.Session);
+
+    req->set_signed_session(ConvertToYsonString(sessionWithResults.Session).ToString());
+    for (const auto& writeResult : sessionWithResults.Results) {
+        YT_VERIFY(writeResult);
+        req->add_signed_write_results(ConvertToYsonString(writeResult).ToString());
+    }
     req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
 }
 
 void ParseRequest(
-    TDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionWithResults* mutableSessionWithResults,
     TDistributedWriteSessionFinishOptions* mutableOptions,
     const TReqFinishDistributedWriteSession& req)
 {
-    *mutableSession = ConvertTo<TDistributedWriteSessionPtr>(TYsonString(req.session()));
+    mutableSessionWithResults->Results.reserve(req.signed_write_results().size());
+    for (const auto& writeResult : req.signed_write_results()) {
+        mutableSessionWithResults->Results.push_back(ConvertTo<TSignedWriteFragmentResultPtr>(TYsonString(writeResult)));
+    }
+
+    mutableSessionWithResults->Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
+
     mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
 }
 
@@ -2000,10 +2023,10 @@ void ParseRequest(
 
 void FillRequest(
     TReqWriteTableFragment* req,
-    const TFragmentWriteCookiePtr& cookie,
-    const TFragmentTableWriterOptions& options)
+    const TSignedWriteFragmentCookiePtr& cookie,
+    const TTableFragmentWriterOptions& options)
 {
-    req->set_cookie(ConvertToYsonString(cookie).ToString());
+    req->set_signed_cookie(ConvertToYsonString(cookie).ToString());
 
     if (options.Config) {
         req->set_config(ConvertToYsonString(*options.Config).ToString());
@@ -2011,11 +2034,11 @@ void FillRequest(
 }
 
 void ParseRequest(
-    TFragmentWriteCookiePtr* mutableCookie,
-    TFragmentTableWriterOptions* mutableOptions,
+    TSignedWriteFragmentCookiePtr* mutableCookie,
+    TTableFragmentWriterOptions* mutableOptions,
     const TReqWriteTableFragment& req)
 {
-    *mutableCookie = ConvertTo<TFragmentWriteCookiePtr>(TYsonString(req.cookie()));
+    *mutableCookie = ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(req.signed_cookie()));
     if (req.has_config()) {
         mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(req.config()));
     } else {
@@ -2071,14 +2094,6 @@ bool IsRetriableError(const TError& error, bool retryProxyBanned, bool retrySequ
         IsDynamicTableRetriableError(error);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-void SetTimeoutOptions(
-    NRpc::TClientRequest& request,
-    const TTimeoutOptions& options)
-{
-    request.SetTimeout(options.Timeout);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ROWSETS
@@ -2198,10 +2213,10 @@ TTableSchemaPtr DeserializeRowsetSchema(
             columns[i].SetStableName(TColumnStableName(entry.name()));
         }
         if (entry.has_logical_type()) {
-            auto simpleLogicalType = CheckedEnumCast<NTableClient::ESimpleLogicalValueType>(entry.logical_type());
+            auto simpleLogicalType = FromProto<NTableClient::ESimpleLogicalValueType>(entry.logical_type());
             columns[i].SetLogicalType(OptionalLogicalType(SimpleLogicalType(simpleLogicalType)));
         } else if (entry.has_type()) {
-            auto simpleLogicalType = CheckedEnumCast<NTableClient::ESimpleLogicalValueType>(entry.type());
+            auto simpleLogicalType = FromProto<NTableClient::ESimpleLogicalValueType>(entry.type());
             columns[i].SetLogicalType(OptionalLogicalType(SimpleLogicalType(simpleLogicalType)));
         }
     }

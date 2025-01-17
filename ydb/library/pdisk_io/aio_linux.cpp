@@ -13,10 +13,18 @@
 
 #undef RWF_APPEND
 
+#if !defined(_musl_)
 #include <liburing.h>
+#endif
 #include <libaio.h>
+#if !defined(_musl_)
 #include <linux/fs.h>
+#endif
 #include <sys/ioctl.h>
+
+#if defined(_musl_)
+#define BLKDISCARD _IO(0x12,119)
+#endif
 
 namespace NKikimr {
 namespace NPDisk {
@@ -212,6 +220,7 @@ public:
                 case ENOSYS:    return EIoResult::FunctionNotImplemented;
                 case EILSEQ:    return EIoResult::InvalidSequence;
                 case ENODATA:   return EIoResult::NoData;
+                case EREMOTEIO:   return EIoResult::RemoteIOError;
                 default: Y_FAIL_S(PDiskInfo << " unexpected error in " << info << ", error# " << -ret
                                  << " strerror# " << strerror(-ret));
             }
@@ -379,6 +388,7 @@ public:
 /*
     TAsyncIoOperationLiburing
 */
+#if !defined(_musl_)
 struct TAsyncIoOperationLiburing : IAsyncIoOperation {
     void* Cookie = nullptr;
     ICallback *Callback = nullptr;
@@ -546,7 +556,7 @@ public:
         tOp->IsReadOp = true;
         tOp->DataPtr = destination;
         tOp->DataSize = size;
-        tOp->DataOffset = offset; 
+        tOp->DataOffset = offset;
     }
 
     void PreparePWrite(IAsyncIoOperation *op, const void *source, size_t size, size_t offset) override {
@@ -705,6 +715,7 @@ public:
     void OnAsyncIoOperationCompletion(IAsyncIoOperation *) override {
     }
 };
+#endif
 
 /*
     CreateAsyncIoContextReal

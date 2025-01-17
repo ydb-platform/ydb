@@ -11,7 +11,7 @@ namespace builtins
   template <class T>
   typename type_functor<T>::type type(T const &t);
   DEFINE_FUNCTOR(pythonic::builtins, type);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

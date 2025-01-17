@@ -14,13 +14,11 @@ using namespace NActors;
 using namespace NMonitoring;
 using namespace NNodeWhiteboard;
 
-bool IsPostContent(const NMon::TEvHttpInfo::TPtr& event);
-
 class TJsonQuery : public TViewerPipeClient {
     using TThis = TJsonQuery;
     using TBase = TViewerPipeClient;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
+    ui32 Timeout = 60000;
     std::vector<std::vector<Ydb::ResultSet>> ResultSets;
     TString Query;
     TString Action;
@@ -65,7 +63,7 @@ public:
     void ParseCgiParameters(const TCgiParameters& params) {
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 60000);
+        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), Timeout);
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -99,56 +97,9 @@ public:
         if (params.Has("resource_pool")) {
             ResourcePool = params.Get("resource_pool");
         }
-        Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     }
 
-    bool ParsePostContent(TStringBuf content) {
-        static NJson::TJsonReaderConfig JsonConfig;
-        NJson::TJsonValue requestData;
-        bool success = NJson::ReadJsonTree(content, &JsonConfig, &requestData);
-        if (success) {
-            if (requestData.Has("query")) {
-                Query = requestData["query"].GetStringRobust();
-            }
-            if (requestData.Has("database")) {
-                Database = requestData["database"].GetStringRobust();
-            }
-            if (requestData.Has("stats")) {
-                Stats = requestData["stats"].GetStringRobust();
-            }
-            if (requestData.Has("action")) {
-                Action = requestData["action"].GetStringRobust();
-            }
-            if (requestData.Has("schema")) {
-                Schema = StringToSchemaType(requestData["schema"].GetStringRobust());
-            }
-            if (requestData.Has("syntax")) {
-                Syntax = requestData["syntax"].GetStringRobust();
-            }
-            if (requestData.Has("query_id")) {
-                QueryId = requestData["query_id"].GetStringRobust();
-            }
-            if (requestData.Has("transaction_mode")) {
-                TransactionMode = requestData["transaction_mode"].GetStringRobust();
-            }
-            if (requestData.Has("base64")) {
-                IsBase64Encode = requestData["base64"].GetBooleanRobust();
-            }
-            if (requestData.Has("limit_rows")) {
-                LimitRows = std::clamp<int>(requestData["limit_rows"].GetIntegerRobust(), 1, 100000);
-            }
-            if (requestData.Has("resource_pool")) {
-                ResourcePool = requestData["resource_pool"].GetStringRobust();
-            }
-        }
-        return success;
-    }
-
-    bool IsPostContent() const {
-        return NViewer::IsPostContent(Event);
-    }
-
-    TJsonQuery(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonQuery(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev)
     {
     }
@@ -157,20 +108,28 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        const auto& params(Event->Get()->Request.GetParams());
-        ParseCgiParameters(params);
-        if (IsPostContent()) {
-            TStringBuf content = Event->Get()->Request.GetPostContent();
-            if (!ParsePostContent(content)) {
-                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Bad content received"), "BadRequest");
-            }
-        }
+        ParseCgiParameters(Params);
         if (Query.empty() && Action != "cancel-query") {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }
-
+        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         SendKpqProxyRequest();
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+    }
+
+    void Cancelled() {
+        if (SessionId) {
+            auto event = std::make_unique<NKqp::TEvKqp::TEvCancelQueryRequest>();
+            event->Record.MutableRequest()->SetSessionId(SessionId);
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+        }
+        PassAway();
+    }
+
+    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+            Cancelled();
+        }
     }
 
     void PassAway() override {
@@ -185,8 +144,7 @@ public:
         TBase::PassAway();
     }
 
-    void ReplyAndPassAway() override {
-    }
+    void ReplyAndPassAway() override {}
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -195,6 +153,8 @@ public:
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
+            cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
+            hFunc(TEvents::TEvUndelivered, Undelivered);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -227,12 +187,13 @@ public:
                 Span.Attribute("database", Database);
             }
         }
+        auto request = GetRequest();
         event->Record.SetApplicationName("ydb-ui");
-        event->Record.SetClientAddress(Event->Get()->Request.GetRemoteAddr());
-        event->Record.SetClientUserAgent(TString(Event->Get()->Request.GetHeader("User-Agent")));
-        if (Event->Get()->UserToken) {
+        event->Record.SetClientAddress(request.GetRemoteAddr());
+        event->Record.SetClientUserAgent(TString(request.GetHeader("User-Agent")));
+        if (TString tokenString = request.GetUserTokenObject()) {
             NACLibProto::TUserToken userToken;
-            if (userToken.ParseFromString(Event->Get()->UserToken)) {
+            if (userToken.ParseFromString(tokenString)) {
                 event->Record.SetUserSID(userToken.GetUserSID());
             }
         }
@@ -280,13 +241,13 @@ public:
         if (Database) {
             request.SetDatabase(Database);
         }
-        if (Event->Get()->UserToken) {
-            event->Record.SetUserToken(Event->Get()->UserToken);
+        if (TString userToken = GetRequest().GetUserTokenObject()) {
+            event->Record.SetUserToken(userToken);
         }
         if (ResourcePool) {
             request.SetPoolId(ResourcePool);
         }
-        request.SetClientAddress(Event->Get()->Request.GetRemoteAddr());
+        request.SetClientAddress(GetRequest().GetRemoteAddr());
         if (Action == "execute-script") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
@@ -416,22 +377,36 @@ private:
                 return ColumnPrimitiveValueToJsonValue(valueParser);
 
             case NYdb::TTypeParser::ETypeKind::Optional:
-                valueParser.OpenOptional();
-                if (valueParser.IsNull()) {
-                    return NJson::JSON_NULL;
-                }
-                switch(valueParser.GetKind()) {
-                    case NYdb::TTypeParser::ETypeKind::Primitive:
-                        return ColumnPrimitiveValueToJsonValue(valueParser);
-                    case NYdb::TTypeParser::ETypeKind::Decimal:
-                        return valueParser.GetDecimal().ToString();
-                    default:
-                        return NJson::JSON_UNDEFINED;
+                {
+                    NJson::TJsonValue jsonOptional;
+                    valueParser.OpenOptional();
+                    if (valueParser.IsNull()) {
+                        jsonOptional = NJson::JSON_NULL;
+                    } else {
+                        switch(valueParser.GetKind()) {
+                            case NYdb::TTypeParser::ETypeKind::Primitive:
+                                jsonOptional = ColumnPrimitiveValueToJsonValue(valueParser);
+                                break;
+                            case NYdb::TTypeParser::ETypeKind::Decimal:
+                                jsonOptional = valueParser.GetDecimal().ToString();
+                                break;
+                            default:
+                                jsonOptional = NJson::JSON_UNDEFINED;
+                                break;
+                        }
+                    }
+                    valueParser.CloseOptional();
+                    return jsonOptional;
                 }
 
             case NYdb::TTypeParser::ETypeKind::Tagged:
-                valueParser.OpenTagged();
-                return ColumnValueToJsonValue(valueParser);
+                {
+                    NJson::TJsonValue jsonTagged;
+                    valueParser.OpenTagged();
+                    jsonTagged = ColumnValueToJsonValue(valueParser);
+                    valueParser.CloseTagged();
+                    return jsonTagged;
+                }
 
             case NYdb::TTypeParser::ETypeKind::Pg:
                 return valueParser.GetPg().Content_;
@@ -447,6 +422,7 @@ private:
                     while (valueParser.TryNextListItem()) {
                         jsonList.AppendValue(ColumnValueToJsonValue(valueParser));
                     }
+                    valueParser.CloseList();
                     return jsonList;
                 }
 
@@ -458,6 +434,7 @@ private:
                     while (valueParser.TryNextElement()) {
                         jsonTuple.AppendValue(ColumnValueToJsonValue(valueParser));
                     }
+                    valueParser.CloseTuple();
                     return jsonTuple;
                 }
 
@@ -469,6 +446,7 @@ private:
                     while (valueParser.TryNextMember()) {
                         jsonStruct[valueParser.GetMemberName()] = ColumnValueToJsonValue(valueParser);
                     }
+                    valueParser.CloseStruct();
                     return jsonStruct;
                 }
 
@@ -479,16 +457,21 @@ private:
                     valueParser.OpenDict();
                     while (valueParser.TryNextDictItem()) {
                         valueParser.DictKey();
-                        TString key = valueParser.GetString();
+                        NJson::TJsonValue jsonDictKey = ColumnValueToJsonValue(valueParser);
                         valueParser.DictPayload();
-                        jsonDict[key] = ColumnValueToJsonValue(valueParser);
+                        jsonDict[jsonDictKey.GetStringRobust()] = ColumnValueToJsonValue(valueParser);
                     }
+                    valueParser.CloseDict();
                     return jsonDict;
                 }
 
             case NYdb::TTypeParser::ETypeKind::Variant:
-                valueParser.OpenVariant();
-                return ColumnValueToJsonValue(valueParser);
+                {
+                    valueParser.OpenVariant();
+                    NJson::TJsonValue jsonVariant = ColumnValueToJsonValue(valueParser);
+                    valueParser.CloseVariant();
+                    return jsonVariant;
+                }
 
             case NYdb::TTypeParser::ETypeKind::EmptyList:
                 return NJson::JSON_ARRAY;

@@ -2,8 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/tx/sequenceshard/public/events.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -16,7 +16,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateSequence TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -170,7 +170,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateSequence TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -577,7 +577,7 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath->PathId);
 
         domainInfo->IncPathsInside();
-        parentPath->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;

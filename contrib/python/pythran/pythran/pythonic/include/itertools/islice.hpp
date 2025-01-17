@@ -1,9 +1,9 @@
 #ifndef PYTHONIC_INCLUDE_ITERTOOLS_ISLICE_HPP
 #define PYTHONIC_INCLUDE_ITERTOOLS_ISLICE_HPP
 
-#include "pythonic/include/utils/functor.hpp"
-#include "pythonic/include/itertools/common.hpp"
 #include "pythonic/include/builtins/range.hpp"
+#include "pythonic/include/itertools/common.hpp"
+#include "pythonic/include/utils/functor.hpp"
 #include <iterator>
 
 PYTHONIC_NS_BEGIN
@@ -64,7 +64,7 @@ namespace itertools
   islice(Iterable &&iterable, long stop);
 
   DEFINE_FUNCTOR(pythonic::itertools, islice);
-}
+} // namespace itertools
 PYTHONIC_NS_END
 
 /* type inference stuff  {*/

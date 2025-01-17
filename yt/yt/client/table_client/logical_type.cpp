@@ -320,8 +320,15 @@ TDecimalLogicalType::TDecimalLogicalType(int precision, int scale)
     , Scale_(scale)
 { }
 
-size_t TDecimalLogicalType::GetMemoryUsage() const
+i64 TDecimalLogicalType::GetMemoryUsage() const
 {
+    return sizeof(*this);
+}
+
+i64 TDecimalLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
     return sizeof(*this);
 }
 
@@ -372,13 +379,27 @@ std::optional<ESimpleLogicalValueType> TOptionalLogicalType::Simplify() const
     }
 }
 
-size_t TOptionalLogicalType::GetMemoryUsage() const
+i64 TOptionalLogicalType::GetMemoryUsage() const
 {
     if (Element_->GetMetatype() == ELogicalMetatype::Simple) {
         // All optionals of simple logical types are singletons and therefore we assume they use no space.
         return 0;
     } else {
         return sizeof(*this) + Element_->GetMemoryUsage();
+    }
+}
+
+i64 TOptionalLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    if (Element_->GetMetatype() == ELogicalMetatype::Simple) {
+        // NB: See TOptionalLogicalType::GetMemoryUsage().
+        return 0;
+    } else if (auto sizeOfThis = static_cast<i64>(sizeof(*this)); sizeOfThis >= threshold) {
+        return sizeof(*this);
+    } else {
+        return sizeOfThis + Element_->GetMemoryUsage(threshold - sizeOfThis);
     }
 }
 
@@ -406,9 +427,16 @@ TSimpleLogicalType::TSimpleLogicalType(ESimpleLogicalValueType element)
     , Element_(element)
 { }
 
-size_t TSimpleLogicalType::GetMemoryUsage() const
+i64 TSimpleLogicalType::GetMemoryUsage() const
 {
     // All simple logical types are singletons and therefore we assume they use no space.
+    return 0;
+}
+
+i64 TSimpleLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
     return 0;
 }
 
@@ -439,9 +467,20 @@ TListLogicalType::TListLogicalType(TLogicalTypePtr element)
     , Element_(std::move(element))
 { }
 
-size_t TListLogicalType::GetMemoryUsage() const
+i64 TListLogicalType::GetMemoryUsage() const
 {
     return sizeof(*this) + Element_->GetMemoryUsage();
+}
+
+i64 TListLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    if (auto sizeOfThis = static_cast<i64>(sizeof(*this)); sizeOfThis >= threshold) {
+        return sizeOfThis;
+    } else {
+        return sizeOfThis + Element_->GetMemoryUsage(threshold - sizeOfThis);
+    }
 }
 
 int TListLogicalType::GetTypeComplexity() const
@@ -678,14 +717,28 @@ TStructLogicalTypeBase::TStructLogicalTypeBase(ELogicalMetatype metatype, std::v
     , Fields_(std::move(fields))
 { }
 
-size_t TStructLogicalTypeBase::GetMemoryUsage() const
+i64 TStructLogicalTypeBase::GetMemoryUsage() const
 {
-    size_t result = sizeof(*this);
-    result += sizeof(TStructField) * Fields_.size();
+    auto usage = static_cast<i64>(sizeof(*this));
+    usage += sizeof(TStructField) * Fields_.size();
     for (const auto& field : Fields_) {
-        result += field.Type->GetMemoryUsage();
+        usage += field.Type->GetMemoryUsage();
     }
-    return result;
+    return usage;
+}
+
+i64 TStructLogicalTypeBase::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    auto usage = static_cast<i64>(sizeof(*this) + sizeof(TStructField) * Fields_.size());
+    for (const auto& field : Fields_) {
+        if (usage >= threshold) {
+            return usage;
+        }
+        usage += field.Type->GetMemoryUsage(threshold - usage);
+    }
+    return usage;
 }
 
 int TStructLogicalTypeBase::GetTypeComplexity() const
@@ -736,14 +789,28 @@ TTupleLogicalTypeBase::TTupleLogicalTypeBase(ELogicalMetatype metatype, std::vec
     , Elements_(std::move(elements))
 { }
 
-size_t TTupleLogicalTypeBase::GetMemoryUsage() const
+i64 TTupleLogicalTypeBase::GetMemoryUsage() const
 {
-    size_t result = sizeof(*this);
-    result += sizeof(TLogicalTypePtr) * Elements_.size();
+    auto usage = static_cast<i64>(sizeof(*this));
+    usage += sizeof(TLogicalTypePtr) * Elements_.size();
     for (const auto& element : Elements_) {
-        result += element->GetMemoryUsage();
+        usage += element->GetMemoryUsage();
     }
-    return result;
+    return usage;
+}
+
+i64 TTupleLogicalTypeBase::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    auto usage = static_cast<i64>(sizeof(*this) + sizeof(TLogicalTypePtr) * Elements_.size());
+    for (const auto& element : Elements_) {
+        if (usage >= threshold) {
+            return usage;
+        }
+        usage += element->GetMemoryUsage(threshold - usage);
+    }
+    return usage;
 }
 
 int TTupleLogicalTypeBase::GetTypeComplexity() const
@@ -795,9 +862,25 @@ TDictLogicalType::TDictLogicalType(TLogicalTypePtr key, TLogicalTypePtr value)
     , Value_(std::move(value))
 { }
 
-size_t TDictLogicalType::GetMemoryUsage() const
+i64 TDictLogicalType::GetMemoryUsage() const
 {
     return sizeof(*this) + Key_->GetMemoryUsage() + Value_->GetMemoryUsage();
+}
+
+i64 TDictLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    auto usage = static_cast<i64>(sizeof(*this));
+    if (usage >= threshold) {
+        return usage;
+    }
+    usage += Key_->GetMemoryUsage(threshold - usage);
+    if (usage >= threshold) {
+        return usage;
+    }
+    usage += Value_->GetMemoryUsage(threshold - usage);
+    return usage;
 }
 
 int TDictLogicalType::GetTypeComplexity() const
@@ -877,9 +960,21 @@ TTaggedLogicalType::TTaggedLogicalType(TString tag, NYT::NTableClient::TLogicalT
     , Element_(std::move(element))
 { }
 
-size_t TTaggedLogicalType::GetMemoryUsage() const
+i64 TTaggedLogicalType::GetMemoryUsage() const
 {
     return sizeof(*this) + GetElement()->GetMemoryUsage();
+}
+
+i64 TTaggedLogicalType::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    auto usage = static_cast<i64>(sizeof(*this));
+    if (usage >= threshold) {
+        return usage;
+    }
+    usage += GetElement()->GetMemoryUsage(threshold - usage);
+    return usage;
 }
 
 int TTaggedLogicalType::GetTypeComplexity() const
@@ -1123,9 +1218,11 @@ void ToProto(NProto::TLogicalType* protoLogicalType, const TLogicalTypePtr& logi
 
 void FromProto(TLogicalTypePtr* logicalType, const NProto::TLogicalType& protoLogicalType)
 {
+    using NYT::FromProto;
+
     switch (protoLogicalType.type_case()) {
         case NProto::TLogicalType::TypeCase::kSimple:
-            *logicalType = SimpleLogicalType(CheckedEnumCast<ESimpleLogicalValueType>(protoLogicalType.simple()));
+            *logicalType = SimpleLogicalType(FromProto<ESimpleLogicalValueType>(protoLogicalType.simple()));
             return;
         case NProto::TLogicalType::TypeCase::kDecimal:
             *logicalType = DecimalLogicalType(protoLogicalType.decimal().precision(), protoLogicalType.decimal().scale());
@@ -1191,7 +1288,7 @@ void FromProto(TLogicalTypePtr* logicalType, const NProto::TLogicalType& protoLo
         case NProto::TLogicalType::TypeCase::kTagged: {
             TLogicalTypePtr element;
             FromProto(&element, protoLogicalType.tagged().element());
-            *logicalType = TaggedLogicalType(protoLogicalType.tagged().tag(), std::move(element));
+            *logicalType = TaggedLogicalType(FromProto<TString>(protoLogicalType.tagged().tag()), std::move(element));
             return;
         }
         case NProto::TLogicalType::TypeCase::TYPE_NOT_SET:

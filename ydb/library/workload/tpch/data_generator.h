@@ -52,12 +52,13 @@ public:
 
         int TableNum;
         ui64 Generated = 0;
+        ui64 FirstRow = 1;
         TAdaptiveLock Lock;
 
     private:
         TString GetFullTableName(const char* table) const;
-        static ui64 CalcCountToGenerate(const TTpchWorkloadDataInitializerGenerator& owner, int tableNum);
         const TTpchWorkloadDataInitializerGenerator& Owner;
+        TDataPortionPtr FirstPortion;
     };
 
 };

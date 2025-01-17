@@ -39,6 +39,11 @@ select
     $format(DateTime::EndOfMonth(`tztimestamp`)),
     $format(DateTime::EndOfWeek(`tztimestamp`)),
     $format(DateTime::EndOfDay(`tztimestamp`)),
+    $format(DateTime::StartOf(`tztimestamp`, Interval("PT13H"))),
+    $format(DateTime::StartOf(`tztimestamp`, Interval("PT4H"))),
+    $format(DateTime::StartOf(`tztimestamp`, Interval("PT15M"))),
+    $format(DateTime::StartOf(`tztimestamp`, Interval("PT20S"))),
+    $format(DateTime::StartOf(`tztimestamp`, Interval("PT7S"))),
 from (
     select
         cast(ftztimestamp as TzTimestamp) as `tztimestamp`

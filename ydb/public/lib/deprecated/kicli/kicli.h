@@ -588,7 +588,8 @@ public:
         ExternalDataSource,
         View,
         ResourcePool,
-        BackupCollection
+        BackupCollection,
+        Transfer
     };
 
     TSchemaObject(TSchemaObject&&) = default;

@@ -63,7 +63,7 @@ public:
         auto lwmGroup = MetricsRegistry->GetSensors()->GetSubgroup("component", "lwm");
         auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(NKikimr::NMiniKQL::TComputationPatternLRUCache::Config(200_MB, 200_MB));
         NDqs::TLocalWorkerManagerOptions lwmOptions;
-        lwmOptions.Factory = NTaskRunnerProxy::CreateFactory(functionRegistry, compFactory, taskTransformFactory, patternCache, true);
+        lwmOptions.Factory = NTaskRunnerProxy::CreateFactory(functionRegistry, compFactory, taskTransformFactory, patternCache, false);
         lwmOptions.AsyncIoFactory = std::move(asyncIoFactory);
         lwmOptions.FunctionRegistry = functionRegistry;
         lwmOptions.TaskRunnerInvokerFactory = new NDqs::TTaskRunnerInvokerFactory();

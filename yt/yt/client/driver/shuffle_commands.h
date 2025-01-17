@@ -15,9 +15,11 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString Account;
+    std::string Account;
     int PartitionCount;
     NObjectClient::TTransactionId ParentTransactionId;
+    std::optional<std::string> Medium;
+    std::optional<int> ReplicationFactor;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -51,7 +53,7 @@ public:
 
 private:
     NApi::TShuffleHandlePtr ShuffleHandle;
-    TString PartitionColumn;
+    std::string PartitionColumn;
     i64 MaxRowBufferSize;
 
     void DoExecute(ICommandContextPtr context) override;

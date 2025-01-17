@@ -3,8 +3,8 @@
 
 #include "pythonic/include/scipy/special/hankel2.hpp"
 
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/types/complex.hpp"
+#include "pythonic/types/ndarray.hpp"
 #include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/numpy_traits.hpp"
 
@@ -24,13 +24,13 @@ namespace scipy
       {
         return boost::math::cyl_hankel_2(x, y);
       }
-    }
+    } // namespace details
 
 #define NUMPY_NARY_FUNC_NAME hankel2
 #define NUMPY_NARY_FUNC_SYM details::hankel2
 #include "pythonic/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

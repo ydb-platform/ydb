@@ -32,7 +32,7 @@ namespace NYql::NConnector::NTest {
     void CreatePostgreSQLExternalDataSource(
         const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
         const TString& dataSourceName,
-        NApi::EProtocol protocol,
+        NYql::EGenericProtocol protocol,
         const TString& host,
         int port,
         const TString& login,
@@ -65,7 +65,7 @@ namespace NYql::NConnector::NTest {
             "login"_a = login,
             "password"_a = password,
             "use_tls"_a = useTls ? "TRUE" : "FALSE",
-            "protocol"_a = NApi::EProtocol_Name(protocol),
+            "protocol"_a = NYql::EGenericProtocol_Name(protocol),
             "source_type"_a = PG_SOURCE_TYPE,
             "database"_a = databaseName,
             "schema"_a = schema);
@@ -76,7 +76,7 @@ namespace NYql::NConnector::NTest {
     void CreateClickHouseExternalDataSource(
         const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
         const TString& dataSourceName,
-        NApi::EProtocol protocol,
+        NYql::EGenericProtocol protocol,
         const TString& clickHouseClusterId,
         const TString& login,
         const TString& password,
@@ -110,7 +110,7 @@ namespace NYql::NConnector::NTest {
             "login"_a = login,
             "password"_a = password,
             "use_tls"_a = useTls ? "TRUE" : "FALSE",
-            "protocol"_a = NYql::NConnector::NApi::EProtocol_Name(protocol),
+            "protocol"_a = NYql::EGenericProtocol_Name(protocol),
             "service_account_id"_a = serviceAccountId,
             "service_account_id_signature"_a = serviceAccountIdSignature,
             "source_type"_a = ToString(NYql::EDatabaseType::ClickHouse),

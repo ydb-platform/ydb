@@ -106,6 +106,7 @@
   - shadow.h
   - signal.h
   - spawn.h
+  - stab.h
   - stdalign.h
   - stdarg.h
   - stdatomic.h
@@ -128,10 +129,12 @@
   - sys/fcntl.h
   - sys/file.h
   - sys/fsuid.h
+  - sys/ifunc.h
   - sys/inotify.h
   - sys/ioctl.h
   - sys/io.h
   - sys/ipc.h
+  - sys/hwcap.h
   - sys/kd.h
   - syslog.h
   - sys/mman.h

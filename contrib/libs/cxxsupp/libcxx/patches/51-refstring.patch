@@ -1,74 +1,81 @@
 diff --git a/src/include/refstring.h b/src/include/refstring.h
-index 0675b39..c32630c 100644
+index 7845224..72daaef 100644
 --- a/src/include/refstring.h
 +++ b/src/include/refstring.h
-@@ -13,7 +13,13 @@
- #include <stdexcept>
+@@ -9,12 +9,18 @@
+ #ifndef _LIBCPP_REFSTRING_H
+ #define _LIBCPP_REFSTRING_H
+ 
+-#include "atomic_support.h"
+ #include <__config>
  #include <cstddef>
  #include <cstring>
-+
-+#if !defined(_LIBCPP_HAS_NO_THREADS) && !defined(_LIBCPP_CXX03_LANG) && !defined(_LIBCPP_USE_ATOMIC)
-+#define _LIBCPP_USE_ATOMIC
-+#include <atomic>
-+#else
- #include "atomic_support.h"
-+#endif
+ #include <stdexcept>
  
++#if !defined(_LIBCPP_HAS_NO_THREADS) && !defined(_LIBCPP_CXX03_LANG) && !defined(_LIBCPP_USE_ATOMIC)
++#  define _LIBCPP_USE_ATOMIC
++#  include <atomic>
++#else
++#  include "atomic_support.h"
++#endif
++
  // MacOS and iOS used to ship with libstdc++, and still support old applications
  // linking against libstdc++. The libc++ and libstdc++ exceptions are supposed
+ // to be ABI compatible, such that they can be thrown from one library and caught
 @@ -40,7 +46,11 @@ typedef int count_t;
  struct _Rep_base {
-     std::size_t len;
-     std::size_t cap;
+   std::size_t len;
+   std::size_t cap;
 +#ifdef _LIBCPP_USE_ATOMIC
-+    std::atomic<count_t> count;
++  std::atomic<count_t> count;
 +#else
-     count_t     count;
+   count_t count;
 +#endif
  };
  
- inline _Rep_base* rep_from_data(const char *data_) noexcept {
-@@ -96,7 +106,11 @@ __libcpp_refstring::__libcpp_refstring(const __libcpp_refstring &s) noexcept
-     : __imp_(s.__imp_)
- {
-     if (__uses_refcount())
+ inline _Rep_base* rep_from_data(const char* data_) noexcept {
+@@ -88,7 +98,11 @@ inline __libcpp_refstring::__libcpp_refstring(const char* msg) {
+ 
+ inline __libcpp_refstring::__libcpp_refstring(const __libcpp_refstring& s) noexcept : __imp_(s.__imp_) {
+   if (__uses_refcount())
 +#ifdef _LIBCPP_USE_ATOMIC
-+        rep_from_data(__imp_)->count.fetch_add(1);
++    rep_from_data(__imp_)->count.fetch_add(1);
 +#else
-         __libcpp_atomic_add(&rep_from_data(__imp_)->count, 1);
+     __libcpp_atomic_add(&rep_from_data(__imp_)->count, 1);
 +#endif
  }
  
- inline
-@@ -105,10 +119,19 @@ __libcpp_refstring& __libcpp_refstring::operator=(__libcpp_refstring const& s) n
-     struct _Rep_base *old_rep = rep_from_data(__imp_);
-     __imp_ = s.__imp_;
-     if (__uses_refcount())
+ inline __libcpp_refstring& __libcpp_refstring::operator=(__libcpp_refstring const& s) noexcept {
+@@ -96,9 +110,19 @@ inline __libcpp_refstring& __libcpp_refstring::operator=(__libcpp_refstring cons
+   struct _Rep_base* old_rep = rep_from_data(__imp_);
+   __imp_                    = s.__imp_;
+   if (__uses_refcount())
 +#ifdef _LIBCPP_USE_ATOMIC
-+        rep_from_data(__imp_)->count.fetch_add(1);
++    rep_from_data(__imp_)->count.fetch_add(1);
 +#else
-         __libcpp_atomic_add(&rep_from_data(__imp_)->count, 1);
+     __libcpp_atomic_add(&rep_from_data(__imp_)->count, 1);
 +#endif
 +
-     if (adjust_old_count)
-     {
+   if (adjust_old_count) {
+-    if (__libcpp_atomic_add(&old_rep->count, count_t(-1)) < 0) {
 +#ifdef _LIBCPP_USE_ATOMIC
-+        if (old_rep->count.fetch_sub(1) == 0)
++    if (old_rep->count.fetch_sub(1) == 0)
 +#else
-         if (__libcpp_atomic_add(&old_rep->count, count_t(-1)) < 0)
++    if (__libcpp_atomic_add(&old_rep->count, count_t(-1)) < 0)
 +#endif
-         {
-             ::operator delete(old_rep);
-         }
-@@ -120,7 +143,11 @@ inline
- __libcpp_refstring::~__libcpp_refstring() {
-     if (__uses_refcount()) {
-         _Rep_base* rep = rep_from_data(__imp_);
-+#ifdef _LIBCPP_USE_ATOMIC
-+        if (rep->count.fetch_sub(1) == 0) {
-+#else
-         if (__libcpp_atomic_add(&rep->count, count_t(-1)) < 0) {
-+#endif
-             ::operator delete(rep);
-         }
++    {
+       ::operator delete(old_rep);
      }
+   }
+@@ -108,7 +132,11 @@ inline __libcpp_refstring& __libcpp_refstring::operator=(__libcpp_refstring cons
+ inline __libcpp_refstring::~__libcpp_refstring() {
+   if (__uses_refcount()) {
+     _Rep_base* rep = rep_from_data(__imp_);
++#ifdef _LIBCPP_USE_ATOMIC
++    if (rep->count.fetch_sub(1) == 0) {
++#else
+     if (__libcpp_atomic_add(&rep->count, count_t(-1)) < 0) {
++#endif
+       ::operator delete(rep);
+     }
+   }

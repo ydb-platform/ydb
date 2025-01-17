@@ -25,7 +25,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr), 0);
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr),
+        std::make_shared<TSchemaObjectsCache>(), 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
@@ -110,7 +111,7 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
     const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions) {
     using namespace NColumnShard;
     auto columnsFilter = GetColumnsFilter(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema());
-    auto rowset = db.Table<Schema::IndexColumnsV1>().Select();
+    auto rowset = db.Table<Schema::IndexColumnsV2>().Select();
     if (!rowset.IsReady()) {
         return TConclusionStatus::Fail("Not ready");
     }
@@ -126,8 +127,10 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
     };
 
     while (!rowset.EndOfSet()) {
-        NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset);
-        initPortion(std::move(chunkLoadContext));
+        NOlap::TColumnChunkLoadContextV2 chunkLoadContext(rowset);
+        for (auto&& i : chunkLoadContext.BuildRecordsV1()) {
+            initPortion(std::move(i));
+        }
 
         if (!rowset.Next()) {
             return TConclusionStatus::Fail("Not ready");

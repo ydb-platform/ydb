@@ -1,4 +1,12 @@
-#include "schemeshard__operation.h"
+#include <util/generic/algorithm.h>
+
+#include <ydb/library/protobuf_printer/security_printer.h>
+
+#include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+
+#include "schemeshard__operation_part.h"
 
 #include "schemeshard__dispatch_op.h"
 #include "schemeshard__operation_db_changes.h"
@@ -8,13 +16,9 @@
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tablet/tablet_exception.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 
-#include <ydb/library/protobuf_printer/security_printer.h>
-
-#include <util/generic/algorithm.h>
+#include "schemeshard__operation.h"
 
 namespace NKikimr::NSchemeShard {
 
@@ -176,6 +180,7 @@ bool TSchemeShard::ProcessOperationParts(
 }
 
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
+    using namespace NGenerated;
     THolder<TProposeResponse> response = nullptr;
 
     auto selfId = SelfTabletId();
@@ -211,13 +216,33 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
+    //
+
+    TVector<TTxTransaction> rewrittenTransactions;
+
+    // # Phase Zero
+    // Rewrites transactions.
+    // It may fill or clear particular fields based on some runtime SS state.
+
+    for (auto tx : record.GetTransaction()) {
+        if (DispatchOp(tx, [&](auto traits) { return traits.NeedRewrite && !Rewrite(traits, tx); })) {
+            response.Reset(new TProposeResponse(NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId)));
+            response->SetError(NKikimrScheme::StatusPreconditionFailed, "Invalid schema rewrite rule.");
+            return std::move(response);
+        }
+
+        rewrittenTransactions.push_back(std::move(tx));
+    }
+
+    //
+
     TVector<TTxTransaction> transactions;
     TVector<TTxTransaction> generatedTransactions;
 
     // # Phase One
     // Generate MkDir transactions based on object name.
 
-    for (const auto& transaction : record.GetTransaction()) {
+    for (const auto& transaction : rewrittenTransactions) {
         auto splitResult = operation->SplitIntoTransactions(transaction, context);
         if (splitResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TProposeResponse(splitResult.Status, ui64(txId), ui64(selfId)));
@@ -260,6 +285,8 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             return std::move(response);
         }
     }
+
+    //
 
     return std::move(response);
 }
@@ -533,9 +560,9 @@ void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::
 template <class TEvType>
 struct TTxTypeFrom;
 
-#define DefineTxTypeFromSpecialization(TEvType, TxTypeValue)  \
+#define DefineTxTypeFromSpecialization(NS, TEvType, TxTypeValue) \
     template <> \
-    struct TTxTypeFrom<TEvType> { \
+    struct TTxTypeFrom<::NKikimr::NS::TEvType> { \
         static constexpr TTxType TxType = TxTypeValue; \
     };
 
@@ -722,15 +749,15 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperati
     return new TTxOperationReply<TEvType>(this, id, ev);
 }
 
-#define DefineCreateTxOperationReplyFunc(TEvType, ...) \
-    template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, TEvType::TPtr& ev);
+#define DefineCreateTxOperationReplyFunc(NS, TEvType, ...) \
+    template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, ::NKikimr::NS::TEvType ## __HandlePtr& ev);
 
     SCHEMESHARD_INCOMING_EVENTS(DefineCreateTxOperationReplyFunc)
 #undef DefineCreateTxOperationReplyFunc
 
 
 TString JoinPath(const TString& workingDir, const TString& name) {
-    Y_ABORT_UNLESS(!name.StartsWith('/') && !name.EndsWith('/'));
+    Y_ABORT_UNLESS(!name.StartsWith('/') && !name.EndsWith('/'), "%s", name.c_str());
     return TStringBuilder()
                << workingDir
                << (workingDir.EndsWith('/') ? "" : "/")
@@ -868,7 +895,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         TString targetName;
 
         if (!DispatchOp(tx, [&](auto traits) {
-                auto name = traits.GetTargetName(tx);
+                auto name = GetTargetName(traits, tx);
                 if (name) {
                     targetName = *name;
                     return true;
@@ -937,7 +964,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             create.SetFailOnExist(tx.GetFailOnExist());
 
             if (!DispatchOp(tx, [&](auto traits) {
-                    return traits.SetName(create, name);
+                    return SetName(traits, create, name);
                 }))
             {
                 Y_ABORT("Invariant violation");
@@ -957,29 +984,31 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 
     // # Generates MkDirs based on transaction-specific requirements
     if (DispatchOp(tx, [&](auto traits) { return traits.CreateAdditionalDirs; })) {
-        for (const auto& [parentPathStr, pathStrs] : DispatchOp(tx, [&](auto traits) { return traits.GetRequiredPaths(tx); })) {
-            const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
-            {
-                TPath::TChecker checks = parentPath.Check();
-                checks
-                    .NotUnderDomainUpgrade()
-                    .IsAtLocalSchemeShard()
-                    .IsResolved()
-                    .NotDeleted()
-                    .NotUnderDeleting()
-                    .IsCommonSensePath()
-                    .IsLikeDirectory();
+        if (auto requiredPaths = DispatchOp(tx, [&](auto traits) { return GetRequiredPaths(traits, tx, context); }); requiredPaths) {
+            for (const auto& [parentPathStr, pathStrs] : *requiredPaths) {
+                const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+                {
+                    TPath::TChecker checks = parentPath.Check();
+                    checks
+                        .NotUnderDomainUpgrade()
+                        .IsAtLocalSchemeShard()
+                        .IsResolved()
+                        .NotDeleted()
+                        .NotUnderDeleting()
+                        .IsCommonSensePath()
+                        .IsLikeDirectory();
 
-                if (!checks) {
-                    result.Transaction = tx;
-                    return result;
+                    if (!checks) {
+                        result.Transaction = tx;
+                        return result;
+                    }
                 }
-            }
 
-            for (const auto& pathStr : pathStrs) {
-                TPath path = TPath::Resolve(JoinPath(parentPathStr, pathStr), context.SS);
-                if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
-                    return result;
+                for (const auto& pathStr : pathStrs) {
+                    TPath path = TPath::Resolve(JoinPath(parentPathStr, pathStr), context.SS);
+                    if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
+                        return result;
+                    }
                 }
             }
         }
@@ -1141,6 +1170,8 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropSequence(NextPartId(), txState);
     case TTxState::ETxType::TxCopySequence:
         return CreateCopySequence(NextPartId(), txState);
+    case TTxState::ETxType::TxMoveSequence:
+        return CreateMoveSequence(NextPartId(), txState);
 
     case TTxState::ETxType::TxFillIndex:
         Y_ABORT("deprecated");
@@ -1159,6 +1190,16 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropReplication(NextPartId(), txState, false);
     case TTxState::ETxType::TxDropReplicationCascade:
         return CreateDropReplication(NextPartId(), txState, true);
+
+    // Transfer
+    case TTxState::ETxType::TxCreateTransfer:
+        return CreateNewTransfer(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterTransfer:
+        return CreateAlterTransfer(NextPartId(), txState);
+    case TTxState::ETxType::TxDropTransfer:
+        return CreateDropTransfer(NextPartId(), txState, false);
+    case TTxState::ETxType::TxDropTransferCascade:
+        return CreateDropTransfer(NextPartId(), txState, true);
 
     // BlobDepot
     case TTxState::ETxType::TxCreateBlobDepot:
@@ -1406,6 +1447,8 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return {CreateMoveTableIndex(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
         return CreateConsistentMoveIndex(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
+        return {CreateMoveSequence(NextPartId(), tx)};
 
     // Replication
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
@@ -1416,6 +1459,16 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return {CreateDropReplication(NextPartId(), tx, false)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
         return {CreateDropReplication(NextPartId(), tx, true)};
+
+    // Transfer
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
+        return {CreateNewTransfer(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
+        return {CreateAlterTransfer(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer:
+        return {CreateDropTransfer(NextPartId(), tx, false)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
+        return {CreateDropTransfer(NextPartId(), tx, true)};
 
     // BlobDepot
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
@@ -1466,8 +1519,8 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return {CreateAlterResourcePool(NextPartId(), tx)};
 
     // IncrementalBackup
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
-        return CreateRestoreIncrementalBackup(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
+        return CreateRestoreMultipleIncrementalBackups(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
@@ -1479,6 +1532,12 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
         return {CreateDropBackupCollection(NextPartId(), tx)};
 
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+        return CreateBackupBackupCollection(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
+        return CreateBackupIncrementalBackupCollection(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
+        return CreateRestoreBackupCollection(NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();
@@ -1629,13 +1688,18 @@ void TOperation::RegisterRelationByTabletId(TSubTxId partId, TTabletId tablet, c
     if (RelationsByTabletId.contains(tablet)) {
         if (RelationsByTabletId.at(tablet) != partId) {
             // it is Ok if Hive otherwise it is error
+            TSubTxId prevPartId = RelationsByTabletId.at(tablet);
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "TOperation RegisterRelationByTabletId"
                             << " collision in routes has found"
-                            << ", TxId: " << TxId
-                            << ", partId: " << partId
-                            << ", prev tablet: " << RelationsByTabletId.at(tablet)
-                            << ", new tablet: " << tablet);
+                            << ", TxId# " << TxId
+                            << ", partId# " << partId
+                            << ", prevPartId# " << prevPartId
+                            << ", tablet# " << tablet
+                            << ", guessDefaultRootHive# " << (tablet == TTabletId(72057594037968897) ? "yes" : "no")
+                            << ", prevTx# " << (prevPartId < Parts.size() ? Parts[prevPartId]->GetTransaction().ShortDebugString() : TString("unknown"))
+                            << ", newTx# " << (partId < Parts.size() ? Parts[partId]->GetTransaction().ShortDebugString() : TString("unknown"))
+                            );
 
             RelationsByTabletId.erase(tablet);
         }

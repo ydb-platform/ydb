@@ -272,6 +272,9 @@ protected:
             if (TokenType == TDerived::ETokenType::NebiusAccessService) {
                 return SanitizeNebiusTicket(Ticket);
             }
+            if (TokenType == TDerived::ETokenType::Login) {
+                return NLogin::TLoginProvider::SanitizeJwtToken(Ticket);
+            }
             return MaskTicket(Ticket);
         }
     };

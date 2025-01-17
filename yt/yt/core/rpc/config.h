@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/concurrency/config.h>
 
+#include <yt/yt/core/misc/backoff_strategy.h>
+
 #include <library/cpp/yt/misc/enum.h>
 
 #include <vector>
@@ -181,6 +183,12 @@ public:
 
     //! Maximum number of retry attempts to make.
     int RetryAttempts;
+
+    // COMPAT(danilalexeev): YT-23734.
+    bool EnableExponentialRetryBackoffs;
+
+    //! Retry backoff policy.
+    TExponentialBackoffOptions RetryBackoff;
 
     //! Maximum time to spend while retrying.
     //! If null then no limit is enforced.
@@ -428,13 +436,13 @@ class TDispatcherConfig
     : public NYTree::TYsonStruct
 {
 public:
-    static constexpr int DefaultHeavyPoolSize = 16;
-    static constexpr int DefaultCompressionPoolSize = 8;
     int HeavyPoolSize;
     int CompressionPoolSize;
     TDuration HeavyPoolPollingPeriod;
 
     bool AlertOnMissingRequestInfo;
+
+    bool SendTracingBaggage;
 
     TDispatcherConfigPtr ApplyDynamic(const TDispatcherDynamicConfigPtr& dynamicConfig) const;
 
@@ -456,6 +464,8 @@ public:
     std::optional<TDuration> HeavyPoolPollingPeriod;
 
     std::optional<bool> AlertOnMissingRequestInfo;
+
+    std::optional<bool> SendTracingBaggage;
 
     REGISTER_YSON_STRUCT(TDispatcherDynamicConfig);
 

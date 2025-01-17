@@ -9,7 +9,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
-#include <yql/essentials/minikql/jsonpath/jsonpath.h>
+#include <yql/essentials/minikql/jsonpath/parser/parser.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 #include "yql/essentials/parser/pg_catalog/catalog.h"
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
@@ -393,6 +393,25 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 .Build();
 
             return IGraphTransformer::TStatus::Repeat;
+        } else if (IsDataTypeDecimal(from) && IsDataTypeDecimal(to)) {
+            auto* sourceDecimal = sourceType.Cast<TDataExprParamsType>();
+            auto* expectedDecimal = expectedType.Cast<TDataExprParamsType>();
+            ui8 p1 = FromString(sourceDecimal->GetParamOne()), s1 = FromString(sourceDecimal->GetParamTwo());
+            ui8 p2 = FromString(expectedDecimal->GetParamOne()), s2 = FromString(expectedDecimal->GetParamTwo());
+            if (s1 > s2) {
+                TString message = TStringBuilder() << "Implicit decimal cast would lose precision";
+                auto issue = TIssue(node->Pos(ctx), message);
+                ctx.AddError(issue);
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (p1 - s1 > p2 - s2) {
+                TString message = TStringBuilder() << "Implicit decimal cast would narrow the range";
+                auto issue = TIssue(node->Pos(ctx), message);
+                ctx.AddError(issue);
+                return IGraphTransformer::TStatus::Error;
+            }
+            allow = true;
+            useCast = true;
         }
 
         if (!allow || !isSafe) {
@@ -4396,7 +4415,7 @@ TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool wa
     }
 
     if (IsDataTypeInterval(dataSlot1) && IsDataTypeInterval(dataSlot2)) {
-        return (dataSlot1 == EDataSlot::Interval64 || dataSlot2 == EDataSlot::Interval64) 
+        return (dataSlot1 == EDataSlot::Interval64 || dataSlot2 == EDataSlot::Interval64)
             ? EDataSlot::Interval64
             : EDataSlot::Interval;
     }
@@ -4944,7 +4963,7 @@ bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node) {
                     break;
                 }
             }
-            
+
             break;
         }
         case ETypeAnnotationKind::Dict: {
@@ -6449,7 +6468,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Atom(1, ToString(aggDesc.FinalFuncId))
                 .List(2)
                     .Do([aggResultType, originalAggResultType](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
-                        if (aggResultType != originalAggResultType) { 
+                        if (aggResultType != originalAggResultType) {
                             builder.List(0)
                                 .Atom(0, "type")
                                 .Atom(1, NPg::LookupType(aggResultType).Name)

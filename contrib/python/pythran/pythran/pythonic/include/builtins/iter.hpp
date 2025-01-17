@@ -23,7 +23,7 @@ namespace builtins
       iterator const &begin() const;
       iterator const &end() const;
     };
-  }
+  } // namespace details
 
   template <class T>
   details::iter<
@@ -31,7 +31,7 @@ namespace builtins
   iter(T &&t);
 
   DEFINE_FUNCTOR(pythonic::builtins, iter);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

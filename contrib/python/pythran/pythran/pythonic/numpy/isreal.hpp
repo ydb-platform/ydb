@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/isreal.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
-#include "pythonic/utils/numpy_traits.hpp"
 #include "pythonic/types/traits.hpp"
+#include "pythonic/utils/functor.hpp"
+#include "pythonic/utils/numpy_traits.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -28,12 +28,12 @@ namespace numpy
     {
       return true;
     }
-  }
+  } // namespace wrapper
 
 #define NUMPY_NARY_FUNC_NAME isreal
 #define NUMPY_NARY_FUNC_SYM wrapper::isreal
 #include "pythonic/types/numpy_nary_expr.hpp"
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -5,12 +5,15 @@
 #include "simdjson/generic/ondemand/base.h"
 #include "simdjson/generic/implementation_simdjson_result_base.h"
 #include "simdjson/generic/ondemand/value_iterator.h"
+#include "simdjson/generic/ondemand/deserialize.h"
 #endif // SIMDJSON_CONDITIONAL_INCLUDE
 
+#include <type_traits>
+
 namespace simdjson {
+
 namespace SIMDJSON_IMPLEMENTATION {
 namespace ondemand {
-
 /**
  * An ephemeral JSON value returned during iteration. It is only valid for as long as you do
  * not access more data in the JSON document.
@@ -35,15 +38,20 @@ public:
    * @returns A value of the given type, parsed from the JSON.
    * @returns INCORRECT_TYPE If the JSON value is not the given type.
    */
-  template<typename T> simdjson_inline simdjson_result<T> get() noexcept {
-    // Unless the simdjson library or the user provides an inline implementation, calling this method should
-    // immediately fail.
-    static_assert(!sizeof(T), "The get method with given type is not implemented by the simdjson library. "
-      "The supported types are ondemand::object, ondemand::array, raw_json_string, std::string_view, uint64_t, "
-      "int64_t, double, and bool. We recommend you use get_double(), get_bool(), get_uint64(), get_int64(), "
-      " get_object(), get_array(), get_raw_json_string(), or get_string() instead of the get template."
-      " You may also add support for custom types, see our documentation.");
+  template <typename T>
+  simdjson_inline simdjson_result<T> get()
+#if SIMDJSON_SUPPORTS_DESERIALIZATION
+    noexcept(custom_deserializable<T, value> ? nothrow_custom_deserializable<T, value> : true)
+#else
+    noexcept
+#endif
+  {
+    static_assert(std::is_default_constructible<T>::value, "The specified type is not default constructible.");
+    T out{};
+    SIMDJSON_TRY(get<T>(out));
+    return out;
   }
+
 
   /**
    * Get this value as the given type.
@@ -54,7 +62,32 @@ public:
    * @returns INCORRECT_TYPE If the JSON value is not an object.
    * @returns SUCCESS If the parse succeeded and the out parameter was set to the value.
    */
-  template<typename T> simdjson_inline error_code get(T &out) noexcept;
+  template <typename T>
+  simdjson_inline error_code get(T &out)
+#if SIMDJSON_SUPPORTS_DESERIALIZATION
+    noexcept(custom_deserializable<T, value> ? nothrow_custom_deserializable<T, value> : true)
+#else
+    noexcept
+#endif
+ {
+#if SIMDJSON_SUPPORTS_DESERIALIZATION
+    if constexpr (custom_deserializable<T, value>) {
+      return deserialize(*this, out);
+    } else {
+#endif // SIMDJSON_SUPPORTS_DESERIALIZATION
+      // Unless the simdjson library or the user provides an inline implementation, calling this method should
+      // immediately fail.
+      static_assert(!sizeof(T), "The get method with given type is not implemented by the simdjson library. "
+        "The supported types are ondemand::object, ondemand::array, raw_json_string, std::string_view, uint64_t, "
+        "int64_t, double, and bool. We recommend you use get_double(), get_bool(), get_uint64(), get_int64(), "
+        " get_object(), get_array(), get_raw_json_string(), or get_string() instead of the get template."
+        " You may also add support for custom types, see our documentation.");
+      static_cast<void>(out); // to get rid of unused errors
+      return UNINITIALIZED;
+#if SIMDJSON_SUPPORTS_DESERIALIZATION
+    }
+#endif
+  }
 
   /**
    * Cast this JSON value to an array.
@@ -129,6 +162,17 @@ public:
    *
    * Important: a value should be consumed once. Calling get_string() twice on the same value
    * is an error.
+   *
+   * In some instances, you may want to allow replacement of invalid Unicode sequences.
+   * You may do so by passing the allow_replacement parameter as true. In the following
+   * example, the string "431924697b\udff0L\u0001Y" is not valid Unicode. By passing true
+   * to get_string, we allow the replacement of the invalid Unicode sequences with the Unicode
+   * replacement character (U+FFFD).
+   *
+   *   simdjson::ondemand::parser parser;
+   *   auto json = R"({"deviceId":"431924697b\udff0L\u0001Y"})"_padded;
+   *   simdjson::ondemand::document doc = parser.iterate(json);
+   *   auto view = doc["deviceId"].get_string(true);
    *
    * @returns An UTF-8 string. The string is stored in the parser and will be invalidated the next
    *          time it parses a document or when it is destroyed.
@@ -381,6 +425,7 @@ public:
   simdjson_inline simdjson_result<value> operator[](std::string_view key) noexcept;
   /** @overload simdjson_inline simdjson_result<value> find_field_unordered(std::string_view key) noexcept; */
   simdjson_inline simdjson_result<value> operator[](const char *key) noexcept;
+  simdjson_result<value> operator[](int) noexcept = delete;
 
   /**
    * Get the type of this JSON value. It does not validate or consume the value.
@@ -748,6 +793,7 @@ public:
   simdjson_inline simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value> operator[](std::string_view key) noexcept;
   /** @overload simdjson_inline simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value> find_field_unordered(std::string_view key) noexcept; */
   simdjson_inline simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value> operator[](const char *key) noexcept;
+  simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value> operator[](int) noexcept = delete;
 
   /**
    * Get the type of this JSON value.

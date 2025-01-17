@@ -23,6 +23,16 @@ struct TAfterMatchSkipTo {
     [[nodiscard]] bool operator==(const TAfterMatchSkipTo&) const noexcept = default;
 };
 
+enum class ERowsPerMatch {
+    OneRow,
+    AllRows
+};
+enum class EOutputColumnSource {
+    PartitionKey,
+    Measure,
+    Other,
+};
+
 constexpr size_t MaxPatternNesting = 20; //Limit recursion for patterns
 constexpr size_t MaxPermutedItems = 6;
 
@@ -47,8 +57,8 @@ using TRowPatternPrimary = std::variant<TString, TRowPattern>;
 
 struct TRowPatternFactor {
     TRowPatternPrimary Primary;
-    uint64_t QuantityMin;
-    uint64_t QuantityMax;
+    ui64 QuantityMin;
+    ui64 QuantityMax;
     bool Greedy;
     bool Output; //include in output with ALL ROW PER MATCH
     bool Unused; // optimization flag; is true when the variable is not used in defines and measures

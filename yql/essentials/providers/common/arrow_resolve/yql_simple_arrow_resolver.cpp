@@ -28,12 +28,14 @@ private:
             TTypeBuilder typeBuilder(env);
             TNullOutput null;
             TVector<TType*> mkqlInputTypes;
+            NCommon::TMemoizedTypesMap typeMemoization;
             for (const auto& type : argTypes) {
-                auto mkqlType = NCommon::BuildType(*type, typeBuilder, null);
+                auto mkqlType = NCommon::BuildType(*type, typeBuilder, typeMemoization, null);
                 YQL_ENSURE(mkqlType, "Failed to convert type " << *type << " to MKQL type");
                 mkqlInputTypes.emplace_back(mkqlType);
             }
-            TType* mkqlOutputType = NCommon::BuildType(*returnType, typeBuilder, null);
+            TType* mkqlOutputType = NCommon::BuildType(*returnType, typeBuilder, typeMemoization, null);
+            YQL_ENSURE(mkqlOutputType, "Failed to convert type " << *returnType << " to MKQL type");
             bool found = FindArrowFunction(name, mkqlInputTypes, mkqlOutputType, *FunctionRegistry_.GetBuiltins());
             return found ? EStatus::OK : EStatus::NOT_FOUND;
         } catch (const std::exception& e) {
@@ -47,9 +49,12 @@ private:
             TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
             TTypeBuilder typeBuilder(env);
+            NCommon::TMemoizedTypesMap typeMemoization;
             TNullOutput null;
-            auto mkqlFromType = NCommon::BuildType(*from, typeBuilder, null);
-            auto mkqlToType = NCommon::BuildType(*to, typeBuilder, null);
+            auto mkqlFromType = NCommon::BuildType(*from, typeBuilder, typeMemoization, null);
+            YQL_ENSURE(mkqlFromType, "Failed to convert type " << *from << " to MKQL type");
+            auto mkqlToType = NCommon::BuildType(*to, typeBuilder, typeMemoization, null);
+            YQL_ENSURE(mkqlToType, "Failed to convert type " << *to << " to MKQL type");
             return HasArrowCast(mkqlFromType, mkqlToType) ? EStatus::OK : EStatus::NOT_FOUND;
         } catch (const std::exception& e) {
             ctx.AddError(TIssue(pos, e.what()));
@@ -64,8 +69,10 @@ private:
             TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
             TTypeBuilder typeBuilder(env);
+            NCommon::TMemoizedTypesMap typeMemoization;
+            TNullOutput null;
 
-	    bool allOk = true;
+            bool allOk = true;
             TArrowConvertFailedCallback cb;
             if (onUnsupported) {
                 cb = [&](TType* failed) {
@@ -81,8 +88,8 @@ private:
 
             for (const auto& type : types) {
                 YQL_ENSURE(type);
-                TNullOutput null;
-                auto mkqlType = NCommon::BuildType(*type, typeBuilder, null);
+                auto mkqlType = NCommon::BuildType(*type, typeBuilder, typeMemoization, null);
+                YQL_ENSURE(mkqlType);
                 std::shared_ptr<arrow::DataType> arrowType;
                 if (!ConvertArrowType(mkqlType, arrowType, cb)) {
                     allOk = false;

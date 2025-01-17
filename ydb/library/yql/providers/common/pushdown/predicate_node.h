@@ -23,6 +23,7 @@ struct TPredicateNode {
     ~TPredicateNode();
 
     bool IsValid() const;
+    bool IsEmpty() const;
     void SetPredicates(const std::vector<TPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos, EBoolOp op);
 
     NNodes::TMaybeNode<NNodes::TExprBase> ExprNode;

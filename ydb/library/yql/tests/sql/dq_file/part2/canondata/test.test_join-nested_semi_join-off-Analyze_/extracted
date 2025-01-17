@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:6:67: Info: Cannot execute self join in DQ
-        	$w1 = (select u.subkey as subkey, u.value as value from Input1 as u left semi join Input1 as v on u.key == v.key);
-	                                                                  ^

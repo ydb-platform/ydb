@@ -3,6 +3,7 @@
 #include "state.h"
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 #include <ydb/library/accessor/accessor.h>
+#include <library/cpp/json/json_value.h>
 #include <util/generic/set.h>
 #include <util/generic/deque.h>
 #include <util/folder/path.h>
@@ -47,10 +48,14 @@ public:
     static const TString PsvFormatString;
 
 protected:
-    virtual TString DoGetDDLQueries() const = 0;
+    using TSpecialDataTypes = TMap<TString, TString>;
+    virtual TString GetTablesYaml() const = 0;
+    virtual TSpecialDataTypes GetSpecialDataTypes() const = 0;
+    NJson::TJsonValue GetTablesJson() const;
 
     THolder<TGeneratorStateProcessor> StateProcessor;
 private:
+    void GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, bool single) const;
     const TWorkloadBaseParams& Params;
 };
 

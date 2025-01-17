@@ -9,7 +9,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("pk_int").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
         };
-        TTestHelper::TCompression compression = TTestHelper::TCompression().SetType(arrow::Compression::type::ZSTD);
+        TTestHelper::TCompression compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
 
         TTestHelper::TColumnTable standaloneTable;
         standaloneTable.SetName("/Root/StandaloneTable").SetPrimaryKey({ "pk_int" }).SetSharding({ "pk_int" }).SetSchema(schema);
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("pk_int").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
         };
-        TTestHelper::TCompression compression = TTestHelper::TCompression().SetType(arrow::Compression::type::UNCOMPRESSED);
+        TTestHelper::TCompression compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
 
         TTestHelper::TColumnTable standaloneTable;
         standaloneTable.SetName("/Root/StandaloneTable").SetPrimaryKey({ "pk_int" }).SetSharding({ "pk_int" }).SetSchema(schema);
@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("pk_int").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
         };
-        TTestHelper::TCompression compression = TTestHelper::TCompression().SetType(arrow::Compression::type::ZSTD);
+        TTestHelper::TCompression compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
 
         TTestHelper::TColumnTableStore testTableStore;
         testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({ "pk_int" }).SetSchema(schema);

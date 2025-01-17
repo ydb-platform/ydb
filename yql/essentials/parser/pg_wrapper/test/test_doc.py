@@ -17,7 +17,7 @@ def run_one(item):
             support_udfs = True
         yqlrun_res = YQLRun(prov='yt',
                             use_sql2yql=False,
-                            cfg_dir='contrib/ydb/library/yql/cfg/udf_test',
+                            cfg_dir='yql/essentials/cfg/udf_test',
                             support_udfs=support_udfs).yql_exec(
             program="--!syntax_pg\n" + input,
             run_sql=True,

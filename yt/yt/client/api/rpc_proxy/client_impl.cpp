@@ -16,6 +16,8 @@
 
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
 
+#include <yt/yt/client/signature/signature.h>
+
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/unversioned_row.h>
@@ -99,7 +101,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool
 {
     const auto& config = Connection_->GetConfig();
     bool retrySequoiaErrorsOnly = !config->EnableRetries;
-    // NB: even if client's retries are disabled Sequoia transient failures are
+    // NB: Even if client's retries are disabled Sequoia transient failures are
     // still retriable. See IsRetriableError().
     return CreateRetryingChannel(
         config->RetryingChannel,
@@ -112,7 +114,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool
 IChannelPtr TClient::CreateNonRetryingChannelByAddress(const std::string& address) const
 {
     return CreateCredentialsInjectingChannel(
-        Connection_->CreateChannelByAddress(TString(address)),
+        Connection_->CreateChannelByAddress(address),
         ClientOptions_);
 }
 
@@ -629,7 +631,7 @@ TFuture<std::vector<TTabletInfo>> TClient::GetTabletInfos(
                 auto& currentReplica = tabletInfo.TableReplicaInfos->emplace_back();
                 currentReplica.ReplicaId = FromProto<TGuid>(protoReplicaInfo.replica_id());
                 currentReplica.LastReplicationTimestamp = protoReplicaInfo.last_replication_timestamp();
-                currentReplica.Mode = CheckedEnumCast<ETableReplicaMode>(protoReplicaInfo.mode());
+                currentReplica.Mode = FromProto<ETableReplicaMode>(protoReplicaInfo.mode());
                 currentReplica.CurrentReplicationRowIndex = protoReplicaInfo.current_replication_row_index();
                 currentReplica.CommittedReplicationRowIndex = protoReplicaInfo.committed_replication_row_index();
                 currentReplica.ReplicationError = FromProto<TError>(protoReplicaInfo.replication_error());
@@ -742,11 +744,12 @@ TFuture<void> TClient::AlterReplicationCard(
     return req->Invoke().As<void>();
 }
 
-TFuture<ITableWriterPtr> TClient::CreateFragmentTableWriter(
-    const TFragmentWriteCookiePtr& cookie,
-    const TFragmentTableWriterOptions& options)
+TFuture<ITableFragmentWriterPtr> TClient::CreateTableFragmentWriter(
+    const TSignedWriteFragmentCookiePtr& cookie,
+    const TTableFragmentWriterOptions& options)
 {
     using TRspPtr = TIntrusivePtr<NRpc::TTypedClientResponse<NProto::TRspWriteTableFragment>>;
+    YT_VERIFY(cookie);
 
     auto proxy = CreateApiServiceProxy();
     auto req = proxy.WriteTableFragment();
@@ -755,22 +758,29 @@ TFuture<ITableWriterPtr> TClient::CreateFragmentTableWriter(
     FillRequest(req.Get(), cookie, options);
 
     auto schema = New<TTableSchema>();
+    auto promise = NewPromise<TSignedWriteFragmentResultPtr>();
+
+    // NB(arkady-e1ppa): Whenever stream is over, rsp future is set
+    // with the value of write result. We create a channel via promise-future
+    // to transfer this write result to the TableWriter adapter. In order to avoid races
+    // when TableWriter is already closed (and so is stream) but the promise with
+    // write result is not yet set, consider writer closed only after said promise is set.
     return CreateRpcClientOutputStream(
         std::move(req),
         BIND ([=] (const TSharedRef& metaRef) {
             NApi::NRpcProxy::NProto::TWriteTableMeta meta;
             if (!TryDeserializeProto(&meta, metaRef)) {
-                THROW_ERROR_EXCEPTION("Failed to deserialize schema for fragment table writer");
+                THROW_ERROR_EXCEPTION("Failed to deserialize schema for table fragment writer");
             }
 
             FromProto(schema.Get(), meta.schema());
         }),
-        BIND([=] (TRspPtr&& rsp) mutable {
-            Deserialize(*cookie, ConvertToNode(TYsonString(rsp->cookie())));
+        BIND([=] (TRspPtr&& rsp)  {
+            promise.Set(ConvertTo<TSignedWriteFragmentResultPtr>(TYsonString(rsp->signed_write_result())));
         }))
-        .ApplyUnique(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
-            return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
-        })).As<ITableWriterPtr>();
+        .ApplyUnique(BIND([=, future = promise.ToFuture()] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
+            return NRpcProxy::CreateTableFragmentWriter(std::move(outputStream), std::move(schema), std::move(future));
+        }));
 }
 
 TFuture<IQueueRowsetPtr> TClient::PullQueue(
@@ -1486,6 +1496,15 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
     }
+    if (options.FromTime) {
+        req->set_from_time(NYT::ToProto(*options.FromTime));
+    }
+    if (options.ToTime) {
+        req->set_to_time(NYT::ToProto(*options.ToTime));
+    }
+    if (options.ContinuationToken) {
+        req->set_continuation_token(*options.ContinuationToken);
+    }
 
     req->set_sort_field(static_cast<NProto::EJobSortField>(options.SortField));
     req->set_sort_order(static_cast<NProto::EJobSortDirection>(options.SortOrder));
@@ -1696,9 +1715,13 @@ TFuture<std::vector<TColumnarStatistics>> TClient::GetColumnarStatistics(
 
     req->set_fetcher_mode(static_cast<NProto::EColumnarStatisticsFetcherMode>(options.FetcherMode));
 
-    ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    if (options.FetchChunkSpecConfig) {
+        ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    }
 
-    ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    if (options.FetcherConfig) {
+        ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    }
 
     req->set_enable_early_finish(options.EnableEarlyFinish);
 
@@ -1726,12 +1749,18 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
         req->add_paths(ToString(path));
     }
 
-    ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    if (options.FetchChunkSpecConfig) {
+        ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    }
 
-    ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    if (options.FetcherConfig) {
+        ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    }
 
-    req->mutable_chunk_slice_fetcher_config()->set_max_slices_per_fetch(
-        options.ChunkSliceFetcherConfig->MaxSlicesPerFetch);
+    if (options.ChunkSliceFetcherConfig) {
+        req->mutable_chunk_slice_fetcher_config()->set_max_slices_per_fetch(
+            options.ChunkSliceFetcherConfig->MaxSlicesPerFetch);
+    }
 
     req->set_partition_mode(static_cast<NProto::EPartitionTablesMode>(options.PartitionMode));
 
@@ -2066,16 +2095,16 @@ TFuture<TMaintenanceCountsPerTarget> TClient::RemoveMaintenance(
                 counts[EMaintenanceType::DisableTabletCells] = rspValue->disable_tablet_cells();
                 counts[EMaintenanceType::PendingRestart] = rspValue->pending_restart();
             } else {
-                for (const auto& [type, count] : rspValue->removed_maintenance_counts()) {
-                    counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+                for (auto [type, count] : rspValue->removed_maintenance_counts()) {
+                    counts[FromProto<EMaintenanceType>(type)] = count;
                 }
             }
         } else {
             result.reserve(rspValue->removed_maintenance_counts_per_target_size());
             for (const auto& [target, protoCounts] : rspValue->removed_maintenance_counts_per_target()) {
                 auto& counts = result[target];
-                for (const auto& [type, count] : protoCounts.counts()) {
-                    counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
+                for (auto [type, count] : protoCounts.counts()) {
+                    counts[FromProto<EMaintenanceType>(type)] = count;
                 }
             }
         }
@@ -2444,8 +2473,8 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
-            .QueryTrackerStage = rsp->query_tracker_stage(),
-            .ClusterName = rsp->cluster_name(),
+            .QueryTrackerStage = FromProto<TString>(rsp->query_tracker_stage()),
+            .ClusterName = FromProto<TString>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
         };
@@ -2667,7 +2696,7 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
 }
 
 TFuture<TShuffleHandlePtr> TClient::StartShuffle(
-    const TString& account,
+    const std::string& account,
     int partitionCount,
     TTransactionId parentTransactionId,
     const TStartShuffleOptions& options)
@@ -2680,6 +2709,12 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
     req->set_account(account);
     req->set_partition_count(partitionCount);
     ToProto(req->mutable_parent_transaction_id(), parentTransactionId);
+    if (options.Medium) {
+        req->set_medium(*options.Medium);
+    }
+    if (options.ReplicationFactor) {
+        req->set_replication_factor(*options.ReplicationFactor);
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
         return ConvertTo<TShuffleHandlePtr>(TYsonString(rsp->shuffle_handle()));

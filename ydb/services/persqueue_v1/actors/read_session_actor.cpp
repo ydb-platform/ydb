@@ -809,7 +809,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     }
 
     if (Request->GetSerializedToken().empty()) {
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             return CloseSession(PersQueue::ErrorCode::ACCESS_DENIED,
                 "unauthenticated access is forbidden, please provide credentials", ctx);
         }
@@ -1220,11 +1220,15 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
 
     BalancerGeneration[assignId] = {record.GetGeneration(), record.GetStep()};
     const TPartitionId partitionId{converterIter->second, record.GetPartition(), assignId};
+    auto [error, maxLag, readTimestampMs] = GetReadFrom(converter, ctx);
+    if (error) {
+        return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
+    }
 
     const TActorId actorId = ctx.Register(new TPartitionActor(
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC, RangesMode,
-        converterIter->second, DirectRead, UseMigrationProtocol));
+        converterIter->second, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
@@ -2076,6 +2080,31 @@ ui32 TReadSessionActor<UseMigrationProtocol>::NormalizeMaxReadSize(ui32 sourceVa
 }
 
 template <bool UseMigrationProtocol>
+std::tuple<TString, ui32, ui64> TReadSessionActor<UseMigrationProtocol>::GetReadFrom(const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) const {
+    auto jt = ReadFromTimestamp.find(topic->GetInternalName());
+    if (jt == ReadFromTimestamp.end()) {
+        LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " error searching for topic"
+            << ": internalName# " << topic->GetInternalName()
+            << ", prettyName# " << topic->GetPrintableString());
+
+        for (const auto& kv : ReadFromTimestamp) {
+            LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " have topic"
+                << ": topic# " << kv.first);
+        }
+
+        return {"internal error", 0, 0};
+    }
+
+    ui64 readTimestampMs = Max(ReadTimestampMs, jt->second);
+
+    auto lagsIt = MaxLagByTopic.find(topic->GetInternalName());
+    Y_ABORT_UNLESS(lagsIt != MaxLagByTopic.end());
+    const ui32 maxLag = lagsIt->second;
+
+    return {TString{}, maxLag, readTimestampMs};
+}
+
+template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& ctx) {
     auto shouldContinueReads = [this]() {
         if constexpr (UseMigrationProtocol) {
@@ -2121,25 +2150,10 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
             size -= csize;
             Y_ABORT_UNLESS(csize < Max<i32>());
 
-            auto jt = ReadFromTimestamp.find(it->second.Topic->GetInternalName());
-            if (jt == ReadFromTimestamp.end()) {
-                LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " error searching for topic"
-                    << ": internalName# " << it->second.Topic->GetInternalName()
-                    << ", prettyName# " << it->second.Topic->GetPrintableString());
-
-                for (const auto& kv : ReadFromTimestamp) {
-                    LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " have topic"
-                        << ": topic# " << kv.first);
-                }
-
-                return CloseSession(PersQueue::ErrorCode::ERROR, "internal error", ctx);
+            auto [error, maxLag, readTimestampMs] = GetReadFrom(it->second.Topic, ctx);
+            if (error) {
+                return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
             }
-
-            ui64 readTimestampMs = Max(ReadTimestampMs, jt->second);
-
-            auto lagsIt = MaxLagByTopic.find(it->second.Topic->GetInternalName());
-            Y_ABORT_UNLESS(lagsIt != MaxLagByTopic.end());
-            const ui32 maxLag = lagsIt->second;
 
             auto ev = MakeHolder<TEvPQProxy::TEvRead>(guid, ccount, csize, maxLag, readTimestampMs);
 

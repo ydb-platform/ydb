@@ -22,7 +22,7 @@ namespace NKikimr {
 
     public:
         TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize = 128 << 20,
-                NPDisk::EDeviceType deviceType = NPDisk::EDeviceType::DEVICE_TYPE_NVME);
+                bool isDiskReadOnly = false, NPDisk::EDeviceType deviceType = NPDisk::EDeviceType::DEVICE_TYPE_NVME);
         TPDiskMockState(std::unique_ptr<TImpl>&& impl);
         ~TPDiskMockState();
 
@@ -40,6 +40,8 @@ namespace NKikimr {
         TPtr Snapshot(); // create a copy of PDisk whole state
 
         void SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly);
+
+        bool IsDiskReadOnly() const;
     };
 
     IActor *CreatePDiskMockActor(TPDiskMockState::TPtr state);

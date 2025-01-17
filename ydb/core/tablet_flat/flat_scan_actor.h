@@ -484,13 +484,7 @@ namespace NOps {
                     if (auto logl = Logger->Log(ELnLev::Debug))
                         logl << NFmt::Do(*this) << " " << NFmt::Do(*req);
 
-                    const auto label = req->PageCollection->Label();
-                    if (PrivateCollections.contains(label)) {
-                        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req, SelfId()));
-                        ForwardedSharedRequests = true;
-                    } else {
-                        SendToOwner(new NSharedCache::TEvRequest(Args.ReadPrio, req, Owner), true);
-                    }
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req, SelfId()));
                 }
 
                 if (ready == NTable::EReady::Page)
@@ -574,7 +568,6 @@ namespace NOps {
                 MakeSharedPageCacheId(),
                 new NSharedCache::TEvRequest(Args.ReadPrio, std::move(msg->Request), SelfId()),
                 ev->Flags, ev->Cookie);
-            ForwardedSharedRequests = true;
         }
 
         void Handle(NBlockIO::TEvStat::TPtr& ev) noexcept
@@ -595,13 +588,6 @@ namespace NOps {
 
             auto* partStore = partView.As<TPartStore>();
             Y_ABORT_UNLESS(partStore);
-
-            for (auto& cache : partStore->PageCollections) {
-                PrivateCollections.insert(cache->Id);
-            }
-            if (auto& cache = partStore->Pseudo) {
-                PrivateCollections.insert(cache->Id);
-            }
 
             Cache->AddCold(partView);
 
@@ -638,13 +624,7 @@ namespace NOps {
                 return Terminate(EAbort::Host);
             }
 
-            // TODO: would want to postpone pinning until usage
-            TVector<NPageCollection::TLoadedPage> pinned(Reserve(msg.Loaded.size()));
-            for (auto& loaded : msg.Loaded) {
-                pinned.emplace_back(loaded.PageId, TPinnedPageRef(loaded.Page).GetData());
-            }
-
-            Cache->DoSave(std::move(msg.Origin), msg.Cookie, pinned);
+            Cache->DoSave(std::move(msg.Origin), msg.Cookie, std::move(msg.Loaded));
 
             if (MayProgress()) {
                 Spent->Alter(true /* resource available again */);
@@ -699,10 +679,7 @@ namespace NOps {
                 Send(pr.second, new TEvents::TEvPoison);
             }
 
-            if (ForwardedSharedRequests) {
-                Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
-            }
-
+            Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
             PassAway();
         }
 
@@ -738,13 +715,11 @@ namespace NOps {
 
         THashMap<TLogoBlobID, TActorId> ColdPartLoaders;
         THashMap<TLogoBlobID, TPartView> ColdPartLoaded;
-        THashSet<TLogoBlobID> PrivateCollections;
 
         TLoadBlobQueue BlobQueue;
         TDeque<TBlobQueueRequest> BlobQueueRequests;
         ui64 BlobQueueRequestsOffset = 0;
 
-        bool ForwardedSharedRequests = false;
         bool ContinueInFly = false;
 
         const NHPTimer::STime MaxCyclesPerIteration;

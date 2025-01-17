@@ -853,9 +853,11 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
-TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Metric metric,
+TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
                                   Ydb::Table::VectorIndexSettings_VectorType vectorType,
-                                  ui32 vectorDimension
+                                  ui32 vectorDimension,
+                                  ui32 clusters,
+                                  ui32 levels
                                   ) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         if (record.GetPathDescription().GetTableIndex().HasVectorIndexKmeansTreeDescription()) {
@@ -863,11 +865,12 @@ TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Metric metric,
             UNIT_ASSERT_VALUES_EQUAL(settings.settings().metric(), metric);
             UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_type(), vectorType);
             UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_dimension(), vectorDimension);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), clusters);
+            UNIT_ASSERT_VALUES_EQUAL(settings.levels(), levels);
         } else {
             UNIT_FAIL("oneof SpecializedIndexDescription should be set.");
         }
     };
-
 }
 
 
@@ -1139,6 +1142,9 @@ TCheckFunc HasTtlEnabled(const TString& columnName, const TDuration& expireAfter
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), columnName);
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnUnit(), columnUnit);
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), expireAfter.Seconds());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 1);
+        UNIT_ASSERT(ttl.GetEnabled().GetTiers(0).HasDelete());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetTiers(0).GetApplyAfterSeconds(), expireAfter.Seconds());
     };
 }
 
@@ -1212,12 +1218,22 @@ TCheckFunc HasColumnTableTtlSettingsDisabled() {
     };
 }
 
-TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tieringName) {
+TCheckFunc HasColumnTableTtlSettingsTier(const TString& columnName, const TDuration& evictAfter, const std::optional<TString>& storageName) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
         UNIT_ASSERT(table.HasTtlSettings());
         const auto& ttl = table.GetTtlSettings();
-        UNIT_ASSERT_EQUAL(ttl.GetUseTiering(), tieringName);
+        UNIT_ASSERT(ttl.HasEnabled());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), columnName);
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 1);
+        const auto& tier = ttl.GetEnabled().GetTiers(0);
+        UNIT_ASSERT_VALUES_EQUAL(tier.GetApplyAfterSeconds(), evictAfter.Seconds());
+        if (storageName) {
+            UNIT_ASSERT(tier.HasEvictToExternalStorage());
+            UNIT_ASSERT_VALUES_EQUAL(tier.GetEvictToExternalStorage().GetStorage(), storageName);
+        } else {
+            UNIT_ASSERT(tier.HasDelete());
+        }
     };
 }
 
@@ -1247,7 +1263,7 @@ void CheckRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TStr
             }
         }
 
-        UNIT_ASSERT_C(!(has ^ mustHave), "" << (mustHave ? "no " : "") << "ace found"
+        UNIT_ASSERT_C(!(has ^ mustHave), "" << record.GetPath() << " " << (mustHave ? "no " : "") << "ace found"
             << ", got " << src.ShortDebugString()
             << ", required " << required.ShortDebugString());
     }
@@ -1255,29 +1271,25 @@ void CheckRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TStr
 
 TCheckFunc HasRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckRight(record, right, true, true);
+        CheckRight(record, right, true, false);
     };
 }
 
 TCheckFunc HasNoRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckRight(record, right, false, true);
+        CheckRight(record, right, false, false);
     };
-}
-
-void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
-    CheckRight(record, right, mustHave, true);
 }
 
 TCheckFunc HasEffectiveRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckEffectiveRight(record, right, true);
+        CheckRight(record, right, true, true);
     };
 }
 
 TCheckFunc HasNoEffectiveRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckEffectiveRight(record, right, false);
+        CheckRight(record, right, false, true);
     };
 }
 

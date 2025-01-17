@@ -71,7 +71,7 @@ private:
                 fields.size());
         }
 
-        for (int i = 0; i < static_cast<int>(fields.size()); ++i) {
+        for (int i = 0; i < std::ssize(fields); ++i) {
             Consumer->OnKeyedItem(fieldNames[i]);
             Consumer->OnStringScalar(fields[i]);
         }

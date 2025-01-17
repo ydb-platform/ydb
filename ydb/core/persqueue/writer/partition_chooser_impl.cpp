@@ -54,11 +54,12 @@ IActor* CreatePartitionChooserActor(TActorId parentId,
                                     const std::shared_ptr<NPQ::TPartitionGraph>& graph,
                                     NPersQueue::TTopicConverterPtr& fullConverter,
                                     const TString& sourceId,
-                                    std::optional<ui32> preferedPartition) {
+                                    std::optional<ui32> preferedPartition,
+                                    NWilson::TTraceId traceId) {
     if (SplitMergeEnabled(config.GetPQTabletConfig())) {
-        return new NPartitionChooser::TSMPartitionChooserActor<TPipeHelper>(parentId, chooser, graph, fullConverter, sourceId, preferedPartition);
+        return new NPartitionChooser::TSMPartitionChooserActor<TPipeHelper>(parentId, chooser, graph, fullConverter, sourceId, preferedPartition, std::move(traceId));
     } else {
-        return new NPartitionChooser::TPartitionChooserActor<TPipeHelper>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
+        return new NPartitionChooser::TPartitionChooserActor<TPipeHelper>(parentId, config, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId));
     }
 }
 
@@ -69,7 +70,8 @@ IActor* CreatePartitionChooserActor<NTabletPipe::TPipeHelper>(TActorId parentId,
                                     const std::shared_ptr<NPQ::TPartitionGraph>& graph,
                                     NPersQueue::TTopicConverterPtr& fullConverter,
                                     const TString& sourceId,
-                                    std::optional<ui32> preferedPartition);
+                                    std::optional<ui32> preferedPartition,
+                                    NWilson::TTraceId traceId);
 
 template
 IActor* CreatePartitionChooserActor<NTabletPipe::NTest::TPipeMock>(TActorId parentId,
@@ -78,7 +80,8 @@ IActor* CreatePartitionChooserActor<NTabletPipe::NTest::TPipeMock>(TActorId pare
                                     const std::shared_ptr<NPQ::TPartitionGraph>& graph,
                                     NPersQueue::TTopicConverterPtr& fullConverter,
                                     const TString& sourceId,
-                                    std::optional<ui32> preferedPartition);
+                                    std::optional<ui32> preferedPartition,
+                                    NWilson::TTraceId traceId);
 
 } // namespace NKikimr::NPQ
 

@@ -17,7 +17,7 @@ namespace builtins
     long write(types::file &&f, types::str const &str);
 
     DEFINE_FUNCTOR(pythonic::builtins::file, write);
-  }
-}
+  } // namespace file
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

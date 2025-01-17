@@ -48,6 +48,9 @@ public:
         return false;
     }
 
+    virtual bool IsReady() const override {
+        return true;
+    }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NLocal

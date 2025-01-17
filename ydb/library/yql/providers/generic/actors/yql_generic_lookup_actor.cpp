@@ -99,8 +99,8 @@ namespace NYql::NDq {
             , RetryPolicy(
                     ILookupRetryPolicy::GetExponentialBackoffPolicy(
                         /* retryClassFunction */
-                        [](const NYdbGrpc::TGrpcStatus&)  {
-                                return ERetryErrorClass::ShortRetry; // TODO tweak
+                        [](const NYdbGrpc::TGrpcStatus&) {
+                            return ERetryErrorClass::ShortRetry; // TODO tweak
                         },
                         /* minDelay */ TDuration::MilliSeconds(1),
                         /* minLongRetryDelay */ TDuration::MilliSeconds(500),

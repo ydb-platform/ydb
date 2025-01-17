@@ -617,23 +617,19 @@ private:
         ev->Record.SetDoneRounds(0);
         ev->Record.SetNeedsRounds(3); // TODO(mbkkt) should be configurable
 
-        if (buildInfo.KMeans.Parent == 0 || buildInfo.KMeans.NeedsAnotherParent()) {
+        if (buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::MultiLocal) {
             ev->Record.SetParentFrom(buildInfo.KMeans.Parent);
             ev->Record.SetParentTo(buildInfo.KMeans.Parent);
             ev->Record.SetChild(buildInfo.KMeans.ChildBegin);
         } else {
             const auto& range = buildInfo.Shards.at(shardIdx).Range;
-            const auto from = range.From.GetCells();
-            const auto to = range.To.GetCells();
-            Y_ASSERT(!from.empty());
-            // TODO(mbkkt) is it precise?
-            const auto parentFrom = from.empty() || from[0].IsNull() ? 1 : from[0].AsValue<ui32>();
-            const auto parentTo = to.empty() || to[0].IsNull() ? buildInfo.KMeans.ParentEnd : to[0].AsValue<ui32>();
-            Y_ASSERT(parentFrom >= 1);
-            Y_ASSERT(parentFrom <= parentTo);
+            const auto [parentFrom, parentTo] = buildInfo.KMeans.RangeToBorders(range);
+            // child begin for parent from = (last child begin + K) - (last parent - parent from + 1) * K
+            const auto childBegin = buildInfo.KMeans.ChildBegin - (buildInfo.KMeans.ParentEnd - parentFrom) * buildInfo.KMeans.K;
+            LOG_D("shard " << shardIdx << ", parent range { From: " << parentFrom << ", To: " << parentTo << " }, child begin " << childBegin);
             ev->Record.SetParentFrom(parentFrom);
             ev->Record.SetParentTo(parentTo);
-            ev->Record.SetChild(buildInfo.KMeans.ChildBegin - (buildInfo.KMeans.ParentEnd - parentFrom + 1) * buildInfo.KMeans.K);
+            ev->Record.SetChild(childBegin);
         }
 
         ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());

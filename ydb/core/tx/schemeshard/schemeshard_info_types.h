@@ -3159,6 +3159,34 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return name;
         }
 
+        std::pair<ui32, ui32> RangeToBorders(const TSerializedTableRange& range) const {
+            Y_ASSERT(ParentEnd != 0);
+            const ui32 maxParent = ParentEnd;
+            const ui32 levelSize = TKMeans::BinPow(K, Level - 1);
+            Y_ASSERT(levelSize <= maxParent);
+            const ui32 minParent = maxParent - levelSize + 1;
+            const ui32 parentFrom = [&, from = range.From.GetCells()] {
+                if (!from.empty()) {
+                    if (!from[0].IsNull()) {
+                        return from[0].AsValue<ui32>() + static_cast<ui32>(from.size() == 1);
+                    }
+                }
+                return minParent;
+            }();
+            const ui32 parentTo = [&, to = range.To.GetCells()] {
+                if (!to.empty()) {
+                    if (!to[0].IsNull()) {
+                        return to[0].AsValue<ui32>() - static_cast<ui32>(to.size() != 1 && to[1].IsNull());
+                    }
+                }
+                return maxParent;
+            }();
+            Y_ASSERT(minParent <= parentFrom);
+            Y_ASSERT(parentFrom <= parentTo);
+            Y_ASSERT(parentTo <= maxParent);
+            return {parentFrom, parentTo};
+        }
+
         TString RangeToDebugStr(const TSerializedTableRange& range) const {
             auto toStr = [&](const TSerializedCellVec& v) -> TString {
                 const auto cells = v.GetCells();

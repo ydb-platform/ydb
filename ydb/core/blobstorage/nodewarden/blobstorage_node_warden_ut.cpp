@@ -192,8 +192,8 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
 
         if (nodeIndex == 0) {
             nodeWardenConfig->SectorMaps[extraPath] = extraSectorMap;
-            ObtainTenantKey(&nodeWardenConfig->TenantKey, app.Keys[0]);
-            ObtainStaticKey(&nodeWardenConfig->StaticKey);
+            ObtainTenantKeys(&nodeWardenConfig->TenantKeys, app.Keys[0]);
+            ObtainStaticKeys(&nodeWardenConfig->StaticKeys);
 
             TString baseDir = runtime.GetTempDir();
 
@@ -852,17 +852,17 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         keyRecord->SetId("Key");
         keyRecord->SetVersion(1);
 
-        TEncryptionKey key1;
-        UNIT_ASSERT(ObtainTenantKey(&key1, keyConfig));
+        TEncryptionKeys key1;
+        UNIT_ASSERT(ObtainTenantKeys(&key1, keyConfig));
 
         keyRecord->SetPin(pin2);
-        TEncryptionKey key2;
-        UNIT_ASSERT(ObtainTenantKey(&key2, keyConfig));
+        TEncryptionKeys key2;
+        UNIT_ASSERT(ObtainTenantKeys(&key2, keyConfig));
 
         if (pin1 == pin2) {
-            UNIT_ASSERT(key1.Key == key2.Key);
+            UNIT_ASSERT(key1.GetCurrentEncryptionKey().Key == key2.GetCurrentEncryptionKey().Key);
         } else {
-            UNIT_ASSERT(!(key1.Key == key2.Key));
+            UNIT_ASSERT(!(key1.GetCurrentEncryptionKey().Key == key2.GetCurrentEncryptionKey().Key));
         }
     }
 

@@ -1,7 +1,9 @@
 #include "kqp_stream_lookup_worker.h"
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -57,16 +59,7 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
 
 NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType* type) {
     YQL_ENSURE(type);
-
-    if (type->GetKind() == NMiniKQL::TType::EKind::Pg) {
-        auto pgType = static_cast<NMiniKQL::TPgType*>(type);
-        auto pgTypeId = pgType->GetTypeId();
-        return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(pgTypeId));
-    } else {
-        bool isOptional = false;
-        auto dataType = NMiniKQL::UnpackOptionalData(type, isOptional);
-        return NScheme::TTypeInfo(dataType->GetSchemeType());
-    }
+    return NScheme::TypeInfoFromMiniKQLType(type);
 }
 
 struct THashableKey {
@@ -148,17 +141,14 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
     KeyColumns.reserve(Settings.GetKeyColumns().size());
     i32 keyOrder = 0;
     for (const auto& keyColumn : Settings.GetKeyColumns()) {
+        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(keyColumn.GetTypeId(), keyColumn.GetTypeInfo());
+
         KeyColumns.emplace(
             keyColumn.GetName(),
             TSysTables::TTableColumnInfo{
                 keyColumn.GetName(),
                 keyColumn.GetId(),
-                NScheme::TTypeInfo{
-                    static_cast<NScheme::TTypeId>(keyColumn.GetTypeId()),
-                    keyColumn.GetTypeId() == NScheme::NTypeIds::Pg
-                        ? NPg::TypeDescFromPgTypeId(keyColumn.GetTypeInfo().GetPgTypeId())
-                        : nullptr
-                },
+                typeInfo,
                 keyColumn.GetTypeInfo().GetPgTypeMod(),
                 keyOrder++
             }
@@ -174,14 +164,12 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
 
     Columns.reserve(Settings.GetColumns().size());
     for (const auto& column : Settings.GetColumns()) {
+        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(column.GetTypeId(), column.GetTypeInfo());
+
         Columns.emplace_back(TSysTables::TTableColumnInfo{
             column.GetName(),
             column.GetId(),
-            NScheme::TTypeInfo{static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                column.GetTypeId() == NScheme::NTypeIds::Pg
-                    ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
-                    : nullptr,
-            },
+            typeInfo,
             column.GetTypeInfo().GetPgTypeMod()
         });
     }

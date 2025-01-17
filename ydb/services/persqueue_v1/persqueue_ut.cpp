@@ -880,12 +880,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             writer->Close();
         }
 
-        void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, ui32 messageLimit) {
+        void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, const ui32 messageLimit) {
             // Get DirectReadResponse messages, send DirectReadAck messages.
 
             auto endTime = TInstant::Now() + TDuration::Seconds(10);
             while (currTotalMessages < messageLimit && endTime > TInstant::Now()) {
-                Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages" << Endl;
+                Cerr << "Wait for direct read id: " << nextReadId << ", currently have " << currTotalMessages << " messages, limit is " << messageLimit << Endl;
 
                 Ydb::Topic::StreamDirectReadMessage::FromServer resp;
                 UNIT_ASSERT(DirectStream->Read(&resp));
@@ -1008,37 +1008,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
         Sleep(TDuration::Seconds(1));
         cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
-        UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.StagedReads.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.Reads.size(), 0);
-    }
-
-    Y_UNIT_TEST(DirectReadNotCached) {
-        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
-        SET_LOCALS;
-        TDirectReadTestSetup setup{server};
-
-        setup.InitControlSession("acc/topic1");
-        auto [partitionId, assignId] = setup.GetNextAssign("acc/topic1");
-        UNIT_ASSERT_VALUES_EQUAL(partitionId, 0);
-        setup.InitDirectSession("acc/topic1");
-        setup.SendReadSessionAssign(assignId);
-
-        ui32 totalMsg = 0;
-        ui64 nextReadId = 1;
-        Sleep(TDuration::Seconds(3));
-        setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 50);
-        setup.DoRead(assignId, nextReadId, totalMsg, 42);
-
-        Topic::StreamReadMessage::FromClient req;
-        req.mutable_read_request()->set_bytes_size(40_MB);
-        if (!setup.ControlStream->Write(req)) {
-            ythrow yexception() << "write fail";
-        }
-        setup.DoRead(assignId, nextReadId, totalMsg, 50);
-
-        Sleep(TDuration::Seconds(1));
-        auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.StagedReads.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.begin()->second.Reads.size(), 0);
@@ -2552,7 +2521,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         for (ui32 i = 0; i < 32; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
-        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 23);
+        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 16);
         auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
         UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 3);
@@ -2562,8 +2531,8 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         for (ui32 i = 0; i < 8; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
 
-        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 23);
-        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 22);
+        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 16);
+        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
         ui32 fromDisk = info0.BlobsFromDisk + info16.BlobsFromDisk;
         ui32 fromCache = info0.BlobsFromCache + info16.BlobsFromCache;
@@ -2623,13 +2592,13 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             server.AnnoyingClient->WriteToPQ({secondTopic, 0, "source1", i}, mb);
         }
 
-        auto info1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 1, "user1"}, 7);
-        auto info2 = server.AnnoyingClient->ReadFromPQ({secondTopic, 0, 0, 1, "user1"}, 7);
+        auto info1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 1, "user1"}, 1);
+        auto info2 = server.AnnoyingClient->ReadFromPQ({secondTopic, 0, 0, 1, "user1"}, 1);
 
         UNIT_ASSERT_VALUES_EQUAL(info1.BlobsFromCache, 1);
         UNIT_ASSERT_VALUES_EQUAL(info2.BlobsFromCache, 1);
-        UNIT_ASSERT_VALUES_EQUAL(info1.Values.size(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(info2.Values.size(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(info1.Values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(info2.Values.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(info1.Values[0].size(), valueSize);
         UNIT_ASSERT_VALUES_EQUAL(info2.Values[0].size(), valueSize);
         UNIT_ASSERT(info1.Values[0] == value1);

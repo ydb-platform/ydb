@@ -136,6 +136,15 @@
     },
     {
       "source": {
+        "type": "BUILD_OUTPUT",
+        "path": "ydb/apps/ydbd/ydbd.debug"
+      },
+      "destination": {
+        "path": "/ydbd.debug"
+      }
+    },
+    {
+      "source": {
           "type": "BUILD_OUTPUT",
           "path": "ydb/apps/ydb/ydb"
       },

@@ -1663,6 +1663,35 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
     }
 
+    Y_UNIT_TEST_F(BillingRecordsForJsonApi, THttpProxyTestMockWithMetering) {
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(queueUrl.EndsWith("ExampleQueueName"));
+
+        NJson::TJsonValue sendMessageReq;
+        sendMessageReq["QueueUrl"] = queueUrl;
+        auto body = "MessageBody-0";
+        sendMessageReq["MessageBody"] = body;
+        sendMessageReq["MessageDeduplicationId"] = "MessageDeduplicationId-0";
+        sendMessageReq["MessageGroupId"] = "MessageGroupId-0";
+
+        res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+
+        // TODO:
+        // Sleep(TDuration::Seconds(500));
+        // TVector<NSc::TValue> records = LoadBillingRecords(sqsConfig.GetMeteringLogFilePath());
+        // CheckBillingRecord(records, expectedRecords);
+    }
+
     Y_UNIT_TEST_F(TestSendMessageEmptyQueueUrl, THttpProxyTestMockForSQS) {
         NJson::TJsonValue sendMessageReq;
         sendMessageReq["QueueUrl"] = "";

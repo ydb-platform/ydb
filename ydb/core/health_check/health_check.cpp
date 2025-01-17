@@ -1052,9 +1052,12 @@ public:
     }
 
     template<typename TEvent>
-    [[nodiscard]] TRequestResponse<typename NNodeWhiteboard::WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId) {
+    [[nodiscard]] TRequestResponse<typename NNodeWhiteboard::WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId, std::initializer_list<int> fields = {}) {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
         auto request = MakeHolder<TEvent>();
+        for (auto field : fields) {
+            request->Record.AddFieldsRequired(field);
+        }
         TRequestResponse<typename NNodeWhiteboard::WhiteboardResponse<TEvent>::Type> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
         if (response.Span) {
             response.Span.Attribute("target_node_id", nodeId);
@@ -1068,7 +1071,7 @@ public:
             if (NodeIds.insert(nodeId).second) {
                 Send(TlsActivationContext->ActorSystem()->InterconnectProxy(nodeId), new TEvents::TEvSubscribe());
             }
-            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>(nodeId));
+            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1}));
             ++Requests;
         }
     }

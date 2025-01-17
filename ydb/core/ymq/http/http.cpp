@@ -164,6 +164,18 @@ void THttpRequest::WriteResponse(const TReplyParams& replyParams, const TSqsHttp
         requestAttributes.ResourceId = response.ResourceId;
         requestAttributes.Action = Action_;
 
+        RLOG_SQS_BASE_DEBUG(*Parent_->ActorSystem_,
+            TStringBuilder() << "Send metering event."
+            << " HttpStatusCode: " << requestAttributes.HttpStatusCode
+            << " IsFifo: " << requestAttributes.IsFifo
+            << " FolderId: " << requestAttributes.FolderId
+            << " RequestSizeInBytes: " << requestAttributes.RequestSizeInBytes
+            << " ResponseSizeInBytes: " << requestAttributes.ResponseSizeInBytes
+            << " SourceAddress: " << requestAttributes.SourceAddress
+            << " ResourceId: " << requestAttributes.ResourceId
+            << " Action: " << requestAttributes.Action
+        );
+
         Parent_->ActorSystem_->Send(MakeSqsMeteringServiceID(), reportRequestAttributes.Release());
     }
 

@@ -33,6 +33,7 @@ struct TEvPrivate {
         EvStorageBalancerOut,
         EvDeleteNode,
         EvCanMoveTablets,
+        EvRefreshScaleRecommendation,
         EvEnd
     };
 
@@ -120,6 +121,8 @@ struct TEvPrivate {
     };
 
     struct TEvCanMoveTablets : TEventLocal<TEvCanMoveTablets, EvCanMoveTablets> {};
+
+    struct TEvRefreshScaleRecommendation : TEventLocal<TEvRefreshScaleRecommendation, EvRefreshScaleRecommendation> {};
 };
 
 } // NHive

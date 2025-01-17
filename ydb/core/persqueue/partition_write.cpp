@@ -452,6 +452,12 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 {
     KVWriteInProgress = false;
+
+    if (DeletePartitionState == DELETION_IN_PROCESS) {
+        // before deleting an supportive partition, it is necessary to summarize its work
+        HandleWakeup(ctx);
+    }
+
     OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
@@ -463,7 +469,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
 {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
+    PQ_LOG_T("TPartition::Handle TEvHandleWriteResponse.");
     OnHandleWriteResponse(ctx);
 }
 
@@ -499,6 +505,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
             ui64 seqNo = std::max(info.SeqNo, it->second.SeqNo);
             SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, now));
         }
+        SourceIdCounter.Use(sourceId, now);
     }
     TxSourceIdForPostPersist.clear();
 
@@ -528,23 +535,23 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     UpdateAfterWriteCounters(true);
 
     //All ok
-    for (auto& avg : AvgWriteBytes) {
-        avg.Update(WriteNewSize, now);
-    }
+    UpdateAvgWriteBytes(WriteNewSize, now);
+    UpdateAvgWriteBytes(WriteNewSizeFromSupportivePartitions, now);
+
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(WriteNewSize, now);
+        avg.Update(WriteNewSizeFromSupportivePartitions, now);
     }
 
-    LOG_DEBUG_S(
-        ctx, NKikimrServices::PERSQUEUE,
-        "TPartition::HandleWriteResponse writeNewSize# " << WriteNewSize;
-    );
+    PQ_LOG_D("TPartition::HandleWriteResponse " <<
+             "writeNewSize# " << WriteNewSize <<
+             " WriteNewSizeFromSupportivePartitions# " << WriteNewSizeFromSupportivePartitions);
 
     if (SupportivePartitionTimeLag) {
         SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
     }
 
-    auto writeNewSizeFull = WriteNewSizeFull;
+    auto writeNewSizeFull = WriteNewSizeFull + WriteNewSizeFromSupportivePartitions;
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
@@ -554,12 +561,13 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
+    WriteNewSizeFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);
 
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
 
-    if (SplitMergeEnabled(Config)) {
+    if (SplitMergeEnabled(Config) && !IsSupportive()) {
         SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
         auto needScaling = CheckScaleStatus(ctx);
         ChangeScaleStatusIfNeeded(needScaling);
@@ -575,6 +583,13 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     ProcessHasDataRequests(ctx);
 
     ProcessTimestampsForNewData(prevEndOffset, ctx);
+}
+
+void TPartition::UpdateAvgWriteBytes(ui64 size, const TInstant& now)
+{
+    for (auto& avg : AvgWriteBytes) {
+        avg.Update(size, now);
+    }
 }
 
 NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {

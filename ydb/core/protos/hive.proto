@@ -245,8 +245,9 @@ message TTabletMetrics {
 message TEvTabletMetrics {
     repeated TTabletMetrics TabletMetrics = 1;
     optional NKikimrTabletBase.TMetrics TotalResourceUsage = 2;
-    optional double TotalNodeUsage = 3;
     optional NKikimrTabletBase.TMetrics ResourceMaximum = 4;
+    optional double TotalNodeUsage = 3;
+    optional double TotalNodeCpuUsage = 5;
 }
 
 message TEvReassignTablet {
@@ -588,4 +589,38 @@ message TEvResponseTabletDistribution {
         repeated fixed64 TabletIds = 2;
     }
     repeated TNode Nodes = 1;
+}
+
+message TEvRequestScaleRecommendation {
+    optional NKikimrSubDomains.TDomainKey DomainKey = 1;
+}
+
+message TEvResponseScaleRecommendation {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional uint32 RecommendedNodes = 2;
+}
+
+message TScaleRecommenderPolicies {
+    message TScaleRecommenderPolicy {
+        message TTargetTrackingPolicy {
+            oneof Target {
+                uint32 AverageCpuUtilizationPercent = 1; 
+            }
+        }
+
+        oneof Policy {
+            TTargetTrackingPolicy TargetTrackingPolicy = 1;
+        }
+    }
+
+    repeated TScaleRecommenderPolicy Policies = 1;
+}
+
+message TEvConfigureScaleRecommender {
+    optional NKikimrSubDomains.TDomainKey DomainKey = 1;
+    optional TScaleRecommenderPolicies Policies = 2;
+}
+
+message TEvConfigureScaleRecommenderReply {
+    optional NKikimrProto.EReplyStatus Status = 1;
 }

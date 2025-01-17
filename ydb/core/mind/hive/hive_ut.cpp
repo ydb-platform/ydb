@@ -265,6 +265,8 @@ namespace {
         app.HiveConfig.SetMinCounterScatterToBalance(0.02);
         app.HiveConfig.SetMinScatterToBalance(0.5);
         app.HiveConfig.SetObjectImbalanceToBalance(0.02);
+        app.HiveConfig.SetScaleInWindowSize(1);
+        app.HiveConfig.SetScaleOutWindowSize(1);
         if (appConfigSetup) {
             appConfigSetup(app);
         }
@@ -7054,4 +7056,152 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         UNIT_ASSERT_LE(bsc.GetOccupancyStDev("def1"), 0.1);
     }
 }
+
+Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
+    using namespace NTestSuiteTHiveTest;
+
+    void ConfigureScaleRecommender(TTestBasicRuntime& runtime, ui64 hiveId, TSubDomainKey subdomainKey,
+        ui32 targetCPUUtilization)
+    {
+        const auto sender = runtime.AllocateEdgeActor();
+
+        auto request = std::make_unique<TEvHive::TEvConfigureScaleRecommender>();
+        request->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
+        request->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());
+        auto* policy = request->Record.MutablePolicies()->AddPolicies()->MutableTargetTrackingPolicy();
+        policy->SetAverageCpuUtilizationPercent(targetCPUUtilization);
+
+        runtime.SendToPipe(hiveId, sender, request.release());
+
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvConfigureScaleRecommenderReply>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+    }
+
+    void AssertScaleRecommencation(TTestBasicRuntime& runtime, ui64 hiveId, TSubDomainKey subdomainKey,
+        NKikimrProto::EReplyStatus expectedStatus, ui32 expectedNodes = 0)
+    {
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(hiveId, sender, new TEvHive::TEvRequestScaleRecommendation(subdomainKey));
+
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseScaleRecommendation>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), expectedStatus);
+        if (expectedNodes) {
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetRecommendedNodes(), expectedNodes);
+        }
+    }
+
+    void RefreshScaleRecommendation(TTestBasicRuntime& runtime, ui64 hiveId) {
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(hiveId, sender, new NHive::TEvPrivate::TEvRefreshScaleRecommendation());
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(NHive::TEvPrivate::EvRefreshScaleRecommendation);
+        runtime.DispatchEvents(options);
+    }
+
+    void SendUsage(TTestBasicRuntime& runtime, ui64 hiveId, ui64 nodeIdx, double cpuUsage) {
+        const auto sender = runtime.AllocateEdgeActor(nodeIdx);
+
+        auto ev = std::make_unique<TEvHive::TEvTabletMetrics>();
+        ev->Record.SetTotalNodeCpuUsage(cpuUsage);
+        runtime.SendToPipe(hiveId, sender, ev.release(), nodeIdx, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetricsAck>(handle);
+    }
+
+    constexpr double LOW_CPU_USAGE = 0.2;
+    constexpr double HIGH_CPU_USAGE = 0.95;
+
+    Y_UNIT_TEST(BasicTest) {
+        // Setup test runtime
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+
+        // Setup hive
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::SchemeShard, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0); // root hive good
+        MakeSureTabletIsUp(runtime, TTestTxConfig::SchemeShard, 0); // root ss good
+
+        TActorId sender = runtime.AllocateEdgeActor(0);
+        InitSchemeRoot(runtime, sender);
+
+        TSubDomainKey subdomainKey;
+
+        // Create subdomain
+        do {
+            auto x = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            auto* tran = x->Record.AddTransaction();
+            tran->SetWorkingDir("/dc-1");
+            tran->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSubDomain);
+            auto* subd = tran->MutableSubDomain();
+            subd->SetName("tenant1");
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, x.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
+            if (reply) {
+                subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
+                break;
+            }
+        } while (true);
+
+        THolder<TEvHive::TEvCreateTablet> createHive = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, TTabletTypes::Hive, BINDED_CHANNELS);
+        createHive->Record.AddAllowedDomains();
+        createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
+        createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
+        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
+
+        TTestActorRuntime::TEventObserver prevObserverFunc;
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
+                event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
+                MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
+            }
+            return prevObserverFunc(event);
+        });
+
+        SendKillLocal(runtime, 0);
+        CreateLocalForTenant(runtime, 0, "/dc-1/tenant1");
+        MakeSureTabletIsUp(runtime, subHiveTablet, 0); // sub hive good
+
+        THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet->Record.AddAllowedDomains();
+        createTablet->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
+        createTablet->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
+        ui64 tabletId = SendCreateTestTablet(runtime, subHiveTablet, testerTablet, std::move(createTablet), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0); // dummy from sub hive also good
+
+        // Configure target CPU usage
+        ConfigureScaleRecommender(runtime, subHiveTablet, subdomainKey, 60);
+
+        // No data yet
+        AssertScaleRecommencation(runtime, subHiveTablet, subdomainKey, NKikimrProto::NOTREADY);
+
+        // Set low CPU usage on Node
+        SendUsage(runtime, subHiveTablet, 0, LOW_CPU_USAGE);
+
+        // Refresh to calculate new scale recommendation
+        RefreshScaleRecommendation(runtime, subHiveTablet);
+
+        // Check scale recommendation for low CPU usage
+        AssertScaleRecommencation(runtime, subHiveTablet, subdomainKey, NKikimrProto::OK, 1);
+
+        // Set high CPU usage on Node
+        SendUsage(runtime, subHiveTablet, 0, HIGH_CPU_USAGE);
+
+        // Refresh to calculate new scale recommendation
+        RefreshScaleRecommendation(runtime, subHiveTablet);
+
+        // Check scale recommendation for high CPU usage
+        AssertScaleRecommencation(runtime, subHiveTablet, subdomainKey, NKikimrProto::OK, 2);
+    }
+}
+
 }

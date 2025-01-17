@@ -96,6 +96,7 @@ namespace NLs {
     void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns,
                             NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
+    TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitionCount(ui32 count);
     TCheckFunc PartitionKeys(TVector<TString> lastShardKeys);

@@ -98,6 +98,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         exchangerSettings->SetMaxDelayMs(10);
         AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
         FeatureFlags.SetEnableSparsedColumns(true);
+        FeatureFlags.SetEnableParameterizedDecimal(true);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }

@@ -240,8 +240,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
        auto ret = session.CreateTable("/Root/DecimalTest",
                 TTableBuilder()
                     .AddNullableColumn("Key", TDecimalType(22, 9))
+                    .AddNullableColumn("Key35", TDecimalType(35, 10))
                     .AddNullableColumn("Value", TDecimalType(22, 9))
-                    .SetPrimaryKeyColumn("Key")
+                    .AddNullableColumn("Value35", TDecimalType(35, 10))
+                    .SetPrimaryKeyColumns({"Key", "Key35"})
                     .SetPartitionAtKeys(partitions)
                     .Build()).GetValueSync();
         UNIT_ASSERT_C(ret.IsSuccess(), ret.GetIssues().ToString());
@@ -252,9 +254,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             const NYdb::NTable::TTableDescription& tableDescription = describeResult.GetTableDescription();
             const TVector<NYdb::NTable::TKeyRange>& keyRanges = tableDescription.GetKeyRanges();
             const TVector<NYdb::NTable::TTableColumn>& columns = tableDescription.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Type.ToString(), "Decimal(22,9)?");
-            UNIT_ASSERT_STRINGS_EQUAL(columns[1].Type.ToString(), "Decimal(22,9)?");
+            UNIT_ASSERT_STRINGS_EQUAL(columns[1].Type.ToString(), "Decimal(35,10)?");
             auto extractValue = [](const TValue& val) {
                 auto parser = TValueParser(val);
                 parser.OpenTuple();
@@ -267,20 +269,24 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto params = TParamsBuilder().AddParam("$in").BeginList()
                 .AddListItem().BeginStruct()
-                    .AddMember("Key").Decimal(TDecimalValue("1.0"))
-                    .AddMember("Value").Decimal(TDecimalValue("10.123456789"))
+                    .AddMember("Key").Decimal(TDecimalValue("1.0", 22, 9))
+                    .AddMember("Key35").Decimal(TDecimalValue("155555555555555.0", 35, 10))
+                    .AddMember("Value").Decimal(TDecimalValue("10.123456789", 22, 9))
+                    .AddMember("Value35").Decimal(TDecimalValue("155555555555555.123456789", 35, 10))
                     .EndStruct()
                 .AddListItem().BeginStruct()
-                    .AddMember("Key").Decimal(TDecimalValue("2.0"))
-                    .AddMember("Value").Decimal(TDecimalValue("20.987654321"))
+                    .AddMember("Key").Decimal(TDecimalValue("2.0", 22, 9))
+                    .AddMember("Key35").Decimal(TDecimalValue("255555555555555.0", 35, 10))
+                    .AddMember("Value").Decimal(TDecimalValue("20.987654321", 22, 9))
+                    .AddMember("Value35").Decimal(TDecimalValue("255555555555555.987654321", 35, 10))
                     .EndStruct()
                 .EndList().Build().Build();
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            DECLARE $in AS List<Struct<Key: Decimal(22, 9), Value: Decimal(22, 9)>>;
+            DECLARE $in AS List<Struct<Key: Decimal(22, 9), Key35: Decimal(35, 10), Value: Decimal(22, 9), Value35: Decimal(35, 10)>>;
             REPLACE INTO `/Root/DecimalTest`
-                SELECT Key, Value FROM AS_TABLE($in);
+                SELECT Key, Key35, Value, Value35 FROM AS_TABLE($in);
         )", TTxControl::BeginTx().CommitTx(), params).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -290,6 +296,12 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             [["1"];["10.123456789"]];
             [["2"];["20.987654321"]]
         ])", StreamResultToYson(it));
+
+        auto it35 = db.StreamExecuteScanQuery("select Key35, max(Value35) from `/Root/DecimalTest` group by Key35 order by Key35").GetValueSync();
+        CompareYson(R"([
+            [["155555555555555"];["155555555555555.123456789"]];
+            [["255555555555555"];["255555555555555.987654321"]]
+        ])", StreamResultToYson(it35));        
     }
 
     Y_UNIT_TEST(TaggedScalar) {

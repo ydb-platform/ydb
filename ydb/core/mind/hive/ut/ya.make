@@ -20,6 +20,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     object_distribution_ut.cpp
+    scale_recommender_policy_ut.cpp
     sequencer_ut.cpp
     storage_pool_info_ut.cpp
     hive_ut.cpp

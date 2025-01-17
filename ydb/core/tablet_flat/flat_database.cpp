@@ -323,7 +323,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
             if (auto got = annex->Place(table, op.Tag, raw)) {
                 ModifiedRefs[index] = got.Ref;
                 const auto payload = NUtil::NBin::ToRef(ModifiedRefs[index]);
-                op.Value = TRawTypeValue(payload, NScheme::TTypeInfo(op.Value.Type()));
+                op.Value = TRawTypeValue(payload, op.Value.Type());
                 op.Op = ELargeObj::Extern;
             }
         }
@@ -516,6 +516,11 @@ void TDatabase::UpdateApproximateFreeSharesByChannel(const THashMap<ui32, float>
     for (auto& [channel, value] : approximateFreeSpaceShareByChannel) {
         DatabaseImpl->Stats.NormalizedFreeSpaceShareByChannel[channel] = NUtil::NormalizeFreeSpaceShare(value);
     }
+}
+
+TDbRuntimeStats TDatabase::RuntimeCounters() const noexcept
+{
+    return DatabaseImpl->GetRuntimeStats();
 }
 
 void TDatabase::SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) noexcept

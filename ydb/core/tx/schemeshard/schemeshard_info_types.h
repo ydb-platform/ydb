@@ -564,13 +564,18 @@ public:
         return copy;
     }
 
+    struct TCreateAlterDataFeatureFlags {
+        bool EnableTablePgTypes;
+        bool EnableTableDatetime64;
+        bool EnableParameterizedDecimal;
+    };
+
     static TAlterDataPtr CreateAlterData(
         TPtr source,
         NKikimrSchemeOp::TTableDescription& descr,
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
-        bool pgTypesEnabled,
-        bool datetime64TypesEnabled,
+        const TCreateAlterDataFeatureFlags& featureFlags,
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -2301,6 +2306,7 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
             const auto alterSpace = GetFileStoreSpace(*AlterConfig);
             space.SSD = Max(space.SSD, alterSpace.SSD);
             space.HDD = Max(space.HDD, alterSpace.HDD);
+            space.SSDSystem = Max(space.SSDSystem, alterSpace.SSDSystem);
         }
 
         return space;
@@ -2314,7 +2320,11 @@ private:
         TFileStoreSpace space;
         switch (config.GetStorageMediaKind()) {
             case 1: // STORAGE_MEDIA_SSD
-                space.SSD += blockCount * blockSize;
+                if (config.GetIsSystem()) {
+                    space.SSDSystem += blockCount * blockSize;
+                } else {
+                    space.SSD += blockCount * blockSize;
+                }
                 break;
             case 2: // STORAGE_MEDIA_HYBRID
             case 3: // STORAGE_MEDIA_HDD

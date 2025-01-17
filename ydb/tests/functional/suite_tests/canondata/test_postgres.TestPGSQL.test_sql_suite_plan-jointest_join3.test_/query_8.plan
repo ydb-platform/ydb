@@ -78,6 +78,9 @@
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "InternalOperatorId": 1
+                                                                                    },
+                                                                                    {
+                                                                                        "Other": "ConstantExpression"
                                                                                     }
                                                                                 ],
                                                                                 "Name": "LeftJoin (MapJoin)"

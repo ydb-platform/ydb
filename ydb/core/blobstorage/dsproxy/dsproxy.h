@@ -566,7 +566,7 @@ public:
 
         // ensure that we are dying for the first time
         Y_ABORT_UNLESS(!Dead);
-        if (RequestHandleClass && PoolCounters) {
+        if (RequestHandleClass && PoolCounters && FirstResponse) {
             PoolCounters->GetItem(*RequestHandleClass, RequestBytes).Register(
                 RequestBytes, GeneratedSubrequests, GeneratedSubrequestBytes, Timer.Passed());
         }
@@ -594,6 +594,7 @@ public:
 
         // send the reply to original request sender
         Derived().Send(source, ev.release(), 0, cookie);
+        FirstResponse = false;
     };
 
     void SendResponse(std::unique_ptr<IEventBase>&& ev, TBlobStorageGroupProxyTimeStats *timeStats = nullptr) {
@@ -658,6 +659,7 @@ private:
     TActorId ProxyActorId;
     std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
     bool ExecutionRelayUsed = false;
+    bool FirstResponse = true;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,

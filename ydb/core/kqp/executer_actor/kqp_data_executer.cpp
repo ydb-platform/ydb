@@ -147,7 +147,7 @@ public:
         ReadOnlyTx = IsReadOnlyTx();
     }
 
-    void CheckExecutionComplete() {
+    bool CheckExecutionComplete() {
         ui32 notFinished = 0;
         for (const auto& x : ShardStates) {
             if (x.second.State != TShardState::EState::Finished) {
@@ -157,7 +157,7 @@ public:
             }
         }
         if (notFinished == 0 && TBase::CheckExecutionComplete()) {
-            return;
+            return true;
         }
 
         if (IsDebugLogEnabled()) {
@@ -176,6 +176,8 @@ public:
             }
             LOG_D(sb);
         }
+
+        return false;
     }
 
     bool ForceAcquireSnapshot() const {
@@ -537,7 +539,7 @@ private:
         LOG_E("Shard " << tabletId << " transaction lost during reconnect: " << record.GetStatus());
 
         CancelProposal(tabletId);
-        ReplyTxStateUnknown(tabletId);
+        ReplyUnavailable(TStringBuilder() << "Disconnected from shard " << tabletId);
     }
 
     void HandlePrepare(TEvDqCompute::TEvState::TPtr& ev) {
@@ -579,7 +581,7 @@ private:
                     return ReplyUnavailable(TStringBuilder() << "Could not prepare program on shard " << msg->TabletId);
                 }
 
-                return ReplyTxStateUnknown(msg->TabletId);
+                return ReplyUnavailable(TStringBuilder() << "Disconnected from shard " << msg->TabletId);
             }
 
             case TShardState::EState::Prepared: {
@@ -599,7 +601,7 @@ private:
                                << (msg->NotDelivered ? ", last message not delivered" : ""));
 
                 CancelProposal(0);
-                return ReplyTxStateUnknown(msg->TabletId);
+                return ReplyUnavailable(TStringBuilder() << "Disconnected from shard " << msg->TabletId);
             }
 
             case TShardState::EState::Initial:
@@ -2152,6 +2154,10 @@ private:
 
         ExecuteTasks();
 
+        if (CheckExecutionComplete()) {
+            return;
+        }
+
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         if (ImmediateTx) {
             LOG_D("ActorState: " << CurrentStateFuncName() << ", immediate tx, become ExecuteState");
@@ -2262,7 +2268,7 @@ private:
             // Volatile transactions must always use generic readsets
             VolatileTx ||
             // Transactions with topics must always use generic readsets
-            !topicTxs.empty() || 
+            !topicTxs.empty() ||
             // HTAP transactions always use generic readsets
             !evWriteTxs.empty());
 
@@ -2595,8 +2601,6 @@ private:
             }
         }
         PropagateChannelsUpdates(updates);
-
-        CheckExecutionComplete();
     }
 
     void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {

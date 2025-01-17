@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
     }
 
     void Restore(TTestBasicRuntime& runtime, const TString& creationScheme, TVector<TTestData>&& data, ui32 readBatchSize = 128) {
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
         Restore(runtime, env, creationScheme, std::move(data), readBatchSize);
     }
 
@@ -688,6 +688,7 @@ value {
             << "-1597235696123456," // negative timestamp64
             << "-300500," // negative interval64
             << "3.321," // decimal
+            << "555555555555555.123456789," // decimal(35,10)
             << ".3321e1," // dynumber
             << "\"" << CGIEscapeRet("lorem ipsum") << "\"," // string
             << "\"" << CGIEscapeRet("lorem ipsum dolor sit amet") << "\"," // utf8
@@ -702,6 +703,7 @@ value {
             << "[\"" << TInstant::ParseIso8601("2020-08-12T00:00:00.000000Z").Days() << "\"];" // date
             << "[\"" << -1597235696 << "\"];" // datetime64
             << "[\"" << TInstant::ParseIso8601("2020-08-12T12:34:56.000000Z").Seconds() << "\"];" // datetime
+            << "[\"" << "555555555555555.123456789" << "\"];" // decimal(35,10)
             << "[\"" << "3.321" << "\"];" // decimal
             << "[\"" << 1.1234 << "\"];" // double
             << "[\"" << ".3321e1" << "\"];" // dynumber
@@ -725,7 +727,7 @@ value {
 
         const auto data = TTestData(std::move(csv), std::move(yson));
 
-        Restore(runtime, R"(
+        Restore(runtime, R"_(
             Name: "Table"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "int32_value" Type: "Int32" }
@@ -745,6 +747,7 @@ value {
             Columns { Name: "timestamp64_value" Type: "Timestamp64" }
             Columns { Name: "interval64_value" Type: "Interval64" }
             Columns { Name: "decimal_value" Type: "Decimal" }
+            Columns { Name: "decimal35_value" Type: "Decimal(35,10)" }
             Columns { Name: "dynumber_value" Type: "DyNumber" }
             Columns { Name: "string_value" Type: "String" }
             Columns { Name: "utf8_value" Type: "Utf8" }
@@ -752,7 +755,7 @@ value {
             Columns { Name: "jsondoc_value" Type: "JsonDocument" }
             Columns { Name: "uuid_value" Type: "Uuid" }
             KeyColumnNames: ["key"]
-        )", {data}, data.Data.size() + 1);
+        )_", {data}, data.Data.size() + 1);
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint64", "0"}, {
             "key",
@@ -773,6 +776,7 @@ value {
             "timestamp64_value",
             "interval64_value",
             "decimal_value",
+            "decimal35_value",
             "dynumber_value",
             "string_value",
             "utf8_value",
@@ -1140,12 +1144,346 @@ value {
         UNIT_ASSERT_C(CheckDefaultFromSequence(table), "Invalid default value");
     }
 
-    Y_UNIT_TEST(ExportImportOnSupportedDatatypes) {
+    Y_UNIT_TEST(ShouldRestoreTableWithVolatilePartitioningMerge) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
+        TTestEnv env(runtime);
+
         ui64 txId = 100;
 
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SEQUENCEPROXY, NActors::NLog::PRI_TRACE);
+
+        // Create table with 2 tablets
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Original"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 2
+                    MaxPartitionsCount: 2
+                }
+            }
+            SplitBoundary {
+              KeyPrefix {
+                Tuple { Optional { Uint32: 2 } }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Upload data
+        const auto firstTablet = TTestTxConfig::FakeHiveTablets;
+        const auto secondTablet = TTestTxConfig::FakeHiveTablets + 1;
+        UpdateRow(runtime, "Original", 1, "valueA", firstTablet);
+        UpdateRow(runtime, "Original", 2, "valueB", secondTablet);
+        
+        // Add delay after copying tables
+        bool dropNotification = false;
+        THolder<IEventHandle> delayed;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvSchemeShard::EvModifySchemeTransaction:
+                break;
+            case TEvSchemeShard::EvNotifyTxCompletionResult:
+                if (dropNotification) {
+                    delayed.Reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+            if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+                dropNotification = true;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // Start exporting table
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Original"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        const ui64 exportId = txId;
+
+        // Wait for delay after copying tables
+        if (!delayed) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
+                return bool(delayed);
+            });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        // Merge 2 tablets in 1 during the delay
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Original"
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 1
+                    MaxPartitionsCount: 1
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestSplitTable(runtime, ++txId, "/MyRoot/Original", Sprintf(R"(
+            SourceTabletId: %lu
+            SourceTabletId: %lu
+        )", firstTablet, secondTablet));
+        env.TestWaitNotification(runtime, txId);
+
+        // Finish the delay and continue exporting
+        runtime.Send(delayed.Release(), 0, true);
+        env.TestWaitNotification(runtime, exportId);
+
+        // Check export
+        TestGetExport(runtime, exportId, "/MyRoot");
+
+        // Restore table
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        const ui64 importId = txId;
+        env.TestWaitNotification(runtime, importId);
+
+        // Check import
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        // Check partitioning in restored table
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored", true, true), {
+            NLs::MinPartitionsCountEqual(2),
+            NLs::MaxPartitionsCountEqual(2),
+            NLs::CheckBoundaries
+        });
+
+        // Check data in restored table
+        const auto restoredFirstTablet = TTestTxConfig::FakeHiveTablets + 5;
+        const auto restoredSecondTablet = TTestTxConfig::FakeHiveTablets + 6;
+        {
+            auto expectedJson = TStringBuilder() << "[[[["
+                << "["
+                    << R"(["1"];)" // key
+                    << R"(["valueA"])" // value
+                << "];"
+            << "];\%false]]]";
+            auto content = ReadTable(runtime, restoredFirstTablet, "Restored", {"key", "Uint32", "0"});
+            NKqp::CompareYson(expectedJson, content);
+        }
+        {
+            auto expectedJson = TStringBuilder() << "[[[["
+                << "["
+                    << R"(["2"];)" // key
+                    << R"(["valueB"])" // value
+                << "];"
+            << "];\%false]]]";
+            auto content = ReadTable(runtime, restoredSecondTablet, "Restored", {"key", "Uint32", "0"});
+            NKqp::CompareYson(expectedJson, content);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldRestoreTableWithVolatilePartitioningSplit) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SEQUENCEPROXY, NActors::NLog::PRI_TRACE);
+
+        // Create table with 2 tablets
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Original"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 2
+                    MaxPartitionsCount: 2
+                }
+            }
+            SplitBoundary {
+              KeyPrefix {
+                Tuple { Optional { Uint32: 3 } }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Upload data
+        const auto firstTablet = TTestTxConfig::FakeHiveTablets;
+        UpdateRow(runtime, "Original", 1, "valueA", firstTablet);
+        UpdateRow(runtime, "Original", 2, "valueB", firstTablet);
+
+        // Add delay after copying tables
+        bool dropNotification = false;
+        THolder<IEventHandle> delayed;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvSchemeShard::EvModifySchemeTransaction:
+                break;
+            case TEvSchemeShard::EvNotifyTxCompletionResult:
+                if (dropNotification) {
+                    delayed.Reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+            if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+                dropNotification = true;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // Start exporting table
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Original"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        const ui64 exportId = txId;
+
+         // Wait for delay after copying tables
+        if (!delayed) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
+                return bool(delayed);
+            });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        // Split 2 tablets in 3 during the delay
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Original"
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 3
+                    MaxPartitionsCount: 3
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestSplitTable(runtime, ++txId, "/MyRoot/Original", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 2 } }
+                }
+            }
+        )", firstTablet));
+        env.TestWaitNotification(runtime, txId);
+
+        // Finish the delay and continue exporting
+        runtime.Send(delayed.Release(), 0, true);
+        env.TestWaitNotification(runtime, exportId);
+
+        // Check export
+        TestGetExport(runtime, exportId, "/MyRoot");
+
+        // Restore table
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        const ui64 importId = txId;
+        env.TestWaitNotification(runtime, importId);
+
+        // Check import
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        // Check partitioning in restored table
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored", true, true), {
+            NLs::MinPartitionsCountEqual(2),
+            NLs::MaxPartitionsCountEqual(2),
+            NLs::CheckBoundaries
+        });
+
+        // Check data in restored table
+        const auto restoredFirstTablet = TTestTxConfig::FakeHiveTablets + 6;
+        const auto restoredSecondTablet = TTestTxConfig::FakeHiveTablets + 7;
+        {
+            auto expectedJson = TStringBuilder() << "[[[["
+                << "["
+                    << R"(["1"];)" // key
+                    << R"(["valueA"])" // value
+                << "];"
+                << "["
+                    << R"(["2"];)" // key
+                    << R"(["valueB"])" // value
+                << "];"
+            << "];\%false]]]";
+            auto content = ReadTable(runtime, restoredFirstTablet, "Restored", {"key", "Uint32", "0"});
+            NKqp::CompareYson(expectedJson, content);
+        }
+        {
+            auto expectedJson = "[[[[];\%false]]]";
+            auto content = ReadTable(runtime, restoredSecondTablet, "Restored", {"key", "Uint32", "0"});
+            NKqp::CompareYson(expectedJson, content);
+        }
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
             Name: "Table"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "int32_value" Type: "Int32" }
@@ -1165,6 +1503,7 @@ value {
             Columns { Name: "timestamp64_value" Type: "Timestamp64" }
             Columns { Name: "interval64_value" Type: "Interval64" }
             Columns { Name: "decimal_value" Type: "Decimal" }
+            Columns { Name: "decimal35_value" Type: "Decimal(35,10)" }
             Columns { Name: "dynumber_value" Type: "DyNumber" }
             Columns { Name: "string_value" Type: "String" }
             Columns { Name: "utf8_value" Type: "Utf8" }
@@ -1172,7 +1511,7 @@ value {
             Columns { Name: "jsondoc_value" Type: "JsonDocument" }
             Columns { Name: "uuid_value" Type: "Uuid" }
             KeyColumnNames: ["key"]
-        )");
+        )_");
         env.TestWaitNotification(runtime, txId);
 
         const int partitionIdx = 0;
@@ -1185,6 +1524,7 @@ value {
         Y_ABORT_UNLESS(binaryJson.Defined());
 
         const std::pair<ui64, ui64> decimal = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("16.17", NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE));
+        const std::pair<ui64, ui64> decimal35 = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("555555555555555.123456789", 35, 10));
         const TString dynumber = *NDyNumber::ParseDyNumberString("18");
 
         char uuid[16];
@@ -1208,6 +1548,7 @@ value {
             TCell::Make<i64>(-14), // Timestamp64
             TCell::Make<i64>(-15), // Interval64
             TCell::Make<std::pair<ui64, ui64>>(decimal), // Decimal
+            TCell::Make<std::pair<ui64, ui64>>(decimal35), // Decimal
             TCell(dynumber.data(), dynumber.size()), // Dynumber
             TCell(string.data(), string.size()), // String
             TCell(string.data(), string.size()), // Utf8
@@ -1261,6 +1602,7 @@ value {
             << "[\"" << 8 << "\"];" // date
             << "[\"" << -13 << "\"];" // datetime64
             << "[\"" << 9 << "\"];" // datetime
+            << "[\"" << "555555555555555.123456789" << "\"];" // decimal35
             << "[\"" << "16.17" << "\"];" // decimal
             << "[\"" << 6.66 << "\"];" // double
             << "[\"" << ".18e2" << "\"];" // dynumber
@@ -1303,6 +1645,7 @@ value {
             "timestamp64_value",
             "interval64_value",
             "decimal_value",
+            "decimal35_value",
             "dynumber_value",
             "string_value",
             "utf8_value",

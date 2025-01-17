@@ -39,7 +39,9 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
     }
 
     Y_UNIT_TEST(SupportedTypes) {
-        TEnv env(TFeatureFlags().SetEnableTableDatetime64(true));
+        TEnv env(TFeatureFlags()
+            .SetEnableTableDatetime64(true)
+            .SetEnableParameterizedDecimal(true));
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
@@ -70,6 +72,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
                 {.Name = "datetime64_value", .Type = "Datetime64"},
                 {.Name = "timestamp64_value", .Type = "Timestamp64"},
                 {.Name = "interval64_value", .Type = "Interval64"},
+                {.Name = "decimal35_value", .Type = "Decimal(35,10)"},
             },
         }));
 
@@ -101,6 +104,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             TRecord(21, R"({"key":[21], "update":{"datetime64_value":1597235696}})"),
             TRecord(22, R"({"key":[22], "update":{"timestamp64_value":1597235696123456}})"),
             TRecord(23, R"({"key":[23], "update":{"interval64_value":-300500}})"),
+            TRecord(31, R"({"key":[31], "update":{"decimal35_value":"355555555555555.321"}})"),
         }));
     }
 }

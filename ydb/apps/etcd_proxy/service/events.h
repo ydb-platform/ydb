@@ -10,7 +10,7 @@ namespace NEtcd {
 
 enum EEv : ui32 {
     EvBegin = 5000,
-    EvQueryResult = EvBegin,
+    EvQueryResult,
     EvQueryError,
     EvEnd
 };
@@ -22,8 +22,7 @@ struct TEvQueryResult : public NActors::TEventLocal<TEvQueryResult, EvQueryResul
 };
 
 struct TEvQueryError : public NActors::TEventLocal<TEvQueryError, EvQueryError> {
-    TEvQueryError(const NYql::TIssues& issues)
-        : Issues(issues) {}
+    TEvQueryError(const NYql::TIssues& issues): Issues(issues) {}
 
     const NYql::TIssues Issues;
 };

@@ -7,7 +7,6 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
-#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/mind/local.h>
@@ -36,25 +35,6 @@ TString DecrementKey(TString key) {
         }
     }
     return TString();
-}
-
-template <typename TResult>
-Ydb::StatusIds::StatusCode PullStatus(const TResult &result) {
-    switch (result.status()) {
-    case NKikimrKeyValue::Statuses::RSTATUS_OK:
-    case NKikimrKeyValue::Statuses::RSTATUS_OVERRUN:
-        return Ydb::StatusIds::SUCCESS;
-    case NKikimrKeyValue::Statuses::RSTATUS_ERROR:
-        return Ydb::StatusIds::GENERIC_ERROR;
-    case NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT:
-        return Ydb::StatusIds::TIMEOUT;
-    case NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND:
-        return Ydb::StatusIds::NOT_FOUND;
-    case NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION:
-        return Ydb::StatusIds::PRECONDITION_FAILED;
-    default:
-        return Ydb::StatusIds::INTERNAL_ERROR;
-    }
 }
 
 template <typename TDerived>

@@ -539,7 +539,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
     Y_UNIT_TEST(NoUserAccessToScriptExecutionsTable) {
         // Test that checks that we can create operations table without internal token (=nullptr)
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(true);
         NYdb::TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);

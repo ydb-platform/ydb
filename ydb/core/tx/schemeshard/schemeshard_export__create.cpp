@@ -1,8 +1,9 @@
 #include "schemeshard_xxport__tx_base.h"
 #include "schemeshard_xxport__helpers.h"
+#include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_export_helpers.h"
-#include "schemeshard_export.h"
+#include "schemeshard_export_scheme_uploader.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
@@ -203,7 +204,7 @@ private:
                     .IsResolved()
                     .NotDeleted()
                     .NotUnderDeleting()
-                    .IsTable()
+                    .IsSupportedInExports()
                     .FailOnRestrictedCreateInTempZone();
 
                 if (!checks) {
@@ -212,7 +213,7 @@ private:
                 }
             }
 
-            exportInfo->Items.emplace_back(item.source_path(), path.Base()->PathId);
+            exportInfo->Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
             exportInfo->PendingItems.push_back(itemIdx);
         }
 
@@ -230,6 +231,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     ui64 Id;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
+    TEvPrivate::TEvExportSchemeUploadResult::TPtr SchemeUploadResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
 
     explicit TTxProgress(TSelf* self, ui64 id)
@@ -250,6 +252,12 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
+    explicit TTxProgress(TSelf* self, TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev)
+        : TXxport::TTxBase(self)
+        , SchemeUploadResult(ev)
+    {
+    }
+
     explicit TTxProgress(TSelf* self, TTxId completedTxId)
         : TXxport::TTxBase(self)
         , CompletedTxId(completedTxId)
@@ -267,6 +275,8 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
             OnAllocateResult(txc, ctx);
         } else if (ModifyResult) {
             OnModifyResult(txc, ctx);
+        } else if (SchemeUploadResult) {
+            OnSchemeUploadResult(txc, ctx);
         } else if (CompletedTxId) {
             OnNotifyResult(txc, ctx);
         } else {
@@ -290,16 +300,22 @@ private:
         Send(Self->SelfId(), MkDirPropose(Self, txId, exportInfo));
     }
 
-    void CopyTables(TExportInfo::TPtr exportInfo, TTxId txId) {
+    bool CopyTables(TExportInfo::TPtr exportInfo, TTxId txId) {
         LOG_I("TExport::TTxProgress: CopyTables propose"
             << ": info# " << exportInfo->ToString()
             << ", txId# " << txId);
 
         Y_ABORT_UNLESS(exportInfo->WaitTxId == InvalidTxId);
-        Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
+        if (AnyOf(exportInfo->Items, [](const TExportInfo::TItem& item) {
+            return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
+        })) {
+            Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
+            return true;
+        }
+        return false;
     }
 
-    void TransferData(TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId) {
+    void TransferData(TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId, const TActorContext& ctx) {
         Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
         auto& item = exportInfo->Items.at(itemIdx);
 
@@ -311,7 +327,17 @@ private:
             << ", txId# " << txId);
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
+        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+            Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
+        } else if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView) {
+            Ydb::Export::ExportToS3Settings exportSettings;
+            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
+            const auto databaseRoot = TStringBuilder() << '/' << JoinSeq('/', Self->RootPathElements);
+
+            item.SchemeUploader = ctx.Register(CreateSchemeUploader(
+                Self->SelfId(), exportInfo->Id, itemIdx, item.SourcePathId, exportSettings, databaseRoot
+            ));
+        }
     }
 
     bool CancelTransferring(TExportInfo::TPtr exportInfo, ui32 itemIdx) {
@@ -620,7 +646,7 @@ private:
         }
     }
 
-    void OnAllocateResult(TTransactionContext&, const TActorContext&) {
+    void OnAllocateResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(AllocateResult);
 
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
@@ -651,13 +677,27 @@ private:
             break;
 
         case EState::CopyTables:
-            CopyTables(exportInfo, txId);
+            if (!CopyTables(exportInfo, txId)) {
+                // none of the items is a table
+                NIceDb::TNiceDb db(txc.DB);
+
+                for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+                    exportInfo->Items[itemIdx].State = EState::Transferring;
+                    Self->PersistExportItemState(db, exportInfo, itemIdx);
+
+                    AllocateTxId(exportInfo, itemIdx);
+                }
+
+                exportInfo->State = EState::Transferring;
+                Self->PersistExportState(db, exportInfo);
+                return;
+            }
             break;
 
         case EState::Transferring:
             if (exportInfo->PendingItems) {
                 itemIdx = popPendingItemIdx(exportInfo->PendingItems);
-                TransferData(exportInfo, itemIdx, txId);
+                TransferData(exportInfo, itemIdx, txId, ctx);
             } else {
                 return;
             }
@@ -870,6 +910,71 @@ private:
         SubscribeTx(txId);
     }
 
+    void OnSchemeUploadResult(TTransactionContext& txc, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(SchemeUploadResult);
+
+        LOG_D("TExport::TTxProgress: OnSchemeUploadResult"
+            << ": success# " << SchemeUploadResult->Get()->Success
+            << ", error# " << SchemeUploadResult->Get()->Error
+        );
+
+        const auto exportId = SchemeUploadResult->Get()->ExportId;
+        auto exportInfo = Self->Exports.Value(exportId, nullptr);
+        if (!exportInfo) {
+            LOG_E("TExport::TTxProgress: OnSchemeUploadResult received unknown export id"
+                << ": id# " << exportId
+            );
+            return;
+        }
+
+        ui32 itemIdx = SchemeUploadResult->Get()->ItemIdx;
+        if (itemIdx >= exportInfo->Items.size()) {
+            LOG_E("TExport::TTxProgress: OnSchemeUploadResult item index out of range"
+                << ": id# " << exportId
+                << ", item index# " << itemIdx
+                << ", number of items# " << exportInfo->Items.size()
+            );
+            return;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto& item = exportInfo->Items[itemIdx];
+        item.SchemeUploader = TActorId();
+
+        if (!SchemeUploadResult->Get()->Success) {
+            item.State = EState::Cancelled;
+            item.Issue = SchemeUploadResult->Get()->Error;
+            Self->PersistExportItemState(db, exportInfo, itemIdx);
+
+            if (!exportInfo->IsInProgress()) {
+                return;
+            }
+
+            Cancel(exportInfo, itemIdx, "unsuccessful scheme upload");
+
+            Self->PersistExportState(db, exportInfo);
+            return SendNotificationsIfFinished(exportInfo);
+        }
+
+        if (exportInfo->State == EState::Transferring) {
+            item.State = EState::Done;
+            Self->PersistExportItemState(db, exportInfo, itemIdx);
+
+            if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
+                exportInfo->State = EState::Done;
+                exportInfo->EndTime = TAppData::TimeProvider->Now();
+
+                Self->PersistExportState(db, exportInfo);
+                SendNotificationsIfFinished(exportInfo);
+
+                if (exportInfo->IsFinished()) {
+                    AuditLogExportEnd(*exportInfo.Get(), Self);
+                }
+            }
+        }
+    }
+
     void OnNotifyResult(TTransactionContext& txc, const TActorContext&) {
         Y_ABORT_UNLESS(CompletedTxId);
         LOG_D("TExport::TTxProgress: OnNotifyResult"
@@ -948,14 +1053,17 @@ private:
             item.State = EState::Done;
             item.WaitTxId = InvalidTxId;
 
-            if (const auto issue = GetIssues(ItemPathId(Self, exportInfo, itemIdx), txId)) {
-                item.Issue = *issue;
-                Cancel(exportInfo, itemIdx, "issues during backing up");
-            } else {
-                if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                    exportInfo->State = EState::Done;
-                    exportInfo->EndTime = TAppData::TimeProvider->Now();
+            bool itemHasIssues = false;
+            if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+                if (const auto issue = GetIssues(ItemPathId(Self, exportInfo, itemIdx), txId)) {
+                    item.Issue = *issue;
+                    Cancel(exportInfo, itemIdx, "issues during backing up");
+                    itemHasIssues = true;
                 }
+            }
+            if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
+                exportInfo->State = EState::Done;
+                exportInfo->EndTime = TAppData::TimeProvider->Now();
             }
 
             Self->PersistExportItemState(db, exportInfo, itemIdx);
@@ -1013,6 +1121,10 @@ ITransaction* TSchemeShard::CreateTxProgressExport(TEvTxAllocatorClient::TEvAllo
 }
 
 ITransaction* TSchemeShard::CreateTxProgressExport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+    return new TExport::TTxProgress(this, ev);
+}
+
+ITransaction* TSchemeShard::CreateTxProgressExport(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev) {
     return new TExport::TTxProgress(this, ev);
 }
 

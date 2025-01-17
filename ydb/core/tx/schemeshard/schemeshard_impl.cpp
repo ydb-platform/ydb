@@ -4513,6 +4513,11 @@ const NKikimrConfig::TDomainsConfig& TSchemeShard::GetDomainsConfig() {
     return AppData()->DomainsConfig;
 }
 
+const NKikimrConfig::TSecurityConfig& TSchemeShard::GetSecurityConfig() {
+    Y_ABORT_UNLESS(AppData());
+    return AppData()->SecurityConfig;
+}
+
 NKikimrSubDomains::TProcessingParams TSchemeShard::CreateRootProcessingParams(const TActorContext &ctx) {
     const auto& domain = GetDomainDescription(ctx);
 
@@ -4550,6 +4555,15 @@ void TSchemeShard::Die(const TActorContext &ctx) {
 
     if (TabletMigrator) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
+    }
+    for (const auto& [id, exportInfo] : Exports) {
+        if (!exportInfo->IsDone()) {
+            for (const auto& item : exportInfo->Items) {
+                if (item.SchemeUploader != TActorId()) {
+                    ctx.Send(item.SchemeUploader, new TEvents::TEvPoisonPill());
+                }
+            }
+        }
     }
 
     IndexBuildPipes.Shutdown(ctx);
@@ -4839,6 +4853,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvExport::TEvListExportsRequest, Handle);
         // } // NExport
         HFuncTraced(NBackground::TEvListRequest, Handle);
+        HFuncTraced(TEvPrivate::TEvExportSchemeUploadResult, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);

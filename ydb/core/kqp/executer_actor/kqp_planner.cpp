@@ -221,7 +221,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(TasksGraph, task, /* serializeAsyncIoSettings = */ true);
+        NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(
+            TasksGraph, task, /* serializeAsyncIoSettings = */ true);
         if (ArrayBufferMinFillPercentage) {
             serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
         }

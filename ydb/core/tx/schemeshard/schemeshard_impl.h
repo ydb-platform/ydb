@@ -1233,6 +1233,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TTxId completedTxId);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev);
 
     void Handle(TEvExport::TEvCreateExportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvExport::TEvGetExportRequest::TPtr& ev, const TActorContext& ctx);
@@ -1240,6 +1241,7 @@ public:
     void Handle(TEvExport::TEvForgetExportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvExport::TEvListExportsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TAutoPtr<TEventHandle<NSchemeShard::NBackground::TEvListRequest>>& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev, const TActorContext& ctx);
 
     void ResumeExports(const TVector<ui64>& exportIds, const TActorContext& ctx);
     // } // NExport
@@ -1497,6 +1499,8 @@ private:
 
 public:
     static const NKikimrConfig::TDomainsConfig& GetDomainsConfig();
+
+    static const NKikimrConfig::TSecurityConfig& GetSecurityConfig();
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;

@@ -428,6 +428,10 @@ public:
     NMonitoring::THistogramPtr WriteActorWritesOperationsHistogram;
     NMonitoring::THistogramPtr WriteActorWritesLatencyHistogram;
 
+    NMonitoring::THistogramPtr BufferActorPrepareLatencyHistogram;
+    NMonitoring::THistogramPtr BufferActorCommitLatencyHistogram;
+    NMonitoring::THistogramPtr BufferActorFlushLatencyHistogram;
+
     NMonitoring::THistogramPtr ForwardActorWritesSizeHistogram;
     NMonitoring::THistogramPtr ForwardActorWritesLatencyHistogram;
 

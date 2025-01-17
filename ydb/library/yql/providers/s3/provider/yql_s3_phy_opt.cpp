@@ -201,17 +201,28 @@ public:
 
         if (!FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite pure S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as stage with sink.";
+            auto shouldBePassedAsInput = FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TDqStage::CallableName()); });
+
+            auto stageInputs = Build<TExprList>(ctx, writePos);
+            auto toFlow = Build<TCoToFlow>(ctx, writePos);
+            TVector<TCoArgument> args;
+
+            if (shouldBePassedAsInput) {
+                stageInputs.Add(input);
+                args.push_back(Build<TCoArgument>(ctx, writePos).Name("in").Done());
+                toFlow.Input("in");
+            }
+            else {
+                toFlow.Input(input);
+            }
+
             return keys.empty() ?
                 Build<TDqStage>(ctx, writePos)
-                    .Inputs()
-                        .Add(input)
-                        .Build()
+                    .Inputs(stageInputs.Done())
                     .Program<TCoLambda>()
-                        .Args({"in"})
+                        .Args(args)
                         .Body<TS3SinkOutput>()
-                            .Input<TCoToFlow>()
-                                .Input("in")
-                                .Build()
+                            .Input(toFlow.Done())
                             .Format(target.Format())
                             .KeyColumns().Build()
                             .Settings(sinkOutputSettingsBuilder.Done())
@@ -239,14 +250,10 @@ public:
                             .Add<TDqCnHashShuffle>()
                                 .Output<TDqOutput>()
                                     .Stage<TDqStage>()
-                                        .Inputs()
-                                            .Add(input)
-                                            .Build()
+                                        .Inputs(stageInputs.Done())
                                         .Program<TCoLambda>()
-                                            .Args({"in"})
-                                            .Body<TCoToFlow>()
-                                                .Input("in")
-                                                .Build()
+                                            .Args(args)
+                                            .Body(toFlow.Done())
                                             .Build()
                                         .Settings().Build()
                                         .Build()

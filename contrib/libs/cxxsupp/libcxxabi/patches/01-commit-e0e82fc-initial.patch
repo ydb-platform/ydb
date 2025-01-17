@@ -7,23 +7,7 @@ Subject: [PATCH] Rebase of changed from emscripten-libs-13.0.0 onto
 diff --git a/include/cxxabi.h b/include/cxxabi.h
 --- a/include/cxxabi.h
 +++ b/include/cxxabi.h
-@@ -39,21 +39,44 @@ namespace __cxxabiv1 {
- extern "C"  {
- 
- // 2.4.2 Allocating the Exception Object
-+#ifndef __EMSCRIPTEN__
- extern _LIBCXXABI_FUNC_VIS void *
- __cxa_allocate_exception(size_t thrown_size) throw();
- extern _LIBCXXABI_FUNC_VIS void
- __cxa_free_exception(void *thrown_exception) throw();
-+#else
-+extern _LIBCXXABI_FUNC_VIS void *
-+__cxa_allocate_exception(size_t thrown_size) _NOEXCEPT;
-+extern _LIBCXXABI_FUNC_VIS void
-+__cxa_free_exception(void *thrown_exception) _NOEXCEPT;
-+#endif
- 
- // 2.4.3 Throwing the Exception Object
+@@ -39,3 +39,9 @@ namespace __cxxabiv1 {
 +#ifdef __USING_WASM_EXCEPTIONS__
 +extern _LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void
 +__cxa_throw(void *thrown_exception, std::type_info *tinfo,
@@ -33,25 +17,6 @@ diff --git a/include/cxxabi.h b/include/cxxabi.h
  __cxa_throw(void *thrown_exception, std::type_info *tinfo,
              void (_LIBCXXABI_DTOR_FUNC *dest)(void *));
 +#endif
- 
- // 2.5.3 Exception Handlers
-+#ifndef __EMSCRIPTEN__
- extern _LIBCXXABI_FUNC_VIS void *
- __cxa_get_exception_ptr(void *exceptionObject) throw();
-+#else
-+extern _LIBCXXABI_FUNC_VIS void *
-+__cxa_get_exception_ptr(void *exceptionObject) _NOEXCEPT;
-+#endif
-+#ifndef __EMSCRIPTEN__
- extern _LIBCXXABI_FUNC_VIS void *
- __cxa_begin_catch(void *exceptionObject) throw();
-+#else
-+extern _LIBCXXABI_FUNC_VIS void *
-+__cxa_begin_catch(void *exceptionObject) _NOEXCEPT;
-+#endif
- extern _LIBCXXABI_FUNC_VIS void __cxa_end_catch();
- #if defined(_LIBCXXABI_ARM_EHABI)
- extern _LIBCXXABI_FUNC_VIS bool
 @@ -148,17 +171,36 @@ extern _LIBCXXABI_FUNC_VIS char *__cxa_demangle(const char *mangled_name,
  
  // Apple additions to support C++ 0x exception_ptr class
@@ -560,7 +525,7 @@ diff --git a/src/stdlib_new_delete.cpp b/src/stdlib_new_delete.cpp
 +++ b/src/stdlib_new_delete.cpp
 @@ -37,9 +37,17 @@ operator new(std::size_t size) _THROW_BAD_ALLOC
          else
- #ifndef _LIBCXXABI_NO_EXCEPTIONS
+ #ifndef _LIBCPP_HAS_NO_EXCEPTIONS
              throw std::bad_alloc();
 +#ifdef __EMSCRIPTEN__
 +            // Abort here so that when exceptions are disabled, we do not just

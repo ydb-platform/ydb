@@ -387,7 +387,7 @@ namespace NTable {
         void ApplyColumn(TRowState& row, const NMem::TColumnUpdate &up) const noexcept
         {
             const auto pos = Remap->Has(up.Tag);
-            auto op = TCellOp::Decode(up.Op);
+            auto op = up.Op;
 
             if (!pos || row.IsFinalized(pos)) {
                 /* Out of remap or row slot is already filled */

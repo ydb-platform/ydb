@@ -109,8 +109,8 @@ size_t WriteRowValue(char* output, const TUnversionedValue& value, bool isInline
             break;
 
         case EValueType::Double:
-            ::memcpy(current, &value.Data.Double, sizeof (double));
-            current += sizeof (double);
+            ::memcpy(current, &value.Data.Double, sizeof(double));
+            current += sizeof(double);
             break;
 
         case EValueType::Boolean:
@@ -170,8 +170,8 @@ size_t ReadRowValue(const char* input, TUnversionedValue* value)
 
         case EValueType::Double: {
             double data;
-            ::memcpy(&data, current, sizeof (double));
-            current += sizeof (double);
+            ::memcpy(&data, current, sizeof(double));
+            current += sizeof(double);
             *value = MakeUnversionedDoubleValue(data, id);
             break;
         }
@@ -205,19 +205,19 @@ void Save(TStreamSaveContext& context, const TUnversionedValue& value)
 {
     auto* output = context.GetOutput();
     if (IsStringLikeType(value.Type)) {
-        output->Write(&value, sizeof (ui16) + sizeof (ui16) + sizeof (ui32)); // Id, Type, Length
+        output->Write(&value, sizeof(ui16) + sizeof(ui16) + sizeof(ui32)); // Id, Type, Length
         if (value.Length != 0) {
             output->Write(value.Data.String, value.Length);
         }
     } else {
-        output->Write(&value, sizeof (TUnversionedValue));
+        output->Write(&value, sizeof(TUnversionedValue));
     }
 }
 
 void Load(TStreamLoadContext& context, TUnversionedValue& value, TChunkedMemoryPool* pool)
 {
     auto* input = context.GetInput();
-    const size_t fixedSize = sizeof (ui16) + sizeof (ui16) + sizeof (ui32); // Id, Type, Length
+    const size_t fixedSize = sizeof(ui16) + sizeof(ui16) + sizeof(ui32); // Id, Type, Length
     YT_VERIFY(input->Load(&value, fixedSize) == fixedSize);
     if (IsStringLikeType(value.Type)) {
         if (value.Length != 0) {
@@ -227,7 +227,7 @@ void Load(TStreamLoadContext& context, TUnversionedValue& value, TChunkedMemoryP
             value.Data.String = nullptr;
         }
     } else {
-        YT_VERIFY(input->Load(&value.Data, sizeof (value.Data)) == sizeof (value.Data));
+        YT_VERIFY(input->Load(&value.Data, sizeof(value.Data)) == sizeof(value.Data));
     }
 }
 
@@ -248,7 +248,7 @@ size_t GetYsonSize(const TUnversionedValue& value)
             return 1 + MaxVarInt64Size;
 
         case EValueType::Double:
-            // Type marker + sizeof double.
+            // Type marker + sizeofdouble.
             return 1 + 8;
 
         case EValueType::String:
@@ -1547,7 +1547,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
     TRefCountedTypeCookie tagCookie)
 {
     size_t bufferSize = 0;
-    bufferSize += sizeof (TUnversionedRow) * rows.Size();
+    bufferSize += sizeof(TUnversionedRow) * rows.Size();
     for (auto row : rows) {
         bufferSize += GetUnversionedRowByteSize(row.GetCount());
         for (const auto& value : row) {
@@ -1571,7 +1571,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
         return unalignedPtr;
     };
 
-    auto* capturedRows = reinterpret_cast<TUnversionedRow*>(allocateAligned(sizeof (TUnversionedRow) * rows.Size()));
+    auto* capturedRows = reinterpret_cast<TUnversionedRow*>(allocateAligned(sizeof(TUnversionedRow) * rows.Size()));
     for (size_t index = 0; index < rows.Size(); ++index) {
         auto row = rows[index];
         int valueCount = row.GetCount();
@@ -1580,7 +1580,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
         capturedHeader->Count = valueCount;
         auto capturedRow = TMutableUnversionedRow(capturedHeader);
         capturedRows[index] = capturedRow;
-        ::memcpy(capturedRow.Begin(), row.Begin(), sizeof (TUnversionedValue) * row.GetCount());
+        ::memcpy(capturedRow.Begin(), row.Begin(), sizeof(TUnversionedValue) * row.GetCount());
         for (auto& capturedValue : capturedRow) {
             if (IsStringLikeType(capturedValue.Type)) {
                 auto* capturedString = allocateUnaligned(capturedValue.Length);

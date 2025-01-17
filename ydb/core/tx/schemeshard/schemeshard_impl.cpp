@@ -5145,7 +5145,7 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     } else {
         ResolveDomainInfo(node)->DecPathsInside(1, isBackupTable);
     }
-    PathsById.at(node->ParentPathId)->DecAliveChildren(1, isBackupTable);
+    PathsById.at(node->ParentPathId)->DecAliveChildrenPrivate(isBackupTable);
 
     TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(node->UserAttrs->Size());
 

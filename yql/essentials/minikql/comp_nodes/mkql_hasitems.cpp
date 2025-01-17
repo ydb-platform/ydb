@@ -38,7 +38,7 @@ public:
             const auto result = PHINode::Create(collection->getType(), 2U, "result", done);
 
             result->addIncoming(collection, block);
-            BranchInst::Create(done, good, IsEmpty(collection, block), block);
+            BranchInst::Create(done, good, IsEmpty(collection, block, context), block);
 
             block = good;
 

@@ -198,11 +198,13 @@ class SqsHttpApi(object):
             extract_result_method=lambda x: x['CountQueuesResponse']['CountQueuesResult']['Count'],
         )
 
-    def create_queue(self, queue_name, is_fifo=False, attributes=None, private_api=False, created_timestamp_sec=None, custom_name=None):
+    def create_queue(self, queue_name, is_fifo=False, attributes=None, private_api=False, created_timestamp_sec=None, custom_name=None, tags=None):
         # if is_fifo and not queue_name.endswith('.fifo'):
         #     return None
         if attributes is None:
-            attributes = dict()
+            attributes = {}
+        if tags is None:
+            tags = {}
         if is_fifo:
             attributes = dict(attributes)  # copy
             attributes['FifoQueue'] = 'true'
@@ -215,6 +217,10 @@ class SqsHttpApi(object):
         for i, (k, v) in enumerate(attributes.items()):
             params['Attribute.{id}.Name'.format(id=i+1)] = k
             params['Attribute.{id}.Value'.format(id=i + 1)] = v
+
+        for i, (k, v) in enumerate(tags.items()):
+            params['Tag.{id}.Key'.format(id=i+1)] = k
+            params['Tag.{id}.Value'.format(id=i+1)] = v
 
         return self.execute_request(
             action='CreateQueue',
@@ -561,3 +567,38 @@ class SqsHttpApi(object):
                     assert i < len(result) and i >= 0
                     result[i]['BatchResultErrorEntry'] = err
         return result
+
+    def list_queue_tags(self, queue_url):
+        tags = self.execute_request(
+            action='ListQueueTags',
+            extract_result_method=lambda x: x['ListQueueTagsResponse']['ListQueueTagsResult']['Tag'],
+            QueueUrl=queue_url
+        )
+
+        return {} if tags is None else {
+            tag['Key']: tag['Value']
+            for tag in wrap_in_list(tags)
+        }
+
+    def tag_queue(self, queue_url, tags):
+        params = {}
+        for i, (k, v) in enumerate(tags.items(), 1):
+            params['Tag.{}.Key'.format(i)] = k
+            params['Tag.{}.Value'.format(i)] = v
+        return self.execute_request(
+            action='TagQueue',
+            extract_result_method=lambda x: x['TagQueueResponse']['ResponseMetadata']['RequestId'],
+            QueueUrl=queue_url,
+            **params
+        )
+
+    def untag_queue(self, queue_url, tag_keys):
+        params = {}
+        for i, k in enumerate(tag_keys, 1):
+            params['TagKey.{}'.format(i)] = k
+        return self.execute_request(
+            action='UntagQueue',
+            extract_result_method=lambda x: x['UntagQueueResponse']['ResponseMetadata']['RequestId'],
+            QueueUrl=queue_url,
+            **params
+        )

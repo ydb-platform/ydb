@@ -53,44 +53,20 @@ public:
             BranchInst::Create(work, done, check, block);
             block = work;
 
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-                const auto funType = FunctionType::get(right->getType(), {factory->getType(), left->getType(), right->getType()}, false);
-                const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                const auto res = CallInst::Create(funType, funcPtr, {factory, left, right}, "res", block);
-                result->addIncoming(res, block);
-            } else {
-                const auto retPtr = new AllocaInst(right->getType(), 0U, "ret_ptr", block);
-                const auto itemPtr = new AllocaInst(left->getType(), 0U, "item_ptr", block);
-                new StoreInst(right, retPtr, block);
-                new StoreInst(left, itemPtr, block);
-                const auto funType = FunctionType::get(Type::getVoidTy(context), {factory->getType(), retPtr->getType(), itemPtr->getType(), retPtr->getType()}, false);
-                const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                CallInst::Create(funType, funcPtr, {factory, retPtr, itemPtr, retPtr}, "", block);
-                const auto res = new LoadInst(right->getType(), retPtr, "res", block);
-                result->addIncoming(res, block);
-            }
+            const auto funType = FunctionType::get(right->getType(), {factory->getType(), left->getType(), right->getType()}, false);
+            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+            const auto res = CallInst::Create(funType, funcPtr, {factory, left, right}, "res", block);
+            result->addIncoming(res, block);
 
             BranchInst::Create(done, block);
 
             block = done;
             return result;
         } else {
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-                const auto funType = FunctionType::get(right->getType(), {factory->getType(), left->getType(), right->getType()}, false);
-                const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                const auto res = CallInst::Create(funType, funcPtr, {factory, left, right}, "res", block);
-                return res;
-            } else {
-                const auto retPtr = new AllocaInst(right->getType(), 0U, "ret_ptr", block);
-                const auto itemPtr = new AllocaInst(left->getType(), 0U, "item_ptr", block);
-                new StoreInst(right, retPtr, block);
-                new StoreInst(left, itemPtr, block);
-                const auto funType = FunctionType::get(Type::getVoidTy(context), {factory->getType(), retPtr->getType(), itemPtr->getType(), retPtr->getType()}, false);
-                const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                CallInst::Create(funType, funcPtr, {factory, retPtr, itemPtr, retPtr}, "", block);
-                const auto res = new LoadInst(right->getType(), retPtr, "res", block);
-                return res;
-            }
+            const auto funType = FunctionType::get(right->getType(), {factory->getType(), left->getType(), right->getType()}, false);
+            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+            const auto res = CallInst::Create(funType, funcPtr, {factory, left, right}, "res", block);
+            return res;
         }
     }
 #endif

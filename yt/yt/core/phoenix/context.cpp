@@ -2,7 +2,7 @@
 
 #include <yt/yt/core/misc/collection_helpers.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -58,4 +58,4 @@ void* TLoadContext::GetObject(TObjectId id) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix

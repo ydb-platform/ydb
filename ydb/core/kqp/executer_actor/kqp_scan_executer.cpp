@@ -314,8 +314,9 @@ private:
             .GUCSettings = nullptr,
             .MayRunTasksLocally = false,
             .ResourceManager_ = Request.ResourceManager_,
-            .CaFactory_ = Request.CaFactory_
+            .CaFactory_ = Request.CaFactory_,
             // TODO: BlockTrackingMode is not set!
+            .VerboseMemoryLimitException = false,
         });
 
         LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());

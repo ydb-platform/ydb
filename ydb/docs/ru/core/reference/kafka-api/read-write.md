@@ -6,7 +6,7 @@
 
 1. [Создайте топик](../ydb-cli/topic-create.md).
 1. [Добавьте читателя](../ydb-cli/topic-consumer-add.md).
-1. Если у вас включена аутентификация, [создайте пользователя](../../security/access-management.md#users).
+1. Если у вас включена аутентификация, [создайте пользователя](../../yql/reference/syntax/create-user.md).
 
 ## Как попробовать Kafka API {#how-to-try-kafka-api}
 

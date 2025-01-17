@@ -180,7 +180,7 @@ public:
     }
 
     void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
-        Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig(), nullptr));
+        Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig(), nullptr, false));
     }
 
     STRICT_STFUNC(StateFunc, {

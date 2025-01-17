@@ -111,7 +111,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Tiers->Start(Tiers);
     if (const auto& tiersSnapshot = NYDBTest::TControllers::GetColumnShardController()->GetOverrideTierConfigs(); !tiersSnapshot.empty()) {
         for (const auto& [id, tier] : tiersSnapshot) {
-            Tiers->UpdateTierConfig(tier, CanonizePath(id), false);
+            Tiers->UpdateTierConfig(tier, NTiers::TExternalStorageId(id), false);
         }
     }
     BackgroundSessionsManager = std::make_shared<NOlap::NBackground::TSessionsManager>(
@@ -134,7 +134,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
 void TColumnShard::Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
     if (const auto& tiersSnapshot = NYDBTest::TControllers::GetColumnShardController()->GetOverrideTierConfigs(); !tiersSnapshot.empty()) {
         for (const auto& [id, tier] : tiersSnapshot) {
-            Tiers->UpdateTierConfig(tier, CanonizePath(id), false);
+            Tiers->UpdateTierConfig(tier, NTiers::TExternalStorageId(id), false);
         }
     }
 

@@ -10,6 +10,8 @@
 #include "self_heal.h"
 #include "storage_pool_stat.h"
 
+#include <util/generic/hash_multi_map.h>
+
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
     return o << NKikimr::TErasureType::ErasureSpeciesName(p);
 }
@@ -71,6 +73,7 @@ public:
     class TTxUpdateLastSeenReady;
     class TTxUpdateNodeDrives;
     class TTxUpdateNodeDisconnectTimestamp;
+    class TTxUpdateShred;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -1431,6 +1434,7 @@ public:
     class THostRecordMapImpl {
         THashMap<THostId, THostRecord> HostIdToRecord;
         THashMap<TNodeId, THostId> NodeIdToHostId;
+        THashMultiMap<TString, TNodeId> FqdnToNodeId;
 
     public:
         THostRecordMapImpl() = default;
@@ -1440,6 +1444,7 @@ public:
                 const THostId hostId(nodeInfo.Host, nodeInfo.Port);
                 NodeIdToHostId.emplace(nodeInfo.NodeId, hostId);
                 HostIdToRecord.emplace(hostId, nodeInfo);
+                FqdnToNodeId.emplace(nodeInfo.Host, nodeInfo.NodeId);
             }
         }
 
@@ -1449,6 +1454,7 @@ public:
                 const TNodeId nodeId = item.GetNodeId();
                 NodeIdToHostId.emplace(nodeId, hostId);
                 HostIdToRecord.emplace(hostId, item);
+                FqdnToNodeId.emplace(item.GetHost(), nodeId);
             }
         }
 
@@ -1479,6 +1485,10 @@ public:
             } else {
                 return {};
             }
+        }
+
+        auto ResolveNodeId(const TString& fqdn) const {
+            return FqdnToNodeId.equal_range(fqdn);
         }
 
         auto begin() const {
@@ -1529,9 +1539,11 @@ private:
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
     NKikimrBlobStorage::TStorageConfig StorageConfig;
+    bool SelfManagementEnabled = false;
     TString YamlConfig;
     ui32 ConfigVersion = 0;
     TBackoffTimer GetBlockBackoff{1, 1000};
+    NKikimrBlobStorage::TShredState ShredState;
 
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
@@ -1561,7 +1573,6 @@ private:
     class TNodeWardenUpdateNotifier;
 
     class TConsoleInteraction;
-
     std::unique_ptr<TConsoleInteraction> ConsoleInteraction;
 
     struct TEvPrivate {
@@ -1836,6 +1847,7 @@ private:
     void ForwardToSystemViewsCollector(STATEFN_SIG);
     void Handle(TEvPrivate::TEvUpdateSystemViews::TPtr &ev);
     void Handle(TEvBlobStorage::TEvGetBlockResult::TPtr &ev);
+    void Handle(TEvBlobStorage::TEvControllerShredRequest::TPtr ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Scrub handling
@@ -2075,6 +2087,7 @@ public:
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedNotify, Handle);
             cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
+            hFunc(TEvBlobStorage::TEvControllerShredRequest, Handle);
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
@@ -2098,10 +2111,6 @@ public:
         SignalTabletActive(TActivationContext::AsActorContext());
         Loaded = true;
         ApplyStorageConfig();
-
-        if (!ConsoleInteraction) { // maybe we are in distconf mode, no console interaction yet started
-            StartConsoleInteraction();
-        }
 
         for (const auto& [id, info] : GroupMap) {
             if (info->VirtualGroupState) {

@@ -1434,5 +1434,18 @@ message TEvControllerValidateConfigResponse {
     optional string ErrorReason = 5;
 }
 
-message TEvControllerValidationTimeout {
+message TEvControllerShredRequest {
+    optional uint64 Generation = 1; // if set, start a new shred iteration; operation is idempotent
+}
+
+message TEvControllerShredResponse {
+    optional uint64 CurrentGeneration = 1; // current shred iteration
+    optional bool Completed = 2; // is it completed?
+    optional uint32 Progress10k = 3; // progress in range [0, 10000]
+}
+
+message TShredState {
+    optional uint64 Generation = 1;
+    optional bool Completed = 2;
+    optional uint32 Progress10k = 3;
 }

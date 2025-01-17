@@ -12,6 +12,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
@@ -2822,6 +2823,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
+        NBackup::TMetadata Metadata;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;

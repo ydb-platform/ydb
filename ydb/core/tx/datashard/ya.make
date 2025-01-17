@@ -50,6 +50,7 @@ SRCS(
     datashard__cleanup_borrowed.cpp
     datashard__cleanup_in_rs.cpp
     datashard__cleanup_tx.cpp
+    datashard__cleanup_uncommitted.cpp
     datashard__column_stats.cpp
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp

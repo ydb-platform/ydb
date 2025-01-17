@@ -35,6 +35,7 @@ namespace NKikimr::NBsController {
         proposeConfigEv->Record.SetConfigHash(configHash);
         proposeConfigEv->Record.SetConfigVersion(Self.ConfigVersion);
         NTabletPipe::SendData(Self.SelfId(), ConsolePipe, proposeConfigEv.Release());
+        Working = true;
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvTabletPipe::TEvClientConnected::TPtr& /*ev*/) {
@@ -42,10 +43,12 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& /*ev*/) {
         ConsolePipe = {};
-        MakeGetBlock();
+        if (Working) {
+            MakeGetBlock();
+        }
     }
 
-    void TBlobStorageController::TConsoleInteraction::MakeCommitToConsole(TString& /* config */, ui32 /* configVersion */) {
+    void TBlobStorageController::TConsoleInteraction::MakeCommitToConsole(TString& /*config*/, ui32 /*configVersion*/) {
         auto ev = MakeHolder<TEvBlobStorage::TEvControllerConsoleCommitRequest>();
         ev->Record.SetYAML(Self.YamlConfig);
         NTabletPipe::SendData(Self.SelfId(), ConsolePipe, ev.Release());
@@ -63,6 +66,9 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerProposeConfigResponse::TPtr &ev) {
+        if (!Working) {
+            return;
+        }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC19, "Console proposed config response", (Response, ev->Get()->Record));
         auto& record = ev->Get()->Record;
         auto status = record.GetStatus();
@@ -88,6 +94,9 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::OnConfigCommit(const TCommitConfigResult& result) {
+        if (!Working) {
+            return;
+        }
         if (result.Status == TCommitConfigResult::EStatus::ParseError ||
                 result.Status == TCommitConfigResult::EStatus::ValidationError) {
             auto response = std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigResponse>();
@@ -105,13 +114,17 @@ namespace NKikimr::NBsController {
         }
     }
 
-    void TBlobStorageController::TConsoleInteraction::OnPassAway() {
+    void TBlobStorageController::TConsoleInteraction::Stop() {
         if (ConsolePipe) {
             NTabletPipe::CloseClient(Self.SelfId(), ConsolePipe);
         }
+        Working = false;
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerConsoleCommitResponse::TPtr &ev) {
+        if (!Working) {
+            return;
+        }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC20, "Console commit config response", (Response, ev->Get()->Record));
         auto& record = ev->Get()->Record;
         auto status = record.GetStatus();
@@ -139,7 +152,7 @@ namespace NKikimr::NBsController {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC24, "Console replace config request", (Request, ev->Get()->Record));
         auto& record = ev->Get()->Record;
         auto response = MakeHolder<TEvBlobStorage::TEvControllerReplaceConfigResponse>();
-        if (!record.GetOverwriteFlag() && GRPCSenderId) {
+        if (!Working || (!record.GetOverwriteFlag() && GRPCSenderId)) {
             response->Record.SetStatus(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit);
             Self.Send(ev->Sender, response.Release());
             return;
@@ -232,6 +245,9 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvGetBlockResult::TPtr& ev) {
+        if (!Working) {
+            return;
+        }
         auto* msg = ev->Get();
         auto status = msg->Status;
         auto blockedGeneration = msg->BlockedGeneration;

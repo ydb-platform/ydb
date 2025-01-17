@@ -168,6 +168,7 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxSyncLogChunksInFlightSSD;
         TControlWrapper DefaultHugeGarbagePerMille;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille;
+        TControlWrapper MaxChunksToDefragInflight;
 
         TControlWrapper ThrottlingDeviceSpeed;
         TControlWrapper ThrottlingMinSstCount;
@@ -586,6 +587,7 @@ namespace NKikimr::NStorage {
         void ForwardToDistributedConfigKeeper(STATEFN_SIG);
 
         NKikimrBlobStorage::TStorageConfig StorageConfig;
+        bool SelfManagementEnabled = false;
         THashSet<TActorId> StorageConfigSubscribers;
 
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);

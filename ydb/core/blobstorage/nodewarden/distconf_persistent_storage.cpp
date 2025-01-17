@@ -293,12 +293,15 @@ namespace NKikimr::NStorage {
 
             // generate new list of drives to acquire
             std::vector<TString> drivesToRead;
-            EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
-                drivesToRead.push_back(drive.GetPath());
-            });
-            std::sort(drivesToRead.begin(), drivesToRead.end());
+            if (BaseConfig.GetSelfManagementConfig().GetEnabled()) {
+                EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+                    drivesToRead.push_back(drive.GetPath());
+                });
+                std::sort(drivesToRead.begin(), drivesToRead.end());
+            }
 
             if (DrivesToRead != drivesToRead) { // re-read configuration as it may cover additional drives
+                DrivesToRead = std::move(drivesToRead);
                 ReadConfig();
             } else {
                 ApplyStorageConfig(InitialConfig);

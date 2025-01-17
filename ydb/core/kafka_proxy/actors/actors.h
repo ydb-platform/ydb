@@ -54,6 +54,8 @@ struct TContext {
     bool Authenticated() {
         return !RequireAuthentication || AuthenticationStep == SUCCESS;
     }
+
+    TActorId DiscoveryCacheActor;
 };
 
 template<std::derived_from<TApiMessage> T>
@@ -167,7 +169,9 @@ inline TString GetUserSerializedToken(std::shared_ptr<TContext> context) {
 
 NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message);
 NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message);
-NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message);
+NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId,
+                                          const TMessagePtr<TMetadataRequestData>& message,
+                                          const TActorId& discoveryCacheActor);
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context);
 NActors::IActor* CreateKafkaReadSessionActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TSaslHandshakeRequestData>& message);

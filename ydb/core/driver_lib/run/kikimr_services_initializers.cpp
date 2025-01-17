@@ -48,6 +48,7 @@
 #include <ydb/core/control/immediate_control_board_actor.h>
 
 #include <ydb/core/driver_lib/version/version.h>
+#include <ydb/core/discovery/discovery.h>
 
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
@@ -1818,6 +1819,18 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             endpoints.push_back(std::move(desc));
         }
 
+        if (Config.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
+            const auto& kakfaConfig = Config.GetKafkaProxyConfig();
+            TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
+            desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address;
+            desc->Port = kakfaConfig.GetListeningPort();
+            desc->Ssl = kakfaConfig.HasSslCertificate();
+
+            desc->EndpointId = NGRpcService::KafkaEndpointId;
+            endpoints.push_back(std::move(desc));
+
+        }
+
         for (auto &sx : config.GetExtEndpoints()) {
             const TString &localAddress = sx.GetHost() ? (sx.GetHost() != "[::]" ? sx.GetHost() : FQDNHostName()) : address;
             if (const ui32 port = sx.GetPort()) {
@@ -2801,9 +2814,15 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
 
         setup->LocalServices.emplace_back(
-            TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),
+            NKafka::MakeKafkaDiscoveryCacheID(),
+            TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
                 TMailboxType::HTSwap, appData->UserPoolId)
+        );
+        setup->LocalServices.emplace_back(
+            TActorId(),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(),
+                                                       NKafka::MakeKafkaDiscoveryCacheID()),
+                           TMailboxType::HTSwap, appData->UserPoolId)
         );
 
         IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{appData->Counters});

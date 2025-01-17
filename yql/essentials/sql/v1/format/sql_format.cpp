@@ -1084,11 +1084,11 @@ private:
 
     void VisitUpdate(const TRule_update_stmt& msg) {
         NewLine();
-        Visit(msg.GetToken1());
-        Visit(msg.GetRule_simple_table_ref2());
-        switch (msg.GetBlock3().Alt_case()) {
-        case TRule_update_stmt_TBlock3::kAlt1: {
-            const auto& alt = msg.GetBlock3().GetAlt1();
+        Visit(msg.GetToken2());
+        Visit(msg.GetRule_simple_table_ref3());
+        switch (msg.GetBlock4().Alt_case()) {
+        case TRule_update_stmt_TBlock4::kAlt1: {
+            const auto& alt = msg.GetBlock4().GetAlt1();
             NewLine();
             Visit(alt.GetToken1());
             const auto& choice = alt.GetRule_set_clause_choice2();
@@ -1175,8 +1175,8 @@ private:
             PopCurrentIndent();
             break;
         }
-        case TRule_update_stmt_TBlock3::kAlt2: {
-            const auto& alt = msg.GetBlock3().GetAlt2();
+        case TRule_update_stmt_TBlock4::kAlt2: {
+            const auto& alt = msg.GetBlock4().GetAlt2();
             NewLine();
             Visit(alt.GetToken1());
             Visit(alt.GetRule_into_values_source2());
@@ -1189,19 +1189,19 @@ private:
 
     void VisitDelete(const TRule_delete_stmt& msg) {
         NewLine();
-        Visit(msg.GetToken1());
         Visit(msg.GetToken2());
-        Visit(msg.GetRule_simple_table_ref3());
-        if (msg.HasBlock4()) {
-            switch (msg.GetBlock4().Alt_case()) {
-            case TRule_delete_stmt_TBlock4::kAlt1: {
-                const auto& alt = msg.GetBlock4().GetAlt1();
+        Visit(msg.GetToken3());
+        Visit(msg.GetRule_simple_table_ref4());
+        if (msg.HasBlock5()) {
+            switch (msg.GetBlock5().Alt_case()) {
+            case TRule_delete_stmt_TBlock5::kAlt1: {
+                const auto& alt = msg.GetBlock5().GetAlt1();
                 NewLine();
                 Visit(alt);
                 break;
             }
-            case TRule_delete_stmt_TBlock4::kAlt2: {
-                const auto& alt = msg.GetBlock4().GetAlt2();
+            case TRule_delete_stmt_TBlock5::kAlt2: {
+                const auto& alt = msg.GetBlock5().GetAlt2();
                 NewLine();
                 Visit(alt);
                 break;

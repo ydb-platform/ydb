@@ -30,11 +30,13 @@ message TPartitionOffset {
 
 message TEvStartSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
-    repeated uint32 PartitionIds = 2;
+    uint32 PartitionId = 2 [deprecated=true];
     string Token = 3;
-    repeated TPartitionOffset Offsets = 4;
+    optional uint64 Offset = 4 [deprecated=true];
     uint64 StartingMessageTimestampMs = 5;
     string QueryId = 6;
+    repeated uint32 PartitionIds = 7;
+    repeated TPartitionOffset Offsets = 8;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
@@ -87,6 +89,7 @@ message TEvStatistics {
 
 message TEvSessionError {
     reserved 1;
+    uint32 PartitionId = 2 [deprecated=true];
     NYql.NDqProto.StatusIds.StatusCode StatusCode = 3;
     repeated Ydb.Issue.IssueMessage Issues = 4;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;

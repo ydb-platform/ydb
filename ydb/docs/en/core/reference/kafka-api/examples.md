@@ -194,9 +194,11 @@ For examples of how to set up authentication, see the section [Authentication Ex
 
 ##### Unexpected error in join group response
 
-Full text of an exception: `Unexpected error in join group response:
-This most likely occurs because of a request being malformed by the client library
-or the message was sent to an incompatible broker. See the broker logs for more details.`.
+Full text of an exception:
+
+```txt
+Unexpected error in join group response: This most likely occurs because of a request being malformed by the client library or the message was sent to an incompatible broker. See the broker logs for more details.
+```
 
 Most likely it means that consumer group is not specified or if specified it does not exist in YDB cluster.
 

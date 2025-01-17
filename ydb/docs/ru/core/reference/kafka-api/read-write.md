@@ -156,7 +156,7 @@
     - Использование CreateTime сообщения в качестве watermark сейчас недоступно, так как вместо CreateTime используется текущее время вычитки
       (баг будет пофикшен в следующих версиях).
 
-  {% endnote %} 
+  {% endnote %}
 
   ```java
     public class YdbKafkaApiReadExample {
@@ -195,9 +195,11 @@
 
 ##### Ошибка Unexpected error in join group response
 
-Полный текст ошибки
-`Unexpected error in join group response: This most likely occurs because of a request being malformed
-by the client library or the message was sent to an incompatible broker. See the broker logs for more details.`.
+Полный текст ошибки:
+
+```txt
+Unexpected error in join group response: This most likely occurs because of a request being malformed by the client library or the message was sent to an incompatible broker. See the broker logs for more details.
+```
 
 Скорее всего проблема в том, что не указана консьюмер группа или указанная консьмер группа не существует в кластере YDB.
 

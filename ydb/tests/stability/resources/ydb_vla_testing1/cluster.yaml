@@ -1,0 +1,178 @@
+use_new_style_kikimr_cfg: True
+cluster_uuid: "ydb:ydb-vla-testing"
+static_erasure: block-4-2
+static_pdisk_type: SSD
+cms:
+  sentinel_config:
+    enable: True
+system_tablets:
+  flat_schemeshard:
+    allow_dynamic_configuration: True
+hosts:
+- name: ydb-vla-testing-0000.search.yandex.net
+  rack: vla00
+  drives: &drives
+  - path: /dev/disk/by-partlabel/kikimr_ssd_01
+    type: SSD
+  - path: /dev/disk/by-partlabel/kikimr_ssd_02
+    type: SSD
+  - path: /dev/disk/by-partlabel/kikimr_ssd_03
+    type: SSD
+  - path: /dev/disk/by-partlabel/kikimr_ssd_04
+    type: SSD
+  - path: /dev/disk/by-partlabel/kikimr_ssd_05
+    type: SSD
+  - path: /dev/disk/by-partlabel/kikimr_ssd_06
+    type: SSD
+- name: ydb-vla-testing-0001.search.yandex.net
+  rack: vla01
+  drives: *drives
+- name: ydb-vla-testing-0002.search.yandex.net
+  rack: vla02
+  drives: *drives
+- name: ydb-vla-testing-0003.search.yandex.net
+  rack: vla03
+  drives: *drives
+- name: ydb-vla-testing-0004.search.yandex.net
+  rack: vla04
+  drives: *drives
+- name: ydb-vla-testing-0005.search.yandex.net
+  rack: vla05
+  drives: *drives
+- name: ydb-vla-testing-0006.search.yandex.net
+  rack: vla06
+  drives: *drives
+- name: ydb-vla-testing-0007.search.yandex.net
+  rack: vla07
+  drives: *drives
+domains:
+- domain_name: Root
+  domain_id: 1
+  plan_resolution: 10
+  dynamic_slots: 1
+  storage_pool_kinds:
+  - kind: ssd
+    erasure: block-4-2
+    filter_properties:
+      type: SSD
+  databases:
+  - name: db1
+    storage_units:
+    - count: 8
+      kind: ssd
+    compute_units:
+    - count: 1
+      kind: slot
+      zone: vla
+static_groups:
+  groups:
+  - drives:
+    - node_id: 1
+      path: /dev/disk/by-partlabel/kikimr_ssd_01
+      pdisk_guid: 16918123817561071335
+      pdisk_id: 1
+    - node_id: 2
+      path: /dev/disk/by-partlabel/kikimr_ssd_01
+      pdisk_guid: 8303029847906949627
+      pdisk_id: 1
+    - node_id: 3
+      path: /dev/disk/by-partlabel/kikimr_ssd_01
+      pdisk_guid: 12735339615082389556
+      pdisk_id: 1
+    - node_id: 4
+      path: /dev/disk/by-partlabel/kikimr_ssd_01
+      pdisk_guid: 14310579272281134489
+      pdisk_id: 1
+    - node_id: 5
+      path: /dev/disk/by-partlabel/kikimr_ssd_01
+      pdisk_guid: 6043098757469019491
+      pdisk_id: 1
+    - node_id: 6
+      path: /dev/disk/by-partlabel/kikimr_ssd_01
+      pdisk_guid: 7493253971083570093
+      pdisk_id: 1
+    - node_id: 7
+      path: /dev/disk/by-partlabel/kikimr_ssd_01
+      pdisk_guid: 6104676721627114706
+      pdisk_id: 1
+    - node_id: 8
+      path: /dev/disk/by-partlabel/kikimr_ssd_01
+      pdisk_guid: 7261967450217184701
+      pdisk_id: 1
+    erasure: block-4-2
+    fail_domain_type: body
+    group_id: 0
+    static_pdisk_type: SSD
+static_pdisk_type: SSD
+kqp:
+  enable: True
+  kqp_allow_new_engine: "true"
+sys:
+  executors:
+    batch:
+      spin_threshold: 1
+      threads: 7
+    ic:
+      spin_threshold: 10
+      threads: 3
+    io:
+      threads: 2
+    system:
+      spin_threshold: 1
+      threads: 9
+    user:
+      spin_threshold: 1
+      threads: 16
+  scheduler:
+    resolution: 64
+grpc:
+  services:
+  - yql
+  - scripting
+  - cms
+  - discovery
+  - legacy
+  - experimental
+  - pq
+shared_cache:
+  memory_limit: 128000000000
+features:
+  EnableSystemViews: True
+  EnableSchemeBoard: True
+  EnableSchemeBoardCache: True
+  EnableExternalSubdomains: true
+  UseSchemeBoardCacheForSchemeRequests: true
+  SendSchemaVersionToDatashard: true
+  EnableExternalHive: true
+  CompileMinikqlWithVersion: true
+  AllowOnlineIndexBuild: true
+  EnableTtlOnIndexedTables: true
+  EnablePersistentQueryStats: true
+  EnableOfflineSlaves: true
+  DisableDataShardBarrier: true
+  ReadTableWithSnapshot: true
+pq:
+  enabled: False
+log:
+  default: 5
+  syslog: True
+  entries:
+  - level: 7
+    name: HIVE
+  - level: 7
+    name: LOCAL
+  - level: 7
+    name: BS_CONTROLLER
+  - level: 5
+    name: TX_PROXY
+  - level: 5
+    name: TX_DATASHARD
+  - level: 7
+    name: FLAT_TX_SCHEMESHARD
+  - level: 7
+    name: TENANT_SLOT_BROKER
+profiles:
+- channels:
+  - storage_pool_kind: ssd
+  - storage_pool_kind: ssd
+  - storage_pool_kind: ssd

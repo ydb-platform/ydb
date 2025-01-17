@@ -208,7 +208,7 @@ Command syntax:
 ```
 
 Parameters:
-`<path>` — the full path from the cluster' root to the object whose permissions need to be modified.
+`<path>` — the full path from the cluster's root to the object whose permissions need to be modified.
 
 Example of a `set-inheritance` command:
 

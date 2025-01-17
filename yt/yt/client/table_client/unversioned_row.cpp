@@ -1732,6 +1732,31 @@ void Deserialize(TLegacyOwningKey& key, INodePtr node)
                     break;
                 }
 
+                case ENodeType::List: {
+                    auto valueType = item->Attributes().Get<EValueType>("type", EValueType::Any);
+                    if (valueType != EValueType::Any && valueType != EValueType::Composite) {
+                        THROW_ERROR_EXCEPTION(
+                            "Unexpected type %Qlv of composite key", valueType);
+                    }
+
+                    TStringStream str;
+                    {
+                        // We want to skip top level attributes of the key,
+                        // so we traverse value manualy.
+                        TBufferedBinaryYsonWriter writer(&str);
+                        writer.OnBeginList();
+                        for (const auto& child : item->AsList()->GetChildren()) {
+                            writer.OnListItem();
+                            Serialize(child, &writer);
+                        }
+                        writer.OnEndList();
+                        writer.Flush();
+                    }
+
+                    builder.AddValue(MakeUnversionedStringLikeValue(valueType, str.Str(), id));
+                    break;
+                }
+
                 default:
                     THROW_ERROR_EXCEPTION("Key cannot contain %Qlv values",
                         item->GetType());

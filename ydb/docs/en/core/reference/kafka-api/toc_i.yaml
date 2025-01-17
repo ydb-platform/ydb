@@ -1,5 +1,5 @@
 items:
-  - name: Аутентификация
+  - name: Authentication
     href: auth.md
   - name: Usage examples
     href: examples.md

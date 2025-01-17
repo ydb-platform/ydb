@@ -1152,8 +1152,7 @@ void SerializeTaskToProto(
         const TKqpTasksGraph& tasksGraph,
         const TTask& task,
         NYql::NDqProto::TDqTask* result,
-        bool serializeAsyncIoSettings,
-        bool localRun) {
+        bool serializeAsyncIoSettings) {
     auto& stageInfo = tasksGraph.GetStageInfo(task.StageId);
     ActorIdToProto(task.Meta.ExecuterId, result->MutableExecuter()->MutableActorId());
     result->SetId(task.Id);
@@ -1195,24 +1194,21 @@ void SerializeTaskToProto(
     for (auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *result->MutableParameters();
         if (task.Meta.ShardId) {
-            // TODO: don't serialize if localRun
             dqParams[paramName] = stageInfo.Meta.Tx.Params->GetShardParam(task.Meta.ShardId, paramName);
-        } else if (!localRun) {
+        } else {
             dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
         }
     }
 
-    if (!localRun) {
-        SerializeCtxToMap(*tasksGraph.GetMeta().UserRequestContext, *result->MutableRequestContext());
-    }
+    SerializeCtxToMap(*tasksGraph.GetMeta().UserRequestContext, *result->MutableRequestContext());
 
     result->SetEnableMetering(enableMetering);
     FillTaskMeta(stageInfo, task, *result);
 }
 
-NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, const TTask& task, bool serializeAsyncIoSettings, bool localRun) {
+NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, const TTask& task, bool serializeAsyncIoSettings) {
     NYql::NDqProto::TDqTask* result = tasksGraph.GetMeta().Allocate<NYql::NDqProto::TDqTask>();
-    SerializeTaskToProto(tasksGraph, task, result, serializeAsyncIoSettings, localRun);
+    SerializeTaskToProto(tasksGraph, task, result, serializeAsyncIoSettings);
     return result;
 }
 

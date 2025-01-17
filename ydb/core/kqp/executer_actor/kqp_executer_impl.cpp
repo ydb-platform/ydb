@@ -130,7 +130,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 std::move(request), database, userToken, counters, true,
                 tableServiceConfig, std::move(asyncIoFactory), creator,
                 userRequestContext, statementResultIndex,
-                federatedQuerySetup, tableServiceConfig.GetEnableOltpSink() ? nullptr : GUCSettings,
+                federatedQuerySetup, GUCSettings,
                 shardIdToTableInfo, txManager, bufferActorId
             );
 

@@ -748,7 +748,18 @@ TString TViewerPipeClient::GetHTTPOKJSON(TString response, TInstant lastModified
 }
 
 TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TInstant lastModified) {
-    return GetHTTPOKJSON(NJson::WriteJson(response, false), lastModified);
+    constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
+    constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
+    constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
+    TStringStream content;
+    NJson::WriteJson(&content, &response, {
+        .DoubleNDigits = doubleNDigits,
+        .FloatNDigits = floatNDigits,
+        .FloatToStringMode = floatMode,
+        .ValidateUtf8 = false,
+        .WriteNanAsString = true,
+    });
+    return GetHTTPOKJSON(content.Str(), lastModified);
 }
 
 TString TViewerPipeClient::GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified) {

@@ -53,7 +53,11 @@ protected:
                         cells.push_back(TCell(entryPath.data(), entryPath.size()));
                         break;
                     case Schema::AuthPermissions::Sid::ColumnId:
-                        cells.push_back(TCell(ace.GetSID().data(), ace.GetSID().size()));
+                        if (ace.HasSID()) {
+                            cells.push_back(TCell(ace.GetSID().data(), ace.GetSID().size()));
+                        } else {
+                            cells.emplace_back();
+                        }
                         break;
                     case Schema::AuthPermissions::Permission::ColumnId:
                         cells.push_back(TCell(permission.data(), permission.size()));

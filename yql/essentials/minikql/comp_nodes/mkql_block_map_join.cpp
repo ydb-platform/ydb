@@ -7,6 +7,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_block_map_join_utils.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
@@ -308,8 +309,6 @@ class TBlockIndex : public TComputationValue<TBlockIndex> {
         };
     };
 
-    static_assert(sizeof(TIndexMapValue) == 8);
-
     using TBase = TComputationValue<TBlockIndex>;
     using TIndexMap = TRobinHoodHashFixedMap<
         ui64,
@@ -318,6 +317,9 @@ class TBlockIndex : public TComputationValue<TBlockIndex> {
         std::hash<ui64>,
         TMKQLAllocator<char>
     >;
+
+    static_assert(sizeof(TIndexMapValue) == 8);
+    static_assert(std::max(TIndexMap::GetCellSize(), static_cast<ui32>(sizeof(TIndexNode))) == BlockMapJoinIndexEntrySize);
 
 public:
     class TIterator {

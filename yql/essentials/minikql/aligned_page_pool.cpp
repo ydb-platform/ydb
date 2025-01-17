@@ -3,6 +3,7 @@
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/string/cast.h>
+#include <util/string/strip.h>
 #include <util/system/align.h>
 #include <util/system/compiler.h>
 #include <util/system/info.h>
@@ -39,7 +40,7 @@ size_t GetMemoryMapsCount() {
 ui64 GetMaxMemoryMaps() {
     ui64 maxMapCount = 0;
 #if defined(_unix_)
-    maxMapCount = FromString<ui64>(TFileInput("/proc/sys/vm/max_map_count").ReadAll());
+    maxMapCount = FromString<ui64>(Strip(TFileInput("/proc/sys/vm/max_map_count").ReadAll()));
 #endif
     return maxMapCount;
 }

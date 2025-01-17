@@ -1414,6 +1414,16 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 950 }];
+        optional uint64 ThrottlingMinLogChunkCount = 22 [(ControlOptions) = {
+            Description: "Minimum pdisk log chunk count - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 100 }];
+        optional uint64 ThrottlingMaxLogChunkCount = 23 [(ControlOptions) = {
+            Description: "Maximum pdisk log chunk count - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 130 }];
     }
 
     message TTabletControls {

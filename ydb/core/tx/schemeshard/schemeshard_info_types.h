@@ -3158,6 +3158,28 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
             return name;
         }
+
+        TString RangeToDebugStr(const TSerializedTableRange& range) const {
+            auto toStr = [&](const TSerializedCellVec& v) -> TString {
+                const auto cells = v.GetCells();
+                if (cells.empty()) {
+                    return "inf";
+                }
+                if (cells[0].IsNull()) {
+                    return "-inf";
+                }
+                auto str = TStringBuilder{} << "{ count: " << cells.size();
+                if (Parent != 0) {
+                    Y_ASSERT(Level != 0);
+                    str << ", parent: " << cells[0].AsValue<ui32>();
+                    if (cells.size() != 1 && cells[1].IsNull()) {
+                        str << ", pk: null";
+                    }
+                }
+                return str << " }";
+            };
+            return TStringBuilder{} << "{ From: " << toStr(range.From) << ", To: " << toStr(range.To) << " }";
+        }
     };
     TKMeans KMeans;
 

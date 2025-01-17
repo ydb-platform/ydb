@@ -192,7 +192,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_T("Prepare " << Debug());
+        LOG_D("Prepare " << Debug());
 
         Driver = driver;
         return {EScan::Feed, {}};
@@ -200,7 +200,7 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final
     {
-        LOG_T("Finish " << Debug());
+        LOG_D("Finish " << Debug());
 
         if (Uploader) {
             Send(Uploader, new TEvents::TEvPoisonPill);
@@ -237,8 +237,9 @@ public:
 
     TString Debug() const
     {
-        return TStringBuilder() << " TLocalKMeansScan Id: " << BuildId
-            << " State: " << State << " Round: " << Round << " MaxRounds: " << MaxRounds
+        return TStringBuilder() << " TLocalKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
+            << " Target: " << TargetTable << " K: " << K << " Clusters: " << Clusters.size()
+            << " State: " << State << " Round: " << Round << " / " << MaxRounds
             << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
     }
 
@@ -277,8 +278,8 @@ protected:
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        LOG_T("Handle TEvUploadRowsResponse " << Debug() << " Uploader: " << Uploader.ToString()
-                                              << " ev->Sender: " << ev->Sender.ToString());
+        LOG_D("Handle TEvUploadRowsResponse " << Debug()
+            << " Uploader: " << Uploader.ToString() << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
             Y_VERIFY_S(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
@@ -386,11 +387,12 @@ public:
         : TLocalKMeansScanBase{buildId, table, std::move(lead), parent, child, request, std::move(result)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
+        LOG_D("Create " << Debug());
     }
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final
     {
-        LOG_T("Seek " << Debug());
+        LOG_D("Seek " << Debug());
         if (State == UploadState) {
             if (!WriteBuf.IsEmpty()) {
                 return EScan::Sleep;
@@ -684,6 +686,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             issue->set_message(error);
             return false;
         });
+        result.reset();
     };
 
     if (const ui64 shardId = request.GetTabletId(); shardId != TabletID()) {
@@ -735,7 +738,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     const auto parentFrom = request.GetParentFrom();
     const auto parentTo = request.GetParentTo();
     if (parentFrom > parentTo) {
-        badRequest("Parent from should be less or equal to parent to");
+        badRequest(TStringBuilder() << "Parent from " << parentFrom << " should be less or equal to parent to " << parentTo);
         return;
     }
     const i64 expectedSize = parentTo - parentFrom + 1;
@@ -745,6 +748,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         TCell from, to;
         const auto range = CreateRangeFrom(userTable, parent, from, to);
         if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
+            LOG_D("TEvLocalKMeansRequst " << request.GetId() << " parent " << parent << " is empty");
             continue;
         }
 
@@ -758,6 +762,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         };
         MakeScan(request, createScan, badRequest);
         if (!scan) {
+            Y_ASSERT(!result);
             return;
         }
 

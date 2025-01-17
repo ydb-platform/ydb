@@ -585,7 +585,13 @@ private:
         };
 
         auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
-        LOG_D("TTxBuildProgress: TEvReshuffleKMeansRequest: " << ev->Record.ShortDebugString());
+        [[maybe_unused]] auto toDebugStr = [&](const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record) {
+            auto r = record;
+            // clusters are not human readable and can be large like 100Kb+
+            r.ClearClusters();
+            return r.ShortDebugString();
+        };
+        LOG_D("TTxBuildProgress: TEvReshuffleKMeansRequest: " << toDebugStr(ev->Record));
 
         ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
     }
@@ -799,6 +805,7 @@ private:
         if (buildInfo.Cluster2Shards.empty()) {
             return false;
         }
+        Y_ASSERT(buildInfo.KMeans.Parent != 0);
         for (const auto& [to, state] : buildInfo.Cluster2Shards) {
             if (const auto& [from, local, global] = state; local != InvalidShardIdx) {
                 if (const auto* status = buildInfo.Shards.FindPtr(local)) {
@@ -1204,14 +1211,15 @@ public:
         }
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, TStringBuilder() << "From: " << shardRange.From.GetCells().size() << "To: " << shardRange.To.GetCells().size());
+        static constexpr std::string_view LogPrefix = "";
+        LOG_D("infinite range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
 
         buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
             Y_ABORT_UNLESS(Self->ShardInfos.contains(x.ShardIdx));
             TSerializedCellVec bound{x.EndOfRange};
             shardRange.To = bound;
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, TStringBuilder() << "From: " << shardRange.From.GetCells().size() << "To: " << shardRange.To.GetCells().size());
+            LOG_D("shard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
             buildInfo.AddParent(shardRange, x.ShardIdx);
             auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), ""});
             Y_ASSERT(emplaced);
@@ -1382,9 +1390,15 @@ public:
             return true;
         }
         auto& buildInfo = *buildInfoPtr->Get();
+        [[maybe_unused]] auto toDebugStr = [&](const NKikimrTxDataShard::TEvSampleKResponse& record) {
+            auto r = record;
+            // rows are not human readable and can be large like 100Kb+
+            r.ClearRows();
+            return r.ShortDebugString();
+        };
         LOG_D("TTxReply : TEvSampleKResponse"
               << ", TIndexBuildInfo: " << buildInfo
-              << ", record: " << record.ShortDebugString());
+              << ", record: " << toDebugStr(record));
 
         TTabletId shardId = TTabletId(record.GetTabletId());
         if (!Self->TabletIdToShardIdx.contains(shardId)) {

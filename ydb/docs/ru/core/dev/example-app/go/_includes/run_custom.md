@@ -13,7 +13,7 @@ go run ./basic -ydb="<endpoint>?database=<database>" )
 
 - `<endpoint>` - [эндпоинт](../../../../concepts/connect.md#endpoint).
 - `<database>` - [путь базы данных](../../../../concepts/connect.md#database).
-- `<auth_mode_var`> - [переменная окружения](../../../../reference/ydb-sdk/auth.md#env), определяющая режим аутентификации.
+- `<auth_mode_var>` - [переменная окружения](../../../../reference/ydb-sdk/auth.md#env), определяющая режим аутентификации.
 - `<auth_mode_value>` - значение параметра аутентификации для выбранного режима.
 
 Например:

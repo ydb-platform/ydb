@@ -308,6 +308,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MapJoinShardMinRows);
     REGISTER_SETTING(*this, MapJoinShardCount).Lower(1).Upper(10);
     REGISTER_SETTING(*this, MapJoinUseFlow);
+    REGISTER_SETTING(*this, BlockMapJoin);
     REGISTER_SETTING(*this, EvaluationTableSizeLimit).Upper(10_MB); // Max 10Mb
     REGISTER_SETTING(*this, LookupJoinLimit).Upper(10_MB); // Same as EvaluationTableSizeLimit
     REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(10000);

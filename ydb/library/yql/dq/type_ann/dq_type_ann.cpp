@@ -619,11 +619,37 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     if (!EnsureArgsCount(*input, 11, ctx)) {
         return TStatus::Error;
     }
+    if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_Output), ctx)) {
+        return TStatus::Error;
+    }
+    if (!TDqOutput::Match(input->Child(TDqCnStreamLookup::idx_Output))) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Child(TDqCnStreamLookup::idx_Output)->Pos()), TStringBuilder() << "Expected " << TDqOutput::CallableName()));
+        return TStatus::Error;
+    }
     if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_LeftLabel), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_RightInput), ctx)) {
         return TStatus::Error;
     }
     if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_RightLabel), ctx)) {
         return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_JoinType), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureTuple(*input->Child(TDqCnStreamLookup::idx_JoinKeys), ctx)) {
+        return TStatus::Error;
+    }
+    for (auto& child: input->Child(TDqCnStreamLookup::idx_JoinKeys)->Children()) {
+        if (!EnsureTupleSize(*child, 4, ctx)) {
+            return TStatus::Error;
+        }
+        for (auto& subChild: child->Children()) {
+            if (!EnsureAtom(*subChild, ctx)) {
+                return TStatus::Error;
+            }
+        }
     }
     if (!EnsureTupleOfAtoms(*input->Child(TDqCnStreamLookup::idx_LeftJoinKeyNames), ctx)) {
         return TStatus::Error;
@@ -631,7 +657,13 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     if (!EnsureTupleOfAtoms(*input->Child(TDqCnStreamLookup::idx_RightJoinKeyNames), ctx)) {
         return TStatus::Error;
     }
-    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_JoinType), ctx)) {
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_TTL), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_MaxDelayedRows), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_MaxCachedRows), ctx)) {
         return TStatus::Error;
     }
     auto cnStreamLookup = TDqCnStreamLookup(input);
@@ -641,9 +673,6 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     }
     if (auto joinType = cnStreamLookup.JoinType(); joinType != TStringBuf("Left")) {
         ctx.AddError(TIssue(ctx.GetPosition(joinType.Pos()), "Streamlookup supports only LEFT JOIN ... ANY"));
-        return TStatus::Error;
-    }
-    if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_RightInput), ctx)) {
         return TStatus::Error;
     }
     auto rightInput = cnStreamLookup.RightInput();

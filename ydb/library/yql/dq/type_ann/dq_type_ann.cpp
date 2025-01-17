@@ -616,6 +616,24 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureArgsCount(*input, 10, ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_LeftLabel), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_RightLabel), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureTupleOfAtoms(*input->Child(TDqCnStreamLookup::idx_LeftJoinKeyNames), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureTupleOfAtoms(*input->Child(TDqCnStreamLookup::idx_RightJoinKeyNames), ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_JoinType), ctx)) {
+        return TStatus::Error;
+    }
     auto cnStreamLookup = TDqCnStreamLookup(input);
     auto leftInputType = GetDqConnectionType(TDqConnection(input), ctx);
     if (!leftInputType) {
@@ -625,26 +643,28 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         ctx.AddError(TIssue(ctx.GetPosition(joinType.Pos()), "Streamlookup supports only LEFT JOIN ... ANY"));
         return TStatus::Error;
     }
+    if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_RightInput), ctx)) {
+        return TStatus::Error;
+    }
     auto rightInput = cnStreamLookup.RightInput();
     if (!rightInput.Raw()->IsCallable("TDqLookupSourceWrap")) {
-        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), "Unknown DqCnStreamLookup RightInput type (must be TDqLookupSourceWrap)"));
+        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), TStringBuilder() << "DqCnStreamLookup: RightInput: Expected TDqLookupSourceWrap, but got " << rightInput));
         return TStatus::Error;
     }
-    const auto leftRowType = GetSeqItemType(leftInputType);
-    if (!leftRowType) {
-        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), "DqCnStreamLookup: Failed to annotate left row type"));
+    const auto& leftRowType = GetSeqItemType(*leftInputType);
+    if (!EnsureStructType(input->Pos(), leftRowType, ctx)) {
         return TStatus::Error;
     }
-    const auto rightRowType = GetSeqItemType(rightInput.Raw()->GetTypeAnn());
-    if (!rightRowType) {
-        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), "DqCnStreamLookup: Failed to annotate right row type"));
+    const auto rightInputType = rightInput.Raw()->GetTypeAnn();
+    const auto& rightRowType = GetSeqItemType(*rightInputType);
+    if (!EnsureStructType(input->Pos(), rightRowType, ctx)) {
         return TStatus::Error;
     }
     const auto outputRowType = GetDqJoinResultType<true>(
         input->Pos(),
-        *leftRowType->Cast<TStructExprType>(),
+        *leftRowType.Cast<TStructExprType>(),
         cnStreamLookup.LeftLabel().Cast<TCoAtom>().StringValue(),
-        *rightRowType->Cast<TStructExprType>(),
+        *rightRowType.Cast<TStructExprType>(),
         cnStreamLookup.RightLabel().StringValue(),
         cnStreamLookup.JoinType().StringValue(),
         cnStreamLookup.JoinKeys(),

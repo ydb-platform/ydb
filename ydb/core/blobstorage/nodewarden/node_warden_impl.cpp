@@ -968,11 +968,17 @@ bool ObtainKey(TEncryptionKey *key, const NKikimrProto::TKeyRecord& record) {
     return true;
 }
 
-bool NKikimr::ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig) {
-    if (keyConfig.KeysSize()) {
-        // TODO(cthulhu): process muliple keys here.
-        auto &record = keyConfig.GetKeys(0);
-        return ObtainKey(key, record);
+bool NKikimr::ObtainTenantKeys(TEncryptionKeys *keys, const NKikimrProto::TKeyConfig& keyConfig) {
+    ui32 keysSize = keyConfig.KeysSize();
+    if (keysSize) {
+        TVector<TEncryptionKey> encryptionKeys(keysSize);
+        for (ui32 i = 0; i < keysSize; ++i) {
+            const auto& record = keyConfig.GetKeys(i);
+            if (!ObtainKey(&encryptionKeys[i], record)) {
+                return false;
+            }
+        }
+        return keys->Init(encryptionKeys.begin(), encryptionKeys.end());
     } else {
         STLOG(PRI_INFO, BS_NODE, NW66, "No Keys in KeyConfig! Encrypted group DsProxies will not start");
         return false;
@@ -1052,7 +1058,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     } else {
         config->ClearSelfManagementConfig();
     }
-    
+
     const auto& bsFrom = appConfig.GetBlobStorageConfig();
     auto *bsTo = config->MutableBlobStorageConfig();
 
@@ -1274,11 +1280,13 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     return true;
 }
 
-bool NKikimr::ObtainStaticKey(TEncryptionKey *key) {
+bool NKikimr::ObtainStaticKeys(TEncryptionKeys *keys) {
     // TODO(cthulhu): Replace this with real data
-    key->Key.SetKey((ui8*)"TestStaticKey", 13);
-    key->Version = 1;
-    key->Id = "TestStaticKeyId";
+    TEncryptionKey key;
+    key.Key.SetKey((ui8*)"TestStaticKey", 13);
+    key.Version = 1;
+    key.Id = "TestStaticKeyId";
+    keys->Init(&key, &key + 1);
     return true;
 }
 

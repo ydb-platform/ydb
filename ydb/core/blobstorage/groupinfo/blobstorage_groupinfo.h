@@ -49,7 +49,7 @@ struct TEncryptionKey {
     TString Id;
 
     TString ToString() const {
-        return TStringBuilder() << "{Id# '" << EscapeC(Id) << "' Version# " << Version << "}";
+        return TStringBuilder() << *this;
     }
 
     explicit operator bool() const { // returns true if the key is set
@@ -59,6 +59,68 @@ struct TEncryptionKey {
     explicit operator const TCypherKey&() const {
         return Key;
     }
+};
+
+// encryption keys set for the group:
+// current key for write, all keys for read
+class TEncryptionKeys {
+public:
+    template <class TIterator>
+    bool Init(TIterator begin, TIterator end) {
+        Keys.clear();
+        Keys.insert(Keys.end(), begin, end);
+
+        if (Keys) {
+            std::sort(Keys.begin(), Keys.end(), [&](const TEncryptionKey& l, const TEncryptionKey& r) {
+                return l.Version > r.Version;
+            });
+
+            // check versions
+            auto prev = Keys.begin();
+            auto next = prev; ++next;
+            for (; next != Keys.end(); prev = next, ++next) {
+                if (prev->Version == next->Version) {
+                    Cerr << "Two encryption keys \"" << prev->Id << "\" and \"" << next->Id
+                         << "\" have the same version #" << prev->Version << Endl;
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    auto begin() const {
+        return Keys.begin();
+    }
+
+    auto end() const {
+        return Keys.end();
+    }
+
+    TString ToString() const {
+        return TStringBuilder() << *this;
+    }
+
+    explicit operator bool() const { // returns true if key is set
+        return Keys && Keys.front();
+    }
+
+    explicit operator const TCypherKey&() const {
+        return Keys ? Keys.front().Key : EmptyCypherKey; // current key is key with max version
+    }
+
+    const TEncryptionKey& GetCurrentEncryptionKey() const {
+        Y_ABORT_UNLESS(Keys);
+        return Keys.front();
+    }
+
+    const TVector<TEncryptionKey>& GetKeys() const {
+        return Keys;
+    }
+
+private:
+    static TCypherKey EmptyCypherKey;
+    TVector<TEncryptionKey> Keys; // Keys. The first key is the newest. We will try it first
 };
 
 // current state of storage group
@@ -324,7 +386,7 @@ public:
     ~TBlobStorageGroupInfo();
 
     static TIntrusivePtr<TBlobStorageGroupInfo> Parse(const NKikimrBlobStorage::TGroupInfo& group,
-        const TEncryptionKey *key, IOutputStream *err);
+        const TEncryptionKeys *keys, IOutputStream *err);
 
     static bool DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMode encryptionMode, const TString& mainKeyId,
         const TString& encryptedGroupKey, ui64 groupKeyNonce, const TCypherKey& tenantKey, TCypherKey *outGroupKey,
@@ -519,4 +581,24 @@ inline void Out<NKikimr::TBlobStorageGroupInfo::ELifeCyclePhase>(IOutputStream& 
         o << "KEY_NOT_LOADED";
         break;
     }
+}
+
+template<>
+inline void Out<NKikimr::TEncryptionKey>(IOutputStream& o, const NKikimr::TEncryptionKey& k) {
+    o << "{Id# '" << EscapeC(k.Id) << "' Version# " << k.Version << "}";
+}
+
+template<>
+inline void Out<NKikimr::TEncryptionKeys>(IOutputStream& o, const NKikimr::TEncryptionKeys& k) {
+    bool keyPrinted = false;
+    o << '[';
+    for (const NKikimr::TEncryptionKey& key : k) {
+        if (!keyPrinted) {
+            keyPrinted = true;
+        } else {
+            o << ", ";
+        }
+        o << key;
+    }
+    o << ']';
 }

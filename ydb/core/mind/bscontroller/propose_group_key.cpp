@@ -46,10 +46,10 @@ public:
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK04, "Group LifeCyclePhase does not match ELCP_INITIAL",
                 (GroupId.GetRawId(), GroupId.GetRawId()), (LifeCyclePhase, group->LifeCyclePhase.GetOrElse(0)));
             IsAnotherTxInProgress = (group->LifeCyclePhase.GetOrElse(0) == TBlobStorageGroupInfo::ELCP_IN_TRANSITION);
-        } else if (group->MainKeyVersion.GetOrElse(0) != (MainKeyVersion - 1)) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK05, "Group MainKeyVersion does not match required MainKeyVersion",
+        } else if (group->MainKeyVersion && *group->MainKeyVersion > MainKeyVersion) {
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK05, "Can't decrease key version",
                 (GroupId.GetRawId(), GroupId.GetRawId()), (MainKeyVersion, group->MainKeyVersion.GetOrElse(0)),
-                (RequiredMainKeyVersion, MainKeyVersion - 1));
+                (NewMainKeyVersion, MainKeyVersion));
         } else if (EncryptedGroupKey.size() != 32 + sizeof(ui32)) {
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK06, "Group does not accept EncryptedGroupKey size",
                 (GroupId.GetRawId(), GroupId.GetRawId()), (EncryptedGroupKeySize, EncryptedGroupKey.size()),

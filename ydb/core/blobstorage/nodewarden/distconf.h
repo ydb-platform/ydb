@@ -648,7 +648,7 @@ namespace NKikimr::NStorage {
             }
 
             TStringStream err;
-            TIntrusivePtr<TBlobStorageGroupInfo> info = TBlobStorageGroupInfo::Parse(group, &nwConfig.StaticKey, &err);
+            TIntrusivePtr<TBlobStorageGroupInfo> info = TBlobStorageGroupInfo::Parse(group, &nwConfig.StaticKeys, &err);
             if (!info) {
                 return makeError(TStringBuilder() << "failed to parse static group " << groupId << ": " << err.Str());
             }

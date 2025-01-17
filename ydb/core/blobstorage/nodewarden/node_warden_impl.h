@@ -197,7 +197,7 @@ namespace NKikimr::NStorage {
         TControlWrapper PredictedDelayMultiplier;
         TControlWrapper PredictedDelayMultiplierHDD;
         TControlWrapper PredictedDelayMultiplierSSD;
-    
+
         TControlWrapper MaxNumOfSlowDisks;
         TControlWrapper MaxNumOfSlowDisksHDD;
         TControlWrapper MaxNumOfSlowDisksSSD;
@@ -500,10 +500,10 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TBlobStorageGroupInfo> NeedGroupInfo(ui32 groupId);
 
         // propose group key
-        void ProposeKey(ui32 groupId, const TEncryptionKey& mainKey, const NKikimrBlobStorage::TGroupInfo& encryptionParams);
+        void ProposeKey(ui32 groupId, const TEncryptionKeys& tenantKeys, const NKikimrBlobStorage::TGroupInfo& encryptionParams);
 
         // get encryption key for the group
-        TEncryptionKey& GetGroupMainKey(ui32 groupId);
+        TEncryptionKeys& GetGroupMainKeys(ui32 groupId);
 
         // process group information structure
         void ApplyGroupInfo(ui32 groupId, ui32 generation, const NKikimrBlobStorage::TGroupInfo *newGroup, bool fromController,

@@ -19,6 +19,7 @@ namespace NKikimr::NGRpcService {
 using TEvRangeKVRequest = TGrpcRequestOperationCall<etcdserverpb::RangeRequest, etcdserverpb::RangeResponse>;
 using TEvPutKVRequest = TGrpcRequestOperationCall<etcdserverpb::PutRequest, etcdserverpb::PutResponse>;
 using TEvDeleteRangeKVRequest = TGrpcRequestOperationCall<etcdserverpb::DeleteRangeRequest, etcdserverpb::DeleteRangeResponse>;
+using TEvCompactKVRequest = TGrpcRequestOperationCall<etcdserverpb::CompactionRequest, etcdserverpb::CompactionResponse>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -37,11 +38,24 @@ TString DecrementKey(TString key) {
     return TString();
 }
 
+void MakeSimplePredicate(const TString& key, const TString& rangeEnd, TStringBuilder& sql, NYdb::TParamsBuilder& params) {
+    sql << "where ";
+    if (rangeEnd.empty())
+        sql << "`key` = $Key";
+    else if (rangeEnd == key)
+        sql << "startswith(`key`,$Key)";
+    else {
+        params.AddParam("$RangeEnd").String(rangeEnd).Build();
+        sql << "`key` between $Key and $RangeEnd";
+    }
+    params.AddParam("$Key").String(key).Build();
+}
+
 template <typename TDerived>
 class TBaseEtcdRequest {
 protected:
     virtual bool ParseGrpcRequest() = 0;
-    virtual std::pair<TString, NYdb::TParams> MakeQueryAndParams() const = 0;
+    virtual void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const = 0;
     virtual void ReplyWith(const NYdb::TResultSets& results) = 0;
 
     i64 Revision;
@@ -297,16 +311,16 @@ protected:
     NWilson::TSpan Span_;
 };
 
-template <typename TDerived, typename TRequest, NACLib::EAccessRights AccessRights>
+template <typename TDerived, typename TRequest>
 class TEtcdRequestGrpc
     : public TEtcdOperationRequestActor<TDerived, TRequest>
-    , public TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest, AccessRights>>
+    , public TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest>>
 {
 public:
     using TBase = TEtcdOperationRequestActor<TDerived, TRequest>;
     using TBase::TBase;
 
-    friend class TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest, AccessRights>>;
+    friend class TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest>>;
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
@@ -316,10 +330,13 @@ public:
     }
 private:
     void SendDatabaseRequest() {
-        const auto& query = this->MakeQueryAndParams();
+        TStringBuilder sql;
+        NYdb::TParamsBuilder params;
+        this->MakeQueryWithParams(sql, params);
+        Cerr << Endl << sql << Endl;
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        NEtcd::AppData()->Client->ExecuteQuery(query.first, NYdb::NQuery::TTxControl::NoTx(), query.second).Subscribe([my, ass](const auto& future) {
+        NEtcd::AppData()->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(), params.Build()).Subscribe([my, ass](const auto& future) {
             if (const auto res = future.GetValueSync(); res.IsSuccess())
                 ass->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
             else
@@ -346,9 +363,9 @@ private:
 };
 
 class TRangeRequest
-    : public TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest, NACLib::SelectRow> {
+    : public TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest> {
 public:
-    using TBase = TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest, NACLib::SelectRow>;
+    using TBase = TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest>;
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
@@ -368,9 +385,7 @@ private:
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
-    std::pair<TString, NYdb::TParams> MakeQueryAndParams() const final {
-        TStringBuilder sql;
-        sql << "declare $Key as String;" << Endl;
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
         sql << "select ";
         if (CountOnly)
             sql << "count(*)";
@@ -379,23 +394,17 @@ private:
         else
             sql << "`key`,`value`,`created`,`modified`,`version`,`lease`";
         sql << Endl << "from ";
-        const bool fromHistory = Revision || MinCreateRevision || MaxCreateRevision || MinModificateRevision || MaxModificateRevision;
+        const bool fromHistory = KeyRevision || MinCreateRevision || MaxCreateRevision || MinModificateRevision || MaxModificateRevision;
         sql << '`' << (fromHistory ? "verhaal" : "huidig") << '`' << Endl;
-        sql << "where ";
-        if (RangeEnd.empty())
-            sql << "`key` = $Key";
-        else if (RangeEnd == Key)
-            sql << "startswith(`key`,$Key)";
-        if (Limit)
-            sql << "LIMIT " << Limit;
+
+        MakeSimplePredicate(Key, RangeEnd, sql, params);
+
+        if (Limit) {
+            sql << Endl << "LIMIT $Limit";
+            params.AddParam("$Limit").Uint64(Limit).Build();
+        }
 
         sql << ';' << Endl;
-
-        auto params = NYdb::TParamsBuilder()
-            .AddParam("$Key").String(Key).Build()
-            .Build();
-
-        return {sql, params};
     }
 
     void ReplyWith(const NYdb::TResultSets& results) final {
@@ -433,16 +442,16 @@ private:
 
     TString Key, RangeEnd;
     bool KeysOnly, CountOnly;
-    i64 Limit;
+    ui64 Limit;
     i64 KeyRevision;
     i64 MinCreateRevision, MaxCreateRevision;
     i64 MinModificateRevision, MaxModificateRevision;
 };
 
 class TPutRequest
-    : public TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest, NACLib::UpdateRow> {
+    : public TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest> {
 public:
-    using TBase = TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest, NACLib::UpdateRow>;
+    using TBase = TEtcdRequestGrpc<TPutRequest, TEvPutKVRequest>;
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
@@ -458,15 +467,7 @@ private:
         return !Key.empty();
     }
 
-    std::pair<TString, NYdb::TParams> MakeQueryAndParams() const final {
-        TStringBuilder sql;
-        sql << "declare $Revision as Int64;" << Endl;
-        sql << "declare $Key as String;" << Endl;
-        if (!IgnoreValue)
-            sql << "declare $Value as String;" << Endl;
-        if (!IgnoreLease)
-            sql << "declare $Lease as Int64;" << Endl;
-
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
         const bool update = IgnoreValue || IgnoreLease;
         sql << Endl << NResource::Find(update ? "update.sql" : "upsert.sql") << Endl;
 
@@ -476,14 +477,10 @@ private:
 
         sql << Endl << "do $up" << (update ? "date" : "sert") << "($Revision,$Key," << (IgnoreValue ? "NULL" : "$Value") << ',' << (IgnoreLease ? "NULL" : "$Lease") << ");" << Endl;
 
-        auto params = NYdb::TParamsBuilder()
-            .AddParam("$Key").String(Key).Build()
-            .AddParam("$Revision").Int64(Revision).Build()
-            .AddParam("$Value").String(Value).Build()
-            .AddParam("$Lease").Int64(Lease).Build()
-            .Build();
-
-        return {sql, params};
+        params.AddParam("$Key").String(Key).Build();
+        params.AddParam("$Revision").Int64(Revision).Build();
+        params.AddParam("$Value").String(Value).Build();
+        params.AddParam("$Lease").Int64(Lease).Build();
     }
 
     void ReplyWith(const NYdb::TResultSets& results) final {
@@ -517,9 +514,9 @@ private:
 };
 
 class TDeleteRangeRequest
-    : public TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest, NACLib::EraseRow> {
+    : public TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest> {
 public:
-    using TBase = TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest, NACLib::EraseRow>;
+    using TBase = TEtcdRequestGrpc<TDeleteRangeRequest, TEvDeleteRangeKVRequest>;
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
@@ -532,28 +529,79 @@ private:
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
-    std::pair<TString, NYdb::TParams> MakeQueryAndParams() const final {
-        TStringBuilder sql;
-        sql << "declare $Key as String;" << Endl;
-///////
-        auto params = NYdb::TParamsBuilder()
-            .AddParam("$Key").String(Key).Build()
-            .Build();
-        return {sql, params};
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
+        TStringBuilder where;
+        MakeSimplePredicate(Key, RangeEnd, where, params);
+        sql << "select count(*) from `huidig` " << where << ';' << Endl;
+        if (GetPrevious) {
+            sql << "select `key`,`value`, `created`, `modified`, `version`,`lease` from `huidig` " << where << ';' << Endl;
+        }
+        sql << "delete from `huidig` " << where << ';' << Endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets&) final {
+    void ReplyWith(const NYdb::TResultSets& results) final {
         etcdserverpb::DeleteRangeResponse response;
         const auto header = response.mutable_header();
         header->set_revision(Revision);
         header->set_cluster_id(0ULL);
         header->set_member_id(0ULL);
         header->set_raft_term(0ULL);
+
+        if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow()) {
+            response.set_deleted(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
+        }
+
+        if (GetPrevious && results.size() > 1U) {
+            auto parser = NYdb::TResultSetParser(results.back());
+            while (parser.TryNextRow()) {
+                const auto kvs = response.add_prev_kvs();
+                kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
+                kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
+                kvs->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
+                kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
+                kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
+                kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+            }
+        }
+
         this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
     }
 
     TString Key, RangeEnd;
     bool GetPrevious = false;
+};
+
+class TCompactRequest
+    : public TEtcdRequestGrpc<TCompactRequest, TEvCompactKVRequest> {
+public:
+    using TBase = TEtcdRequestGrpc<TCompactRequest, TEvCompactKVRequest>;
+    using TBase::TBase;
+private:
+    bool ParseGrpcRequest() final {
+        Revision = NEtcd::AppData()->Revision.load();
+
+        const auto &rec = *GetProtoRequest();
+        KeyRevision = rec.revision();
+        return KeyRevision > 0 && KeyRevision < Revision;
+    }
+
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
+        sql << "delete from `verhaal` where `modified` <= $Revision;" << Endl;
+        params.AddParam("$Revision").Int64(KeyRevision).Build();
+    }
+
+    void ReplyWith(const NYdb::TResultSets&) final {
+        etcdserverpb::CompactionResponse response;
+        const auto header = response.mutable_header();
+        header->set_revision(Revision);
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+
+        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+    }
+
+    i64 KeyRevision;
 };
 
 }
@@ -568,6 +616,10 @@ NActors::IActor* MakePut(IRequestOpCtx* p) {
 
 NActors::IActor* MakeDeleteRange(IRequestOpCtx* p) {
     return new TDeleteRangeRequest(p);
+}
+
+NActors::IActor* MakeCompact(IRequestOpCtx* p) {
+    return new TCompactRequest(p);
 }
 
 } // namespace NKikimr::NGRpcService

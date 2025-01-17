@@ -479,34 +479,35 @@ void TEtcdGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TL
 void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
-#define SETUP_METHOD_RAW(methodName, rlMode, serviceType, serviceName, counterName)    \
-    MakeIntrusive<NGRpcService::TGRpcRequest<                                                              \
-        etcdserverpb::Y_CAT(methodName, Request),                                                       \
-        etcdserverpb::Y_CAT(methodName, Response),                                                       \
-        T##serviceType##GRpcService>>                                                                         \
-    (                                                                                                          \
-        this,                                                                                                   \
-        &Service_,                                                                                              \
-        CQ,                                                                                                     \
-        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                                      \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                                \
-            ActorSystem->Register(Make##methodName(new TEtcdRequestOperationCall<                              \
-                etcdserverpb::Y_CAT(methodName, Request),                                                \
-                etcdserverpb::Y_CAT(methodName, Response)>(reqCtx)                   \
-            ));           \
-        },                                                                                                      \
-        &etcdserverpb::serviceName::AsyncService::Y_CAT(Request, methodName),          \
-        Y_STRINGIZE(serviceType) "/" Y_STRINGIZE(methodName),                                               \
-        logger,                                                                                                 \
-        getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                                  \
+#define SETUP_METHOD_RAW(methodName, secondName, rlMode, serviceType, serviceName, counterName)    \
+    MakeIntrusive<NGRpcService::TGRpcRequest<                                                      \
+        etcdserverpb::Y_CAT(secondName, Request),                                                  \
+        etcdserverpb::Y_CAT(secondName, Response),                                                 \
+        T##serviceType##GRpcService>>                                                              \
+    (                                                                                              \
+        this,                                                                                      \
+        &Service_,                                                                                 \
+        CQ,                                                                                        \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                            \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                     \
+            ActorSystem->Register(Make##methodName(new TEtcdRequestOperationCall<                  \
+                etcdserverpb::Y_CAT(secondName, Request),                                          \
+                etcdserverpb::Y_CAT(secondName, Response)>(reqCtx)                                 \
+            ));                                                                                    \
+        },                                                                                         \
+        &etcdserverpb::serviceName::AsyncService::Y_CAT(Request, methodName),                      \
+        Y_STRINGIZE(serviceType) "/" Y_STRINGIZE(methodName),                                      \
+        logger,                                                                                    \
+        getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                         \
     )->Run()
 
-    #define SETUP_ETCD_KV_METHOD(methodName) \
-        SETUP_METHOD_RAW(methodName,Rps,Etcd,KV,etcd)
+    #define SETUP_ETCD_KV_METHOD(methodName, secondName) \
+        SETUP_METHOD_RAW(methodName,secondName,Rps,Etcd,KV,etcd)
 
-    SETUP_ETCD_KV_METHOD(Range);
-    SETUP_ETCD_KV_METHOD(Put);
-    SETUP_ETCD_KV_METHOD(DeleteRange);
+    SETUP_ETCD_KV_METHOD(Range,Range);
+    SETUP_ETCD_KV_METHOD(Put,Put);
+    SETUP_ETCD_KV_METHOD(DeleteRange,DeleteRange);
+    SETUP_ETCD_KV_METHOD(Compact,Compaction);
 
     #undef SETUP_ETCD_KV_METHOD
     #undef SETUP_METHOD_RAW

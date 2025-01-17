@@ -5149,6 +5149,60 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         }
     }
 
+    Y_UNIT_TEST(BrokenLockChangesDontLeak) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key Uint32, value Uint32, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table` (key, value) VALUES (1, 11);");
+
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                SELECT key, value FROM `/Root/table`
+                ORDER BY key;
+            )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table` (key, value) VALUES (2, 22);");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (3, 33);
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+            )"),
+            "ERROR: ABORTED");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        // Check shard doesn't have open transactions
+        {
+            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
+        }
+    }
+
 }
 
 } // namespace NKikimr

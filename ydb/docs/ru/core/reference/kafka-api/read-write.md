@@ -51,7 +51,7 @@
 - Консольные утилиты Kafka
 
   {% note info %}
- 
+
   При использовании консольных утилит Kafka с Java 23 и получении ошибки
   `java.lang.UnsupportedOperationException: getSubject is supported only if a security manager is allowed`
   , либо запустите команду, используя другую версию Java ([как сменить версию Java на macos](https://stackoverflow.com/questions/21964709/how-to-set-or-change-the-default-java-jdk-version-on-macos))
@@ -107,7 +107,7 @@
       }
   }
   ```
- 
+
 - Spark
 
   Apache Spark при работе с Kafka не использует ничего из существующих ограничений Kafka API в YDB Topics. Благодаря этому
@@ -142,9 +142,9 @@
       }
   }
   ```
- 
+
   В примере выше использовался apache spark 2.12:3.5.3 с зависимостью на `org.apache.spark:spark-streaming-kafka-0-10_2.12:3.5.3`
- 
+
 - Flink
 
   {% note info %}
@@ -186,7 +186,7 @@
         }
     }
   ```
- 
+
   В примере выше используется Apache Flink версии 1.20 и [flink datastream connector](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/connectors/datastream/kafka/) к Kafka.
 
 {% endlist %}
@@ -195,7 +195,9 @@
 
 ##### Ошибка Unexpected error in join group response
 
-Полный текст ошибки `Unexpected error in join group response: This most likely occurs because of a request being malformed by the client library or the message was sent to an incompatible broker. See the broker logs for more details.`.
+Полный текст ошибки
+`Unexpected error in join group response: This most likely occurs because of a request being malformed
+by the client library or the message was sent to an incompatible broker. See the broker logs for more details.`.
 
 Скорее всего проблема в том, что не указана консьюмер группа или указанная консьмер группа не существует в кластере YDB.
 
@@ -440,7 +442,7 @@
 
   props.put("check.crcs", false);
   props.put("partition.assignment.strategy", RoundRobinAssignor.class.getName());
- 
+
   props.put("security.protocol", "SASL_SSL");
   props.put("sasl.mechanism", "PLAIN");
   props.put("sasl.jaas.config", "sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"@<path_to_database>\" password=\"<api_key>\";");

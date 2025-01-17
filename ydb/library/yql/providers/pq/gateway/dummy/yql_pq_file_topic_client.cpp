@@ -135,7 +135,7 @@ private:
     }
     
     TFile File_;
-    TBlockingEQueue EventsQ_ {4_MB};
+    TBlockingEQueue<NYdb::NTopic::TReadSessionEvent::TEvent> EventsQ_ {4_MB};
     NYdb::NTopic::TPartitionSession::TPtr Session_;
     TString ProducerId_;
     std::thread FilePoller_;

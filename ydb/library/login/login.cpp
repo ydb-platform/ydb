@@ -353,9 +353,13 @@ bool TLoginProvider::ShouldUnlockAccount(const TSidRecord& sid) const {
 TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCheckLockOutRequest& request) {
     TCheckLockOutResponse response;
     auto itUser = Sids.find(request.User);
-    if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
+    if (itUser == Sids.end()) {
         response.Status = TCheckLockOutResponse::EStatus::INVALID_USER;
-        response.Error = "Invalid user";
+        response.Error = TStringBuilder() << "Cannot find user: " << request.User;
+        return response;
+    } else if (itUser->second.Type != ESidType::USER) {
+        response.Status = TCheckLockOutResponse::EStatus::INVALID_USER;
+        response.Error = TStringBuilder() << request.User << " is a group";
         return response;
     }
 

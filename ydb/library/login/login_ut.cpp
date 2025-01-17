@@ -395,6 +395,27 @@ Y_UNIT_TEST_SUITE(Login) {
         }
     }
 
+    Y_UNIT_TEST(CannotCheckLockoutNonExistentUser) {
+        TLoginProvider provider;
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+
+        {
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = "nonExistentUser"});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::INVALID_USER);
+            UNIT_ASSERT_VALUES_EQUAL(checkLockoutResponse.Error, "Cannot find user: nonExistentUser");
+        }
+
+        {
+            auto createGroupResponse = provider.CreateGroup({.Group = "group1"});
+            UNIT_ASSERT(!createGroupResponse.Error);
+
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = "group1"});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::INVALID_USER);
+            UNIT_ASSERT_VALUES_EQUAL(checkLockoutResponse.Error, "group1 is a group");
+        }
+    }
+
     Y_UNIT_TEST(AccountLockoutAndAutomaticallyUnlock) {
         TAccountLockout::TInitializer accountLockoutInitializer {.AttemptThreshold = 4, .AttemptResetDuration = "3s"};
         TLoginProvider provider(accountLockoutInitializer);

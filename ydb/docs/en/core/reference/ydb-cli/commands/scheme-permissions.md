@@ -206,3 +206,12 @@ Command syntax:
 ```bash
 {{ ydb-cli }} [connection options] scheme permissions set-inheritance [options...] <path>
 ```
+
+Parameters:
+`<path>` — the full path from the cluster' root to the object whose permissions need to be modified.
+
+Example of a `set-inheritance` command:
+
+```bash
+{{ ydb-cli }} scheme permissions set-inheritance '/Root/db1'
+```

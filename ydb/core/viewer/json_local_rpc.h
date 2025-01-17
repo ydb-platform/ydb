@@ -146,9 +146,13 @@ public:
             auto result = MakeHolder<TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>>();
             if constexpr (TRpcEv::IsOp) {
                 if (response.operation().ready() && response.operation().status() == Ydb::StatusIds::SUCCESS) {
-                    TProtoResult rs;
-                    response.operation().result().UnpackTo(&rs);
-                    result->Message = std::move(rs);
+                    if (response.operation().has_result()) {
+                        TProtoResult rs;
+                        response.operation().result().UnpackTo(&rs);
+                        result->Message = std::move(rs);
+                    } else if constexpr (std::is_same_v<TProtoResult, Ydb::Operations::Operation>) {
+                        result->Message = std::move(response.operation());
+                    }
                 }
                 NYql::TIssues issues;
                 NYql::IssuesFromMessage(response.operation().issues(), issues);

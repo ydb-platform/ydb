@@ -1843,11 +1843,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     TString PostExecuteScript(TKeepAliveHttpClient& httpClient, TString query) {
         TStringStream requestBody;
-        requestBody
-            << "{ \"database\": \"/Root\","
-            << " \"script_content\": {"
-                << " \"text\": \"" << query << "\"},"
-            << " \"exec_mode\": \"EXEC_MODE_EXECUTE\" }";
+        requestBody << R"json({
+            "database": "/Root",
+            "script_content": { "text": ")json" << query << R"json(" },
+            "exec_mode": "EXEC_MODE_EXECUTE",
+            "stats_mode": "STATS_MODE_FULL" })json";
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
@@ -1872,6 +1872,22 @@ Y_UNIT_TEST_SUITE(Viewer) {
                                                             << "&database=%2FRoot", &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+
+        return response;
+    }
+
+    TString ListOperations(TKeepAliveHttpClient& httpClient) {
+        TStringStream requestBody;
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
+                                                            << "/operation/list?timeout=600000&kind=scriptexec"
+                                                            << "&database=%2FRoot", &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+
         return response;
     }
 
@@ -1932,6 +1948,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         response = GetOperation(httpClient, id);
         NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
         UNIT_ASSERT_EQUAL_C(json["issues"].GetArray().size(), 0, response);
+        UNIT_ASSERT_C(json.GetMap().contains("metadata"), response);
+        UNIT_ASSERT_C(json["metadata"].GetMap().contains("exec_stats"), response);
+        UNIT_ASSERT_C(json["metadata"].GetMap().at("exec_stats").GetMap().contains("process_cpu_time_us"), response);
+
+        response = ListOperations(httpClient);
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+        UNIT_ASSERT_EQUAL_C(json["operations"].GetArray().size(), 1, response);
+        UNIT_ASSERT_EQUAL_C(json["operations"].GetArray()[0]["id"], id, response);
 
         response = GetFetchScript(httpClient, id);
         NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);

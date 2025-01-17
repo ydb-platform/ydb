@@ -124,8 +124,10 @@ public:
         if (Database.empty()) {
             ListTenantsResponse = MakeRequestConsoleListTenants();
         } else {
-            TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
             NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
+            if (Database != DomainPath) {
+                TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
+            }
         }
 
         if (Database.empty() || Database == DomainPath) {
@@ -134,8 +136,8 @@ public:
             tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
             tenant.SetType(NKikimrViewer::Domain);
             tenant.SetName(DomainPath);
-            NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
             RequestMetadataCacheHealthCheck(DomainPath);
+            NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
         }
 
         HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);

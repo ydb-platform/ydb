@@ -208,9 +208,10 @@ public:
             TVector<TCoArgument> args;
 
             if (shouldBePassedAsInput) {
+                auto arg = Build<TCoArgument>(ctx, writePos).Name("in").Done();
                 stageInputs.Add(input);
-                args.push_back(Build<TCoArgument>(ctx, writePos).Name("in").Done());
-                toFlow.Input("in");
+                args.push_back(arg);
+                toFlow.Input(arg);
             }
             else {
                 toFlow.Input(input);

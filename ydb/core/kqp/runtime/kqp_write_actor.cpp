@@ -174,7 +174,6 @@ class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
         enum EEv {
             EvShardRequestTimeout = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
             EvResolveRequestPlanned,
-            EvTerminate,
         };
 
         struct TEvShardRequestTimeout : public TEventLocal<TEvShardRequestTimeout, EvShardRequestTimeout> {
@@ -186,9 +185,6 @@ class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
         };
 
         struct TEvResolveRequestPlanned : public TEventLocal<TEvResolveRequestPlanned, EvResolveRequestPlanned> {
-        };
-
-        struct TEvTerminate : public TEventLocal<TEvTerminate, EvTerminate> {
         };
     };
 
@@ -1307,6 +1303,7 @@ private:
         DirectWriteActorSpan.EndError(message);
 
         NYql::TIssue issue(message);
+        SetIssueCode(id, issue);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
         }
@@ -2089,7 +2086,8 @@ public:
     }
 
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
-        if (State != EState::ROLLINGBACK) {
+        if (State != EState::ROLLINGBACK && State != EState::FINISHED) {
+            CancelProposal();
             Rollback();
         }
         PassAway();

@@ -835,6 +835,13 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         KqpGroup->GetHistogram("SinkWrites/WriteActorWritesOperations", NMonitoring::ExponentialHistogram(20, 2, 1));
     WriteActorWritesLatencyHistogram =
         KqpGroup->GetHistogram("SinkWrites/WriteActorWritesLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+
+    BufferActorPrepareLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorPrepareLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+    BufferActorCommitLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorCommitLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+    BufferActorFlushLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorFlushLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
     
     ForwardActorWritesSizeHistogram =
         KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesSize", NMonitoring::ExponentialHistogram(28, 2, 1));

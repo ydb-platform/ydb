@@ -1662,6 +1662,7 @@ public:
         Counters->BufferActorFlushes->Inc();
         BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
             "BufferWriteActorState::Flushing", NWilson::EFlags::AUTO_END);
+        OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start flush");
         YQL_ENSURE(State == EState::WRITING);
@@ -1675,6 +1676,7 @@ public:
     void Prepare(const ui64 txId) {
         BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
             "BufferWriteActorState::Preparing", NWilson::EFlags::AUTO_END);
+        OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start prepare for distributed commit");
         YQL_ENSURE(State == EState::WRITING);
@@ -1696,6 +1698,7 @@ public:
         Counters->BufferActorImmediateCommits->Inc();
         BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
             "BufferWriteActorState::Committing", NWilson::EFlags::AUTO_END);
+        OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start immediate commit");
         YQL_ENSURE(State == EState::WRITING);
@@ -1716,6 +1719,7 @@ public:
         Counters->BufferActorDistributedCommits->Inc();
         BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
             "BufferWriteActorState::Committing", NWilson::EFlags::AUTO_END);
+        OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start distributed commit with TxId=" << *TxId);
         YQL_ENSURE(State == EState::PREPARING);
@@ -2309,6 +2313,10 @@ public:
         }
     }
 
+    void OnOperationFinished(NMonitoring::THistogramPtr latencyHistogramUs) {
+        latencyHistogramUs->Collect((TInstant::Now() - OperationStartTime).MicroSeconds());
+    }
+
     void ProcessPreparedTopic(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         if (State != EState::PREPARING) {
             CA_LOG_D("Ignored topic prepared event.");
@@ -2406,6 +2414,7 @@ public:
         }
         Y_UNUSED(preparedInfo, dataSize);
         if (TxManager->ConsumePrepareTransactionResult(std::move(preparedInfo))) {
+            OnOperationFinished(Counters->BufferActorPrepareLatencyHistogram);
             TxManager->StartExecute();
             Y_ABORT_UNLESS(GetTotalMemory() == 0);
             DistributedCommit();
@@ -2420,7 +2429,7 @@ public:
         }
         Y_UNUSED(dataSize);
         if (TxManager->ConsumeCommitResult(shardId)) {
-            CA_LOG_D("Committed");
+            OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
             State = EState::FINISHED;
             Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
                 BuildStats()
@@ -2441,7 +2450,7 @@ public:
         YQL_ENSURE(State == EState::FLUSHING);
         BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
             "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END);
-        CA_LOG_D("Flushed");
+        OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
         State = EState::WRITING;
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
             BuildStats()
@@ -2552,6 +2561,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
     THashMap<ui64, TInstant> SendTime;
+    TInstant OperationStartTime;
 
     NWilson::TSpan BufferWriteActor;
     NWilson::TSpan BufferWriteActorState;

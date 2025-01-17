@@ -1,5 +1,5 @@
 import ydb.tests.olap.load.lib.tpch as tpch
-from conftest import FunctionalTestBase
+from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 
 
 class TestTpchS1(tpch.TestTpch1, FunctionalTestBase):

@@ -433,7 +433,7 @@ TESTCASES = [
                 on(e.za = u.a AND e.yb = u.b)
             ;
 
-            $enriched2 = select a, b, c, d, e, f, za, yb, yc, zd, u.c as c2, u.d as d2
+            $enriched2 = SELECT e.a AS a, e.b AS b, e.c AS c, e.d AS d, e.e AS e, e.f AS f, za, yb, yc, zd, u.c AS c2, u.d AS d2
                 from
                     $enriched1 as e
                 left join {streamlookup} any ydb_conn_{table_name}.db as u

@@ -44,8 +44,7 @@ struct TPoolInfo {
     ui64 NewNotEnoughCpuExecutions = 0;
     ui16 LocalQueueSize;
 
-    std::atomic<i64> CurrentThreadCount = 0;
-
+    std::atomic<float> SharedCpuQuota = 0;
     std::atomic<i64> LastFlags = 0; // 0 - isNeedy; 1 - isStarved; 2 - isHoggish
     std::atomic<ui64> IncreasingThreadsByNeedyState = 0;
     std::atomic<ui64> IncreasingThreadsByExchange = 0;

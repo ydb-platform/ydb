@@ -564,7 +564,7 @@ namespace NActors {
     }
 
     float TBasicExecutorPool::GetThreadCount() const {
-        return GetFullThreadCount();
+        return GetFullThreadCount() + SharedCpuQuota.load(std::memory_order_relaxed);
     }
 
     i16 TBasicExecutorPool::GetFullThreadCount() const {
@@ -572,7 +572,7 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::SetFullThreadCount(i16 threads) {
-        threads = Max<i16>(0, Min(MaxFullThreadCount, threads));
+        threads = Max<i16>(MinFullThreadCount, Min(MaxFullThreadCount, threads));
         with_lock (ChangeThreadsLock) {
             i16 prevCount = GetFullThreadCount();
             AtomicSet(ThreadCount, threads);
@@ -791,6 +791,10 @@ namespace NActors {
         }
         ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " Shared_", PoolId, " TBasicExecutorPool::GetReadyActivation: stop");
         return nullptr;
+    }
+
+    void TBasicExecutorPool::SetSharedCpuQuota(float quota) {
+        SharedCpuQuota.store(quota, std::memory_order_release);
     }
 
 }

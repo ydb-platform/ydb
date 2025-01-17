@@ -166,9 +166,12 @@ void THarmonizer::ProcessNeedyState() {
         if (!CpuConsumption.IsNeedyByPool[needyPoolIdx]) {
             continue;
         }
-        i64 threadCount = pool.GetFullThreadCount();
+        float threadCount = pool.GetFullThreadCount() + SharedInfo.CpuConsumption[needyPoolIdx].CpuQuota;
 
-        if (ProcessingBudget >= 1.0 && threadCount < pool.MaxFullThreadCount) {
+        if (Shared && SharedInfo.ForeignThreadsAllowed[needyPoolIdx] == 0) {
+            Shared->SetForeignThreadSlots(needyPoolIdx, 1);
+            CpuConsumption.IsNeedyByPool[needyPoolIdx] = false;
+        } else if (ProcessingBudget >= 1.0 && threadCount + 1 <= pool.MaxFullThreadCount) {
             pool.IncreasingThreadsByNeedyState.fetch_add(1, std::memory_order_relaxed);
             CpuConsumption.IsNeedyByPool[needyPoolIdx] = false;
             CpuConsumption.AdditionalThreads++;
@@ -199,10 +202,17 @@ void THarmonizer::ProcessExchange() {
     for (size_t needyPoolIdx : CpuConsumption.NeedyPools) {
         TPoolInfo &pool = *Pools[needyPoolIdx];
         i64 threadCount = pool.GetFullThreadCount();
+
         sumOfAdditionalThreads -= threadCount - pool.DefaultFullThreadCount;
         if (sumOfAdditionalThreads < takingAwayThreads + 1) {
             break;
         }
+
+        if (Shared && SharedInfo.ForeignThreadsAllowed[needyPoolIdx] < static_cast<i16>(Pools.size())) {
+            Shared->SetForeignThreadSlots(needyPoolIdx, static_cast<i16>(Pools.size()));
+            CpuConsumption.IsNeedyByPool[needyPoolIdx] = false;
+        }
+
         if (!CpuConsumption.IsNeedyByPool[needyPoolIdx]) {
             continue;
         }
@@ -237,13 +247,16 @@ void THarmonizer::ProcessExchange() {
 
 void THarmonizer::ProcessHoggishState() {
     HARMONIZER_DEBUG_PRINT("ProcessHoggishState");
-    for (auto &[hoggishPoolIdx, freeCpu]  : CpuConsumption.HoggishPools) {
+    for (auto &[hoggishPoolIdx, freeCpu] : CpuConsumption.HoggishPools) {
         TPoolInfo &pool = *Pools[hoggishPoolIdx];
         i64 threadCount = pool.GetFullThreadCount();
         if (threadCount > pool.MinFullThreadCount && freeCpu >= 1) {
             pool.DecreasingThreadsByHoggishState.fetch_add(1, std::memory_order_relaxed);
             pool.SetFullThreadCount(threadCount - 1);
             LWPROBE_WITH_DEBUG(HarmonizeOperation, hoggishPoolIdx, pool.Pool->GetName(), "decrease by hoggish", threadCount - 1, pool.DefaultFullThreadCount, pool.MaxFullThreadCount);
+        }
+        if (threadCount == pool.MinFullThreadCount && Shared && SharedInfo.ForeignThreadsAllowed[hoggishPoolIdx] != 0) {
+            Shared->SetForeignThreadSlots(hoggishPoolIdx, 0);
         }
         if (pool.BasicPool && pool.LocalQueueSize > NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE) {
             pool.LocalQueueSize = std::min<ui16>(NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE, pool.LocalQueueSize / 2);
@@ -257,6 +270,13 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
     HARMONIZER_DEBUG_PRINT("HarmonizeImpl", "Iteration", Iteration.fetch_add(1, std::memory_order_relaxed));
     Y_UNUSED(ts);
 
+    for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
+        TPoolInfo &pool = *Pools[poolIdx];
+        pool.SharedCpuQuota.store(SharedInfo.CpuConsumption[poolIdx].CpuQuota, std::memory_order_relaxed);
+        if (pool.BasicPool) {
+            pool.BasicPool->SetSharedCpuQuota(SharedInfo.CpuConsumption[poolIdx].CpuQuota);
+        }
+    }
 
     ProcessWaitingStats();
 
@@ -404,6 +424,7 @@ TPoolHarmonizerStats THarmonizer::GetPoolStats(i16 poolId) const {
         .MinElapsedCpu = pool.MinElapsedCpu.load(std::memory_order_relaxed),
         .AvgElapsedCpu = pool.AvgElapsedCpu.load(std::memory_order_relaxed),
         .PotentialMaxThreadCount = pool.PotentialMaxThreadCount.load(std::memory_order_relaxed),
+        .SharedCpuQuota = pool.SharedCpuQuota.load(std::memory_order_relaxed),
         .IsNeedy = static_cast<bool>(flags & 1),
         .IsStarved = static_cast<bool>(flags & 2),
         .IsHoggish = static_cast<bool>(flags & 4),
@@ -445,6 +466,7 @@ TString TPoolHarmonizerStats::ToString() const {
         << "MinElapsedCpu: " << MinElapsedCpu << ", "
         << "AvgElapsedCpu: " << AvgElapsedCpu << ", "
         << "PotentialMaxThreadCount: " << PotentialMaxThreadCount << ", "
+        << "SharedCpuQuota: " << SharedCpuQuota << ", "
         << "IsNeedy: " << IsNeedy << ", "
         << "IsStarved: " << IsStarved << ", "
         << "IsHoggish: " << IsHoggish << '}';

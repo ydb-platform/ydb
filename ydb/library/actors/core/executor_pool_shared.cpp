@@ -146,7 +146,6 @@ namespace NActors {
             ACTORLIB_DEBUG(EDebugLevel::Lease, "Worker_", wctx.WorkerId, " TSharedExecutorPool::SwitchToPool: return lease; ownerPoolId == ", Threads[wctx.WorkerId].OwnerPoolId, " currentPoolId == ", Threads[wctx.WorkerId].CurrentPoolId, " poolId = ", poolId, " slots == ", slots, " -> ", slots + 1);
         }
         Threads[wctx.WorkerId].CurrentPoolId = poolId;
-        TlsThreadContext->Pool = Pools[poolId];
         Threads[wctx.WorkerId].SoftDeadlineForPool = Max<NHPTimer::STime>();
         Threads[wctx.WorkerId].Thread->SwitchPool(Pools[poolId]);
         ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", wctx.WorkerId, " TSharedExecutorPool::SwitchToPool: end; ownerPoolId == ", Threads[wctx.WorkerId].OwnerPoolId, " currentPoolId == ", Threads[wctx.WorkerId].CurrentPoolId, " poolId = ", poolId);
@@ -197,7 +196,7 @@ namespace NActors {
                 continue;
             }
             bool goToSleep = true;
-            for (i16 attempt = 0; attempt < 1; ++attempt) {
+            for (i16 attempt = 0; attempt < 2; ++attempt) {
                 ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: attempt == ", attempt, " ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                 if (i16 poolId = FindPoolForWorker(thread, revolvingCounter); poolId != -1) {
                     ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: found pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);

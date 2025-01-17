@@ -98,6 +98,8 @@ namespace NActors {
         Ctx.Stats = &SharedStats[pool->PoolId];
         Ctx.MailboxTable = pool->GetMailboxTable();
         Ctx.MailboxCache.Switch(Ctx.MailboxTable);
+        Ctx.Executor = pool;
+        TlsThreadContext->Pool = pool;
     }
 
     void TGenericExecutorThread::UnregisterActor(TMailbox* mailbox, TActorId actorId) {

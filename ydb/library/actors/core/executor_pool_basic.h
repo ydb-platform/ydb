@@ -129,8 +129,6 @@ namespace NActors {
         }
     };
 
-
-
     class TBasicExecutorPool: public TExecutorPoolBase {
         friend class TBasicExecutorPoolSanitizer;
         friend class TSharedExecutorPool;
@@ -163,6 +161,7 @@ namespace NActors {
         std::atomic<ui64> SpinningTimeUs;
 
         TAtomic ThreadCount;
+        std::atomic<float> SharedCpuQuota = 0.0;
         TMutex ChangeThreadsLock;
 
         float MinThreadCount;
@@ -279,11 +278,12 @@ namespace NActors {
 
         TSemaphore GetSemaphore() const;
         void SetSharedPool(TSharedExecutorPool* pool);
-
+        void SetSharedCpuQuota(float quota);
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 
         void WakeUpLoop(i16 currentThreadCount);
         bool WakeUpLoopShared();
+        
     };
 }

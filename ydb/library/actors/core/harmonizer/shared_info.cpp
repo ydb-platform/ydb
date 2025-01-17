@@ -10,25 +10,18 @@ void TSharedInfo::Pull(const ISharedPool& shared) {
     shared.FillOwnedThreads(OwnedThreads);
 
     for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
-        CpuConsumption[poolId].Elapsed = 0;
-        CpuConsumption[poolId].Cpu = 0;
-        CpuConsumption[poolId].CpuQuota = 0;
-    }
-
-    for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
         shared.GetSharedStatsForHarmonizer(poolId, ThreadStats);
         for (i16 threadId = 0; threadId < static_cast<i16>(ThreadStats.size()); ++threadId) {
             ui64 elapsed = std::exchange(CpuConsumptionByPool[poolId][threadId].Elapsed, ThreadStats[threadId].SafeElapsedTicks);
             CpuConsumptionByPool[poolId][threadId].DiffElapsed = CpuConsumptionByPool[poolId][threadId].Elapsed - elapsed;
-            Cerr << "Elapsed: " << elapsed << " DiffElapsed: " << CpuConsumptionByPool[poolId][threadId].DiffElapsed << Endl;
             ui64 cpu = std::exchange(CpuConsumptionByPool[poolId][threadId].Cpu, ThreadStats[threadId].CpuUs);
             CpuConsumptionByPool[poolId][threadId].DiffCpu = CpuConsumptionByPool[poolId][threadId].Cpu - cpu;
-            Cerr << "Cpu: " << cpu << " DiffCpu: " << CpuConsumptionByPool[poolId][threadId].DiffCpu << Endl;
             ui64 parked = std::exchange(CpuConsumptionByPool[poolId][threadId].Parked, ThreadStats[threadId].SafeParkedTicks);
             CpuConsumptionByPool[poolId][threadId].DiffParked = CpuConsumptionByPool[poolId][threadId].Parked - parked;
-            Cerr << "Parked: " << parked << " DiffParked: " << CpuConsumptionByPool[poolId][threadId].DiffParked << Endl;
         }
     }
+
+    bool isFirst = true;
 
     for (i16 threadId = 0; threadId < static_cast<i16>(ThreadStats.size()); ++threadId) {
         TStackVec<ui64, 8> elapsedByPool;
@@ -41,14 +34,28 @@ void TSharedInfo::Pull(const ISharedPool& shared) {
             parked += CpuConsumptionByPool[poolId][threadId].DiffParked;
         }
 
-        ui64 threadTime = std::accumulate(elapsedByPool.begin(), elapsedByPool.end(), 0) + parked;
+        ui64 threadTime = std::accumulate(elapsedByPool.begin(), elapsedByPool.end(), 0ull) + parked;
+        if (threadTime == 0) {
+            continue;
+        } else if (isFirst) {
+            isFirst = false;
+            for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
+                CpuConsumption[poolId].Elapsed = 0;
+                CpuConsumption[poolId].Cpu = 0;
+                CpuConsumption[poolId].CpuQuota = 0;
+            }
+        }
+
         
         for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
-            CpuConsumption[poolId].Elapsed += static_cast<float>(CpuConsumptionByPool[poolId][threadId].DiffElapsed) / threadTime;
-            CpuConsumption[poolId].Cpu += static_cast<float>(CpuConsumptionByPool[poolId][threadId].DiffCpu) / threadTime;
-            CpuConsumption[poolId].CpuQuota += static_cast<float>(CpuConsumptionByPool[poolId][threadId].DiffElapsed) / threadTime;
+            float elapsedCpu = static_cast<float>(CpuConsumptionByPool[poolId][threadId].DiffElapsed) / threadTime;
+            float cpu = static_cast<float>(CpuConsumptionByPool[poolId][threadId].DiffCpu) / threadTime;
+            CpuConsumption[poolId].Elapsed += elapsedCpu;
+            CpuConsumption[poolId].Cpu += cpu;
+            CpuConsumption[poolId].CpuQuota += elapsedCpu;
         }
-        CpuConsumption[ThreadOwners[threadId]].CpuQuota = static_cast<float>(parked) / threadTime;
+        float parkedCpu = static_cast<float>(parked) / threadTime;
+        CpuConsumption[ThreadOwners[threadId]].CpuQuota += parkedCpu;
     }
 }
 
@@ -64,6 +71,12 @@ void TSharedInfo::Init(i16 poolCount, const ISharedPool *shared) {
             CpuConsumptionByPool[i].resize(ThreadOwners.size());
         }
         ThreadStats.resize(ThreadOwners.size());
+        for (ui32 i = 0; i < ThreadOwners.size(); ++i) {
+            i16 owner = ThreadOwners[i];
+            if (owner >= 0 && owner < poolCount) {
+                CpuConsumption[owner].CpuQuota += 1.0f;
+            }
+        }
     }
 }
 

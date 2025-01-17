@@ -453,6 +453,34 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         UNIT_ASSERT_VALUES_EQUAL(resultLogin3.error(), "");
     }
 
+    Y_UNIT_TEST(BanUserWithWaiting) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
+        ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            Cerr << describe.DebugString() << Endl;
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "123");
+
+        for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {
+            auto resultLogin = Login(runtime, "user1", "wrongpassword");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        }
+
+        ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", false);
+
+        // FailedAttemptCount will reset in 1 hour
+        runtime.AdvanceCurrentTime(TDuration::Minutes(61));
+
+        auto resultLogin = Login(runtime, "user1", "123");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "User user1 is not permitted to log in");
+    }
+
     Y_UNIT_TEST(ChangeAcceptablePasswordParameters) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

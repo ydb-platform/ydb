@@ -17,30 +17,12 @@
 
 namespace NKikimr::NGRpcService {
 
-using namespace NActors;
-using namespace Ydb;
-
 using TEvRangeKVRequest = TGrpcRequestOperationCall<etcdserverpb::RangeRequest, etcdserverpb::RangeResponse>;
 using TEvPutKVRequest = TGrpcRequestOperationCall<etcdserverpb::PutRequest, etcdserverpb::PutResponse>;
 using TEvDeleteRangeKVRequest = TGrpcRequestOperationCall<etcdserverpb::DeleteRangeRequest, etcdserverpb::DeleteRangeResponse>;
 
-} // namespace NKikimr::NGRpcService
-
-
-namespace NKikimr::NGRpcService {
-
 using namespace NActors;
 using namespace Ydb;
-
-#define COPY_PRIMITIVE_FIELD(name) \
-    to->set_ ## name(static_cast<decltype(to->name())>(from.name())) \
-// COPY_PRIMITIVE_FIELD
-
-#define COPY_PRIMITIVE_OPTIONAL_FIELD(name) \
-    if (from.has_ ## name()) { \
-        to->set_ ## name(static_cast<decltype(to->name())>(from.name())); \
-    } \
-// COPY_PRIMITIVE_FIELD
 
 namespace {
 
@@ -54,44 +36,6 @@ TString DecrementKey(TString key) {
         }
     }
     return TString();
-}
-
-void CopyProtobuf(const etcdserverpb::RangeRequest &from, NKikimrKeyValue::ReadRangeRequest *to) {
-    to->mutable_range()->set_from_key_inclusive(from.key());
-    to->mutable_range()->set_to_key_exclusive(from.range_end());
-    to->set_include_data(!(from.keys_only() || from.count_only()));
-}
-
-void CopyProtobuf(const NKikimrKeyValue::ReadRangeResult::KeyValuePair &from, mvccpb::KeyValue *to) {
-    to->set_key(from.key());
-    to->set_value(from.value());
-}
-
-void CopyProtobuf(const NKikimrKeyValue::ReadRangeResult &from, etcdserverpb::RangeResponse *to) {
-    to->set_count(from.pair().size());
-    for (const auto &pair : from.pair()) {
-        CopyProtobuf(pair, to->add_kvs());
-    }
-}
-
-void CopyProtobuf(const etcdserverpb::PutRequest &from, NKikimrKeyValue::ExecuteTransactionRequest *to) {
-    const auto cmd = to->add_commands()->mutable_write();
-    cmd->set_key(from.key());
-    cmd->set_value(from.value());
-}
-
-void CopyProtobuf(const NKikimrKeyValue::ExecuteTransactionResult &, etcdserverpb::PutResponse *) {
-
-}
-
-void CopyProtobuf(const etcdserverpb::DeleteRangeRequest &from, NKikimrKeyValue::ExecuteTransactionRequest *to) {
-    const auto cmd = to->add_commands()->mutable_delete_range();
-    cmd->mutable_range()->set_from_key_inclusive(from.key());
-    cmd->mutable_range()->set_to_key_exclusive(from.range_end());
-}
-
-void CopyProtobuf(const NKikimrKeyValue::ExecuteTransactionResult &, etcdserverpb::DeleteRangeResponse *) {
-
 }
 
 template <typename TResult>
@@ -116,86 +60,9 @@ Ydb::StatusIds::StatusCode PullStatus(const TResult &result) {
 template <typename TDerived>
 class TBaseEtcdRequest {
 protected:
-    void OnBootstrap() {
-/*
-        auto self = static_cast<TDerived*>(this);
-        if (const auto& userToken = self->Request_->GetSerializedToken()) {
-            UserToken = new NACLib::TUserToken(userToken);
-        }
-        ParseGrpcRequest();
-        SendDatabaseRequest();
-*/
-    }
-
     virtual bool ParseGrpcRequest() = 0;
     virtual std::pair<TString, NYdb::TParams> MakeQueryAndParams() const = 0;
-
     virtual void ReplyWith(const NYdb::TResultSets& results) = 0;
-
-    bool OnNavigateKeySetResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, ui32 access) {
-        auto self = static_cast<TDerived*>(this);
-        TEvTxProxySchemeCache::TEvNavigateKeySetResult* res = ev->Get();
-        NSchemeCache::TSchemeCacheNavigate *request = res->Request.Get();
-
-        auto ctx = self->ActorContext();
-
-        if (res->Request->ResultSet.size() != 1) {
-            self->Reply(StatusIds::INTERNAL_ERROR, "Received an incorrect answer from SchemeCache.", NKikimrIssues::TIssuesIds::UNEXPECTED, ctx);
-            return false;
-        }
-
-        switch (request->ResultSet[0].Status) {
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-            break;
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
-            self->Reply(StatusIds::UNAUTHORIZED, "Access denied.", NKikimrIssues::TIssuesIds::ACCESS_DENIED, ctx);
-            return false;
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-            self->Reply(StatusIds::SCHEME_ERROR, "Path isn't exist.", NKikimrIssues::TIssuesIds::PATH_NOT_EXIST, ctx);
-            return false;
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
-            self->Reply(StatusIds::UNAVAILABLE, "Database resolve failed with no certain result.", NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, ctx);
-            return false;
-        default:
-            self->Reply(StatusIds::UNAVAILABLE, "Resolve error", NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, ctx);
-            return false;
-        }
-
-        if (!self->CheckAccess(CanonizePath(res->Request->ResultSet[0].Path), res->Request->ResultSet[0].SecurityObject, access)) {
-            return false;
-        }
-        if (!request->ResultSet[0].SolomonVolumeInfo) {
-            self->Reply(StatusIds::SCHEME_ERROR, "Table isn't keyvalue.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-            return false;
-        }
-
-        return true;
-    }
-
-    bool CheckAccess(const TString& path, TIntrusivePtr<TSecurityObject> securityObject, ui32 access) {
-        auto self = static_cast<TDerived*>(this);
-        if (!UserToken || !securityObject) {
-            return true;
-        }
-
-        if (securityObject->CheckAccess(access, *UserToken)) {
-            return true;
-        }
-
-        self->Reply(Ydb::StatusIds::UNAUTHORIZED,
-            TStringBuilder() << "Access denied"
-                << ": for# " << UserToken->GetUserSID()
-                << ", path# " << path
-                << ", access# " << NACLib::AccessRightsToString(access),
-            NKikimrIssues::TIssuesIds::ACCESS_DENIED,
-            self->ActorContext());
-        return false;
-    }
-
-private:
-    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 template <typename TDerived, typename TRequest, bool IsOperation>
@@ -203,19 +70,6 @@ class TEtcdRequestWithOperationParamsActor : public TActorBootstrapped<TDerived>
 private:
     typedef TActorBootstrapped<TDerived> TBase;
     typedef typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type TRequestBase;
-
-    template<typename TIn, typename TOut>
-    void Fill(const TIn*, TOut*) {/* TODO
-        auto& operationParams = in->operation_params();
-        out->OperationTimeout_ = GetDuration(operationParams.operation_timeout());
-        out->CancelAfter_ = GetDuration(operationParams.cancel_after());
-        out->ReportCostInfo_ = operationParams.report_cost_info() == Ydb::FeatureFlag::ENABLED; */
-    }
-
-    template<typename TOut>
-    void Fill(const NProtoBuf::Message*, TOut*) {
-    }
-
 public:
     enum EWakeupTag {
         WakeupTagTimeout = 10,
@@ -223,12 +77,10 @@ public:
         WakeupTagGetConfig = 21,
         WakeupTagClientLost = 22,
     };
-
 public:
     TEtcdRequestWithOperationParamsActor(TRequestBase* request)
         : Request_(request)
     {
-        Fill(GetProtoRequest(), this);
     }
 
     const typename TRequest::TRequest* GetProtoRequest() const {
@@ -473,48 +325,29 @@ public:
     using TBase = TEtcdOperationRequestActor<TDerived, TRequest>;
     using TBase::TBase;
 
-    template<typename T, typename = void>
-    struct THasMsg: std::false_type
-    {};
-    template<typename T>
-    struct THasMsg<T, std::enable_if_t<std::is_same<decltype(std::declval<T>().msg()), void>::value>>: std::true_type
-    {};
-    template<typename T>
-    static constexpr bool HasMsgV = THasMsg<T>::value;
-
     friend class TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest, TKVRequest, AccessRights>>;
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
-
         this->ParseGrpcRequest();
         this->Become(&TEtcdRequestGrpc::StateFunc);
-
         SendDatabaseRequest();
     }
 private:
     void SendDatabaseRequest() {
         const auto& query = this->MakeQueryAndParams();
-
-        Cerr << __func__ << Endl << query.first << Endl;
-
-        const auto self = this->SelfId();
+        const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        NEtcd::AppData()->Client->ExecuteQuery(query.first, NYdb::NQuery::TTxControl::NoTx(), query.second).Subscribe([self, ass](const auto& future) {
-            const auto res = future.GetValueSync();
-            if (res.IsSuccess())
-                ass->Send(self, new NEtcd::TEvQueryResult(res.GetResultSets()));
+        NEtcd::AppData()->Client->ExecuteQuery(query.first, NYdb::NQuery::TTxControl::NoTx(), query.second).Subscribe([my, ass](const auto& future) {
+            if (const auto res = future.GetValueSync(); res.IsSuccess())
+                ass->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
             else
-                ass->Send(self, new NEtcd::TEvQueryError(res.GetIssues()));
+                ass->Send(my, new NEtcd::TEvQueryError(res.GetIssues()));
         });
     }
-protected:
+
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            hFunc(TKVRequest::TResponse, Handle);
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(NEtcd::TEvQueryResult, Handle);
             hFunc(NEtcd::TEvQueryError, Handle);
         default:
@@ -529,92 +362,6 @@ protected:
     void Handle(NEtcd::TEvQueryError::TPtr &ev) {
         Cerr << __func__ << ' ' << ev->Get()->Issues.ToString() << Endl;
     }
-
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
-        TEvTxProxySchemeCache::TEvNavigateKeySetResult* res = ev->Get();
-        NSchemeCache::TSchemeCacheNavigate *request = res->Request.Get();
-
-        if (!this->OnNavigateKeySetResult(ev, AccessRights)) {
-            return;
-        }
-
-        const NKikimrSchemeOp::TSolomonVolumeDescription &desc = request->ResultSet[0].SolomonVolumeInfo->Description;
-        ui64 partitionId = 0ULL; //rec.partition_id();
-
-        if (const auto &partition = desc.GetPartitions(partitionId); partition.GetPartitionId() == partitionId) {
-            KVTabletId = partition.GetTabletId();
-        } else {
-            Y_DEBUG_ABORT_UNLESS(false);
-            for (const NKikimrSchemeOp::TSolomonVolumeDescription::TPartition &partition : desc.GetPartitions()) {
-                if (partition.GetPartitionId() == partitionId)  {
-                    KVTabletId = partition.GetTabletId();
-                    break;
-                }
-            }
-        }
-
-        if (!KVTabletId) {
-            this->Reply(StatusIds::INTERNAL_ERROR, "Partition wasn't found.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, this->ActorContext());
-            return;
-        }
-
-        CreatePipe();
-        SendRequest();
-    }
-
-    void SendRequest() {
-        std::unique_ptr<TKVRequest> req = std::make_unique<TKVRequest>();
-        auto &rec = *this->GetProtoRequest();
-        CopyProtobuf(rec, &req->Record);
-        req->Record.set_tablet_id(KVTabletId);
-        NTabletPipe::SendData(this->SelfId(), KVPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
-    }
-
-    void Handle(typename TKVRequest::TResponse::TPtr &ev) {
-        auto status = PullStatus(ev->Get()->Record);
-        if constexpr (HasMsgV<decltype(ev->Get()->Record)>) {
-            if (status != Ydb::StatusIds::SUCCESS) {
-                this->Reply(status, ev->Get()->Record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, this->ActorContext());
-            }
-        }
-        typename TRequest::TResponse resp;
-        CopyProtobuf(ev->Get()->Record, &resp);
-        this->Reply(status, resp, TActivationContext::AsActorContext());
-    }
-
-    NTabletPipe::TClientConfig GetPipeConfig() {
-        NTabletPipe::TClientConfig cfg;
-        cfg.RetryPolicy = {
-            .RetryLimitCount = 3u
-        };
-        return cfg;
-    }
-
-    void CreatePipe() {
-        KVPipeClient = this->Register(NTabletPipe::CreateClient(this->SelfId(), KVTabletId, GetPipeConfig()));
-    }
-
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        if (ev->Get()->Status != NKikimrProto::OK) {
-            this->Reply(StatusIds::UNAVAILABLE, "Failed to connect to coordination node.", NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, this->ActorContext());
-        }
-    }
-
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        this->Reply(StatusIds::UNAVAILABLE, "Connection to coordination node was lost.", NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, this->ActorContext());
-    }
-
-    void PassAway() override {
-        if (KVPipeClient) {
-            NTabletPipe::CloseClient(this->SelfId(), KVPipeClient);
-            KVPipeClient = {};
-        }
-        TBase::PassAway();
-    }
-
-protected:
-    ui64 KVTabletId = 0;
-    TActorId KVPipeClient;
 };
 
 class TRangeRequest

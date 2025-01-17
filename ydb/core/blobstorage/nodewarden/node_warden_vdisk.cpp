@@ -207,6 +207,8 @@ namespace NKikimr::NStorage {
         vdiskConfig->ThrottlingMaxInplacedSize = ThrottlingMaxInplacedSize;
         vdiskConfig->ThrottlingMinOccupancyPerMille = ThrottlingMinOccupancyPerMille;
         vdiskConfig->ThrottlingMaxOccupancyPerMille = ThrottlingMaxOccupancyPerMille;
+        vdiskConfig->ThrottlingMinLogChunkCount = ThrottlingMinLogChunkCount;
+        vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
 
         vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 

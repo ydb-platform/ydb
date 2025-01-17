@@ -76,7 +76,7 @@ struct TExpectant {
 };
 
 struct TCollection {
-    TLogoBlobID MetaId;
+    TLogoBlobID Id;
     TSet<TActorId> Owners;
     TPageMap<TIntrusivePtr<TPage>> PageMap;
     TMap<ui32, TExpectant> Expectants;
@@ -146,7 +146,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         static TPageKey GetKey(const TPage* page) {
-            return {page->Collection->MetaId, page->PageId};
+            return {page->Collection->Id, page->PageId};
         }
 
         static size_t GetHash(const TPageKey& key) {
@@ -192,7 +192,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         static TPageKey GetKey(const TPage* page) {
-            return {page->Collection->MetaId, page->PageId};
+            return {page->Collection->Id, page->PageId};
         }
 
         static size_t GetHash(const TPageKey& key) {
@@ -373,17 +373,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         PassAway();
     }
 
-    TCollection& AttachCollection(const TLogoBlobID &metaId, const NPageCollection::IPageCollection &pageCollection, const TActorId &owner) {
-        TCollection &collection = Collections[metaId];
-        if (!collection.MetaId) {
-            Y_ABORT_UNLESS(metaId);
-            collection.MetaId = metaId;
+    TCollection& AttachCollection(const TLogoBlobID &pageCollectionId, const NPageCollection::IPageCollection &pageCollection, const TActorId &owner) {
+        TCollection &collection = Collections[pageCollectionId];
+        if (!collection.Id) {
+            Y_ABORT_UNLESS(pageCollectionId);
+            collection.Id = pageCollectionId;
             collection.PageMap.resize(pageCollection.Total());
         } else {
-            Y_DEBUG_ABORT_UNLESS(collection.MetaId == metaId);
+            Y_DEBUG_ABORT_UNLESS(collection.Id == pageCollectionId);
             Y_ABORT_UNLESS(collection.PageMap.size() == pageCollection.Total(),
                 "Page collection %s changed number of pages from %" PRISZT " to %" PRIu32 " by %s",
-                metaId.ToString().c_str(), collection.PageMap.size(), pageCollection.Total(), owner.ToString().c_str());
+                pageCollectionId.ToString().c_str(), collection.PageMap.size(), pageCollection.Total(), owner.ToString().c_str());
         }
 
         if (collection.Owners.insert(owner).second) {
@@ -415,7 +415,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Y_ABORT_UNLESS(pageCollectionId);
         Y_ABORT_IF(Collections.contains(pageCollectionId), "Only new collections can save compacted pages");
         TCollection &collection = Collections[pageCollectionId];
-        collection.MetaId = pageCollectionId;
+        collection.Id = pageCollectionId;
         collection.PageMap.resize(pageCollection.Total());
 
         for (auto &page : msg->Pages) {
@@ -849,14 +849,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         DoGC();
     }
 
-    void TryDropExpiredCollection(TCollection* collection) {
-        if (!collection->Owners &&
-            !collection->Expectants &&
-            collection->PageMap.used() == 0)
+    void TryDropExpiredCollection(TCollection* pageCollection) {
+        if (!pageCollection->Owners &&
+            !pageCollection->Expectants &&
+            pageCollection->PageMap.used() == 0)
         {
             // Drop unnecessary collections from memory
-            auto metaId = collection->MetaId;
-            Collections.erase(metaId);
+            auto pageCollectionId = pageCollection->Id;
+            Collections.erase(pageCollectionId);
         }
     }
 
@@ -924,7 +924,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             if (collection->DroppedPages) {
                 // N.B. usually there is a single owner
                 for (TActorId owner : collection->Owners) {
-                    auto& actions = toSend[owner][collection->MetaId];
+                    auto& actions = toSend[owner][collection->Id];
                     for (ui32 pageId : collection->DroppedPages) {
                         actions.Dropped.insert(pageId);
                     }
@@ -1043,17 +1043,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void DropRequestsFor(TActorId owner, const TLogoBlobID &metaId) {
-        DropFromQueue(ScanRequests, owner, metaId);
-        DropFromQueue(AsyncRequests, owner, metaId);
+    void DropRequestsFor(TActorId owner, const TLogoBlobID &pageCollectionId) {
+        DropFromQueue(ScanRequests, owner, pageCollectionId);
+        DropFromQueue(AsyncRequests, owner, pageCollectionId);
     }
 
-    void DropFromQueue(TRequestQueue &queue, TActorId ownerId, const TLogoBlobID &metaId) {
+    void DropFromQueue(TRequestQueue &queue, TActorId ownerId, const TLogoBlobID &pageCollectionId) {
         auto ownerIt = queue.Requests.find(ownerId);
         if (ownerIt == queue.Requests.end())
             return;
         auto &reqsByOwner = ownerIt->second;
-        auto reqsIt = reqsByOwner.Index.find(metaId);
+        auto reqsIt = reqsByOwner.Index.find(pageCollectionId);
         if (reqsIt == reqsByOwner.Index.end())
             return;
 

@@ -503,12 +503,6 @@ private:
         TEvDataShard::TEvProposeTransactionResult* res = ev->Get();
         ResponseEv->Orbit.Join(res->Orbit);
         const ui64 shardId = res->GetOrigin();
-        {
-            if (auto it = SendTime.find(shardId); it != std::end(SendTime)) {
-                Counters->Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MicroSeconds());
-                SendTime.erase(it);
-            }
-        }
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState, "Unexpected propose result from unknown tabletId " << shardId);
 
@@ -1316,12 +1310,6 @@ private:
         TEvDataShard::TEvProposeTransactionResult* res = ev->Get();
         ResponseEv->Orbit.Join(res->Orbit);
         const ui64 shardId = res->GetOrigin();
-        {
-            if (auto it = SendTime.find(shardId); it != std::end(SendTime)) {
-                Counters->Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MicroSeconds());
-                SendTime.erase(it);
-            }
-        }
         LastShard = shardId;
 
         TShardState* shardState = ShardStates.FindPtr(shardId);
@@ -1825,8 +1813,6 @@ private:
         auto traceId = ExecuterSpan.GetTraceId();
 
         LOG_D("ExecuteDatashardTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
-
-        SendTime[shardId] = TInstant::Now();
 
         Send(MakePipePerNodeCacheID(GetUseFollowers()), new TEvPipeCache::TEvForward(ev.release(), shardId, true), 0, 0, std::move(traceId));
 
@@ -3061,8 +3047,6 @@ private:
     TDatashardTxs DatashardTxs;
     TEvWriteTxs EvWriteTxs;
     TTopicTabletTxs TopicTxs;
-
-    THashMap<ui64, TInstant> SendTime; // TODO: delete
 
     // Lock handle for a newly acquired lock
     TLockHandle LockHandle;

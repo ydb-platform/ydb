@@ -342,6 +342,5 @@ TVector<TPatternComponent<TChar>> SplitPattern(const TBasicString<TChar>& patter
 }
 
 bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix);
-TString AsSource(const NProtoBuf::Message& statement);
 
 } // namespace NSQLTranslationV1

@@ -6,7 +6,6 @@
 #include "node.h"
 #include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
-#include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/object_processing.h>
 #include <yql/essentials/utils/yql_paths.h>
 #include <util/generic/scope.h>
@@ -264,8 +263,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!nodeExpr) {
                 return false;
             }
-
-            Cerr << ">>>>> " << core.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1().DebugString() << Endl << Flush;
 
             TVector<TNodePtr> nodes;
             auto subquery = nodeExpr->GetSource();

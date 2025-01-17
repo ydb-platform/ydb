@@ -442,7 +442,7 @@ public:
             auto& targets = *oldConf.MutableTransferSpecific()->MutableTargets();
             if (targets.size() != 1) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "Only one transfet target allowed");
+                    "Only one transfer target allowed");
                 return result;
             }
             targets.begin()->SetTransformLambda(op.GetTransferTransformLambda());

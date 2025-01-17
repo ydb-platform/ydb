@@ -14,6 +14,7 @@ PEERDIR(
     library/cpp/http/misc
     library/cpp/http/simple
     ydb/core/testlib/default
+    ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils
 )
 
 END()

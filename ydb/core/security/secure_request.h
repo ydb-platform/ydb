@@ -1,5 +1,6 @@
 #pragma once
 #include "ticket_parser.h"
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/base/appdata.h>
 
@@ -18,6 +19,10 @@ private:
 
     static bool GetEnforceUserTokenRequirement() {
         return AppData()->EnforceUserTokenRequirement;
+    }
+
+    static bool GetRequireCredentialsInNewProtocol() {
+        return AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
     }
 
     static bool GetEnforceUserTokenCheckRequirement() {
@@ -39,9 +44,10 @@ private:
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
         if (!result.Error.empty()) {
-            if (IsTokenRequired()) {
+            // if (IsTokenRequired() || IsTokenExists())
+            // if (!result.Error.Retryable)
+            if (IsTokenRequired())
                 return static_cast<TDerived*>(this)->OnAccessDenied(result.Error, ctx);
-            }
         } else {
             if (RequireAdminAccess) {
                 if (!GetAdministrationAllowedSIDs().empty()) {
@@ -154,7 +160,7 @@ public:
 
 public:
     bool IsTokenRequired() const {
-        if (GetEnforceUserTokenRequirement()) {
+        if (GetEnforceUserTokenRequirement() || GetRequireCredentialsInNewProtocol()) {
             return true;
         }
 

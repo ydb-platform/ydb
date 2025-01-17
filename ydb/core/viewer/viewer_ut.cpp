@@ -6,6 +6,7 @@
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
+#include <util/generic/maybe.h>
 #include <util/stream/null.h>
 #include <util/string/join.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
@@ -27,6 +28,8 @@
 
 #include <util/string/builder.h>
 #include <regex>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 
 using namespace NKikimr;
 using namespace NViewer;
@@ -1846,6 +1849,215 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT(ticketParser);
         UNIT_ASSERT_VALUES_EQUAL_C(ticketParser->AuthorizeTicketRequests, 1, response);
         UNIT_ASSERT_VALUES_EQUAL_C(ticketParser->AuthorizeTicketSuccesses, 1, response);
+    }
+
+    NKikimr::Tests::TServerSettings MakeServerSettings() {
+        auto settings = NKikimr::NPersQueueTests::PQSettings(0);
+        settings.SetDomainName("Root");
+        settings.SetNodeCount(1);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        settings.PQConfig.SetRoot("/Root");
+        settings.PQConfig.SetDatabase("/Root");
+
+        settings.SetLoggerInitializer([](NActors::TTestActorRuntime& runtime) {
+            runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::PQ_MIRRORER, NActors::NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NActors::NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, NActors::NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NActors::NLog::PRI_DEBUG);
+        });
+
+        return settings;
+    }
+
+    Y_UNIT_TEST(UnavailableOnTicketParserErrors) {
+        enum class ETicketParserErrors {
+            NONE,
+            RETRYABLE,
+            PERMANENT
+        };
+        auto ToString = [](ETicketParserErrors e) {
+            switch (e) {
+            case ETicketParserErrors::NONE: return "NONE";
+            case ETicketParserErrors::RETRYABLE: return "RETRYABLE";
+            case ETicketParserErrors::PERMANENT: return "PERMANENT";
+            }
+        };
+        struct TFakeTicketParserActor2 : public TActor<TFakeTicketParserActor2> {
+            TFakeTicketParserActor2(std::atomic<ETicketParserErrors>& injectErrors)
+                : TActor<TFakeTicketParserActor2>(&TFakeTicketParserActor2::StFunc)
+                , InjectErrors(injectErrors)
+            {
+            }
+
+            STFUNC(StFunc) {
+                switch (ev->GetTypeRewrite()) {
+                    hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+                    default:
+                        break;
+                }
+            }
+
+            void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Ticket parser: got TEvAuthorizeTicket event: " << ev->Get()->Ticket << " " << ev->Get()->Database << " " << ev->Get()->Entries.size());
+                ++AuthorizeTicketRequests;
+
+                switch (InjectErrors) {
+                case ETicketParserErrors::NONE:
+                    if (ev->Get()->Ticket == "wrong") {
+                        Fail(ev, "Error", /*retryable=*/ false);
+                    } else {
+                        Success(ev);
+                    }
+                    break;
+                case ETicketParserErrors::RETRYABLE:
+                    Fail(ev, "Error", /*retryable=*/ true);
+                    break;
+                case ETicketParserErrors::PERMANENT:
+                    Fail(ev, "Error", /*retryable=*/ false);
+                    break;
+                }
+            }
+
+            void Fail(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev, const TString& message, bool retryable) {
+                ++AuthorizeTicketFails;
+                auto err = TEvTicketParser::TError{
+                    .Message = message ? message : "Test error",
+                    .Retryable = retryable,
+                };
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult: " << err.Message);
+                Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, err));
+            }
+
+            void Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+                ++AuthorizeTicketSuccesses;
+                auto userToken = MakeIntrusive<NACLib::TUserToken>(NACLib::TUserToken::TUserTokenInitFields{
+                    .OriginalUserToken = ev->Get()->Ticket,
+                    .UserSID = "root@builtin",
+                    .GroupSIDs = {"all-users@well-known"},
+                    .AuthType = "Builtin",
+                });
+                userToken->SaveSerializationInfo();
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult success");
+                Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
+            }
+
+            size_t AuthorizeTicketRequests = 0;
+            size_t AuthorizeTicketSuccesses = 0;
+            size_t AuthorizeTicketFails = 0;
+            std::atomic<ETicketParserErrors>& InjectErrors;
+        };
+        auto createTopic = [](int grpcPort) {
+            auto driverConfig = NYdb::TDriverConfig()
+                .SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
+                .SetDatabase("/Root")
+                .SetAuthToken("root@builtin")
+                .SetLog(CreateLogBackend("cerr"));
+
+            auto driver = NYdb::TDriver(driverConfig);
+            auto topicClient = NYdb::NTopic::TTopicClient(driver);
+            auto res = topicClient.CreateTopic("/Root/test-topic").GetValueSync();
+            UNIT_ASSERT(res.IsSuccess());
+        };
+
+        TString rootToken = "root@builtin";
+        TString wrongToken = "wrong";
+
+        auto test = [&](bool enforceToken, bool require, TMaybe<TString> authToken, ETicketParserErrors injectErrors, NYdb::EStatus expectedStatus = NYdb::EStatus::STATUS_UNDEFINED) {
+            Cerr << ">>> Run with EnforceUserTokenCheckRequirement=" << enforceToken
+                 << ", RequireCredentialsInNewProtocol=" << require
+                 << ", AuthToken='" << authToken.GetOrElse("<EMPTY>") << "'"
+                 << ", injectErrors=" << ToString(injectErrors)
+                 << ", expectedStatus=" << expectedStatus
+                 << Endl;
+            auto serverSettings = MakeServerSettings();
+
+            std::atomic<ETicketParserErrors> injectErrors_(ETicketParserErrors::NONE);
+
+            TFakeTicketParserActor2* ticketParser = nullptr;
+            serverSettings.CreateTicketParser = [&](const TTicketParserSettings&) -> IActor* {
+                ticketParser = new TFakeTicketParserActor2(injectErrors_);
+                return ticketParser;
+            };
+
+            auto server = NPersQueue::TTestServer(serverSettings);
+
+            createTopic(server.GrpcPort);
+
+            server.CleverServer->GetRuntime()->GetAppData().EnforceUserTokenRequirement = enforceToken;
+            server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(require);
+            // TODO? securityConfig.SetEnforceUserTokenCheckRequirement(enforceTokenCheck);
+
+            Sleep(TDuration::Seconds(3));
+
+            injectErrors_ = injectErrors;
+
+            auto driverConfig = NYdb::TDriverConfig()
+                .SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
+                .SetDatabase("/Root")
+                .SetLog(CreateLogBackend("cerr"));
+
+            if (authToken.Defined()) {
+                driverConfig.SetAuthToken(*authToken);
+            }
+
+            auto driver = NYdb::TDriver(driverConfig);
+            auto topicClient = NYdb::NTopic::TTopicClient(driver);
+
+            auto retryPolicy = std::make_shared<NYdb::NPersQueue::NTests::TYdbPqTestRetryPolicy>();
+            auto writerSettings = NYdb::NTopic::TWriteSessionSettings()
+                .Path("test-topic");
+
+            bool waitForRetries = (authToken.Defined() && !authToken->empty()) && injectErrors == ETicketParserErrors::RETRYABLE;
+            if (waitForRetries) {
+                writerSettings.RetryPolicy(retryPolicy);
+                retryPolicy->Initialize();
+                retryPolicy->ExpectBreakDown();
+            }
+
+            auto writer = topicClient.CreateWriteSession(writerSettings);
+
+            if (waitForRetries) {
+                retryPolicy->WaitForRetriesSync(3);
+                injectErrors_ = ETicketParserErrors::NONE;
+                if (authToken == wrongToken) {
+                    return;
+                }
+            }
+
+            auto event = writer->GetEvent(true);
+            if (auto* e = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                Cerr << (TStringBuilder() << ">>> Got event " << e->DebugString() << Endl);
+                UNIT_ASSERT_VALUES_EQUAL(expectedStatus, NYdb::EStatus::STATUS_UNDEFINED);
+            } else if (auto* e = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                Cerr << (TStringBuilder() << ">>> Got event " << e->DebugString() << Endl);
+                UNIT_ASSERT_VALUES_EQUAL(expectedStatus, e->GetStatus());
+            } else {
+                Y_UNREACHABLE();
+            }
+        };
+
+        // Expect no errors:
+        for (auto injectErrors : {ETicketParserErrors::NONE, ETicketParserErrors::PERMANENT, ETicketParserErrors::RETRYABLE}) {
+            test(false, false, Nothing(), injectErrors);
+            test(false, false, "", injectErrors);
+            test(false, false, wrongToken, injectErrors);
+            test(false, false, rootToken, injectErrors);
+        }
+
+        for (auto [enforce, require] : {std::pair<bool, bool>{false, true}, {true, false}, {true, true}}) {
+            test(enforce, require, Nothing(), ETicketParserErrors::NONE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
+            test(enforce, require, "", ETicketParserErrors::NONE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
+            test(enforce, require, wrongToken, ETicketParserErrors::NONE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
+            test(enforce, require, rootToken, ETicketParserErrors::NONE);
+
+            test(enforce, require, Nothing(), ETicketParserErrors::RETRYABLE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
+            test(enforce, require, "", ETicketParserErrors::RETRYABLE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
+            test(enforce, require, wrongToken, ETicketParserErrors::RETRYABLE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
+            test(enforce, require, rootToken, ETicketParserErrors::RETRYABLE);
+        }
     }
 
     Y_UNIT_TEST(SimpleFeatureFlags) {

@@ -648,7 +648,7 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     }
     auto rightInput = cnStreamLookup.RightInput();
     if (!rightInput.Raw()->IsCallable("TDqLookupSourceWrap")) {
-        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), TStringBuilder() << "DqCnStreamLookup: RightInput: Expected TDqLookupSourceWrap, but got " << rightInput));
+        ctx.AddError(TIssue(ctx.GetPosition(rightInput.Pos()), TStringBuilder() << "DqCnStreamLookup: RightInput: Expected TDqLookupSourceWrap, but got " << rightInput.Raw()->Content()));
         return TStatus::Error;
     }
     const auto& leftRowType = GetSeqItemType(*leftInputType);

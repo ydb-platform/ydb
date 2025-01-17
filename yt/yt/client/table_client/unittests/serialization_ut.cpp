@@ -2,6 +2,7 @@
 #include <yt/yt/client/table_client/schema.h>
 
 #include <yt/yt/library/formats/format.h>
+#include <yt/yt/library/named_value/named_value.h>
 
 #include <yt/yt/core/misc/blob_output.h>
 #include <yt/yt/core/ytree/convert.h>
@@ -86,6 +87,41 @@ TEST(TInstantSerialization, YsonCompatibility)
     EXPECT_EQ(TInstant::MilliSeconds(lower.MilliSeconds()), convert(lower.MilliSeconds()));
     EXPECT_EQ(upper, convert(upper));
     EXPECT_EQ(TInstant::MilliSeconds(upper.MilliSeconds()), convert(upper.MilliSeconds()));
+}
+
+TEST(TLegacyOwningKeySerialization, CompositeKeys)
+{
+    auto nameTable = New<TNameTable>();
+    nameTable->RegisterName("key0");
+
+
+
+    auto checkSerializeDeserialize = [] (auto&& value) {
+        TStringStream str;
+        NYson::TYsonWriter ysonWriter(&str);
+
+        Serialize(value, &ysonWriter);
+
+        auto node = NYTree::ConvertToNode(NYson::TYsonString(str.Str()));
+
+        using TValueType = std::decay_t<decltype(value)>;
+        TValueType result;
+        Deserialize(result, node);
+        EXPECT_EQ(value, result);
+    };
+#define CHECK_SERIALIZE_DESERIALIZE(x) do { SCOPED_TRACE(""); checkSerializeDeserialize(x);} while (0)
+
+    CHECK_SERIALIZE_DESERIALIZE(
+        NNamedValue::MakeRow(nameTable, {
+            {"key0", EValueType::Any, "[1; 2]"},
+        }));
+
+    CHECK_SERIALIZE_DESERIALIZE(
+        NNamedValue::MakeRow(nameTable, {
+            {"key0", EValueType::Composite, "[1; 2]"},
+        }));
+
+#undef CHECK_SERIALIZE_DESERIALIZE
 }
 
 ////////////////////////////////////////////////////////////////////////////////

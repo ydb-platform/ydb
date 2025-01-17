@@ -7,6 +7,8 @@ SRCS(
     compact_hash.h
     defs.h
     mkql_alloc.cpp
+    mkql_block_map_join_utils.cpp
+    mkql_block_map_join_utils.h
     mkql_buffer.cpp
     mkql_buffer.h
     mkql_function_metadata.cpp
@@ -30,6 +32,8 @@ SRCS(
     mkql_opt_literal.h
     mkql_program_builder.cpp
     mkql_program_builder.h
+    mkql_rh_hash_utils.cpp
+    mkql_rh_hash_utils.h
     mkql_runtime_version.cpp
     mkql_runtime_version.h
     mkql_stats_registry.cpp

@@ -252,7 +252,7 @@ def on_fill_jar_copy_resources_cmd(unit, *args):
 
 
 def on_fill_jar_gen_srcs(unit, *args):
-    varname, jar_type, srcdir, base_classes_dir, java_list, kt_list, groovy_list, res_list = tuple(args[0:8])
+    varname, jar_type, srcdir, base_classes_dir, java_list, kt_list, res_list = tuple(args[0:7])
     resolved_srcdir = unit.resolve_arc_path(srcdir)
     if not resolved_srcdir.startswith('$') or resolved_srcdir.startswith('$S'):
         return
@@ -261,8 +261,8 @@ def on_fill_jar_gen_srcs(unit, *args):
     globs = args[7:exclude_pos]
     excludes = args[exclude_pos + 1 :]
     var = unit.get(varname)
-    var += ' && ${{cwd:BINDIR}} $YMAKE_PYTHON ${{input:"build/scripts/resolve_java_srcs.py"}} --append -d {} -s {} -k {} -g {} -r {} --include-patterns {}'.format(
-        srcdir, java_list, kt_list, groovy_list, res_list, ' '.join(globs)
+    var += ' && ${{cwd:BINDIR}} $YMAKE_PYTHON ${{input:"build/scripts/resolve_java_srcs.py"}} --append -d {} -s {} -k {} -r {} --include-patterns {}'.format(
+        srcdir, java_list, kt_list, res_list, ' '.join(globs)
     )
     if jar_type == 'SRC_JAR':
         var += ' --all-resources'

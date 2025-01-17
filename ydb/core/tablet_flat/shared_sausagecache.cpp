@@ -1070,7 +1070,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto it = queue.Requests.find(ownerId);
         if (it != queue.Requests.end()) {
             LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Drop queues"
-                << " for " << ownerId
+                << " owner " << ownerId
                 << " page collections " << it->second.Index.size());
 
             queue.Requests.erase(it);

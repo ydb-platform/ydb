@@ -381,6 +381,51 @@ TESTCASES = [
                         )
                     )            ;
 
+            $enriched = select a, b, c, d, e, f, za, yb, yc, zd
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                on(e.za = u.a AND e.yb = u.b)
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":1,"yb":"2","yc":100,"zd":101}',
+                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101}',
+                ),
+                (
+                    '{"id":2,"za":7,"yb":"8","yc":106,"zd":107}',
+                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107}',
+                ),
+                (
+                    '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115}',
+                ),
+                (
+                    '{"id":3,"za":null,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115}',
+                ),
+            ]
+        ),
+    ),
+    # 8
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za Int32,
+                            yb STRING,
+                            yc Int32,
+                            zd Int32,
+                        )
+                    )            ;
+
             $enriched1 = select a, b, c, d, e, f, za, yb, yc, zd
                 from
                     $input as e
@@ -390,14 +435,66 @@ TESTCASES = [
 
             $enriched2 = select a, b, c, d, e, f, za, yb, yc, zd, u.c as c2, u.d as d2
                 from
-                    $input as enriched1
+                    $enriched1 as e
                 left join {streamlookup} any ydb_conn_{table_name}.db as u
                 on(e.za = u.a AND e.yb = u.b)
             ;
 
             $enriched = select a, b, c, d, e, f, za, yb, yc, zd, (c2 IS NOT DISTINCT FROM c) as eq1, (d2 IS NOT DISTINCT FROM d) as eq2
                 from
-                    $input as enriched
+                    $enriched2 as e
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":1,"yb":"2","yc":100,"zd":101}',
+                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101,"eq1":true,"eq2":true}',
+                ),
+                (
+                    '{"id":2,"za":7,"yb":"8","yc":106,"zd":107}',
+                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107,"eq1":true,"eq2":true}',
+                ),
+                (
+                    '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true}',
+                ),
+                (
+                    '{"id":3,"za":null,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115,"eq1":true,"eq2":true}',
+                ),
+            ]
+        ),
+    ),
+    # 9
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za Int32,
+                            yb STRING,
+                            yc Int32,
+                            zd Int32,
+                        )
+                    )            ;
+
+            $enriched12 = select u.a as a, u.b as b, u.c as c, u.d as d, u.e as e, u.f as f, za, yb, yc, zd, u2.c as c2, u2.d as d2
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                on(e.za = u.a AND e.yb = u.b)
+                left join {streamlookup} any ydb_conn_{table_name}.db as u2
+                on(e.yb = u2.b AND e.za = u2.a)
+            ;
+
+            $enriched = select a, b, c, d, e, f, za, yb, yc, zd, (c2 IS NOT DISTINCT FROM c) as eq1, (d2 IS NOT DISTINCT FROM d) as eq2
+                from
+                    $enriched12 as e
             ;
 
             insert into myyds.`{output_topic}`

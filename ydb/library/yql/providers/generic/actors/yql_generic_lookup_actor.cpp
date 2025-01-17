@@ -290,7 +290,7 @@ namespace NYql::NDq {
             }
 
             Request = std::move(request);
-            RetryState = std::make_shared<ILookupRetryState::TPtr>(RetryPolicy->CreateRetryState());
+            RetryState = std::shared_ptr<ILookupRetryState>(RetryPolicy->CreateRetryState().release());
             SendRequest();
         }
 
@@ -415,9 +415,9 @@ namespace NYql::NDq {
                 new TEvError(std::move(error)));
         }
 
-        static void SendRetryOrError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, std::shared_ptr<ILookupRetryState::TPtr> retryState) {
+        static void SendRetryOrError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, std::shared_ptr<ILookupRetryState> retryState) {
             if (NConnector::GrpcStatusNeedsRetry(status) || status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED) {
-                auto nextRetry = (*retryState)->GetNextRetryDelay(status);
+                auto nextRetry = retryState->GetNextRetryDelay(status);
                 if (nextRetry) {
                     // <<< TODO tune/tweak
                     YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;
@@ -521,7 +521,7 @@ namespace NYql::NDq {
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; // TODO move me to TEvReadSplitsPart
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
         ILookupRetryPolicy::TPtr RetryPolicy;
-        std::shared_ptr<ILookupRetryState::TPtr> RetryState;
+        std::shared_ptr<ILookupRetryState> RetryState;
         ::NMonitoring::TDynamicCounters::TCounterPtr Count;
         ::NMonitoring::TDynamicCounters::TCounterPtr Keys;
         ::NMonitoring::TDynamicCounters::TCounterPtr ResultRows;

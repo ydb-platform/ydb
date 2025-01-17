@@ -4,8 +4,8 @@
 
 Authentication is always enabled when using the [Kafka API in Yandex Cloud](https://yandex.cloud/docs/data-streams/kafkaapi/auth).
 
-Authentication is disabled by default when using the Docker image.
-To enable it, set the `security.enforce_user_token=true` parameter in the [cluster configuration YAML file](https://ydb.tech/docs/en/reference/configuration/).
+Authentication is disabled by default when using the local database (e.g. Docker image).
+To enable it, set [`enforce_user_token_requirement` configuration option](../configuration/index.md#auth).
 
 ## How does authentication work in the Kafka API?
 

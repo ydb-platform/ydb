@@ -4,8 +4,8 @@
 
 Аутентификация всегда включена при использовании [Kafka API в Yandex Cloud](https://yandex.cloud/ru/docs/data-streams/kafkaapi/auth)
 
-Аутентификация по умолчанию выключена при использовании Docker образа.
-Чтобы включить ее, укажите в yaml [конфигурации кластера](https://ydb.tech/docs/ru/reference/configuration/) параметр security.enforce_user_token=true
+Аутентификация по умолчанию выключена при использовании локальной базы (например из Docker образа).
+Чтобы включить ее, укажите опцию [`enforce_user_token_requirement` в конфиге](../configuration/index.md#auth).
 
 ## Как работает аутентификация в Kafka API?
 

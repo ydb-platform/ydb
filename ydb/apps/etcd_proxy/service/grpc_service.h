@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/grpc/etcd/rpc.grpc.pb.h>
+#include <ydb/apps/etcd_proxy/proto/rpc.grpc.pb.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/actors/core/actorsystem.h>

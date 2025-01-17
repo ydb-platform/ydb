@@ -7,7 +7,6 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/protos
     ydb/public/api/grpc
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_discovery

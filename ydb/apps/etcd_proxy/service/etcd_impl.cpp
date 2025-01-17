@@ -1,8 +1,8 @@
 #include "etcd_impl.h"
 #include "events.h"
-#include "../appdata.h"
+#include "appdata.h"
 
-#include <ydb/public/api/grpc/etcd/rpc.pb.h>
+#include <ydb/apps/etcd_proxy/proto/rpc.grpc.pb.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>

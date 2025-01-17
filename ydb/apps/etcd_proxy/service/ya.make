@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/api/grpc/etcd
+    ydb/apps/etcd_proxy/proto
     ydb/library/grpc/server
     ydb/core/grpc_services
     ydb/core/grpc_services/base

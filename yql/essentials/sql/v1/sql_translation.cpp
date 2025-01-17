@@ -5142,7 +5142,7 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
                     endToken = &lambda.GetBlock2().GetBlock2().GetAlt2().GetToken3();
                     break;
                 case TRule_lambda_TBlock2_TBlock2::AltCase::ALT_NOT_SET:
-                    return {};
+                    Y_ABORT("You should change implementation according to grammar changes");
             }
 
             auto begin = GetQueryPosition(Ctx.Query, beginToken);
@@ -5162,7 +5162,7 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
             return result;
         }
         case NSQLv1Generated::TRule_lambda_or_parameter::ALT_NOT_SET:
-            return {};
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 }
 
@@ -5174,8 +5174,14 @@ bool TSqlTranslation::ParseTransferLambda(
 
     TSqlExpression expr(Ctx, Ctx.Settings.Mode);
     auto result = expr.Build(lambdaOrParameter);
+    if (!result) {
+        return false;
+    }
 
     lambdaText = GetLambdaText(*this, Ctx, lambdaOrParameter);
+    if (lambdaText.empty()) {
+        Ctx.Error() << "Cannot parse lambda correctly";
+    }
 
     return !lambdaText.empty();
 }

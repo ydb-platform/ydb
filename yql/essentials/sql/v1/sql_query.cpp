@@ -143,7 +143,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
     auto value = ctx.Build(in.GetRule_expr3());
 
     if (!value) {
-        ctx.Context().Error() << "Invalid replication setting: " << key.Name;
+        ctx.Context().Error() << "Invalid transfer setting: " << key.Name;
         return false;
     }
 
@@ -1854,7 +1854,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString target = Id(node.GetRule_object_ref7().GetRule_id_or_at2(), *this).second;
             TString transformLambda;
             if (node.GetBlock8().HasRule_lambda_or_parameter2()) {
-                ParseTransferLambda(transformLambda, node.GetBlock8().GetRule_lambda_or_parameter2());
+                if (!ParseTransferLambda(transformLambda, node.GetBlock8().GetRule_lambda_or_parameter2())) {
+                    return false;
+                }
             }
 
             AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx.Pos(), BuildTablePath(prefixPath, id),
@@ -1883,7 +1885,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     return TransferSettings(settings, in.GetAlt_alter_transfer_action1().GetRule_alter_transfer_set_setting1().GetRule_transfer_settings3(), expr, false);
                 } else if (in.HasAlt_alter_transfer_action2()) {
                     TString lb;
-                    ParseTransferLambda(lb, in.GetAlt_alter_transfer_action2().GetRule_alter_transfer_set_using1().GetRule_lambda_or_parameter3());
+                    if (!ParseTransferLambda(lb, in.GetAlt_alter_transfer_action2().GetRule_alter_transfer_set_using1().GetRule_lambda_or_parameter3())) {
+                        return false;
+                    }
                     transformLambda = lb;
                     return true;
                 }

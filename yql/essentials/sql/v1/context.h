@@ -238,7 +238,7 @@ namespace NSQLTranslationV1 {
         THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;
         THashSet<TString> WeakVariables;
         NSQLTranslation::TTranslationSettings Settings;
-        const TString& Query;
+        const TString Query;
         std::unique_ptr<TMemoryPool> Pool;
         NYql::TIssues& Issues;
         TMap<TString, TNodePtr> UniversalAliases;

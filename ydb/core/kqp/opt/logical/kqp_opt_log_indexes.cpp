@@ -431,11 +431,6 @@ TExprBase DoRewriteTopSortOverKMeansTree(
         .Callable("Uint32").Atom(0, "1", TNodeFlags::Default).Seal()
     .Build();
 
-    // TODO(mbkkt) count should be customizable via query options
-    auto count = ctx.Builder(pos)
-        .Callable("Uint64").Atom(0, "2", TNodeFlags::Default).Seal()
-    .Build();
-
     auto levelLambda = [&] {
         const auto oldArgNodes = lambdaArgs.Children();
         TNodeOnNodeOwnedMap replaces(oldArgNodes.size());
@@ -488,9 +483,16 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     }();
 
     ui32 level = 1;
-    auto levels = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription)
-        .settings().levels();
+    const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription)
+        .settings();
+    const auto clusters = std::max<ui32>(2, settings.clusters());
+    const auto levels = std::max<ui32>(1, settings.levels());
     Y_ENSURE(level <= levels);
+
+    // TODO(mbkkt) count should be customizable via query options
+    auto count = ctx.Builder(pos)
+        .Callable("Uint64").Atom(0, std::to_string(std::min<ui32>(4, clusters)), TNodeFlags::Default).Seal()
+    .Build();
 
     // TODO(mbkkt) Is it best way to do `SELECT FROM levelTable WHERE first_pk_column = 0`?
     auto readLevel = Build<TKqlReadTable>(ctx, pos)

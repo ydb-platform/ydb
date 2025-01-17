@@ -100,10 +100,12 @@ namespace NYql::NDq {
                     ILookupRetryPolicy::GetExponentialBackoffPolicy(
                         /* retryClassFunction */
                         [](const NYdbGrpc::TGrpcStatus& status) {
-                            if (NConnector::GrpcStatusNeedsRetry(status))
+                            if (NConnector::GrpcStatusNeedsRetry(status)) {
                                 return ERetryErrorClass::ShortRetry;
-                            if (status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED)
+                            }
+                            if (status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED) {
                                 return ERetryErrorClass::ShortRetry; // TODO LongRetry?
+                            }
                             return ERetryErrorClass::NoRetry;
                         },
                         /* minDelay */ TDuration::MilliSeconds(1),

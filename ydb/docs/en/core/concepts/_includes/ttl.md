@@ -1,4 +1,4 @@
-# Time to Live (TTL) and Eviction to External Storage
+# Time to Live (TTL) and eviction to external storage
 
 This section describes how the TTL mechanism works and what its limits are.
 

@@ -5,5 +5,5 @@ items:
   href: accessing-json.md
 - name: Модификация JSON
   href: modifying-json.md
-- name: Настройка TTL таблиц
+- name: Настройка TTL
   href: ttl.md

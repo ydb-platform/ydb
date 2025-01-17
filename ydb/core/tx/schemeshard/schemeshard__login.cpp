@@ -14,6 +14,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
     bool NeedPublishOnComplete = false;
     THolder<TEvSchemeShard::TEvLoginResult> Result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
     size_t CurrentFailedAttemptCount = 0;
+    bool IsEnabled;
 
     TTxLogin(TSelf *self, TEvSchemeShard::TEvLogin::TPtr &ev)
         : TRwTxBase(self)

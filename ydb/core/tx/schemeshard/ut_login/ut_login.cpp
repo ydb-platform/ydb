@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         UNIT_ASSERT_VALUES_EQUAL(resultLogin1.error(), "");
         ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", false);
         auto resultLogin2 = Login(runtime, "user1", "123");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin2.error(), "User 'user1' is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin2.error(), "User user1 is not permitted to log in");
         ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", true);
         auto resultLogin3 = Login(runtime, "user1", "123");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin3.error(), "");
@@ -694,11 +694,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         // Also do not accept correct password
         resultLogin = Login(runtime, "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -791,7 +791,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -821,8 +821,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user2", TStringBuilder() << "wrongpassword2" << newAttemptThreshold);
-        // User is locked out after 6 attempts
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is locked out");
+        // User is not permitted to log in after 6 attempts
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is not permitted to log in");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -833,7 +833,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // After 4 seconds user2 must be locked out
         Sleep(TDuration::Seconds(4));
         resultLogin = Login(runtime, "user2", "wrongpassword28");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is not permitted to log in");
 
         // After 7 seconds user2 must be unlocked
         Sleep(TDuration::Seconds(8));
@@ -866,11 +866,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         // Also do not accept correct password
         resultLogin = Login(runtime, "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
     }
 
     Y_UNIT_TEST(CheckThatLockedOutParametersIsRestoredFromLocalDb) {
@@ -907,7 +907,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -919,7 +919,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         // After reboot schemeshard user1 must be locked out
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         // User1 must be unlocked in 1 second after reboot schemeshard
         Sleep(TDuration::Seconds(2));

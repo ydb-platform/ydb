@@ -28,29 +28,34 @@ public:
             const NKikimrSchemeOp::TAlterLogin& alterLogin = Transaction.GetAlterLogin();
 
             TParts additionalParts;
+            auto getCanLoginFromTransaction = [](NKikimrSchemeOp::ETypeOfLogin value) -> NLogin::TLoginProvider::ETypeOfLogin {
+                NLogin::TLoginProvider::ETypeOfLogin result;
+                switch (value) {
+                    case NKikimrSchemeOp::ETypeOfLogin::Login:
+                    {
+                        result = NLogin::TLoginProvider::ETypeOfLogin::Login;
+                        break;
+                    }
+                    case NKikimrSchemeOp::ETypeOfLogin::NoLogin:
+                    {
+                        result = NLogin::TLoginProvider::ETypeOfLogin::NoLogin;
+                        break;
+                    }
+                    case NKikimrSchemeOp::ETypeOfLogin::Undefined:
+                    {
+                        result = NLogin::TLoginProvider::ETypeOfLogin::Undefined;
+                        break;
+                    }
+                }
+
+                return result;
+            };
 
             switch (alterLogin.GetAlterCase()) {
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
 
-                    NLogin::TLoginProvider::ETypeOfLogin canLogin;
-                    switch (createUser.GetCanLogin()) {
-                        case NKikimrSchemeOp::ETypeOfLogin::Login:
-                        {
-                            canLogin = NLogin::TLoginProvider::ETypeOfLogin::Login;
-                            break;
-                        }
-                        case NKikimrSchemeOp::ETypeOfLogin::NoLogin:
-                        {
-                            canLogin = NLogin::TLoginProvider::ETypeOfLogin::NoLogin;
-                            break;
-                        }
-                        case NKikimrSchemeOp::ETypeOfLogin::Undefined:
-                        {
-                            canLogin = NLogin::TLoginProvider::ETypeOfLogin::Undefined;
-                            break;
-                        }
-                    }
+                    NLogin::TLoginProvider::ETypeOfLogin canLogin = getCanLoginFromTransaction(createUser.GetCanLogin());
 
                     auto response = context.SS->LoginProvider.CreateUser(
                         {.User = createUser.GetUser(), .Password = createUser.GetPassword(), .CanLogin = canLogin});
@@ -85,24 +90,7 @@ public:
                     NLogin::TLoginProvider::TModifyUserRequest request;
 
                     request.User = modifyUser.GetUser();
-
-                    switch (modifyUser.GetCanLogin()) {
-                        case NKikimrSchemeOp::ETypeOfLogin::Login:
-                        {
-                            request.CanLogin = NLogin::TLoginProvider::ETypeOfLogin::Login;
-                            break;
-                        }
-                        case NKikimrSchemeOp::ETypeOfLogin::NoLogin:
-                        {
-                            request.CanLogin = NLogin::TLoginProvider::ETypeOfLogin::NoLogin;
-                            break;
-                        }
-                        case NKikimrSchemeOp::ETypeOfLogin::Undefined:
-                        {
-                            request.CanLogin = NLogin::TLoginProvider::ETypeOfLogin::Undefined;
-                            break;
-                        }
-                    }
+                    request.CanLogin = getCanLoginFromTransaction(modifyUser.GetCanLogin());
 
                     if (modifyUser.HasPassword()) {
                         request.Password = modifyUser.GetPassword();
@@ -113,15 +101,8 @@ public:
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
-
-                        if (modifyUser.HasPassword()) {
-                            db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
-                        }
-
-                        if (request.CanLogin != NLogin::TLoginProvider::ETypeOfLogin::Undefined) {
-                            db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::IsEnabled>(sid.Type, sid.IsEnabled);
-                        }
-
+                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
+                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::IsEnabled>(sid.Type, sid.IsEnabled);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);

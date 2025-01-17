@@ -44,3 +44,8 @@ graph TD;
     db.database.connect --> ydb.granular.describe_schema;
     ydb.granular.describe_schema --> ydb.granular.select_row;
     ydb.granular.select_row --> ydb.granular.update_row;
+```
+
+For example, to update rows, you need not only the right `ydb.granular.update_row`, but also all the overlying rights.
+
+{% endnote %}

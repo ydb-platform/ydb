@@ -108,7 +108,7 @@ public:
         Server_->EnableGRpc(grpcOption);
 
         Tests::TClient annoyingClient(*ServerSettings);
-        if (ServerSettings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+        if (ServerSettings->AppConfig->GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             annoyingClient.SetSecurityToken("root@builtin");
         }
         annoyingClient.InitRootScheme("Root");

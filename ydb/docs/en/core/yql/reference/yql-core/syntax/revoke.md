@@ -12,7 +12,7 @@ REVOKE [GRANT OPTION FOR] {{permission_name} [, ...] | ALL [PRIVILEGES]} ON {pat
 * `path_to_scheme_object` - the path to the schema object from which rights are revoked.
 * `role_name` - the name of the user or group from which rights to the schema object are revoked.
 
-`GRANT OPTION FOR` - using this clause revokes from the user or group the right to manage access rights. All rights previously granted by this user remain in effect. The clause functions similarly to revoking the `"ydb.access.grant"` right or `GRANT`.
+`GRANT OPTION FOR` - using this clause revokes the right to manage access rights from the user or group. All rights previously granted by this user remain in effect. The clause functions similarly to revoking the `"ydb.access.grant"` right or `GRANT`.
 
 {% include [x](_includes/permissions/permissions_list.md) %}
 
@@ -36,7 +36,7 @@ REVOKE [GRANT OPTION FOR] {{permission_name} [, ...] | ALL [PRIVILEGES]} ON {pat
   REVOKE LIST, CONNECT ON `/shop_db` FROM user2, group1;
   ```
 
-* Revoke the `ydb.generic.use` right on the tables `/shop_db/orders` and `/shop_db/sellers` from users `user1@domain`, `user2@domain`:
+* Revoke the `ydb.generic.use` right on the tables `/shop_db/orders` and `/shop_db/sellers` from users `user1@domain` and `user2@domain`:
 
   ```yql
   REVOKE 'ydb.generic.use' ON `/shop_db/orders`, `/shop_db/sellers` FROM `user1@domain`, `user2@domain`;

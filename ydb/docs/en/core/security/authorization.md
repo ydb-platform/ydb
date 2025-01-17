@@ -1,20 +1,20 @@
 # Authorization
 
-## Basic Concepts
+## Basic concepts
 
 Authorization in {{ ydb-short-name }} is based on the concepts of:
 
-* [Access Object](../concepts/glossary.md#access-object)
-* [Access Subject](../concepts/glossary.md#access-subject)
-* [Access Right](../concepts/glossary.md#access-right)
-* [Access Control List](../concepts/glossary.md#access-acl)
+* [Access object](../concepts/glossary.md#access-object)
+* [Access subject](../concepts/glossary.md#access-subject)
+* [Access right](../concepts/glossary.md#access-right)
+* [Access control list](../concepts/glossary.md#access-acl)
 * [Owner](../concepts/glossary.md#access-owner)
 * [User](../concepts/glossary.md#access-user)
 * [Group](../concepts/glossary.md#access-group)
 
-Regardless of the method of [authentication](https://en.wikipedia.org/wiki/Authentication), [authorization](https://en.wikipedia.org/wiki/Authorization) is always performed on the server side of {{ ydb-short-name }} based on the stored information about access objects and rights. Access rights determine the set of operations available to perform.
+Regardless of the [authentication](https://en.wikipedia.org/wiki/Authentication) method, [authorization](https://en.wikipedia.org/wiki/Authorization) is always performed on the server side of {{ ydb-short-name }} based on the stored information about access objects and rights. Access rights determine the set of operations available to perform.
 
-Authorization is performed for each user action: their rights are not cached, as they can be revoked or granted at any time.
+Authorization is performed for each user action: the rights are not cached, as they can be revoked or granted at any time.
 
 ## User {#user}
 
@@ -28,7 +28,7 @@ To create, alter, and delete users in {{ ydb-short-name }}, the following comman
 
 {% note info %}
 
-There is a separate user `root` with maximum rights. It is created during the initial deployment of the cluster, during which a password must be set immediately. It is not recommended to use this account further, and users with limited rights should be created.
+There is a separate user `root` with maximum rights. It is created during the initial deployment of the cluster, during which a password must be set immediately. It is not recommended to use this account long-term; instead, users with limited rights should be created.
 
 More about initial deployment:
 

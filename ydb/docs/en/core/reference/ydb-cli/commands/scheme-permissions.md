@@ -1,8 +1,8 @@
 # Permissions
 
-## General List of Commands
+## General list of commands
 
-You can get a list of available commands through interactive help:
+You can get a list of available commands via interactive help:
 
 ```bash
 {{ ydb-cli }} scheme permissions --help
@@ -41,12 +41,12 @@ The syntax of the {{ ydb-short-name }} CLI commands is as follows:
 
 Parameters:
 
-`<path>` — the full path from the root of the cluster to the object whose rights need to be modified;
+`<path>` — the full path from the root of the cluster to the object whose rights need to be modified.
 `<subject>` — the name of the user or group whose access rights are being changed.
 
 Additional parameters `[options...]`:
 
-`{-p|--permission} NAME` — the list of rights that need to be granted (grant) or revoked (revoke) for the user.
+`{-p|--permission} NAME` — the list of rights that need to be granted (`grant`) or revoked (`revoke`) for the user.
 
 Each right must be passed as a separate parameter, for example:
 
@@ -84,7 +84,7 @@ Command syntax:
 ```
 
 Parameters:
-`<path>` — the full path from the root of the cluster to the object for which you want to obtain rights.
+`<path>` — the full path from the cluster's root to the object you want to get rights for.
 
 Example result of executing `list`:
 
@@ -163,7 +163,7 @@ Command syntax:
 ```
 
 Parameters:
-`<path>` — the full path from the root of the cluster to the object whose permissions need to be modified;
+`<path>` — the full path from the root of the cluster to the object whose permissions need to be modified.
 `<owner>` — the name of the new owner (a user or a group) of the specified object.
 
 Example of a `chown` command:
@@ -189,7 +189,7 @@ Command syntax:
 ```
 
 Parameters:
-`<path>` — the full path from the root of the cluster to the object whose permissions need to be modified.
+`<path>` — the full path from the cluster' root to the object whose permissions need to be modified.
 
 Example of a `clear-inheritance` command:
 

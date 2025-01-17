@@ -253,7 +253,7 @@ An **external table** is a piece of metadata that describes a particular dataset
 
 A **secret** is a sensitive piece of metadata that requires special handling. For example, secrets can be used in [external data source](#external-data-source) definitions and represent things like passwords and tokens.
 
-### Scheme Object {#scheme-object}
+### Scheme object {#scheme-object}
 
 A database schema consists of **scheme objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [folders](#folder), and so on.
 
@@ -263,24 +263,24 @@ For organizational convenience, scheme objects form a hierarchy using [folders](
 
 As in file systems, a **folder** or **directory** is a container for [scheme objects](#scheme-object).
 
-Folders can contain subfolders, and such nesting can be of arbitrary depth.
+Folders can contain subfolders, and this nesting can have arbitrary depth.
 
-### Access Object {#access-object}
+### Access object {#access-object}
 
 An **access object** in the context of [authorization](../security/authorization.md) is an entity for which access rights and restrictions are configured. In {{ ydb-short-name }}, access objects are [scheme objects](#scheme-object).
 Each access object has an [owner](#access-owner) and an [access control list](#access-control-list).
 
-### Access Subject {#access-subject}
+### Access subject {#access-subject}
 
 An **access subject** is an entity that can interact with [access objects](#access-object) or perform specific actions within the system. Access to these interactions and actions depends on configured [access control lists](#access-control-list).
 
 An access subject can be a [user](#access-user) or a [group](#access-group).
 
-### Access Right {#access-right}
+### Access right {#access-right}
 
 An **[access right](../security/authorization.md#right)** is an entity that represents permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
 
-### Access Control List {#access-control-list}
+### Access control list {#access-control-list}
 
 An **access control list** or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) for a specific [access object](#access-object).
 

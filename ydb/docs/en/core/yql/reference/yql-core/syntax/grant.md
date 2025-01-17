@@ -25,19 +25,19 @@ A subject with the `ydb.access.grant` right cannot grant rights broader than the
   GRANT 'ydb.generic.read' ON `/shop_db/orders` TO user1;
   ```
 
-  The same command, using the keyword
+  The same command, using the keyword:
 
   ```yql
   GRANT SELECT ON `/shop_db/orders` TO user1;
   ```
 
-* Assign the rights `ydb.database.connect`, `ydb.generic.list` to the root of the database `/shop_db` for user `user2` and group `group1`:
+* Assign the rights `ydb.database.connect` and `ydb.generic.list` to the root of the database `/shop_db` for user `user2` and group `group1`:
 
   ```yql
   GRANT LIST, CONNECT ON `/shop_db` TO user2, group1;
   ```
 
-* Assign the `ydb.generic.use` right to the tables `/shop_db/orders` and `/shop_db/sellers` for users `user1@domain`, `user2@domain`:
+* Assign the `ydb.generic.use` right to the tables `/shop_db/orders` and `/shop_db/sellers` for users `user1@domain` and `user2@domain`:
 
   ```yql
   GRANT 'ydb.generic.use' ON `/shop_db/orders`, `/shop_db/sellers` TO `user1@domain`, `user2@domain`;

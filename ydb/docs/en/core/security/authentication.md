@@ -23,7 +23,7 @@ However, if a user or token is specified, the corresponding authentication mode 
 
 {% note warning %}
 
-Anonymous authentication should be used only for informational purposes for local databases that do not have access over the network.
+Anonymous authentication should be used only for informational purposes for local databases that are not accessible over the network.
 
 {% endnote %}
 
@@ -31,12 +31,12 @@ To enable anonymous authentication, use `false` in the `enforce_user_token_requi
 
 ## Authenticating by username and password {#static-credentials}
 
-This type of access implies that each database user has a username and password.
-Only digits and lowercase Latin letters can be used in usernames. Passwords are not restricted; even empty passwords can be used.
+This access type implies that each database user has a username and password.
+Only digits and lowercase Latin letters can be used in usernames. Passwords are not restricted; even empty passwords are allowed.
 
-The username and hashed password are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. In authentication mode, only the system administrator can use a username and password pair to access the table.
+The username and hashed password are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. Only the system administrator has access to this table.
 
-A token is returned in response to the username and password. Tokens have a default lifetime of 12 hours. To rotate tokens, the client, such as the [SDK](../reference/ydb-sdk/index.md), independently accesses the authentication service. Tokens accelerate authentication and enhance security.
+A token is returned in response to the username and password. Tokens have a default lifetime of 12 hours. To rotate tokens, the client, such as the [SDK](../reference/ydb-sdk/index.md), independently sends requests to the authentication service. Tokens accelerate authentication and enhance security.
 
 Authentication by username and password includes the following steps:
 

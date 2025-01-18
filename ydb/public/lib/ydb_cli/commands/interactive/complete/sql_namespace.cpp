@@ -6,10 +6,10 @@ namespace NSQLComplete {
 
     using NThreading::MakeFuture;
 
-    TFuture<TYQLNamesList> TYQLNamespace::GetNamesStartingWith(TStringBuf prefix) {
-        return GetNames().Apply([prefix = ToLowerUTF8(TYQLName(prefix))](auto&& future) {
-            TYQLNamesList names = future.GetValue();
-            auto removed = std::ranges::remove_if(names, [&](const TYQLName& name) {
+    TFuture<TSqlNamesList> TSqlNamespace::GetNamesStartingWith(TStringBuf prefix) {
+        return GetNames().Apply([prefix = ToLowerUTF8(TSqlName(prefix))](auto&& future) {
+            TSqlNamesList names = future.GetValue();
+            auto removed = std::ranges::remove_if(names, [&](const TSqlName& name) {
                 return !ToLowerUTF8(name).StartsWith(prefix);
             });
             names.erase(std::begin(removed), std::end(removed));
@@ -17,12 +17,12 @@ namespace NSQLComplete {
         });
     }
 
-    TYQLKeywords::TYQLKeywords(TYQLNamesList keywords)
+    TSqlKeywords::TSqlKeywords(TSqlNamesList keywords)
         : Keywords(std::move(keywords))
     {
     }
 
-    TFuture<TYQLNamesList> TYQLKeywords::GetNames() {
+    TFuture<TSqlNamesList> TSqlKeywords::GetNames() {
         return MakeFuture(Keywords);
     }
 

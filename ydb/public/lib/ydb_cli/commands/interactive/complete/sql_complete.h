@@ -37,7 +37,7 @@ namespace NSQLComplete {
         TVector<TCandidate> Candidates;
     };
 
-    class TYQLCompletionEngine final {
+    class TSqlCompletionEngine final {
         using TDefaultYQLGrammar = TAntlrGrammar<
             NALPDefaultAntlr4::SQLv1Antlr4Lexer,
             NALPDefaultAntlr4::SQLv1Antlr4Parser>;
@@ -47,12 +47,12 @@ namespace NSQLComplete {
             NALPAnsiAntlr4::SQLv1Antlr4Parser>;
 
     public:
-        TYQLCompletionEngine();
+        TSqlCompletionEngine();
 
         TCompletion Complete(TStringBuf prefix);
 
     private:
-        IC3Engine& GetEngine(EYQLSyntaxMode mode);
+        IC3Engine& GetEngine(ESqlSyntaxMode mode);
 
         TC3Engine<TDefaultYQLGrammar> DefaultEngine;
         TC3Engine<TAnsiYQLGrammar> AnsiEngine;

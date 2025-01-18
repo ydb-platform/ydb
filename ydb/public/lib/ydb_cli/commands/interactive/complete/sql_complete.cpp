@@ -33,23 +33,23 @@ namespace NSQLComplete {
 
     // Parametrized by the syntax mode, as there is no guarantee that the
     // token and rule numbers (or even sets) will match in different modes.
-    const antlr4::dfa::Vocabulary& GetVocabulary(EYQLSyntaxMode mode);
-    std::unordered_set<TTokenId> GetIgnoredTokens(EYQLSyntaxMode mode);
-    std::unordered_set<TRuleId> GetPreferredRules(EYQLSyntaxMode mode);
-    IC3Engine::TConfig GetEngineConfig(EYQLSyntaxMode mode);
+    const antlr4::dfa::Vocabulary& GetVocabulary(ESqlSyntaxMode mode);
+    std::unordered_set<TTokenId> GetIgnoredTokens(ESqlSyntaxMode mode);
+    std::unordered_set<TRuleId> GetPreferredRules(ESqlSyntaxMode mode);
+    IC3Engine::TConfig GetEngineConfig(ESqlSyntaxMode mode);
 
     size_t LastWordIndex(TStringBuf text);
     TCompletedToken GetCompletedToken(TStringBuf prefix);
 
     bool IsIdKeyword(const TSuggestedToken& token);
 
-    TYQLCompletionEngine::TYQLCompletionEngine()
-        : DefaultEngine(GetEngineConfig(EYQLSyntaxMode::Default))
-        , AnsiEngine(GetEngineConfig(EYQLSyntaxMode::ANSI))
+    TSqlCompletionEngine::TSqlCompletionEngine()
+        : DefaultEngine(GetEngineConfig(ESqlSyntaxMode::Default))
+        , AnsiEngine(GetEngineConfig(ESqlSyntaxMode::ANSI))
     {
     }
 
-    TCompletion TYQLCompletionEngine::Complete(TStringBuf prefix) {
+    TCompletion TSqlCompletionEngine::Complete(TStringBuf prefix) {
         auto completedToken = GetCompletedToken(prefix);
 
         auto& c3 = GetEngine(QuerySyntaxMode(TString(prefix)));
@@ -58,8 +58,8 @@ namespace NSQLComplete {
 
         std::ranges::remove_if(tokens, IsIdKeyword);
 
-        TYQLKeywords keywordSource([&] {
-            TYQLNamesList names;
+        TSqlKeywords keywordSource([&] {
+            TSqlNamesList names;
             for (const auto& token : tokens) {
                 auto content = c3.GetVocabulary().getDisplayName(token.Number);
                 names.emplace_back(std::move(content));
@@ -67,7 +67,7 @@ namespace NSQLComplete {
             return names;
         }());
 
-        TMap<ECandidateKind, TFuture<TYQLNamesList>> requests;
+        TMap<ECandidateKind, TFuture<TSqlNamesList>> requests;
         requests.emplace(
             ECandidateKind::Keyword,
             keywordSource.GetNamesStartingWith(completedToken.Content));
@@ -93,26 +93,26 @@ namespace NSQLComplete {
         };
     }
 
-    IC3Engine& TYQLCompletionEngine::GetEngine(EYQLSyntaxMode mode) {
+    IC3Engine& TSqlCompletionEngine::GetEngine(ESqlSyntaxMode mode) {
         switch (mode) {
-            case EYQLSyntaxMode::Default:
+            case ESqlSyntaxMode::Default:
                 return DefaultEngine;
-            case EYQLSyntaxMode::ANSI:
+            case ESqlSyntaxMode::ANSI:
                 return AnsiEngine;
         }
     }
 
     // Returning a reference is okay as vocabulary storage is static
-    const antlr4::dfa::Vocabulary& GetVocabulary(EYQLSyntaxMode mode) {
+    const antlr4::dfa::Vocabulary& GetVocabulary(ESqlSyntaxMode mode) {
         switch (mode) {
-            case EYQLSyntaxMode::Default:
+            case ESqlSyntaxMode::Default:
                 return NALPDefaultAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
-            case EYQLSyntaxMode::ANSI:
+            case ESqlSyntaxMode::ANSI:
                 return NALPAnsiAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
         }
     }
 
-    std::unordered_set<TTokenId> GetIgnoredTokens(EYQLSyntaxMode mode) {
+    std::unordered_set<TTokenId> GetIgnoredTokens(ESqlSyntaxMode mode) {
         std::unordered_set<TTokenId> ignoredTokens;
 
         const auto keywords = NSQLFormat::GetKeywords();
@@ -128,7 +128,7 @@ namespace NSQLComplete {
         return ignoredTokens;
     }
 
-    std::unordered_set<TRuleId> GetPreferredRules(EYQLSyntaxMode mode) {
+    std::unordered_set<TRuleId> GetPreferredRules(ESqlSyntaxMode mode) {
         Y_UNUSED(mode);
 
         STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword);
@@ -147,7 +147,7 @@ namespace NSQLComplete {
         return preferredRules;
     }
 
-    IC3Engine::TConfig GetEngineConfig(EYQLSyntaxMode mode) {
+    IC3Engine::TConfig GetEngineConfig(ESqlSyntaxMode mode) {
         return {
             .IgnoredTokens = GetIgnoredTokens(mode),
             .PreferredRules = GetPreferredRules(mode),

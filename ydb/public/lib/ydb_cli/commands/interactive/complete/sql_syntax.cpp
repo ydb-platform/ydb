@@ -9,11 +9,11 @@ namespace NSQLComplete {
     using NSQLTranslation::TTranslationSettings;
     using NYql::TIssues;
 
-    EYQLSyntaxMode QuerySyntaxMode(const TString& queryUtf8) {
+    ESqlSyntaxMode QuerySyntaxMode(const TString& queryUtf8) {
         if (IsAnsiQuery(queryUtf8)) {
-            return EYQLSyntaxMode::ANSI;
+            return ESqlSyntaxMode::ANSI;
         }
-        return EYQLSyntaxMode::Default;
+        return ESqlSyntaxMode::Default;
     }
 
     bool IsAnsiQuery(const TString& queryUtf8) {

@@ -10,24 +10,24 @@ namespace NSQLComplete {
 
     using NThreading::TFuture;
 
-    using TYQLName = std::string;
-    using TYQLNamesList = TVector<TYQLName>;
+    using TSqlName = std::string;
+    using TSqlNamesList = TVector<TSqlName>;
 
-    class TYQLNamespace {
+    class TSqlNamespace {
     public:
-        virtual TFuture<TYQLNamesList> GetNames() = 0;
-        virtual TFuture<TYQLNamesList> GetNamesStartingWith(TStringBuf prefix);
-        virtual ~TYQLNamespace() = default;
+        virtual TFuture<TSqlNamesList> GetNames() = 0;
+        virtual TFuture<TSqlNamesList> GetNamesStartingWith(TStringBuf prefix);
+        virtual ~TSqlNamespace() = default;
     };
 
-    class TYQLKeywords final: public TYQLNamespace {
+    class TSqlKeywords final: public TSqlNamespace {
     public:
-        explicit TYQLKeywords(TYQLNamesList keywords);
+        explicit TSqlKeywords(TSqlNamesList keywords);
 
-        TFuture<TYQLNamesList> GetNames() override;
+        TFuture<TSqlNamesList> GetNames() override;
 
     private:
-        TYQLNamesList Keywords;
+        TSqlNamesList Keywords;
     };
 
 } // namespace NSQLComplete

@@ -54,7 +54,7 @@ private:
     std::string Prompt;
     std::string HistoryFilePath;
     TFileHandle HistoryFileHandle;
-    NSQLComplete::TYQLCompletionEngine CompletionEngine;
+    NSQLComplete::TSqlCompletionEngine CompletionEngine;
     replxx::Replxx Rx;
 };
 

@@ -239,15 +239,6 @@ TString CheckPathExistsArgMapper(const TString& arg)
     return arg;
 }
 
-TGuid CheckGuidArgMapper(const TString& arg)
-{
-    TGuid result;
-    if (!TGuid::FromString(arg, &result)) {
-        throw TProgramException(Format("Error parsing guid %Qv", arg));
-    }
-    return result;
-}
-
 NYson::TYsonString CheckYsonArgMapper(const TString& arg)
 {
     ParseYsonStringBuffer(arg, EYsonType::Node, GetNullYsonConsumer());

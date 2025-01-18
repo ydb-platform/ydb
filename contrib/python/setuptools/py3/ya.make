@@ -2,11 +2,12 @@
 
 PY3_LIBRARY()
 
-VERSION(74.1.3)
+VERSION(75.6.0)
 
 LICENSE(MIT)
 
 PEERDIR(
+    contrib/python/jaraco.collections
     contrib/python/jaraco.context
     contrib/python/jaraco.functools
     contrib/python/jaraco.text
@@ -35,15 +36,11 @@ PY_SRCS(
     setuptools/__init__.py
     setuptools/_core_metadata.py
     setuptools/_distutils/__init__.py
-    setuptools/_distutils/_collections.py
-    setuptools/_distutils/_functools.py
-    setuptools/_distutils/_itertools.py
     setuptools/_distutils/_log.py
     setuptools/_distutils/_macos_compat.py
     setuptools/_distutils/_modified.py
     setuptools/_distutils/_msvccompiler.py
     setuptools/_distutils/archive_util.py
-    setuptools/_distutils/bcppcompiler.py
     setuptools/_distutils/ccompiler.py
     setuptools/_distutils/cmd.py
     setuptools/_distutils/command/__init__.py
@@ -65,13 +62,10 @@ PY_SRCS(
     setuptools/_distutils/command/install_headers.py
     setuptools/_distutils/command/install_lib.py
     setuptools/_distutils/command/install_scripts.py
-    setuptools/_distutils/command/register.py
     setuptools/_distutils/command/sdist.py
-    setuptools/_distutils/command/upload.py
     setuptools/_distutils/compat/__init__.py
     setuptools/_distutils/compat/py38.py
     setuptools/_distutils/compat/py39.py
-    setuptools/_distutils/config.py
     setuptools/_distutils/core.py
     setuptools/_distutils/cygwinccompiler.py
     setuptools/_distutils/debug.py
@@ -99,6 +93,7 @@ PY_SRCS(
     setuptools/_normalization.py
     setuptools/_path.py
     setuptools/_reqs.py
+    setuptools/_shutil.py
     setuptools/archive_util.py
     setuptools/build_meta.py
     setuptools/command/__init__.py
@@ -120,14 +115,11 @@ PY_SRCS(
     setuptools/command/install_egg_info.py
     setuptools/command/install_lib.py
     setuptools/command/install_scripts.py
-    setuptools/command/register.py
     setuptools/command/rotate.py
     setuptools/command/saveopts.py
     setuptools/command/sdist.py
     setuptools/command/setopt.py
     setuptools/command/test.py
-    setuptools/command/upload.py
-    setuptools/command/upload_docs.py
     setuptools/compat/__init__.py
     setuptools/compat/py310.py
     setuptools/compat/py311.py

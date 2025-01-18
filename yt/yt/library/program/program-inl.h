@@ -8,6 +8,24 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T>
+T FromStringArgMapper(TStringBuf arg)
+{
+    T result;
+    if (!T::FromString(arg, &result)) {
+        throw TProgramException(Format("Error parsing %Qv", arg));
+    }
+    return result;
+}
+
+template <class T>
+T ParseEnumArgMapper(TStringBuf arg)
+{
+    return ParseEnum<T>(arg);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class E>
     requires std::is_enum_v<E>
 void TProgram::Abort(E exitCode) noexcept

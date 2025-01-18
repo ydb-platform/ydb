@@ -1,8 +1,8 @@
-#include "yql_complete.h"
+#include "sql_complete.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace NYdb::NConsoleClient;
+using namespace NSQLComplete;
 
 Y_UNIT_TEST_SUITE(YqlCompleteTests) {
     Y_UNIT_TEST(Beginning) {

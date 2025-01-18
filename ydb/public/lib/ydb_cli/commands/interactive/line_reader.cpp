@@ -1,7 +1,8 @@
 #include "line_reader.h"
 
-#include "yql_complete.h"
 #include "yql_highlight.h"
+
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/sql_complete.h>
 
 #include <util/generic/string.h>
 #include <util/system/file.h>
@@ -36,7 +37,7 @@ std::optional<FileHandlerLockGuard> LockFile(TFileHandle & fileHandle) {
     return FileHandlerLockGuard(&fileHandle);
 }
 
-replxx::Replxx::Color ReplxxColorOf(ECandidateKind /* kind */) {
+replxx::Replxx::Color ReplxxColorOf(NSQLComplete::ECandidateKind /* kind */) {
     return replxx::Replxx::Color::DEFAULT;
 }
 
@@ -53,7 +54,7 @@ private:
     std::string Prompt;
     std::string HistoryFilePath;
     TFileHandle HistoryFileHandle;
-    TYQLCompletionEngine CompletionEngine;
+    NSQLComplete::TYQLCompletionEngine CompletionEngine;
     replxx::Replxx Rx;
 };
 
@@ -87,7 +88,7 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
     Rx.enable_bracketed_paste();
     Rx.set_unique_history(true);
     Rx.set_complete_on_empty(true);
-    Rx.set_word_break_characters(WordBreakCharacters.data());
+    Rx.set_word_break_characters(NSQLComplete::WordBreakCharacters.data());
     Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code); });
     Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code); });
     Rx.bind_key(replxx::Replxx::KEY::control('D'), [](char32_t) { return replxx::Replxx::ACTION_RESULT::BAIL; });

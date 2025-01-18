@@ -6,15 +6,19 @@
 
 {% list tabs group=os %}
 
-- Linux
+- Linux (amd64)
 
    {% include notitle [Linux](_includes/ydb-cli/linux.md) %}
 
-- macOS (Intel)
+- Linux (arm64)
+
+   {% include notitle [LinuxArm64](_includes/ydb-cli/linux_arm64.md) %}
+
+- macOS (amd64)
 
    {% include notitle [macIntel](_includes/ydb-cli/darwin_amd64.md) %}
 
-- macOS (M1 arm)
+- macOS (arm64)
 
    {% include notitle [macM1](_includes/ydb-cli/darwin_arm64.md) %}
 

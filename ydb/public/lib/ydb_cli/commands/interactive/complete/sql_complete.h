@@ -59,8 +59,14 @@ namespace NSQLComplete {
     private:
         IC3Engine& GetEngine(ESqlSyntaxMode mode);
 
+        TVector<TString> SiftedKeywords(const TVector<TSuggestedToken>& tokens, ESqlSyntaxMode mode);
+        const std::unordered_set<TTokenId>& GetKeywordTokens(ESqlSyntaxMode mode);
+
         TC3Engine<TDefaultYQLGrammar> DefaultEngine;
         TC3Engine<TAnsiYQLGrammar> AnsiEngine;
+
+        std::unordered_set<TTokenId> DefaultKeywordTokens;
+        std::unordered_set<TTokenId> AnsiKeywordTokens;
     };
 
 } // namespace NSQLComplete

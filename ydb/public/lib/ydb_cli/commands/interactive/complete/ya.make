@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     sql_complete.cpp
-    sql_namespace.cpp
     sql_syntax.cpp
     string_util.cpp
 )

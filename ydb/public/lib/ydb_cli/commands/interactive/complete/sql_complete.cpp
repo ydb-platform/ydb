@@ -2,7 +2,6 @@
 
 #include "c3_engine.h"
 #include "string_util.h"
-#include "sql_namespace.h"
 #include "sql_syntax.h"
 
 #include <yql/essentials/sql/v1/format/sql_format.h>
@@ -31,9 +30,9 @@ namespace NSQLComplete {
         RULE(Keyword_compat),
     };
 
-    // Parametrized by the syntax mode, as there is no guarantee that the
-    // token and rule numbers (or even sets) will match in different modes.
     const antlr4::dfa::Vocabulary& GetVocabulary(ESqlSyntaxMode mode);
+    std::unordered_set<TTokenId> GetAllTokens(ESqlSyntaxMode mode);
+    std::unordered_set<TTokenId> GetKeywordTokens(ESqlSyntaxMode mode);
     std::unordered_set<TTokenId> GetIgnoredTokens(ESqlSyntaxMode mode);
     std::unordered_set<TRuleId> GetPreferredRules(ESqlSyntaxMode mode);
     IC3Engine::TConfig GetEngineConfig(ESqlSyntaxMode mode);
@@ -43,9 +42,21 @@ namespace NSQLComplete {
 
     bool IsIdKeyword(const TSuggestedToken& token);
 
+    TVector<TString> SiftedKeywords(
+        const TVector<TSuggestedToken>& tokens,
+        const antlr4::dfa::Vocabulary& vocabulary);
+
+    void EnrichWithKeywords(TVector<TCandidate>& candidates, TVector<TString> keywords);
+
+    void FilterByContent(TVector<TCandidate>& candidates, TStringBuf prefix);
+
+    void RankingSort(TVector<TCandidate>& candidates);
+
     TSqlCompletionEngine::TSqlCompletionEngine()
         : DefaultEngine(GetEngineConfig(ESqlSyntaxMode::Default))
         , AnsiEngine(GetEngineConfig(ESqlSyntaxMode::ANSI))
+        , DefaultKeywordTokens(NSQLComplete::GetKeywordTokens(ESqlSyntaxMode::Default))
+        , AnsiKeywordTokens(NSQLComplete::GetKeywordTokens(ESqlSyntaxMode::ANSI))
     {
     }
 
@@ -54,40 +65,18 @@ namespace NSQLComplete {
 
         auto completedToken = GetCompletedToken(prefix);
 
-        auto& c3 = GetEngine(QuerySyntaxMode(TString(prefix)));
+        auto mode = QuerySyntaxMode(TString(prefix));
+        auto& c3 = GetEngine(mode);
 
         auto tokens = c3.Complete(prefix);
-
         std::ranges::remove_if(tokens, IsIdKeyword);
 
-        TSqlKeywords keywordSource([&] {
-            TSqlNamesList names;
-            for (const auto& token : tokens) {
-                auto content = c3.GetVocabulary().getDisplayName(token.Number);
-                names.emplace_back(std::move(content));
-            }
-            return names;
-        }());
-
-        TMap<ECandidateKind, TFuture<TSqlNamesList>> requests;
-        requests.emplace(
-            ECandidateKind::Keyword,
-            keywordSource.GetNamesStartingWith(completedToken.Content));
-
         TVector<TCandidate> candidates;
+        EnrichWithKeywords(candidates, SiftedKeywords(tokens, mode));
 
-        for (auto [kind, names] : requests) {
-            for (auto& name : names.ExtractValueSync()) {
-                candidates.push_back({
-                    .Kind = kind,
-                    .Content = std::move(name),
-                });
-            }
-        }
+        FilterByContent(candidates, completedToken.Content);
 
-        Sort(candidates, [](const TCandidate& lhs, const TCandidate& rhs) {
-            return std::tie(lhs.Content, lhs.Kind) < std::tie(rhs.Content, rhs.Kind);
-        });
+        RankingSort(candidates);
 
         return {
             .CompletedToken = std::move(completedToken),
@@ -104,6 +93,29 @@ namespace NSQLComplete {
         }
     }
 
+    TVector<TString> TSqlCompletionEngine::SiftedKeywords(const TVector<TSuggestedToken>& tokens, ESqlSyntaxMode mode) {
+        const auto& vocabulary = GetVocabulary(mode);
+        const auto& keywordTokens = GetKeywordTokens(mode);
+
+        TVector<TString> keywords;
+        for (const auto& token : tokens) {
+            if (keywordTokens.contains(token.Number)) {
+                keywords.emplace_back(vocabulary.getDisplayName(token.Number));
+            }
+        }
+        return keywords;
+    }
+
+    const std::unordered_set<TTokenId>& TSqlCompletionEngine::GetKeywordTokens(
+        ESqlSyntaxMode mode) {
+        switch (mode) {
+            case ESqlSyntaxMode::Default:
+                return DefaultKeywordTokens;
+            case ESqlSyntaxMode::ANSI:
+                return AnsiKeywordTokens;
+        }
+    }
+
     // Returning a reference is okay as vocabulary storage is static
     const antlr4::dfa::Vocabulary& GetVocabulary(ESqlSyntaxMode mode) {
         switch (mode) {
@@ -114,19 +126,38 @@ namespace NSQLComplete {
         }
     }
 
-    std::unordered_set<TTokenId> GetIgnoredTokens(ESqlSyntaxMode mode) {
-        std::unordered_set<TTokenId> ignoredTokens;
-
-        const auto keywords = NSQLFormat::GetKeywords();
+    std::unordered_set<TTokenId> GetAllTokens(ESqlSyntaxMode mode) {
         const auto& vocabulary = GetVocabulary(mode);
 
+        std::unordered_set<TTokenId> allTokens;
+
         for (size_t type = 1; type <= vocabulary.getMaxTokenType(); ++type) {
-            if (!keywords.contains(vocabulary.getSymbolicName(type))) {
-                ignoredTokens.emplace(type);
-            }
+            allTokens.emplace(type);
         }
 
-        ignoredTokens.emplace(TOKEN_EOF);
+        return allTokens;
+    }
+
+    std::unordered_set<TTokenId> GetKeywordTokens(ESqlSyntaxMode mode) {
+        const auto& vocabulary = GetVocabulary(mode);
+        const auto keywords = NSQLFormat::GetKeywords();
+
+        auto keywordTokens = GetAllTokens(mode);
+        std::erase_if(keywordTokens, [&](TTokenId token) {
+            return !keywords.contains(vocabulary.getSymbolicName(token));
+        });
+        keywordTokens.erase(TOKEN_EOF);
+
+        return keywordTokens;
+    }
+
+    std::unordered_set<TTokenId> GetIgnoredTokens(ESqlSyntaxMode mode) {
+        auto ignoredTokens = GetAllTokens(mode);
+
+        for (auto keywordToken : GetKeywordTokens(mode)) {
+            ignoredTokens.erase(keywordToken);
+        }
+
         return ignoredTokens;
     }
 
@@ -166,6 +197,30 @@ namespace NSQLComplete {
     bool IsIdKeyword(const TSuggestedToken& token) {
         return AnyOf(token.ParserCallStack, [&](TRuleId rule) {
             return Find(KeywordRules, rule) != std::end(KeywordRules);
+        });
+    }
+
+    void EnrichWithKeywords(
+        TVector<TCandidate>& candidates,
+        TVector<TString> keywords) {
+        for (auto keyword : keywords) {
+            candidates.push_back({
+                .Kind = ECandidateKind::Keyword,
+                .Content = std::move(keyword),
+            });
+        }
+    }
+
+    void FilterByContent(TVector<TCandidate>& candidates, TStringBuf prefix) {
+        auto removed = std::ranges::remove_if(candidates, [&](const auto& candidate) {
+            return !ToLowerUTF8(candidate.Content).StartsWith(prefix);
+        });
+        candidates.erase(std::begin(removed), std::end(removed));
+    }
+
+    void RankingSort(TVector<TCandidate>& candidates) {
+        Sort(candidates, [](const TCandidate& lhs, const TCandidate& rhs) {
+            return std::tie(lhs.Content, lhs.Kind) < std::tie(rhs.Content, rhs.Kind);
         });
     }
 

@@ -15,6 +15,11 @@
 
 namespace NSQLComplete {
 
+    struct TCompletionInput final {
+        TStringBuf Text;
+        size_t CursorPosition = Text.length();
+    };
+
     struct TCompletedToken final {
         TStringBuf Content;
         size_t SourcePosition;
@@ -49,7 +54,7 @@ namespace NSQLComplete {
     public:
         TSqlCompletionEngine();
 
-        TCompletion Complete(TStringBuf prefix);
+        TCompletion Complete(TCompletionInput input);
 
     private:
         IC3Engine& GetEngine(ESqlSyntaxMode mode);

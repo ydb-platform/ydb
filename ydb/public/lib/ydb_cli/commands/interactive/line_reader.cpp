@@ -67,7 +67,10 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
     Rx.install_window_change_handler();
 
     auto completion_callback = [this](const std::string & prefix, size_t contextLen) {
-        auto completion = CompletionEngine.Complete(prefix);
+        auto completion = CompletionEngine.Complete({
+            .Text = prefix,
+            .CursorPosition = prefix.length(),
+        });
 
         contextLen = completion.CompletedToken.SourcePosition;
 

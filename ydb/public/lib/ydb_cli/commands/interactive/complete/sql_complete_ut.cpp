@@ -43,12 +43,12 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("").Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete(" ").Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("  ").Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete(";").Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("; ").Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete(" ; ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({""}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({" "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"  "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({";"}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"; "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({" ; "}).Candidates, expected);
     }
 
     Y_UNIT_TEST(Alter) {
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("ALTER ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"ALTER "}).Candidates, expected);
     }
 
     Y_UNIT_TEST(Create) {
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("CREATE ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"CREATE "}).Candidates, expected);
     }
 
     Y_UNIT_TEST(Delete) {
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("DELETE ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"DELETE "}).Candidates, expected);
     }
 
     Y_UNIT_TEST(Drop) {
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("DROP ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"DROP "}).Candidates, expected);
     }
 
     Y_UNIT_TEST(Explain) {
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("EXPLAIN ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"EXPLAIN "}).Candidates, expected);
     }
 
     Y_UNIT_TEST(Grant) {
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("GRANT ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"GRANT "}).Candidates, expected);
     }
 
     Y_UNIT_TEST(Insert) {
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("INSERT ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"INSERT "}).Candidates, expected);
     }
 
     Y_UNIT_TEST(Pragma) {
@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("PRAGMA ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"PRAGMA "}).Candidates, expected);
     }
 
     Y_UNIT_TEST(Select) {
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("SELECT ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT "}).Candidates, expected);
     }
 
     Y_UNIT_TEST(Upsert) {
@@ -262,20 +262,20 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("UPSERT ").Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"UPSERT "}).Candidates, expected);
     }
 
     Y_UNIT_TEST(UTF8Wide) {
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("\xF0\x9F\x98\x8A").Candidates.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("编码").Candidates.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"\xF0\x9F\x98\x8A"}).Candidates.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"编码"}).Candidates.size(), 0);
     }
 
     Y_UNIT_TEST(WordBreak) {
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("SELECT (").Candidates.size(), 28);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("SELECT (1)").Candidates.size(), 30);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete("SELECT 1;").Candidates.size(), 33);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT ("}).Candidates.size(), 28);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT (1)"}).Candidates.size(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT 1;"}).Candidates.size(), 33);
     }
 
     Y_UNIT_TEST(Typing) {
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
         for (std::size_t size = 0; size <= queryUtf16.size(); ++size) {
             const TWtringBuf prefixUtf16(queryUtf16, 0, size);
-            auto completion = engine.Complete(TString::FromUtf16(prefixUtf16));
+            auto completion = engine.Complete({TString::FromUtf16(prefixUtf16)});
             Y_DO_NOT_OPTIMIZE_AWAY(completion);
         }
     }

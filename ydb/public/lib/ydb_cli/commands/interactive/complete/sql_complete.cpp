@@ -49,7 +49,9 @@ namespace NSQLComplete {
     {
     }
 
-    TCompletion TSqlCompletionEngine::Complete(TStringBuf prefix) {
+    TCompletion TSqlCompletionEngine::Complete(TCompletionInput input) {
+        auto prefix = input.Text.Head(input.CursorPosition);
+
         auto completedToken = GetCompletedToken(prefix);
 
         auto& c3 = GetEngine(QuerySyntaxMode(TString(prefix)));

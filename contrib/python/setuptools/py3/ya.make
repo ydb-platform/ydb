@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(71.1.0)
+VERSION(74.1.3)
 
 LICENSE(MIT)
 
@@ -11,7 +11,6 @@ PEERDIR(
     contrib/python/jaraco.functools
     contrib/python/jaraco.text
     contrib/python/more-itertools
-    contrib/python/ordered-set
     contrib/python/packaging
     contrib/python/platformdirs
     contrib/python/typeguard
@@ -43,21 +42,6 @@ PY_SRCS(
     setuptools/_distutils/_macos_compat.py
     setuptools/_distutils/_modified.py
     setuptools/_distutils/_msvccompiler.py
-    setuptools/_distutils/_vendor/__init__.py
-    setuptools/_distutils/_vendor/packaging/__init__.py
-    setuptools/_distutils/_vendor/packaging/_elffile.py
-    setuptools/_distutils/_vendor/packaging/_manylinux.py
-    setuptools/_distutils/_vendor/packaging/_musllinux.py
-    setuptools/_distutils/_vendor/packaging/_parser.py
-    setuptools/_distutils/_vendor/packaging/_structures.py
-    setuptools/_distutils/_vendor/packaging/_tokenizer.py
-    setuptools/_distutils/_vendor/packaging/markers.py
-    setuptools/_distutils/_vendor/packaging/metadata.py
-    setuptools/_distutils/_vendor/packaging/requirements.py
-    setuptools/_distutils/_vendor/packaging/specifiers.py
-    setuptools/_distutils/_vendor/packaging/tags.py
-    setuptools/_distutils/_vendor/packaging/utils.py
-    setuptools/_distutils/_vendor/packaging/version.py
     setuptools/_distutils/archive_util.py
     setuptools/_distutils/bcppcompiler.py
     setuptools/_distutils/ccompiler.py
@@ -100,8 +84,6 @@ PY_SRCS(
     setuptools/_distutils/file_util.py
     setuptools/_distutils/filelist.py
     setuptools/_distutils/log.py
-    setuptools/_distutils/msvc9compiler.py
-    setuptools/_distutils/msvccompiler.py
     setuptools/_distutils/spawn.py
     setuptools/_distutils/sysconfig.py
     setuptools/_distutils/text_file.py
@@ -149,6 +131,7 @@ PY_SRCS(
     setuptools/compat/__init__.py
     setuptools/compat/py310.py
     setuptools/compat/py311.py
+    setuptools/compat/py312.py
     setuptools/compat/py39.py
     setuptools/config/__init__.py
     setuptools/config/_apply_pyprojecttoml.py
@@ -190,7 +173,10 @@ RESOURCE_FILES(
     .dist-info/top_level.txt
     pkg_resources/api_tests.txt
     pkg_resources/py.typed
-    setuptools/_distutils/_vendor/packaging/py.typed
+    setuptools/config/NOTICE
+    setuptools/config/_validate_pyproject/NOTICE
+    setuptools/config/distutils.schema.json
+    setuptools/config/setuptools.schema.json
     setuptools/script.tmpl
 )
 

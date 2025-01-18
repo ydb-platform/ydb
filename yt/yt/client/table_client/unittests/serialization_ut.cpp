@@ -94,8 +94,6 @@ TEST(TLegacyOwningKeySerialization, CompositeKeys)
     auto nameTable = New<TNameTable>();
     nameTable->RegisterName("key0");
 
-
-
     auto checkSerializeDeserialize = [] (auto&& value) {
         TStringStream str;
         NYson::TYsonWriter ysonWriter(&str);
@@ -109,6 +107,7 @@ TEST(TLegacyOwningKeySerialization, CompositeKeys)
         Deserialize(result, node);
         EXPECT_EQ(value, result);
     };
+
 #define CHECK_SERIALIZE_DESERIALIZE(x) do { SCOPED_TRACE(""); checkSerializeDeserialize(x);} while (0)
 
     CHECK_SERIALIZE_DESERIALIZE(

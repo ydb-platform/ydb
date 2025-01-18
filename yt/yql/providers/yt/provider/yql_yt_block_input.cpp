@@ -41,21 +41,16 @@ private:
 
         auto settings = RemoveSetting(map.Settings().Ref(), EYtSettingType::BlockInputReady, ctx);
         settings = AddSetting(*settings, EYtSettingType::BlockInputApplied, TExprNode::TPtr(), ctx);
-
-        // Static assert to ensure backward compatible change: if the
-        // constant below is true, both input and output types of
-        // WideFromBlocks callable have to be WideStream; otherwise,
-        // both input and output types have to be WideFlow.
-        // FIXME: When all spots using WideFromBlocks are adjusted
-        // to work with WideStream, drop the assertion below.
-        static_assert(!NYql::NBlockStreamIO::WideFromBlocks);
-
         auto mapperLambda = Build<TCoLambda>(ctx, map.Mapper().Pos())
             .Args({"flow"})
             .Body<TExprApplier>()
                 .Apply(map.Mapper())
-                .With<TCoWideFromBlocks>(0)
-                    .Input("flow")
+                .With<TCoToFlow>(0)
+                    .Input<TCoWideFromBlocks>()
+                        .Input<TCoFromFlow>()
+                            .Input("flow")
+                        .Build()
+                    .Build()
                 .Build()
             .Build()
             .Done()

@@ -21,7 +21,6 @@
 #include <yt/cpp/mapreduce/interface/protobuf_format.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-#include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/http/requests.h>
 #include <yt/cpp/mapreduce/http/retry_request.h>
@@ -2408,7 +2407,8 @@ TString TOperation::TOperationImpl::GetWebInterfaceUrl() const
 
 void TOperation::TOperationImpl::OnPrepared()
 {
-    Y_ABORT_UNLESS(!PreparedPromise_.HasException() && !PreparedPromise_.HasValue());
+    Y_ABORT_IF(PreparedPromise_.HasException());
+    Y_ABORT_IF(PreparedPromise_.HasValue());
     PreparedPromise_.SetValue();
 }
 
@@ -2454,7 +2454,8 @@ bool TOperation::TOperationImpl::IsStarted() const {
 
 void TOperation::TOperationImpl::OnPreparationException(std::exception_ptr e)
 {
-    Y_ABORT_UNLESS(!PreparedPromise_.HasValue() && !PreparedPromise_.HasException());
+    Y_ABORT_IF(PreparedPromise_.HasValue());
+    Y_ABORT_IF(PreparedPromise_.HasException());
     PreparedPromise_.SetException(e);
 }
 
@@ -3022,7 +3023,8 @@ void* SyncPrepareAndStartOperation(void* pArgs)
         try {
             prepare();
             operation->OnPrepared();
-        } catch (...) {
+        } catch (const std::exception& ex) {
+            YT_LOG_INFO("Operation preparation failed: %v", ex.what());
             operation->OnPreparationException(std::current_exception());
         }
         if (mode >= TOperationOptions::EStartOperationMode::AsyncStart) {

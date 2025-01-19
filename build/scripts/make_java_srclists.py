@@ -78,10 +78,38 @@ class SourcesSorter:
                 writelines(f, self.cur_jsources)
 
 
-def add_rel_src_to_coverage(coverage, src, source_root):
-    rel = os.path.relpath(src, source_root)
-    if not rel.startswith('..' + os.path.sep):
-        coverage.append(rel)
+class SourcesConsumer:
+    def __init__(self, source_root, with_kotlin, with_coverage):
+        self.source_root = source_root
+        self.with_kotlin = with_kotlin
+        self.with_coverage = with_coverage
+
+        self.java = []
+        self.kotlin = []
+        self.coverage = []
+
+    def consume(self, src, sorter):
+        if src.endswith(".java"):
+            self.java.append(src)
+            self.kotlin.append(src)
+            self._add_rel_src_to_coverage(src)
+        elif self.with_kotlin and src.endswith(".kt"):
+            self.kotlin.append(src)
+            self._add_rel_src_to_coverage(src)
+        else:
+            assert sorter.cur_srcdir is not None and sorter.cur_resources_list_file is not None
+            sorter.cur_resources.append(os.path.relpath(src, sorter.cur_srcdir))
+
+        if sorter.cur_jsources_list_file is not None:
+            assert sorter.cur_srcdir is not None
+            sorter.cur_jsources.append(os.path.relpath(src, sorter.cur_srcdir))
+
+    def _add_rel_src_to_coverage(self, src):
+        if not self.with_coverage or not self.source_root:
+            return
+        rel = os.path.relpath(src, self.source_root)
+        if not rel.startswith('..' + os.path.sep):
+            self.coverage.append(rel)
 
 
 def main():
@@ -94,43 +122,27 @@ def main():
     parser.add_argument('--source-root')
     args, remaining_args = parser.parse_known_args(args)
 
-    java = []
-    kotlin = []
-    coverage = []
-
     src_sorter = SourcesSorter(args.moddir)
+    src_consumer = SourcesConsumer(
+        source_root=args.source_root,
+        with_kotlin=True if args.kotlin else False,
+        with_coverage=True if args.coverage else False)
+
     for src in src_sorter.sort_args(remaining_args):
-        # Handle archived sources here
         if src.endswith(".gentar"):
             unpack_dir(src, os.path.dirname(src))
             continue
 
-        # Handle regular souce files there
-        if src.endswith(".java"):
-            java.append(src)
-            kotlin.append(src)
-            if args.coverage and args.source_root:
-                add_rel_src_to_coverage(coverage, src, args.source_root)
-        elif args.kotlin and src.endswith(".kt"):
-            kotlin.append(src)
-            if args.coverage and args.source_root:
-                add_rel_src_to_coverage(coverage, src, args.source_root)
-        else:
-            assert src_sorter.cur_srcdir is not None and src_sorter.cur_resources_list_file is not None
-            src_sorter.cur_resources.append(os.path.relpath(src, src_sorter.cur_srcdir))
-
-        if src_sorter.cur_jsources_list_file is not None:
-            assert src_sorter.cur_srcdir is not None
-            src_sorter.cur_jsources.append(os.path.relpath(src, src_sorter.cur_srcdir))
+        src_consumer.consume(src, src_sorter)
 
     if args.java:
         with open(args.java, 'w') as f:
-            writelines(f, java)
+            writelines(f, src_consumer.java)
     if args.kotlin:
         with open(args.kotlin, 'w') as f:
-            writelines(f, kotlin)
+            writelines(f, src_consumer.kotlin)
     if args.coverage:
-        jcov.write_coverage_sources(args.coverage, args.source_root, coverage)
+        jcov.write_coverage_sources(args.coverage, args.source_root, src_consumer.coverage)
 
     return 0
 

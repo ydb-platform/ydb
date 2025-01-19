@@ -42,26 +42,26 @@ protected:
         opts
             .AddLongOption(
                 Format("%v-schema", argumentName),
-                Format("Prints %v schema and exit", argumentName))
+                Format("Prints %v schema", argumentName))
             .OptionalValue(YsonSchemaFormat_, "FORMAT")
             .Handler0([&] { ConfigSchemaFlag_ = true; })
             .StoreResult(&ConfigSchema_);
         opts
             .AddLongOption(
                 Format("%v-template", argumentName),
-                Format("Prints %v template and exit", argumentName))
+                Format("Prints %v template", argumentName))
             .OptionalArgument()
             .SetFlag(&ConfigTemplateFlag_);
         opts
             .AddLongOption(
                 Format("%v-actual", argumentName),
-                Format("Prints actual %v and exit", argumentName))
+                Format("Prints actual %v", argumentName))
             .OptionalArgument()
             .SetFlag(&ConfigActualFlag_);
         opts
             .AddLongOption(
                 Format("%v-unrecognized", argumentName),
-                Format("Prints unrecognized %v and exit", argumentName))
+                Format("Prints unrecognized %v", argumentName))
             .OptionalArgument()
             .SetFlag(&ConfigUnrecognizedFlag_);
 

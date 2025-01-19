@@ -1371,7 +1371,7 @@ public:
                 createUser.SetPassword(settings.Password);
             }
 
-            createUser.SetCanLogin(settings.CanLogin.value_or(true));
+            createUser.SetCanLogin(settings.CanLogin);
 
             SendSchemeRequest(ev.Release()).Apply(
                 [createUserPromise](const TFuture<TGenericResult>& future) mutable {

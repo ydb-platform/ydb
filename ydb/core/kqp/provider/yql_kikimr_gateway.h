@@ -662,7 +662,7 @@ struct TCreateUserSettings {
     TString UserName;
     TString Password;
     bool PasswordEncrypted = false;
-    std::optional<bool> CanLogin;
+    bool CanLogin;
 };
 
 struct TModifyPermissionsSettings {
@@ -682,7 +682,7 @@ struct TAlterUserSettings {
     TString UserName;
     std::optional<TString> Password;
     bool PasswordEncrypted = false;
-    bool CanLogin = true;
+    std::optional<bool> CanLogin;
 };
 
 struct TDropUserSettings {

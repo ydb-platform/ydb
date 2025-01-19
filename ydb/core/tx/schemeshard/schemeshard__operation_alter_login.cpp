@@ -33,10 +33,10 @@ public:
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
 
-                    TCreateUserOption request;
+                    NLogin::TLoginProvider::TCreateUserRequest request;
                     request.User = createUser.GetUser();
                     request.Password = createUser.GetPassword();
-                    request = createUser.GetCanLogin();
+                    request.CanLogin = createUser.GetCanLogin();
 
                     auto response = context.SS->LoginProvider.CreateUser(request);
 

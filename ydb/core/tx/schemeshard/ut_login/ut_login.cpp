@@ -402,7 +402,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         CreateAlterLoginCreateGroup(runtime, ++txId, "/MyRoot", "group1");
         auto resultLogin = Login(runtime, "group1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid user");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "group1 is a group");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
 
         {

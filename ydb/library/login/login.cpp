@@ -359,7 +359,8 @@ std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) 
 }
 
 bool TLoginProvider::CheckLockout(const TSidRecord& sid) const {
-    return (AccountLockout.AttemptThreshold != 0 && sid.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold);
+    return  !sid.IsEnabled
+            || AccountLockout.AttemptThreshold != 0 && sid.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold;
 }
 
 void TLoginProvider::ResetFailedLoginAttemptCount(TSidRecord* sid) {
@@ -381,7 +382,7 @@ bool TLoginProvider::ShouldResetFailedAttemptCount(const TSidRecord& sid) const 
 }
 
 bool TLoginProvider::ShouldUnlockAccount(const TSidRecord& sid) const {
-    return ShouldResetFailedAttemptCount(sid);
+    return sid.IsEnabled && ShouldResetFailedAttemptCount(sid);
 }
 
 TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCheckLockOutRequest& request) {
@@ -404,7 +405,7 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
             response.Status = TCheckLockOutResponse::EStatus::RESET;
         } else {
             response.Status = TCheckLockOutResponse::EStatus::SUCCESS;
-            response.Error = TStringBuilder() << "User " << request.User << " is locked out";
+            response.Error = TStringBuilder() << "User " << request.User << " is not permitted to log in";
         }
         return response;
     } else if (ShouldResetFailedAttemptCount(sid)) {
@@ -443,8 +444,6 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
             sid->FailedLoginAttemptCount++;
             return response;
         }
-
-        itUser->second.LastSuccessfulLogin = response.LoginAttemptTime;
     }
 
     const TKeyRecord& key = Keys.back();
@@ -778,7 +777,6 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             sid.Type = pbSid.GetType();
             sid.Name = pbSid.GetName();
             sid.Hash = pbSid.GetHash();
-            sid.LastSuccessfulLogin = pbSid.GetLastSuccessfulLogin();
             sid.IsEnabled = pbSid.GetIsEnabled();
             for (const auto& pbSubSid : pbSid.GetMembers()) {
                 sid.Members.emplace(pbSubSid);

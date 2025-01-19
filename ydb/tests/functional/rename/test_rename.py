@@ -111,7 +111,7 @@ class Simple:
     async def driver_init_async(self):
         self._driver = ydb.aio.Driver(self._driver_configs)
         await self._driver.wait(timeout=15)
-        self._pool = ydb.aio.SessionPool(driver=self._driver, size=10)
+        self._pool = ydb.aio.QuerySessionPool(driver=self._driver, size=10)
 
     upsert_table_template = (
         r"""

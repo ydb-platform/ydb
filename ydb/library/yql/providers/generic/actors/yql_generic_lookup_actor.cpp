@@ -29,6 +29,7 @@ namespace NYql::NDq {
 
     namespace {
         constexpr ui32 RequestRetriesLimit = 10; // TODO lookup parameters or PRAGMA?
+        constexpr TDuration RequestTimeout = TDuration::Minutes(3); // TODO lookup parameters or PRAGMA?
 
         const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
             Y_ABORT_UNLESS(t1);
@@ -195,7 +196,7 @@ namespace NYql::NDq {
             *readRequest.add_splits() = split;
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
             readRequest.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
-            Connector->ReadSplits(readRequest).Subscribe([
+            Connector->ReadSplits(readRequest, RequestTimeout).Subscribe([
                     actorSystem = TActivationContext::ActorSystem(),
                     selfId = SelfId(),
                     retriesRemaining = RetriesRemaining
@@ -284,7 +285,7 @@ namespace NYql::NDq {
             };
 
             splitRequest.Setmax_split_count(1);
-            Connector->ListSplits(splitRequest).Subscribe([
+            Connector->ListSplits(splitRequest, RequestTimeout).Subscribe([
                     actorSystem = TActivationContext::ActorSystem(),
                     selfId = SelfId(),
                     retriesRemaining = RetriesRemaining
@@ -395,13 +396,17 @@ namespace NYql::NDq {
         }
 
         static void SendRetryOrError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, ui32 retriesRemaining) {
-            if (NConnector::GrpcStatusNeedsRetry(status)) {
+            if (NConnector::GrpcStatusNeedsRetry(status) || status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED) {
                 if (retriesRemaining) {
                     const auto retry = RequestRetriesLimit - retriesRemaining;
                     const auto delay = TDuration::MilliSeconds(1u << retry); // Exponential delay from 1ms to ~0.5s
                     // <<< TODO tune/tweak
                     YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry " << (retry + 1) << " of " << RequestRetriesLimit << ", scheduled in " << delay;
                     --retriesRemaining;
+                    if (status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED) {
+                        // if error was deadline, retry only once
+                        retriesRemaining = 0; // TODO tune/tweak
+                    }
                     actorSystem->Schedule(delay, new IEventHandle(selfId, selfId, new TEvRetry(retriesRemaining)));
                     return;
                 }

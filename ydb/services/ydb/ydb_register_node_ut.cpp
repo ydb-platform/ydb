@@ -69,7 +69,7 @@ private:
     static NKikimrConfig::TAppConfig GetAppConfig(const TServerInitialization& serverInitialization) {
         auto config = NKikimrConfig::TAppConfig();
 
-        auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
+        auto& securityConfig = *config.MutableSecurityConfig();
         if (serverInitialization.EnforceUserToken) {
             securityConfig.SetEnforceUserTokenRequirement(true);
         }

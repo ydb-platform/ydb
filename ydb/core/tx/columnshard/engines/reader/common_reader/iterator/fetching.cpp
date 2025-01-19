@@ -79,8 +79,8 @@ TString TFetchingScript::DebugString() const {
         return "";
     }
     sb << "{branch:" << BranchName << ";";
-    if (FinishInstant && StartInstant) {
-        sb << "duration:" << *FinishInstant - *StartInstant << ";";
+    if (AtomicGet(FinishInstant) && AtomicGet(StartInstant)) {
+        sb << "duration:" << AtomicGet(FinishInstant) - AtomicGet(StartInstant) << ";";
     }
 
     sb << "steps_10Ms:[" << sbBranch << "]}";

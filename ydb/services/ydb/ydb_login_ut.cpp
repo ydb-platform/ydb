@@ -95,7 +95,7 @@ private:
         authConfig->SetUseBlackBox(false);
         authConfig->SetUseLoginProvider(true);
         authConfig->SetEnableLoginAuthentication(isLoginAuthenticationEnabled);
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 

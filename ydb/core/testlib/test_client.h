@@ -465,7 +465,7 @@ namespace Tests {
         NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
         NMsgBusProxy::EResponseStatus CreateGroup(const TString& parent, const TString& group);
         NMsgBusProxy::EResponseStatus AddGroupMembership(const TString& parent, const TString& group, const TString& member);
-        
+
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent,
@@ -504,15 +504,14 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusResponse> Ls(const TString& path);
         static TPathVersion ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe);
         static TVector<ui64> ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-        bool FlatQuery(const TString& mkql, NKikimrMiniKQL::TResult& result);
-        bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
+        bool FlatQuery(TTestActorRuntime* runtime, const TString& mkql, NKikimrMiniKQL::TResult& result);
+        bool FlatQuery(TTestActorRuntime* runtime, const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
                        const NKikimrClient::TResponse& expectedResponse);
-        bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
+        bool FlatQuery(TTestActorRuntime* runtime, const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
                        ui32 expectedStatus = NMsgBusProxy::MSTATUS_OK);
-        bool FlatQueryParams(const TString &query, const TString &params, bool queryCompiled, NKikimrMiniKQL::TResult &result);
 
         // returns NMsgBusProxy::MSTATUS_* and the raw response
-        ui32 FlatQueryRaw(const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
+        ui32 FlatQueryRaw(TTestActorRuntime* runtime, const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
 
         bool Compile(const TString &mkql, TString &compiled);
         void SetSecurityToken(const TString& token) { SecurityToken = token; }

@@ -1,5 +1,4 @@
 import pytest
-from typing import Callable, Any, List, Self, Optional
 from library.recipes import common as recipes_common
 import yatest.common
 import moto
@@ -8,7 +7,6 @@ import logging
 import os
 import boto3
 import hashlib
-import botocore
 
 
 class S3Base(object):

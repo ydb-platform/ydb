@@ -28,7 +28,7 @@ class Query(object):
               tx: ydb.QueryTxContext | None = None,
               stats: bool | None = None,
               parameters: Optional[dict] = None,
-              retry_settings = None) -> List[Any]:
+              retry_settings=None) -> List[Any]:
         results = []
         if tx is None:
             if not stats:

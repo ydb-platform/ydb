@@ -32,15 +32,15 @@ class TestBase(TestLib, Query):
                                                    extra_feature_flags=["enable_resource_pools",
                                                                         "enable_external_data_sources",
                                                                         "enable_tiering_in_column_shard"],
-                                                   columnshard_config={
-                                                    'disabled_on_scheme_shard': False,
-                                                    'lag_for_compaction_before_tierings_ms': 0,
-                                                    'compaction_actualization_lag_ms': 0,
-                                                    'optimizer_freshness_check_duration_ms': 0,
-                                                    'small_portion_detect_size_limit': 0,
-                                                    },
-                                                    additional_log_configs={
-                                                        'TX_TIERING': LogLevels.DEBUG,}))
+                                                   column_shard_config={
+                                                       'disabled_on_scheme_shard': False,
+                                                       'lag_for_compaction_before_tierings_ms': 0,
+                                                       'compaction_actualization_lag_ms': 0,
+                                                       'optimizer_freshness_check_duration_ms': 0,
+                                                       'small_portion_detect_size_limit': 0,
+                                                       },
+                                                   additional_log_configs={
+                                                       'TX_TIERING': LogLevels.DEBUG}))
         cls.cluster.start()
         cls.driver = ydb.Driver(
             ydb.DriverConfig(
@@ -99,10 +99,8 @@ class TpchTestBaseH1(TestBase):
         args.extend(argv)
 
         return yatest.common.execute([cls.ydb_cli_path] + args,
-            #stderr=stderr_file,
-            wait=True,
-            #stdout=stdout_file
-            ).stdout.decode("utf-8")
+                                     wait=True,
+                                     ).stdout.decode("utf-8")
 
     def setup_method(cls):
         super().setup_method()

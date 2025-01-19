@@ -51,6 +51,195 @@ void MakeSimplePredicate(const TString& key, const TString& rangeEnd, TStringBui
     params.AddParam("$Key").String(key).Build();
 }
 
+struct TRange {
+    TString Key, RangeEnd;
+    bool KeysOnly, CountOnly;
+    ui64 Limit;
+    i64 KeyRevision;
+    i64 MinCreateRevision, MaxCreateRevision;
+    i64 MinModificateRevision, MaxModificateRevision;
+
+    bool Parse(const etcdserverpb::RangeRequest& rec) {
+        Key = rec.key();
+        RangeEnd = DecrementKey(rec.range_end());
+        KeysOnly = rec.keys_only();
+        CountOnly = rec.count_only();
+        Limit = rec.limit();
+        KeyRevision = rec.revision();
+        MinCreateRevision = rec.min_create_revision();
+        MaxCreateRevision = rec.max_create_revision();
+        MinModificateRevision = rec.min_mod_revision();
+        MaxModificateRevision = rec.max_mod_revision();
+        return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
+    }
+
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const {
+        sql << "select ";
+        if (CountOnly)
+            sql << "count(*)";
+        else if (KeysOnly)
+            sql << "`key`";
+        else
+            sql << "`key`,`value`,`created`,`modified`,`version`,`lease`";
+        sql << Endl << "from ";
+        const bool fromHistory = KeyRevision || MinCreateRevision || MaxCreateRevision || MinModificateRevision || MaxModificateRevision;
+        sql << '`' << (fromHistory ? "verhaal" : "huidig") << '`' << Endl;
+
+        MakeSimplePredicate(Key, RangeEnd, sql, params);
+        if (KeyRevision) {
+            sql << Endl << '\t' << "and `modified` = $Revision";
+            params.AddParam("$Revision").Int64(KeyRevision).Build();
+        }
+
+        if (MinCreateRevision) {
+            sql << Endl << '\t' << "and `created` >= $MinCreateRevision";
+            params.AddParam("$MinCreateRevision").Int64(MinCreateRevision).Build();
+        }
+
+        if (MaxCreateRevision) {
+            sql << Endl << '\t' << "and `created` <= $MaxCreateRevision";
+            params.AddParam("$MaxCreateRevision").Int64(MaxCreateRevision).Build();
+        }
+
+        if (MinModificateRevision) {
+            sql << Endl << '\t' << "and `modified` >= $MinModificateRevision";
+            params.AddParam("$MinModificateRevision").Int64(MinModificateRevision).Build();
+        }
+
+        if (MaxModificateRevision) {
+            sql << Endl << '\t' << "and `modified` <= $MaxModificateRevision";
+            params.AddParam("$MaxModificateRevision").Int64(MaxModificateRevision).Build();
+        }
+
+        if (Limit) {
+            sql << Endl << "LIMIT $Limit";
+            params.AddParam("$Limit").Uint64(Limit).Build();
+        }
+
+        sql << ';' << Endl;
+    }
+
+    etcdserverpb::RangeResponse MakeResponse(const NYdb::TResultSets& results) {
+        etcdserverpb::RangeResponse response;
+        if (!results.empty()) {
+            auto parser = NYdb::TResultSetParser(results.front());
+            if (CountOnly) {
+                if (parser.TryNextRow()) {
+                    response.set_count(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
+                }
+            } else if (KeysOnly) {
+                while (parser.TryNextRow()) {
+                    response.add_kvs()->set_key(NYdb::TValueParser(parser.GetValue(0)).GetString());
+                }
+            } else {
+                while (parser.TryNextRow()) {
+                    const auto kvs = response.add_kvs();
+                    kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
+                    kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
+                    kvs->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
+                    kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
+                    kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
+                    kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+                }
+            }
+        }
+        return response;
+    }
+};
+
+struct TPut {
+    TString Key, Value;
+    i64 Lease = 0LL;
+    bool GetPrevious = false;
+    bool IgnoreValue = false;
+    bool IgnoreLease = false;
+
+    bool Parse(const etcdserverpb::PutRequest& rec) {
+        Key = rec.key();
+        Value = rec.value();
+        Lease = rec.lease();
+        GetPrevious = rec.prev_kv();
+        IgnoreValue = rec.ignore_value();
+        IgnoreLease = rec.ignore_lease();
+        return !Key.empty();
+    }
+
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, i64 revision) const {
+        const bool update = IgnoreValue || IgnoreLease;
+        sql << Endl << NResource::Find(update ? "update.sql" : "upsert.sql") << Endl;
+
+        if (GetPrevious) {
+            sql << "select `value`, `created`, `modified`, `version`,`lease` from `huidig` where `key` = $Key;" << Endl;
+        }
+
+        sql << Endl << "do $up" << (update ? "date" : "sert") << "($Revision,$Key," << (IgnoreValue ? "NULL" : "$Value") << ',' << (IgnoreLease ? "NULL" : "$Lease") << ");" << Endl;
+
+        params.AddParam("$Key").String(Key).Build();
+        params.AddParam("$Revision").Int64(revision).Build();
+        params.AddParam("$Value").String(Value).Build();
+        params.AddParam("$Lease").Int64(Lease).Build();
+    }
+
+    etcdserverpb::PutResponse MakeResponse(const NYdb::TResultSets& results) {
+        etcdserverpb::PutResponse response;
+        if (GetPrevious && !results.empty()) {
+            if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
+                const auto prev = response.mutable_prev_kv();
+                prev->set_key(Key);
+                prev->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
+                prev->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
+                prev->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
+                prev->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
+                prev->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+            }
+        }
+        return response;
+    }
+};
+
+struct TDeleteRange {
+    TString Key, RangeEnd;
+    bool GetPrevious = false;
+
+    bool Parse(const etcdserverpb::DeleteRangeRequest& rec) {
+        Key = rec.key();
+        RangeEnd = DecrementKey(rec.range_end());
+        GetPrevious = rec.prev_kv();
+        return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
+    }
+
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const {
+        TStringBuilder where;
+        MakeSimplePredicate(Key, RangeEnd, where, params);
+        sql << "select count(*) from `huidig` " << where << ';' << Endl;
+        if (GetPrevious) {
+            sql << "select `key`,`value`, `created`, `modified`, `version`,`lease` from `huidig` " << where << ';' << Endl;
+        }
+        sql << "delete from `huidig` " << where << ';' << Endl;
+    }
+
+    etcdserverpb::DeleteRangeResponse MakeResponse(const NYdb::TResultSets& results) {
+        etcdserverpb::DeleteRangeResponse response;
+        if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow()) {
+            response.set_deleted(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
+        }
+
+        if (GetPrevious && results.size() > 1U) {
+            auto parser = NYdb::TResultSetParser(results.back());
+            while (parser.TryNextRow()) {
+                const auto kvs = response.add_prev_kvs();
+                kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
+                kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
+                kvs->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
+                kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
+                kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
+                kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+            }
+        }
+        return response;
+    }
+};
+
 template <typename TDerived>
 class TBaseEtcdRequest {
 protected:
@@ -370,82 +559,24 @@ public:
 private:
     bool ParseGrpcRequest() final {
         Revision = NEtcd::AppData()->Revision.load();
-
-        const auto &rec = *GetProtoRequest();
-        Key = rec.key();
-        RangeEnd = DecrementKey(rec.range_end());
-        KeysOnly = rec.keys_only();
-        CountOnly = rec.count_only();
-        Limit = rec.limit();
-        KeyRevision = rec.revision();
-        MinCreateRevision = rec.min_create_revision();
-        MaxCreateRevision = rec.max_create_revision();
-        MinModificateRevision = rec.min_mod_revision();
-        MaxModificateRevision = rec.max_mod_revision();
-        return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
+        return Range.Parse(*GetProtoRequest());
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
-        sql << "select ";
-        if (CountOnly)
-            sql << "count(*)";
-        else if (KeysOnly)
-            sql << "`key`";
-        else
-            sql << "`key`,`value`,`created`,`modified`,`version`,`lease`";
-        sql << Endl << "from ";
-        const bool fromHistory = KeyRevision || MinCreateRevision || MaxCreateRevision || MinModificateRevision || MaxModificateRevision;
-        sql << '`' << (fromHistory ? "verhaal" : "huidig") << '`' << Endl;
-
-        MakeSimplePredicate(Key, RangeEnd, sql, params);
-
-        if (Limit) {
-            sql << Endl << "LIMIT $Limit";
-            params.AddParam("$Limit").Uint64(Limit).Build();
-        }
-
-        sql << ';' << Endl;
+        return Range.MakeQueryWithParams(sql, params);
     }
 
     void ReplyWith(const NYdb::TResultSets& results) final {
-        etcdserverpb::RangeResponse response;
+        auto response = Range.MakeResponse(results);
         const auto header = response.mutable_header();
         header->set_revision(Revision);
         header->set_cluster_id(0ULL);
         header->set_member_id(0ULL);
         header->set_raft_term(0ULL);
-
-        if (!results.empty()) {
-            auto parser = NYdb::TResultSetParser(results.front());
-            if (CountOnly) {
-                if (parser.TryNextRow()) {
-                    response.set_count(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
-                }
-            } else if (KeysOnly) {
-                while (parser.TryNextRow()) {
-                    response.add_kvs()->set_key(NYdb::TValueParser(parser.GetValue(0)).GetString());
-                }
-            } else {
-                while (parser.TryNextRow()) {
-                    const auto kvs = response.add_kvs();
-                    kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
-                    kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
-                    kvs->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
-                    kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
-                    kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
-                    kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
-                }
-            }
-        }
-        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        return this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
     }
 
-    TString Key, RangeEnd;
-    bool KeysOnly, CountOnly;
-    ui64 Limit;
-    i64 KeyRevision;
-    i64 MinCreateRevision, MaxCreateRevision;
-    i64 MinModificateRevision, MaxModificateRevision;
+    TRange Range;
 };
 
 class TPutRequest
@@ -456,61 +587,24 @@ public:
 private:
     bool ParseGrpcRequest() final {
         Revision = NEtcd::AppData()->Revision.fetch_add(1L);
-
-        auto &rec = *GetProtoRequest();
-        Key = rec.key();
-        Value = rec.value();
-        Lease = rec.lease();
-        GetPrevious = rec.prev_kv();
-        IgnoreValue = rec.ignore_value();
-        IgnoreLease = rec.ignore_lease();
-        return !Key.empty();
+        return Put.Parse(*GetProtoRequest());
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
-        const bool update = IgnoreValue || IgnoreLease;
-        sql << Endl << NResource::Find(update ? "update.sql" : "upsert.sql") << Endl;
-
-        if (GetPrevious) {
-            sql << "select `value`, `created`, `modified`, `version`,`lease` from `huidig` where `key` = $Key;" << Endl;
-        }
-
-        sql << Endl << "do $up" << (update ? "date" : "sert") << "($Revision,$Key," << (IgnoreValue ? "NULL" : "$Value") << ',' << (IgnoreLease ? "NULL" : "$Lease") << ");" << Endl;
-
-        params.AddParam("$Key").String(Key).Build();
-        params.AddParam("$Revision").Int64(Revision).Build();
-        params.AddParam("$Value").String(Value).Build();
-        params.AddParam("$Lease").Int64(Lease).Build();
+        return Put.MakeQueryWithParams(sql, params, Revision);
     }
 
     void ReplyWith(const NYdb::TResultSets& results) final {
-        etcdserverpb::PutResponse response;
+        auto response = Put.MakeResponse(results);
         const auto header = response.mutable_header();
         header->set_revision(Revision);
         header->set_cluster_id(0ULL);
         header->set_member_id(0ULL);
         header->set_raft_term(0ULL);
-
-        if (GetPrevious && !results.empty()) {
-            if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
-                const auto prev = response.mutable_prev_kv();
-                prev->set_key(Key);
-                prev->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
-                prev->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
-                prev->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
-                prev->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
-                prev->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
-            }
-        }
-
-        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        return this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
     }
 
-    TString Key, Value;
-    bool GetPrevious = false;
-    bool IgnoreValue = false;
-    bool IgnoreLease = false;
-    i64 Lease = 0LL;
+    TPut Put;
 };
 
 class TDeleteRangeRequest
@@ -521,54 +615,24 @@ public:
 private:
     bool ParseGrpcRequest() final {
         Revision = NEtcd::AppData()->Revision.fetch_add(1L);
-
-        const auto &rec = *GetProtoRequest();
-        Key = rec.key();
-        RangeEnd = DecrementKey(rec.range_end());
-        GetPrevious = rec.prev_kv();
-        return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
+        return DeleteRange.Parse(*GetProtoRequest());
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
-        TStringBuilder where;
-        MakeSimplePredicate(Key, RangeEnd, where, params);
-        sql << "select count(*) from `huidig` " << where << ';' << Endl;
-        if (GetPrevious) {
-            sql << "select `key`,`value`, `created`, `modified`, `version`,`lease` from `huidig` " << where << ';' << Endl;
-        }
-        sql << "delete from `huidig` " << where << ';' << Endl;
+        return DeleteRange.MakeQueryWithParams(sql, params);
     }
 
     void ReplyWith(const NYdb::TResultSets& results) final {
-        etcdserverpb::DeleteRangeResponse response;
+        auto response = DeleteRange.MakeResponse(results);
         const auto header = response.mutable_header();
         header->set_revision(Revision);
         header->set_cluster_id(0ULL);
         header->set_member_id(0ULL);
         header->set_raft_term(0ULL);
-
-        if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow()) {
-            response.set_deleted(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
-        }
-
-        if (GetPrevious && results.size() > 1U) {
-            auto parser = NYdb::TResultSetParser(results.back());
-            while (parser.TryNextRow()) {
-                const auto kvs = response.add_prev_kvs();
-                kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
-                kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
-                kvs->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
-                kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
-                kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
-                kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
-            }
-        }
-
-        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        return this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
     }
 
-    TString Key, RangeEnd;
-    bool GetPrevious = false;
+    TDeleteRange DeleteRange;
 };
 
 class TCompactRequest
@@ -586,7 +650,7 @@ private:
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
-        sql << "delete from `verhaal` where `modified` <= $Revision;" << Endl;
+        sql << "delete from `verhaal` where `modified` < $Revision;" << Endl;
         params.AddParam("$Revision").Int64(KeyRevision).Build();
     }
 
@@ -597,7 +661,6 @@ private:
         header->set_cluster_id(0ULL);
         header->set_member_id(0ULL);
         header->set_raft_term(0ULL);
-
         this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
     }
 

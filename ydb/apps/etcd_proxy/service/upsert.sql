@@ -1,19 +1,23 @@
 DEFINE ACTION $upsert($revision, $key, $value, $lease) AS
 
-UPSERT INTO `huidig`
-SELECT * FROM (
-    SELECT
-        SOME(<|`key`:$key, `created`:`created`, `modified`:$revision, `version`:`version` + 1L, `value`:$value, `lease`:`lease`|>) ??
-             <|`key`:$key, `created`:$revision, `modified`:$revision, `version`: 1L, `value`:$value, `lease`:$lease|>
-    FROM `huidig` WHERE `key` = $key
-) FLATTEN COLUMNS;
-
 INSERT INTO `verhaal`
-SELECT * FROM (
-    SELECT
-        SOME(<|`key`:$key, `created`:`created`, `modified`:$revision, `version`:`version` + 1L, `value`:$value, `lease`:`lease`|>) ??
-             <|`key`:$key, `created`:$revision, `modified`:$revision, `version`: 1L, `value`:$value, `lease`:$lease|>
-    FROM `huidig` WHERE `key` = $key
-) FLATTEN COLUMNS;
+SELECT
+    $key AS `key`,
+    SOME(`created`) ?? $revision AS `created`,
+    $revision AS `modified`,
+    (SOME(`version`) ?? 0L) + 1L AS `version`,
+    $value AS `value`,
+    $lease AS `lease`
+FROM `huidig` WHERE `key` = $key;
+
+UPSERT INTO `huidig`
+SELECT
+    $key AS `key`,
+    SOME(`created`) ?? $revision AS `created`,
+    $revision AS `modified`,
+    (SOME(`version`) ?? 0L) + 1L AS `version`,
+    $value AS `value`,
+    $lease AS `lease`
+FROM `huidig` WHERE `key` = $key;
 
 END DEFINE;

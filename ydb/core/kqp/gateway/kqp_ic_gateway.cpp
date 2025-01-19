@@ -1371,23 +1371,7 @@ public:
                 createUser.SetPassword(settings.Password);
             }
 
-            switch (settings.CanLogin) {
-                case NYql::TCreateUserSettings::ETypeOfLogin::Login:
-                {
-                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
-                    break;
-                }
-                case NYql::TCreateUserSettings::ETypeOfLogin::NoLogin:
-                {
-                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
-                    break;
-                }
-                case NYql::TCreateUserSettings::ETypeOfLogin::Undefined:
-                {
-                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Undefined);
-                    break;
-                }
-            }
+            createUser.SetCanLogin(settings.CanLogin.value_or(true));
 
             SendSchemeRequest(ev.Release()).Apply(
                 [createUserPromise](const TFuture<TGenericResult>& future) mutable {
@@ -1433,22 +1417,8 @@ public:
                 alterUser.SetPassword(settings.Password.value());
             }
 
-            switch (settings.CanLogin) {
-                case NYql::TAlterUserSettings::ETypeOfLogin::Login:
-                {
-                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
-                    break;
-                }
-                case NYql::TAlterUserSettings::ETypeOfLogin::NoLogin:
-                {
-                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
-                    break;
-                }
-                case NYql::TAlterUserSettings::ETypeOfLogin::Undefined:
-                {
-                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Undefined);
-                    break;
-                }
+            if (settings.CanLogin.has_value()) {
+                alterUser.SetCanLogin(settings.CanLogin.value());
             }
 
             SendSchemeRequest(ev.Release()).Apply(

@@ -103,6 +103,7 @@ namespace {
     TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) {
         TCreateUserSettings createUserSettings;
         createUserSettings.UserName = TString(createUser.UserName());
+        createUserSettings.CanLogin = true;
 
         for (auto setting : createUser.Settings()) {
             auto name = setting.Name().Value();
@@ -113,9 +114,9 @@ namespace {
             } else if (name == "passwordEncrypted") {
                 createUserSettings.PasswordEncrypted = true;
             } else if (name == "login") {
-                createUserSettings.CanLogin = TCreateUserSettings::ETypeOfLogin::Login;
+                createUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
-                createUserSettings.CanLogin = TCreateUserSettings::ETypeOfLogin::NoLogin;
+                createUserSettings.CanLogin = false;
             }
         }
         return createUserSettings;
@@ -134,9 +135,9 @@ namespace {
             } else if (name == "passwordEncrypted") {
                 alterUserSettings.PasswordEncrypted = true;
             } else if (name == "login") {
-                alterUserSettings.CanLogin = TAlterUserSettings::ETypeOfLogin::Login;
+                alterUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
-                alterUserSettings.CanLogin = TAlterUserSettings::ETypeOfLogin::NoLogin;
+                alterUserSettings.CanLogin = false;
             }
         }
         return alterUserSettings;

@@ -2051,9 +2051,9 @@ namespace NSchemeShardUT_Private {
         alterUser->SetUser(user);
 
         if (isEnabled) {
-            alterUser->SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
+            alterUser->SetCanLogin(true);
         } else {
-            alterUser->SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
+            alterUser->SetCanLogin(false);
         }
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());

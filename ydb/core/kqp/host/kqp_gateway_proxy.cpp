@@ -1497,28 +1497,13 @@ public:
             schemeTx.SetWorkingDir(database);
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
             auto& createUser = *schemeTx.MutableAlterLogin()->MutableCreateUser();
+
             createUser.SetUser(settings.UserName);
             if (settings.Password) {
                 createUser.SetPassword(settings.Password);
             }
 
-            switch (settings.CanLogin) {
-                case TCreateUserSettings::ETypeOfLogin::Login:
-                {
-                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
-                    break;
-                }
-                case TCreateUserSettings::ETypeOfLogin::NoLogin:
-                {
-                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
-                    break;
-                }
-                case TCreateUserSettings::ETypeOfLogin::Undefined:
-                {
-                    createUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Undefined);
-                    break;
-                }
-            }
+            createUser.SetCanLogin(settings.CanLogin);
 
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto& phyTx = *phyQuery.AddTransactions();
@@ -1557,22 +1542,8 @@ public:
                 alterUser.SetPassword(settings.Password.value());
             }
 
-            switch (settings.CanLogin) {
-                case TAlterUserSettings::ETypeOfLogin::Login:
-                {
-                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
-                    break;
-                }
-                case TAlterUserSettings::ETypeOfLogin::NoLogin:
-                {
-                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
-                    break;
-                }
-                case TAlterUserSettings::ETypeOfLogin::Undefined:
-                {
-                    alterUser.SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Undefined);
-                    break;
-                }
+            if (settings.CanLogin.has_value()) {
+                alterUser.SetCanLogin(settings.CanLogin.value());
             }
 
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

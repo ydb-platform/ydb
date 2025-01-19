@@ -28,37 +28,17 @@ public:
             const NKikimrSchemeOp::TAlterLogin& alterLogin = Transaction.GetAlterLogin();
 
             TParts additionalParts;
-            auto getCanLoginFromTransaction = [](NKikimrSchemeOp::ETypeOfLogin value) -> NLogin::TLoginProvider::ETypeOfLogin {
-                NLogin::TLoginProvider::ETypeOfLogin result;
-                switch (value) {
-                    case NKikimrSchemeOp::ETypeOfLogin::Login:
-                    {
-                        result = NLogin::TLoginProvider::ETypeOfLogin::Login;
-                        break;
-                    }
-                    case NKikimrSchemeOp::ETypeOfLogin::NoLogin:
-                    {
-                        result = NLogin::TLoginProvider::ETypeOfLogin::NoLogin;
-                        break;
-                    }
-                    case NKikimrSchemeOp::ETypeOfLogin::Undefined:
-                    {
-                        result = NLogin::TLoginProvider::ETypeOfLogin::Undefined;
-                        break;
-                    }
-                }
-
-                return result;
-            };
 
             switch (alterLogin.GetAlterCase()) {
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
 
-                    NLogin::TLoginProvider::ETypeOfLogin canLogin = getCanLoginFromTransaction(createUser.GetCanLogin());
+                    TCreateUserOption request;
+                    request.User = createUser.GetUser();
+                    request.Password = createUser.GetPassword();
+                    request = createUser.GetCanLogin();
 
-                    auto response = context.SS->LoginProvider.CreateUser(
-                        {.User = createUser.GetUser(), .Password = createUser.GetPassword(), .CanLogin = canLogin});
+                    auto response = context.SS->LoginProvider.CreateUser(request);
 
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
@@ -90,10 +70,13 @@ public:
                     NLogin::TLoginProvider::TModifyUserRequest request;
 
                     request.User = modifyUser.GetUser();
-                    request.CanLogin = getCanLoginFromTransaction(modifyUser.GetCanLogin());
 
                     if (modifyUser.HasPassword()) {
                         request.Password = modifyUser.GetPassword();
+                    }
+
+                    if (modifyUser.HasCanLogin()) {
+                        request.CanLogin = modifyUser.GetCanLogin();
                     }
 
                     auto response = context.SS->LoginProvider.ModifyUser(request);

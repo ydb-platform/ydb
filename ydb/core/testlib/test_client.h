@@ -381,22 +381,16 @@ namespace Tests {
             ui64 Version = 0;
         };
 
-        enum class ETypeOfLogin {
-            Undefined,
-            Login,
-            NoLogin
-        };
-
         struct TCreateUserOption {
             TString User;
             TString Password;
-            ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
+            bool CanLogin = true;
         };
 
         struct TModifyUserOption {
             TString User;
             std::optional<TString> Password;
-            ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
+            std::optional<bool> CanLogin;
         };
 
         using TApplyIf = TVector<TPathVersion>;

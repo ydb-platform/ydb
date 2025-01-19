@@ -87,21 +87,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
     user.Hash = Impl->GenerateHash(request.Password);
     user.CreatedAt = std::chrono::system_clock::now();
     user.LastFailedLogin = std::chrono::system_clock::time_point();
-
-    switch (request.CanLogin) {
-        case ETypeOfLogin::Login:
-        case ETypeOfLogin::Undefined:
-        {
-            user.IsEnabled = true;
-            break;
-        }
-        case ETypeOfLogin::NoLogin:
-        {
-            user.IsEnabled = false;
-            break;
-        }
-    }
-
+    user.IsEnabled = request.CanLogin;
     return response;
 }
 
@@ -135,21 +121,8 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
         user.Hash = Impl->GenerateHash(request.Password.value());
     }
 
-    switch (request.CanLogin) {
-        case ETypeOfLogin::Login:
-        {
-            user.IsEnabled = true;
-            break;
-        }
-        case ETypeOfLogin::NoLogin:
-        {
-            user.IsEnabled = false;
-            break;
-        }
-        case ETypeOfLogin::Undefined:
-        {
-            break;
-        }
+    if (request.CanLogin.has_value()) {
+        user.IsEnabled = request.CanLogin.value();
     }
 
     return response;

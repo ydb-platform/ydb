@@ -91,22 +91,16 @@ public:
         TString ExternalAuth;
     };
 
-    enum class ETypeOfLogin {
-        Undefined,
-        Login,
-        NoLogin
-    };
-
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
-        ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
+        bool CanLogin = true;
     };
 
     struct TModifyUserRequest : TBasicRequest {
         TString User;
         std::optional<TString> Password;
-        ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
+        std::optional<bool> CanLogin;
     };
 
     struct TRemoveUserResponse : TBasicResponse {

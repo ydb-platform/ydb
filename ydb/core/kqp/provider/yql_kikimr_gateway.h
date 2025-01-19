@@ -662,14 +662,7 @@ struct TCreateUserSettings {
     TString UserName;
     TString Password;
     bool PasswordEncrypted = false;
-
-    enum class ETypeOfLogin {
-        Undefined,
-        Login,
-        NoLogin
-    };
-
-    ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
+    std::optional<bool> CanLogin;
 };
 
 struct TModifyPermissionsSettings {
@@ -689,14 +682,7 @@ struct TAlterUserSettings {
     TString UserName;
     std::optional<TString> Password;
     bool PasswordEncrypted = false;
-
-    enum class ETypeOfLogin {
-        Undefined,
-        Login,
-        NoLogin
-    };
-
-    ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
+    bool CanLogin = true;
 };
 
 struct TDropUserSettings {

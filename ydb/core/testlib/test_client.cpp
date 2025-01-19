@@ -2040,19 +2040,7 @@ namespace Tests {
         auto* createUser = op->MutableAlterLogin()->MutableCreateUser();
         createUser->SetUser(options.User);
         createUser->SetPassword(options.Password);
-
-        switch (options.CanLogin) {
-            case ETypeOfLogin::Undefined:
-            case ETypeOfLogin::Login: {
-                createUser->SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
-                break;
-            }
-            case ETypeOfLogin::NoLogin: {
-                createUser->SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
-                break;
-            }
-        }
-
+        createUser->SetCanLogin(options.CanLogin);
         request->Record.SetSecurityToken(userToken);
 
         TAutoPtr<NBus::TBusMessage> reply;
@@ -2082,18 +2070,8 @@ namespace Tests {
             modifyUser->SetPassword(options.Password.value());
         }
 
-        switch (options.CanLogin) {
-            case ETypeOfLogin::Login: {
-                modifyUser->SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::Login);
-                break;
-            }
-            case ETypeOfLogin::NoLogin: {
-                modifyUser->SetCanLogin(NKikimrSchemeOp::ETypeOfLogin::NoLogin);
-                break;
-            }
-            case ETypeOfLogin::Undefined: {
-                break;
-            }
+        if (options.CanLogin.has_value()) {
+            modifyUser->SetCanLogin(options.CanLogin.value());
         }
 
         TAutoPtr<NBus::TBusMessage> reply;

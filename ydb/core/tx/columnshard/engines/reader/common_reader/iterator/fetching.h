@@ -109,8 +109,8 @@ class TFetchingScript {
 private:
     YDB_ACCESSOR(TString, BranchName, "UNDEFINED");
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
-    std::optional<TMonotonic> StartInstant;
-    std::optional<TMonotonic> FinishInstant;
+    TAtomic StartInstant;
+    TAtomic FinishInstant;
 
 public:
     TFetchingScript(const TSpecialReadContext& context);
@@ -122,14 +122,12 @@ public:
     }
 
     void AddStepDuration(const ui32 index, const TDuration d) {
-        FinishInstant = TMonotonic::Now();
+        AtomicSet(&FinishInstant, TMonotonic::Now().MicroSeconds());
         GetStep(index)->AddDuration(d);
     }
 
     void OnExecute() {
-        if (!StartInstant) {
-            StartInstant = TMonotonic::Now();
-        }
+        AtomicCas(&StartInstant, TMonotonic::Now().MicroSeconds(), 0);
     }
 
     TString DebugString() const;

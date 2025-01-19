@@ -30,6 +30,7 @@ SRCS(
     GLOBAL bus/tcp/configure_dispatcher.cpp
     bus/tcp/packet.cpp
     bus/tcp/client.cpp
+    bus/tcp/local_bypass.cpp
     bus/tcp/server.cpp
     bus/tcp/ssl_context.cpp
     bus/tcp/ssl_helpers.cpp

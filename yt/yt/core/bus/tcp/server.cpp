@@ -1,5 +1,6 @@
 #include "server.h"
 #include "config.h"
+#include "local_bypass.h"
 #include "server.h"
 #include "connection.h"
 #include "dispatcher_impl.h"
@@ -50,18 +51,12 @@ public:
         , Handler_(std::move(handler))
         , PacketTranscoderFactory_(std::move(packetTranscoderFactory))
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
+        , Logger(MakeLogger(Config_))
     {
         YT_VERIFY(Config_);
         YT_VERIFY(Poller_);
         YT_VERIFY(Handler_);
         YT_VERIFY(MemoryUsageTracker_);
-
-        if (Config_->Port) {
-            Logger.AddTag("ServerPort: %v", *Config_->Port);
-        }
-        if (Config_->UnixDomainSocketPath) {
-            Logger.AddTag("UnixDomainSocketPath: %v", *Config_->UnixDomainSocketPath);
-        }
     }
 
     ~TTcpBusServerBase()
@@ -72,17 +67,23 @@ public:
     void Start()
     {
         OpenServerSocket();
+
         if (!Poller_->TryRegister(this)) {
             CloseServerSocket();
             THROW_ERROR_EXCEPTION("Cannot register server pollable");
         }
+
         ArmPoller();
+
+        YT_LOG_INFO("Bus server started");
     }
 
     TFuture<void> Stop()
     {
         YT_LOG_INFO("Stopping Bus server");
+
         UnarmPoller();
+
         return Poller_->Unregister(this).Apply(BIND([this, this_ = MakeStrong(this)] {
             YT_LOG_INFO("Bus server stopped");
         }));
@@ -94,12 +95,12 @@ public:
         return Logger.GetTag();
     }
 
-    void OnEvent(EPollControl /*control*/) override
+    void OnEvent(EPollControl /*control*/) final
     {
         OnAccept();
     }
 
-    void OnShutdown() override
+    void OnShutdown() final
     {
         {
             auto guard = Guard(ControlSpinLock_);
@@ -123,10 +124,10 @@ protected:
     const TBusServerConfigPtr Config_;
     const IPollerPtr Poller_;
     const IMessageHandlerPtr Handler_;
-
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
-
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+
+    const NLogging::TLogger Logger;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ControlSpinLock_);
     SOCKET ServerSocket_ = INVALID_SOCKET;
@@ -134,11 +135,20 @@ protected:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ConnectionsSpinLock_);
     THashSet<TTcpConnectionPtr> Connections_;
 
-    NLogging::TLogger Logger = BusLogger();
-
     virtual void CreateServerSocket() = 0;
-
     virtual void InitClientSocket(SOCKET clientSocket) = 0;
+
+    static NLogging::TLogger MakeLogger(const TBusServerConfigPtr& config)
+    {
+        auto logger = BusLogger();
+        if (config->Port) {
+            logger.AddTag("ServerPort: %v", *config->Port);
+        }
+        if (config->UnixDomainSocketPath) {
+            logger.AddTag("UnixDomainSocketPath: %v", *config->UnixDomainSocketPath);
+        }
+        return logger;
+    }
 
     void OnConnectionTerminated(const TTcpConnectionPtr& connection, const TError& /*error*/)
     {
@@ -263,7 +273,7 @@ protected:
 
             {
                 auto guard = WriterGuard(ConnectionsSpinLock_);
-                YT_VERIFY(Connections_.insert(connection).second);
+                EmplaceOrCrash(Connections_, connection);
             }
 
             connection->SubscribeTerminated(BIND_NO_PROPAGATE(
@@ -321,7 +331,7 @@ public:
     using TTcpBusServerBase::TTcpBusServerBase;
 
 private:
-    void CreateServerSocket() override
+    void CreateServerSocket() final
     {
         ServerSocket_ = CreateTcpServerSocket();
 
@@ -329,7 +339,7 @@ private:
         BindSocket(serverAddress, Format("Failed to bind a server socket to port %v", Config_->Port));
     }
 
-    void InitClientSocket(SOCKET clientSocket) override
+    void InitClientSocket(SOCKET clientSocket) final
     {
         if (Config_->EnableNoDelay) {
             if (!TrySetSocketNoDelay(clientSocket)) {
@@ -364,7 +374,7 @@ public:
     { }
 
 private:
-    void CreateServerSocket() override
+    void CreateServerSocket() final
     {
         ServerSocket_ = CreateUnixServerSocket();
 
@@ -381,7 +391,7 @@ private:
         }
     }
 
-    void InitClientSocket(SOCKET /*clientSocket*/) override
+    void InitClientSocket(SOCKET /*clientSocket*/) final
     { }
 };
 
@@ -414,7 +424,7 @@ public:
         YT_UNUSED_FUTURE(Stop());
     }
 
-    void Start(IMessageHandlerPtr handler) override
+    void Start(IMessageHandlerPtr handler) final
     {
         auto server = New<TServer>(
             Config_,
@@ -427,7 +437,7 @@ public:
         server->Start();
     }
 
-    TFuture<void> Stop() override
+    TFuture<void> Stop() final
     {
         if (auto server = Server_.Exchange(nullptr)) {
             return server->Stop();
@@ -438,9 +448,7 @@ public:
 
 private:
     const TBusServerConfigPtr Config_;
-
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
-
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     TAtomicIntrusivePtr<TServer> Server_;
@@ -448,34 +456,91 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DECLARE_REFCOUNTED_CLASS(TLocalMessageHandler)
+
+class TLocalMessageHandler
+    : public ILocalMessageHandler
+{
+public:
+    explicit TLocalMessageHandler(IMessageHandlerPtr underlying)
+        : Underlying_(std::move(underlying))
+    { }
+
+    void HandleMessage(TSharedRefArray message, IBusPtr replyBus) noexcept final
+    {
+        Underlying_->HandleMessage(std::move(message), std::move(replyBus));
+    }
+
+    void SubscribeTerminated(const TCallback<void(const TError&)>& callback) final
+    {
+        Terminated_.Subscribe(callback);
+    }
+
+    void UnsubscribeTerminated(const TCallback<void(const TError&)>& callback) final
+    {
+        Terminated_.Unsubscribe(callback);
+    }
+
+    void Terminate(const TError& error)
+    {
+        Terminated_.Fire(error);
+    }
+
+private:
+    const IMessageHandlerPtr Underlying_;
+
+    TSingleShotCallbackList<void(const TError&)> Terminated_;
+};
+
+DEFINE_REFCOUNTED_TYPE(TLocalMessageHandler)
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TCompositeBusServer
     : public IBusServer
 {
 public:
-    explicit TCompositeBusServer(std::vector<IBusServerPtr> servers)
-        : Servers_(std::move(servers))
+    TCompositeBusServer(
+        TBusServerConfigPtr config,
+        std::vector<IBusServerPtr> servers)
+        : Config_(std::move(config))
+        , Servers_(std::move(servers))
     { }
 
     // IBusServer implementation.
 
-    void Start(IMessageHandlerPtr handler) override
+    void Start(IMessageHandlerPtr handler) final
     {
         for (const auto& server : Servers_) {
             server->Start(handler);
         }
+
+        if (Config_->EnableLocalBypass && Config_->Port) {
+            LocalHandler_ = New<TLocalMessageHandler>(std::move(handler));
+            TTcpDispatcher::TImpl::Get()->RegisterLocalMessageHandler(*Config_->Port, LocalHandler_);
+        }
     }
 
-    TFuture<void> Stop() override
+    TFuture<void> Stop() final
     {
-        std::vector<TFuture<void>> asyncResults;
-        for (const auto& server : Servers_) {
-            asyncResults.push_back(server->Stop());
+        if (Config_->EnableLocalBypass && Config_->Port) {
+            LocalHandler_->Terminate(TError(NRpc::EErrorCode::TransportError, "Local server stopped"));
+            LocalHandler_.Reset();
+            TTcpDispatcher::TImpl::Get()->UnregisterLocalMessageHandler(*Config_->Port);
         }
-        return AllSucceeded(asyncResults);
+
+        std::vector<TFuture<void>> futures;
+        for (const auto& server : Servers_) {
+            futures.push_back(server->Stop());
+        }
+        return AllSucceeded(futures);
     }
 
 private:
+    const TBusServerConfigPtr Config_;
     const std::vector<IBusServerPtr> Servers_;
+
+    TLocalMessageHandlerPtr LocalHandler_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -494,6 +559,7 @@ IBusServerPtr CreateBusServer(
                 packetTranscoderFactory,
                 memoryUsageTracker));
     }
+
 #ifdef _linux_
     // Abstract unix sockets are supported only on Linux.
     servers.push_back(
@@ -503,7 +569,9 @@ IBusServerPtr CreateBusServer(
             memoryUsageTracker));
 #endif
 
-    return New<TCompositeBusServer>(std::move(servers));
+    return New<TCompositeBusServer>(
+        config,
+        std::move(servers));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

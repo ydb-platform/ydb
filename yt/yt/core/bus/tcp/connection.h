@@ -284,6 +284,11 @@ private:
 
     size_t MaxFragmentsPerWrite_ = 256;
 
+    ILocalMessageHandlerPtr LocalBypassHandler_;
+    IBusPtr LocalBypassReplyBus_;
+    TCallback<void(const TError&)> LocalBypassTerminatedCallback_;
+    std::atomic<bool> LocalBypassActive_ = false;
+
     void Open(TGuard<NThreading::TSpinLock>& guard);
     void Close();
     void CloseSslSession(ESslState newSslState);
@@ -295,6 +300,10 @@ private:
     void InitBuffers();
 
     int GetSocketPort();
+
+    void InitLocalBypass(ILocalMessageHandlerPtr localBypassHandler, const NNet::TNetworkAddress& address);
+    void OnLocalBypassHandlerTerminated(const TError& error);
+    void FlushQueuedMessagesToLocalBypass();
 
     void ConnectSocket(const NNet::TNetworkAddress& address);
     void OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError);
@@ -322,6 +331,9 @@ private:
     bool OnMessagePacketReceived();
     bool OnHandshakePacketReceived();
     bool OnSslAckPacketReceived();
+
+    TFuture<void> SendViaSocket(TSharedRefArray message, const TSendOptions& options);
+    TFuture<void> SendViaLocalBypass(TSharedRefArray message, const TSendOptions& options);
 
     TPacket* EnqueuePacket(
         EPacketType type,

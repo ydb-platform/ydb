@@ -14,6 +14,7 @@ PEERDIR(
     ydb/tests/library
     library/python/testing/recipe
     library/recipes/common
+    contrib/python/moto
 )
 
 END()

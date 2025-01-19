@@ -89,7 +89,7 @@ public:
     }
 
     // IPollable implementation.
-    const TString& GetLoggingTag() const override
+    const std::string& GetLoggingTag() const override
     {
         return Logger.GetTag();
     }

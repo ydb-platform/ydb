@@ -289,7 +289,7 @@ void TTcpConnection::RunPeriodicCheck()
     }
 }
 
-const TString& TTcpConnection::GetLoggingTag() const
+const std::string& TTcpConnection::GetLoggingTag() const
 {
     return LoggingTag_;
 }

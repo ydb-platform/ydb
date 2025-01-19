@@ -5,6 +5,7 @@
 
 #include <ydb/library/actors/http/http.h>
 
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/export.pb.h>
 #include <ydb/core/protos/import.pb.h>
 

@@ -1,7 +1,16 @@
 #pragma once
 
 #include <util/generic/string.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
+
+namespace NKikimrScheme {
+enum EStatus : int;
+
+class TEvModifySchemeTransaction;
+class TEvModifySchemeTransactionResult;
+
+class TEvLogin;
+class TEvLoginResult;
+}
 
 namespace NKikimrExport {
 class TEvCreateExportRequest;

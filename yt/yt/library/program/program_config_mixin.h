@@ -65,21 +65,19 @@ protected:
             .OptionalArgument()
             .SetFlag(&ConfigUnrecognizedFlag_);
 
-        TStringBuilder unrecognizedStrategies;
-        for (const auto& strategy: TEnumTraits<NYTree::EUnrecognizedStrategy>::GetDomainNames()) {
-            if (unrecognizedStrategies.GetLength()) {
-                unrecognizedStrategies.AppendString(", ");
-            }
-            unrecognizedStrategies.AppendString(CamelCaseToUnderscoreCase(strategy));
-        }
         opts
             .AddLongOption(
                 Format("%v-unrecognized-strategy", argumentName),
                 Format("Configures strategy for unrecognized attributes in %v, variants: %v",
                     argumentName,
-                    unrecognizedStrategies.Flush()))
+                    JoinToString(
+                        TEnumTraits<NYTree::EUnrecognizedStrategy>::GetDomainValues(),
+                        [] (TStringBuilderBase* builder, NYTree::EUnrecognizedStrategy strategy) {
+                            builder->AppendFormat(FormatEnum(strategy));
+                        },
+                        TStringBuf(", "))))
             .DefaultValue(FormatEnum(UnrecognizedStrategy_))
-            .Handler1T<TStringBuf>([&] (TStringBuf value) {
+            .template Handler1T<TStringBuf>([&] (TStringBuf value) {
                 UnrecognizedStrategy_ = ParseEnum<NYTree::EUnrecognizedStrategy>(value);
             });
 

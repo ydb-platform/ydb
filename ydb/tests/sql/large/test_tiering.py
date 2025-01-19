@@ -10,6 +10,12 @@ import time
 class TestYdbS3TTL(TestBase, S3Base):
 
     def test_basic_tiering_operations(self):
+        """
+        Tests basic data tiering functionality with S3 storage.
+        Sets up S3 bucket and external datasource, verifies data reading from external source.
+        Creates table with TTL policy to move expired data to S3.
+        Validates data migration to S3 tier after concurrent inserts and TTL expiration.
+        """
         # S3 client initialization and temp bucket creation
 
         s3_client = self.s3_session_client()
@@ -20,10 +26,10 @@ class TestYdbS3TTL(TestBase, S3Base):
         self.create_external_datasource_and_secrets(bucket_name)
 
         # Check if external datasource can read that data
-        data = f"a,b\n1,2"
-        s3_client.put_object(Bucket=self.bucket_name(), Key="test.csv", Body=data)
+        data = "a,b\n1,2"
+        s3_client.put_object(Bucket=self.bucket_name(), Key="subfolder/test.csv", Body=data)
 
-        results = self.query(f"""SELECT a, b FROM `{self.table_path}_external_datasource`.`*.csv`
+        results = self.query(f"""SELECT a, b FROM `{self.table_path}_external_datasource`.`subfolder/test.csv`
                                     WITH(FORMAT = 'csv_with_names',
                                          SCHEMA =
                                             (
@@ -31,6 +37,7 @@ class TestYdbS3TTL(TestBase, S3Base):
                                                 b Uint32
                                             )
                                     )""")
+
         assert results[0][0] == 1, "Check if read data from external data source"
         assert results[0][1] == 2, "Check if read data from external data source"
 
@@ -64,7 +71,6 @@ class TestYdbS3TTL(TestBase, S3Base):
 
         start_time = time.time()
         max_wait_time = 150  # Wait time for tiered files
-        files = []
         while True:
             # Получаем текущий список объектов из бакета
             response = s3_client.list_objects_v2(Bucket=bucket_name)
@@ -82,12 +88,22 @@ class TestYdbS3TTL(TestBase, S3Base):
                 break
 
             # Wait until retry
-            time.sleep(1)
+            time.sleep(10)
         assert len(files) > 0, "No tiered files in bucket"
 
-
     def test_tiering_the_same_results(self):
-        # S3 client initialization and temp bucket creation
+        """
+        Tests data consistency during tiering process to external storage.
+        Verifies that:
+        - Data remains consistent while being moved to S3
+        - Multiple threads can safely insert data
+        - Sum of values stays constant during tiering
+        Test flow:
+        1. Creates table and S3 bucket
+        2. Parallel bulk inserts of test data
+        3. Enables TTL with tiering
+        4. Monitors data consistency during tiering process
+        """
 
         s3_client = self.s3_session_client()
 
@@ -116,7 +132,8 @@ class TestYdbS3TTL(TestBase, S3Base):
 
             # Wait for the insert operation to complete, then allow reading to complete
             concurrent.futures.wait(insert_futures)
-            [future.result() for future in insert_futures]
+            for future in insert_futures:
+                future.result()
 
         total_value = self.query(f"SELECT sum(value) from `{self.table_path}_test_table`")[0][0]
 
@@ -128,7 +145,7 @@ class TestYdbS3TTL(TestBase, S3Base):
 
         start_time = time.time()
         max_wait_time = 150  # Wait time for tiered files
-        files = []
+
         while True:
             current_value = self.query(f"SELECT sum(value) from `{self.table_path}_test_table`")[0][0]
             assert current_value == total_value, f"Current value {current_value} is not equal to expected value {total_value}"
@@ -147,7 +164,7 @@ class TestYdbS3TTL(TestBase, S3Base):
             # Генерация тестовых данных
             record_id = random.randint(1, 1000000)
             data = f"test_data_{worker_id}_{i}"
-            expire_at = datetime.datetime.now() + datetime.timedelta(hours=-random.randint(1, 48))
+            expire_at = datetime.datetime.now() - datetime.timedelta(hours=random.randint(1, 48))
             value = random.randint(1, 1000000)
 
             upsert_data.append({"id": record_id, "data": data, "expire_at": expire_at, "value": value})

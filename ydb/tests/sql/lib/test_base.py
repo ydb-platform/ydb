@@ -3,8 +3,7 @@ import os
 import yatest.common
 import random
 import logging
-import sys
-import tempfile
+import hashlib
 
 
 from datetime import date
@@ -13,6 +12,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from .test_lib import TestLib
 from .test_query import Query
+from ydb.tests.library.harness.util import LogLevels
 
 
 logger = logging.getLogger(__name__)
@@ -33,11 +33,14 @@ class TestBase(TestLib, Query):
                                                                         "enable_external_data_sources",
                                                                         "enable_tiering_in_column_shard"],
                                                    columnshard_config={
+                                                    'disabled_on_scheme_shard': False,
                                                     'lag_for_compaction_before_tierings_ms': 0,
                                                     'compaction_actualization_lag_ms': 0,
                                                     'optimizer_freshness_check_duration_ms': 0,
                                                     'small_portion_detect_size_limit': 0,
-                                                    }))
+                                                    },
+                                                    additional_log_configs={
+                                                        'TX_TIERING': LogLevels.DEBUG,}))
         cls.cluster.start()
         cls.driver = ydb.Driver(
             ydb.DriverConfig(
@@ -75,6 +78,8 @@ class TestBase(TestLib, Query):
     def setup_method(self):
         current_test_full_name = os.environ.get("PYTEST_CURRENT_TEST")
         self.table_path = "insert_table_" + current_test_full_name.replace("::", ".").removesuffix(" (setup)")
+        self.hash = hashlib.md5(self.table_path.encode()).hexdigest()
+        self.hash_short = self.hash[:8]
 
 
 class TpchTestBaseH1(TestBase):

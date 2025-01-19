@@ -86,7 +86,7 @@ class S3Base(object):
 
     @staticmethod
     def replace_special_chars(input_string):
-        # Forbidded characters
+        # Forbidden characters
         characters_to_replace = ":() ."
 
         # Replace any forbidden characters with '_'

@@ -1,6 +1,7 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
+ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 
 # INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 

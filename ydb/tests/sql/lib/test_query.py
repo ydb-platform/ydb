@@ -27,17 +27,21 @@ class Query(object):
     def query(self, text,
               tx: ydb.QueryTxContext | None = None,
               stats: bool | None = None,
-              parameters: Optional[dict] = None) -> List[Any]:
+              parameters: Optional[dict] = None,
+              retry_settings = None) -> List[Any]:
         results = []
         if tx is None:
             if not stats:
-                result_sets = self.pool.execute_with_retries(text, parameters=parameters)
+                result_sets = self.pool.execute_with_retries(text, parameters=parameters, retry_settings=retry_settings)
                 for result_set in result_sets:
                     results.extend(result_set.rows)
             else:
                 settings = ydb.ScanQuerySettings()
                 settings = settings.with_collect_stats(ydb.QueryStatsCollectionMode.FULL)
-                for response in self.driver.table_client.scan_query(text, settings=settings, parameters=parameters):
+                for response in self.driver.table_client.scan_query(text,
+                                                                    settings=settings,
+                                                                    parameters=parameters,
+                                                                    retry_settings=retry_settings):
                     last_response = response
                     for row in response.result_set.rows:
                         results.append(row)

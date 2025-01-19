@@ -122,7 +122,7 @@ public:
     }
 
     void AddStepDuration(const ui32 index, const TDuration d) {
-        AtomicSet(&FinishInstant, TMonotonic::Now().MicroSeconds());
+        AtomicSet(FinishInstant, TMonotonic::Now().MicroSeconds());
         GetStep(index)->AddDuration(d);
     }
 

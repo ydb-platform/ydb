@@ -231,8 +231,6 @@ public:
     virtual NBus::EMessageStatus ExecuteRequest(NThreading::TPromise<TResult> promise, TAutoPtr<NBus::TBusMessage> request) override {
         const ui32 type = request->GetHeader()->Type;
         switch(type) {
-        case NMsgBusProxy::MTYPE_CLIENT_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusRequest>(&NGRpcProxy::TGRpcClient::Request, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_FLAT_TX_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusSchemeOperation>(&NGRpcProxy::TGRpcClient::SchemeOperation, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST:

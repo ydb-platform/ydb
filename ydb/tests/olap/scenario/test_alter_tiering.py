@@ -26,6 +26,7 @@ from ydb import PrimitiveType, StatusCode
 import yatest.common
 from moto.server import ThreadedMotoServer
 
+import time
 import boto3
 import datetime
 import random
@@ -88,16 +89,7 @@ class S3:
         return sum(1 for _ in bucket.objects.all())
 
 
-class TestAlterTiering(BaseTestSet):
-    schema1 = (
-        ScenarioTestHelper.Schema()
-        .with_column(name='timestamp', type=PrimitiveType.Timestamp, not_null=True)
-        .with_column(name='writer', type=PrimitiveType.Uint32, not_null=True)
-        .with_column(name='value', type=PrimitiveType.Uint64, not_null=True)
-        .with_column(name='data', type=PrimitiveType.String, not_null=True)
-        .with_key_columns('timestamp', 'writer', 'value')
-    )
-
+class TieringTestBase(BaseTestSet):
     @classmethod
     def _get_cluster_config(cls):
         return KikimrConfigGenerator(
@@ -116,6 +108,100 @@ class TestAlterTiering(BaseTestSet):
                 'TX_TIERING_BLOBS_TIER': LogLevels.DEBUG,
             },
         )
+    
+    def _setup_tiering_test(self, ctx):
+        random.seed(0)
+
+        LOGGER.info('Initializing test parameters')
+        self.s3_endpoint = get_external_param('s3-endpoint', '')
+        self.s3_buckets = list(get_external_param('s3-buckets', 'ydb-tiering-test-1,ydb-tiering-test-2').split(','))
+        self.s3_access_key = get_external_param('s3-access-key', 'access_key')
+        self.s3_secret_key = get_external_param('s3-secret-key', 'secret_key')
+
+        assert len(self.s3_buckets) == 2, len(self.s3_buckets)
+
+        self.s3 = S3()
+        if not self.s3_endpoint:
+            LOGGER.info('Starting S3 server')
+            self.s3_endpoint = self.s3.start_server()
+
+        LOGGER.info('Preparing scheme objects')
+        sth = ScenarioTestHelper(ctx)
+
+        self.access_key_secret = self._get_test_prefix() + '_access_key'
+        self.secret_key_secret = self._get_test_prefix() + '_secret_key'
+        sth.execute_scheme_query(UpsertSecret(self.access_key_secret, self.s3_access_key))
+        sth.execute_scheme_query(UpsertSecret(self.secret_key_secret, self.s3_secret_key))
+
+        self.s3_configs = [
+            ObjectStorageParams(
+                endpoint=self.s3_endpoint,
+                bucket=bucket,
+                access_key_secret=self.access_key_secret,
+                secret_key_secret=self.secret_key_secret,
+                access_key=self.s3_access_key,
+                secret_key=self.s3_secret_key,
+            )
+            for bucket in self.s3_buckets
+        ]
+
+        if self.s3.is_server_started():
+            for config in self.s3_configs:
+                self.s3.create_bucket(config)
+
+        self.sources: list[str] = []
+        for i, s3_config in enumerate(self.s3_configs):
+            self.sources.append(f'tier{i}')
+            self._override_external_data_source(sth, self.sources[-1], s3_config)
+
+
+    def _tier_down_tiering_test(self, ctx):
+        LOGGER.info('Tiering down scheme objects')
+        sth = ScenarioTestHelper(ctx)
+        for table in self.tables:
+            sth.execute_scheme_query(AlterTable(table).action(ResetSetting('TTL')), retries=2)
+
+        for table in self.tables:
+            sth.execute_scheme_query(DropTable(table))
+        if not self.is_standalone_tables:
+            sth.execute_scheme_query(DropTableStore('store'))
+
+        # NOTE: evicted data is not erased when the colummnstore is deleted
+        # assert all(s3.count_objects(bucket) == 0 for bucket in s3_configs)
+
+        for source in self.sources:
+            sth.execute_scheme_query(DropExternalDataSource(source))
+
+        sth.execute_scheme_query(DropSecret(self.access_key_secret))
+        sth.execute_scheme_query(DropSecret(self.secret_key_secret))
+
+    def _override_external_data_source(self, sth, path, config):
+        sth.execute_scheme_query(CreateExternalDataSource(path, config, True))
+
+    def _get_test_duration(self, test_class: str) -> datetime.timedelta:
+        class_to_duration = {
+            'SMALL': datetime.timedelta(minutes=2),
+            'MEDIUM': datetime.timedelta(hours=6),
+            'LARGE': datetime.timedelta(days=2),
+        }
+        assert test_class in class_to_duration, test_class
+        return class_to_duration[test_class]
+
+    def _get_test_prefix(self):
+        return type(self).__name__
+
+
+
+
+class TestAlterTiering(TieringTestBase):
+    schema1 = (
+        ScenarioTestHelper.Schema()
+        .with_column(name='timestamp', type=PrimitiveType.Timestamp, not_null=True)
+        .with_column(name='writer', type=PrimitiveType.Uint32, not_null=True)
+        .with_column(name='value', type=PrimitiveType.Uint64, not_null=True)
+        .with_column(name='data', type=PrimitiveType.String, not_null=True)
+        .with_key_columns('timestamp', 'writer', 'value')
+    )
 
     def _loop_bulk_upsert(
         self,
@@ -211,77 +297,21 @@ class TestAlterTiering(BaseTestSet):
             LOGGER.info('executing DROP COLUMN')
             sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), retries=2)
 
-    def _override_external_data_source(self, sth, path, config):
-        sth.execute_scheme_query(CreateExternalDataSource(path, config, True))
-
-    def _get_test_duration(self, test_class: str) -> datetime.timedelta:
-        class_to_duration = {
-            'SMALL': datetime.timedelta(minutes=2),
-            'MEDIUM': datetime.timedelta(hours=6),
-            'LARGE': datetime.timedelta(days=2),
-        }
-        assert test_class in class_to_duration, test_class
-        return class_to_duration[test_class]
-
-    def _get_test_prefix(self):
-        return type(self).__name__
-
     def scenario_many_tables(self, ctx: TestContext):
-        random.seed(0)
+        self._setup_tiering_test(ctx)
 
-        LOGGER.info('Initializing test parameters')
-        test_duration = self._get_test_duration(get_external_param('test-class', 'SMALL'))
-        n_tables = 4
-        n_writers = 4
-        is_standalone_tables = False
+        self.test_duration = self._get_test_duration(get_external_param('test-class', 'SMALL'))
+        self.n_tables = 4
+        self.n_writers = 4
+        self.is_standalone_tables = False
 
-        s3_endpoint = get_external_param('s3-endpoint', '')
-        s3_buckets = list(get_external_param('s3-buckets', 'ydb-tiering-test-1,ydb-tiering-test-2').split(','))
-        s3_access_key = get_external_param('s3-access-key', 'access_key')
-        s3_secret_key = get_external_param('s3-secret-key', 'secret_key')
-
-        assert len(s3_buckets) == 2, len(s3_buckets)
-
-        s3 = S3()
-        if not s3_endpoint:
-            LOGGER.info('Starting S3 server')
-            s3_endpoint = s3.start_server()
-
-        LOGGER.info('Preparing scheme objects')
-        sth = ScenarioTestHelper(ctx)
-
-        access_key_secret = self._get_test_prefix() + '_access_key'
-        secret_key_secret = self._get_test_prefix() + '_secret_key'
-        sth.execute_scheme_query(UpsertSecret(access_key_secret, s3_access_key))
-        sth.execute_scheme_query(UpsertSecret(secret_key_secret, s3_secret_key))
-
-        s3_configs = [
-            ObjectStorageParams(
-                endpoint=s3_endpoint,
-                bucket=bucket,
-                access_key_secret=access_key_secret,
-                secret_key_secret=secret_key_secret,
-                access_key=s3_access_key,
-                secret_key=s3_secret_key,
-            )
-            for bucket in s3_buckets
-        ]
-
-        if s3.is_server_started():
-            for config in s3_configs:
-                s3.create_bucket(config)
-
-        sources: list[str] = []
-        for i, s3_config in enumerate(s3_configs):
-            sources.append(f'tier{i}')
-            self._override_external_data_source(sth, sources[-1], s3_config)
-
-        if not is_standalone_tables:
+        if not self.is_standalone_tables:
             sth.execute_scheme_query(CreateTableStore('store').with_schema(self.schema1).existing_ok())
 
+        sth = ScenarioTestHelper(ctx)
         tables: list[str] = []
-        for i in range(n_tables):
-            if is_standalone_tables:
+        for i in range(self.n_tables):
+            if self.is_standalone_tables:
                 tables.append(f'table{i}')
             else:
                 tables.append(f'store/table{i}')
@@ -293,19 +323,19 @@ class TestAlterTiering(BaseTestSet):
         threads.append(
             TestThread(
                 target=self._loop_add_drop_column,
-                args=[ctx, 'store', test_duration],
+                args=[ctx, 'store', self.test_duration],
             )
         )
         for i, table in enumerate(tables):
-            for writer in range(n_writers):
+            for writer in range(self.n_writers):
                 threads.append(
                     TestThread(
                         target=self._loop_bulk_upsert,
                         args=[
                             ctx,
                             table,
-                            i * n_writers + writer,
-                            test_duration,
+                            i * self.n_writers + writer,
+                            self.test_duration,
                         ],
                     )
                 )
@@ -315,34 +345,165 @@ class TestAlterTiering(BaseTestSet):
                     args=[
                         ctx,
                         table,
-                        random.sample(sources, len(sources)),
-                        test_duration,
+                        random.sample(self.sources, len(self.sources)),
+                        self.test_duration,
                     ],
                 )
             )
-            threads.append(TestThread(target=self._loop_scan, args=[ctx, table, test_duration]))
+            threads.append(TestThread(target=self._loop_scan, args=[ctx, table, self.test_duration]))
 
         for thread in threads:
             thread.start()
         for thread in threads:
             thread.join()
 
-        assert any(s3.count_objects(bucket) != 0 for bucket in s3_configs)
+        assert any(self.s3.count_objects(bucket) != 0 for bucket in self.s3_configs)
 
-        LOGGER.info('Tiering down scheme objects')
-        for table in tables:
-            sth.execute_scheme_query(AlterTable(table).action(ResetSetting('TTL')), retries=2)
+        self._tier_down_tiering_test(ctx)
 
-        for table in tables:
-            sth.execute_scheme_query(DropTable(table))
-        if not is_standalone_tables:
-            sth.execute_scheme_query(DropTableStore('store'))
 
-        # NOTE: evicted data is not erased when the colummnstore is deleted
-        # assert all(s3.count_objects(bucket) == 0 for bucket in s3_configs)
+class TestDataCorrectness(TieringTestBase):
+    schema1 = (
+        ScenarioTestHelper.Schema()
+        .with_column(name='timestamp', type=PrimitiveType.Timestamp, not_null=True)
+        .with_column(name='id', type=PrimitiveType.Uint32, not_null=True)
+        .with_column(name='value', type=PrimitiveType.Uint64, not_null=True)
+        .with_column(name='payload', type=PrimitiveType.String, not_null=True)
+        .with_key_columns('timestamp', 'id')
+    )
 
-        for source in sources:
-            sth.execute_scheme_query(DropExternalDataSource(source))
+    def _get_values_total(self, ctx: TestContext, table: str):
+        return ScenarioTestHelper(ctx).execute_scan_query(f'SELECT SUM(value) FROM `{ScenarioTestHelper(ctx).get_full_path(table)}`').result_set.rows[0]['column0'] or 0
 
-        sth.execute_scheme_query(DropSecret(access_key_secret))
-        sth.execute_scheme_query(DropSecret(secret_key_secret))
+    def _get_rows_in_tier(self, ctx: TestContext, table: str, tier: str):
+        return ScenarioTestHelper(ctx).execute_scan_query(f'SELECT SUM(Rows) FROM `{ScenarioTestHelper(ctx).get_full_path(table)}/.sys/primary_index_portion_stats` WHERE Activity == 1 AND TierName == "{tier}"').result_set.rows[0]['column0'] or 0
+
+    def _write_data(
+        self,
+        ctx: TestContext,
+        table: str,
+        values_from: int,
+        n_rows: int,
+        value: int = 1,
+    ):
+        sth = ScenarioTestHelper(ctx)
+
+        chunk_size = 100
+        while n_rows:
+            current_chunk_size = min(chunk_size, n_rows)
+            sth.bulk_upsert(
+                table,
+                dg.DataGeneratorPerColumn(self.schema1, current_chunk_size)
+                .with_column(
+                    'timestamp',
+                    dg.ColumnValueGeneratorLambda(lambda: int(datetime.datetime.now().timestamp() * 1000000)),
+                )
+                .with_column('id', dg.ColumnValueGeneratorSequential(values_from))
+                .with_column('value', dg.ColumnValueGeneratorConst(value))
+                .with_column(
+                    'payload',
+                    dg.ColumnValueGeneratorConst(random.randbytes(1024)),
+                ),
+            )
+            values_from += current_chunk_size
+            n_rows -= current_chunk_size
+            assert n_rows >= 0
+
+    def _delete_rows(
+        self,
+        ctx: TestContext,
+        table: str,
+        values_from: int,
+        n_rows: int,
+    ):
+        sth = ScenarioTestHelper(ctx)
+
+        chunk_size = 100
+        while n_rows:
+            current_chunk_size = min(chunk_size, n_rows)
+            sth.execute_data_query(f'DELETE FROM `{ScenarioTestHelper(ctx).get_full_path(table)}` WHERE id BETWEEN {values_from} AND {values_from + current_chunk_size};')
+            values_from += current_chunk_size
+            n_rows -= current_chunk_size
+            assert n_rows >= 0
+
+    def scenario_write_update_delete(self, ctx: TestContext):
+        self._setup_tiering_test(ctx)
+
+        sth = ScenarioTestHelper(ctx)
+
+        table = 'table'
+        sth.execute_scheme_query(CreateTable(table).with_schema(self.schema1))
+        # sth.execute_scheme_query(
+        #     AlterTable(table).set_ttl(
+        #         [
+        #             (
+        #                 datetime.timedelta(seconds=1),
+        #                 sth.get_full_path(self.sources[0]),
+        #             )
+        #         ],
+        #         'timestamp',
+        #     ),
+        #     retries=2,
+        # )
+
+        threads = [
+            TestThread(
+                target=self._write_data,
+                args=[ctx, table, i * 1000, 1000, 1],
+            )
+            for i in range(10)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert self._get_values_total(ctx, table) == 10000
+
+        q = ScenarioTestHelper(ctx).execute_scan_query(f'SELECT COUNT(*) FROM `{ScenarioTestHelper(ctx).get_full_path(table)}/.sys/primary_index_portion_stats`').result_set.rows
+        assert q == "abc"
+        assert '\n'.join(f"TierName={x['TierName']},Rows={x['Rows']},Activity={x['Activity']}" for x in q) == "aboba"
+
+        while self._get_rows_in_tier(ctx, table, "__DEFAULT"):
+            assert False
+            LOGGER.info("waiting eviction")
+            time.sleep(1)
+        assert self._get_rows_in_tier(ctx, table, f"{ScenarioTestHelper(ctx).get_full_path(self.sources[0])}") == 10000
+        assert self._get_values_total(ctx, table) == 10000
+
+        threads = [
+            TestThread(
+                target=self._write_data,
+                args=[ctx, table, i * 1000, 1000, 2],
+            )
+            for i in range(10)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        while self._get_rows_in_tier(ctx, table, "__DEFAULT"):
+            LOGGER.info("waiting eviction")
+            time.sleep(1)
+        assert self._get_rows_in_tier(ctx, table, f"{ScenarioTestHelper(ctx).get_full_path(self.sources[0])}") == 10000
+        assert self._get_values_total(ctx, table) == 20000
+
+        threads = [
+            TestThread(
+                target=self._delete_rows,
+                args=[ctx, table, i * 1000, 1000],
+            )
+            for i in range(10)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        while self._get_rows_in_tier(ctx, table, f"{ScenarioTestHelper(ctx).get_full_path(self.sources[0])}") == 0:
+            LOGGER.info("waiting eviction")
+            time.sleep(1)
+        assert self._get_values_total(ctx, table) == 0
+
+        self._tier_down_tiering_test(ctx)

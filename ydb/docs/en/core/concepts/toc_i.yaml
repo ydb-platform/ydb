@@ -3,8 +3,6 @@ items:
   href: glossary.md
 - name: Connecting to a database
   href: connect.md
-- name: Authentication
-  href: auth.md
 - name: Data model and schema
   href: datamodel/index.md
   include:

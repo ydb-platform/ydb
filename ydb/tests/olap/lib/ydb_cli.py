@@ -34,7 +34,7 @@ class YdbCliHelper:
         if cli == 'git':
             return [yatest.common.work_path('ydb')] + args
         elif cli == 'main':
-            return [yatest.common.binary_path('ydb/apps/ydb/ydb')] + args
+            return [yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))] + args
         else:
             return [cli] + args
 

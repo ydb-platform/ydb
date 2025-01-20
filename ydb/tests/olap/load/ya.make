@@ -4,6 +4,8 @@ PY3TEST()
 
     SIZE(LARGE)
 
+    ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+
     TEST_SRCS (
         test_clickbench.py
         test_tpcds.py

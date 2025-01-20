@@ -1,6 +1,7 @@
 #include "config_parser.h"
 
 #include <ydb/library/actors/core/log_settings.h>
+#include <ydb/library/yaml_config/protos/config.pb.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/protos/alloc.pb.h>
@@ -99,9 +100,11 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
     }
 
     if (res.Has("domains-file")) {
-        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("domains-file"), Config.AppConfig.MutableDomainsConfig()));
-        if (Config.AppConfig.HasDomainsConfig() && Config.AppConfig.GetDomainsConfig().HasSecurityConfig()) {
-            Config.AppConfig.MutableSecurityConfig()->CopyFrom(Config.AppConfig.GetDomainsConfig().GetSecurityConfig());
+        NKikimrConfig::TExtendedDomainsConfig domains;
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("domains-file"), &domains));
+        domains.CopyToTDomainsConfig(*Config.AppConfig.MutableDomainsConfig());
+        if (domains.HasSecurityConfig()) {
+            Config.AppConfig.MutableSecurityConfig()->CopyFrom(domains.GetSecurityConfig());
         }
     }
 

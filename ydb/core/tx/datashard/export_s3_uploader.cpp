@@ -186,24 +186,24 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     template <typename T>
-    void PutBuffer(TString& buffer, const TString& key, T stateFunc) {
+    void PutBuffer(TString&& buffer, const TString& key, T stateFunc) {
         auto request = Aws::S3::Model::PutObjectRequest().WithKey(key);
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(buffer)));
         this->Become(stateFunc);
     }
 
     template <typename T>
-    void PutBufferWithChecksum(TString& buffer, const TString& key, TString& checksum, T stateFunc) {
+    void PutBufferWithChecksum(TString&& buffer, const TString& key, TString& checksum, T stateFunc) {
         if (EnableChecksums) {
             checksum = ComputeChecksum(buffer);
         }
-        PutBuffer(buffer, key, stateFunc);
+        PutBuffer(std::move(buffer), key, stateFunc);
     }
 
     template <typename T>
     void PutMessage(const google::protobuf::Message& message, const TString& key, TString& checksum, T stateFunc) {
         google::protobuf::TextFormat::PrintToString(message, &Buffer);
-        PutBufferWithChecksum(Buffer, key, checksum, stateFunc);
+        PutBufferWithChecksum(std::move(Buffer), key, checksum, stateFunc);
     }
 
     void PutScheme(const Ydb::Table::CreateTableRequest& scheme) {
@@ -272,7 +272,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     {   
         // make checksum verifiable using sha256sum CLI
         checksum += ' ' + objectKeySuffix;
-        PutBuffer(checksum, checksumKey, &TThis::StateUploadChecksum);
+        PutBuffer(std::move(checksum), checksumKey, &TThis::StateUploadChecksum);
         ChecksumUploadedCallback = checksumUploadedCallback;
     }
 

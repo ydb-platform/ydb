@@ -91,7 +91,7 @@ struct TRange : public TOperation {
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter) {
-        ++resultsCounter;
+        ResultIndex = resultsCounter++;
         sql << "select ";
         if (CountOnly)
             sql << "count(*)";
@@ -141,14 +141,15 @@ struct TRange : public TOperation {
 
         if (Limit) {
             const auto paramName = TString("$Limit") += ToString(paramsCounter++);
-            sql << Endl << "LIMIT " << paramName;
+            sql << Endl << "limit " << paramName;
             params.AddParam(paramName).Uint64(Limit).Build();
         }
 
         sql << ';' << Endl;
     }
 
-    etcdserverpb::RangeResponse MakeResponse(const NYdb::TResultSets& results) {
+    etcdserverpb::RangeResponse MakeResponse(const NYdb::TResultSets& results) const {
+        Cerr << __func__ << ' ' << results.size() << ',' << ResultIndex << Endl;
         etcdserverpb::RangeResponse response;
         if (!results.empty()) {
             auto parser = NYdb::TResultSetParser(results[ResultIndex]);
@@ -214,7 +215,7 @@ struct TPut : public TOperation {
         sql << Endl << "do $up" << (update ? "date" : "sert") << "($Revision," << keyParamName << ',' << valueParamName << ',' << leaseParamName << ");" << Endl;
     }
 
-    etcdserverpb::PutResponse MakeResponse(const NYdb::TResultSets& results) {
+    etcdserverpb::PutResponse MakeResponse(const NYdb::TResultSets& results) const {
         etcdserverpb::PutResponse response;
         if (GetPrevious) {
             if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
@@ -254,7 +255,7 @@ struct TDeleteRange : public TOperation {
         sql << "delete from `huidig` " << where << ';' << Endl;
     }
 
-    etcdserverpb::DeleteRangeResponse MakeResponse(const NYdb::TResultSets& results) {
+    etcdserverpb::DeleteRangeResponse MakeResponse(const NYdb::TResultSets& results) const {
         etcdserverpb::DeleteRangeResponse response;
         if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
             response.set_deleted(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
@@ -373,6 +374,13 @@ struct TTxn : public TOperation {
         static constexpr std::string_view Comparator[] = {"="sv, ">"sv, "<"sv, "!="sv};
 
         ResultIndex = resultsCounter++;
+
+        const bool singleRange = false;
+
+        if (!singleRange)
+            sql << "$Compare = ";
+
+
         sql << "select bool_and(`cmp`) ?? false from (" << Endl;
         for (auto i = 0U; i < Compares.size(); ++i) {
             if (i)
@@ -387,12 +395,43 @@ struct TTxn : public TOperation {
         }
 
         sql << Endl << ");" << Endl;
+
+        if (!singleRange)
+            sql << "select * from $Compare;" << Endl;
+
+        const auto make = [&](std::vector<TRequestOp>& operations, const TString&) {
+            for (auto& operation : operations) {
+                if (const auto oper = std::get_if<TRange>(&operation))
+                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter);
+                else if (const auto oper = std::get_if<TPut>(&operation))
+                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter);
+                else if (const auto oper = std::get_if<TDeleteRange>(&operation))
+                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter);
+                else if (const auto oper = std::get_if<TTxn>(&operation))
+                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter);
+            }
+        };
+        TString filter;
+        make(Success, filter);
+        make(Failure, TString("not ")+= filter);
     }
 
-    etcdserverpb::TxnResponse MakeResponse(const NYdb::TResultSets& results) {
+    etcdserverpb::TxnResponse MakeResponse(const NYdb::TResultSets& results) const {
         etcdserverpb::TxnResponse response;
         if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
-            response.set_succeeded(NYdb::TValueParser(parser.GetValue(0)).GetBool());
+            const bool succeeded = NYdb::TValueParser(parser.GetValue(0)).GetBool();
+            response.set_succeeded(succeeded);
+            for (const auto& operation : succeeded ? Success : Failure) {
+                const auto resp = response.add_responses();
+                if (const auto oper = std::get_if<TRange>(&operation))
+                    *resp->mutable_response_range() = oper->MakeResponse(results);
+                else if (const auto oper = std::get_if<TPut>(&operation))
+                    *resp->mutable_response_put() = oper->MakeResponse(results);
+                else if (const auto oper = std::get_if<TDeleteRange>(&operation))
+                    *resp->mutable_response_delete_range() = oper->MakeResponse(results);
+                else if (const auto oper = std::get_if<TTxn>(&operation))
+                    *resp->mutable_response_txn() = oper->MakeResponse(results);
+            }
         }
         return response;
     }

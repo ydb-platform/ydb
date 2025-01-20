@@ -215,8 +215,8 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
                 .Build()
             .Table(upsert.Table())
             .Columns(upsert.Columns())
-            .Settings(upsert.Settings())
             .IsBatch(upsert.IsBatch())
+            .Settings(upsert.Settings())
             .ReturningColumns(upsert.ReturningColumns())
             .Done();
 }

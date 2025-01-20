@@ -1091,7 +1091,11 @@ public:
                             .Filter(settings.Filter.Cast())
                             .Update(settings.Update.Cast())
                             .ReturningColumns(returningColumns)
-                            .IsBatch(settings.IsBatch)
+                            .IsBatch(
+                                settings.IsBatch
+                                ? ctx.NewAtom(node->Pos(), "true")
+                                : ctx.NewAtom(node->Pos(), "false")
+                            )
                             .Done()
                             .Ptr();
                     } else {
@@ -1118,7 +1122,11 @@ public:
                             .Table().Build(key.GetTablePath())
                             .Filter(settings.Filter.Cast())
                             .ReturningColumns(returningColumns)
-                            .IsBatch(settings.IsBatch)
+                            .IsBatch(
+                                settings.IsBatch
+                                ? ctx.NewAtom(node->Pos(), "true")
+                                : ctx.NewAtom(node->Pos(), "false")
+                            )
                             .Done()
                             .Ptr();
                     } else {

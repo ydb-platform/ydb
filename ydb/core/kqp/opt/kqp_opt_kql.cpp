@@ -245,6 +245,7 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
         .Input(input.Ptr())
         .Columns(columns.Ptr())
         .ReturningColumns(write.ReturningColumns())
+        .IsBatch(ctx.NewAtom(write.Pos(), "false"))
         .Settings(settings)
         .Done();
 
@@ -286,6 +287,7 @@ TExprBase BuildReplaceTable(const TKiWriteTable& write, const TCoAtomList& input
         .Input(input.Ptr())
         .Columns(columns)
         .ReturningColumns(write.ReturningColumns())
+        .IsBatch(ctx.NewAtom(write.Pos(), "false"))
         .Settings(settings)
         .Done();
 
@@ -388,6 +390,7 @@ TExprBase BuildDeleteTable(const TKiWriteTable& write, const TKikimrTableDescrip
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
         .Input(keysToDelete)
         .ReturningColumns(write.ReturningColumns())
+        .IsBatch(ctx.NewAtom(write.Pos(), "false"))
         .Done();
 }
 
@@ -569,9 +572,9 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
         .Columns()
             .Add(updateColumnsList)
             .Build()
+        .IsBatch(update.IsBatch())
         .Settings(IsUpdateSetting(ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
-        .IsBatch(update.IsBatch())
         .Done();
 }
 
@@ -633,6 +636,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         .Columns()
             .Add(updateColumnsList)
             .Build()
+        .IsBatch(ctx.NewAtom(update.Pos(), "false"))
         .Settings(IsUpdateSetting(ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
@@ -700,10 +704,10 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                     .Columns(GetPgNotNullColumns(tableData, update.Pos(), ctx))
                 .Build()
                 .ReturningColumns<TCoAtomList>().Build()
-                .IsBatch(update.IsBatch())
                 .Columns()
                     .Add(indexColumnsList)
                     .Build()
+                .IsBatch(ctx.NewAtom(update.Pos(), "false"))
                 .Settings().Build()
                 .Done();
 

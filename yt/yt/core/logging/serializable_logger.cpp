@@ -16,37 +16,41 @@ void TSerializableLogger::Save(TStreamSaveContext& context) const
 
     if (Category_) {
         Save(context, true);
-        Save(context, TString(Category_->Name));
+        Save(context, Category_->Name);
     } else {
         Save(context, false);
     }
 
     Save(context, Essential_);
     Save(context, MinLevel_);
-    Save(context, Tag_);
-    TVectorSerializer<TTupleSerializer<TStructuredTag, 2>>::Save(context, StructuredTags_);
+
+    Save(context, GetTag());
+    TVectorSerializer<TTupleSerializer<TStructuredTag, 2>>::Save(context, GetStructuredTags());
 }
 
 void TSerializableLogger::Load(TStreamLoadContext& context)
 {
     using NYT::Load;
 
-    TString categoryName;
-
-    bool categoryPresent = false;
-    Load(context, categoryPresent);
-    if (categoryPresent) {
-        Load(context, categoryName);
+    if (Load<bool>(context)) {
+        auto categoryName = Load<std::string>(context);
         LogManager_ = GetDefaultLogManager();
-        Category_ = LogManager_->GetCategory(categoryName.data());
+        Category_ = LogManager_->GetCategory(categoryName);
     } else {
         Category_ = nullptr;
     }
 
     Load(context, Essential_);
     Load(context, MinLevel_);
-    Load(context, Tag_);
-    TVectorSerializer<TTupleSerializer<TStructuredTag, 2>>::Load(context, StructuredTags_);
+
+    TCoWState state;
+    Load<std::string>(context, state.Tag);
+    TVectorSerializer<TTupleSerializer<TStructuredTag, 2>>::Load(context, state.StructuredTags);
+    if (state.Tag.empty() && state.StructuredTags.empty()) {
+        ResetCoWState();
+    } else {
+        *GetMutableCoWState() = std::move(state);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

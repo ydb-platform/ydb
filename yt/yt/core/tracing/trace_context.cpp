@@ -264,7 +264,7 @@ void TTraceContext::SetRequestId(TRequestId requestId)
     RequestId_ = requestId;
 }
 
-void TTraceContext::SetLoggingTag(const TString& loggingTag)
+void TTraceContext::SetLoggingTag(const std::string& loggingTag)
 {
     LoggingTag_ = loggingTag;
 }

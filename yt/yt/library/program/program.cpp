@@ -83,16 +83,16 @@ private:
 TProgram::TProgram()
 {
     Opts_.AddHelpOption();
-    Opts_.AddLongOption("yt-version", "print YT version and exit")
+    Opts_.AddLongOption("yt-version", "Prints YT version")
         .NoArgument()
         .StoreValue(&PrintYTVersion_, true);
-    Opts_.AddLongOption("version", "print version and exit")
+    Opts_.AddLongOption("version", "Print version")
         .NoArgument()
         .StoreValue(&PrintVersion_, true);
-    Opts_.AddLongOption("yson", "print build information in YSON")
+    Opts_.AddLongOption("yson", "Prints build information in YSON")
         .NoArgument()
         .StoreValue(&UseYson_, true);
-    Opts_.AddLongOption("build", "print build information and exit")
+    Opts_.AddLongOption("build", "Prints build information")
         .NoArgument()
         .StoreValue(&PrintBuild_, true);
     Opts_.SetFreeArgsNum(0);

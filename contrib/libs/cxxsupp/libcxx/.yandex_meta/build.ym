@@ -1,7 +1,7 @@
 {% extends '//builtin/run.ym' %}
 
-{% block current_version %}9783f28cbb155e4a8d49c12e1c60ce14dcfaf0c7{% endblock %}
-{% block current_date %}2023-12-18{% endblock %}
+{% block current_version %}80f9458cf30d13eef21b09042ea590945c5e64db{% endblock %}
+{% block current_date %}2024-03-05{% endblock %}
 
 {% block keep_sources %}
 .yandex_meta/scripts/sysincls.py
@@ -58,6 +58,7 @@ rsync --recursive ${RESOURCES}/libcxx/src .
 cp ${RESOURCES}/libcxx/.clang-format .
 cp ${RESOURCES}/libcxx/CREDITS.TXT .
 cp ${RESOURCES}/libcxx/LICENSE.TXT .
+cp ${RESOURCES}/libcxx/vendor/llvm/default_assertion_handler.in include/__assertion_handler
 {% endblock %}
 
 {% block build_source %}
@@ -284,6 +285,7 @@ SRCS(
     src/filesystem/filesystem_error.cpp
     src/filesystem/operations.cpp
     src/filesystem/path.cpp
+    src/fstream.cpp
     src/functional.cpp
     src/future.cpp
     src/hash.cpp
@@ -297,6 +299,7 @@ SRCS(
     src/mutex.cpp
     src/mutex_destructor.cpp
     src/optional.cpp
+    src/ostream.cpp
     src/print.cpp
     src/random.cpp
     src/random_shuffle.cpp
@@ -327,7 +330,8 @@ ENDIF()
 
 IF (OS_LINUX)
     SRCS(
-        src/tz.cpp
+        src/time_zone.cpp
+        src/tzdb.cpp
         src/tzdb_list.cpp
     )
 ENDIF()

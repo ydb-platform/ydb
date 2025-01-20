@@ -704,6 +704,9 @@ void BuildUserJobFluently(
         .DoIf(!preparer.GetLayers().empty(), [&] (TFluentMap fluentMap) {
             fluentMap.Item("layer_paths").List(preparer.GetLayers());
         })
+        .DoIf(userJobSpec.DockerImage_.Defined(), [&] (TFluentMap fluentMap) {
+            fluentMap.Item("docker_image").Value(*userJobSpec.DockerImage_);
+        })
         .Item("command").Value(preparer.GetCommand())
         .Item("class_name").Value(preparer.GetClassName())
         .DoIf(!userJobSpec.Environment_.empty(), [&] (TFluentMap fluentMap) {

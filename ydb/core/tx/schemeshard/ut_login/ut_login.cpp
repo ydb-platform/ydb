@@ -455,6 +455,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
     Y_UNIT_TEST(BanUserWithWaiting) {
         TTestBasicRuntime runtime;
+
+        runtime.AddAppDataInit([] (ui32, NKikimr::TAppData& appData) {
+            appData.AuthConfig.MutableAccountLockout()->SetAttemptResetDuration("3s");
+        });
+
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;
@@ -474,8 +479,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", false);
 
-        // FailedAttemptCount will reset in 1 hour
-        runtime.AdvanceCurrentTime(TDuration::Minutes(61));
+        // User is blocked for 3 seconds
+        Sleep(TDuration::Seconds(4));
 
         auto resultLogin = Login(runtime, "user1", "123");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "User user1 is not permitted to log in");

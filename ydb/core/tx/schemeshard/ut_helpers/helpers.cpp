@@ -2049,12 +2049,7 @@ namespace NSchemeShardUT_Private {
         auto alterUser = transaction->MutableAlterLogin()->MutableModifyUser();
 
         alterUser->SetUser(user);
-
-        if (isEnabled) {
-            alterUser->SetCanLogin(true);
-        } else {
-            alterUser->SetCanLogin(false);
-        }
+        alterUser->SetCanLogin(isEnabled);
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
         TAutoPtr<IEventHandle> handle;

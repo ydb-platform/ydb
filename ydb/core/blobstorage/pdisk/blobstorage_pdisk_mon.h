@@ -469,6 +469,12 @@ struct TPDiskMon {
     TReqCounters YardSlay;
     TReqCounters YardControl;
 
+    TReqCounters ShredPDisk;
+    TReqCounters PreShredCompactVDisk;
+    TReqCounters ShredVDiskResult;
+    TReqCounters MarkDirty;
+    TReqCounters MarkDirtyBatch;
+
     TIoCounters WriteSyncLog;
     TIoCounters WriteFresh;
     TIoCounters WriteHuge;

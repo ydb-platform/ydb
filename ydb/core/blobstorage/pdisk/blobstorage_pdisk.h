@@ -1545,6 +1545,188 @@ struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStora
     {}
 };
 
+// NodeWarden sends this message to PDisk to ask for shredding
+struct TEvShredPDisk : public TEventLocal<TEvShredPDisk, TEvBlobStorage::EvShredPDisk> {
+    ui64 ShredGeneration;
+
+    TEvShredPDisk(ui64 shredGeneration)
+        : ShredGeneration(shredGeneration)
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{EvShredPDisk ShredGeneration# " << ShredGeneration << "}";
+        return str.Str();
+    }
+};
+
+// PDisk sends this message to NodeWarden when shredding is complete
+struct TEvShredPDiskResult : public TEventLocal<TEvShredPDiskResult, TEvBlobStorage::EvShredPDiskResult> {
+    NKikimrProto::EReplyStatus Status;
+    ui64 ShredGeneration;
+    TString ErrorReason;
+
+    TEvShredPDiskResult(NKikimrProto::EReplyStatus status, ui64 shredGeneration, const TString &errorReason)
+        : Status(status)
+        , ShredGeneration(shredGeneration)
+        , ErrorReason(errorReason)
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{EvShredPDiskResult ShredGeneration# " << ShredGeneration
+            << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data()
+            << " ErrorReason# \"" << ErrorReason << "\"}";
+        return str.Str();
+    }
+};
+
+// PDisk sends this message to VDisk to ask for full compaction before shredding
+struct TEvPreShredCompactVDisk : public TEventLocal<TEvPreShredCompactVDisk, TEvBlobStorage::EvPreShredCompactVDisk> {
+    ui64 ShredGeneration;
+    std::vector<TChunkIdx> ChunksToShred;
+
+    TEvPreShredCompactVDisk(ui64 shredGeneration)
+        : ShredGeneration(shredGeneration)
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{EvPreShredCompactVDisk ShredGeneration# " << ShredGeneration << "}";
+        return str.Str();
+    }
+};
+
+// VDisk sends this message to PDisk when pre-shred compaction is complete
+struct TEvPreShredCompactVDiskResult : public TEventLocal<TEvPreShredCompactVDiskResult, TEvBlobStorage::EvPreShredCompactVDiskResult> {
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    ui64 ShredGeneration;
+    NKikimrProto::EReplyStatus Status;
+    TString ErrorReason;
+
+    TEvPreShredCompactVDiskResult(TOwner owner, TOwnerRound ownerRound, ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString &errorReason)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+        , ShredGeneration(shredGeneration)
+        , Status(status)
+        , ErrorReason(errorReason)
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{EvPreShredCompactVDiskResult OwnerId# " << (ui32)Owner
+            << " OwnerRound# " << OwnerRound
+            << " ShredGeneration# " << ShredGeneration
+            << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data()
+            << " ErrorReason# \"" << ErrorReason << "\"}";
+        return str.Str();
+    }
+};
+
+// PDisk sends this message to VDisk to ask it to move all the data needed away from the chunks that are being shredded
+struct TEvShredVDisk : public TEventLocal<TEvShredVDisk, TEvBlobStorage::EvShredVDisk> {
+    ui64 ShredGeneration;
+    std::vector<TChunkIdx> ChunksToShred;
+
+    TEvShredVDisk(ui64 shredGeneration, std::vector<TChunkIdx> chunksToShred)
+        : ShredGeneration(shredGeneration)
+        , ChunksToShred(std::move(chunksToShred))
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{EvShredVDisk ShredGeneration# " << ShredGeneration << "}";
+        str << " ChunksToShred# {";
+        for (size_t i = 0; i < ChunksToShred.size(); ++i) {
+            if (i) {
+                str << ", ";
+            }
+            str << ChunksToShred[i];
+        }
+        str << "}}";
+        return str.Str();
+    }
+};
+
+// VDisk sends this message to PDisk when the data has been moved away from the chunks that are being shredded
+struct TEvShredVDiskResult : public TEventLocal<TEvShredVDiskResult, TEvBlobStorage::EvShredVDiskResult> {
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    ui64 ShredGeneration;
+    NKikimrProto::EReplyStatus Status;
+    TString ErrorReason;
+
+    TEvShredVDiskResult(TOwner owner, TOwnerRound ownerRound, ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString &errorReason)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+        , ShredGeneration(shredGeneration)
+        , Status(status)
+        , ErrorReason(errorReason)
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{EvShredVDiskResult OwnerId# " << (ui32)Owner
+            << " OwnerRound# " << OwnerRound
+            << " ShredGeneration# " << ShredGeneration
+            << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data()
+            << " ErrorReason# \"" << ErrorReason << "\"}";
+        return str.Str();
+    }
+};
+
+// VDisk sends this message to PDisk to mark a single chunk as dirty
+// No response is expected from PDisk as the operation has very high priority and always succeeds
+struct TEvMarkDirty : public TEventLocal<TEvMarkDirty, TEvBlobStorage::EvMarkDirty> {
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    TChunkIdx ChunkToMarkDirty;
+
+    TEvMarkDirty(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkToMarkDirty)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+        , ChunkToMarkDirty(chunkToMarkDirty)
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{EvMarkDirty OwnerId# " << (ui32)Owner
+            << " OwnerRound# " << OwnerRound
+            << " ChunkToMarkDirty# " << ChunkToMarkDirty
+            << "}";
+        return str.Str();
+    }
+};
+
+// VDisk sends this message to PDisk to mark a batch of chunks as dirty
+// No response is expected from PDisk as the operation has very high priority and always succeeds
+struct TEvMarkDirtyBatch : public TEventLocal<TEvMarkDirtyBatch, TEvBlobStorage::EvMarkDirtyBatch> {
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    std::vector<TChunkIdx> ChunksToMarkDirty;
+
+    TEvMarkDirtyBatch(TOwner owner, TOwnerRound ownerRound, std::vector<TChunkIdx> chunksToMarkDirty)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+        , ChunksToMarkDirty(std::move(chunksToMarkDirty))
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{EvMarkDirtyBatch ownerId# " << (ui32)Owner
+            << " ownerRound# " << OwnerRound
+            << " ChunksToMarkDirty# {";
+        for (size_t i = 0; i < ChunksToMarkDirty.size(); ++i) {
+            if (i) {
+                str << ", ";
+            }
+            str << ChunksToMarkDirty[i];
+        }
+        str << "}}";
+        return str.Str();
+    }
+};
 
 /*
  * One common context in the PDisk's world.

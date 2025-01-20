@@ -262,7 +262,7 @@ public:
 
         Y_ABORT_UNLESS(0 == txState.Shards.size());
         parentPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;

@@ -308,7 +308,7 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release());
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -316,7 +316,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release());
             MakeResponseAndPassAway();
             return;
         } else if (Request.UseImmediateEffects) {
@@ -325,7 +325,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release());
             return;
         } else {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -2187,6 +2187,14 @@ private:
 
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
+
+        if (TxManager) {
+            for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+                if (stageInfo.Meta.ShardKey) {
+                    TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+                }
+            }
+        }
 
         if (StreamResult || EnableReadsMerge || AllowOlapDataQuery) {
             TSet<ui64> shardIds;

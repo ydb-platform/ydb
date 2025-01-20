@@ -12850,6 +12850,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
 
+        Functions["BlockMapJoinCore"] = &BlockMapJoinCoreWrapper;
+
         ExtFunctions["AsScalar"] = &AsScalarWrapper;
         ExtFunctions["WideToBlocks"] = &WideToBlocksWrapper;
         ExtFunctions["BlockCombineAll"] = &BlockCombineAllWrapper;

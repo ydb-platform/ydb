@@ -48,6 +48,7 @@ protected:
     IViewer* Viewer = nullptr;
     NMon::TEvHttpInfo::TPtr Event;
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr HttpEvent;
+    TCgiParameters Params;
     TJsonSettings JsonSettings;
     TProto2JsonConfig Proto2JsonConfig;
     TDuration Timeout = TDuration::Seconds(10);
@@ -276,6 +277,8 @@ protected:
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
+    void BuildParamsFromJson(TStringBuf data);
+    void SetupTracing(const TString& handlerName);
     void ClosePipes();
     ui32 FailPipeConnect(TTabletId tabletId);
 

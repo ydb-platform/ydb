@@ -159,9 +159,9 @@ struct TDurationParser {
         return res;
     }
 
-    constexpr ui32 ConsumeNumberPortion() noexcept {
-        ui32 dec = 1;
-        ui32 res = 0;
+    constexpr ui64 ConsumeNumberPortion() noexcept {
+        ui64 dec = 1;
+        ui64 res = 0;
         while (!Src.empty() && IsDigit(Src.back())) {
             res += (Src.back() - '0') * dec;
             dec *= 10;

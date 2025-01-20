@@ -1655,7 +1655,7 @@ void TMkqlReaderImpl::SetSpecs(const TMkqlIOSpecs& specs, const NKikimr::NMiniKQ
     if (Specs_->UseBlockInput_) {
         Decoder_.Reset(new TArrowDecoder(Buf_, *Specs_, holderFactory, NUdf::GetYqlMemoryPool()));
     } else if (Specs_->UseSkiff_) {
-#ifndef MKQL_DISABLE_CODEGEN
+#if !defined(MKQL_DISABLE_CODEGEN) && !defined(__aarch64__) && !defined(_win_)
         if (Specs_->OptLLVM_ != "OFF" && NCodegen::ICodegen::IsCodegenAvailable()) {
             Decoder_.Reset(new TSkiffLLVMDecoder(Buf_, *Specs_, holderFactory));
         }

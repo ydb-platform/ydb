@@ -1,7 +1,7 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
-REQUIREMENTS(ram:48)
+REQUIREMENTS(ram:48 cpu:all)
 
 TEST_SRCS(
     test_bulkupserts_tpch.py
@@ -22,7 +22,5 @@ PEERDIR(
     ydb/tests/library
     ydb/tests/sql/lib
 )
-
-FORK_SUBTESTS()
 
 END()

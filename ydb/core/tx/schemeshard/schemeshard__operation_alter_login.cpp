@@ -24,7 +24,7 @@ public:
         } else if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Wrong working dir");
         } else {
-            const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = context.SS->GetDomainsConfig().GetSecurityConfig();
+            const NKikimrConfig::TSecurityConfig& securityConfig = context.SS->GetSecurityConfig();
             const NKikimrSchemeOp::TAlterLogin& alterLogin = Transaction.GetAlterLogin();
 
             TParts additionalParts;
@@ -294,8 +294,10 @@ public:
     }
 
     void AddLastSuccessfulLogin(NLogin::TLoginProvider::TSidRecord& sid, TParts& additionalParts) {
-        if (sid.LastSuccessfulLogin) {
-            additionalParts.emplace_back("last_login", TInstant::FromValue(sid.LastSuccessfulLogin).ToString());
+        const auto duration = sid.LastSuccessfulLogin.time_since_epoch();
+        const auto time = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+        if (time) {
+            additionalParts.emplace_back("last_login", TInstant::MicroSeconds(time).ToString());
         }
     }
 };

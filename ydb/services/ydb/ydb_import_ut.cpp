@@ -127,4 +127,36 @@ Y_UNIT_TEST_SUITE(YdbImport) {
         }
     }
 
+    Y_UNIT_TEST(ImportFromS3ToExistingTable) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(TStringBuilder()
+            << "localhost:" << server.GetPort()));
+
+        {
+            NYdb::NTable::TTableClient client(driver);
+            auto session = client.GetSession().ExtractValueSync().GetSession();
+
+            auto builder = NYdb::NTable::TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key");
+
+            auto result = session.CreateTable("/Root/Table", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            NYdb::NImport::TImportClient client(driver);
+            auto settings = NYdb::NImport::TImportFromS3Settings()
+                .AppendItem({.Src = "Fake/S3/Prefix", .Dst = "/Root/Table"})
+                .Endpoint("s3.fake.endpoint.net")
+                .Bucket("fake_bucket")
+                .AccessKey("fake_access_key")
+                .SecretKey("fake_secret_key");
+
+            auto result = client.ImportFromS3(settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), EStatus::BAD_REQUEST, result.Status().GetIssues().ToString());
+        }
+    }
+
 }

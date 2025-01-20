@@ -154,8 +154,6 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
             return MainNodeByHost(cmdConf, argc, argv);
         case EDM_SCHEME_INITROOT:
             return NDriverClient::SchemeInitRoot(cmdConf, argc, argv);
-        case EDM_COMPILE_AND_EXEC_MINIKQL:
-            return NDriverClient::CompileAndExecMiniKQL(cmdConf, argc, argv);
         case EDM_PERSQUEUE_REQUEST:
             return NDriverClient::PersQueueRequest(cmdConf, argc, argv);
         case EDM_PERSQUEUE_STRESS:

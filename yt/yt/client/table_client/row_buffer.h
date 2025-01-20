@@ -39,7 +39,7 @@ public:
             TTag(),
             startChunkSize)
     {
-        static_assert(sizeof(TTag) <= 1);
+        static_assert(IsEmptyClass<TTag>());
     }
 
     template <class TTag>
@@ -52,7 +52,7 @@ public:
             GetRefCountedTypeCookie<TTag>(),
             std::move(chunkProvider))
     {
-        static_assert(sizeof(TTag) <= 1);
+        static_assert(IsEmptyClass<TTag>());
     }
 
     TChunkedMemoryPool* GetPool();

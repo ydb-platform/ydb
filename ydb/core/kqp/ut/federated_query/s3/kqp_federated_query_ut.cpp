@@ -2369,8 +2369,38 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         {
             const TString sql = fmt::format(R"(
                     INSERT INTO {destination}
+                        SELECT key, value FROM {source};)",
+                    "destination"_a = table1,
+                    "source"_a = olapTable);
+
+            auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+        }
+
+        {
+            const TString sql = fmt::format(R"(
+                    INSERT INTO {destination}
                         SELECT key, value FROM {source} LIMIT 1;)",
                     "destination"_a = table1,
+                    "source"_a = olapTable);
+
+            auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+        }
+
+        {
+            const TString sql = fmt::format(R"(
+                    INSERT INTO {destination}
+                        SELECT key, value, "2024" AS year FROM {source};)",
+                    "destination"_a = table2,
                     "source"_a = olapTable);
 
             auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();

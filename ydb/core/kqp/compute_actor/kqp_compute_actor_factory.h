@@ -126,6 +126,7 @@ public:
         const bool ShareMailbox;
         const TMaybe<NYql::NDqProto::TRlPath>& RlPath;
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
+        const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<IKqpNodeState> State = nullptr;

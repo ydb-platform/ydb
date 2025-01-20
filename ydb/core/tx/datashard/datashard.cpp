@@ -435,6 +435,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     NotifySchemeshard(ctx);
     CheckInitiateBorrowedPartsReturn(ctx);
     CheckStateChange(ctx);
+    CleanupUncommitted(ctx);
 }
 
 void TDataShard::SyncConfig() {
@@ -2863,6 +2864,7 @@ void TDataShard::FinishMediatorStateRestore(TTransactionContext& txc, ui64 readS
     }
 
     MediatorStateWaiting = false;
+    InMemoryVarsRestored = true;
 
     // Resend all waiting messages
     TVector<THolder<IEventHandle>> msgs;
@@ -4746,6 +4748,18 @@ void TDataShard::Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev, const T
     }
 }
 
+void TDataShard::OnTableCreated(TTransactionContext &txc, const TActorContext &ctx) {
+    if (GetState() == TShardState::WaitScheme) {
+        SetPersistState(TShardState::Ready, txc);
+        // A newly created table doesn't need to wait for mediator state
+        // restore and initial values can be trusted.
+        InMemoryVarsRestored = true;
+        // We could perform snapshot reads after becoming ready
+        // Make sure older versions restore mediator state in that case
+        PersistUnprotectedReadsEnabled(txc);
+        SendRegistrationRequestTimeCast(ctx);
+    }
+}
 
 } // NDataShard
 

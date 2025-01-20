@@ -288,35 +288,7 @@ The Apache Software Foundation (https://www.apache.org/).
 
 
 ====================COPYRIGHT====================
-  Copyright (c) 2008 Thomas Porschberg <thomas@randspringer.de>
-  Copyright (c) 2008 Michael Tindal
-  Copyright (c) 2008 Daniel Casimiro <dan.casimiro@gmail.com>
-* lang/c++/m4/m4_ax_boost_asio.m4
-  Copyright (c) 2008 Thomas Porschberg <thomas@randspringer.de>
-  Copyright (c) 2008 Pete Greenwell <pete@mu.org>
-* lang/c++/m4/m4_ax_boost_filesystem.m4
-  Copyright (c) 2009 Thomas Porschberg <thomas@randspringer.de>
-  Copyright (c) 2009 Michael Tindal
-  Copyright (c) 2009 Roman Rybalko <libtorrent@romanr.info>
-* lang/c++/m4/m4_ax_boost_thread.m4
-  Copyright (c) 2009 Thomas Porschberg <thomas@randspringer.de>
-  Copyright (c) 2009 Michael Tindal
-* lang/c++/m4/m4_ax_boost_regex.m4
-  Copyright (c) 2008 Thomas Porschberg <thomas@randspringer.de>
-  Copyright (c) 2008 Michael Tindal
-* lang/c++/m4/m4_ax_boost_base.m4
-  Copyright (c) 2008 Thomas Porschberg <thomas@randspringer.de>
-
-
-====================COPYRIGHT====================
 Copyright 2010-2015 The Apache Software Foundation
-
-
-====================FSFAP====================
-| Copying and distribution of this file, with or without modification, are
-| permitted in any medium without royalty provided the copyright notice
-| and this notice are preserved. This file is offered as-is, without any
-| warranty.
 
 
 ====================File: NOTICE====================

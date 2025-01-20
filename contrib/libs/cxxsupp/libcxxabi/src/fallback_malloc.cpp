@@ -8,21 +8,17 @@
 
 #include "fallback_malloc.h"
 
-#include <__threading_support>
+#include <__thread/support.h>
 #ifndef _LIBCXXABI_HAS_NO_THREADS
 #if defined(__ELF__) && defined(_LIBCXXABI_LINK_PTHREAD_LIB)
 #pragma comment(lib, "pthread")
 #endif
 #endif
 
-#ifdef __EMSCRIPTEN__
 #include <__memory/aligned_alloc.h>
-#endif
-
 #include <assert.h>
 #include <stdlib.h> // for malloc, calloc, free
 #include <string.h> // for memset
-#include <new> // for std::__libcpp_aligned_{alloc,free}
 
 //  A small, simple heap manager based (loosely) on
 //  the startup heap manager from FreeBSD, optimized for space.

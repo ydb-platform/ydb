@@ -16,6 +16,8 @@
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/fork_aware_rw_spin_lock.h>
 
+#include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+
 #include <atomic>
 
 namespace NYT::NBus {
@@ -57,6 +59,10 @@ public:
 
     std::optional<TString> GetBusCertsDirectoryPath() const;
 
+    void RegisterLocalMessageHandler(int port, const ILocalMessageHandlerPtr& handler);
+    void UnregisterLocalMessageHandler(int port);
+    ILocalMessageHandlerPtr FindLocalBypassMessageHandler(const NNet::TNetworkAddress& address);
+
 private:
     friend class TTcpDispatcher;
 
@@ -73,8 +79,9 @@ private:
     std::vector<TTcpConnectionPtr> GetConnections();
     void BuildOrchid(NYson::IYsonConsumer* consumer);
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, PollerLock_);
-    TTcpDispatcherConfigPtr Config_ = New<TTcpDispatcherConfig>();
+    TAtomicIntrusivePtr<TTcpDispatcherConfig> Config_{New<TTcpDispatcherConfig>()};
+
+    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, PollersLock_);
     NConcurrency::IThreadPoolPollerPtr AcceptorPoller_;
     NConcurrency::IThreadPoolPollerPtr XferPoller_;
 
@@ -106,6 +113,9 @@ private:
     };
 
     TEnumIndexedArray<EMultiplexingBand, TBandDescriptor> BandToDescriptor_;
+
+    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, LocalMessageHandlersLock_);
+    THashMap<int, ILocalMessageHandlerPtr> LocalMessageHandlers_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

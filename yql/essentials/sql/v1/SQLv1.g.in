@@ -930,8 +930,8 @@ simple_table_ref_core: object_ref | COMMAT? bind_parameter;
 simple_table_ref: simple_table_ref_core table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
-delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)? returning_columns_list?;
-update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source)  returning_columns_list?;
+delete_stmt: BATCH? DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)? returning_columns_list?;
+update_stmt: BATCH? UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source)  returning_columns_list?;
 
 /// out of 2003 standart
 set_clause_choice: set_clause_list | multiple_column_assignment;
@@ -1278,6 +1278,7 @@ keyword_as_compat:
   | ATTRIBUTES
   | AUTOINCREMENT
   | BACKUP
+  | BATCH
   | BEFORE
   | BEGIN
   | BERNOULLI
@@ -1504,6 +1505,7 @@ keyword_compat: (
   | ATTRIBUTES
   | AUTOINCREMENT
   | BACKUP
+  | BATCH
   | BEFORE
   | BEGIN
   | BERNOULLI
@@ -1830,6 +1832,7 @@ ATTRIBUTES: A T T R I B U T E S;
 AUTOINCREMENT: A U T O I N C R E M E N T;
 AUTOMAP: A U T O M A P;
 BACKUP: B A C K U P;
+BATCH: B A T C H;
 COLLECTION: C O L L E C T I O N;
 BEFORE: B E F O R E;
 BEGIN: B E G I N;

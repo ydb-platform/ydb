@@ -1,0 +1,15 @@
+--- contrib/python/typeguard/typeguard/importhook.py	(index)
++++ contrib/python/typeguard/typeguard/importhook.py	(working tree)
+@@ -29 +29 @@ class TypeguardTransformer(ast.NodeVisitor):
+-            elif isinstance(child, ast.Expr) and isinstance(child.value, ast.Str):
++            elif isinstance(child, ast.Expr) and isinstance(child.value, ast.Constant):
+--- contrib/python/typeguard/tests/test_typeguard.py	(index)
++++ contrib/python/typeguard/tests/test_typeguard.py	(working tree)
+@@ -1227,6 +1227,7 @@ class TestTypeChecked:
+             def foo():
+                 pass
+ 
++    @pytest.mark.skipif(sys.version_info >= (3, 12), reason="Fail wint Python 3.12")
+     @pytest.mark.parametrize('annotation', [TBound, TConstrained], ids=['bound', 'constrained'])
+     def test_typevar_forwardref(self, annotation):
+         @typechecked

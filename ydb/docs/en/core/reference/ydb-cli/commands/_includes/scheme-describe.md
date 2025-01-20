@@ -1,6 +1,6 @@
 # Getting information about schema objects
 
-Get information about a schema object:
+Get information about a [schema object](../../../../concepts/glossary.md#scheme-object):
 
 ```bash
 {{ ydb-cli }} scheme describe episodes --stats

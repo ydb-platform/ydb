@@ -10,6 +10,7 @@
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/ytree/convert.h>
+#include <yt/yt/core/ytree/helpers.h>
 
 #include <yt/yt_proto/yt/core/tracing/proto/tracing_ext.pb.h>
 
@@ -263,7 +264,7 @@ void TTraceContext::SetRequestId(TRequestId requestId)
     RequestId_ = requestId;
 }
 
-void TTraceContext::SetLoggingTag(const TString& loggingTag)
+void TTraceContext::SetLoggingTag(const std::string& loggingTag)
 {
     LoggingTag_ = loggingTag;
 }
@@ -315,7 +316,7 @@ void TTraceContext::SetAllocationTagList(TAllocationTagListPtr list) noexcept
 
 void TTraceContext::DoSetAllocationTags(TAllocationTags&& tags)
 {
-    VERIFY_SPINLOCK_AFFINITY(AllocationTagsLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(AllocationTagsLock_);
     auto holder = tags.empty() ? nullptr : New<TAllocationTagList>(std::move(tags));
     AllocationTagList_.Store(std::move(holder));
 }

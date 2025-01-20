@@ -40,5 +40,15 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         LICENSE [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 92820a51167fb631a01b0124882800db
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2012-2023 Yann Collet
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
         xxhash.c [3:3]
         xxhash.h [4:4]

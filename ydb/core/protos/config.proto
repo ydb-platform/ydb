@@ -176,6 +176,32 @@ message TDynamicNameserviceConfig {
     optional uint32 MinDynamicNodeId = 4 [default = 50000];
 }
 
+message TSecurityConfig {
+    optional bool EnforceUserTokenRequirement = 1 [default = false];
+    optional bool EnforceUserTokenCheckRequirement = 7 [default = false]; // Check if a token was specified // If not, or if the token was incorrect or access was denied, the request will be handled as if no token was provided
+    repeated string MonitoringAllowedSIDs = 2;
+    repeated string AdministrationAllowedSIDs = 3;
+    repeated string DefaultUserSIDs = 4;
+    optional string AllAuthenticatedUsers = 5;
+    repeated string ViewerAllowedSIDs = 6;
+    repeated string RegisterDynamicNodeAllowedSIDs = 8;
+
+    message TUser {
+        optional string Name = 1;
+        optional string Password = 2;
+    }
+
+    message TGroup {
+        optional string Name = 1;
+        repeated string Members = 2;
+    }
+
+    repeated TUser DefaultUsers = 15;
+    repeated TGroup DefaultGroups = 16;
+    repeated string DefaultAccess = 17;
+    optional string AllUsersGroup = 18;
+}
+
 message TDomainsConfig {
     message TStateStorage {
         message TRing {
@@ -235,39 +261,14 @@ message TDomainsConfig {
         optional NKikimrCompaction.TCompactionPolicy Policy = 2;
     }
 
-    message TSecurityConfig {
-        optional bool EnforceUserTokenRequirement = 1 [default = false];
-        optional bool EnforceUserTokenCheckRequirement = 7 [default = false]; // Check if a token was specified // If not, or if the token was incorrect or access was denied, the request will be handled as if no token was provided
-        repeated string MonitoringAllowedSIDs = 2;
-        repeated string AdministrationAllowedSIDs = 3;
-        repeated string DefaultUserSIDs = 4;
-        optional string AllAuthenticatedUsers = 5;
-        repeated string ViewerAllowedSIDs = 6;
-        repeated string RegisterDynamicNodeAllowedSIDs = 8;
-
-        message TUser {
-            optional string Name = 1;
-            optional string Password = 2;
-        }
-
-        message TGroup {
-            optional string Name = 1;
-            repeated string Members = 2;
-        }
-
-        repeated TUser DefaultUsers = 15;
-        repeated TGroup DefaultGroups = 16;
-        repeated string DefaultAccess = 17;
-        optional string AllUsersGroup = 18;
-    }
-
     repeated TDomain Domain = 1;
     repeated TStateStorage StateStorage = 2;
     repeated TExecLevel ExecLevel = 3;
     repeated THiveConfig HiveConfig = 4;
     repeated TNamedCompactionPolicy NamedCompactionPolicy = 5;
-    optional TSecurityConfig SecurityConfig = 6;
     optional bool ForbidImplicitStoragePools = 7 [default = true];
+    reserved 8;
+    reserved "SecurityConfig";
 }
 
 message TBlobStorageConfig {
@@ -1373,6 +1374,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 260 }];
+        optional uint64 MaxChunksToDefragInflight = 21 [(ControlOptions) = {
+            Description: "Max inflight defragmentation chunks per one chunk size per vdisk",
+            MinValue: 1,
+            MaxValue: 50,
+            DefaultValue: 10 }];
 
         optional uint64 ThrottlingDeviceSpeed = 14 [(ControlOptions) = {
             Description: "Maximum allowed speed when throttling is active",
@@ -1409,6 +1415,16 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 950 }];
+        optional uint64 ThrottlingMinLogChunkCount = 22 [(ControlOptions) = {
+            Description: "Minimum pdisk log chunk count - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 100 }];
+        optional uint64 ThrottlingMaxLogChunkCount = 23 [(ControlOptions) = {
+            Description: "Maximum pdisk log chunk count - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 130 }];
     }
 
     message TTabletControls {
@@ -1790,6 +1806,10 @@ message TColumnShardConfig {
     optional bool UseSlicesFilter = 31 [default = true];
     optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
     optional uint64 WritingBufferVolumeMb = 33 [default = 32];
+    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000];
+    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 128000000];
+    optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
+    optional int32 DefaultCompressionLevel = 37;
 }
 
 message TSchemeShardConfig {
@@ -2193,6 +2213,8 @@ message TAppConfig {
 
     optional TConfigVersion Version = 102;
     repeated TLabel Labels = 103;
+    optional TSecurityConfig SecurityConfig = 104;
+    optional bool DisableBuiltinSecurity = 105;
 }
 
 message TYdbVersion {

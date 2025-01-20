@@ -108,6 +108,7 @@ SRCS(
     table_client/public.cpp
     table_client/adapters.cpp
     table_client/table_output.cpp
+    table_client/timestamped_schema_helpers.cpp
     table_client/blob_reader.cpp
     table_client/check_schema_compatibility.cpp
     table_client/chunk_stripe_statistics.cpp
@@ -192,10 +193,6 @@ SRCS(
     complex_types/time_text.cpp
     complex_types/uuid_text.cpp
     complex_types/yson_format_conversion.cpp
-
-    zookeeper/packet.cpp
-    zookeeper/protocol.cpp
-    zookeeper/requests.cpp
 
     kafka/packet.cpp
     kafka/protocol.cpp

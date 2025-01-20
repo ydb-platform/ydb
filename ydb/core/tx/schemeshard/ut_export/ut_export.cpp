@@ -37,7 +37,8 @@ namespace {
 
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
-            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "") {
+            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "", 
+            const TVector<TString>& cdcStreams = {}) {
 
         TTablesWithAttrs tables;
 
@@ -126,6 +127,11 @@ namespace {
                 NKikimrScheme::StatusAccepted,
                 NKikimrScheme::StatusAlreadyExists,
             }, userAttrs);
+            env.TestWaitNotification(runtime, txId, schemeshardId);
+        }
+
+        for (const auto& cdcStream : cdcStreams) {
+            TestCreateCdcStream(runtime, schemeshardId, ++txId, dbName, cdcStream);
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
@@ -2450,5 +2456,103 @@ partitioning_settings {
         const auto* permissionsChecksum = s3Mock.GetData().FindPtr("/permissions.pb.sha256");
         UNIT_ASSERT(permissionsChecksum);
         UNIT_ASSERT_VALUES_EQUAL(*permissionsChecksum, "b41fd8921ff3a7314d9c702dc0e71aace6af8443e0102add0432895c5e50a326 permissions.pb");
+    }
+
+    class ChangefeedGenerator {
+    public:
+        ChangefeedGenerator(const ui64 count, const TS3Mock& s3Mock)
+            : Count(count)
+            , S3Mock(s3Mock)
+            , Changefeeds(GenChangefeeds())
+        {}
+
+        const TVector<TString>& GetChangefeeds() const {
+            return Changefeeds;
+        }
+
+        void Check() {
+            for (ui64 i = 1; i <= Count; ++i) {
+                auto changefeedDir = "/" + GenChangefeedName(i);
+                auto* changefeed = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb");
+                UNIT_ASSERT_VALUES_EQUAL(*changefeed, Sprintf(R"(name: "update_feed%d"
+mode: MODE_UPDATES
+format: FORMAT_JSON
+state: STATE_ENABLED
+)", i));
+                UNIT_ASSERT_VALUES_EQUAL(*changefeed, Sprintf("name: \"update_feed%d\"\nmode: MODE_UPDATES\nformat: FORMAT_JSON\nstate: STATE_ENABLED\n", i));
+
+                auto* topic = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb");
+                UNIT_ASSERT(topic);
+
+                const auto* changefeedChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb.sha256");
+                UNIT_ASSERT(changefeedChecksum);
+
+                const auto* topicChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb.sha256");
+                UNIT_ASSERT(topicChecksum);
+            }
+        }
+
+    private:
+        static TString GenChangefeedName(const ui64 num) {
+            return TStringBuilder() << "update_feed" << num;
+        }
+
+        TVector<TString> GenChangefeeds() {
+            TVector<TString> result(Count);
+            std::generate(result.begin(), result.end(), [n = 1]() mutable {
+                    return Sprintf(
+                        R"(
+                            TableName: "Table"
+                            StreamDescription {
+                                Name: "%s"
+                                Mode: ECdcStreamModeUpdate
+                                Format: ECdcStreamFormatJson
+                                State: ECdcStreamStateReady
+                            }
+                        )", GenChangefeedName(n++).data()
+                    );
+                }
+            );
+            return result;
+        }
+
+        const ui64 Count;
+        const TS3Mock& S3Mock;
+        const TVector<TString> Changefeeds;
+    };
+
+    Y_UNIT_TEST(Changefeeds) {
+        TTestBasicRuntime runtime;
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        ChangefeedGenerator gen(3, s3Mock);
+
+        auto request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port);
+
+        TTestEnv env(runtime);
+        Run(runtime, env, TVector<TString>{
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", gen.GetChangefeeds());
+
+        gen.Check();
     }
 }

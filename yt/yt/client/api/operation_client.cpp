@@ -352,12 +352,12 @@ TGetJobStderrResponse TGetJobStderrResponse::MakeJobStderr(const TSharedRef& dat
         };
     };
 
-    size_t firstPos = 0;
+    i64 firstPos = 0;
     if (offset > 0) {
         firstPos = offset;
     }
 
-    if (firstPos >= data.size()) {
+    if (firstPos >= std::ssize(data)) {
         return {
             .Data = TSharedRef{},
             .TotalSize = totalSize,
@@ -370,14 +370,14 @@ TGetJobStderrResponse TGetJobStderrResponse::MakeJobStderr(const TSharedRef& dat
         } else {
             lastPos += data.size();
         }
-        if (lastPos > data.size()) {
+        if (lastPos > std::ssize(data)) {
             lastPos = data.size();
         }
         const auto dataCut = data.Slice(firstPos, lastPos);
         return {
             .Data = dataCut,
             .TotalSize = totalSize,
-            .EndOffset = limit ? static_cast<i64>(firstPos + dataCut.size()) : endOffset,
+            .EndOffset = limit ? firstPos + std::ssize(dataCut) : endOffset,
         };
     }
 }

@@ -91,7 +91,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/includes/ngtcp2/ngtcp2_net.h [4:4]
         lib/ngtcp2_balloc.c [4:4]
         lib/ngtcp2_balloc.h [4:4]
         lib/ngtcp2_net.h [4:4]
@@ -128,7 +127,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         COPYING [3:3]
-        README.rst [355:355]
+        README.rst [357:357]
         lib/includes/ngtcp2/version.h [4:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 94b9ad611aac02e9c9d2f6105f7ab5f2
@@ -165,7 +164,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/includes/ngtcp2/ngtcp2.h [4:5]
-        lib/includes/ngtcp2/ngtcp2_macro.h [4:4]
         lib/ngtcp2_acktr.c [4:4]
         lib/ngtcp2_acktr.h [4:4]
         lib/ngtcp2_buf.c [4:4]
@@ -255,13 +253,13 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/includes/ngtcp2/ngtcp2_crypto.h [4:4]
-        lib/includes/ngtcp2/ngtcp2_crypto_quictls.h [4:4]
+        crypto/includes/ngtcp2/ngtcp2_crypto.h [4:4]
+        crypto/includes/ngtcp2/ngtcp2_crypto_quictls.h [4:4]
+        crypto/quictls/quictls.c [4:4]
+        crypto/shared.c [4:4]
+        crypto/shared.h [4:4]
         lib/ngtcp2_addr.c [4:4]
         lib/ngtcp2_addr.h [4:4]
-        lib/ngtcp2_crypto_quictls.c [4:4]
-        lib/ngtcp2_crypto_shared.c [4:4]
-        lib/ngtcp2_crypto_shared.h [4:4]
         lib/ngtcp2_path.c [4:4]
         lib/ngtcp2_path.h [4:4]
         lib/ngtcp2_pv.c [4:4]

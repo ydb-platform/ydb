@@ -233,6 +233,7 @@ class TDataShard
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
+    class TTxCleanupUncommitted;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -1423,6 +1424,9 @@ class TDataShard
     void SwitchToWork(const TActorContext &ctx);
     void SyncConfig();
 
+    // Cleanup for bug https://github.com/ydb-platform/ydb/issues/13387
+    void CleanupUncommitted(const TActorContext &ctx);
+
     TMaybe<TInstant> GetTxPlanStartTimeAndCleanup(ui64 step);
 
     struct TPersistentTablet;
@@ -2146,6 +2150,8 @@ public:
         Y_ABORT_UNLESS(type != ELogThrottlerType::LAST);
         return LogThrottlers[type];
     };
+
+    void OnTableCreated(TTransactionContext& txc, const TActorContext& ctx);
 
 private:
     ///

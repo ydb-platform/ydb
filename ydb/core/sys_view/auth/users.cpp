@@ -26,9 +26,7 @@ public:
     }
 
 protected:
-    void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TResultSet& resultSet) override {
-        Y_ABORT_UNLESS(resultSet.size() == 1);
-        auto& entry = resultSet.back();
+    void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) override {
         Y_ABORT_UNLESS(entry.Status == TNavigate::EStatus::Ok);
         Y_ABORT_UNLESS(CanonizePath(entry.Path) == TBase::TenantName);
         

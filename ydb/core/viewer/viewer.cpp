@@ -57,13 +57,13 @@ public:
             TVector<TString> viewerAllowedSIDs;
             TVector<TString> monitoringAllowedSIDs;
             {
-                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetViewerAllowedSIDs();
+                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetSecurityConfig().GetViewerAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
                     viewerAllowedSIDs.emplace_back(sid);
                 }
             }
             {
-                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetMonitoringAllowedSIDs();
+                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetSecurityConfig().GetMonitoringAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
                     monitoringAllowedSIDs.emplace_back(sid);
                 }
@@ -142,16 +142,6 @@ public:
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
-            mon->RegisterActorHandler({
-                .Path = "/viewer/simple_counter",
-                .Handler = ctx.SelfID,
-                .UseAuth = true,
-            });
-            mon->RegisterActorHandler({
-                .Path = "/viewer/multipart_counter",
-                .Handler = ctx.SelfID,
-                .UseAuth = true,
-            });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
                 "http-mon", Sprintf(":%d", KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort())));
@@ -183,6 +173,18 @@ public:
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodelist"] = JsonHandlers.JsonHandlersIndex["/viewer/nodelist"];
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/tabletinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/tabletinfo"];
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodeinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/nodeinfo"];
+
+            for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
+                // temporary handling of new handlers
+                if (handler->IsHttpEvent()) {
+                    mon->RegisterActorHandler({
+                        .Path = name,
+                        .Handler = ctx.SelfID,
+                        .UseAuth = true,
+                        .AllowedSIDs = viewerAllowedSIDs,
+                    });
+                }
+            }
         }
     }
 
@@ -203,8 +205,8 @@ public:
 
     bool CheckAccessAdministration(const TRequestState& request) override {
         auto userTokenObject = request.GetUserTokenObject();
-        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
-            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
+        if (!KikimrRunConfig.AppConfig.GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+            if (!KikimrRunConfig.AppConfig.GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
                 return true;
             }
         }
@@ -212,7 +214,7 @@ public:
             return false;
         }
         auto token = std::make_unique<NACLib::TUserToken>(userTokenObject);
-        for (const auto& allowedSID : KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetAdministrationAllowedSIDs()) {
+        for (const auto& allowedSID : KikimrRunConfig.AppConfig.GetSecurityConfig().GetAdministrationAllowedSIDs()) {
             if (token->IsExist(allowedSID)) {
                 return true;
             }

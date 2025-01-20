@@ -137,7 +137,7 @@ IComputationNode* WrapWideStreamDethrottler(TCallable& callable, const TComputat
 
 }
 
-TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType) {
+TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool scalar) {
     const auto itemTypes = AS_TYPE(TTupleType, tupleType)->GetElements();
     const auto ui64Type = pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id);
     const auto blockLenType = pgmBuilder.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
@@ -145,7 +145,7 @@ TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType) {
     TVector<TType*> blockItemTypes;
     std::transform(itemTypes.cbegin(), itemTypes.cend(), std::back_inserter(blockItemTypes),
         [&](const auto& itemType) {
-            return pgmBuilder.NewBlockType(itemType, TBlockType::EShape::Many);
+            return pgmBuilder.NewBlockType(itemType, scalar ? TBlockType::EShape::Scalar : TBlockType::EShape::Many);
         });
     // XXX: Mind the last block length column.
     blockItemTypes.push_back(blockLenType);
@@ -201,6 +201,37 @@ NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
             listValues = listValues.Append(std::move(tuple));
         }
     }
+    return holderFactory.CreateDirectListHolder(std::move(listValues));
+}
+
+NUdf::TUnboxedValuePod MakeUint64ScalarBlock(TComputationContext& ctx, size_t blockSize,
+    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
+) {
+    // Creates a block of scalar values using the first element of the given list
+
+    for (auto type : types) {
+        // Because IScalarBuilder has no implementations
+        Y_ENSURE(AS_TYPE(TDataType, type)->GetDataSlot() == NYql::NUdf::EDataSlot::Uint64);
+    }
+
+    const auto& holderFactory = ctx.HolderFactory;
+    const size_t width = types.size();
+    const size_t rowsCount = values.GetListLength();
+
+    NUdf::TUnboxedValue row;
+    Y_ENSURE(values.GetListIterator().Next(row));
+    TDefaultListRepresentation listValues;
+    for (size_t rowOffset = 0; rowOffset < rowsCount; rowOffset += blockSize) {
+        NUdf::TUnboxedValue* items = nullptr;
+        const auto tuple = holderFactory.CreateDirectArrayHolder(width + 1, items);
+        for (size_t i = 0; i < width; i++) {
+            const NUdf::TUnboxedValuePod& item = row.GetElement(i);
+            items[i] = holderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(item.Get<ui64>())));
+        }
+        items[width] = MakeBlockCount(holderFactory, std::min(blockSize, rowsCount - rowOffset));
+        listValues = listValues.Append(std::move(tuple));
+    }
+
     return holderFactory.CreateDirectListHolder(std::move(listValues));
 }
 

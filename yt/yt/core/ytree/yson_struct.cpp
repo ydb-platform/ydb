@@ -151,6 +151,11 @@ bool TYsonStructBase::IsEqual(const TYsonStructBase& rhs) const
     return Meta_->CompareStructs(this, &rhs);
 }
 
+const IYsonStructMeta* TYsonStructBase::GetMeta() const
+{
+    return Meta_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TYsonStruct::InitializeRefCounted()

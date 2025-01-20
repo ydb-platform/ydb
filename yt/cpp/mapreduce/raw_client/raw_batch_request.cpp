@@ -18,6 +18,8 @@
 #include <yt/cpp/mapreduce/http/retry_request.h>
 
 #include <util/generic/guid.h>
+#include <util/generic/scope.h>
+
 #include <util/string/builder.h>
 
 #include <exception>
@@ -62,7 +64,7 @@ static void EnsureType(const TMaybe<TNode>& node, TNode::EType type)
 
 template <typename TReturnType>
 class TResponseParserBase
-    : public TRawBatchRequest::IResponseItemParser
+    : public THttpRawBatchRequest::IResponseItemParser
 {
 public:
     using TFutureResult = TFuture<TReturnType>;
@@ -269,13 +271,13 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRawBatchRequest::TBatchItem::TBatchItem(TNode parameters, ::TIntrusivePtr<IResponseItemParser> responseParser)
+THttpRawBatchRequest::TBatchItem::TBatchItem(TNode parameters, ::TIntrusivePtr<IResponseItemParser> responseParser)
     : Parameters(std::move(parameters))
     , ResponseParser(std::move(responseParser))
     , NextTry()
 { }
 
-TRawBatchRequest::TBatchItem::TBatchItem(const TBatchItem& batchItem, TInstant nextTry)
+THttpRawBatchRequest::TBatchItem::TBatchItem(const TBatchItem& batchItem, TInstant nextTry)
     : Parameters(batchItem.Parameters)
     , ResponseParser(batchItem.ResponseParser)
     , NextTry(nextTry)
@@ -283,24 +285,72 @@ TRawBatchRequest::TBatchItem::TBatchItem(const TBatchItem& batchItem, TInstant n
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRawBatchRequest::TRawBatchRequest(const TConfigPtr& config)
-    : Config_(config)
+THttpRawBatchRequest::THttpRawBatchRequest(const TClientContext& context, IRequestRetryPolicyPtr retryPolicy)
+    : Context_(context)
+    , RequestRetryPolicy_(std::move(retryPolicy))
 { }
 
-TRawBatchRequest::~TRawBatchRequest() = default;
+THttpRawBatchRequest::~THttpRawBatchRequest() = default;
 
-bool TRawBatchRequest::IsExecuted() const
+void THttpRawBatchRequest::ExecuteBatch(const TExecuteBatchOptions& options)
+{
+    if (IsExecuted()) {
+        ythrow yexception() << "Cannot execute batch request since it is already executed";
+    }
+    Y_DEFER {
+        MarkExecuted();
+    };
+
+    const auto concurrency = options.Concurrency_.GetOrElse(50);
+    const auto batchPartMaxSize = options.BatchPartMaxSize_.GetOrElse(concurrency * 5);
+
+    if (!RequestRetryPolicy_) {
+        RequestRetryPolicy_ = CreateDefaultRequestRetryPolicy(Context_.Config);
+    }
+
+    while (BatchSize()) {
+        auto parameters = TNode::CreateMap();
+        TInstant nextTry;
+        FillParameterList(batchPartMaxSize, &parameters["requests"], &nextTry);
+        if (nextTry) {
+            SleepUntil(nextTry);
+        }
+        parameters["concurrency"] = concurrency;
+        auto body = NodeToYsonString(parameters);
+        THttpHeader header("POST", "execute_batch");
+        header.AddMutationId();
+        TResponseInfo result;
+        try {
+            result = RequestWithRetry<TResponseInfo>(
+                RequestRetryPolicy_,
+                [this, &header, &body] (TMutationId& mutationId) {
+                    auto response = RequestWithoutRetry(Context_, mutationId, header, body);
+                    return TResponseInfo{
+                        .RequestId = response->GetRequestId(),
+                        .Response = response->GetResponse(),
+                        .HttpCode = response->GetStatusCode(),
+                    };
+                });
+        } catch (const std::exception& e) {
+            SetErrorResult(std::current_exception());
+            throw;
+        }
+        ParseResponse(std::move(result), RequestRetryPolicy_.Get());
+    }
+}
+
+bool THttpRawBatchRequest::IsExecuted() const
 {
     return Executed_;
 }
 
-void TRawBatchRequest::MarkExecuted()
+void THttpRawBatchRequest::MarkExecuted()
 {
     Executed_ = true;
 }
 
 template <typename TResponseParser>
-typename TResponseParser::TFutureResult TRawBatchRequest::AddRequest(
+typename TResponseParser::TFutureResult THttpRawBatchRequest::AddRequest(
     const TString& command,
     TNode parameters,
     TMaybe<TNode> input)
@@ -309,7 +359,7 @@ typename TResponseParser::TFutureResult TRawBatchRequest::AddRequest(
 }
 
 template <typename TResponseParser>
-typename TResponseParser::TFutureResult TRawBatchRequest::AddRequest(
+typename TResponseParser::TFutureResult THttpRawBatchRequest::AddRequest(
     const TString& command,
     TNode parameters,
     TMaybe<TNode> input,
@@ -326,13 +376,13 @@ typename TResponseParser::TFutureResult TRawBatchRequest::AddRequest(
     return parser->GetFuture();
 }
 
-void TRawBatchRequest::AddRequest(TBatchItem batchItem)
+void THttpRawBatchRequest::AddRequest(TBatchItem batchItem)
 {
     Y_ENSURE(!Executed_, "Cannot add request: batch request is already executed");
     BatchItemList_.push_back(batchItem);
 }
 
-TFuture<TNodeId> TRawBatchRequest::Create(
+TFuture<TNodeId> THttpRawBatchRequest::Create(
     const TTransactionId& transaction,
     const TYPath& path,
     ENodeType type,
@@ -340,44 +390,44 @@ TFuture<TNodeId> TRawBatchRequest::Create(
 {
     return AddRequest<TGuidResponseParser>(
         "create",
-        SerializeParamsForCreate(transaction, Config_->Prefix, path, type, options),
+        SerializeParamsForCreate(transaction, Context_.Config->Prefix, path, type, options),
         Nothing());
 }
 
-TFuture<void> TRawBatchRequest::Remove(
+TFuture<void> THttpRawBatchRequest::Remove(
     const TTransactionId& transaction,
     const TYPath& path,
     const TRemoveOptions& options)
 {
     return AddRequest<TVoidResponseParser>(
         "remove",
-        SerializeParamsForRemove(transaction, Config_->Prefix, path, options),
+        SerializeParamsForRemove(transaction, Context_.Config->Prefix, path, options),
         Nothing());
 }
 
-TFuture<bool> TRawBatchRequest::Exists(
+TFuture<bool> THttpRawBatchRequest::Exists(
     const TTransactionId& transaction,
     const TYPath& path,
     const TExistsOptions& options)
 {
     return AddRequest<TExistsResponseParser>(
         "exists",
-        SerializeParamsForExists(transaction, Config_->Prefix, path, options),
+        SerializeParamsForExists(transaction, Context_.Config->Prefix, path, options),
         Nothing());
 }
 
-TFuture<TNode> TRawBatchRequest::Get(
+TFuture<TNode> THttpRawBatchRequest::Get(
     const TTransactionId& transaction,
     const TYPath& path,
     const TGetOptions& options)
 {
     return AddRequest<TGetResponseParser>(
         "get",
-        SerializeParamsForGet(transaction, Config_->Prefix, path, options),
+        SerializeParamsForGet(transaction, Context_.Config->Prefix, path, options),
         Nothing());
 }
 
-TFuture<void> TRawBatchRequest::Set(
+TFuture<void> THttpRawBatchRequest::Set(
     const TTransactionId& transaction,
     const TYPath& path,
     const TNode& node,
@@ -385,22 +435,22 @@ TFuture<void> TRawBatchRequest::Set(
 {
     return AddRequest<TVoidResponseParser>(
         "set",
-        SerializeParamsForSet(transaction, Config_->Prefix, path, options),
+        SerializeParamsForSet(transaction, Context_.Config->Prefix, path, options),
         node);
 }
 
-TFuture<TNode::TListType> TRawBatchRequest::List(
+TFuture<TNode::TListType> THttpRawBatchRequest::List(
     const TTransactionId& transaction,
     const TYPath& path,
     const TListOptions& options)
 {
     return AddRequest<TListResponseParser>(
         "list",
-        SerializeParamsForList(transaction, Config_->Prefix, path, options),
+        SerializeParamsForList(transaction, Context_.Config->Prefix, path, options),
         Nothing());
 }
 
-TFuture<TNodeId> TRawBatchRequest::Copy(
+TFuture<TNodeId> THttpRawBatchRequest::Copy(
     const TTransactionId& transaction,
     const TYPath& sourcePath,
     const TYPath& destinationPath,
@@ -408,11 +458,11 @@ TFuture<TNodeId> TRawBatchRequest::Copy(
 {
     return AddRequest<TGuidResponseParser>(
         "copy",
-        SerializeParamsForCopy(transaction, Config_->Prefix, sourcePath, destinationPath, options),
+        SerializeParamsForCopy(transaction, Context_.Config->Prefix, sourcePath, destinationPath, options),
         Nothing());
 }
 
-TFuture<TNodeId> TRawBatchRequest::Move(
+TFuture<TNodeId> THttpRawBatchRequest::Move(
     const TTransactionId& transaction,
     const TYPath& sourcePath,
     const TYPath& destinationPath,
@@ -420,11 +470,11 @@ TFuture<TNodeId> TRawBatchRequest::Move(
 {
     return AddRequest<TGuidResponseParser>(
         "move",
-        SerializeParamsForMove(transaction, Config_->Prefix, sourcePath, destinationPath, options),
+        SerializeParamsForMove(transaction, Context_.Config->Prefix, sourcePath, destinationPath, options),
         Nothing());
 }
 
-TFuture<TNodeId> TRawBatchRequest::Link(
+TFuture<TNodeId> THttpRawBatchRequest::Link(
     const TTransactionId& transaction,
     const TYPath& targetPath,
     const TYPath& linkPath,
@@ -432,11 +482,11 @@ TFuture<TNodeId> TRawBatchRequest::Link(
 {
     return AddRequest<TGuidResponseParser>(
         "link",
-        SerializeParamsForLink(transaction, Config_->Prefix, targetPath, linkPath, options),
+        SerializeParamsForLink(transaction, Context_.Config->Prefix, targetPath, linkPath, options),
         Nothing());
 }
 
-TFuture<TLockId> TRawBatchRequest::Lock(
+TFuture<TLockId> THttpRawBatchRequest::Lock(
     const TTransactionId& transaction,
     const TYPath& path,
     ELockMode mode,
@@ -444,22 +494,22 @@ TFuture<TLockId> TRawBatchRequest::Lock(
 {
     return AddRequest<TGuidResponseParser>(
         "lock",
-        SerializeParamsForLock(transaction, Config_->Prefix, path, mode, options),
+        SerializeParamsForLock(transaction, Context_.Config->Prefix, path, mode, options),
         Nothing());
 }
 
-TFuture<void> TRawBatchRequest::Unlock(
+TFuture<void> THttpRawBatchRequest::Unlock(
     const TTransactionId& transaction,
     const TYPath& path,
     const TUnlockOptions& options)
 {
     return AddRequest<TVoidResponseParser>(
         "unlock",
-        SerializeParamsForUnlock(transaction, Config_->Prefix, path, options),
+        SerializeParamsForUnlock(transaction, Context_.Config->Prefix, path, options),
         Nothing());
 }
 
-TFuture<TMaybe<TYPath>> TRawBatchRequest::GetFileFromCache(
+TFuture<TMaybe<TYPath>> THttpRawBatchRequest::GetFileFromCache(
     const TTransactionId& transactionId,
     const TString& md5Signature,
     const TYPath& cachePath,
@@ -471,7 +521,7 @@ TFuture<TMaybe<TYPath>> TRawBatchRequest::GetFileFromCache(
         Nothing());
 }
 
-TFuture<TYPath> TRawBatchRequest::PutFileToCache(
+TFuture<TYPath> THttpRawBatchRequest::PutFileToCache(
     const TTransactionId& transactionId,
     const TYPath& filePath,
     const TString& md5Signature,
@@ -480,11 +530,11 @@ TFuture<TYPath> TRawBatchRequest::PutFileToCache(
 {
     return AddRequest<TYPathParser>(
         "put_file_to_cache",
-        SerializeParamsForPutFileToCache(transactionId, Config_->Prefix, filePath, md5Signature, cachePath, options),
+        SerializeParamsForPutFileToCache(transactionId, Context_.Config->Prefix, filePath, md5Signature, cachePath, options),
         Nothing());
 }
 
-TFuture<TCheckPermissionResponse> TRawBatchRequest::CheckPermission(
+TFuture<TCheckPermissionResponse> THttpRawBatchRequest::CheckPermission(
     const TString& user,
     EPermission permission,
     const TYPath& path,
@@ -492,11 +542,11 @@ TFuture<TCheckPermissionResponse> TRawBatchRequest::CheckPermission(
 {
     return AddRequest<TCheckPermissionParser>(
         "check_permission",
-        SerializeParamsForCheckPermission(user, permission, Config_->Prefix, path, options),
+        SerializeParamsForCheckPermission(user, permission, Context_.Config->Prefix, path, options),
         Nothing());
 }
 
-TFuture<TOperationAttributes> TRawBatchRequest::GetOperation(
+TFuture<TOperationAttributes> THttpRawBatchRequest::GetOperation(
     const TOperationId& operationId,
     const TGetOperationOptions& options)
 {
@@ -506,7 +556,7 @@ TFuture<TOperationAttributes> TRawBatchRequest::GetOperation(
         Nothing());
 }
 
-TFuture<void> TRawBatchRequest::AbortOperation(const TOperationId& operationId)
+TFuture<void> THttpRawBatchRequest::AbortOperation(const TOperationId& operationId)
 {
     return AddRequest<TVoidResponseParser>(
         "abort_op",
@@ -514,14 +564,14 @@ TFuture<void> TRawBatchRequest::AbortOperation(const TOperationId& operationId)
         Nothing());
 }
 
-TFuture<void> TRawBatchRequest::CompleteOperation(const TOperationId& operationId)
+TFuture<void> THttpRawBatchRequest::CompleteOperation(const TOperationId& operationId)
 {
     return AddRequest<TVoidResponseParser>(
         "complete_op",
         SerializeParamsForCompleteOperation(operationId),
         Nothing());
 }
-TFuture<void> TRawBatchRequest::SuspendOperation(
+TFuture<void> THttpRawBatchRequest::SuspendOperation(
     const TOperationId& operationId,
     const TSuspendOperationOptions& options)
 {
@@ -530,7 +580,7 @@ TFuture<void> TRawBatchRequest::SuspendOperation(
         SerializeParamsForSuspendOperation(operationId, options),
         Nothing());
 }
-TFuture<void> TRawBatchRequest::ResumeOperation(
+TFuture<void> THttpRawBatchRequest::ResumeOperation(
     const TOperationId& operationId,
     const TResumeOperationOptions& options)
 {
@@ -540,7 +590,7 @@ TFuture<void> TRawBatchRequest::ResumeOperation(
         Nothing());
 }
 
-TFuture<void> TRawBatchRequest::UpdateOperationParameters(
+TFuture<void> THttpRawBatchRequest::UpdateOperationParameters(
     const TOperationId& operationId,
     const TUpdateOperationParametersOptions& options)
 {
@@ -550,12 +600,12 @@ TFuture<void> TRawBatchRequest::UpdateOperationParameters(
         Nothing());
 }
 
-TFuture<TRichYPath> TRawBatchRequest::CanonizeYPath(const TRichYPath& path)
+TFuture<TRichYPath> THttpRawBatchRequest::CanonizeYPath(const TRichYPath& path)
 {
     TRichYPath result = path;
     // Out of the symbols in the canonization branch below, only '<' can appear in the beggining of a valid rich YPath.
     if (!result.Path_.StartsWith("<")) {
-        result.Path_ = AddPathPrefix(result.Path_, Config_->Prefix);
+        result.Path_ = AddPathPrefix(result.Path_, Context_.Config->Prefix);
     }
 
     if (result.Path_.find_first_of("<>{}[]") != TString::npos) {
@@ -563,12 +613,12 @@ TFuture<TRichYPath> TRawBatchRequest::CanonizeYPath(const TRichYPath& path)
             "parse_ypath",
             SerializeParamsForParseYPath(result),
             Nothing(),
-            MakeIntrusive<TCanonizeYPathResponseParser>(Config_->Prefix, result));
+            MakeIntrusive<TCanonizeYPathResponseParser>(Context_.Config->Prefix, result));
     }
     return NThreading::MakeFuture(result);
 }
 
-TFuture<TVector<TTableColumnarStatistics>> TRawBatchRequest::GetTableColumnarStatistics(
+TFuture<TVector<TTableColumnarStatistics>> THttpRawBatchRequest::GetTableColumnarStatistics(
     const TTransactionId& transaction,
     const TVector<TRichYPath>& paths,
     const TGetTableColumnarStatisticsOptions& options)
@@ -579,7 +629,7 @@ TFuture<TVector<TTableColumnarStatistics>> TRawBatchRequest::GetTableColumnarSta
         Nothing());
 }
 
-TFuture<TMultiTablePartitions> TRawBatchRequest::GetTablePartitions(
+TFuture<TMultiTablePartitions> THttpRawBatchRequest::GetTablePartitions(
     const TTransactionId& transaction,
     const TVector<TRichYPath>& paths,
     const TGetTablePartitionsOptions& options)
@@ -590,7 +640,7 @@ TFuture<TMultiTablePartitions> TRawBatchRequest::GetTablePartitions(
         Nothing());
 }
 
-void TRawBatchRequest::FillParameterList(size_t maxSize, TNode* result, TInstant* nextTry) const
+void THttpRawBatchRequest::FillParameterList(size_t maxSize, TNode* result, TInstant* nextTry) const
 {
     Y_ABORT_UNLESS(result);
     Y_ABORT_UNLESS(nextTry);
@@ -609,25 +659,21 @@ void TRawBatchRequest::FillParameterList(size_t maxSize, TNode* result, TInstant
     }
 }
 
-void TRawBatchRequest::ParseResponse(
+void THttpRawBatchRequest::ParseResponse(
     const TResponseInfo& requestResult,
     const IRequestRetryPolicyPtr& retryPolicy,
-    TRawBatchRequest* retryBatch,
     TInstant now)
 {
     TNode node = NodeFromYsonString(requestResult.Response);
-    return ParseResponse(node, requestResult.RequestId, retryPolicy, retryBatch, now);
+    return ParseResponse(node, requestResult.RequestId, retryPolicy, now);
 }
 
-void TRawBatchRequest::ParseResponse(
+void THttpRawBatchRequest::ParseResponse(
     TNode node,
     const TString& requestId,
     const IRequestRetryPolicyPtr& retryPolicy,
-    TRawBatchRequest* retryBatch,
     TInstant now)
 {
-    Y_ABORT_UNLESS(retryBatch);
-
     EnsureType(node, TNode::List);
     auto& responseList = node.AsList();
     const auto size = responseList.size();
@@ -655,7 +701,7 @@ void TRawBatchRequest::ParseResponse(
                             "Batch subrequest (%s) failed, will retry, error: %s",
                             RequestInfo(BatchItemList_[i].Parameters),
                             error.what());
-                        retryBatch->AddRequest(TBatchItem(BatchItemList_[i], now + *curInterval));
+                        AddRequest(TBatchItem(BatchItemList_[i], now + *curInterval));
                     } else {
                         YT_LOG_ERROR(
                             "Batch subrequest (%s) failed, error: %s",
@@ -673,14 +719,14 @@ void TRawBatchRequest::ParseResponse(
     BatchItemList_.erase(BatchItemList_.begin(), BatchItemList_.begin() + size);
 }
 
-void TRawBatchRequest::SetErrorResult(std::exception_ptr e) const
+void THttpRawBatchRequest::SetErrorResult(std::exception_ptr e) const
 {
     for (const auto& batchItem : BatchItemList_) {
         batchItem.ResponseParser->SetException(e);
     }
 }
 
-size_t TRawBatchRequest::BatchSize() const
+size_t THttpRawBatchRequest::BatchSize() const
 {
     return BatchItemList_.size();
 }

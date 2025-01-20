@@ -113,6 +113,7 @@ public:
         ConfigFiles["NameserviceConfig"] = "names.txt";
         ConfigFiles["InterconnectConfig"] = "ic.txt";
         ConfigFiles["DomainsConfig"] = "domains.txt";
+        ConfigFiles["SecurityConfig"] = "security.txt";
         ConfigFiles["BlobStorageConfig"] = "bs.txt";
         ConfigFiles["ChannelProfileConfig"] = "channels.txt";
         ConfigFiles["BootstrapConfig"] = "boot.txt";

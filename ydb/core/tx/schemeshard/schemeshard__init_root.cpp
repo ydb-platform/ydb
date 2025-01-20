@@ -4,6 +4,7 @@
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/security/util.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -40,8 +41,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Y_VERIFY_S(rootPathElements.size() == 1, "invalid root name in domain config: " << rootName << " parts count: " << rootPathElements.size());
 
         TString owner;
-        const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = Self->GetDomainsConfig().GetSecurityConfig();
-
+        const NKikimrConfig::TSecurityConfig& securityConfig = Self->GetSecurityConfig();
         for (const auto& defaultUser : securityConfig.GetDefaultUsers()) {
             auto response = Self->LoginProvider.CreateUser({
                 .User = defaultUser.GetName(),
@@ -55,7 +55,9 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                          << ", error: " << response.Error);
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
-                db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
+                db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
+                                                                   Schema::LoginSids::SidHash,
+                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.Hash, ToInstant(sid.CreatedAt).MilliSeconds());
                 if (owner.empty()) {
                     owner = defaultUser.GetName();
                 }
@@ -77,7 +79,8 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                          << ", error: " << response.Error);
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultGroup.GetName()];
-                db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType>(sid.Type);
+                db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
+                                                                   Schema::LoginSids::CreatedAt>(sid.Type, ToInstant(sid.CreatedAt).MilliSeconds());
                 for (const auto& member : defaultGroup.GetMembers()) {
                     auto response = Self->LoginProvider.AddGroupMembership({
                         .Group = defaultGroup.GetName(),

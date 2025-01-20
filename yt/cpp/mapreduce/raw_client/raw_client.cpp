@@ -11,6 +11,7 @@
 #include <yt/cpp/mapreduce/http/retry_request.h>
 
 #include <yt/cpp/mapreduce/interface/fluent.h>
+#include <yt/cpp/mapreduce/interface/fwd.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
@@ -493,21 +494,6 @@ IFileReaderPtr THttpRawClient::GetJobFailContext(
     return MakeIntrusive<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
-TString THttpRawClient::GetJobStderrWithRetries(
-    const TOperationId& operationId,
-    const TJobId& jobId,
-    const TGetJobStderrOptions& /*options*/)
-{
-    TMutationId mutationId;
-    THttpHeader header("GET", "get_job_stderr");
-    header.AddOperationId(operationId);
-    header.AddParameter("job_id", GetGuidAsString(jobId));
-    TRequestConfig config;
-    config.IsHeavy = true;
-    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
-    return responseInfo->GetResponse();
-}
-
 IFileReaderPtr THttpRawClient::GetJobStderr(
     const TOperationId& operationId,
     const TJobId& jobId,
@@ -569,32 +555,6 @@ std::vector<TJobTraceEvent> THttpRawClient::GetJobTrace(
     }
 
     return result;
-}
-
-NHttpClient::IHttpResponsePtr THttpRawClient::SkyShareTable(
-    const std::vector<TYPath>& tablePaths,
-    const TSkyShareTableOptions& options)
-{
-    TMutationId mutationId;
-    THttpHeader header("POST", "api/v1/share", /*IsApi*/ false);
-
-    auto proxyName = Context_.ServerName.substr(0,  Context_.ServerName.find('.'));
-
-    auto host = Context_.Config->SkynetApiHost;
-    if (host == "") {
-        host = "skynet." + proxyName + ".yt.yandex.net";
-    }
-
-    TSkyShareTableOptions patchedOptions = options;
-
-    if (Context_.Config->Pool && !patchedOptions.Pool_) {
-        patchedOptions.Pool(Context_.Config->Pool);
-    }
-
-    header.MergeParameters(NRawClient::SerializeParamsForSkyShareTable(proxyName, Context_.Config->Prefix, tablePaths, patchedOptions));
-    TClientContext skyApiHost({.ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient()});
-
-    return RequestWithoutRetry(skyApiHost, mutationId, header, "");
 }
 
 std::unique_ptr<IInputStream> THttpRawClient::ReadFile(
@@ -966,19 +926,9 @@ ui64 THttpRawClient::GenerateTimestamp()
     return NodeFromYsonString(responseInfo->GetResponse()).AsUint64();
 }
 
-TAuthorizationInfo THttpRawClient::WhoAmI()
+IRawBatchRequestPtr THttpRawClient::CreateRawBatchRequest()
 {
-    TMutationId mutationId;
-    THttpHeader header("GET", "auth/whoami", /*isApi*/ false);
-    auto requestResult = RequestWithoutRetry(Context_, mutationId, header);
-    TAuthorizationInfo result;
-
-    NJson::TJsonValue jsonValue;
-    bool ok = NJson::ReadJsonTree(requestResult->GetResponse(), &jsonValue, /*throwOnError*/ true);
-    Y_ABORT_UNLESS(ok);
-    result.Login = jsonValue["login"].GetString();
-    result.Realm = jsonValue["realm"].GetString();
-    return result;
+    return MakeIntrusive<NRawClient::THttpRawBatchRequest>(Context_, /*retryPolicy*/ nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

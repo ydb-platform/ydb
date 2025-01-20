@@ -42,7 +42,7 @@ void DropPath(NIceDb::TNiceDb& db,
     domainInfo->DecPathsInside(1, isBackupTable);
 
     auto parentDir = path.Parent();
-    parentDir->DecAliveChildren(1, isBackupTable);
+    DecAliveChildrenDirect(operationId, parentDir.Base(), context, isBackupTable);
     ++parentDir->DirAlterVersion;
     context.SS->PersistPathDirAlterVersion(db, parentDir.Base());
 

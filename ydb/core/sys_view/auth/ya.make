@@ -1,12 +1,16 @@
 LIBRARY()
 
 SRCS(
-    group_members.h
     group_members.cpp
-    users.h
-    users.cpp
-    groups.h
+    group_members.h
     groups.cpp
+    groups.h
+    owners.cpp
+    owners.h
+    permissions.cpp
+    permissions.h
+    users.cpp
+    users.h
 )
 
 PEERDIR(

@@ -1,9 +1,19 @@
 name: Rightlib sync
 on:
   schedule:
-    - cron: "0 0 * * *"  # At 00:00 -- for PR creation
-    - cron: "0 5 * * *"  # At 05:00 -- for PR completion
+    # If you change the schedule here, please also update it in the conditionals for the create-pr and check-pr steps.
+    - cron: "30 0 * * *"   # At 00:30 -- for PR creation
+    - cron: "30 1-23 * * *"   # Hourly during 1-23 interval for PR completion
   workflow_dispatch:
+    inputs:
+      command:
+        default: check-pr
+        options:
+          - create-pr
+          - check-pr
+        required: true
+        type: choice
+        description: ""
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
@@ -23,11 +33,21 @@ jobs:
         run: |
           git config --global user.email "alex@ydb.tech"
           git config --global user.name "Alexander Smirnov"
-          
-      - name: run sync
+
+      - name: create-pr
+        if: github.event.schedule == '30 0 * * *' || (github.event.inputs && github.event.inputs.command == 'create-pr')
         env:
           REPO: ${{ github.repository }}
           TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
         run: |
           cd ./ydb/ci/rightlib
-          ./sync-rightlib.py
+          ./sync-rightlib.py create-pr
+
+      - name: check-pr
+        if: github.event.schedule == '30 1-23 * * *' || (github.event.inputs && github.event.inputs.command == 'check-pr')
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+        run: |
+          cd ./ydb/ci/rightlib
+          ./sync-rightlib.py check-pr

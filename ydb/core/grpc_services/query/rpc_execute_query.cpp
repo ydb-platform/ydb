@@ -8,6 +8,7 @@
 #include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
@@ -363,7 +364,10 @@ private:
         response.set_status(Ydb::StatusIds::SUCCESS);
 
         if (NeedReportStats(*Request_->GetProtoRequest())) {
-            FillQueryStats(*response.mutable_exec_stats(), record.GetQueryStats());
+            if (record.HasQueryStats()) {
+                record.SetQueryPlan(NKqp::SerializeAnalyzePlan(record.GetQueryStats()));
+                FillQueryStats(*response.mutable_exec_stats(), record.GetQueryStats());
+            }
         }
 
         TString out;

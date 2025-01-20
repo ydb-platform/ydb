@@ -8,7 +8,6 @@
 #include <yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 #include <yql/essentials/sql/v1/sql.h>
 
 #include <util/string/ascii.h>
@@ -279,30 +278,6 @@ bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr&
         }
 
         statements.push_back(statement);
-    }
-
-    return true;
-}
-
-bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, NYql::TIssues& issues,
-    const NSQLTranslation::TTranslationSettings& settings) {
-    auto lexer = NSQLTranslationV1::MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
-
-    TVector<TString> parts;
-    if (!SplitQueryToStatements(query, lexer, parts, issues)) {
-        return false;
-    }
-
-    for (auto& currentQuery : parts) {
-        NYql::TIssues parserIssues;
-        auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
-            settings.AnsiLexer, settings.Antlr4Parser, settings.TestAntlr4, settings.Arena);
-        if (!message) {
-            // Skip empty statements
-            continue;
-        }
-
-        statements.push_back(std::move(currentQuery));
     }
 
     return true;

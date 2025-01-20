@@ -24,4 +24,8 @@ namespace NSQLTranslationV1 {
 
     bool NeedUseForAllStatements(const NSQLv1Generated::TRule_sql_stmt_core::AltCase& subquery);
 
+    bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, NYql::TIssues& issues,
+        const NSQLTranslation::TTranslationSettings& settings);
+
+
 }  // namespace NSQLTranslationV1

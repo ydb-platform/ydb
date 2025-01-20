@@ -6,8 +6,6 @@ PEERDIR(
     yql/essentials/parser/proto_ast/gen/v1_ansi
     yql/essentials/parser/proto_ast/gen/v1_antlr4
     yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4
-    yql/essentials/sql/settings
-    yql/essentials/sql/v1/proto_parser
 )
 
 SRCS(

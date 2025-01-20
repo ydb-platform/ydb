@@ -1,7 +1,6 @@
 #pragma once
 
 #include <yql/essentials/parser/lexer_common/lexer.h>
-#include <yql/essentials/sql/settings/translation_settings.h>
 
 namespace NSQLTranslationV1 {
 
@@ -13,8 +12,6 @@ NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi, bool antlr4);
 // in SELECT * FROM ... GROUP BY ... - group is a keyword.
 bool IsProbablyKeyword(const NSQLTranslation::TParsedToken& token);
 
-bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, NYql::TIssues& issues,
-    const NSQLTranslation::TTranslationSettings& settings);
 bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr& lexer,
     TVector<TString>& statements, NYql::TIssues& issues);
 

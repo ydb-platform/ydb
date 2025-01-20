@@ -39,12 +39,9 @@ TString DecrementKey(TString key) {
     return TString();
 }
 
-void MakeSimplePredicate(const TString& key, const TString& rangeEnd, TStringBuilder& sql, NYdb::TParamsBuilder& params, std::optional<size_t> index = std::nullopt) {
-    TString keyParamName("$Key"), rangeEndParamName("$RangeEnd");
-    if (index) {
-        keyParamName += ToString(*index);
-        rangeEndParamName += ToString(*index);
-    }
+void MakeSimplePredicate(const TString& key, const TString& rangeEnd, TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter) {
+    const auto keyParamName = TString("$Key") += ToString(paramsCounter++);
+    params.AddParam(keyParamName).String(key).Build();
 
     sql << "where ";
     if (rangeEnd.empty())
@@ -52,13 +49,18 @@ void MakeSimplePredicate(const TString& key, const TString& rangeEnd, TStringBui
     else if (rangeEnd == key)
         sql << "startswith(`key`, " << keyParamName << ')';
     else {
+        const auto rangeEndParamName = TString("$RangeEnd") += ToString(paramsCounter++);
         params.AddParam(rangeEndParamName).String(rangeEnd).Build();
         sql << "`key` between $Key and " << rangeEndParamName;
     }
-    params.AddParam(keyParamName).String(key).Build();
 }
 
-struct TRange {
+struct TOperation {
+    size_t ResultIndex = 0ULL;
+};
+
+
+struct TRange : public TOperation {
     TString Key, RangeEnd;
     bool KeysOnly, CountOnly;
     ui64 Limit;
@@ -88,7 +90,8 @@ struct TRange {
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const {
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter) {
+        ++resultsCounter;
         sql << "select ";
         if (CountOnly)
             sql << "count(*)";
@@ -100,30 +103,35 @@ struct TRange {
         const bool fromHistory = KeyRevision || MinCreateRevision || MaxCreateRevision || MinModificateRevision || MaxModificateRevision;
         sql << '`' << (fromHistory ? "verhaal" : "huidig") << '`' << Endl;
 
-        MakeSimplePredicate(Key, RangeEnd, sql, params);
+        MakeSimplePredicate(Key, RangeEnd, sql, params, paramsCounter);
         if (KeyRevision) {
-            sql << Endl << '\t' << "and `modified` = $Revision";
-            params.AddParam("$Revision").Int64(KeyRevision).Build();
+            const auto paramName = TString("$Revision") += ToString(paramsCounter++);
+            sql << Endl << '\t' << "and `modified` = " << paramName;
+            params.AddParam(paramName).Int64(KeyRevision).Build();
         }
 
         if (MinCreateRevision) {
-            sql << Endl << '\t' << "and `created` >= $MinCreateRevision";
-            params.AddParam("$MinCreateRevision").Int64(MinCreateRevision).Build();
+            const auto paramName = TString("$MinCreateRevision") += ToString(paramsCounter++);
+            sql << Endl << '\t' << "and `created` >= " << paramName;
+            params.AddParam(paramName).Int64(MinCreateRevision).Build();
         }
 
         if (MaxCreateRevision) {
-            sql << Endl << '\t' << "and `created` <= $MaxCreateRevision";
-            params.AddParam("$MaxCreateRevision").Int64(MaxCreateRevision).Build();
+            const auto paramName = TString("$MaxCreateRevision") += ToString(paramsCounter++);
+            sql << Endl << '\t' << "and `created` <= " << paramName;
+            params.AddParam(paramName).Int64(MaxCreateRevision).Build();
         }
 
         if (MinModificateRevision) {
-            sql << Endl << '\t' << "and `modified` >= $MinModificateRevision";
-            params.AddParam("$MinModificateRevision").Int64(MinModificateRevision).Build();
+            const auto paramName = TString("$MinModificateRevision") += ToString(paramsCounter++);
+            sql << Endl << '\t' << "and `modified` >= " << paramName;
+            params.AddParam(paramName).Int64(MinModificateRevision).Build();
         }
 
         if (MaxModificateRevision) {
-            sql << Endl << '\t' << "and `modified` <= $MaxModificateRevision";
-            params.AddParam("$MaxModificateRevision").Int64(MaxModificateRevision).Build();
+            const auto paramName = TString("$MaxModificateRevision") += ToString(paramsCounter++);
+            sql << Endl << '\t' << "and `modified` <= " << paramName;
+            params.AddParam(paramName).Int64(MaxModificateRevision).Build();
         }
 
         if (SortOrder) {
@@ -132,8 +140,9 @@ struct TRange {
         }
 
         if (Limit) {
-            sql << Endl << "LIMIT $Limit";
-            params.AddParam("$Limit").Uint64(Limit).Build();
+            const auto paramName = TString("$Limit") += ToString(paramsCounter++);
+            sql << Endl << "LIMIT " << paramName;
+            params.AddParam(paramName).Uint64(Limit).Build();
         }
 
         sql << ';' << Endl;
@@ -142,7 +151,7 @@ struct TRange {
     etcdserverpb::RangeResponse MakeResponse(const NYdb::TResultSets& results) {
         etcdserverpb::RangeResponse response;
         if (!results.empty()) {
-            auto parser = NYdb::TResultSetParser(results.front());
+            auto parser = NYdb::TResultSetParser(results[ResultIndex]);
             if (CountOnly) {
                 if (parser.TryNextRow()) {
                     response.set_count(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
@@ -167,7 +176,7 @@ struct TRange {
     }
 };
 
-struct TPut {
+struct TPut : public TOperation {
     TString Key, Value;
     i64 Lease = 0LL;
     bool GetPrevious = false;
@@ -184,26 +193,31 @@ struct TPut {
         return !Key.empty();
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, i64 revision) const {
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter) {
         const bool update = IgnoreValue || IgnoreLease;
         sql << Endl << NResource::Find(update ? "update.sql" : "upsert.sql") << Endl;
 
+        const auto keyParamName = TString("$Key") += ToString(paramsCounter++);
+        const auto valueParamName = IgnoreValue ? TString("NULL") : TString("$Value") += ToString(paramsCounter++);
+        const auto leaseParamName = IgnoreValue ? TString("NULL") : TString("$Lease") += ToString(paramsCounter++);
+        params.AddParam(keyParamName).String(Key).Build();
+        if (!IgnoreValue)
+            params.AddParam(valueParamName).String(Value).Build();
+        if (!IgnoreLease)
+            params.AddParam(leaseParamName).Int64(Lease).Build();
+
         if (GetPrevious) {
-            sql << "select `value`, `created`, `modified`, `version`,`lease` from `huidig` where `key` = $Key;" << Endl;
+            ResultIndex = resultsCounter++;
+            sql << "select `value`, `created`, `modified`, `version`,`lease` from `huidig` where `key` = " << keyParamName << ';' << Endl;
         }
 
-        sql << Endl << "do $up" << (update ? "date" : "sert") << "($Revision,$Key," << (IgnoreValue ? "NULL" : "$Value") << ',' << (IgnoreLease ? "NULL" : "$Lease") << ");" << Endl;
-
-        params.AddParam("$Key").String(Key).Build();
-        params.AddParam("$Revision").Int64(revision).Build();
-        params.AddParam("$Value").String(Value).Build();
-        params.AddParam("$Lease").Int64(Lease).Build();
+        sql << Endl << "do $up" << (update ? "date" : "sert") << "($Revision," << keyParamName << ',' << valueParamName << ',' << leaseParamName << ");" << Endl;
     }
 
     etcdserverpb::PutResponse MakeResponse(const NYdb::TResultSets& results) {
         etcdserverpb::PutResponse response;
-        if (GetPrevious && !results.empty()) {
-            if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
+        if (GetPrevious) {
+            if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
                 const auto prev = response.mutable_prev_kv();
                 prev->set_key(Key);
                 prev->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
@@ -217,7 +231,7 @@ struct TPut {
     }
 };
 
-struct TDeleteRange {
+struct TDeleteRange : public TOperation {
     TString Key, RangeEnd;
     bool GetPrevious = false;
 
@@ -228,11 +242,13 @@ struct TDeleteRange {
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const {
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter) {
         TStringBuilder where;
-        MakeSimplePredicate(Key, RangeEnd, where, params);
+        MakeSimplePredicate(Key, RangeEnd, where, params, paramsCounter);
+        ResultIndex = resultsCounter++;
         sql << "select count(*) from `huidig` " << where << ';' << Endl;
         if (GetPrevious) {
+            ++resultsCounter;
             sql << "select `key`,`value`, `created`, `modified`, `version`,`lease` from `huidig` " << where << ';' << Endl;
         }
         sql << "delete from `huidig` " << where << ';' << Endl;
@@ -240,12 +256,12 @@ struct TDeleteRange {
 
     etcdserverpb::DeleteRangeResponse MakeResponse(const NYdb::TResultSets& results) {
         etcdserverpb::DeleteRangeResponse response;
-        if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow()) {
+        if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
             response.set_deleted(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
         }
 
-        if (GetPrevious && results.size() > 1U) {
-            auto parser = NYdb::TResultSetParser(results.back());
+        if (GetPrevious) {
+            auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]);
             while (parser.TryNextRow()) {
                 const auto kvs = response.add_prev_kvs();
                 kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
@@ -297,7 +313,7 @@ struct TCompare {
 
 };
 
-struct TTxn {
+struct TTxn : public TOperation {
     using TRequestOp = std::variant<TRange, TPut, TDeleteRange, TTxn>;
 
     std::vector<TCompare> Compares;
@@ -352,17 +368,18 @@ struct TTxn {
         return !Compares.empty() && fill(Success, rec.success()) && fill(Failure, rec.failure());
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, i64 ) const {
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter) {
         static constexpr std::string_view Fields[] = {"version"sv, "created"sv, "modified"sv, "value"sv, "lease"sv};
         static constexpr std::string_view Comparator[] = {"="sv, ">"sv, "<"sv, "!="sv};
 
+        ResultIndex = resultsCounter++;
         sql << "select bool_and(`cmp`) ?? false from (" << Endl;
         for (auto i = 0U; i < Compares.size(); ++i) {
             if (i)
                 sql << Endl << "union all" << Endl;
-            const auto argParamName = TString("$Arg") += ToString(i);
+            const auto argParamName = TString("$Arg") += ToString(paramsCounter++);
             sql << "select bool_and(`" << Fields[Compares[i].Target] << "` " << Comparator[Compares[i].Result] << ' ' << argParamName << ") ?? false as `cmp` from `huidig` ";
-            MakeSimplePredicate(Compares[i].Key, Compares[i].RangeEnd, sql, params, i);
+            MakeSimplePredicate(Compares[i].Key, Compares[i].RangeEnd, sql, params, paramsCounter);
             if (const auto val = std::get_if<i64>(&Compares[i].Value))
                 params.AddParam(argParamName).Int64(*val).Build();
             if (const auto val = std::get_if<TString>(&Compares[i].Value))
@@ -374,7 +391,7 @@ struct TTxn {
 
     etcdserverpb::TxnResponse MakeResponse(const NYdb::TResultSets& results) {
         etcdserverpb::TxnResponse response;
-        if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow()) {
+        if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
             response.set_succeeded(NYdb::TValueParser(parser.GetValue(0)).GetBool());
         }
         return response;
@@ -385,7 +402,7 @@ template <typename TDerived>
 class TBaseEtcdRequest {
 protected:
     virtual bool ParseGrpcRequest() = 0;
-    virtual void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const = 0;
+    virtual void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) = 0;
     virtual void ReplyWith(const NYdb::TResultSets& results) = 0;
 
     i64 Revision;
@@ -703,8 +720,9 @@ private:
         return Range.Parse(*GetProtoRequest());
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
-        return Range.MakeQueryWithParams(sql, params);
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        size_t resultsCounter = 0U, paramsCounter = 0U;
+        return Range.MakeQueryWithParams(sql, params, resultsCounter, paramsCounter);
     }
 
     void ReplyWith(const NYdb::TResultSets& results) final {
@@ -731,8 +749,10 @@ private:
         return Put.Parse(*GetProtoRequest());
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
-        return Put.MakeQueryWithParams(sql, params, Revision);
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        params.AddParam("$Revision").Int64(Revision).Build();
+        size_t resultsCounter = 0U, paramsCounter = 0U;
+        return Put.MakeQueryWithParams(sql, params, resultsCounter, paramsCounter);
     }
 
     void ReplyWith(const NYdb::TResultSets& results) final {
@@ -759,8 +779,9 @@ private:
         return DeleteRange.Parse(*GetProtoRequest());
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
-        return DeleteRange.MakeQueryWithParams(sql, params);
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        size_t resultsCounter = 0U, paramsCounter = 0U;
+        return DeleteRange.MakeQueryWithParams(sql, params, resultsCounter, paramsCounter);
     }
 
     void ReplyWith(const NYdb::TResultSets& results) final {
@@ -787,8 +808,10 @@ private:
         return Txn.Parse(*GetProtoRequest());
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
-        return Txn.MakeQueryWithParams(sql, params, Revision);
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        params.AddParam("$Revision").Int64(Revision).Build();
+        size_t resultsCounter = 0U, paramsCounter = 0U;
+        return Txn.MakeQueryWithParams(sql, params, resultsCounter, paramsCounter);
     }
 
     void ReplyWith(const NYdb::TResultSets& results) final {
@@ -818,7 +841,7 @@ private:
         return KeyRevision > 0 && KeyRevision < Revision;
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
         sql << "delete from `verhaal` where `modified` < $Revision;" << Endl;
         params.AddParam("$Revision").Int64(KeyRevision).Build();
     }

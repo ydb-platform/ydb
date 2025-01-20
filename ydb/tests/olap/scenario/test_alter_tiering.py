@@ -366,10 +366,9 @@ class TestDataCorrectness(TieringTestBase):
     schema1 = (
         ScenarioTestHelper.Schema()
         .with_column(name='timestamp', type=PrimitiveType.Timestamp, not_null=True)
-        .with_column(name='id', type=PrimitiveType.Uint32, not_null=True)
         .with_column(name='value', type=PrimitiveType.Uint64, not_null=True)
         .with_column(name='payload', type=PrimitiveType.String, not_null=True)
-        .with_key_columns('timestamp', 'id')
+        .with_key_columns('timestamp')
     )
 
     def _get_values_total(self, ctx: TestContext, table: str):
@@ -382,7 +381,7 @@ class TestDataCorrectness(TieringTestBase):
         self,
         ctx: TestContext,
         table: str,
-        values_from: int,
+        timestamp_from_ms: int,
         n_rows: int,
         value: int = 1,
     ):
@@ -396,16 +395,15 @@ class TestDataCorrectness(TieringTestBase):
                 dg.DataGeneratorPerColumn(self.schema1, current_chunk_size)
                 .with_column(
                     'timestamp',
-                    dg.ColumnValueGeneratorLambda(lambda: int(datetime.datetime.now().timestamp() * 1000000)),
+                    dg.ColumnValueGeneratorSequential(timestamp_from_ms),
                 )
-                .with_column('id', dg.ColumnValueGeneratorSequential(values_from))
                 .with_column('value', dg.ColumnValueGeneratorConst(value))
                 .with_column(
                     'payload',
                     dg.ColumnValueGeneratorConst(random.randbytes(1024)),
                 ),
             )
-            values_from += current_chunk_size
+            timestamp_from_ms += current_chunk_size
             n_rows -= current_chunk_size
             assert n_rows >= 0
 
@@ -433,23 +431,24 @@ class TestDataCorrectness(TieringTestBase):
 
         table = 'table'
         sth.execute_scheme_query(CreateTable(table).with_schema(self.schema1))
-        # sth.execute_scheme_query(
-        #     AlterTable(table).set_ttl(
-        #         [
-        #             (
-        #                 datetime.timedelta(seconds=1),
-        #                 sth.get_full_path(self.sources[0]),
-        #             )
-        #         ],
-        #         'timestamp',
-        #     ),
-        #     retries=2,
-        # )
+        sth.execute_scheme_query(
+            AlterTable(table).set_ttl(
+                [
+                    (
+                        datetime.timedelta(seconds=1),
+                        sth.get_full_path(self.sources[0]),
+                    )
+                ],
+                'timestamp',
+            ),
+            retries=2,
+        )
 
+        start_time_ms = int(datetime.datetime.now().timestamp() * 1000000)
         threads = [
             TestThread(
                 target=self._write_data,
-                args=[ctx, table, i * 1000, 1000, 1],
+                args=[ctx, table, start_time_ms + i * 10000, 10000, 1],
             )
             for i in range(10)
         ]
@@ -458,14 +457,7 @@ class TestDataCorrectness(TieringTestBase):
         for thread in threads:
             thread.join()
 
-        assert self._get_values_total(ctx, table) == 10000
-
-        q = ScenarioTestHelper(ctx).execute_scan_query(f'SELECT COUNT(*) FROM `{ScenarioTestHelper(ctx).get_full_path(table)}/.sys/primary_index_portion_stats`').result_set.rows
-        assert q == "abc"
-        assert '\n'.join(f"TierName={x['TierName']},Rows={x['Rows']},Activity={x['Activity']}" for x in q) == "aboba"
-
         while self._get_rows_in_tier(ctx, table, "__DEFAULT"):
-            assert False
             LOGGER.info("waiting eviction")
             time.sleep(1)
         assert self._get_rows_in_tier(ctx, table, f"{ScenarioTestHelper(ctx).get_full_path(self.sources[0])}") == 10000

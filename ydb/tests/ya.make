@@ -7,7 +7,6 @@ RECURSE(
     oss
     postgres_integrations
     sql
-    sql/large
     stability
     stress
     supp

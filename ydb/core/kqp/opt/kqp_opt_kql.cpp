@@ -425,6 +425,7 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
         .Input(keysToDelete)
         .ReturningColumns<TCoAtomList>().Build()
+        .IsBatch(del.IsBatch())
         .Done();
 }
 
@@ -445,6 +446,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
         .Input(ProjectColumns(rowsToDelete, pk, ctx))
         .ReturningColumns<TCoAtomList>().Build()
+        .IsBatch(del.IsBatch())
         .Done();
 
     TVector<TExprBase> effects;
@@ -469,6 +471,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
             .Table(indexMeta)
             .Input(ProjectColumns(rowsToDelete, indexTableColumns, ctx))
             .ReturningColumns<TCoAtomList>().Build()
+            .IsBatch(del.IsBatch())
             .Done();
 
         effects.push_back(indexDelete);
@@ -568,6 +571,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
             .Build()
         .Settings(IsUpdateSetting(ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
+        .IsBatch(update.IsBatch())
         .Done();
 }
 
@@ -663,6 +667,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 .Table(indexMeta)
                 .Input(ProjectColumns(rowsToUpdate, indexTableColumns, ctx))
                 .ReturningColumns<TCoAtomList>().Build()
+                .IsBatch(update.IsBatch())
                 .Done();
 
             effects.push_back(indexDelete);
@@ -695,6 +700,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                     .Columns(GetPgNotNullColumns(tableData, update.Pos(), ctx))
                 .Build()
                 .ReturningColumns<TCoAtomList>().Build()
+                .IsBatch(update.IsBatch())
                 .Columns()
                     .Add(indexColumnsList)
                     .Build()

@@ -46,7 +46,7 @@ static void CreateTestTable(auto session, const TString& name = "TestTable") {
 }
 
 Y_UNIT_TEST_SUITE(KqpBatch) {
-    Y_UNIT_TEST(Update) {
+    Y_UNIT_TEST(UpdateBatch) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            BATCH UPDATE TestTable SET Amount = 1000 WHERE Group = 1;
+            BATCH UPDATE TestTable SET Amount = 1000 WHERE Group >= 1 AND Age <= 30;
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(Delete) {
+    Y_UNIT_TEST(DeleteBatch) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();

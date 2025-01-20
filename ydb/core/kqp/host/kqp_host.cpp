@@ -68,23 +68,23 @@ bool CheckIsBatch(const TExprNode::TPtr& root, TExprContext& exprCtx) {
     bool isBatch = false;
 
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
-        if (node->Content() == "is_batch") {
+        if (node->ChildrenSize() == 2
+            && node->Child(0)->Content() == "is_batch"
+            && node->Child(1)->Content() == "true") {
             isBatch = true;
-            return false;
+            return true;
         }
 
         if (NYql::NNodes::TCoWrite::Match(node.Get())) {
             writeCount++;
-            return true;
         } else if (NYql::NNodes::TCoRead::Match(node.Get())) {
             readCount++;
-            return false;
         }
 
         return true;
     });
 
-    if (isBatch && writeCount > 1 || readCount != 0) {
+    if (isBatch && (writeCount > 1 || readCount != 0)) {
         exprCtx.AddError(NYql::TIssue(
             exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
             "BATCH can't be used with multiple writes or reads."));

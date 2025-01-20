@@ -355,6 +355,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 .InconsistentWrite(settings.AllowInconsistentWrites
                     ? ctx.NewAtom(node.Pos(), "true")
                     : ctx.NewAtom(node.Pos(), "false"))
+                .IsBatch(node.IsBatch())
                 .Mode(ctx.NewAtom(node.Pos(), settings.Mode))
                 .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
                 .TableType(ctx.NewAtom(node.Pos(), isOlap ? "olap" : "oltp"))
@@ -505,6 +506,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                 .TableType(ctx.NewAtom(node.Pos(), isOlap ? "olap" : "oltp"))
                 .Settings()
                     .Build()
+                .IsBatch(node.IsBatch())
                 .Build()
             .Done();
 

@@ -172,11 +172,11 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TVector<TChunkIdx> OwnedChunks;  // Sorted vector of owned chunk identifiers.
     TString ErrorReason;
 
-    TEvYardInitResult(const NKikimrProto::EReplyStatus status, const TString &errorReason)
+    TEvYardInitResult(const NKikimrProto::EReplyStatus status, TString errorReason)
         : Status(status)
         , StatusFlags(0)
         , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DEVICE_TYPE_ROT))
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {
         Y_ABORT_UNLESS(status != NKikimrProto::OK, "Single-parameter constructor is for error responses only");
     }
@@ -185,7 +185,7 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
             ui64 writeSpeedBps, ui64 readBlockSize, ui64 writeBlockSize,
             ui64 bulkWriteBlockSize, ui32 chunkSize, ui32 appendBlockSize,
             TOwner owner, TOwnerRound ownerRound, TStatusFlags statusFlags, TVector<TChunkIdx> ownedChunks,
-            EDeviceType trueMediaType, const TString &errorReason)
+            EDeviceType trueMediaType, TString errorReason)
         : Status(status)
         , StatusFlags(statusFlags)
         , PDiskParams(new TPDiskParams(
@@ -201,7 +201,7 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
                     bulkWriteBlockSize,
                     trueMediaType))
         , OwnedChunks(std::move(ownedChunks))
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {}
 
     TString ToString() const {
@@ -412,11 +412,11 @@ struct TEvLogResult : TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResult> {
 
     TEvLogResult(NKikimrProto::EReplyStatus status,
             TStatusFlags statusFlags,
-            const TString &errorReason,
+            TString errorReason,
             i64 logChunkCount)
         : Status(status)
         , StatusFlags(statusFlags)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
         , LogChunkCount(logChunkCount)
     {}
 };
@@ -467,13 +467,13 @@ struct TEvReadLogResult : TEventLocal<TEvReadLogResult, TEvBlobStorage::EvReadLo
     TOwner Owner;
 
     TEvReadLogResult(NKikimrProto::EReplyStatus status, TLogPosition position, TLogPosition nextPosition,
-            bool isEndOfLog, TStatusFlags statusFlags, const TString &errorReason, TOwner owner)
+            bool isEndOfLog, TStatusFlags statusFlags, TString errorReason, TOwner owner)
         : Status(status)
         , Position(position)
         , NextPosition(nextPosition)
         , IsEndOfLog(isEndOfLog)
         , StatusFlags(statusFlags)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
         , Owner(owner)
     {}
 
@@ -1124,23 +1124,23 @@ struct TEvChunkWriteResult : TEventLocal<TEvChunkWriteResult, TEvBlobStorage::Ev
     mutable NLWTrace::TOrbit Orbit;
 
     TEvChunkWriteResult(NKikimrProto::EReplyStatus status, TChunkIdx chunkIdx, void *cookie,
-            TStatusFlags statusFlags, const TString &errorReason)
+            TStatusFlags statusFlags, TString errorReason)
         : Status(status)
         , ChunkIdx(chunkIdx)
         , PartsPtr()
         , Cookie(cookie)
         , StatusFlags(statusFlags)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {}
 
     TEvChunkWriteResult(NKikimrProto::EReplyStatus status, TChunkIdx chunkIdx, TEvChunkWrite::TPartsPtr partsPtr,
-                        void *cookie, TStatusFlags statusFlags, const TString &errorReason)
+                        void *cookie, TStatusFlags statusFlags, TString errorReason)
         : Status(status)
         , ChunkIdx(chunkIdx)
         , PartsPtr(partsPtr)
         , Cookie(cookie)
         , StatusFlags(statusFlags)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {}
 
     TString ToString() const {
@@ -1189,10 +1189,10 @@ struct TEvHarakiriResult : TEventLocal<TEvHarakiriResult, TEvBlobStorage::EvHara
     TStatusFlags StatusFlags;
     TString ErrorReason;
 
-    TEvHarakiriResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags, const TString &errorReason)
+    TEvHarakiriResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags, TString errorReason)
         : Status(status)
         , StatusFlags(statusFlags)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {}
 
     TString ToString() const {
@@ -1312,7 +1312,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
     TStatusFlags LogStatusFlags;
 
     TEvCheckSpaceResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags, ui32 freeChunks,
-            ui32 totalChunks, ui32 usedChunks, ui32 numSlots, const TString &errorReason,
+            ui32 totalChunks, ui32 usedChunks, ui32 numSlots, TString errorReason,
             TStatusFlags logStatusFlags = {})
         : Status(status)
         , StatusFlags(statusFlags)
@@ -1320,7 +1320,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         , TotalChunks(totalChunks)
         , UsedChunks(usedChunks)
         , NumSlots(numSlots)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
         , LogStatusFlags(logStatusFlags)
     {}
 
@@ -1368,9 +1368,9 @@ struct TEvConfigureSchedulerResult :
     NKikimrProto::EReplyStatus Status;
     TString ErrorReason;
 
-    TEvConfigureSchedulerResult(NKikimrProto::EReplyStatus status, const TString &errorReason)
+    TEvConfigureSchedulerResult(NKikimrProto::EReplyStatus status, TString errorReason)
         : Status(status)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {}
 
     TString ToString() const {
@@ -1425,10 +1425,10 @@ struct TEvYardControlResult : TEventLocal<TEvYardControlResult, TEvBlobStorage::
     void *Cookie;
     TString ErrorReason;
 
-    TEvYardControlResult(NKikimrProto::EReplyStatus status, void *cookie, const TString &errorReason)
+    TEvYardControlResult(NKikimrProto::EReplyStatus status, void *cookie, TString errorReason)
         : Status(status)
         , Cookie(cookie)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {}
 
     TString ToString() const {
@@ -1566,10 +1566,10 @@ struct TEvShredPDiskResult : TEventLocal<TEvShredPDiskResult, TEvBlobStorage::Ev
     ui64 ShredGeneration;
     TString ErrorReason;
 
-    TEvShredPDiskResult(NKikimrProto::EReplyStatus status, ui64 shredGeneration, const TString &errorReason)
+    TEvShredPDiskResult(NKikimrProto::EReplyStatus status, ui64 shredGeneration, TString errorReason)
         : Status(status)
         , ShredGeneration(shredGeneration)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {}
 
     TString ToString() const {
@@ -1605,12 +1605,12 @@ struct TEvPreShredCompactVDiskResult : TEventLocal<TEvPreShredCompactVDiskResult
     NKikimrProto::EReplyStatus Status;
     TString ErrorReason;
 
-    TEvPreShredCompactVDiskResult(TOwner owner, TOwnerRound ownerRound, ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString &errorReason)
+    TEvPreShredCompactVDiskResult(TOwner owner, TOwnerRound ownerRound, ui64 shredGeneration, NKikimrProto::EReplyStatus status, TString errorReason)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , ShredGeneration(shredGeneration)
         , Status(status)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {}
 
     TString ToString() const {
@@ -1657,12 +1657,12 @@ struct TEvShredVDiskResult : TEventLocal<TEvShredVDiskResult, TEvBlobStorage::Ev
     NKikimrProto::EReplyStatus Status;
     TString ErrorReason;
 
-    TEvShredVDiskResult(TOwner owner, TOwnerRound ownerRound, ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString &errorReason)
+    TEvShredVDiskResult(TOwner owner, TOwnerRound ownerRound, ui64 shredGeneration, NKikimrProto::EReplyStatus status, TString errorReason)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , ShredGeneration(shredGeneration)
         , Status(status)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {}
 
     TString ToString() const {

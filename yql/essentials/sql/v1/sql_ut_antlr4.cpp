@@ -7986,3 +7986,47 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
     }
 }
+
+Y_UNIT_TEST_SUITE(Transfer) {
+    Y_UNIT_TEST(Lambda) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            -- Русский коммент, empty statement
+            ;
+
+            -- befor comment
+            $a = "А";
+
+            SELECT * FROM Input;
+
+            $b = ($x) -> { return $a || $x; };
+
+            CREATE TRANSFER `TransferName`
+              FROM `TopicName` TO `TableName`
+              USING ($x) -> {
+                -- internal comment
+                return $b($x);
+              }
+              WITH (
+                CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
+              );
+        )");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Issues.Size(), 0, res.Issues.ToString());
+
+        const auto programm = GetPrettyPrint(res);
+
+        Cerr << ">>>>> Root " << programm << Endl;
+        auto expected = R"('transformLambda 'use plato;
+-- befor comment
+            $a = "А";
+$b = ($x) -> { return $a || $x; };
+$__ydb_transfer_lambda = ($x) -> {
+                -- internal comment
+                return $b($x);
+              };)";
+
+        UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, programm.find(expected));
+        
+    }
+}

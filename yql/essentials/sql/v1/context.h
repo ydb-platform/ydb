@@ -93,7 +93,7 @@ namespace NSQLTranslationV1 {
         TContext(const NSQLTranslation::TTranslationSettings& settings,
                  const NSQLTranslation::TSQLHints& hints,
                  NYql::TIssues& issues,
-                 const TString& query);
+                 const TString& query = {});
 
         virtual ~TContext();
 

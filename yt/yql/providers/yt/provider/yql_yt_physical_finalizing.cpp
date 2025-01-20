@@ -2815,9 +2815,15 @@ private:
                 } else {
                     const size_t pathNdx = uniquePaths.emplace(rawPath, uniquePaths.size()).first->second;
                     auto& cu = usage.ColumnUsage[outIndex];
+                    THashMap<TString, TString> renames;
+                    if (auto& colRenames = columns.GetRenames()) {
+                        for (auto& [k, v]: *colRenames) {
+                            renames[v] = k;
+                        }
+                    }
                     std::for_each(columns.GetColumns()->cbegin(), columns.GetColumns()->cend(),
-                        [&cu, pathNdx](const TYtColumnsInfo::TColumn& c) {
-                            cu[c.Name].insert(pathNdx);
+                        [&cu, pathNdx, &renames](const TYtColumnsInfo::TColumn& c) {
+                            cu[renames.Value(c.Name, c.Name)].insert(pathNdx);
                         }
                     );
                 }

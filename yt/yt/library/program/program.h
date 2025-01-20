@@ -112,8 +112,13 @@ private:
 //! Helper for TOpt::StoreMappedResult to validate file paths for existence.
 TString CheckPathExistsArgMapper(const TString& arg);
 
-//! Helper for TOpt::StoreMappedResult to parse GUIDs.
-TGuid CheckGuidArgMapper(const TString& arg);
+//! Helper for TOpt::StoreMappedResult to parse types with #FromString.
+template <class T>
+T FromStringArgMapper(TStringBuf arg);
+
+//! Helper for TOpt::StoreMappedResult to parse enums.
+template <class T>
+T ParseEnumArgMapper(TStringBuf arg);
 
 //! Helper for TOpt::StoreMappedResult to parse YSON strings.
 NYson::TYsonString CheckYsonArgMapper(const TString& arg);

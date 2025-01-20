@@ -31,7 +31,6 @@ SRCS(
     msgbus_server_node_registration.cpp
     msgbus_server_proxy.cpp
     msgbus_server_proxy.h
-    msgbus_server_request.cpp
     msgbus_server_request.h
     msgbus_server_scheme_initroot.cpp
     msgbus_server_scheme_request.cpp

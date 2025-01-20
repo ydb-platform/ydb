@@ -59,33 +59,20 @@ TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx, TTypeA
         auto read = maybeRead.Cast();
 
         if (typesCtx.IsBlockEngineEnabled()) {
-            if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
-                wideRead = Build<TCoWideFromBlocks>(ctx, node.Pos())
-                    .Input<TKqpBlockReadOlapTableRanges>()
-                        .Table(read.Table())
-                        .Ranges(read.Ranges())
-                        .Columns(read.Columns())
-                        .Settings(read.Settings())
-                        .ExplainPrompt(read.ExplainPrompt())
-                        .Process(read.Process())
-                        .Build()
-                    .Done();
-            } else {
-                wideRead = Build<TCoToFlow>(ctx, node.Pos())
-                    .Input<TCoWideFromBlocks>()
-                        .Input<TCoFromFlow>()
-                            .Input<TKqpBlockReadOlapTableRanges>()
-                                .Table(read.Table())
-                                .Ranges(read.Ranges())
-                                .Columns(read.Columns())
-                                .Settings(read.Settings())
-                                .ExplainPrompt(read.ExplainPrompt())
-                                .Process(read.Process())
-                                .Build()
+            wideRead = Build<TCoToFlow>(ctx, node.Pos())
+                .Input<TCoWideFromBlocks>()
+                    .Input<TCoFromFlow>()
+                        .Input<TKqpBlockReadOlapTableRanges>()
+                            .Table(read.Table())
+                            .Ranges(read.Ranges())
+                            .Columns(read.Columns())
+                            .Settings(read.Settings())
+                            .ExplainPrompt(read.ExplainPrompt())
+                            .Process(read.Process())
                             .Build()
                         .Build()
-                    .Done();
-            }
+                    .Build()
+                .Done();
         } else {
             wideRead = Build<TKqpWideReadOlapTableRanges>(ctx, node.Pos())
                 .Table(read.Table())

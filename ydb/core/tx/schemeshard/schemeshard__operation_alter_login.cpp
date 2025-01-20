@@ -1,3 +1,4 @@
+#include "schemeshard_audit_log.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
@@ -16,19 +17,24 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
         TTabletId ssId = context.SS->SelfTabletId();
-        auto result = MakeHolder<TProposeResponse>(OperationId.GetTxId(), ssId);
+        const auto txId = OperationId.GetTxId();
+        auto result = MakeHolder<TProposeResponse>(txId, ssId);
         if (!AppData()->AuthConfig.GetEnableLoginAuthentication()) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Login authentication is disabled");
         } else if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Wrong working dir");
         } else {
-            const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = context.SS->GetDomainsConfig().GetSecurityConfig();
+            const NKikimrConfig::TSecurityConfig& securityConfig = context.SS->GetSecurityConfig();
             const NKikimrSchemeOp::TAlterLogin& alterLogin = Transaction.GetAlterLogin();
+
+            TParts additionalParts;
+
             switch (alterLogin.GetAlterCase()) {
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
                     auto response = context.SS->LoginProvider.CreateUser(
                         {.User = createUser.GetUser(), .Password = createUser.GetPassword()});
+
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
@@ -46,6 +52,8 @@ public:
                             }
                         }
                         result->SetStatus(NKikimrScheme::StatusSuccess);
+
+                        AddIsUserAdmin(createUser.GetUser(), context.SS->LoginProvider, additionalParts);
                     }
                     break;
                 }
@@ -58,16 +66,27 @@ public:
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
+
+                        AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);
+                        AddLastSuccessfulLogin(sid, additionalParts);
                     }
                     break;
                 }
                 case NKikimrSchemeOp::TAlterLogin::kRemoveUser: {
                     const auto& removeUser = alterLogin.GetRemoveUser();
+
+                    auto sid = context.SS->LoginProvider.Sids.find(removeUser.GetUser());
+                    if (context.SS->LoginProvider.Sids.end() != sid) {
+                        AddLastSuccessfulLogin(sid->second, additionalParts);
+                    }
+
                     auto response = RemoveUser(context, removeUser, db);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         result->SetStatus(NKikimrScheme::StatusSuccess);
+
+                        AddIsUserAdmin(removeUser.GetUser(), context.SS->LoginProvider, additionalParts);
                     }
                     break;
                 }
@@ -162,6 +181,15 @@ public:
                     break;
                 }
             }
+
+            TString userSID, sanitizedToken;
+            if (context.UserToken) {
+                userSID = context.UserToken->GetUserSID();
+                sanitizedToken = context.UserToken->GetSanitizedToken();
+            }
+            const auto status = result->Record.GetStatus();
+            const auto reason = result->Record.HasReason() ? result->Record.GetReason() : TString();
+            AuditLogModifySchemeOperation(Transaction, status, reason, context.SS, context.PeerName, userSID, sanitizedToken, ui64(txId), additionalParts);
         }
 
         if (result->Record.GetStatus() == NKikimrScheme::StatusSuccess) {
@@ -245,6 +273,32 @@ public:
         }
 
         return {}; // success
+    }
+
+    void AddIsUserAdmin(const TString& user, NLogin::TLoginProvider& loginProvider, TParts& additionalParts) {
+        const auto& adminSids = AppData()->AdministrationAllowedSIDs;
+        bool isAdmin = adminSids.empty();
+        if (!isAdmin) {
+            const auto providerGroups = loginProvider.GetGroupsMembership(user);
+            const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
+            const auto userToken = NACLib::TUserToken(user, groups);
+            auto hasSid = [&userToken](const TString& sid) -> bool {
+                return userToken.IsExist(sid);
+            };
+            isAdmin = std::find_if(adminSids.begin(), adminSids.end(), hasSid) != adminSids.end();   
+        }
+
+        if (isAdmin) {
+            additionalParts.emplace_back("login_user_level", "admin");
+        }
+    }
+
+    void AddLastSuccessfulLogin(NLogin::TLoginProvider::TSidRecord& sid, TParts& additionalParts) {
+        const auto duration = sid.LastSuccessfulLogin.time_since_epoch();
+        const auto time = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+        if (time) {
+            additionalParts.emplace_back("last_login", TInstant::MicroSeconds(time).ToString());
+        }
     }
 };
 

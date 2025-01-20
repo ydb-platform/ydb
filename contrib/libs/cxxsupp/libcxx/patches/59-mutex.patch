@@ -1,5 +1,5 @@
 diff --git a/src/call_once.cpp b/src/call_once.cpp
-index b596518..7f5aef1 100644
+index 5744347..2b981b6 100644
 --- a/src/call_once.cpp
 +++ b/src/call_once.cpp
 @@ -28,7 +28,12 @@ static constinit __libcpp_mutex_t mut  = _LIBCPP_MUTEX_INITIALIZER;
@@ -46,7 +46,7 @@ index b596518..7f5aef1 100644
      __libcpp_condvar_broadcast(&cv);
      guard.__complete();
 diff --git a/src/mutex.cpp b/src/mutex.cpp
-index ce85475..13c6324 100644
+index 2f8504d..26b26b6 100644
 --- a/src/mutex.cpp
 +++ b/src/mutex.cpp
 @@ -12,7 +12,9 @@

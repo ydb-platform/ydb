@@ -1636,8 +1636,8 @@ TExprNode::TPtr BuildBlockMapJoin(TExprNode::TPtr leftFlow, TExprNode::TPtr righ
 
     return ctx.Builder(pos)
         .Callable("NarrowMap")
-            .Callable(0, "WideFromBlocks")
-                .Callable(0, "ToFlow")
+            .Callable(0, "ToFlow")
+                .Callable(0, "WideFromBlocks")
                     .Callable(0, "BlockMapJoinCore")
                         .Callable(0, "FromFlow")
                             .Callable(0, "WideToBlocks")

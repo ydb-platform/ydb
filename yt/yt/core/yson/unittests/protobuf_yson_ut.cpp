@@ -2529,6 +2529,8 @@ TEST(TYsonToProtobufTest, YsonStringMerger)
     ASSERT_EQ(protobufStringBinary, protobufStringMerged);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T, class TNodeList, class TRepeated>
 void CopyToProto(const TNodeList& from, TRepeated& rep)
 {
@@ -2536,6 +2538,8 @@ void CopyToProto(const TNodeList& from, TRepeated& rep)
         rep.Add(child->template GetValue<T>());
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 TEST(TPackedRepeatedProtobufTest, TestSerializeDeserialize)
 {
@@ -2667,6 +2671,8 @@ TEST(TPackedRepeatedProtobufTest, TestSerializeDeserialize)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
 {
     for (auto storageType: {EEnumYsonStorageType::String, EEnumYsonStorageType::Int}) {
@@ -2782,6 +2788,8 @@ TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TYsonToProtobufTest, Casing)
 {
     auto ysonNode = BuildYsonNodeFluently()
@@ -2844,6 +2852,8 @@ TEST(TYsonToProtobufTest, ForceSnakeCaseNames)
             << "Actual: " << newYsonString << "\n\n";
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 TEST(TStrictEnumValueCheckTest, DeserializeSerializeUnknownUnchecked)
 {
@@ -2993,6 +3003,33 @@ TEST(TStrictEnumValueCheckTest, ProtoToYsonUnknownChecked)
             TErrorException);
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TProtobufWriterOptionsTest, CreateChildOptions)
+{
+    TProtobufWriterOptions options{
+        .UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+            return path.StartsWith("/foo")
+                ? EUnknownYsonFieldsMode::Keep
+                : EUnknownYsonFieldsMode::Fail;
+        }
+    };
+
+    auto optionsCopy = options.CreateChildOptions("");
+    EXPECT_EQ(optionsCopy.UnknownYsonFieldModeResolver("/foo"), EUnknownYsonFieldsMode::Keep);
+    EXPECT_EQ(optionsCopy.UnknownYsonFieldModeResolver("/bar"), EUnknownYsonFieldsMode::Fail);
+
+    auto fooOptions = options.CreateChildOptions("/foo");
+    EXPECT_EQ(fooOptions.UnknownYsonFieldModeResolver(""), EUnknownYsonFieldsMode::Keep);
+    EXPECT_EQ(fooOptions.UnknownYsonFieldModeResolver("/baz"), EUnknownYsonFieldsMode::Keep);
+
+    auto barOptions = options.CreateChildOptions("/bar");
+    EXPECT_EQ(barOptions.UnknownYsonFieldModeResolver(""), EUnknownYsonFieldsMode::Fail);
+    EXPECT_EQ(barOptions.UnknownYsonFieldModeResolver("/foo"), EUnknownYsonFieldsMode::Fail);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYson

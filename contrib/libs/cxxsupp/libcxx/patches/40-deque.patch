@@ -1,5 +1,5 @@
 diff --git a/include/deque b/include/deque
-index d0520b6..6389627 100644
+index 85ea9c6..2c6773a 100644
 --- a/include/deque
 +++ b/include/deque
 @@ -249,7 +249,9 @@ class _LIBCPP_TEMPLATE_VIS deque;
@@ -22,7 +22,7 @@ index d0520b6..6389627 100644
  
    _LIBCPP_HIDE_FROM_ABI bool __invariants() const {
      if (!__map_.__invariants())
-@@ -2457,7 +2459,7 @@ inline void deque<_Tp, _Allocator>::swap(deque& __c)
+@@ -2494,7 +2496,7 @@ inline void deque<_Tp, _Allocator>::swap(deque& __c)
  }
  
  template <class _Tp, class _Allocator>

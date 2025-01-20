@@ -20,7 +20,7 @@ namespace NYT::NClient::NFederated {
 
 namespace {
 
-TString MakeConnectionLoggingTag(const std::vector<NApi::IConnectionPtr>& connections, TGuid connectionId)
+std::string MakeConnectionLoggingTag(const std::vector<NApi::IConnectionPtr>& connections, TGuid connectionId)
 {
     TStringBuilder builder;
     builder.AppendString("Clusters: (");
@@ -50,7 +50,7 @@ public:
         YT_VERIFY(!Connections_.empty());
     }
 
-    const TString& GetLoggingTag() const override
+    const std::string& GetLoggingTag() const override
     {
         return LoggingTag_;
     }
@@ -114,7 +114,7 @@ private:
     const std::vector<NApi::IConnectionPtr> Connections_;
     const NConcurrency::TActionQueuePtr ActionQueue_;
     const TGuid ConnectionId_;
-    const TString LoggingTag_;
+    const std::string LoggingTag_;
 
     std::atomic<bool> Terminated_ = false;
 };

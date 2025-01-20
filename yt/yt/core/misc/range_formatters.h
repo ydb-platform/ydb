@@ -1,9 +1,10 @@
 #pragma once
 
-#include "range.h"
 #include "shared_range.h"
 
 #include <library/cpp/yt/string/format.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 namespace NYT {
 

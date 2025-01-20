@@ -215,6 +215,7 @@ private:
     }
 
     bool OnIncrRestorePipelineResponse(TTransactionContext& txc, const TActorContext& ctx) {
+        Y_UNUSED(txc);
         const auto& record = IncrRestorePipelineResponse->Get()->Record;
 
         LOG_D("Response"

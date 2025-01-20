@@ -507,6 +507,7 @@ void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_ETCD_KV_METHOD(Range,Range);
     SETUP_ETCD_KV_METHOD(Put,Put);
     SETUP_ETCD_KV_METHOD(DeleteRange,DeleteRange);
+    SETUP_ETCD_KV_METHOD(Txn,Txn);
     SETUP_ETCD_KV_METHOD(Compact,Compaction);
 
     #undef SETUP_ETCD_KV_METHOD

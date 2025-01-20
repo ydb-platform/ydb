@@ -11,5 +11,6 @@ namespace NKikimr::NGRpcService {
     NActors::IActor* MakeRange(IRequestOpCtx* p);
     NActors::IActor* MakePut(IRequestOpCtx* p);
     NActors::IActor* MakeDeleteRange(IRequestOpCtx* p);
+    NActors::IActor* MakeTxn(IRequestOpCtx* p);
     NActors::IActor* MakeCompact(IRequestOpCtx* p);
 } // NKikimr::NGRpcService

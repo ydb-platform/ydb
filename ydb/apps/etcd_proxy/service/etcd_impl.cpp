@@ -19,6 +19,7 @@ namespace NKikimr::NGRpcService {
 using TEvRangeKVRequest = TGrpcRequestOperationCall<etcdserverpb::RangeRequest, etcdserverpb::RangeResponse>;
 using TEvPutKVRequest = TGrpcRequestOperationCall<etcdserverpb::PutRequest, etcdserverpb::PutResponse>;
 using TEvDeleteRangeKVRequest = TGrpcRequestOperationCall<etcdserverpb::DeleteRangeRequest, etcdserverpb::DeleteRangeResponse>;
+using TEvTxnKVRequest = TGrpcRequestOperationCall<etcdserverpb::TxnRequest, etcdserverpb::TxnResponse>;
 using TEvCompactKVRequest = TGrpcRequestOperationCall<etcdserverpb::CompactionRequest, etcdserverpb::CompactionResponse>;
 
 using namespace NActors;
@@ -38,17 +39,23 @@ TString DecrementKey(TString key) {
     return TString();
 }
 
-void MakeSimplePredicate(const TString& key, const TString& rangeEnd, TStringBuilder& sql, NYdb::TParamsBuilder& params) {
+void MakeSimplePredicate(const TString& key, const TString& rangeEnd, TStringBuilder& sql, NYdb::TParamsBuilder& params, std::optional<size_t> index = std::nullopt) {
+    TString keyParamName("$Key"), rangeEndParamName("$RangeEnd");
+    if (index) {
+        keyParamName += ToString(*index);
+        rangeEndParamName += ToString(*index);
+    }
+
     sql << "where ";
     if (rangeEnd.empty())
-        sql << "`key` = $Key";
+        sql << "`key` = " << keyParamName;
     else if (rangeEnd == key)
-        sql << "startswith(`key`,$Key)";
+        sql << "startswith(`key`, " << keyParamName << ')';
     else {
-        params.AddParam("$RangeEnd").String(rangeEnd).Build();
-        sql << "`key` between $Key and $RangeEnd";
+        params.AddParam(rangeEndParamName).String(rangeEnd).Build();
+        sql << "`key` between $Key and " << rangeEndParamName;
     }
-    params.AddParam("$Key").String(key).Build();
+    params.AddParam(keyParamName).String(key).Build();
 }
 
 struct TRange {
@@ -58,6 +65,8 @@ struct TRange {
     i64 KeyRevision;
     i64 MinCreateRevision, MaxCreateRevision;
     i64 MinModificateRevision, MaxModificateRevision;
+    std::optional<bool> SortOrder;
+    size_t SortTarget;
 
     bool Parse(const etcdserverpb::RangeRequest& rec) {
         Key = rec.key();
@@ -70,6 +79,12 @@ struct TRange {
         MaxCreateRevision = rec.max_create_revision();
         MinModificateRevision = rec.min_mod_revision();
         MaxModificateRevision = rec.max_mod_revision();
+        SortTarget = rec.sort_target();
+        switch (rec.sort_order()) {
+            case etcdserverpb::RangeRequest_SortOrder_ASCEND: SortOrder = true; break;
+            case etcdserverpb::RangeRequest_SortOrder_DESCEND: SortOrder = false; break;
+            default: break;
+        }
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
@@ -109,6 +124,11 @@ struct TRange {
         if (MaxModificateRevision) {
             sql << Endl << '\t' << "and `modified` <= $MaxModificateRevision";
             params.AddParam("$MaxModificateRevision").Int64(MaxModificateRevision).Build();
+        }
+
+        if (SortOrder) {
+            static constexpr std::string_view Fields[] = {"key"sv, "version"sv, "created"sv, "modified"sv, "value"sv};
+            sql << Endl << "order by `" << Fields[SortTarget] << "` " << (*SortOrder ? "asc" : "desc");
         }
 
         if (Limit) {
@@ -235,6 +255,127 @@ struct TDeleteRange {
                 kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
                 kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
             }
+        }
+        return response;
+    }
+};
+
+struct TCompare {
+    TString Key, RangeEnd;
+
+    std::variant<i64, TString> Value;
+
+    size_t Result, Target;
+
+    bool Parse(const etcdserverpb::Compare& rec) {
+        Key = rec.key();
+        RangeEnd = DecrementKey(rec.range_end());
+        Result = rec.result();
+        Target = rec.target();
+        switch (rec.target()) {
+            case etcdserverpb::Compare_CompareTarget_VERSION:
+                Value = rec.version();
+                break;
+            case etcdserverpb::Compare_CompareTarget_CREATE:
+                Value = rec.create_revision();
+                break;
+            case etcdserverpb::Compare_CompareTarget_MOD:
+                Value = rec.mod_revision();
+                break;
+            case etcdserverpb::Compare_CompareTarget_VALUE:
+                Value = rec.value();
+                break;
+            case etcdserverpb::Compare_CompareTarget_LEASE:
+                Value = rec.lease();
+                break;
+            default:
+                break;
+        }
+
+        return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
+    }
+
+};
+
+struct TTxn {
+    using TRequestOp = std::variant<TRange, TPut, TDeleteRange, TTxn>;
+
+    std::vector<TCompare> Compares;
+    std::vector<TRequestOp> Success, Failure;
+
+    template<class TOperation, class TSrc>
+    static bool Parse(std::vector<TRequestOp>& operations, const TSrc& src) {
+        TOperation op;
+        if (!op.Parse(src))
+            return false;
+        operations.emplace_back(std::move(op));
+        return true;
+    }
+
+    bool Parse(const etcdserverpb::TxnRequest& rec) {
+        for (const auto& comp : rec.compare()) {
+            Compares.emplace_back();
+            if (!Compares.back().Parse(comp))
+                return false;
+        }
+
+        const auto fill = [](std::vector<TRequestOp>& operations, const auto& fields) {
+            for (const auto& op : fields) {
+                switch (op.request_case()) {
+                    case etcdserverpb::RequestOp::RequestCase::kRequestRange: {
+                        if (!Parse<TRange>(operations, op.request_range()))
+                            return false;
+                        break;
+                    }
+                    case etcdserverpb::RequestOp::RequestCase::kRequestPut: {
+                        if (!Parse<TPut>(operations, op.request_put()))
+                            return false;
+                        break;
+                    }
+                    case etcdserverpb::RequestOp::RequestCase::kRequestDeleteRange: {
+                        if (!Parse<TDeleteRange>(operations, op.request_delete_range()))
+                            return false;
+                        break;
+                    }
+                    case etcdserverpb::RequestOp::RequestCase::kRequestTxn: {
+                        if (!Parse<TTxn>(operations, op.request_txn()))
+                            return false;
+                        break;
+                    }
+                    default:
+                        return false;
+                }
+            }
+            return true;
+        };
+
+        return !Compares.empty() && fill(Success, rec.success()) && fill(Failure, rec.failure());
+    }
+
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, i64 ) const {
+        static constexpr std::string_view Fields[] = {"version"sv, "created"sv, "modified"sv, "value"sv, "lease"sv};
+        static constexpr std::string_view Comparator[] = {"="sv, ">"sv, "<"sv, "!="sv};
+
+        sql << "select bool_and(`cmp`) ?? false from (" << Endl;
+        for (auto i = 0U; i < Compares.size(); ++i) {
+            if (i)
+                sql << Endl << "union all" << Endl;
+            const auto argParamName = TString("$Arg") += ToString(i);
+            sql << "select bool_and(`" << Fields[Compares[i].Target] << "` " << Comparator[Compares[i].Result] << ' ' << argParamName << ") ?? false as `cmp` from `huidig` ";
+            MakeSimplePredicate(Compares[i].Key, Compares[i].RangeEnd, sql, params, i);
+            if (const auto val = std::get_if<i64>(&Compares[i].Value))
+                params.AddParam(argParamName).Int64(*val).Build();
+            if (const auto val = std::get_if<TString>(&Compares[i].Value))
+                params.AddParam(argParamName).String(*val).Build();
+        }
+
+        sql << Endl << ");" << Endl;
+    }
+
+    etcdserverpb::TxnResponse MakeResponse(const NYdb::TResultSets& results) {
+        etcdserverpb::TxnResponse response;
+        if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow()) {
+            response.set_succeeded(NYdb::TValueParser(parser.GetValue(0)).GetBool());
         }
         return response;
     }
@@ -635,6 +776,34 @@ private:
     TDeleteRange DeleteRange;
 };
 
+class TTxnRequest
+    : public TEtcdRequestGrpc<TTxnRequest, TEvTxnKVRequest> {
+public:
+    using TBase = TEtcdRequestGrpc<TTxnRequest, TEvTxnKVRequest>;
+    using TBase::TBase;
+private:
+    bool ParseGrpcRequest() final {
+        Revision = NEtcd::AppData()->Revision.fetch_add(1L);
+        return Txn.Parse(*GetProtoRequest());
+    }
+
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) const final {
+        return Txn.MakeQueryWithParams(sql, params, Revision);
+    }
+
+    void ReplyWith(const NYdb::TResultSets& results) final {
+        auto response = Txn.MakeResponse(results);
+        const auto header = response.mutable_header();
+        header->set_revision(Revision);
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+        return this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+    }
+
+    TTxn Txn;
+};
+
 class TCompactRequest
     : public TEtcdRequestGrpc<TCompactRequest, TEvCompactKVRequest> {
 public:
@@ -679,6 +848,10 @@ NActors::IActor* MakePut(IRequestOpCtx* p) {
 
 NActors::IActor* MakeDeleteRange(IRequestOpCtx* p) {
     return new TDeleteRangeRequest(p);
+}
+
+NActors::IActor* MakeTxn(IRequestOpCtx* p) {
+    return new TTxnRequest(p);
 }
 
 NActors::IActor* MakeCompact(IRequestOpCtx* p) {

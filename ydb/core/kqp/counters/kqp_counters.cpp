@@ -829,6 +829,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         "PhyTx/ScanTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     FullScansExecuted = KqpGroup->GetCounter("FullScans", true);
+
+    TotalSingleNodeReqCount = KqpGroup->GetCounter("TotalSingleNodeReqCount", true);
+    NonLocalSingleNodeReqCount = KqpGroup->GetCounter("NonLocalSingleNodeReqCount", true);
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

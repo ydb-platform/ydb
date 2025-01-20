@@ -232,6 +232,7 @@ protected:
         ShardIdToNodeId = std::move(reply.ShardNodes);
         for (auto& [shardId, nodeId] : ShardIdToNodeId) {
             ShardsOnNode[nodeId].push_back(shardId);
+            ParticipantNodes.emplace(nodeId);
         }
 
         if (IsDebugLogEnabled()) {
@@ -1991,6 +1992,10 @@ protected:
     THashMap<NYql::NDq::TStageId, THashMap<ui64, TShardInfo>> SourceScanStageIdToParititions;
 
     ui32 StatementResultIndex;
+
+    // Track which nodes has been involved during execution
+    THashSet<ui32> ParticipantNodes;
+
     bool AlreadyReplied = false;
 
 private:

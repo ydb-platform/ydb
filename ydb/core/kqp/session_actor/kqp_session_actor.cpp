@@ -1441,6 +1441,7 @@ public:
 
         ExecuterId = TActorId{};
 
+        
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
             const auto executionType = ev->ExecutionType;
 
@@ -1503,6 +1504,13 @@ public:
         }
 
         auto& executerResults = *response->MutableResult();
+
+	if (executerResults.ParticipantNodesSize()) {
+            for (auto nodeId : executerResults.GetParticipantNodes()) {
+                QueryState->ParticipantNodes.emplace(nodeId);
+            }
+        }
+
         if (!MergeLocksWithTxResult(executerResults)) {
             return;
         }
@@ -2117,6 +2125,13 @@ public:
             auto forwardId = MakeKqpWorkloadServiceId(SelfId().NodeId());
             Send(new IEventHandle(*QueryState->PoolHandlerActor, SelfId(), event.release(), IEventHandle::FlagForwardOnNondelivery, 0, &forwardId));
             QueryState->PoolHandlerActor = Nothing();
+        }
+
+        if (QueryState && QueryState->ParticipantNodes.size() == 1) {
+            Counters->TotalSingleNodeReqCount->Inc();
+            if (!QueryState->IsLocalExecution(SelfId().NodeId())) {
+                Counters->NonLocalSingleNodeReqCount->Inc();
+            }
         }
 
         LOG_I("Cleanup start, isFinal: " << isFinal << " CleanupCtx: " << bool{CleanupCtx}

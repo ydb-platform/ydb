@@ -1371,6 +1371,8 @@ public:
                 createUser.SetPassword(settings.Password);
             }
 
+            createUser.SetCanLogin(settings.CanLogin);
+
             SendSchemeRequest(ev.Release()).Apply(
                 [createUserPromise](const TFuture<TGenericResult>& future) mutable {
                     createUserPromise.SetValue(future.GetValue());
@@ -1410,8 +1412,13 @@ public:
             auto& alterUser = *schemeTx.MutableAlterLogin()->MutableModifyUser();
 
             alterUser.SetUser(settings.UserName);
-            if (settings.Password) {
-                alterUser.SetPassword(settings.Password);
+
+            if (settings.Password.has_value()) {
+                alterUser.SetPassword(settings.Password.value());
+            }
+
+            if (settings.CanLogin.has_value()) {
+                alterUser.SetCanLogin(settings.CanLogin.value());
             }
 
             SendSchemeRequest(ev.Release()).Apply(

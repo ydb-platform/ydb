@@ -70,7 +70,7 @@ public:
             SUCCESS,
             INVALID_USER,
             INVALID_PASSWORD,
-            UNAVAILABLE_KEY,
+            UNAVAILABLE_KEY
         };
 
         TString Token;
@@ -94,11 +94,13 @@ public:
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
+        bool CanLogin = true;
     };
 
     struct TModifyUserRequest : TBasicRequest {
         TString User;
-        TString Password;
+        std::optional<TString> Password;
+        std::optional<bool> CanLogin;
     };
 
     struct TRemoveUserResponse : TBasicResponse {
@@ -161,6 +163,7 @@ public:
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
         TString Hash;
+        bool IsEnabled;
         std::unordered_set<TString> Members;
         // CreatedAt, FailedLoginAttemptCount, LastFailedLogin, LastSuccessfulLogin do not need in describe result.
         // We will not add these parameters to security state

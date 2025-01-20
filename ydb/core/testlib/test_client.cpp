@@ -2031,16 +2031,16 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
         op->SetWorkingDir(parent);
 
         auto* createUser = op->MutableAlterLogin()->MutableCreateUser();
-        createUser->SetUser(user);
-        createUser->SetPassword(password);
-
+        createUser->SetUser(options.User);
+        createUser->SetPassword(options.Password);
+        createUser->SetCanLogin(options.CanLogin);
         request->Record.SetSecurityToken(userToken);
 
         TAutoPtr<NBus::TBusMessage> reply;
@@ -2051,7 +2051,11 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+        return CreateUser(parent, {.User = user, .Password = password}, userToken);
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
@@ -2060,8 +2064,15 @@ namespace Tests {
         request->Record.SetSecurityToken(userToken);
 
         auto* modifyUser = op->MutableAlterLogin()->MutableModifyUser();
-        modifyUser->SetUser(user);
-        modifyUser->SetPassword(password);
+        modifyUser->SetUser(options.User);
+
+        if (options.Password.has_value()) {
+            modifyUser->SetPassword(options.Password.value());
+        }
+
+        if (options.CanLogin.has_value()) {
+            modifyUser->SetCanLogin(options.CanLogin.value());
+        }
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);

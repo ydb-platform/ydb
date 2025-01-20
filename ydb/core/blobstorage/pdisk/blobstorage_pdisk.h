@@ -129,7 +129,7 @@ public:
 ////////////////////////////////////////////////////////////////////////////
 // INIT
 ////////////////////////////////////////////////////////////////////////////
-struct TEvYardInit : public TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
+struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
     TOwnerRound OwnerRound;
     TVDiskID VDisk;
     ui64 PDiskGuid;
@@ -164,7 +164,7 @@ struct TEvYardInit : public TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit>
     }
 };
 
-struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYardInitResult> {
+struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYardInitResult> {
     NKikimrProto::EReplyStatus Status;
     TMap<TLogSignature, TLogRecord> StartingPoints;
     TStatusFlags StatusFlags;
@@ -241,7 +241,7 @@ struct TEvLogResult;
 ////////////////////////////////////////////////////////////////////////////
 // LOG
 ////////////////////////////////////////////////////////////////////////////
-struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
+struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     struct ICallback {
         virtual ~ICallback() = default;
         virtual void operator ()(TActorSystem *actorSystem, const TEvLogResult &ev) = 0;
@@ -328,7 +328,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     mutable NLWTrace::TOrbit Orbit;
 };
 
-struct TEvMultiLog : public TEventLocal<TEvMultiLog, TEvBlobStorage::EvMultiLog> {
+struct TEvMultiLog : TEventLocal<TEvMultiLog, TEvBlobStorage::EvMultiLog> {
     void AddLog(THolder<TEvLog> &&ev, NWilson::TTraceId traceId = {}) {
         Logs.emplace_back(std::move(ev), std::move(traceId));
         auto &log = *Logs.back().Event;
@@ -369,7 +369,7 @@ struct TEvMultiLog : public TEventLocal<TEvMultiLog, TEvBlobStorage::EvMultiLog>
     TLsnSeg LsnSeg;
 };
 
-struct TEvLogResult : public TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResult> {
+struct TEvLogResult : TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResult> {
     struct TRecord {
         ui64 Lsn;
         void *Cookie;
@@ -424,7 +424,7 @@ struct TEvLogResult : public TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResu
 ////////////////////////////////////////////////////////////////////////////
 // READ LOG
 ////////////////////////////////////////////////////////////////////////////
-struct TEvReadLog : public TEventLocal<TEvReadLog, TEvBlobStorage::EvReadLog> {
+struct TEvReadLog : TEventLocal<TEvReadLog, TEvBlobStorage::EvReadLog> {
     TOwner Owner;
     TOwnerRound OwnerRound;
     TLogPosition Position;
@@ -452,7 +452,7 @@ struct TEvReadLog : public TEventLocal<TEvReadLog, TEvBlobStorage::EvReadLog> {
     }
 };
 
-struct TEvReadLogResult : public TEventLocal<TEvReadLogResult, TEvBlobStorage::EvReadLogResult> {
+struct TEvReadLogResult : TEventLocal<TEvReadLogResult, TEvBlobStorage::EvReadLogResult> {
     typedef TVector<TLogRecord> TResults;
     TResults Results;
     NKikimrProto::EReplyStatus Status;
@@ -497,7 +497,7 @@ struct TEvReadLogResult : public TEventLocal<TEvReadLogResult, TEvBlobStorage::E
 ////////////////////////////////////////////////////////////////////////////////
 // Lock chucks specified by color or by count
 ////////////////////////////////////////////////////////////////////////////////
-struct TEvChunkLock : public TEventLocal<TEvChunkLock, TEvBlobStorage::EvChunkLock> {
+struct TEvChunkLock : TEventLocal<TEvChunkLock, TEvBlobStorage::EvChunkLock> {
     enum ELockFrom {
         LOG,
         PERSONAL_QUOTA,
@@ -584,7 +584,7 @@ struct TEvChunkLock : public TEventLocal<TEvChunkLock, TEvBlobStorage::EvChunkLo
     }
 };
 
-struct TEvChunkLockResult : public TEventLocal<TEvChunkLockResult, TEvBlobStorage::EvChunkLockResult> {
+struct TEvChunkLockResult : TEventLocal<TEvChunkLockResult, TEvBlobStorage::EvChunkLockResult> {
     NKikimrProto::EReplyStatus Status;
     TVector<TChunkIdx> LockedChunks;
     ui32 AvailableChunksCount;
@@ -623,7 +623,7 @@ struct TEvChunkLockResult : public TEventLocal<TEvChunkLockResult, TEvBlobStorag
 ////////////////////////////////////////////////////////////////////////////////
 // Unlock all previously locked chunks
 ////////////////////////////////////////////////////////////////////////////////
-struct TEvChunkUnlock : public TEventLocal<TEvChunkUnlock, TEvBlobStorage::EvChunkUnlock> {
+struct TEvChunkUnlock : TEventLocal<TEvChunkUnlock, TEvBlobStorage::EvChunkUnlock> {
     TEvChunkLock::ELockFrom LockFrom;
     bool ByVDiskId = true;
     TOwner Owner = 0;
@@ -677,7 +677,7 @@ struct TEvChunkUnlock : public TEventLocal<TEvChunkUnlock, TEvBlobStorage::EvChu
     }
 };
 
-struct TEvChunkUnlockResult : public TEventLocal<TEvChunkUnlockResult, TEvBlobStorage::EvChunkUnlockResult> {
+struct TEvChunkUnlockResult : TEventLocal<TEvChunkUnlockResult, TEvBlobStorage::EvChunkUnlockResult> {
     NKikimrProto::EReplyStatus Status;
     ui32 UnlockedChunks;
     TString ErrorReason;
@@ -707,7 +707,7 @@ struct TEvChunkUnlockResult : public TEventLocal<TEvChunkUnlockResult, TEvBlobSt
 ////////////////////////////////////////////////////////////////////////////
 // CHUNK RESERVATION
 ////////////////////////////////////////////////////////////////////////////
-struct TEvChunkReserve : public TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkReserve> {
+struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkReserve> {
     TOwner Owner;
     TOwnerRound OwnerRound;
     ui32 SizeChunks;
@@ -732,7 +732,7 @@ struct TEvChunkReserve : public TEventLocal<TEvChunkReserve, TEvBlobStorage::EvC
     }
 };
 
-struct TEvChunkReserveResult : public TEventLocal<TEvChunkReserveResult, TEvBlobStorage::EvChunkReserveResult> {
+struct TEvChunkReserveResult : TEventLocal<TEvChunkReserveResult, TEvBlobStorage::EvChunkReserveResult> {
     NKikimrProto::EReplyStatus Status;
     TVector<TChunkIdx> ChunkIds;
     TStatusFlags StatusFlags;
@@ -766,7 +766,7 @@ struct TEvChunkReserveResult : public TEventLocal<TEvChunkReserveResult, TEvBlob
 ////////////////////////////////////////////////////////////////////////////
 // CHUNK FORGET
 ////////////////////////////////////////////////////////////////////////////
-struct TEvChunkForget : public TEventLocal<TEvChunkForget, TEvBlobStorage::EvChunkForget> {
+struct TEvChunkForget : TEventLocal<TEvChunkForget, TEvBlobStorage::EvChunkForget> {
     TOwner Owner;
     TOwnerRound OwnerRound;
     TVector<TChunkIdx> ForgetChunks;
@@ -797,7 +797,7 @@ struct TEvChunkForget : public TEventLocal<TEvChunkForget, TEvBlobStorage::EvChu
     }
 };
 
-struct TEvChunkForgetResult : public TEventLocal<TEvChunkForgetResult, TEvBlobStorage::EvChunkForgetResult> {
+struct TEvChunkForgetResult : TEventLocal<TEvChunkForgetResult, TEvBlobStorage::EvChunkForgetResult> {
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
     TString ErrorReason;
@@ -830,7 +830,7 @@ struct TEvChunkForgetResult : public TEventLocal<TEvChunkForgetResult, TEvBlobSt
 ////////////////////////////////////////////////////////////////////////////
 // CHUNK READ
 ////////////////////////////////////////////////////////////////////////////
-struct TEvChunkRead : public TEventLocal<TEvChunkRead, TEvBlobStorage::EvChunkRead> {
+struct TEvChunkRead : TEventLocal<TEvChunkRead, TEvBlobStorage::EvChunkRead> {
     TChunkIdx ChunkIdx;
     ui32 Offset;
     ui32 Size;
@@ -868,7 +868,7 @@ struct TEvChunkRead : public TEventLocal<TEvChunkRead, TEvBlobStorage::EvChunkRe
     }
 };
 
-struct TEvChunkReadResult : public TEventLocal<TEvChunkReadResult, TEvBlobStorage::EvChunkReadResult> {
+struct TEvChunkReadResult : TEventLocal<TEvChunkReadResult, TEvBlobStorage::EvChunkReadResult> {
     NKikimrProto::EReplyStatus Status;
     TChunkIdx ChunkIdx;
     ui32 Offset;
@@ -909,7 +909,7 @@ struct TEvChunkReadResult : public TEventLocal<TEvChunkReadResult, TEvBlobStorag
 ////////////////////////////////////////////////////////////////////////////
 // CHUNK WRITE
 ////////////////////////////////////////////////////////////////////////////
-struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> {
+struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> {
     // this interface allows us to pass several memory parts for writing them continuously into chunk
     class IParts : public TThrRefBase {
     public:
@@ -1113,7 +1113,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
     }
 };
 
-struct TEvChunkWriteResult : public TEventLocal<TEvChunkWriteResult, TEvBlobStorage::EvChunkWriteResult> {
+struct TEvChunkWriteResult : TEventLocal<TEvChunkWriteResult, TEvBlobStorage::EvChunkWriteResult> {
     NKikimrProto::EReplyStatus Status;
     TChunkIdx ChunkIdx;
     TEvChunkWrite::TPartsPtr PartsPtr;
@@ -1162,7 +1162,7 @@ struct TEvChunkWriteResult : public TEventLocal<TEvChunkWriteResult, TEvBlobStor
 ////////////////////////////////////////////////////////////////////////////
 // DELETE OWNER AND ALL HIS DATA
 ////////////////////////////////////////////////////////////////////////////
-struct TEvHarakiri : public TEventLocal<TEvHarakiri, TEvBlobStorage::EvHarakiri> {
+struct TEvHarakiri : TEventLocal<TEvHarakiri, TEvBlobStorage::EvHarakiri> {
     TOwner Owner;
     TOwnerRound OwnerRound;
 
@@ -1184,7 +1184,7 @@ struct TEvHarakiri : public TEventLocal<TEvHarakiri, TEvBlobStorage::EvHarakiri>
     }
 };
 
-struct TEvHarakiriResult : public TEventLocal<TEvHarakiriResult, TEvBlobStorage::EvHarakiriResult> {
+struct TEvHarakiriResult : TEventLocal<TEvHarakiriResult, TEvBlobStorage::EvHarakiriResult> {
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
     TString ErrorReason;
@@ -1209,7 +1209,7 @@ struct TEvHarakiriResult : public TEventLocal<TEvHarakiriResult, TEvBlobStorage:
     }
 };
 
-struct TEvSlay : public TEventLocal<TEvSlay, TEvBlobStorage::EvSlay> {
+struct TEvSlay : TEventLocal<TEvSlay, TEvBlobStorage::EvSlay> {
     TVDiskID VDiskId;
     TOwnerRound SlayOwnerRound;
     ui32 PDiskId;
@@ -1237,7 +1237,7 @@ struct TEvSlay : public TEventLocal<TEvSlay, TEvBlobStorage::EvSlay> {
     }
 };
 
-struct TEvSlayResult : public TEventLocal<TEvSlayResult, TEvBlobStorage::EvSlayResult> {
+struct TEvSlayResult : TEventLocal<TEvSlayResult, TEvBlobStorage::EvSlayResult> {
     NKikimrProto::EReplyStatus Status;  // OK => VDisk is no more
                                         // ERROR => Something bad has happened, see ErrorReason
                                         // NOTREADY => PDisk is still initializing, see ErrorReason
@@ -1282,7 +1282,7 @@ struct TEvSlayResult : public TEventLocal<TEvSlayResult, TEvBlobStorage::EvSlayR
 ////////////////////////////////////////////////////////////////////////////
 // CHECK DISK SPACE
 ////////////////////////////////////////////////////////////////////////////
-struct TEvCheckSpace : public TEventLocal<TEvCheckSpace, TEvBlobStorage::EvCheckSpace> {
+struct TEvCheckSpace : TEventLocal<TEvCheckSpace, TEvBlobStorage::EvCheckSpace> {
     TOwner Owner;
     TOwnerRound OwnerRound;
 
@@ -1300,7 +1300,7 @@ struct TEvCheckSpace : public TEventLocal<TEvCheckSpace, TEvBlobStorage::EvCheck
     }
 };
 
-struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::EvCheckSpaceResult> {
+struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::EvCheckSpaceResult> {
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
     ui32 FreeChunks;
@@ -1342,7 +1342,7 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
 ////////////////////////////////////////////////////////////////////////////
 // CONFIGURE SCHEDULER
 ////////////////////////////////////////////////////////////////////////////
-struct TEvConfigureScheduler : public TEventLocal<TEvConfigureScheduler, TEvBlobStorage::EvConfigureScheduler> {
+struct TEvConfigureScheduler : TEventLocal<TEvConfigureScheduler, TEvBlobStorage::EvConfigureScheduler> {
     TOwner Owner;
     TOwnerRound OwnerRound;
 
@@ -1364,7 +1364,7 @@ struct TEvConfigureScheduler : public TEventLocal<TEvConfigureScheduler, TEvBlob
 };
 
 struct TEvConfigureSchedulerResult :
-        public TEventLocal<TEvConfigureSchedulerResult, TEvBlobStorage::EvConfigureSchedulerResult> {
+        TEventLocal<TEvConfigureSchedulerResult, TEvBlobStorage::EvConfigureSchedulerResult> {
     NKikimrProto::EReplyStatus Status;
     TString ErrorReason;
 
@@ -1385,7 +1385,7 @@ struct TEvConfigureSchedulerResult :
 ////////////////////////////////////////////////////////////////////////////
 // CONTROL
 ////////////////////////////////////////////////////////////////////////////
-struct TEvYardControl : public TEventLocal<TEvYardControl, TEvBlobStorage::EvYardControl> {
+struct TEvYardControl : TEventLocal<TEvYardControl, TEvBlobStorage::EvYardControl> {
     enum EAction {
         ActionPause = 0,
         ActionStep = 1,
@@ -1420,7 +1420,7 @@ struct TEvYardControl : public TEventLocal<TEvYardControl, TEvBlobStorage::EvYar
     }
 };
 
-struct TEvYardControlResult : public TEventLocal<TEvYardControlResult, TEvBlobStorage::EvYardControlResult> {
+struct TEvYardControlResult : TEventLocal<TEvYardControlResult, TEvBlobStorage::EvYardControlResult> {
     NKikimrProto::EReplyStatus Status;
     void *Cookie;
     TString ErrorReason;
@@ -1449,7 +1449,7 @@ struct TEvYardControlResult : public TEventLocal<TEvYardControlResult, TEvBlobSt
 // CUTLOG
 // Yard (PDisk) sends this message to VDisk to ask for log cut
 ////////////////////////////////////////////////////////////////////////////
-struct TEvCutLog : public TEventLocal<TEvCutLog, TEvBlobStorage::EvCutLog> {
+struct TEvCutLog : TEventLocal<TEvCutLog, TEvBlobStorage::EvCutLog> {
     TOwner Owner;
     TOwnerRound OwnerRound;
     ui64 FreeUpToLsn; // excluding this lsn
@@ -1490,7 +1490,7 @@ struct TEvCutLog : public TEventLocal<TEvCutLog, TEvBlobStorage::EvCutLog> {
     }
 };
 
-struct TEvAskForCutLog : public TEventLocal<TEvAskForCutLog, TEvBlobStorage::EvAskForCutLog> {
+struct TEvAskForCutLog : TEventLocal<TEvAskForCutLog, TEvBlobStorage::EvAskForCutLog> {
     TOwner Owner;
     TOwnerRound OwnerRound;
 
@@ -1546,7 +1546,7 @@ struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStora
 };
 
 // NodeWarden sends this message to PDisk to ask for shredding
-struct TEvShredPDisk : public TEventLocal<TEvShredPDisk, TEvBlobStorage::EvShredPDisk> {
+struct TEvShredPDisk : TEventLocal<TEvShredPDisk, TEvBlobStorage::EvShredPDisk> {
     ui64 ShredGeneration;
 
     TEvShredPDisk(ui64 shredGeneration)
@@ -1561,7 +1561,7 @@ struct TEvShredPDisk : public TEventLocal<TEvShredPDisk, TEvBlobStorage::EvShred
 };
 
 // PDisk sends this message to NodeWarden when shredding is complete
-struct TEvShredPDiskResult : public TEventLocal<TEvShredPDiskResult, TEvBlobStorage::EvShredPDiskResult> {
+struct TEvShredPDiskResult : TEventLocal<TEvShredPDiskResult, TEvBlobStorage::EvShredPDiskResult> {
     NKikimrProto::EReplyStatus Status;
     ui64 ShredGeneration;
     TString ErrorReason;
@@ -1582,7 +1582,7 @@ struct TEvShredPDiskResult : public TEventLocal<TEvShredPDiskResult, TEvBlobStor
 };
 
 // PDisk sends this message to VDisk to ask for full compaction before shredding
-struct TEvPreShredCompactVDisk : public TEventLocal<TEvPreShredCompactVDisk, TEvBlobStorage::EvPreShredCompactVDisk> {
+struct TEvPreShredCompactVDisk : TEventLocal<TEvPreShredCompactVDisk, TEvBlobStorage::EvPreShredCompactVDisk> {
     ui64 ShredGeneration;
     std::vector<TChunkIdx> ChunksToShred;
 
@@ -1598,7 +1598,7 @@ struct TEvPreShredCompactVDisk : public TEventLocal<TEvPreShredCompactVDisk, TEv
 };
 
 // VDisk sends this message to PDisk when pre-shred compaction is complete
-struct TEvPreShredCompactVDiskResult : public TEventLocal<TEvPreShredCompactVDiskResult, TEvBlobStorage::EvPreShredCompactVDiskResult> {
+struct TEvPreShredCompactVDiskResult : TEventLocal<TEvPreShredCompactVDiskResult, TEvBlobStorage::EvPreShredCompactVDiskResult> {
     TOwner Owner;
     TOwnerRound OwnerRound;
     ui64 ShredGeneration;
@@ -1625,7 +1625,7 @@ struct TEvPreShredCompactVDiskResult : public TEventLocal<TEvPreShredCompactVDis
 };
 
 // PDisk sends this message to VDisk to ask it to move all the data needed away from the chunks that are being shredded
-struct TEvShredVDisk : public TEventLocal<TEvShredVDisk, TEvBlobStorage::EvShredVDisk> {
+struct TEvShredVDisk : TEventLocal<TEvShredVDisk, TEvBlobStorage::EvShredVDisk> {
     ui64 ShredGeneration;
     std::vector<TChunkIdx> ChunksToShred;
 
@@ -1650,7 +1650,7 @@ struct TEvShredVDisk : public TEventLocal<TEvShredVDisk, TEvBlobStorage::EvShred
 };
 
 // VDisk sends this message to PDisk when the data has been moved away from the chunks that are being shredded
-struct TEvShredVDiskResult : public TEventLocal<TEvShredVDiskResult, TEvBlobStorage::EvShredVDiskResult> {
+struct TEvShredVDiskResult : TEventLocal<TEvShredVDiskResult, TEvBlobStorage::EvShredVDiskResult> {
     TOwner Owner;
     TOwnerRound OwnerRound;
     ui64 ShredGeneration;
@@ -1678,7 +1678,7 @@ struct TEvShredVDiskResult : public TEventLocal<TEvShredVDiskResult, TEvBlobStor
 
 // VDisk sends this message to PDisk to mark a single chunk as dirty
 // No response is expected from PDisk as the operation has very high priority and always succeeds
-struct TEvMarkDirty : public TEventLocal<TEvMarkDirty, TEvBlobStorage::EvMarkDirty> {
+struct TEvMarkDirty : TEventLocal<TEvMarkDirty, TEvBlobStorage::EvMarkDirty> {
     TOwner Owner;
     TOwnerRound OwnerRound;
     TChunkIdx ChunkToMarkDirty;
@@ -1701,7 +1701,7 @@ struct TEvMarkDirty : public TEventLocal<TEvMarkDirty, TEvBlobStorage::EvMarkDir
 
 // VDisk sends this message to PDisk to mark a batch of chunks as dirty
 // No response is expected from PDisk as the operation has very high priority and always succeeds
-struct TEvMarkDirtyBatch : public TEventLocal<TEvMarkDirtyBatch, TEvBlobStorage::EvMarkDirtyBatch> {
+struct TEvMarkDirtyBatch : TEventLocal<TEvMarkDirtyBatch, TEvBlobStorage::EvMarkDirtyBatch> {
     TOwner Owner;
     TOwnerRound OwnerRound;
     std::vector<TChunkIdx> ChunksToMarkDirty;

@@ -23,7 +23,6 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
         enum EEv {
             EvUpdateRuntimeStats = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvCleanupDeadTablets,
-            EvUpdateClockSkew,
             EvEnd
         };
 
@@ -31,7 +30,6 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
 
         struct TEvUpdateRuntimeStats : TEventLocal<TEvUpdateRuntimeStats, EvUpdateRuntimeStats> {};
         struct TEvCleanupDeadTablets : TEventLocal<TEvCleanupDeadTablets, EvCleanupDeadTablets> {};
-        struct TEvUpdateClockSkew : TEventLocal<TEvUpdateClockSkew, EvUpdateClockSkew> {};
     };
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -64,7 +62,6 @@ public:
         MaxClockSkewPeerIdCounter = group->GetCounter("MaxClockSkewPeerId");
 
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
-        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
         Become(&TNodeWhiteboardService::StateFunc);
     }
 
@@ -76,6 +73,7 @@ protected:
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
     i64 MaxClockSkewWithPeerUs;
     ui32 MaxClockSkewPeerId;
+    float MaxNetworkUtilization = 0.0;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
 
@@ -509,7 +507,6 @@ protected:
     STRICT_STFUNC(StateFunc,
         HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
-        HFunc(TEvWhiteboard::TEvClockSkewUpdate, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateDelete, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
@@ -538,7 +535,6 @@ protected:
         HFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
         HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
         HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
-        HFunc(TEvPrivate::TEvUpdateClockSkew, Handle);
     )
 
     void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
@@ -549,14 +545,6 @@ protected:
         }
         if (CheckedMerge(tabletStateInfo, ev->Get()->Record) >= 100) {
             tabletStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
-        }
-    }
-
-    void Handle(TEvWhiteboard::TEvClockSkewUpdate::TPtr &ev, const TActorContext &) {
-        i64 skew = ev->Get()->Record.GetClockSkewUs();
-        if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
-            MaxClockSkewWithPeerUs = skew;
-            MaxClockSkewPeerId = ev->Get()->Record.GetPeerNodeId();
         }
     }
 
@@ -571,6 +559,15 @@ protected:
         } else {
             nodeStateInfo.ClearWriteThroughput();
         }
+        if (ev->Get()->Record.GetSameScope()) {
+            i64 skew = ev->Get()->Record.GetClockSkewUs();
+            if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
+                MaxClockSkewWithPeerUs = skew;
+                MaxClockSkewPeerId = ev->Get()->Record.GetPeerNodeId();
+            }
+        }
+        // TODO: need better way to calculate network utilization
+        MaxNetworkUtilization = std::max(MaxNetworkUtilization, ev->Get()->Record.GetUtilization());
         nodeStateInfo.MergeFrom(ev->Get()->Record);
         nodeStateInfo.SetChangeTime(currentChangeTime);
     }
@@ -1081,14 +1078,31 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr &, const TActorContext &ctx) {
-        THolder<TEvWhiteboard::TEvSystemStateUpdate> systemStatsUpdate = MakeHolder<TEvWhiteboard::TEvSystemStateUpdate>();
-        TVector<double> loadAverage = GetLoadAverage();
-        for (double d : loadAverage) {
-            systemStatsUpdate->Record.AddLoadAverage(d);
+        {
+            NKikimrWhiteboard::TSystemStateInfo systemStatsUpdate;
+            TVector<double> loadAverage = GetLoadAverage();
+            for (double d : loadAverage) {
+                systemStatsUpdate.AddLoadAverage(d);
+            }
+            if (CheckedMerge(SystemStateInfo, systemStatsUpdate)) {
+                SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            }
         }
-        if (CheckedMerge(SystemStateInfo, systemStatsUpdate->Record)) {
-            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+
+        {
+            MaxClockSkewWithPeerUsCounter->Set(abs(MaxClockSkewWithPeerUs));
+            MaxClockSkewPeerIdCounter->Set(MaxClockSkewPeerId);
+
+            SystemStateInfo.SetMaxClockSkewWithPeerUs(MaxClockSkewWithPeerUs);
+            SystemStateInfo.SetMaxClockSkewPeerId(MaxClockSkewPeerId);
+            MaxClockSkewWithPeerUs = 0;
         }
+
+        {
+            SystemStateInfo.SetNetworkUtilization(MaxNetworkUtilization);
+            MaxNetworkUtilization = 0;
+        }
+
         UpdateSystemState(ctx);
         ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateRuntimeStats());
     }
@@ -1121,16 +1135,6 @@ protected:
             }
         }
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
-    }
-
-    void Handle(TEvPrivate::TEvUpdateClockSkew::TPtr &, const TActorContext &ctx) {
-        MaxClockSkewWithPeerUsCounter->Set(abs(MaxClockSkewWithPeerUs));
-        MaxClockSkewPeerIdCounter->Set(MaxClockSkewPeerId);
-
-        SystemStateInfo.SetMaxClockSkewWithPeerUs(MaxClockSkewWithPeerUs);
-        SystemStateInfo.SetMaxClockSkewPeerId(MaxClockSkewPeerId);
-        MaxClockSkewWithPeerUs = 0;
-        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
     }
 };
 

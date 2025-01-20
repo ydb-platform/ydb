@@ -1231,6 +1231,7 @@ message TBackupTask {
     }
 
     optional TPathDescription Table = 10; // for further restore
+    repeated TPathDescription ChangefeedUnderlyingTopics = 17; // for further restore
 
     message TScanSettings {
         optional uint64 RowsBatchSize = 1 [default = 0]; // no limit

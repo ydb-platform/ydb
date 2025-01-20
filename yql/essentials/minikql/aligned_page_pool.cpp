@@ -542,23 +542,23 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
         // Extra space is also page-aligned. Put it to the free page list
         auto alignedSize = AlignUp(size, POOL_PAGE_SIZE);
         ui64 extraPages = (allocSize - off - alignedSize) / POOL_PAGE_SIZE;
-        ui64 tail = (allocSize - off - alignedSize) % POOL_PAGE_SIZE;
+        // ui64 tail = (allocSize - off - alignedSize) % POOL_PAGE_SIZE;
         auto extraPage = reinterpret_cast<ui8*>(res) + alignedSize;
         for (ui64 i = 0; i < extraPages; ++i) {
             AllPages.emplace(extraPage);
             FreePages.emplace(extraPage);
             extraPage += POOL_PAGE_SIZE;
         }
-        if (size != alignedSize) {
-            // unmap unaligned hole
-            globalPool.DoMunmap(reinterpret_cast<ui8*>(res) + size, alignedSize - size);
-        }
+        // if (size != alignedSize) {
+        //     // unmap unaligned hole
+        //     globalPool.DoMunmap(reinterpret_cast<ui8*>(res) + size, alignedSize - size);
+        // }
 
-        if (tail) {
-            // unmap suffix
-            Y_DEBUG_ABORT_UNLESS(extraPage+tail <= reinterpret_cast<ui8*>(mem) + size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE);
-            globalPool.DoMunmap(extraPage, tail);
-        }
+        // if (tail) {
+        //     // unmap suffix
+        //     Y_DEBUG_ABORT_UNLESS(extraPage+tail <= reinterpret_cast<ui8*>(mem) + size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE);
+        //     globalPool.DoMunmap(extraPage, tail);
+        // }
 
         auto extraSize = extraPages * POOL_PAGE_SIZE;
         auto totalSize = size + extraSize;

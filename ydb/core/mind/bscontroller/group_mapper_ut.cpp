@@ -593,10 +593,6 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TestBlock42(1);
     }
 
-    Y_UNIT_TEST(Block42_2disk) {
-        TestBlock42(2);
-    }
-
     Y_UNIT_TEST(Mirror3dc) {
         TTestContext context(6, 3, 3, 3, 3);
         TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc));

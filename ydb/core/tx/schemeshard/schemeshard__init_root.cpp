@@ -57,7 +57,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                    Schema::LoginSids::SidHash,
-                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.Hash, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MilliSeconds());
                 if (owner.empty()) {
                     owner = defaultUser.GetName();
                 }

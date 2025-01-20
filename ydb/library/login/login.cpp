@@ -84,7 +84,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
 
     TSidRecord& user = itUserCreate.first->second;
     user.Name = request.User;
-    user.Hash = Impl->GenerateHash(request.Password);
+    user.PasswordHash = Impl->GenerateHash(request.Password);
     user.CreatedAt = std::chrono::system_clock::now();
     user.LastFailedLogin = std::chrono::system_clock::time_point();
     user.IsEnabled = request.CanLogin;
@@ -118,7 +118,7 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
             return response;
         }
 
-        user.Hash = Impl->GenerateHash(request.Password.value());
+        user.PasswordHash = Impl->GenerateHash(request.Password.value());
     }
 
     if (request.CanLogin.has_value()) {
@@ -410,7 +410,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         }
 
         sid = &(itUser->second);
-        if (!Impl->VerifyHash(request.Password, itUser->second.Hash)) {
+        if (!Impl->VerifyHash(request.Password, itUser->second.PasswordHash)) {
             response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
             response.Error = "Invalid password";
             sid->LastFailedLogin = now;
@@ -670,9 +670,9 @@ TString TLoginProvider::TImpl::GenerateHash(const TString& password) {
     return NJson::WriteJson(json, false);
 }
 
-bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& hashJson) {
+bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& passwordHash) {
     NJson::TJsonValue json;
-    if (!NJson::ReadJsonTree(hashJson, &json)) {
+    if (!NJson::ReadJsonTree(passwordHash, &json)) {
         return false;
     }
     TString type = json["type"].GetStringRobust();
@@ -749,7 +749,7 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             TSidRecord& sid = Sids[pbSid.GetName()];
             sid.Type = pbSid.GetType();
             sid.Name = pbSid.GetName();
-            sid.Hash = pbSid.GetHash();
+            sid.PasswordHash = pbSid.GetHash();
             sid.IsEnabled = pbSid.GetIsEnabled();
             for (const auto& pbSubSid : pbSid.GetMembers()) {
                 sid.Members.emplace(pbSubSid);

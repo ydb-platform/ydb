@@ -9,7 +9,7 @@
 #include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/sql/settings/partitioning.h>
-#include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 
 #include <util/generic/scope.h>
@@ -5126,7 +5126,7 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
 
     TVector<TString> statements;
     NYql::TIssues issues;
-    if (!NSQLFormat::SplitQueryToStatements(Ctx.Query, statements, issues, Ctx.Settings)) {
+    if (!SplitQueryToStatements(Ctx.Query, statements, issues, Ctx.Settings)) {
         return {};
     }
 

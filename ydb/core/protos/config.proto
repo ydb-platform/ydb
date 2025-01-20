@@ -267,7 +267,7 @@ message TDomainsConfig {
     repeated THiveConfig HiveConfig = 4;
     repeated TNamedCompactionPolicy NamedCompactionPolicy = 5;
     optional bool ForbidImplicitStoragePools = 7 [default = true];
-    reserved 8;
+    reserved 6;
     reserved "SecurityConfig";
 }
 

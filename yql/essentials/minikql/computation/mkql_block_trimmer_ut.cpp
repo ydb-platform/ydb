@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <yql/essentials/public/udf/arrow/block_builder.h>
+#include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>

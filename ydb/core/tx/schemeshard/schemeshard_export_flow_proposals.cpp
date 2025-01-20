@@ -178,6 +178,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         if (sourceDescription.HasTable()) {
             FillSetValForSequences(
                 ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+            FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
             for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
                 auto cdcPathDesc =  GetChangefeedDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
                 for (const auto& child : cdcPathDesc.GetChildren()) {

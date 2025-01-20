@@ -21,6 +21,8 @@
 
 - [Установка](install.md)
 - [Аутентификация](auth.md)
+- [{#T}](error_handling.md)
+- [{#T}](status-codes.md)
 - [Сравнение возможностей SDK](feature-parity.md)
 
 Смотрите также:

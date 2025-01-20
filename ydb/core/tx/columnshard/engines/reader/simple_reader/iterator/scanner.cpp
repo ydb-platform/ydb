@@ -10,7 +10,6 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& tableExt, const ui32 startIndex,
     const ui32 recordsCount, TPlainReadData& reader) {
-
     source->MutableResultRecordsCount() += tableExt ? tableExt->num_rows() : 0;
     if (!tableExt || !tableExt->num_rows()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", source->DebugJson().GetStringRobust());
@@ -56,10 +55,11 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
         AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
         FetchingSources.pop_front();
         frontSource->ClearResult();
-        if (Context->GetCommonContext()->GetReadMetadata()->HasLimit() && SortedSources.size() && frontSource->GetResultRecordsCount()) {
+        if (Context->GetCommonContext()->GetReadMetadata()->HasLimit()) {
             AFL_VERIFY(FetchingInFlightSources.erase(frontSource));
             AFL_VERIFY(FinishedSources.emplace(frontSource).second);
-            while (FinishedSources.size() && (*FinishedSources.begin())->GetFinish() < SortedSources.front()->GetStart()) {
+            while (FinishedSources.size() &&
+                   (SortedSources.empty() || (*FinishedSources.begin())->GetFinish() < SortedSources.front()->GetStart())) {
                 auto finishedSource = *FinishedSources.begin();
                 if (!finishedSource->GetResultRecordsCount() && InFlightLimit < MaxInFlight) {
                     InFlightLimit = 2 * InFlightLimit;
@@ -90,10 +90,8 @@ TConclusionStatus TScanHead::Start() {
 
 TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
-    if (HasAppData()) {
-        if (AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
-            MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
-        }
+    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
+        MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
     }
     if (Context->GetReadMetadata()->HasLimit()) {
         InFlightLimit = 1;
@@ -121,34 +119,40 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     if (!Context->IsActive()) {
         return false;
     }
-    if (InFlightLimit <= IntervalsInFlightCount) {
-        return false;
-    }
     if (SortedSources.size() == 0) {
         return false;
     }
     bool changed = false;
-    ui32 inFlightCountLocal = 0;
-    if (SortedSources.size()) {
+    if (!Context->GetCommonContext()->GetReadMetadata()->HasLimit()) {
+        while (SortedSources.size() && FetchingSources.size() < InFlightLimit) {
+            SortedSources.front()->StartProcessing(SortedSources.front());
+            FetchingSources.emplace_back(SortedSources.front());
+            AFL_VERIFY(FetchingSourcesByIdx.emplace(SortedSources.front()->GetSourceIdx(), SortedSources.front()).second);
+            SortedSources.pop_front();
+            changed = true;
+        }
+    } else {
+        if (InFlightLimit <= IntervalsInFlightCount) {
+            return false;
+        }
+        ui32 inFlightCountLocal = 0;
         for (auto it = FetchingInFlightSources.begin(); it != FetchingInFlightSources.end(); ++it) {
-            if ((*it)->GetFinish() < SortedSources.front()->GetStart()) {
+            if (SortedSources.empty() || (*it)->GetFinish() < SortedSources.front()->GetStart()) {
                 ++inFlightCountLocal;
             } else {
                 break;
             }
         }
-    }
-    AFL_VERIFY(IntervalsInFlightCount == inFlightCountLocal)("count_global", IntervalsInFlightCount)("count_local", inFlightCountLocal);
-    while (SortedSources.size() && inFlightCountLocal < InFlightLimit) {
-        SortedSources.front()->StartProcessing(SortedSources.front());
-        FetchingSources.emplace_back(SortedSources.front());
-        FetchingSourcesByIdx.emplace(SortedSources.front()->GetSourceIdx(), SortedSources.front());
-        AFL_VERIFY(FetchingInFlightSources.emplace(SortedSources.front()).second);
-        SortedSources.pop_front();
-        if (SortedSources.size()) {
+        AFL_VERIFY(IntervalsInFlightCount == inFlightCountLocal)("count_global", IntervalsInFlightCount)("count_local", inFlightCountLocal);
+        while (SortedSources.size() && inFlightCountLocal < InFlightLimit) {
+            SortedSources.front()->StartProcessing(SortedSources.front());
+            FetchingSources.emplace_back(SortedSources.front());
+            AFL_VERIFY(FetchingSourcesByIdx.emplace(SortedSources.front()->GetSourceIdx(), SortedSources.front()).second);
+            AFL_VERIFY(FetchingInFlightSources.emplace(SortedSources.front()).second);
+            SortedSources.pop_front();
             ui32 inFlightCountLocalNew = 0;
             for (auto it = FetchingInFlightSources.begin(); it != FetchingInFlightSources.end(); ++it) {
-                if ((*it)->GetFinish() < SortedSources.front()->GetStart()) {
+                if (SortedSources.empty() || (*it)->GetFinish() < SortedSources.front()->GetStart()) {
                     ++inFlightCountLocalNew;
                 } else {
                     break;
@@ -156,10 +160,10 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
             }
             AFL_VERIFY(inFlightCountLocal <= inFlightCountLocalNew);
             inFlightCountLocal = inFlightCountLocalNew;
+            changed = true;
         }
-        changed = true;
+        IntervalsInFlightCount = inFlightCountLocal;
     }
-    IntervalsInFlightCount = inFlightCountLocal;
     return changed;
 }
 

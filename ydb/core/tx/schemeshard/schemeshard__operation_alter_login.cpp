@@ -42,13 +42,13 @@ public:
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                            Schema::LoginSids::SidHash,
                                                                            Schema::LoginSids::CreatedAt>(sid.Type, sid.Hash, ToInstant(sid.CreatedAt).MilliSeconds());
-                        if (securityConfig.HasAllUsersGroup()) {
+                        if (const auto& allUsersGroup = securityConfig.GetAllUsersGroup(); !allUsersGroup.empty()) {
                             auto response = context.SS->LoginProvider.AddGroupMembership({
-                                .Group = securityConfig.GetAllUsersGroup(),
+                                .Group = allUsersGroup,
                                 .Member = createUser.GetUser(),
                             });
                             if (!response.Error) {
-                                db.Table<Schema::LoginSidMembers>().Key(securityConfig.GetAllUsersGroup(), createUser.GetUser()).Update();
+                                db.Table<Schema::LoginSidMembers>().Key(allUsersGroup, createUser.GetUser()).Update();
                             }
                         }
                         result->SetStatus(NKikimrScheme::StatusSuccess);

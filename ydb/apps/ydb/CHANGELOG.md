@@ -1,4 +1,4 @@
-* Fixed bug with backslashes in db paths in benchmark workload in YDB on Windows
+* Fixed a bug with backslashes in `ydb workload` benchmark paths on Windows
 * Added CREATE TABLE text suggestion on scheme error during `ydb import file csv`
 * Backup and restore of changefeeds has been added to `ydb tools dump` and `ydb tools restore`. As a result, there are changes in the backup file structure: for tables with changefeeds, a subdirectory is created for each changefeed, named after the changefeed. This subdirectory contains two files: `changefeed_description.pb`, which contains the changefeed description, and `topic_description.pb`, which contains information about the underlying topic.
 * Added `--skip-checksum-validation` option to `ydb import s3` command to skip server-side checksum validation.

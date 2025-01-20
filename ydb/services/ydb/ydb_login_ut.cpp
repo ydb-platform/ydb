@@ -38,7 +38,7 @@ public:
     void CreateUser(TString user, TString password) {
         TClient client(*(Server.ServerSettings));
         client.SetSecurityToken("root@builtin");
-        auto status = client.CreateUser("/Root", { .User = user, .Password = password});
+        auto status = client.CreateUser("/Root", user, password);
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
     }
 

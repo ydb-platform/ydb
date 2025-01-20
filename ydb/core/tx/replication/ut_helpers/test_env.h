@@ -93,7 +93,7 @@ public:
         const auto db = "/" + ToString(DomainName);
         // create user & set owner
         {
-            auto st = Client.CreateUser(db, { .User = user, .Password = password});
+            auto st = Client.CreateUser(db, user, password);
             UNIT_ASSERT_VALUES_EQUAL(st, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
 
             Client.ModifyOwner("/", DomainName, user);

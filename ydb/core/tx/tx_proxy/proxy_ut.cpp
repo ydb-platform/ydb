@@ -996,13 +996,13 @@ Y_UNIT_TEST_SUITE(TModifyUserTest) {
         auto& client = env.GetClient();
         TString user1Token;
         {
-            client.CreateUser("/dc-1", { .User = "user1", .Password = "pass1"}, "root@builtin");
+            client.CreateUser("/dc-1", "user1", "pass1", "root@builtin");
             user1Token = CheckLogin(client, env.GetRuntime(), "user1", "pass1");
         }
 
         TString user2Token;
         {
-            client.CreateUser("/dc-1", { .User = "user2", .Password = "pass2"}, "root@builtin");
+            client.CreateUser("/dc-1", "user2", "pass2", "root@builtin");
             user2Token = CheckLogin(client, env.GetRuntime(), "user2", "pass2");
         }
 

@@ -237,9 +237,6 @@ void TTieringActualizer::DoExtractTasks(
 }
 
 void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext) {
-    if (Tiering && !info) {
-        AFL_VERIFY(false)("what", "tiering_reset");   // TODO: remove (debug)
-    }
     AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "refresh_tiering")("has_tiering", !!info)(
         "tiers", info ? info->GetOrderedTiers().size() : 0)("had_tiering_before", !!Tiering);
     Tiering = info;

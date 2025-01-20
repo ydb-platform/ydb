@@ -1,18 +1,17 @@
 #pragma once
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
-#include <util/system/yassert.h>
 #include <util/system/defaults.h>
+#include <util/system/yassert.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-
-#include <type_traits>
 #include <stack>
-#include <vector>
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 namespace NKikimr {
 
@@ -307,5 +306,4 @@ i64 GetTotalMmapedBytes();
 template<typename TMmap = TSystemMmap>
 i64 GetTotalFreeListBytes();
 
-
-} // NKikimr
+} // namespace NKikimr

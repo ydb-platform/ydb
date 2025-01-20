@@ -1,22 +1,21 @@
 #pragma once
+
 #include "aligned_page_pool.h"
 #include "mkql_mem_info.h"
+
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_value.h>
+
 #include <util/string/builder.h>
 #include <util/system/align.h>
 #include <util/system/defaults.h>
 #include <util/system/tls.h>
-#include <new>
+
 #include <unordered_map>
-#include <atomic>
-#include <memory>
 
-namespace NKikimr {
-
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 const ui64 MKQL_ALIGNMENT = 16;
 
@@ -164,7 +163,7 @@ struct TMkqlPAllocHeader {
     ui64 Self; // should be placed right before pointer to allocated area, see GetMemoryChunkContext
 };
 
-static_assert(sizeof(TMkqlPAllocHeader) == 
+static_assert(sizeof(TMkqlPAllocHeader) ==
     sizeof(size_t) +
     sizeof(TAllocState::TListEntry) +
     sizeof(void*), "Padding is not allowed");
@@ -291,7 +290,7 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool);
 inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     Y_DEBUG_ABORT_UNLESS(state);
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
     auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
     if (!ret) {
         throw TMemoryLimitExceededException();
@@ -317,7 +316,7 @@ inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemoryS
 
     bool useMemalloc = state->SupportsSizedAllocators && sz > MaxPageUserData;
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
     useMemalloc = true;
 #endif
 
@@ -350,7 +349,7 @@ inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool) noex
         return;
     }
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
     TAllocState *state = TlsAllocState;
     Y_DEBUG_ABORT_UNLESS(state);
 
@@ -379,7 +378,7 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state,
 
     bool useFree = state->SupportsSizedAllocators && sz > MaxPageUserData;
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
     useFree = true;
 #endif
 
@@ -724,6 +723,4 @@ inline void TBoxedValueWithFree::operator delete(void *mem) noexcept {
     MKQLFreeWithSize(mem, size, EMemorySubPool::Default);
 }
 
-} // NMiniKQL
-
-} // NKikimr
+} // namespace NKikimr::NMiniKQL

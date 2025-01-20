@@ -1,11 +1,8 @@
 #include "mkql_alloc.h"
-#include <util/system/align.h>
-#include <yql/essentials/public/udf/udf_value.h>
+
 #include <tuple>
 
-namespace NKikimr {
-
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_POD_THREAD(TAllocState*) TlsAllocState;
 
@@ -49,7 +46,7 @@ void TAllocState::CleanupPAllocList(TListEntry* root) {
 void TAllocState::CleanupArrowList(TListEntry* root) {
     for (auto curr = root->Right; curr != root; ) {
         auto next = curr->Right;
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
         free(curr);
 #else
         auto size = ((TMkqlArrowHeader*)curr)->Size;
@@ -256,7 +253,7 @@ void* MKQLArrowAllocate(ui64 size) {
         state->OffloadAlloc(fullSize);
     }
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
     auto ptr = malloc(fullSize);
     if (!ptr) {
         throw TMemoryLimitExceededException();
@@ -297,7 +294,7 @@ void MKQLArrowFree(const void* mem, ui64 size) {
     }
 
     Y_ENSURE(size == header->Size);
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
     free(header);
 #else
     ReleaseAlignedPage(header, fullSize);
@@ -325,6 +322,4 @@ void MKQLArrowUntrack(const void* mem) {
     }
 }
 
-} // NMiniKQL
-
-} // NKikimr
+} // namespace NKikimr::NMiniKQL

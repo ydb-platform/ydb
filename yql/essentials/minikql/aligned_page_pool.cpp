@@ -1,13 +1,12 @@
 #include "aligned_page_pool.h"
 
-#include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/string/cast.h>
 #include <util/string/strip.h>
 #include <util/system/align.h>
 #include <util/system/compiler.h>
-#include <util/system/info.h>
 #include <util/system/error.h>
+#include <util/system/info.h>
 #include <util/thread/lfstack.h>
 
 #if defined(_win_)
@@ -95,7 +94,7 @@ public:
 private:
 
     size_t PushPage(void* addr) {
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
         FreePage(addr);
         return GetPageSize();
 #else
@@ -404,7 +403,7 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
         throw TMemoryLimitExceededException();
     }
 
-#ifndef PROFILE_MEMORY_ALLOCATIONS
+#if !defined(PROFILE_MEMORY_ALLOCATIONS)
     if (const auto ptr = TGlobalPools<T, false>::Instance().Get(0).GetPage()) {
         TotalAllocated += POOL_PAGE_SIZE;
         if (AllocNotifyCallback) {
@@ -423,7 +422,7 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
     ++PageMissCount;
 #endif
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
     const auto res = GetBlock(POOL_PAGE_SIZE);
 #else
     const auto res = Alloc(POOL_PAGE_SIZE);
@@ -435,7 +434,7 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
     ReturnBlock(addr, POOL_PAGE_SIZE);
 #else
     Y_DEBUG_ABORT_UNLESS(AllPages.find(addr) != AllPages.end());
@@ -447,7 +446,7 @@ template<typename T>
 void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
     Y_DEBUG_ABORT_UNLESS(size >= POOL_PAGE_SIZE);
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
     OffloadAlloc(size);
     auto ret = malloc(size);
     if (!ret) {
@@ -470,7 +469,7 @@ template<typename T>
 void TAlignedPagePoolImpl<T>::ReturnBlock(void* ptr, size_t size) noexcept {
     Y_DEBUG_ABORT_UNLESS(size >= POOL_PAGE_SIZE);
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
     OffloadFree(size);
     free(ptr);
 #else
@@ -747,4 +746,4 @@ template void ReleaseAlignedPage<>(void*,ui64);
 template void ReleaseAlignedPage<TFakeAlignedMmap>(void*,ui64);
 template void ReleaseAlignedPage<TFakeUnalignedMmap>(void*,ui64);
 
-} // NKikimr
+} // namespace NKikimr

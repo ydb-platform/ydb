@@ -867,8 +867,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
 
     RowsDuplicationsFound = KqpGroup->GetCounter("RowsDuplicationFound", true);
 
-    TotalSingleShardTxCount = KqpGroup->GetCounter("TotalSingleShardTxCount", true);
-    NonLocalSingleShardTxCount = KqpGroup->GetCounter("NonLocalSingleShardTxCount", true);
+    TotalSingleNodeReqCount = KqpGroup->GetCounter("TotalSingleNodeReqCount", true);
+    NonLocalSingleNodeReqCount = KqpGroup->GetCounter("NonLocalSingleNodeReqCount", true);
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

@@ -8,7 +8,7 @@
 
 - Linux (amd64)
 
-   {% include notitle [Linux](_includes/ydb-cli/linux.md) %}
+   {% include notitle [Linux](_includes/ydb-cli/linux_amd64.md) %}
 
 - Linux (arm64)
 

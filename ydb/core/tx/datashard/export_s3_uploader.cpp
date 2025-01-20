@@ -944,7 +944,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         Ydb::StatusIds::StatusCode status;
         TString error;
         FillTopicDescription(topic, pq.GetPersQueueGroup(), pq.GetSelf(), cdcStream.GetName(), status, error);
-
+        topic.Mutableself()->Clearcreated_at(); // Unnecessary information
         changefeeds.emplace_back(changefeed, topic);
     }
 

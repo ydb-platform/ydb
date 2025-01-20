@@ -27,11 +27,11 @@
 
 {% include notitle [builtin-groups-graph](../_includes/builtin-groups-graph.md) %}
 
-Например, пользователям группы `DATA-WRITERS`:
+Например, пользователям группы `DATA-WRITERS` разрешено:
 
-- разрешено смотреть схему -- `METADATA-READERS`
-- читать данные -- `DATA-READERS`
-- и менять их -- `DATA-WRITERS`
+- смотреть схему --`METADATA-READERS`;
+- читать данные -- `DATA-READERS`;
+- и менять их -- `DATA-WRITERS`.
 
 Пользователям группы `DDL-ADMINS`:
 

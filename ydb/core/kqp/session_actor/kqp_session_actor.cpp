@@ -282,7 +282,7 @@ public:
             if (!ctx->BufferActorId) {
                 Transactions.AddToBeAborted(std::move(ctx));
             } else {
-                TerminateBufferActor();
+                TerminateBufferActor(ctx);
             }
             ReplySuccess();
         } else {
@@ -1992,7 +1992,7 @@ public:
             if (!ctx->BufferActorId) {
                 Transactions.AddToBeAborted(std::move(ctx));
             } else {
-                TerminateBufferActor();
+                TerminateBufferActor(ctx);
             }
         }
 
@@ -2017,7 +2017,7 @@ public:
             if (!ctx->BufferActorId) {
                 Transactions.AddToBeAborted(std::move(ctx));
             } else {
-                TerminateBufferActor();
+                TerminateBufferActor(ctx);
             }
         }
 
@@ -2220,10 +2220,10 @@ public:
 
     void ResetTxState() {
         if (QueryState->TxCtx) {
+            TerminateBufferActor(QueryState->TxCtx);
             QueryState->TxCtx->ClearDeferredEffects();
             QueryState->TxCtx->Locks.Clear();
             QueryState->TxCtx->TxManager.reset();
-            TerminateBufferActor();
             QueryState->TxCtx->Finish();
         }
     }
@@ -2238,18 +2238,18 @@ public:
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
             if (txCtx->IsInvalidated()) {
-                if (!txCtx->TxManager) {
+                if (!txCtx->BufferActorId) {
                     Transactions.AddToBeAborted(txCtx);
                 } else {
-                    TerminateBufferActor();
+                    TerminateBufferActor(txCtx);
                 }
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }
 
-        if (isFinal)
-            TerminateBufferActor();
+        if (isFinal && QueryState)
+            TerminateBufferActor(QueryState->TxCtx);
 
         if (isFinal)
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
@@ -2720,10 +2720,10 @@ private:
         QueryState->TxCtx->TopicOperations.SetWriteId(std::move(handle));
     }
 
-    void TerminateBufferActor() {
-        if (QueryState && QueryState->TxCtx && QueryState->TxCtx->BufferActorId) {
-            Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
-            QueryState->TxCtx->BufferActorId = {};
+    void TerminateBufferActor(TIntrusivePtr<TKqpTransactionContext> ctx) {
+        if (ctx && ctx->BufferActorId) {
+            Send(ctx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
+            ctx->BufferActorId = {};
         }
     }
 

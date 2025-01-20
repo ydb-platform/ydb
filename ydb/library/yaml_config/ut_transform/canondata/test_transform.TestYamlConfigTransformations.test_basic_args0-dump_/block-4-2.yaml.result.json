@@ -243,17 +243,7 @@
           {
             "Hive":72057594037968897
           }
-        ],
-      "SecurityConfig":
-        {
-          "DefaultUsers":
-            [
-              {
-                "Name":"root",
-                "Password":"1234"
-              }
-            ]
-        }
+        ]
     },
   "BlobStorageConfig":
     {
@@ -1544,6 +1534,13 @@
     },
   "SecurityConfig":
     {
+      "DefaultUsers":
+        [
+          {
+            "Name":"root",
+            "Password":"1234"
+          }
+        ],
       "DefaultGroups":
         [
           {

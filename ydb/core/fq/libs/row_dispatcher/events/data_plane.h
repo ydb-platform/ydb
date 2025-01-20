@@ -49,6 +49,7 @@ struct TEvRowDispatcher {
         EvCoordinatorResult,
         EvSessionStatistic,
         EvHeartbeat,
+        EvNoSession,
         EvGetInternalStateRequest,
         EvGetInternalStateResponse,
         EvPurecalcCompileRequest,
@@ -85,6 +86,8 @@ struct TEvRowDispatcher {
         NFq::NRowDispatcherProto::TEvGetAddressResponse, EEv::EvCoordinatorResult> {
         TEvCoordinatorResult() = default;
     };
+
+// Session events (with seqNo checks)
 
     struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
         NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
@@ -160,8 +163,17 @@ struct TEvRowDispatcher {
         TTopicSessionStatistic Stat;
     };
 
+// Network events (without seqNo checks)
+
     struct TEvHeartbeat : public NActors::TEventPB<TEvHeartbeat, NFq::NRowDispatcherProto::TEvHeartbeat, EEv::EvHeartbeat> {
         TEvHeartbeat() = default;
+    };
+
+    struct TEvNoSession : public NActors::TEventPB<TEvNoSession, NFq::NRowDispatcherProto::TEvNoSession, EEv::EvNoSession> {
+        TEvNoSession() = default;
+        TEvNoSession(ui32 partitionId) {
+            Record.SetPartitionId(partitionId);
+        }
     };
 
     struct TEvGetInternalStateRequest : public NActors::TEventPB<TEvGetInternalStateRequest,

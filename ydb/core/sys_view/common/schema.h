@@ -54,6 +54,8 @@ namespace NAuth {
     constexpr TStringBuf GroupsName = "auth_groups";
     constexpr TStringBuf GroupMembersName = "auth_group_members";
     constexpr TStringBuf OwnersName = "auth_owners";
+    constexpr TStringBuf PermissionsName = "auth_permissions";
+    constexpr TStringBuf EffectivePermissionsName = "auth_effective_permissions";
 }
 
 
@@ -655,6 +657,19 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<
             Path,
             Sid
+        >;
+    };
+
+    struct AuthPermissions : Table<19> {
+        struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Sid: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Permission: Column<3, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Path, Sid, Permission>;
+        using TColumns = TableColumns<
+            Path,
+            Sid,
+            Permission
         >;
     };
 

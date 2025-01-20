@@ -1,5 +1,5 @@
 diff --git a/include/locale b/include/locale
-index 70d22ff..2806396 100644
+index e3c63e3..13b911c 100644
 --- a/include/locale
 +++ b/include/locale
 @@ -2168,7 +2168,11 @@ public:

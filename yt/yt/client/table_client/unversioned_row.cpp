@@ -11,8 +11,6 @@
 
 #include <yt/yt/library/decimal/decimal.h>
 
-#include <yt/yt/core/misc/range.h>
-
 #include <yt/yt/core/yson/consumer.h>
 
 #include <yt/yt/core/ytree/attributes.h>
@@ -21,6 +19,7 @@
 
 #include <library/cpp/yt/misc/hash.h>
 
+#include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/tls_scratch.h>
 
 #include <library/cpp/yt/farmhash/farm_hash.h>

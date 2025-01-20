@@ -2586,6 +2586,7 @@ public:
             Settings.GetTable().GetVersion())
         , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "TKqpForwardWriteActor")
     {
+        Counters->ForwardActorsCount->Inc();
         EgressStats.Level = args.StatsLevel;
 
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
@@ -2602,7 +2603,6 @@ public:
     }
 
     void Bootstrap() {
-        Counters->ForwardActorsCount->Inc();
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         Become(&TKqpForwardWriteActor::StateFuncFwd);
     }

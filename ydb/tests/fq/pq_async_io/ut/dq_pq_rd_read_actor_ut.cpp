@@ -248,7 +248,7 @@ struct TFixture : public TPqIoTestFixture {
     void MockUndelivered(NActors::TActorId rowDispatcherId, ui64 generation = 0, NActors::TEvents::TEvUndelivered::EReason reason = NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NActors::TEvents::TEvUndelivered(0, reason);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event, 0, generation));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
 
@@ -535,7 +535,6 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req2->Cookie);
         ExpectStartSession({{PartitionId1, 2}}, RowDispatcher1, 2);
 
-        ExpectStartSession(2, RowDispatcher1, 2);
         MockAck(RowDispatcher1);
     }
 }

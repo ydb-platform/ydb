@@ -928,7 +928,7 @@ TDqPqRdReadActor::TSession* TDqPqRdReadActor::FindSession(const TEventPtr& ev) {
 
     if (ev->Cookie != session.Generation) {
         SRC_LOG_W("Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << session.Generation << ", send TEvStopSession");
-        SendNoSession(ev->Sender, partitionId, ev->Cookie);
+        SendNoSession(ev->Sender, ev->Cookie);
         return nullptr;
     }
     if (!session.EventsQueue.OnEventReceived(ev)) {

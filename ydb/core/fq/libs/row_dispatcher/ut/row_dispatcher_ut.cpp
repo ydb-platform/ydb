@@ -156,7 +156,7 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
     }
 
-    void MockNoSession(ui64 partitionId, TActorId readActorId) {
+    void MockNoSession(TActorId readActorId) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvNoSession>();
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
     }
@@ -440,14 +440,14 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
     }
 
     Y_UNIT_TEST_F(ProcessNoSession, TFixture) {
-        MockAddSession(Source1, PartitionId0, ReadActorId3);
+        MockAddSession(Source1, {PartitionId0}, ReadActorId3);
         auto topicSessionId = ExpectRegisterTopicSession();
         ExpectStartSessionAck(ReadActorId3);
         ExpectStartSession(topicSessionId);
         ProcessData(ReadActorId3, PartitionId0, topicSessionId);
 
-        MockNoSession(PartitionId0, ReadActorId3);
-        ExpectStopSession(topicSessionId, PartitionId0);
+        MockNoSession(ReadActorId3);
+        ExpectStopSession(topicSessionId);
     }
 }
 

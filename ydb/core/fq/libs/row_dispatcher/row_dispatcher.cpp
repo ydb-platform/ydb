@@ -865,8 +865,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Received TEvNoSession from " << ev->Sender << ", cookie " << ev->Cookie);
-    ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
-    DeleteConsumer(key);
+    DeleteConsumer(ev->Sender);
 }
 
 template <class TEventPtr>
@@ -892,7 +891,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 
     LWPROBE(StopSession, ev->Sender.ToString(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() << " query id " << it->second->QueryId);
-    const auto& consumer = it->second;
     if (!CheckSession(it->second, ev)) {
         return;
     }

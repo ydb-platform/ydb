@@ -14,11 +14,11 @@
 
   {% include notitle [LinuxArm64](_includes/ydb-cli/linux_arm64.md) %}
 
-- macOS (amd64)
+- MacOS (amd64)
 
   {% include notitle [macIntel](_includes/ydb-cli/darwin_amd64.md) %}
 
-- macOS (arm64)
+- MacOS (arm64)
 
   {% include notitle [macM1](_includes/ydb-cli/darwin_arm64.md) %}
 

@@ -1,0 +1,20 @@
+allowHTML: true
+langs: ['en','ru']
+singlePage: true
+docs-viewer:
+  project-name: yql-core
+  abc-slug: yql
+  index-page:
+    hidden:
+      testing: false
+      production: false
+    title: YQL core
+    description: Язык запросов YQL
+  auto-release-to:
+    testing: false
+    prod: false
+  single-page:
+    supported: true
+  startrek:
+    queue: YQLSUPPORT
+    components: [docs]

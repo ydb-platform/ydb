@@ -279,7 +279,11 @@ public:
         auto txId = TTxId::FromString(txControl.tx_id());
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            Transactions.AddToBeAborted(std::move(ctx));
+            if (!ctx->BufferActorId) {
+                Transactions.AddToBeAborted(std::move(ctx));
+            } else {
+                TerminateBufferActor(ctx);
+            }
             ReplySuccess();
         } else {
             ReplyTransactionNotFound(txControl.tx_id());
@@ -1403,7 +1407,9 @@ public:
             RequestCounters, Settings.TableService,
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings,
+            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
+            (!Settings.TableService.GetEnableOltpSink() && QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
+                ? GUCSettings : nullptr,
             txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId);
 
         auto exId = RegisterWithSameMailbox(executerActor);
@@ -1674,13 +1680,11 @@ public:
             LOG_W(logMsg);
         }
 
-        TString reason = TStringBuilder() << msg.Message << "; " << msg.SubIssues.ToString();
-
         if (ExecuterId) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.StatusCode, reason);
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.StatusCode, msg.Issues);
             Send(ExecuterId, abortEv.Release(), IEventHandle::FlagTrackDelivery);
         } else {
-            ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), logMsg, MessageFromIssues(msg.SubIssues));
+            ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), logMsg, MessageFromIssues(msg.Issues));
         }
     }
 
@@ -1985,7 +1989,11 @@ public:
         LOG_W("ReplyQueryCompileError, status " << QueryState->CompileResult->Status << " remove tx with tx_id: " << txId.GetHumanStr());
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            Transactions.AddToBeAborted(std::move(ctx));
+            if (!ctx->BufferActorId) {
+                Transactions.AddToBeAborted(std::move(ctx));
+            } else {
+                TerminateBufferActor(ctx);
+            }
         }
 
         auto* record = &QueryResponse->Record;
@@ -2006,7 +2014,11 @@ public:
         auto txId = TTxId();
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            Transactions.AddToBeAborted(std::move(ctx));
+            if (!ctx->BufferActorId) {
+                Transactions.AddToBeAborted(std::move(ctx));
+            } else {
+                TerminateBufferActor(ctx);
+            }
         }
 
         FillTxInfo(record.MutableResponse());
@@ -2208,15 +2220,10 @@ public:
 
     void ResetTxState() {
         if (QueryState->TxCtx) {
+            TerminateBufferActor(QueryState->TxCtx);
             QueryState->TxCtx->ClearDeferredEffects();
             QueryState->TxCtx->Locks.Clear();
             QueryState->TxCtx->TxManager.reset();
-
-            if (QueryState->TxCtx->BufferActorId) {
-                Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
-                QueryState->TxCtx->BufferActorId = {};
-            }
-
             QueryState->TxCtx->Finish();
         }
     }
@@ -2231,11 +2238,18 @@ public:
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
             if (txCtx->IsInvalidated()) {
-                Transactions.AddToBeAborted(txCtx);
+                if (!txCtx->BufferActorId) {
+                    Transactions.AddToBeAborted(txCtx);
+                } else {
+                    TerminateBufferActor(txCtx);
+                }
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }
+
+        if (isFinal && QueryState)
+            TerminateBufferActor(QueryState->TxCtx);
 
         if (isFinal)
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
@@ -2704,6 +2718,13 @@ private:
 
     void SetTopicWriteId(NLongTxService::TLockHandle handle) {
         QueryState->TxCtx->TopicOperations.SetWriteId(std::move(handle));
+    }
+
+    void TerminateBufferActor(TIntrusivePtr<TKqpTransactionContext> ctx) {
+        if (ctx && ctx->BufferActorId) {
+            Send(ctx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
+            ctx->BufferActorId = {};
+        }
     }
 
 private:

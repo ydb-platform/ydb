@@ -7,7 +7,12 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
 
     def test_concurrent_bulkinsert_and_count(self):
         """
-        Test concurrent operations: inserting into lineitem and counting records from lineitem.
+        Tests concurrent bulk insert and count operations.
+        Creates two tables and runs parallel operations:
+        - Multiple threads performing bulk inserts of 100k records into lineitem table
+        - Single thread continuously counting and storing results in count table
+        Verifies consistency between insert and count operations.
+
         """
         lineitem_table = f"{self.tpch_default_path()}/lineitem"
         count_table = f"{self.tpch_default_path()}/lineitem_count"
@@ -65,6 +70,8 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
 
             # Wait for the insert operation to complete, then allow reading to complete
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         # Verify that both operations completed successfully
         final_count = self.query(f"SELECT count(*) as cntr FROM `{count_table}` WHERE cntr > 0;")
@@ -72,7 +79,11 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
 
     def test_concurrent_upsert_and_count_tx(self):
         """
-        Test concurrent operations: inserting into lineitem and counting records from lineitem.
+        Tests concurrent transactional upserts and count operations.
+        Creates two tables and runs parallel operations in transactions:
+        - Multiple threads performing transactional upserts of 100k records into lineitem
+        - Single thread continuously counting and storing results
+        Verifies data consistency between concurrent transactional operations.
         """
         lineitem_table = f"{self.tpch_default_path()}/lineitem"
         count_table = f"{self.tpch_default_path()}/lineitem_count"
@@ -87,6 +98,8 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
             PARTITION BY HASH(id)
             WITH(STORE=COLUMN)
         """)
+
+        count_future = None
 
         # One worker thread required be
         num_threads = 10
@@ -144,6 +157,8 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
 
             # Wait for the insert operation to complete, then allow reading to complete
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         # Verify that both operations completed successfully
         final_count = self.query(f"SELECT count(*) as cntr FROM `{count_table}` WHERE cntr > 0;")
@@ -151,7 +166,12 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
 
     def test_concurrent_upsert_and_count(self):
         """
-        Test concurrent operations: inserting into lineitem and counting records from lineitem.
+        Tests concurrent batch upserts and count operations.
+        Creates two tables and runs parallel operations:
+        - Multiple threads performing batch upserts of 100k records into lineitem
+        - Single thread continuously counting and storing results
+        Combines multiple upsert statements into single batch query for better performance.
+        Verifies data consistency between concurrent operations.
         """
         lineitem_table = f"{self.tpch_default_path()}/lineitem"
         count_table = f"{self.tpch_default_path()}/lineitem_count"
@@ -214,6 +234,8 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
 
             # Wait for the insert operation to complete, then allow reading to complete
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         # Verify that both operations completed successfully
         final_count = self.query(f"SELECT count(*) as cntr FROM `{count_table}` WHERE cntr > 0;")

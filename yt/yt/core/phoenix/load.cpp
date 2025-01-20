@@ -6,7 +6,7 @@
 
 #include <library/cpp/iterator/zip.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 using namespace NYson;
 
@@ -153,4 +153,4 @@ TLoadSessionGuard::~TLoadSessionGuard()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix

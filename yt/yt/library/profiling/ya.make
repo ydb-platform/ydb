@@ -14,7 +14,7 @@ SRCS(
 PEERDIR(
     library/cpp/yt/assert
     library/cpp/yt/cpu_clock
-    library/cpp/yt/small_containers
+    library/cpp/yt/compact_containers
     library/cpp/yt/string
     library/cpp/yt/memory
 )

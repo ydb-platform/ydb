@@ -192,7 +192,7 @@ private:
 
         Fibers_.Append(std::move(toRegister));
 
-        // NB: util intrusive list does not return
+        // NB: Util intrusive list does not return
         // nullptr in case of empty!
         // We have to check ourselves that
         // PopBack return is a valid one.

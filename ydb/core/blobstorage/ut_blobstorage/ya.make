@@ -41,10 +41,12 @@ SRCS(
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
+    shred.cpp
     snapshots.cpp
     space_check.cpp
     sync.cpp
     ut_helpers.cpp
+    validation.cpp
 )
 
 PEERDIR(

@@ -2788,7 +2788,8 @@ void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrPro
 
     logWrite->SpanStack.PopError(err.Str());
     logWrite->Result.Reset(new NPDisk::TEvLogResult(status,
-            GetStatusFlags(logWrite->Owner, logWrite->OwnerGroupType), err.Str()));
+        GetStatusFlags(logWrite->Owner, logWrite->OwnerGroupType), err.Str(),
+        Keeper.GetLogChunkCount()));
     logWrite->Result->Results.push_back(NPDisk::TEvLogResult::TRecord(logWrite->Lsn, logWrite->Cookie));
 }
 
@@ -3804,7 +3805,7 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         // Can't be processed in read-only mode.
         case ERequestType::RequestLogWrite: {
             TLogWrite &req = *static_cast<TLogWrite*>(request);
-            NPDisk::TEvLogResult* result = new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, errorReason);
+            NPDisk::TEvLogResult* result = new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, errorReason, 0);
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(req.Lsn, req.Cookie));
             PCtx->ActorSystem->Send(sender, result);
             req.Replied = true;

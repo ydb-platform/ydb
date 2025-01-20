@@ -49,14 +49,14 @@ namespace orc {
    */
   class BufferedOutputStream : public google::protobuf::io::ZeroCopyOutputStream {
    private:
-    OutputStream* outputStream;
-    std::unique_ptr<BlockBuffer> dataBuffer;
-    uint64_t blockSize;
-    WriterMetrics* metrics;
+    OutputStream* outputStream_;
+    std::unique_ptr<BlockBuffer> dataBuffer_;
+    uint64_t blockSize_;
+    WriterMetrics* metrics_;
 
    public:
     BufferedOutputStream(MemoryPool& pool, OutputStream* outStream, uint64_t capacity,
-                         uint64_t block_size, WriterMetrics* metrics);
+                         uint64_t blockSize, WriterMetrics* metrics);
     virtual ~BufferedOutputStream() override;
 
     virtual bool Next(void** data, int* size) override;
@@ -69,10 +69,12 @@ namespace orc {
     virtual uint64_t getSize() const;
     virtual uint64_t flush();
     virtual void suppress();
+    virtual uint64_t getRawInputBufferSize() const;
 
     virtual bool isCompressed() const {
       return false;
     }
+    virtual void finishStream();
   };
   DIAGNOSTIC_POP
 
@@ -84,20 +86,21 @@ namespace orc {
    */
   class AppendOnlyBufferedStream {
    private:
-    std::unique_ptr<BufferedOutputStream> outStream;
-    char* buffer;
-    int bufferOffset, bufferLength;
+    std::unique_ptr<BufferedOutputStream> outStream_;
+    char* buffer_;
+    int bufferOffset_, bufferLength_;
 
    public:
-    AppendOnlyBufferedStream(std::unique_ptr<BufferedOutputStream> _outStream)
-        : outStream(std::move(_outStream)) {
-      buffer = nullptr;
-      bufferOffset = bufferLength = 0;
+    AppendOnlyBufferedStream(std::unique_ptr<BufferedOutputStream> outStream)
+        : outStream_(std::move(outStream)) {
+      buffer_ = nullptr;
+      bufferOffset_ = bufferLength_ = 0;
     }
 
     void write(const char* data, size_t size);
     uint64_t getSize() const;
     uint64_t flush();
+    void finishStream();
 
     void recordPosition(PositionRecorder* recorder) const;
   };

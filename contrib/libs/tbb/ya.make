@@ -4,7 +4,7 @@ LIBRARY()
 
 VERSION(2021.8.0)
 
-ORIGINAL_SOURCE(https://github.com/oneapi-src/oneTBB/archive/v2021.8.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/uxlfoundation/oneTBB/archive/v2021.8.0.tar.gz)
 
 LICENSE(Apache-2.0)
 

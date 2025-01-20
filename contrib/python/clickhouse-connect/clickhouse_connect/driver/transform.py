@@ -55,13 +55,7 @@ class NativeTransform:
                     # We ran out of data before it was expected, this could be ClickHouse reporting an error
                     # in the response
                     if source.last_message:
-                        message = source.last_message
-                        if len(message) > 1024:
-                            message = message[-1024:]
-                        error_start = message.find('Code: ')
-                        if error_start != -1:
-                            message = message[error_start:]
-                        raise StreamFailureError(message) from None
+                        raise StreamFailureError(extract_error_message(source.last_message)) from None
                 raise
             block_num += 1
             return result_block
@@ -119,3 +113,16 @@ class NativeTransform:
                 yield footer
 
         return chunk_gen()
+
+
+def extract_error_message(message: bytes) -> str:
+    if len(message) > 1024:
+        message = message[-1024:]
+    error_start = message.find('Code: '.encode())
+    if error_start != -1:
+        message = message[error_start:]
+    try:
+        message_str = message.decode()
+    except UnicodeError:
+        message_str = f'unrecognized data found in stream: `{message.hex()[128:]}`'
+    return message_str

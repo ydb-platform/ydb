@@ -1029,10 +1029,12 @@ public:
 
     bool IsLocalAddress(const TNetworkAddress& address)
     {
-        TNetworkAddress localIP{address, 0};
-
+        if (!address.IsIP()) {
+            return false;
+        }
+        TNetworkAddress candidateAddress(address, /*port*/ 0);
         const auto& localAddresses = GetLocalAddresses();
-        return std::find(localAddresses.begin(), localAddresses.end(), localIP) != localAddresses.end();
+        return std::find(localAddresses.begin(), localAddresses.end(), candidateAddress) != localAddresses.end();
     }
 
     void PurgeCache()

@@ -52,7 +52,7 @@ struct TTestMetricConsumer
         if (name == "sensor") {
             Name = value;
         } else {
-            Labels.push_back(TString(name) + "=" + value);
+            Labels.push_back(std::string(name) + "=" + value.data());
         }
     }
 
@@ -111,17 +111,17 @@ struct TTestMetricConsumer
         Summaries[FormatName()] = snapshot;
     }
 
-    TString Name;
-    std::vector<TString> Labels;
+    std::string Name;
+    std::vector<std::string> Labels;
 
-    THashMap<TString, i64> Counters;
-    THashMap<TString, double> Gauges;
-    THashMap<TString, NMonitoring::ISummaryDoubleSnapshotPtr> Summaries;
-    THashMap<TString, NMonitoring::IHistogramSnapshotPtr> Histograms;
+    THashMap<std::string, i64> Counters;
+    THashMap<std::string, double> Gauges;
+    THashMap<std::string, NMonitoring::ISummaryDoubleSnapshotPtr> Summaries;
+    THashMap<std::string, NMonitoring::IHistogramSnapshotPtr> Histograms;
 
-    std::vector<TString> LabelsCache;
+    std::vector<std::string> LabelsCache;
 
-    TString FormatName() const
+    std::string FormatName() const
     {
         return Name + "{" + JoinSeq(";", Labels) + "}";
     }
@@ -900,7 +900,7 @@ TEST(TSolomonRegistry, ProducerRemoveSupport)
 class TGaugeSummaryTriple
 {
 public:
-    TGaugeSummaryTriple(TProfiler* profiler, const TString& name, ESummaryPolicy policy)
+    TGaugeSummaryTriple(TProfiler* profiler, const std::string& name, ESummaryPolicy policy)
         : First_(profiler->GaugeSummary(name, policy))
         , Second_(profiler->GaugeSummary(name, policy))
         , Third_(profiler->GaugeSummary(name, policy))
@@ -974,17 +974,19 @@ struct TTagInfo
 
 using TTagInfoMapping = THashMap<std::string, TTagInfo>;
 
-TTagInfo GetLongTag() {
-    TString longTag;
+TTagInfo GetLongTag()
+{
+    std::string longTag;
     longTag.reserve(210);
     for (int index = 0; index < 210; ++index) {
-        longTag.append('a' + index % 26);
+        longTag.append(1, 'a' + index % 26);
     }
-    TString longTagEncoded;
+
+    std::string longTagEncoded;
     longTagEncoded.reserve(200);
     longTagEncoded.append(longTag.begin(), 100).append("...");
     for (int index = 103; index < 200; ++index) {
-        longTagEncoded.append('a' + (index - 103 + 9) % 26);
+        longTagEncoded.append(1, 'a' + (index - 103 + 9) % 26);
     }
 
     return {
@@ -993,7 +995,8 @@ TTagInfo GetLongTag() {
     };
 }
 
-void CheckTags(const TSolomonRegistryPtr& registry, const TTagInfoMapping& tagInfoMapping) {
+void CheckTags(const TSolomonRegistryPtr& registry, const TTagInfoMapping& tagInfoMapping)
+{
     int tagNameLength = tagInfoMapping.begin()->first.size();
 
     TTagSet tagSet;
@@ -1023,7 +1026,7 @@ TEST(TSolomonRegistry, IncorrectSolomonLabelsWeakPolicy)
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
     impl->SetLabelSanitizationPolicy(ELabelSanitizationPolicy::Weak);
-
+std::string a(98, 'a');
     CheckTags(
         impl,
         {
@@ -1041,16 +1044,16 @@ TEST(TSolomonRegistry, IncorrectSolomonLabelsWeakPolicy)
             {
                 "tag2",
                 {
-                    .TagValue = TString(98, 'a')
-                        .append('\0')
+                    .TagValue = std::string(98, 'a')
+                        .append(1, '\0')
                         .append(100, 'a')
-                        .append('\0')
-                        .append('\xff'),
-                    .EncodedTagValue = TString(98, 'a')
+                        .append(1, '\0')
+                        .append(1, '\xff'),
+                    .EncodedTagValue = std::string(98, 'a')
                         .append("%0...")
                         .append(93, 'a')
                         .append("%00")
-                        .append('\xff')
+                        .append(1, '\xff')
                 },
             },
         });
@@ -1079,11 +1082,11 @@ TEST(TSolomonRegistry, IncorrectSolomonLabelsStrongPolicy)
             {
                 "tag2",
                 {
-                    .TagValue = TString(98, 'a')
-                        .append('\xff')
+                    .TagValue = std::string(98, 'a')
+                        .append(1, '\xff')
                         .append(100, 'a')
-                        .append('\0'),
-                    .EncodedTagValue = TString(98, 'a')
+                        .append(1, '\0'),
+                    .EncodedTagValue = std::string(98, 'a')
                         .append("%f...")
                         .append(94, 'a')
                         .append("%00"),

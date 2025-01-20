@@ -76,6 +76,14 @@ TString PermissionsKeySuffix() {
     return "permissions.pb";
 }
 
+TString TopicKeySuffix() {
+    return "topic_description.pb";
+}
+
+TString ChangefeedKeySuffix() {
+    return "changefeed_description.pb";
+}
+
 TString SchemeKeySuffix() {
     return "scheme.pb";
 }
@@ -87,10 +95,6 @@ TString MetadataKeySuffix() {
 TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec) {
     const auto ext = DataFileExtension(format, codec);
     return Sprintf("data_%02d%s", n, ext.c_str());
-}
-
-TString ChecksumKey(const TString& objKey) {
-    return objKey + ".sha256";
 }
 
 } // NBackupRestoreTraits

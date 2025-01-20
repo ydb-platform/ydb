@@ -29,7 +29,6 @@
 #include <vector>
 
 namespace orc {
-
   class ColumnPrinter {
    protected:
     std::string& buffer;
@@ -42,8 +41,13 @@ namespace orc {
     virtual void printRow(uint64_t rowId) = 0;
     // should be called once at the start of each batch of rows
     virtual void reset(const ColumnVectorBatch& batch);
+    struct Param {
+      bool printDecimalAsString = false;
+      bool printDecimalTrimTrailingZeros = false;
+    };
   };
 
-  std::unique_ptr<ColumnPrinter> createColumnPrinter(std::string&, const Type* type);
+  std::unique_ptr<ColumnPrinter> createColumnPrinter(std::string&, const Type* type,
+                                                     ColumnPrinter::Param = {});
 }  // namespace orc
 #endif

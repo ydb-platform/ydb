@@ -48,7 +48,7 @@
 
 {{ ydb-short-name }} DSTool — утилита командной строки для [управления дисковой подсистемой](../maintenance/manual/index.md) кластера {{ ydb-short-name }}.
 
-Для использования утилиты установите Python-пакет [ydb-dstool](https://pypi.org/project/ydb-dstool/).
+Для использования утилиты установите [ydb-dstool](../reference/ydb-dstool/install.md).
 
 ## {{ ydb-short-name }} Ops {#ydbops}
 

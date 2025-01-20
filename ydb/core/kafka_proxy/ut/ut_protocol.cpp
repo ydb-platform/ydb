@@ -121,6 +121,7 @@ public:
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(512);
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(1_KB);
 
+        appConfig.MutableGRpcConfig()->SetHost("::1");
         auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
         limit->SetMinPeriodSeconds(0);
         limit->SetMaxPeriodSeconds(TDuration::Days(1).Seconds());
@@ -138,7 +139,7 @@ public:
 
         if (secure) {
             appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
-            appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+            appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         }
         KikimrServer = std::unique_ptr<TKikimr>(new TKikimr(std::move(appConfig), {}, {}, false, nullptr, nullptr, 0));
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KAFKA_PROXY, NActors::NLog::PRI_TRACE);
@@ -835,10 +836,10 @@ private:
 };
 
 Y_UNIT_TEST_SUITE(KafkaProtocol) {
-    // this test imitates kafka producer behaviour: 
-    // 1. get api version, 
-    // 2. authenticate via sasl, 
-    // 3. acquire producer id, 
+    // this test imitates kafka producer behaviour:
+    // 1. get api version,
+    // 2. authenticate via sasl,
+    // 3. acquire producer id,
     // 4. produce to topic several messages, read them and assert correct contents and metadata
     Y_UNIT_TEST(ProduceScenario) {
         TInsecureTestServer testServer("2");
@@ -1234,7 +1235,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
             }
         }
-            
+
         // create table and init cdc for it
         {
             NYdb::NTable::TTableClient tableClient(*testServer.Driver);

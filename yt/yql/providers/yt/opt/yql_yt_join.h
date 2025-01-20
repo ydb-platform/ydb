@@ -35,7 +35,9 @@ struct TMapJoinSettings {
     ui64 LeftSize = 0;
     ui64 RightSize = 0;
     ui64 LeftMemSize = 0;
+    ui64 LeftMemSizeUsingBlocks = 0;
     ui64 RightMemSize = 0;
+    ui64 RightMemSizeUsingBlocks = 0;
     bool LeftUnique = false;
     bool RightUnique = false;
     ui64 LeftCount = 0;

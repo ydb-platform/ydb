@@ -96,10 +96,10 @@ namespace orc {
 
     ~RleEncoderV2() override {
       delete[] literals;
-      delete[] gapVsPatchList;
-      delete[] zigzagLiterals;
-      delete[] baseRedLiterals;
-      delete[] adjDeltas;
+      delete[] gapVsPatchList_;
+      delete[] zigzagLiterals_;
+      delete[] baseRedLiterals_;
+      delete[] adjDeltas_;
     }
     /**
      * Flushing underlying BufferedOutputStream
@@ -108,19 +108,21 @@ namespace orc {
 
     void write(int64_t val) override;
 
+    void finishEncode() override;
+
    private:
-    const bool alignedBitPacking;
-    uint32_t fixedRunLength;
-    uint32_t variableRunLength;
-    int64_t prevDelta;
-    int32_t histgram[HIST_LEN];
+    const bool alignedBitPacking_;
+    uint32_t fixedRunLength_;
+    uint32_t variableRunLength_;
+    int64_t prevDelta_;
+    int32_t histgram_[HIST_LEN];
 
     // The four list below should actually belong to EncodingOption since it only holds temporal
     // values in write(int64_t val), it is move here for performance consideration.
-    int64_t* gapVsPatchList;
-    int64_t* zigzagLiterals;
-    int64_t* baseRedLiterals;
-    int64_t* adjDeltas;
+    int64_t* gapVsPatchList_;
+    int64_t* zigzagLiterals_;
+    int64_t* baseRedLiterals_;
+    int64_t* adjDeltas_;
 
     uint32_t getOpCode(EncodingType encoding);
     int64_t* prepareForDirectOrPatchedBase(EncodingOption& option);
@@ -169,39 +171,39 @@ namespace orc {
     unsigned char readByte();
 
     void setBufStart(const char* start) {
-      bufferStart = const_cast<char*>(start);
+      bufferStart_ = const_cast<char*>(start);
     }
 
     char* getBufStart() {
-      return bufferStart;
+      return bufferStart_;
     }
 
     void setBufEnd(const char* end) {
-      bufferEnd = const_cast<char*>(end);
+      bufferEnd_ = const_cast<char*>(end);
     }
 
     char* getBufEnd() {
-      return bufferEnd;
+      return bufferEnd_;
     }
 
     uint64_t bufLength() {
-      return bufferEnd - bufferStart;
+      return bufferEnd_ - bufferStart_;
     }
 
     void setBitsLeft(const uint32_t bits) {
-      bitsLeft = bits;
+      bitsLeft_ = bits;
     }
 
     void setCurByte(const uint32_t byte) {
-      curByte = byte;
+      curByte_ = byte;
     }
 
     uint32_t getBitsLeft() {
-      return bitsLeft;
+      return bitsLeft_;
     }
 
     uint32_t getCurByte() {
-      return curByte;
+      return curByte_;
     }
 
     /**
@@ -225,8 +227,8 @@ namespace orc {
                            int64_t* resPatch, uint64_t* patchIdx);
 
     void resetReadLongs() {
-      bitsLeft = 0;
-      curByte = 0;
+      bitsLeft_ = 0;
+      curByte_ = 0;
     }
 
     void resetRun() {
@@ -249,17 +251,17 @@ namespace orc {
     template <typename T>
     uint64_t copyDataFromBuffer(T* data, uint64_t offset, uint64_t numValues, const char* notNull);
 
-    const std::unique_ptr<SeekableInputStream> inputStream;
-    const bool isSigned;
-    unsigned char firstByte;
-    char* bufferStart;
-    char* bufferEnd;
-    uint64_t runLength;                 // Length of the current run
-    uint64_t runRead;                   // Number of returned values of the current run
-    uint32_t bitsLeft;                  // Used by readLongs when bitSize < 8
-    uint32_t curByte;                   // Used by anything that uses readLongs
-    DataBuffer<int64_t> unpackedPatch;  // Used by PATCHED_BASE
-    DataBuffer<int64_t> literals;       // Values of the current run
+    const std::unique_ptr<SeekableInputStream> inputStream_;
+    const bool isSigned_;
+    unsigned char firstByte_;
+    char* bufferStart_;
+    char* bufferEnd_;
+    uint64_t runLength_;                 // Length of the current run
+    uint64_t runRead_;                   // Number of returned values of the current run
+    uint32_t bitsLeft_;                  // Used by readLongs when bitSize < 8
+    uint32_t curByte_;                   // Used by anything that uses readLongs
+    DataBuffer<int64_t> unpackedPatch_;  // Used by PATCHED_BASE
+    DataBuffer<int64_t> literals_;       // Values of the current run
   };
 
   inline void RleDecoderV2::resetBufferStart(uint64_t len, bool resetBuf, uint32_t backupByteLen) {
@@ -268,20 +270,20 @@ namespace orc {
     const void* bufferPointer = nullptr;
 
     if (backupByteLen != 0) {
-      inputStream->BackUp(backupByteLen);
+      inputStream_->BackUp(backupByteLen);
     }
 
     if (len >= remainingLen && resetBuf) {
-      if (!inputStream->Next(&bufferPointer, &bufferLength)) {
+      if (!inputStream_->Next(&bufferPointer, &bufferLength)) {
         throw ParseError("bad read in RleDecoderV2::resetBufferStart");
       }
     }
 
     if (bufferPointer == nullptr) {
-      bufferStart += len;
+      bufferStart_ += len;
     } else {
-      bufferStart = const_cast<char*>(static_cast<const char*>(bufferPointer));
-      bufferEnd = bufferStart + bufferLength;
+      bufferStart_ = const_cast<char*>(static_cast<const char*>(bufferPointer));
+      bufferEnd_ = bufferStart_ + bufferLength;
     }
   }
 }  // namespace orc

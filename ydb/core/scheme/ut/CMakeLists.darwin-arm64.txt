@@ -48,6 +48,7 @@ target_sources(ydb-core-scheme-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/scheme/scheme_borders_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/scheme/scheme_ranges_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/scheme/scheme_tablecell_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/scheme/scheme_types_proto_ut.cpp
 )
 
 

@@ -186,24 +186,24 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     template <typename T>
-    void PutBuffer(TString&& buffer, const TString& key, T stateFunc) {
+    void PutData(TString&& data, const TString& key, T stateFunc) {
         auto request = Aws::S3::Model::PutObjectRequest().WithKey(key);
-        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(buffer)));
+        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(data)));
         this->Become(stateFunc);
     }
 
     template <typename T>
-    void PutBufferWithChecksum(TString&& buffer, const TString& key, TString& checksum, T stateFunc) {
+    void PutDataWithChecksum(TString&& data, const TString& key, TString& checksum, T stateFunc) {
         if (EnableChecksums) {
-            checksum = ComputeChecksum(buffer);
+            checksum = ComputeChecksum(data);
         }
-        PutBuffer(std::move(buffer), key, stateFunc);
+        PutData(std::move(data), key, stateFunc);
     }
 
     template <typename T>
     void PutMessage(const google::protobuf::Message& message, const TString& key, TString& checksum, T stateFunc) {
         google::protobuf::TextFormat::PrintToString(message, &Buffer);
-        PutBufferWithChecksum(std::move(Buffer), key, checksum, stateFunc);
+        PutDataWithChecksum(std::move(Buffer), key, checksum, stateFunc);
     }
 
     void PutScheme(const Ydb::Table::CreateTableRequest& scheme) {
@@ -264,7 +264,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         Y_ABORT_UNLESS(!MetadataUploaded);
 
         Buffer = std::move(Metadata);
-        PutBufferWithChecksum(Buffer, Settings.GetMetadataKey(), MetadataChecksum, &TThis::StateUploadMetadata);
+        PutDataWithChecksum(std::move(Buffer), Settings.GetMetadataKey(), MetadataChecksum, &TThis::StateUploadMetadata);
     }
 
     void UploadChecksum(TString&& checksum, const TString& checksumKey, const TString& objectKeySuffix, 
@@ -272,7 +272,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     {   
         // make checksum verifiable using sha256sum CLI
         checksum += ' ' + objectKeySuffix;
-        PutBuffer(std::move(checksum), checksumKey, &TThis::StateUploadChecksum);
+        PutData(std::move(checksum), checksumKey, &TThis::StateUploadChecksum);
         ChecksumUploadedCallback = checksumUploadedCallback;
     }
 

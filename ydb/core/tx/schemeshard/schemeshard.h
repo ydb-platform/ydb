@@ -95,6 +95,9 @@ namespace TEvSchemeShard {
 
         EvOwnerActorAck,
 
+        EvListUsers,
+        EvListUsersResult,
+
         EvEnd
     };
 
@@ -660,6 +663,14 @@ namespace TEvSchemeShard {
 
     struct TEvOwnerActorAck : TEventPB<TEvOwnerActorAck, NKikimrScheme::TEvOwnerActorAck, EvOwnerActorAck> {
         TEvOwnerActorAck() = default;
+    };
+
+    struct TEvListUsers : TEventPB<TEvListUsers, NKikimrScheme::TEvListUsers, EvListUsers> {
+        TEvListUsers() = default;
+    };
+
+    struct TEvListUsersResult : TEventPB<TEvListUsersResult, NKikimrScheme::TEvListUsersResult, EvListUsersResult> {
+        TEvListUsersResult() = default;
     };
 };
 

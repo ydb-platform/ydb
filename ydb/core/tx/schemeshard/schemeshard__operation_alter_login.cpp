@@ -47,7 +47,7 @@ public:
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                            Schema::LoginSids::SidHash,
                                                                            Schema::LoginSids::CreatedAt,
-                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.Hash, ToInstant(sid.CreatedAt).MilliSeconds(), sid.IsEnabled);
+                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MilliSeconds(), sid.IsEnabled);
 
                         if (securityConfig.HasAllUsersGroup()) {
                             auto response = context.SS->LoginProvider.AddGroupMembership({
@@ -86,7 +86,7 @@ public:
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                            Schema::LoginSids::SidHash,
-                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.Hash, sid.IsEnabled);
+                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, sid.IsEnabled);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);

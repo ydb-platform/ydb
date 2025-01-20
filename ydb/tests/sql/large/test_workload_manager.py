@@ -198,12 +198,12 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
         # CONCURRENT_QUERY_LIMIT (1) queries are executing, 2 in queue
         assert success_count == queue_size + 1, f"Expected {queue_size+1} successful queries, got {success_count}"
 
-    @pytest.mark.parametrize("run_count", [1])
-    def test_resource_pool_queue_resource_weight(self, run_count):
+    @pytest.mark.parametrize("run_count,use_classifiers", [(1, False), (1, True)])
+    def test_resource_pool_queue_resource_weight(self, run_count, use_classifiers):
         """
         Tests resource pool performance based on different resource weights and priorities.
         Creates two pools with different resource weights and CPU limits for high and low priority users.
-        Verifies that high priority pool executes queries significantly faster than low priority pool.
+        If resource pool classifiers are set, verifies that high priority pool executes queries significantly faster than low priority pool.
         """
 
         table_name = f"{self.tpch_default_path()}/lineitem"
@@ -243,27 +243,28 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
         """
         self.query(pool_definition)
 
-        pool_classifier1_definition = f"""
-            CREATE RESOURCE POOL CLASSIFIER test_classifier1
-            WITH (
-                RESOURCE_POOL = '{high_resource_pool}',
-                MEMBER_NAME = '{high_priority_user}'
-            )"""
-        self.query(pool_classifier1_definition)
+        if use_classifiers:
+            pool_classifier1_definition = f"""
+                CREATE RESOURCE POOL CLASSIFIER test_classifier1
+                WITH (
+                    RESOURCE_POOL = '{high_resource_pool}',
+                    MEMBER_NAME = '{high_priority_user}'
+                )"""
+            self.query(pool_classifier1_definition)
 
-        pool_classifier2_definition = f"""
-            CREATE RESOURCE POOL CLASSIFIER test_classifier2
-            WITH (
-                RESOURCE_POOL = '{low_resource_pool}',
-                MEMBER_NAME = '{low_priority_user}'
-            )"""
-        self.query(pool_classifier2_definition)
+            pool_classifier2_definition = f"""
+                CREATE RESOURCE POOL CLASSIFIER test_classifier2
+                WITH (
+                    RESOURCE_POOL = '{low_resource_pool}',
+                    MEMBER_NAME = '{low_priority_user}'
+                )"""
+            self.query(pool_classifier2_definition)
 
-        # Wait until resource pool fetches resource classifiers list
-        time.sleep(12)
+            # Wait until resource pool fetches resource classifiers list
+            time.sleep(12)
 
-        self.verify_pool(high_priority_user, high_resource_pool, f'select count(*) from `{table_name}`')
-        self.verify_pool(low_priority_user, low_resource_pool, f'select count(*) from `{table_name}`')
+            self.verify_pool(high_priority_user, high_resource_pool, f'select count(*) from `{table_name}`')
+            self.verify_pool(low_priority_user, low_resource_pool, f'select count(*) from `{table_name}`')
 
         highpriority_user_connection = self.create_connection(high_priority_user)
         lowpriority_user_connection = self.create_connection(low_priority_user)

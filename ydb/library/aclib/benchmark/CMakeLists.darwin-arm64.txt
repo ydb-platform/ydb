@@ -12,24 +12,54 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-add_subdirectory(ut)
-add_subdirectory(benchmark)
-
-add_library(ydb-library-aclib)
+add_executable(benchmark)
 
 
-target_link_libraries(ydb-library-aclib PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(benchmark PUBLIC
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-protobuf
-  cpp-protobuf-util
-  library-aclib-protos
+  cpp-testing-gbenchmark
+  ydb-library-aclib
 )
 
-target_sources(ydb-library-aclib PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/aclib/aclib.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/aclib/aclib.h
+target_allocator(benchmark
+  system_allocator
 )
 
+target_link_options(benchmark PRIVATE
+  -Wl,-platform_version,macos,11.0,11.0
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
+
+target_sources(benchmark PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/aclib/benchmark/b_aclib.cpp
+)
+
+
+add_test(
+  NAME
+  benchmark
+  COMMAND
+  benchmark
+)
+
+set_property(
+  TEST
+  benchmark
+  PROPERTY
+  LABELS
+  SMALL
+)
+
+vcs_info(benchmark)
+
+set_property(
+  TEST
+  benchmark
+  PROPERTY
+  PROCESSORS
+  1
+)

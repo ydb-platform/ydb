@@ -32,10 +32,12 @@ target_sources(core-sys_view-auth PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/group_members.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/groups.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/owners.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/permissions.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/users.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/group_members.h
   ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/groups.h
   ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/owners.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/permissions.h
   ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/auth/users.h
 )
 

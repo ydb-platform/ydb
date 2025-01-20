@@ -34,6 +34,7 @@ void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TA
     TouchBlobs(ctx, tabletId, request->ExpectedBlobs, false);
     RemoveBlobs(ctx, tabletId, request->RemovedBlobs);
     RegretBlobs(ctx, tabletId, request->MissedBlobs);
+    RenameBlobs(ctx, tabletId, request->RenamedBlobs);
 
     THashMap<TKey, TCacheValue::TPtr> evicted;
     AddBlobs(ctx, tabletId, request->StoredBlobs, evicted);
@@ -163,6 +164,25 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
         (*Counters.Evictions) += numEvicted;
         (*Counters.Unused) += numUnused;
         (*Counters.Used) += numEvicted - numUnused;
+    }
+}
+
+void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
+                                    const TVector<std::pair<TCacheBlobL2, TCacheBlobL2>>& blobs)
+{
+    for (const auto& [oldBlob, newBlob] : blobs) {
+        TKey oldKey(tabletId, oldBlob);
+        auto it = Cache.FindWithoutPromote(oldKey);
+        if (it != Cache.End()) {
+            Cache.Erase(it);
+        }
+
+        TKey newKey(tabletId, newBlob);
+        Cache.Insert(newKey, newBlob.Value);
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Renamed. Tablet '" << tabletId
+                    << "' old partition " << oldBlob.Partition << " old offset " << oldBlob.Offset
+                    << " new partition " << newBlob.Partition << " new offset " << newBlob.Offset);
     }
 }
 

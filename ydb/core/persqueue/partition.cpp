@@ -1827,7 +1827,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         AddCmdDeleteRangeForAllKeys(*PersistRequest);
 
-        ctx.Send(Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
+        ctx.Send(BlobCache, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
         PersistRequest = nullptr;
         CurrentPersistRequestSpan = std::move(PersistRequestSpan);
         PersistRequestSpan = NWilson::TSpan();

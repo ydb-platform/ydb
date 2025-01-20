@@ -118,6 +118,8 @@ private:
     void RemoveBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs);
     void TouchBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs, bool isHit = true);
     void RegretBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs);
+    void RenameBlobs(const TActorContext& ctx, ui64 tabletId,
+                     const TVector<std::pair<TCacheBlobL2, TCacheBlobL2>>& blobs);
 
     static ui64 ClampMinSize(ui64 maxSize) {
         static const ui64 MIN_SIZE = 32_MB;

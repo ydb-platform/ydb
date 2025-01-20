@@ -274,9 +274,9 @@ namespace NPQ {
         {
             auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
-            SaveBlobs(kvReq, *reqData, ctx);
-            RenameBlobs(kvReq, *reqData, ctx);
             DeleteBlobs(kvReq, *reqData, ctx);
+            RenameBlobs(kvReq, *reqData, ctx);
+            SaveBlobs(kvReq, *reqData, ctx);
 
             auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
@@ -309,8 +309,15 @@ namespace NPQ {
 
         TBlobId MakeBlobId(const TString& s)
         {
-            TKey key(s);
-            return {key.GetPartition(), key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount()};
+            if (s.length() == TKeyPrefix::MarkPosition()) {
+                TPartitionId partitionId;
+                partitionId.OriginalPartitionId = FromString<ui32>(s.data() + 1, 10);
+                partitionId.InternalPartitionId = partitionId.OriginalPartitionId;
+                return {partitionId, 0, 0, 0, 0};
+            } else {
+                TKey key(s);
+                return {key.GetPartition(), key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount()};
+            }
         }
 
         void RenameBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
@@ -341,7 +348,7 @@ namespace NPQ {
                 for (auto i = lowerBound; i != upperBound; ++i) {
                     const auto& [blob, value] = *i;
 
-                    reqData.RemovedBlobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, nullptr);
+                    reqData.RemovedBlobs.emplace_back(blob.Partition, blob.Offset, blob.PartNo, nullptr);
                     Counters.Dec(value);
 
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Deleting head blob in L1. Partition "

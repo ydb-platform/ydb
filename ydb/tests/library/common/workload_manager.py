@@ -19,6 +19,7 @@ def get_pool(self, ydb_cli_path, endpoint, database, user, query):
 
     stdout = yatest.common.execute(command, wait=True).stdout.decode("utf-8")
     resource_pool_in_use = _find_resource_pool_id(stdout)
+    return resource_pool_in_use
 
 
 def _find_resource_pool_id(text):

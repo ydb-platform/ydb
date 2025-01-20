@@ -1474,7 +1474,7 @@ bool TTcpConnection::WriteFragments(size_t* bytesWritten)
     size_t bytesAvailable = MaxBatchWriteSize;
 
     while (fragmentIt != fragmentEnd &&
-           SendVector_.size() < MaxFragmentsPerWrite_ &&
+           std::ssize(SendVector_) < MaxFragmentsPerWrite_ &&
            bytesAvailable > 0)
     {
         const auto& fragment = *fragmentIt;
@@ -1598,7 +1598,7 @@ bool TTcpConnection::MaybeEncodeFragments()
         coalescedSize += fragment.Size();
     };
 
-    while (EncodedFragments_.size() < MaxFragmentsPerWrite_ &&
+    while (std::ssize(EncodedFragments_) < MaxFragmentsPerWrite_ &&
            encodedSize <= MaxBatchWriteSize &&
            !QueuedPackets_.empty())
     {

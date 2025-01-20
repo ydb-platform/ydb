@@ -628,7 +628,7 @@ struct Schema : NIceDb::Schema {
         struct LastSuccessfulAttemptAt: Column<5, NScheme::NTypeIds::Timestamp> {};
         struct LastFailedAttemptAt: Column<6, NScheme::NTypeIds::Timestamp> {};
         struct FailedAttemptCount: Column<7, NScheme::NTypeIds::Uint32> {};
-        struct Password: Column<8, NScheme::NTypeIds::Utf8> {};
+        struct PasswordHash: Column<8, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Sid>;
         using TColumns = TableColumns<
@@ -639,7 +639,7 @@ struct Schema : NIceDb::Schema {
             LastSuccessfulAttemptAt,
             LastFailedAttemptAt,
             FailedAttemptCount,
-            Password
+            PasswordHash
         >;
     };
 

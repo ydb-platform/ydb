@@ -2168,7 +2168,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         {
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Password
+                SELECT PasswordHash
                 FROM `Root/.sys/auth_users`
             )").GetValueSync();
 

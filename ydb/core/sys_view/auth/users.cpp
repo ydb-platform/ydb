@@ -133,9 +133,9 @@ protected:
                         ? TCell::Make(user.GetFailedAttemptCount())
                         : TCell());
                     break;
-                case Schema::AuthUsers::Password::ColumnId:
-                    cells.push_back(user.HasPassword()
-                        ? TCell(user.GetPassword().data(), user.GetPassword().size())
+                case Schema::AuthUsers::PasswordHash::ColumnId:
+                    cells.push_back(user.HasPasswordHash()
+                        ? TCell(user.GetPasswordHash().data(), user.GetPasswordHash().size())
                         : TCell());
                     break;
                 default:

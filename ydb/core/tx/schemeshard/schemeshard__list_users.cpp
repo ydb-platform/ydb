@@ -30,7 +30,7 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
             }
             auto user = Result->Record.AddUsers();
             user->SetName(sid.Name);
-            user->SetPassword(sid.Hash);
+            user->SetPasswordHash(sid.PasswordHash);
             // TODO: fill the rest user fields
         }
 

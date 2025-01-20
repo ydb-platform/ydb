@@ -173,12 +173,13 @@ void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
     for (const auto& [oldBlob, newBlob] : blobs) {
         TKey oldKey(tabletId, oldBlob);
         auto it = Cache.FindWithoutPromote(oldKey);
-        if (it != Cache.End()) {
-            Cache.Erase(it);
+        if (it == Cache.End()) {
+            continue;
         }
 
         TKey newKey(tabletId, newBlob);
-        Cache.Insert(newKey, newBlob.Value);
+        Cache.Insert(newKey, *it);
+        Cache.Erase(it);
 
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Renamed. Tablet '" << tabletId
                     << "' old partition " << oldBlob.Partition << " old offset " << oldBlob.Offset

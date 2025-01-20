@@ -436,6 +436,10 @@ public:
     NMonitoring::THistogramPtr DataTxTotalTimeHistogram;
     NMonitoring::THistogramPtr ScanTxTotalTimeHistogram;
 
+    // Locality metrics for request
+    NMonitoring::TDynamicCounters::TCounterPtr TotalSingleNodeReqCount;
+    NMonitoring::TDynamicCounters::TCounterPtr NonLocalSingleNodeReqCount;
+
     TAlignedPagePoolCounters AllocCounters;
 
     // db counters

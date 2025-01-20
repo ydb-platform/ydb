@@ -149,13 +149,17 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event, 0, generation));
     }
 
-    void MockStopSession(const NYql::NPq::NProto::TDqPqTopicSource& source, ui64 partitionId, TActorId readActorId,
-        NFq::NRowDispatcherProto::TEvStopSession::EStopReason reason = NFq::NRowDispatcherProto::TEvStopSession::COMMON) {
+    void MockStopSession(const NYql::NPq::NProto::TDqPqTopicSource& source, ui64 partitionId, TActorId readActorId) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         event->Record.MutableSource()->CopyFrom(source);
         event->Record.SetPartitionId(partitionId);
-        event->Record.SetReason(reason);
         event->Record.MutableTransportMeta()->SetSeqNo(1);
+        Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
+    }
+
+    void MockNoSession(ui64 partitionId, TActorId readActorId) {
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvNoSession>();
+        event->Record.SetPartitionId(partitionId);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
     }
 
@@ -440,14 +444,14 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ExpectStopSession(session2, PartitionId0);
     }
 
-    Y_UNIT_TEST_F(StopSessionWithWrongSessionFlag, TFixture) {
+    Y_UNIT_TEST_F(ProcessNoSession, TFixture) {
         MockAddSession(Source1, PartitionId0, ReadActorId3);
         auto topicSessionId = ExpectRegisterTopicSession();
         ExpectStartSessionAck(ReadActorId3);
         ExpectStartSession(topicSessionId);
         ProcessData(ReadActorId3, PartitionId0, topicSessionId);
 
-        MockStopSession(Source1, PartitionId0, ReadActorId3, NFq::NRowDispatcherProto::TEvStopSession::WRONG_SESSION);
+        MockNoSession(PartitionId0, ReadActorId3);
         ExpectStopSession(topicSessionId, PartitionId0);
     }
 }

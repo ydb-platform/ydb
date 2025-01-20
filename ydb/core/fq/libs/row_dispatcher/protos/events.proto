@@ -49,15 +49,8 @@ message TEvNewDataArrived {
 }
 
 message TEvStopSession {
-    enum EStopReason {
-        STOP_REASON_UNSPECIFIED = 0;
-        COMMON = 1;
-        WRONG_SESSION = 2;
-    }
-
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
     uint32 PartitionId = 2;
-    EStopReason Reason = 3;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
@@ -92,7 +85,10 @@ message TEvSessionError {
 
 message TEvHeartbeat {
     uint32 PartitionId = 1;
-    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvNoSession {
+    uint32 PartitionId = 1;
 }
 
 message TEvGetInternalStateRequest {

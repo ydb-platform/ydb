@@ -89,6 +89,12 @@ struct TFixture : public TPqIoTestFixture {
         UNIT_ASSERT(eventHolder->Cookie == expectedGeneration);
     }
 
+    void ExpectNoSession(NActors::TActorId rowDispatcherId, ui64 expectedGeneration = 1) {
+        auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvNoSession>(rowDispatcherId, TDuration::Seconds(5));
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+        UNIT_ASSERT(eventHolder->Cookie == expectedGeneration);
+    }
+
     void ExpectGetNextBatch(NActors::TActorId rowDispatcherId) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
@@ -389,7 +395,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         ProcessSomeMessages(3, {Message4}, RowDispatcher2, UVPairParser, 2);
 
         MockHeartbeat(RowDispatcher1, 1);       // old generation
-        ExpectStopSession(RowDispatcher1);
+        ExpectNoSession(RowDispatcher1, 1);
     }
 
     Y_UNIT_TEST_F(Backpressure, TFixture) {

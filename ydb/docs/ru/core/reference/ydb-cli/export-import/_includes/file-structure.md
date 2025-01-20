@@ -118,10 +118,6 @@ self {
   name: "update_feed"
   owner: "Alice"
   type: TOPIC
-  created_at {
-    plan_step: 1734362034420
-    tx_id: 281474982949619
-  }
 }
 consumers {
   name: "my_consumer"

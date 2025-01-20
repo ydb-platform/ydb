@@ -3,7 +3,7 @@
 
 namespace NKikimr::NFormats {
 
-arrow::Result<TArrowCSV> TArrowCSVTable::Create(const TVector<NYdb::NTable::TTableColumn>& columns, bool header) {
+arrow::Result<TArrowCSV> TArrowCSVTable::Create(const std::vector<NYdb::NTable::TTableColumn>& columns, bool header) {
     TVector<TString> errors;
     TColummns convertedColumns;
     convertedColumns.reserve(columns.size());

@@ -150,8 +150,8 @@ private:
     }
 
     struct TArrowCSVParams {
-        TStatus Status = TStatus(EStatus::SUCCESS, NYql::TIssues());
-        TVector<NYdb::NTable::TTableColumn> Columns;
+        TStatus Status = TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues());
+        std::vector<NYdb::NTable::TTableColumn> Columns;
     };
 
     TArrowCSVParams GetCSVParams(const TString& table) {

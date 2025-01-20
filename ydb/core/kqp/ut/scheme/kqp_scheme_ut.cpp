@@ -7618,8 +7618,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = Sprintf(R"(
                 --!syntax_v1
-                $a = "a"; -- CA
-                ; -- C1
+                $a = "a"; -- CA РусоТекс1
+                ; -- Озер нон ассии
                 $b = () -> { -- CB
                     return $a;
                 };

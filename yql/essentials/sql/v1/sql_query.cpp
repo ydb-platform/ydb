@@ -1859,6 +1859,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
+            Cerr << ">>>>> L = '" << transformLambda << "'" << Endl << Flush;
+
             AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx.Pos(), BuildTablePath(prefixPath, id),
                 std::move(source), std::move(target), std::move(transformLambda), std::move(settings), context));
             break;

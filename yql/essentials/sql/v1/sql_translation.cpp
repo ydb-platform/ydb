@@ -5100,18 +5100,25 @@ bool TSqlTranslation::ParseViewQuery(
 
 namespace {
 
-static size_t GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token) {
-    size_t position = 0;
-
-    for (size_t line = 1; line < token.line(); ++line) {
-        position = query.find("\n", position);
-        if (position == std::string::npos) {
-            return std::string::npos;
-        }
-        ++position;
+static std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4) {
+    if (1 == token.GetLine() && 0 == token.GetColumn()) {
+        return 0;
     }
 
-    return position + token.column();
+    TPosition pos = {0, 1};
+    TTextWalker walker(pos, antlr4);
+
+    std::string::size_type position = 0;
+    for (char c : query) {
+        walker.Advance(c);
+        ++position;
+
+        if (pos.Row == token.GetLine() && pos.Column == token.GetColumn()) {
+            return position;
+        }
+    }
+
+    return std::string::npos;
 }
 
 static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
@@ -5145,8 +5152,8 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
                     Y_ABORT("You should change implementation according to grammar changes");
             }
 
-            auto begin = GetQueryPosition(Ctx.Query, beginToken);
-            auto end = GetQueryPosition(Ctx.Query, *endToken);
+            auto begin = GetQueryPosition(Ctx.Query, beginToken, Ctx.Settings.Antlr4Parser);
+            auto end = GetQueryPosition(Ctx.Query, *endToken, Ctx.Settings.Antlr4Parser);
             if (begin == std::string::npos || end == std::string::npos) {
                 return {};
             }

@@ -380,6 +380,19 @@ namespace Tests {
             ui64 PathId = 0;
             ui64 Version = 0;
         };
+
+        struct TCreateUserOption {
+            TString User;
+            TString Password;
+            bool CanLogin = true;
+        };
+
+        struct TModifyUserOption {
+            TString User;
+            std::optional<TString> Password;
+            std::optional<bool> CanLogin;
+        };
+
         using TApplyIf = TVector<TPathVersion>;
 
         TClient(const TServerSettings& settings);
@@ -460,8 +473,9 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus DeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteUnsafe(const TString& parent, const TString &name);
+        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken = "");
         NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
-        NMsgBusProxy::EResponseStatus ModifyUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
+        NMsgBusProxy::EResponseStatus ModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken = "");
         NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
         NMsgBusProxy::EResponseStatus CreateGroup(const TString& parent, const TString& group);
         NMsgBusProxy::EResponseStatus AddGroupMembership(const TString& parent, const TString& group, const TString& member);

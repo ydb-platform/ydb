@@ -144,7 +144,7 @@ public:
         return NJson::JSON_NULL;
     }
 
-    void Actualize(const TInstant currentInstant) {
+    void Actualize(const TInstant currentInstant, TActualizationContext& context) {
         CurrentWeightInstant = currentInstant;
         AFL_VERIFY(Buckets.size());
         for (auto&& i : Buckets) {
@@ -152,7 +152,7 @@ public:
                 continue;
             }
             RemoveBucketFromRating(i.second);
-            i.second->Actualize(currentInstant);
+            i.second->Actualize(currentInstant, context);
             AddBucketToRating(i.second);
         }
         AFL_VERIFY(RatedBuckets.size() == Buckets.size());

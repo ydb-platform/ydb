@@ -675,13 +675,17 @@ private:
         return Others.Validate(MainPortion);
     }
 
-    void RebuildOptimizedFeature(const TInstant currentInstant) const {
+    void RebuildOptimizedFeature(const TInstant currentInstant, TActualizationContext& context) const {
 //        Others.InitRuntimeFeature();
         if (!MainPortion) {
             return;
         }
-        MainPortion->InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, Others.IsEmpty() && currentInstant > MainPortion->RecordSnapshotMax().GetPlanInstant() +
-            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings());
+        const bool isOptimized = Others.IsEmpty() && currentInstant > MainPortion->RecordSnapshotMax().GetPlanInstant() +
+            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings();
+        if (isOptimized != MainPortion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
+            MainPortion->InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, isOptimized);
+            context.OnRuntimeFeatureUpdated(MainPortion->GetPortionId());
+        }
     }
 public:
     TTaskDescription GetTaskDescription() const {
@@ -939,13 +943,13 @@ public:
         dest.MoveNextBorderTo(*this);
     }
 
-    [[nodiscard]] bool Actualize(const TInstant currentInstant) {
+    [[nodiscard]] bool Actualize(const TInstant currentInstant, TActualizationContext& context) {
         if (currentInstant < NextActualizeInstant) {
             return false;
         }
         auto gChartsThis = StartModificationGuard();
         NextActualizeInstant = Others.Actualize(currentInstant);
-        RebuildOptimizedFeature(currentInstant);
+        RebuildOptimizedFeature(currentInstant, context);
         return true;
     }
 
@@ -1095,13 +1099,13 @@ public:
         return NJson::JSON_NULL;
     }
 
-    void Actualize(const TInstant currentInstant) {
+    void Actualize(const TInstant currentInstant, TActualizationContext& context) {
         RemoveBucketFromRating(LeftBucket);
-        Y_UNUSED(LeftBucket->Actualize(currentInstant));
+        Y_UNUSED(LeftBucket->Actualize(currentInstant, context));
         AddBucketToRating(LeftBucket);
         for (auto&& i : Buckets) {
             const i64 rating = i.second->GetLastWeight();
-            if (i.second->Actualize(currentInstant)) {
+            if (i.second->Actualize(currentInstant, context)) {
                 RemoveBucketFromRating(i.second, rating);
                 AddBucketToRating(i.second);
             }
@@ -1240,8 +1244,8 @@ protected:
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
         return Buckets.BuildOptimizationTask(granule, locksManager);
     }
-    virtual void DoActualize(const TInstant currentInstant) override {
-        Buckets.Actualize(currentInstant);
+    virtual void DoActualize(const TInstant currentInstant, TActualizationContext& context) override {
+        Buckets.Actualize(currentInstant, context);
     }
 
     virtual TOptimizationPriority DoGetUsefulMetric() const override {

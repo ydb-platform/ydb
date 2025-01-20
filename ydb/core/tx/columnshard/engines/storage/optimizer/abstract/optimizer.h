@@ -78,6 +78,16 @@ public:
     }
 };
 
+class TActualizationContext {
+private:
+    YDB_READONLY_DEF(THashSet<ui64>, ChangedPortions);
+
+public:
+    void OnRuntimeFeatureUpdated(const ui64 portionId) {
+        ChangedPortions.emplace(portionId);
+    }
+};
+
 class IOptimizerPlanner {
 private:
     const ui64 PathId;
@@ -89,7 +99,7 @@ protected:
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
-    virtual void DoActualize(const TInstant currentInstant) = 0;
+    virtual void DoActualize(const TInstant currentInstant, TActualizationContext& context) = 0;
     virtual TString DoDebugString() const {
         return "";
     }
@@ -159,9 +169,9 @@ public:
     TOptimizationPriority GetUsefulMetric() const {
         return DoGetUsefulMetric();
     }
-    void Actualize(const TInstant currentInstant) {
+    void Actualize(const TInstant currentInstant, TActualizationContext& context) {
         ActualizationInstant = currentInstant;
-        return DoActualize(currentInstant);
+        return DoActualize(currentInstant, context);
     }
 };
 

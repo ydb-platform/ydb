@@ -320,9 +320,11 @@ public:
         return OptimizerPlanner->GetUsefulMetric();
     }
 
-    void ActualizeOptimizer(const TInstant currentInstant, const TDuration recalcLag) const {
+    void ActualizeOptimizer(const TInstant currentInstant, const TDuration recalcLag) {
         if (OptimizerPlanner->GetActualizationInstant() + recalcLag < currentInstant) {
-            OptimizerPlanner->Actualize(currentInstant);
+            NStorageOptimizer::TActualizationContext context;
+            OptimizerPlanner->Actualize(currentInstant, context);
+            ReturnToIndexes(context.GetChangedPortions());
         }
     }
 

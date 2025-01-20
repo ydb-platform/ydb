@@ -46,8 +46,8 @@ protected:
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
         return Buckets.BuildOptimizationTask(granule, locksManager);
     }
-    virtual void DoActualize(const TInstant currentInstant) override {
-        Buckets.Actualize(currentInstant);
+    virtual void DoActualize(const TInstant currentInstant, TActualizationContext& context) override {
+        Buckets.Actualize(currentInstant, context);
     }
 
     virtual TOptimizationPriority DoGetUsefulMetric() const override {

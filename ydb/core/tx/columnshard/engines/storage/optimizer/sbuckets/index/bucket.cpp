@@ -7,12 +7,15 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
-void TPortionsBucket::RebuildOptimizedFeature(const TInstant currentInstant) const {
+void TPortionsBucket::RebuildOptimizedFeature(const TInstant currentInstant, TActualizationContext& context) const {
     for (auto&& [_, p] : Portions) {
-        p.MutablePortionInfo().InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized,
-            Portions.size() == 1 &&
-                currentInstant > p->RecordSnapshotMax().GetPlanInstant() +
-                                     NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings());
+        const bool isOptimized =
+            Portions.size() == 1 && currentInstant > p->RecordSnapshotMax().GetPlanInstant() +
+                                                         NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings();
+        if (isOptimized != p.GetPortionInfo()->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
+            p.MutablePortionInfo().InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, isOptimized);
+            context.OnRuntimeFeatureUpdated(p->GetPortionId());
+        }
     }
 }
 

@@ -102,7 +102,7 @@ protected:
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
 
-    virtual void DoActualize(const TInstant currentInstant) override {
+    virtual void DoActualize(const TInstant currentInstant, TActualizationContext& /*context*/) override {
         if (currentInstant - LastActualization > TDuration::Seconds(180)) {
             LastActualization = currentInstant;
         } else {

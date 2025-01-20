@@ -121,7 +121,7 @@ private:
         return result;
     }
 
-    void RebuildOptimizedFeature(const TInstant currentInstant) const;
+    void RebuildOptimizedFeature(const TInstant currentInstant, TActualizationContext& context) const;
 
 public:
     const TLeftBucketBorder& GetStart() const {
@@ -283,13 +283,13 @@ public:
         return NextActualizeInstant <= currentInstant;
     }
 
-    void Actualize(const TInstant currentInstant) {
+    void Actualize(const TInstant currentInstant, TActualizationContext& context) {
         if (!NeedActualization(currentInstant)) {
             AFL_VERIFY(!!LastWeight);
             return;
         }
         ResetWeight(currentInstant);
-        RebuildOptimizedFeature(currentInstant);
+        RebuildOptimizedFeature(currentInstant, context);
     }
 };
 

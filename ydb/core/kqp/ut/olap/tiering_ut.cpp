@@ -172,6 +172,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, 3600000000 + i * 10000, 1000);
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, 3600000000 + i * 10000, 1000);
         }
 
         csController->WaitActualization(TDuration::Seconds(10));

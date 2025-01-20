@@ -67,6 +67,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
     opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT");
+    opts.AddLongOption("kafka-port", "enable kafka proxy server on port").OptionalArgument("PORT");
     opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST");
     opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT");
@@ -99,6 +100,9 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
 
     if (res.Has("domains-file")) {
         Y_ABORT_UNLESS(ParsePBFromFile(res.Get("domains-file"), Config.AppConfig.MutableDomainsConfig()));
+        if (Config.AppConfig.HasDomainsConfig() && Config.AppConfig.GetDomainsConfig().HasSecurityConfig()) {
+            Config.AppConfig.MutableSecurityConfig()->CopyFrom(Config.AppConfig.GetDomainsConfig().GetSecurityConfig());
+        }
     }
 
     if (res.Has("bs-file")) {
@@ -163,6 +167,11 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         auto& conf = *Config.AppConfig.MutableGRpcConfig();
         conf.SetStartGRpcProxy(true);
         conf.SetSslPort(FromString<ui16>(res.Get("grpcs-port")));
+    }
+
+    if (res.Has("kafka-port")) {
+        auto& conf = *Config.AppConfig.MutableKafkaProxyConfig();
+        conf.SetListeningPort(FromString<ui16>(res.Get("kafka-port")));
     }
 
     if (res.Has("grpc-public-host")) {

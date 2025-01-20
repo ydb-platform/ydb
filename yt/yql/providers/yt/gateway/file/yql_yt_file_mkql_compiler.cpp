@@ -643,7 +643,9 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             values = NCommon::MkqlBuildExpr(ytMap.Mapper().Body().Ref(), innerCtx);
 
             if (IsWideBlockType(lambdaOutputType)) {
-                values = ctx.ProgramBuilder.WideFromBlocks(values);
+                values = ctx.ProgramBuilder.ToFlow(
+                    ctx.ProgramBuilder.WideFromBlocks(
+                        ctx.ProgramBuilder.FromFlow(values)));
             }
 
             if (ETypeAnnotationKind::Multi == lambdaOutputType.GetKind())

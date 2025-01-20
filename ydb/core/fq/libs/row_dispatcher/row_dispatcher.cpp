@@ -117,7 +117,7 @@ struct TAggQueryStat {
 
 ui64 UpdateMetricsPeriodSec = 60;
 ui64 PrintStateToLogPeriodSec = 600;
-ui64 PrintStateToLogSplitSize = 512000;
+ui64 PrintStateToLogSplitSize = 64000;
 ui64 MaxSessionBufferSizeBytes = 16000000;
 
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {

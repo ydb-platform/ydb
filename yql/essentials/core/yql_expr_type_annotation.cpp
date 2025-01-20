@@ -6035,6 +6035,13 @@ std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TS
     return std::nullopt;
 }
 
+std::optional<ui32> GetWideBlockFieldPosition(const TMultiExprType& multiType, const TStringBuf& field) {
+    YQL_ENSURE(multiType.GetSize() >= 1);
+    if (ui32 pos; TryFromString(field, pos) && pos < multiType.GetSize() - 1)
+        return {pos};
+    return std::nullopt;
+}
+
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx) {
     pgType = 0;
     convertToPg = false;

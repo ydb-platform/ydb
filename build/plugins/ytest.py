@@ -510,6 +510,8 @@ def check_data(fields, unit, *args):
     if not dart_record[df.TestFiles.KEY]:
         return
 
+    dart_record[df.ModuleLang.KEY] = consts.ModuleLang.LANG_AGNOSTIC
+
     data = dump_test(unit, dart_record)
     if data:
         unit.set_property(["DART_DATA", data])
@@ -542,6 +544,7 @@ def check_resource(fields, unit, *args):
     )
 
     dart_record = create_dart_record(fields, unit, flat_args, spec_args)
+    dart_record[df.ModuleLang.KEY] = consts.ModuleLang.LANG_AGNOSTIC
 
     data = dump_test(unit, dart_record)
     if data:

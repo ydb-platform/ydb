@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index de02565..104d517 100644
+index 255b858..4e6feac 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -1546,4 +1546,6 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1541,4 +1541,6 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
  
  #endif // __cplusplus
  

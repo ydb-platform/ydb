@@ -216,7 +216,7 @@ Creating a new `mydb1` profile:
    Please enter your numeric choice:
    ```
 
-   All the available authentication methods are described in [{#T}](../../../../concepts/auth.md). The set of methods and text of the hints may differ from those given in this example.
+   All the available authentication methods are described in [{#T}](../../../../security/authentication.md). The set of methods and text of the hints may differ from those given in this example.
 
    If the method you choose involves specifying an additional parameter, you'll be prompted to enter it. For example, if you select `4` (Use service account key file):
 

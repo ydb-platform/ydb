@@ -41,8 +41,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Y_VERIFY_S(rootPathElements.size() == 1, "invalid root name in domain config: " << rootName << " parts count: " << rootPathElements.size());
 
         TString owner;
-        const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = Self->GetDomainsConfig().GetSecurityConfig();
-
+        const NKikimrConfig::TSecurityConfig& securityConfig = Self->GetSecurityConfig();
         for (const auto& defaultUser : securityConfig.GetDefaultUsers()) {
             auto response = Self->LoginProvider.CreateUser({
                 .User = defaultUser.GetName(),

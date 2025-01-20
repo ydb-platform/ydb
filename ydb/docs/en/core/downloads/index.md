@@ -48,7 +48,7 @@
 
 {{ ydb-short-name }} DSTool is a command line utility for [managing a {{ ydb-short-name }} cluster's disk subsystem](../maintenance/manual/index.md).
 
-To use the utility, install the [ydb-dstool](https://pypi.org/project/ydb-dstool/) Python package.
+To use the utility, install the [ydb-dstool](../reference/ydb-dstool/install.md).
 
 ## {{ ydb-short-name }} Ops {#ydbops}
 

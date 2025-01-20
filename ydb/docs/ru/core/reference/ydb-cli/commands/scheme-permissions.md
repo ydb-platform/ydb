@@ -5,10 +5,10 @@
 Получить список доступных команд можно через интерактивную справку:
 
 ```bash
-{{ ydb-cli }} scheme permissions  --help
+{{ ydb-cli }} scheme permissions --help
 ```
 
-```bash
+```text
 Usage: ydb [global options...] scheme permissions [options...] <subcommand>
 
 Description: Modify permissions

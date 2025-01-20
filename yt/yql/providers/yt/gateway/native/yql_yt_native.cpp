@@ -2364,6 +2364,7 @@ private:
             columnGroupsSpec = NYT::NodeFromYsonString(it->second);
             if (it->second != srcColumnGroups) {
                 forceMerge = forceTransform = true;
+                YQL_CLOG(INFO, ProviderYt) << "Column groups diff forces merge, src=" << srcColumnGroups << ", dst=" << it->second;
             }
         }
 

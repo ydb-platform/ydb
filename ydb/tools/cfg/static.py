@@ -45,7 +45,7 @@ class StaticConfigGenerator(object):
         database=None,
         node_broker_port=2135,
         ic_port=19001,
-        walle_provider=None,
+        host_info_provider=None,
         grpc_port=2135,
         mon_port=8765,
         cfg_home="/Berkanavt/kikimr",
@@ -60,13 +60,17 @@ class StaticConfigGenerator(object):
         self.__binary_path = binary_path
         self.__local_binary_path = local_binary_path or binary_path
         self.__output_dir = output_dir
-        # collects and provides information about cluster hosts
-        self.__cluster_details = base.ClusterDetailsProvider(template, walle_provider, validator=schema_validator, database=database)
+
+        self._host_info_provider = host_info_provider
+
+        self.__cluster_details = base.ClusterDetailsProvider(template, host_info_provider, validator=schema_validator, database=database)
+        if self.__cluster_details.use_k8s_api:
+            self._host_info_provider._init_k8s_labels(self.__cluster_details.k8s_rack_label, self.__cluster_details.k8s_dc_label)
+
         self._enable_cores = template.get("enable_cores", enable_cores)
         self._yaml_config_enabled = template.get("yaml_config_enabled", False)
         self.__is_dynamic_node = True if database is not None else False
         self._database = database
-        self._walle_provider = walle_provider
         self._skip_location = skip_location
         self.__node_broker_port = node_broker_port
         self.__grpc_port = grpc_port
@@ -103,6 +107,7 @@ class StaticConfigGenerator(object):
             "pqcd.txt": None,
             "failure_injection.txt": None,
             "pdisk_key.txt": None,
+            "immediate_controls_config.txt": None,
         }
         self.__optional_config_files = set(
             (
@@ -112,6 +117,7 @@ class StaticConfigGenerator(object):
                 "fq.txt",
                 "failure_injection.txt",
                 "pdisk_key.txt",
+                "immediate_controls_config.txt",
             )
         )
         tracing = template.get("tracing_config")
@@ -265,6 +271,14 @@ class StaticConfigGenerator(object):
     @property
     def pdisk_key_txt_enabled(self):
         return self.__proto_config("pdisk_key.txt").ByteSize() > 0
+
+    @property
+    def immediate_controls_config_txt(self):
+        return self.__proto_config("immediate_controls_config.txt", config_pb2.TImmediateControlsConfig, self.__cluster_details.immediate_controls_config)
+
+    @property
+    def immediate_controls_config_txt_enabled(self):
+        return self.__proto_config("immediate_controls_config.txt").ByteSize() > 0
 
     @property
     def mbus_enabled(self):
@@ -522,6 +536,7 @@ class StaticConfigGenerator(object):
                             if 'pdisk_config' in vdisk_location:
                                 if 'expected_slot_count' in vdisk_location['pdisk_config']:
                                     vdisk_location['pdisk_config']['expected_slot_count'] = int(vdisk_location['pdisk_config']['expected_slot_count'])
+
         if self.__cluster_details.channel_profile_config is not None:
             normalized_config["channel_profile_config"] = self.__cluster_details.channel_profile_config
         else:
@@ -627,6 +642,8 @@ class StaticConfigGenerator(object):
         app_config.MergeFrom(self.tracing_txt)
         if self.pdisk_key_txt_enabled:
             app_config.PDiskKeyConfig.CopyFrom(self.pdisk_key_txt)
+        if self.immediate_controls_config_txt_enabled:
+            app_config.ImmediateControlsConfig.CopyFrom(self.immediate_controls_config_txt)
         return app_config
 
     def __proto_config(self, config_file, config_class=None, cluster_details_for_field=None):
@@ -1210,6 +1227,10 @@ class StaticConfigGenerator(object):
                     node.WalleLocation.DataCenter = host.datacenter
                     node.WalleLocation.Rack = host.rack
                     node.WalleLocation.Body = int(host.body)
+                elif self.__cluster_details.use_k8s_api:
+                    node.Location.DataCenter = host.datacenter
+                    node.Location.Rack = host.rack
+                    node.Location.Body = int(host.body)
                 else:
                     node.Location.DataCenter = host.datacenter
                     node.Location.Rack = host.rack

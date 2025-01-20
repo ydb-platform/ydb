@@ -3,6 +3,7 @@
 import collections
 import copy
 import os
+import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from ydb.tools.cfg import types, validation, walle
@@ -21,6 +22,8 @@ DEFAULT_FAIL_DOMAIN_TYPE = types.FailDomainType.Rack
 DEFAULT_PDISK_TYPE = types.PDiskCategory.ROT
 
 DEFAULT_BOX_ID = 1
+
+logger = logging.getLogger()
 
 # MOVE THESE DEFAULTS TO YDB CODE
 VDISKS_DEFAULT_CONFIG = {
@@ -264,7 +267,7 @@ def normalize_domain(domain_name):
 
 
 class ClusterDetailsProvider(object):
-    def __init__(self, template, walle_provider, validator=None, database=None, use_new_style_cfg=False):
+    def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False):
         if not validator:
             validator = validation.default_validator()
 
@@ -278,9 +281,13 @@ class ClusterDetailsProvider(object):
             self.__cluster_description = self.get_subjective_description(self.__cluster_description, database, self.__validator)
 
         self._use_walle = self.__cluster_description.get("use_walle", True)
-        if not walle_provider:
-            walle_provider = walle.NopHostsInformationProvider()
-        self._walle = walle_provider
+        self._k8s_settings = self.__cluster_description.get("k8s_settings", {"use": False})
+
+        if host_info_provider is not None:
+            self._host_info_provider = host_info_provider
+        else:
+            self._host_info_provider = walle.NopHostsInformationProvider
+
         self.__translated_storage_pools_deprecated = None
         self.__translated_hosts = None
         self.__racks = {}
@@ -299,6 +306,7 @@ class ClusterDetailsProvider(object):
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
         self.memory_controller_config = self.__cluster_description.get("memory_controller_config", {})
         self.channel_profile_config = self.__cluster_description.get("channel_profile_config")
+        self.immediate_controls_config = self.__cluster_description.get("immediate_controls_config")
         self.pdisk_key_config = self.__cluster_description.get("pdisk_key_config", {})
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:
             assert "cannot remove txt files without new style kikimr cfg!"
@@ -345,6 +353,18 @@ class ClusterDetailsProvider(object):
         return self._use_walle
 
     @property
+    def use_k8s_api(self):
+        return self._k8s_settings.get("use")
+
+    @property
+    def k8s_rack_label(self):
+        return self._k8s_settings.get("k8s_rack_label")
+
+    @property
+    def k8s_dc_label(self):
+        return self._k8s_settings.get("k8s_dc_label")
+
+    @property
     def security_settings(self):
         return self.__cluster_description.get("security_settings", {})
 
@@ -358,7 +378,7 @@ class ClusterDetailsProvider(object):
         dc = host_description.get("location", {}).get("data_center", None)
         if dc:
             return str(dc)
-        return str(self._walle.get_datacenter(host_description.get("name", host_description.get("host"))))
+        return str(self._host_info_provider.get_datacenter(host_description.get("name", host_description.get("host"))))
 
     def _get_rack(self, host_description):
         if host_description.get("rack") is not None:
@@ -366,7 +386,7 @@ class ClusterDetailsProvider(object):
         rack = host_description.get("location", {}).get("rack", None)
         if rack:
             return str(rack)
-        return str(self._walle.get_rack(host_description.get("name", host_description.get("host"))))
+        return str(self._host_info_provider.get_rack(host_description.get("name", host_description.get("host"))))
 
     def _get_body(self, host_description):
         if host_description.get("body") is not None:
@@ -374,7 +394,7 @@ class ClusterDetailsProvider(object):
         body = host_description.get("location", {}).get("body", None)
         if body:
             return str(body)
-        return str(self._walle.get_body(host_description.get("name", host_description.get("host"))))
+        return str(self._host_info_provider.get_body(host_description.get("name", host_description.get("host"))))
 
     def _collect_drives_info(self, host_description):
         host_config_id = host_description.get("host_config_id", None)
@@ -411,6 +431,7 @@ class ClusterDetailsProvider(object):
         if self._hosts is not None:
             return self._hosts
         futures = []
+
         for node_id, host_description in enumerate(self.__cluster_description.get("hosts"), 1):
             futures.append(self._thread_pool.submit(self.__collect_host_info, node_id, host_description))
 

@@ -1,6 +1,8 @@
 import argparse
 import random
 
+from pathlib import Path
+
 
 def parse_optional_arguments(args):
     kwargs = {}
@@ -72,6 +74,31 @@ def get_parser(generate_func, extra_cfg_arguments=[]):
             v['name'],
             help=v['help'],
         )
+
+    host_location_group = parser_cfg.add_mutually_exclusive_group()
+    host_location_group.add_argument(
+        "--hosts-provider-k8s", 
+        action='store_true', 
+        help="""If specified, K8s api will be used to query information 
+        about host location. Mutually exclusive with --host-location-url.
+        Usage example in template:
+
+        k8s_settings:
+            use: true
+            k8s_rack_label: <label>
+            k8s_dc_label: <label>""")
+    host_location_group.add_argument(
+        "--hosts-provider-url", 
+        type=str, 
+        help="""URL from which information about hosts can be obtained. 
+        Mutually exclusive with --hosts-provider-k8s""")
+
+    home_directory = str(Path.home())
+    defaultKubeconfigLocation = "{0}/.kube/config".format(home_directory)
+    parser_cfg.add_argument("--kubeconfig",
+                            type=str,
+                            help="path to the kubeconfig file. Default `$HOME/.kube/config`, also see --hosts-provider-k8s",
+                            default=defaultKubeconfigLocation)
 
     argument_group = parser_cfg.add_mutually_exclusive_group()
 

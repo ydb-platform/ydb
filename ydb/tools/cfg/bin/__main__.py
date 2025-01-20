@@ -12,6 +12,7 @@ from ydb.tools.cfg.dynamic import DynamicConfigGenerator
 from ydb.tools.cfg.static import StaticConfigGenerator
 from ydb.tools.cfg.utils import write_to_file
 from ydb.tools.cfg.walle import NopHostsInformationProvider, WalleHostsInformationProvider
+from ydb.tools.cfg.k8s_api import K8sApiHostsInformationProvider
 
 logging_config.dictConfig(
     {
@@ -48,11 +49,13 @@ def cfg_generate(args):
     with open(args.cluster_description, "r") as yaml_template:
         cluster_template = yaml.safe_load(yaml_template)
 
-    hosts_provider = NopHostsInformationProvider()
+    host_info_provider = NopHostsInformationProvider()
     if args.hosts_provider_url:
-        hosts_provider = WalleHostsInformationProvider(args.hosts_provider_url)
+        host_info_provider = WalleHostsInformationProvider(args.hosts_provider_url)
+    elif args.hosts_provider_k8s:
+        host_info_provider = K8sApiHostsInformationProvider(args.kubeconfig)
 
-    generator = cfg_cls(cluster_template, args.binary_path, args.output_dir, walle_provider=hosts_provider, **kwargs)
+    generator = cfg_cls(cluster_template, args.binary_path, args.output_dir, host_info_provider=host_info_provider, **kwargs)
 
     all_configs = generator.get_all_configs()
     for cfg_name, cfg_value in all_configs.items():
@@ -60,7 +63,7 @@ def cfg_generate(args):
 
 
 def main():
-    parser = get_parser(cfg_generate, [{"name": "--hosts-provider-url", "help": "URL from which information about hosts can be obtained."}])
+    parser = get_parser(cfg_generate)
     args = parser.parse_args()
     args.func(args)
 

@@ -485,7 +485,7 @@ DOMAIN_SCHEMA = {
             "type": "array",
             "items": {
                 "type": "string",
-                "enum": utils.get_resources_list("resources/console_initializers/"),
+                "enum": ["cloud_ssd_table_profile", "cloud_ssdencrypted_table_profile"],
             },
         },
     },

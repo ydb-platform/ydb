@@ -76,6 +76,7 @@ private:
     friend class TTcpBusServerBase;
     template <class TServer>
     friend class TTcpBusServerProxy;
+    friend class TCompositeBusServer;
 
     class TImpl;
     const TIntrusivePtr<TImpl> Impl_;

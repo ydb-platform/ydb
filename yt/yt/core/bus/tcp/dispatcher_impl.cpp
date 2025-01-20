@@ -79,7 +79,7 @@ IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
     const TString& threadNamePrefix)
 {
     {
-        auto guard = ReaderGuard(PollerLock_);
+        auto guard = ReaderGuard(PollersLock_);
         if (*pollerPtr) {
             return *pollerPtr;
         }
@@ -87,13 +87,14 @@ IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
 
     IPollerPtr poller;
     {
-        auto guard = WriterGuard(PollerLock_);
+        auto guard = WriterGuard(PollersLock_);
+        auto config = Config_.Acquire();
         if (!*pollerPtr) {
             if (isXfer) {
                 *pollerPtr = CreateThreadPoolPoller(
-                    Config_->ThreadPoolSize,
+                    config->ThreadPoolSize,
                     threadNamePrefix,
-                    Config_->ThreadPoolPollingPeriod);
+                    config->ThreadPoolPollingPeriod);
             } else {
                 *pollerPtr = CreateThreadPoolPoller(/*threadCount*/ 1, threadNamePrefix);
             }
@@ -181,13 +182,13 @@ IPollerPtr TTcpDispatcher::TImpl::GetXferPoller()
 void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
 {
     {
-        auto guard = WriterGuard(PollerLock_);
+        auto guard = WriterGuard(PollersLock_);
 
-        Config_ = config;
+        Config_.Store(config);
 
         if (XferPoller_) {
-            XferPoller_->SetThreadCount(Config_->ThreadPoolSize);
-            XferPoller_->SetPollingPeriod(Config_->ThreadPoolPollingPeriod);
+            XferPoller_->SetThreadCount(config->ThreadPoolSize);
+            XferPoller_->SetPollingPeriod(config->ThreadPoolPollingPeriod);
         }
     }
 
@@ -259,12 +260,7 @@ void TTcpDispatcher::TImpl::CollectSensors(ISensorWriter* writer)
         }
     });
 
-    TTcpDispatcherConfigPtr config;
-    {
-        auto guard = ReaderGuard(PollerLock_);
-        config = Config_;
-    }
-
+    auto config = Config_.Acquire();
     if (config->NetworkBandwidth) {
         writer->AddGauge("/network_bandwidth_limit", *config->NetworkBandwidth);
     }
@@ -348,8 +344,47 @@ void TTcpDispatcher::TImpl::OnPeriodicCheck()
 
 std::optional<TString> TTcpDispatcher::TImpl::GetBusCertsDirectoryPath() const
 {
-    auto guard = ReaderGuard(PollerLock_);
-    return Config_->BusCertsDirectoryPath;
+    return Config_.Acquire()->BusCertsDirectoryPath;
+}
+
+void TTcpDispatcher::TImpl::RegisterLocalMessageHandler(int port, const ILocalMessageHandlerPtr& handler)
+{
+    {
+        auto guard = WriterGuard(LocalMessageHandlersLock_);
+        if (!LocalMessageHandlers_.emplace(port, handler).second) {
+            THROW_ERROR_EXCEPTION("Local message handler is already registered for port %v",
+                port);
+        }
+    }
+
+    YT_LOG_INFO("Local message handler registered (Port: %v)",
+        port);
+}
+
+void TTcpDispatcher::TImpl::UnregisterLocalMessageHandler(int port)
+{
+    {
+        auto guard = WriterGuard(LocalMessageHandlersLock_);
+        LocalMessageHandlers_.erase(port);
+    }
+
+    YT_LOG_INFO("Local message handler unregistered (Port: %v)",
+        port);
+}
+
+ILocalMessageHandlerPtr TTcpDispatcher::TImpl::FindLocalBypassMessageHandler(const TNetworkAddress& address)
+{
+    if (!TAddressResolver::Get()->IsLocalAddress(address)) {
+        return nullptr;
+    }
+
+    if (!Config_.Acquire()->EnableLocalBypass) {
+        YT_LOG_INFO("XXX disabled %v", address);
+        return nullptr;
+    }
+
+    auto guard = ReaderGuard(LocalMessageHandlersLock_);
+    return GetOrDefault(LocalMessageHandlers_, address.GetPort());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

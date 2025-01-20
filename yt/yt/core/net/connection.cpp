@@ -514,7 +514,7 @@ public:
         return impl;
     }
 
-    const TString& GetLoggingTag() const override
+    const std::string& GetLoggingTag() const override
     {
         return LoggingTag_;
     }
@@ -763,7 +763,7 @@ public:
 private:
     const TConnectionId Id_ = TConnectionId::Create();
     const TString Endpoint_;
-    const TString LoggingTag_;
+    const std::string LoggingTag_;
     const NLogging::TLogger Logger;
     const TNetworkAddress LocalAddress_;
     const TNetworkAddress RemoteAddress_;
@@ -918,7 +918,7 @@ private:
     TDelayedExecutorCookie ReadTimeoutCookie_;
     TDelayedExecutorCookie WriteTimeoutCookie_;
 
-    static TString MakeLoggingTag(TConnectionId id, const TString& endpoint)
+    static std::string MakeLoggingTag(TConnectionId id, const TString& endpoint)
     {
        return Format("ConnectionId: %v, Endpoint: %v",
             id,

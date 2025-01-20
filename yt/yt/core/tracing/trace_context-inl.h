@@ -59,7 +59,7 @@ Y_FORCE_INLINE const TString& TTraceContext::GetSpanName() const
     return SpanName_;
 }
 
-Y_FORCE_INLINE const TString& TTraceContext::GetLoggingTag() const
+Y_FORCE_INLINE const std::string& TTraceContext::GetLoggingTag() const
 {
     return LoggingTag_;
 }

@@ -151,6 +151,48 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         TTestEvictionWithStrippedEdsPath().RunTest();
     }
 
+    Y_UNIT_TEST(ActualizerCheckForEvict) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        TLocalHelper localHelper(testHelper.GetKikimr());
+        testHelper.GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
+        testHelper.GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, NActors::NLog::PRI_DEBUG);
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+
+        localHelper.CreateTestOlapTable();
+        testHelper.CreateTier("tier1");
+
+        testHelper.SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
+        csController->WaitActualization(TDuration::Seconds(5));
+
+        for (ui64 i = 0; i < 100; ++i) {
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, 3600000000 + i * 10000, 1000);
+        }
+
+        csController->WaitActualization(TDuration::Seconds(10));
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT
+                    TierName, SUM(Rows) As Rows
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+                GROUP BY TierName
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "/Root/tier1");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows")), 100000);
+        }
+    }
+
     Y_UNIT_TEST(TieringValidation) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 

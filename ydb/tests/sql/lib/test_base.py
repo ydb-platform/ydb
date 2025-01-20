@@ -27,7 +27,7 @@ class TestBase(TestLib, Query):
 
         cls.ydb_cli_path = yatest.common.build_path("ydb/apps/ydb/ydb")
 
-        cls.database = "/Root"
+        cls.database = "/Root/TestDb"
         cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration(),
                                                    extra_feature_flags=["enable_resource_pools",
                                                                         "enable_external_data_sources",
@@ -42,6 +42,14 @@ class TestBase(TestLib, Query):
                                                    additional_log_configs={
                                                        'TX_TIERING': LogLevels.DEBUG}))
         cls.cluster.start()
+        cls.cluster.create_database(
+            cls.database,
+            storage_pool_units_count={
+                'hdd': len(cls.cluster.nodes)
+            }
+        )
+        cls.cluster.register_and_start_slots(cls.database, count=cls.get_dynnodes_count())
+        cls.cluster.wait_tenant_up(cls.database)
         cls.driver = ydb.Driver(
             ydb.DriverConfig(
                 database=cls.get_database(),
@@ -58,6 +66,10 @@ class TestBase(TestLib, Query):
     @classmethod
     def get_cluster_configuration(self):
         return Erasure.NONE
+
+    @classmethod
+    def get_dynnodes_count(self):
+        return 1
 
     @classmethod
     def get_database(self):
@@ -85,8 +97,8 @@ class TestBase(TestLib, Query):
 class TpchTestBaseH1(TestBase):
 
     @classmethod
-    def get_cluster_configuration(self):
-        return Erasure.MIRROR_3_DC
+    def get_dynnodes_count(self):
+        return 4
 
     @classmethod
     def run_cli(cls, argv: list[str]) -> yatest.common.process._Execution:

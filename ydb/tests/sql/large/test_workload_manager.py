@@ -9,7 +9,7 @@ import pytest
 
 class TestWorkloadManager(TpchTestBaseH1):
     def get_pool(self, user, query):
-        workload_manager.get_pool(self, self.ydb_cli_path, cls.get_endpoint(), cls.get_database(), database, user, query)
+        return workload_manager.get_pool(self, self.ydb_cli_path, self.get_endpoint(), self.get_database(), user, query)
 
     def test_crud(self):
         """

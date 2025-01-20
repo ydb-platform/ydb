@@ -5,8 +5,8 @@ def get_pool(self, ydb_cli_path, endpoint, database, user, query):
 
     command = [
         ydb_cli_path,
-        '-e', 'grpc://' + cls.get_endpoint(),
-        '-d', cls.get_database(),
+        '-e', 'grpc://' + endpoint,
+        '-d', database,
         "--user", user, 
         '--no-password', 
         "sql", 
@@ -14,8 +14,6 @@ def get_pool(self, ydb_cli_path, endpoint, database, user, query):
         '--stats', 'full', 
         '--format', 'json-unicode'
     ]
-
-    args.extend(argv)
 
     stdout = yatest.common.execute(command, wait=True).stdout.decode("utf-8")
     resource_pool_in_use = _find_resource_pool_id(stdout)

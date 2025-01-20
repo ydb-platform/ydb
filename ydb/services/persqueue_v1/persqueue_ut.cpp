@@ -2839,10 +2839,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         ui32 fromDisk = info0.BlobsFromDisk + info16.BlobsFromDisk;
         ui32 fromCache = info0.BlobsFromCache + info16.BlobsFromCache;
-        UNIT_ASSERT_C(fromDisk > 0, "fromDisk=" << fromDisk);
-        UNIT_ASSERT_C(fromDisk < 5, "fromDisk=" << fromDisk);
-        UNIT_ASSERT_C(fromCache > 0, "fromCache=" << fromCache);
-        UNIT_ASSERT_C(fromCache < 5, "fromCache=" << fromCache);
+        UNIT_ASSERT(fromDisk > 0);
+        UNIT_ASSERT(fromDisk < 5);
+        UNIT_ASSERT(fromCache > 0);
+        UNIT_ASSERT(fromCache < 5);
     }
 
     Y_UNIT_TEST(CacheHead) {

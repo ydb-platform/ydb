@@ -1853,16 +1853,6 @@ void TFixture::EnsureKeysIsEqual(const TString& topicName, unsigned id)
     auto tabletKeys = GetPQTabletDataKeys(edge, tabletId);
     auto cacheKeys = GetPQCacheKeys(edge, tabletId);
 
-    Cerr << "== tablet keys ==" << Endl;
-    for (const auto& key : tabletKeys) {
-        Cerr << key << Endl;
-    }
-    Cerr << "== cache keys ===" << Endl;
-    for (const auto& key : cacheKeys) {
-        Cerr << "(" << key.Partition.OriginalPartitionId << "," << key.Partition.InternalPartitionId << ") " << key.Offset << " " << key.PartNo << Endl;
-    }
-    Cerr << "=================" << Endl;
-
     UNIT_ASSERT_VALUES_EQUAL_C(tabletKeys.size(), cacheKeys.size(), "id=" << id);
 
     auto compareBlobId = [](const TEvPqCache::TEvCacheKeysResponse::TKey& lhs,
@@ -2700,6 +2690,8 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_49, TFixture)
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_50, TFixture)
 {
+    // We write to the topic in the transaction. When a transaction is committed, the keys in the blob
+    // cache are renamed.
     CreateTopic("topic_A", TEST_CONSUMER);
     CreateTopic("topic_B", TEST_CONSUMER);
 

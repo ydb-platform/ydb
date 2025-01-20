@@ -84,9 +84,9 @@ class TestBase(TestLib, Query):
 
 class TpchTestBaseH1(TestBase):
 
-    # @classmethod
-    # def get_cluster_configuration(self):
-    #     return Erasure.MIRROR_3_DC
+    @classmethod
+    def get_cluster_configuration(self):
+        return Erasure.MIRROR_3_DC
 
     @classmethod
     def run_cli(cls, argv: list[str]) -> yatest.common.process._Execution:

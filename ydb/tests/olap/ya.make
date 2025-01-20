@@ -1,3 +1,23 @@
+PY3TEST()
+    ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+    ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+
+    TEST_SRCS(
+        test_disk_exhaustion.py
+    )
+
+    SIZE(MEDIUM)
+
+    DEPENDS(
+        ydb/apps/ydb
+        ydb/apps/ydbd
+    )
+
+    PEERDIR(
+        ydb/tests/library
+    )
+END()
+
 RECURSE(
     lib
     scenario

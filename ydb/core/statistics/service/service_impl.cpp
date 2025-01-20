@@ -1047,13 +1047,13 @@ private:
             columnTags->Add(tag);
         }
 
-        const auto round = AggregationStatistics.Round;
-        NTabletPipe::SendData(SelfId(), clientId, request.release(), round);
-        Schedule(Settings.StatisticsRequestTimeout, new TEvPrivate::TEvStatisticsRequestTimeout(round, tabletId));
-
         SA_LOG_D("TEvStatisticsRequest send"
             << ", client id = " << clientId
             << ", path = " << *path);
+
+        const auto round = AggregationStatistics.Round;
+        NTabletPipe::SendData(SelfId(), clientId, request.release(), round);
+        Schedule(Settings.StatisticsRequestTimeout, new TEvPrivate::TEvStatisticsRequestTimeout(round, tabletId));
     }
 
     void OnTabletError(ui64 tabletId) {

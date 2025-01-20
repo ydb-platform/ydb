@@ -5,8 +5,10 @@ ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 
 TEST_SRCS(
     base.py
-    functional.py
+    ttl_delete_s3.py
 )
+
+SIZE(MEDIUM)
 
 PEERDIR(
     ydb/tests/library

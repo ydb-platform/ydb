@@ -10,6 +10,8 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/mkql_stats_registry.h>
 
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
+
 #include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
@@ -33,6 +35,7 @@ int main() {
         GetCommonDqFactory(),
         GetDqYtFactory(statsRegistry.Get()),
         NKikimr::NMiniKQL::GetYqlFactory(),
+        NYql::GetPgFactory(),
     });
 
     auto dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({

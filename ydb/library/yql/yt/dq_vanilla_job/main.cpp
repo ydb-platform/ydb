@@ -4,6 +4,8 @@
 #include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
+
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
@@ -39,6 +41,7 @@ int main(int argc, const char* argv[]) {
                 GetCommonDqFactory(),
                 GetDqYtFactory(statsRegistry.Get()),
                 NKikimr::NMiniKQL::GetYqlFactory(),
+                NYql::GetPgFactory(),
             });
 
             auto dqTaskTransformFactory = CreateCompositeTaskTransformFactory({

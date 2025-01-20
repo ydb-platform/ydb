@@ -242,6 +242,7 @@ protected:
         ShardIdToNodeId = std::move(reply.ShardNodes);
         for (auto& [shardId, nodeId] : ShardIdToNodeId) {
             ShardsOnNode[nodeId].push_back(shardId);
+            ParticipantNodes.emplace(nodeId);
         }
 
         if (IsDebugLogEnabled()) {
@@ -1923,6 +1924,10 @@ protected:
                     LOG_I("Full stats: " << response.GetResult().GetStats());
                 }
             }
+
+            for (const auto nodeId : ParticipantNodes) {
+                response.MutableResult()->AddParticipantNodes(nodeId);
+            }
         }
 
         Request.Transactions.crop(0);
@@ -2055,6 +2060,10 @@ protected:
     bool CheckDuplicateRows = false;
 
     ui32 StatementResultIndex;
+
+    // Track which nodes has been involved during execution
+    THashSet<ui32> ParticipantNodes;
+
     bool AlreadyReplied = false;
     bool EnableReadsMerge = false;
 

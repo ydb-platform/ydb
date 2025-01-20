@@ -12,8 +12,6 @@ from yql_utils import execute, get_supported_providers, get_tables, get_files, g
 from yqlrun import YQLRun
 
 from test_utils import get_parameters_json, replace_vars
-# FIXME dq usage
-from test_utils import DATA_PATH
 
 
 def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is_hybrid=False, allow_llvm=True):
@@ -56,10 +54,7 @@ def check_provider(provider, config):
         pytest.skip('%s provider is not supported here' % provider)
 
 
-# FIXME make data_path required (dq usage)
 def get_sql_query(provider, suite, case, config, data_path=None, template='.sql'):
-    if data_path is None:
-        data_path = DATA_PATH
     pragmas = get_pragmas(config)
 
     if get_param('TARGET_PLATFORM'):
@@ -93,9 +88,6 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                       yqlrun_binary=None, extra_args=[], force_blocks=False, allow_llvm=True, data_path=None,
                       run_sql=True):
     check_provider(provider, config)
-    # FIXME dq usage
-    if data_path is None:
-        data_path = DATA_PATH
 
     sql_query = get_sql_query(provider, suite, case, config, data_path, template='.sql' if run_sql else '.yqls')
     sql_query = replace_vars(sql_query, "yqlrun_var")

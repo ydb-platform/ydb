@@ -9,7 +9,6 @@ from library.recipes import common as recipes_common
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.common.types import Erasure
 
 
 logger = logging.getLogger(__name__)
@@ -92,9 +91,6 @@ class ColumnTableHelper:
         results = self.ydb_client.query(stmt)
         return {row["TierName"]: {"Portions": row["Portions"], "BlobSize": row["BlobSize"], "BlobCount": row["BlobCount"]} for result_set in results for row in result_set.rows}
 
-    def get_stat(self):
-        pass
-
 
 class TllTieringTestBase(object):
     @classmethod
@@ -104,16 +100,15 @@ class TllTieringTestBase(object):
 
     @classmethod
     def teardown_class(cls):
+        recipes_common.stop_daemon(cls.s3_pid)
         cls.ydb_client.stop()
         cls.cluster.stop()
-        recipes_common.stop_daemon(cls.s3_pid)
 
     @classmethod
     def _setup_ydb(cls):
-        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY", "ydb/apps/ydbd/ydbd"))
+        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_external_data_sources": True,
                 "enable_tiering_in_column_shard": True

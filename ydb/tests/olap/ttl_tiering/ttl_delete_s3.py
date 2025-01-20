@@ -14,7 +14,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
     cold_bucket = "cold"
     frozen_bucket = "frozen"
     days_to_cool = 1000
-    days_to_froze = 3000
+    days_to_freeze = 3000
 
     @classmethod
     def setup_class(cls):
@@ -103,7 +103,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
             logger.info(f"{cur_rows} rows inserted in total, portions: {table.get_portion_stat_by_tier()}, blobs: {table.get_blob_stat_by_tier()}")
 
         logger.info(f"Rows older than {self.days_to_cool} days: {self.get_row_count_by_date(table_path, self.days_to_cool)}")
-        logger.info(f"Rows older than {self.days_to_froze} days: {self.get_row_count_by_date(table_path, self.days_to_froze)}")
+        logger.info(f"Rows older than {self.days_to_freeze} days: {self.get_row_count_by_date(table_path, self.days_to_freeze)}")
 
         def portions_actualized_in_sys():
             portions = table.get_portion_stat_by_tier()
@@ -119,7 +119,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         stmt = f"""
             ALTER TABLE `{table_path}` SET (TTL =
                 Interval("P{self.days_to_cool}D") TO EXTERNAL DATA SOURCE `{cold_eds_path}`,
-                Interval("P{self.days_to_froze}D") TO EXTERNAL DATA SOURCE `{frozen_eds_path}`
+                Interval("P{self.days_to_freeze}D") TO EXTERNAL DATA SOURCE `{frozen_eds_path}`
                 ON ts
             )
         """

@@ -8024,7 +8024,8 @@ $b = ($x) -> { return $a || $x; };
 $__ydb_transfer_lambda = ($x) -> {
                 -- internal comment
                 return $b($x);
-              };)";
+              };
+))";
 
         UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, programm.find(expected));
         

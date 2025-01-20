@@ -60,7 +60,7 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 
 {% endif %}
 
-{% include [table naming rules](../../../../concepts/datamodel/_includes/table-name-rules.md) %}
+{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
 
 ## Examples of table creation {#examples-tables-creation}
 

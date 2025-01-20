@@ -20,7 +20,7 @@ AS <query>
 
   * `security_invoker` (Bool) causes the underlying base relations to be checked against the privileges of the user of the view rather than the view owner. {#security_invoker}
 
-{% include [object naming rules](../../../concepts/datamodel/_includes/table-name-rules.md#object-naming-rules) %}
+{% include [object naming rules](../../../concepts/datamodel/_includes/object-naming-rules.md#object-naming-rules) %}
 
 ## Notes {#notes}
 

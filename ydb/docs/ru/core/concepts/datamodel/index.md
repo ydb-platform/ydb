@@ -18,4 +18,4 @@
 
 Все схемные объекты в {{ ydb-short-name }} имеют одинаковые требования к своим [наименованиям](#object-naming-rules). Но правила наименования колонок немного [отличаются](#column-naming-rules) от правил для схемных объектов.
 
-{% include [object naming rules](./_includes/table-name-rules.md) %}
+{% include [object naming rules](./_includes/object-naming-rules.md) %}

@@ -14,7 +14,7 @@ ALTER TABLE old_table_name RENAME TO new_table_name;
 
 {% cut "См. правила наименования таблиц и колонок" %}
 
-{% include [table naming rules](../../../../concepts/datamodel/_includes/table-name-rules.md) %}
+{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
 
 {% endcut %}
 

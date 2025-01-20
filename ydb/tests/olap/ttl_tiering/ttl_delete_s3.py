@@ -155,7 +155,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
             cold_bucket_stat = self.s3_client.get_bucket_stat(self.cold_bucket)
             frozen_bucket_stat = self.s3_client.get_bucket_stat(self.frozen_bucket)
             logger.info(
-                f"portions: {table.get_portion_stat_by_tier()}, blobs: {table.get_blob_stat_by_tier()}, cold bucket stat: {self.cold_bucket_stat}, frozen bucket stat: {self.frozen_bucket_stat}")
+                f"portions: {table.get_portion_stat_by_tier()}, blobs: {table.get_blob_stat_by_tier()}, cold bucket stat: {cold_bucket_stat}, frozen bucket stat: {frozen_bucket_stat}")
             return cold_bucket_stat[0] == 0 and frozen_bucket_stat[0] == 0
 
         if not self.wait_for(lambda: data_deleted_from_buckets(), 120):

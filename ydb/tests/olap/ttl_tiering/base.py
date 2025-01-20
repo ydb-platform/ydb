@@ -128,7 +128,7 @@ class TllTieringTestBase(object):
         cls.cluster = KiKiMR(config)
         cls.cluster.start()
         node = cls.cluster.nodes[1]
-        cls.ydb_client = YdbClient(database=config.domain_name, endpoint=f"grpc://{node.host}:{node.port}")
+        cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
         cls.ydb_client.wait_connection()
 
     @classmethod

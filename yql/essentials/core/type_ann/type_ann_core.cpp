@@ -9153,6 +9153,36 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    IGraphTransformer::TStatus TableSourceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool isWide = input->Content().StartsWith("Wide");
+        if (isWide) {
+            if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList) {
+                ;
+            } else {
+                if (!EnsureListType(input->Head(), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                auto inputItemType = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+                if (!EnsureStructType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus SqlProcessWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -12623,6 +12653,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SqlVisit"] = &SqlVisitWrapper;
         Functions["Visit"] = &VisitWrapper;
         Functions["Way"] = &WayWrapper;
+        Functions["TableSource"] = &TableSourceWrapper;
+        Functions["WideTableSource"] = &TableSourceWrapper;
         Functions["SqlAccess"] = &SqlAccessWrapper;
         Functions["SqlProcess"] = &SqlProcessWrapper;
         Functions["SqlReduce"] = &SqlReduceWrapper;

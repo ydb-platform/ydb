@@ -26,7 +26,7 @@ def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is
             schema.Pattern = 'http_test://(.*)'
             schema.TargetUrl = yql_http_file_server.compose_http_link('$1')
         if force_blocks:
-            config_message.SqlCore.TranslationFlags.extend(['EmitAggApply'])
+            config_message.SqlCore.TranslationFlags.extend(['EmitAggApply', 'EmitTableSource'])
             flags = config_message.YqlCore.Flags.add()
             flags.Name = 'UseBlocks'
         if is_hybrid:

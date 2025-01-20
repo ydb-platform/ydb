@@ -71,7 +71,7 @@ def pytest_generate_tests_by_template(template, metafunc, data_path):
     metafunc.parametrize(['suite', 'case'], argvalues)
 
 
-def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, currentPart=0, partsCount=1, data_path=None):
+def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, currentPart=0, partsCount=1, data_path=None, mode_expander=None):
     assert data_path is not None
     argvalues = []
 
@@ -95,25 +95,30 @@ def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, curren
             ]
             if os.path.exists(suite_dir + '/' + case + '.cfg'):
                 configs.append('')
+            to_append = []
             for cfg in sorted(configs):
                 if _make_hash((suite, case, cfg)) % partsCount == currentPart:
-                    argvalues.append((suite, case, cfg))
+                    to_append.append((suite, case, cfg))
             if not configs and _make_hash((suite, case, 'default.txt')) % partsCount == currentPart:
-                argvalues.append((suite, case, 'default.txt'))
+                to_append.append((suite, case, 'default.txt'))
+            if mode_expander is None:
+                argvalues += to_append
+            else:
+                argvalues += mode_expander(to_append)
 
     metafunc.parametrize(
-        ['suite', 'case', 'cfg'],
+        ['suite', 'case', 'cfg'] + (['what'] if mode_expander is not None else []),
         argvalues,
     )
 
 
 # FIXME make data_path required (dq usage)
-def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None, template='.sql'):
+def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None, template='.sql', mode_expander=None):
     if data_path is None:
         data_path = DATA_PATH
 
     return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount,
-                                         data_path=data_path, template=template)
+                                         data_path=data_path, template=template, mode_expander=mode_expander)
 
 
 def get_cfg_file(cfg, case):

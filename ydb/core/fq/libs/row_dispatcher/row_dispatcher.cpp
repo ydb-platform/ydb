@@ -394,6 +394,8 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvGetInternalStateResponse::TPtr& ev);
 
     void Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev);
+
     void Handle(const TEvPrivate::TEvTryConnect::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&);
     void Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&);
@@ -423,6 +425,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvNoSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionStatistic, Handle);
@@ -858,7 +861,15 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
     }
     LWPROBE(Heartbeat, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
     LOG_ROW_DISPATCHER_TRACE("Received TEvHeartbeat from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
-    CheckSession(it->second, ev);
+    if (ev->Cookie != it->second->Generation) {
+        LOG_ROW_DISPATCHER_WARN("Wrong message generation (TEvHeartbeat), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << it->second->Generation << ", query id " << it->second->QueryId); 
+    }
+}
+
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
+    LOG_ROW_DISPATCHER_DEBUG("Received TEvNoSession from " << ev->Sender << ", cookie " << ev->Cookie);
+    ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
+    DeleteConsumer(key);
 }
 
 template <class TEventPtr>
@@ -869,7 +880,7 @@ bool TRowDispatcher::CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, cons
     }
     if (!consumer->EventsQueue.OnEventReceived(ev)) {
         const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-        LOG_ROW_DISPATCHER_WARN("Wrong seq num ignore message (" << typeid(TEventPtr).name() << ") seqNo " << meta.GetSeqNo() << " from " << ev->Sender.ToString() << ", query id " << consumer->QueryId);
+        LOG_ROW_DISPATCHER_WARN("Wrong seq num, ignore message (" << typeid(TEventPtr).name() << ") seqNo " << meta.GetSeqNo() << " from " << ev->Sender.ToString() << ", query id " << consumer->QueryId);
         return false;
     }
     return true;
@@ -885,6 +896,11 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     LWPROBE(StopSession, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
+    const auto& consumer = it->second;
+    if (ev->Cookie != consumer->Generation) {
+        LOG_ROW_DISPATCHER_WARN("Wrong message generation, ignore TEvStopSession, sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << consumer->Generation << ", query id " << consumer->QueryId);
+        return;
+    }
     if (!CheckSession(it->second, ev)) {
         return;
     }
@@ -946,7 +962,8 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbea
     bool needSend = sessionInfo->EventsQueue.Heartbeat();
     if (needSend) {
         LOG_ROW_DISPATCHER_TRACE("Send TEvHeartbeat to " << sessionInfo->ReadActorId << " query id " << sessionInfo->QueryId);
-        sessionInfo->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvHeartbeat(sessionInfo->PartitionId), sessionInfo->Generation);
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvHeartbeat>(sessionInfo->PartitionId);
+        Send(new IEventHandle(sessionInfo->ReadActorId, SelfId(), event.release(), 0, sessionInfo->Generation));
     }
 }
 

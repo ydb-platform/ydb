@@ -78,6 +78,7 @@ add_subdirectory(ut_transfer)
 add_subdirectory(ut_ttl)
 add_subdirectory(ut_user_attributes)
 add_subdirectory(ut_user_attributes_reboots)
+add_subdirectory(ut_vector_index_build_reboots)
 add_subdirectory(ut_view)
 
 add_library(core-tx-schemeshard)

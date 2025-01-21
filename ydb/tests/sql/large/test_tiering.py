@@ -3,6 +3,7 @@ import datetime
 import random
 import ydb
 from ydb.tests.sql.lib.test_base import TestBase
+from ydb.tests.sql.lib.helpers import split_data_into_fixed_size_chunks
 from ydb.tests.sql.lib.test_s3 import S3Base
 import time
 
@@ -183,5 +184,5 @@ class TestYdbS3TTL(TestBase, S3Base):
                 column_types
             )
 
-        for chunk in TestBase.split_data_into_fixed_size_chunks(upsert_data, 10000):
+        for chunk in split_data_into_fixed_size_chunks(upsert_data, 10000):
             bulk_upsert_operation(chunk)

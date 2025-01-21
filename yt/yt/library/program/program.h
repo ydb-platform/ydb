@@ -126,8 +126,6 @@ NYson::TYsonString CheckYsonArgMapper(const TString& arg);
 //! Drop privileges and save them if running with suid-bit.
 void ConfigureUids();
 
-void ConfigureCoverageOutput();
-
 void ConfigureIgnoreSigpipe();
 
 //! Intercepts standard crash signals (see signal_registry.h for full list) with a nice handler.

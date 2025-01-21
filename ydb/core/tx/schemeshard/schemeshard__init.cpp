@@ -4441,6 +4441,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         item.Scheme = scheme;
                     }
 
+                    if (rowset.HaveValue<Schema::ImportItems::CreationQuery>()) {
+                        item.CreationQuery = rowset.GetValue<Schema::ImportItems::CreationQuery>();
+                    }
+
+                    if (rowset.HaveValue<Schema::ImportItems::PreparedCreationQuery>()) {
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(
+                            item.PreparedCreationQuery,
+                            rowset.GetValue<Schema::ImportItems::PreparedCreationQuery>()
+                        ));
+                    }
+
                     if (rowset.HaveValue<Schema::ImportItems::Permissions>()) {
                         Ydb::Scheme::ModifyPermissionsRequest permissions;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(permissions, rowset.GetValue<Schema::ImportItems::Permissions>()));

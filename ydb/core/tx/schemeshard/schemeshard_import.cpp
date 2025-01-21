@@ -175,6 +175,12 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     record.Update(
         NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Scheme.SerializeAsString())
     );
+
+    if (!item.CreationQuery.empty()) {
+        record.Update(
+            NIceDb::TUpdate<Schema::ImportItems::CreationQuery>(item.CreationQuery)
+        );
+    }
     if (item.Permissions.Defined()) {
         record.Update(
             NIceDb::TUpdate<Schema::ImportItems::Permissions>(item.Permissions->SerializeAsString())
@@ -183,6 +189,18 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.Metadata.Serialize())
     );
+}
+
+void TSchemeShard::PersistImportItemPreparedCreationQuery(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+    const auto& item = importInfo->Items[itemIdx];
+
+    // persist the prepared modify scheme if it is non-empty (has operation type is interpreted as non-empty)
+    if (item.PreparedCreationQuery.HasOperationType()) {
+        db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+            NIceDb::TUpdate<Schema::ImportItems::PreparedCreationQuery>(item.PreparedCreationQuery.SerializeAsString())
+        );
+    }
 }
 
 void TSchemeShard::PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -216,6 +234,10 @@ void TSchemeShard::Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TAct
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressImport(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressImport(ev), ctx);
 }
 

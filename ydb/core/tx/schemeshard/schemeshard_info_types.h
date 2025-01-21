@@ -2847,6 +2847,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString DstPathName;
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
+        TString CreationQuery;
+        NKikimrSchemeOp::TModifyScheme PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
 
@@ -2855,6 +2857,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TTxId WaitTxId = InvalidTxId;
         int NextIndexIdx = 0;
         TString Issue;
+        int ViewCreationRetries = 0;
 
         TItem() = default;
 

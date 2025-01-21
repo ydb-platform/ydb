@@ -39,11 +39,6 @@ class TestYdbWorkload(object):
     def test(self):
         client = YdbClient(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root')
 
-        try:
-            client.query("DROP TABLE huge")
-        except ydb.issues.SchemeError:
-            pass
-
         def create_table(table):
             return client.query(f"""
                 CREATE TABLE {table} (

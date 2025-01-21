@@ -170,6 +170,7 @@ struct TEvRowDispatcher {
     };
 
     struct TEvNoSession : public NActors::TEventPB<TEvNoSession, NFq::NRowDispatcherProto::TEvNoSession, EEv::EvNoSession> {
+        TEvNoSession() = default;
     };
 
     struct TEvGetInternalStateRequest : public NActors::TEventPB<TEvGetInternalStateRequest,

@@ -422,7 +422,6 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockCoordinatorChanged(Coordinator1Id);
         req = ExpectCoordinatorRequest(Coordinator1Id);
         MockCoordinatorResult({{RowDispatcher2, PartitionId1}}, req->Cookie);       // distribution is not changed
-
         ProcessSomeMessages(5, {Message2}, RowDispatcher2, UVPairParser, 2);
     }
 

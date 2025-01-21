@@ -4,6 +4,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/progress_indication.h>
@@ -44,6 +45,9 @@ void TCommandSql::Config(TConfig& config) {
     config.Opts->AddLongOption("print-progress", "Print progress of query execution. "
             "Requires non-none statistics collection mode.")
         .StoreTrue(&PrintProgress);
+    config.Opts->AddLongOption("full-stats", "Full stats report file name. "
+            "Requires full or profile statistics collection mode.")
+        .StoreResult(&FullStatsFileName);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
         .Hidden();
@@ -100,6 +104,9 @@ void TCommandSql::Parse(TConfig& config) {
     }
     if (PrintProgress && (CollectStatsMode.empty() || CollectStatsMode == "none")) {
         throw TMisuseException() << "Option \"--print-progress\" requires non-none statistics collection mode.";
+    }
+    if (FullStatsFileName && (CollectStatsMode.empty() || CollectStatsMode == "none" || CollectStatsMode == "basic")) {
+        throw TMisuseException() << "Option \"--full-stats\" requires full or profile statistics collection mode.";
     }
     if (QueryFile) {
         if (QueryFile == "-") {
@@ -196,6 +203,16 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
         TProgressIndication progressIndication;
+
+        TString currentStatsFileName;
+        TString currentPlanWithStatsFileName;
+        TString currentPlanWithStatsFileNameJson;
+        if (FullStatsFileName) {
+            currentStatsFileName = TStringBuilder() << FullStatsFileName << ".stats";
+            currentPlanWithStatsFileName = TStringBuilder() << FullStatsFileName << ".plan.svg";
+            currentPlanWithStatsFileNameJson = TStringBuilder() << FullStatsFileName << ".plan.json";
+        }
+
         TMaybe<NQuery::TExecStats> execStats;
 
         while (!IsInterrupted()) {
@@ -206,6 +223,31 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
 
             if (streamPart.HasStats()) {
                 execStats = streamPart.ExtractStats();
+
+                if (FullStatsFileName) {
+                    TFileOutput out(currentStatsFileName);
+                    out << execStats->ToString();
+                    {
+                        auto plan = execStats->GetPlan();
+                        if (plan) {
+                            {
+                                TPlanVisualizer pv;
+                                TFileOutput out(currentPlanWithStatsFileName);
+                                try {
+                                    pv.LoadPlans(*execStats->GetPlan());
+                                    out << pv.PrintSvg();
+                                } catch (std::exception& e) {
+                                    out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";
+                                }
+                            }
+                            {
+                                TFileOutput out(currentPlanWithStatsFileNameJson);
+                                TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
+                                queryPlanPrinter.Print(*execStats->GetPlan());
+                            }
+                        }
+                    }
+                }
 
                 const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
                 for (const auto& queryPhase : protoStats.query_phases()) {

@@ -378,7 +378,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
         TMaybe<TString> currentStatsFileName;
         if (FullStatsFileName) {
             TFsPath(FullStatsFileName).Parent().MkDirs();
-            currentStatsFileName =  TStringBuilder() << FullStatsFileName << "." << queryN << ".stats";
+            currentStatsFileName =  TStringBuilder() << FullStatsFileName << "." << queryN;
         }
 
         for (ui32 i = 0; i < IterationsCount && Now() < GlobalDeadline; ++i) {

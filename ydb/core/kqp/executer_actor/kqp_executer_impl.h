@@ -403,20 +403,34 @@ protected:
 
         YQL_ENSURE(Stats);
 
-        if (state.HasStats() && Request.ProgressStatsPeriod) {
-            Stats->UpdateTaskStats(taskId, state.GetStats());
+        if (state.HasStats()) {
             auto now = TInstant::Now();
-            if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
-                auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
-                auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
-                Stats->ExportExecStats(execStats);
-                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
-                    const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
-                    execStats.AddTxPlansWithStats(planWithStats);
+            if (Request.ProgressStatsPeriod) {
+                Stats->UpdateTaskStats(taskId, state.GetStats());
+                if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
+                    auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
+                    auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
+                    Stats->ExportExecStats(execStats);
+                    for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                        const auto& tx = Request.Transactions[txId].Body;
+                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                        execStats.AddTxPlansWithStats(planWithStats);
+                    }
+                    this->Send(Target, progress.Release());
+                    LastProgressStats = now;
                 }
-                this->Send(Target, progress.Release());
-                LastProgressStats = now;
+            }
+            if (Request.AnalyzePlanPeriod) {
+                if (LastAnalyzePlan + Request.AnalyzePlanPeriod <= now) {
+                    auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
+                    for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                        const auto& tx = Request.Transactions[txId].Body;
+                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                        execStats.AddTxPlansWithStats(planWithStats);
+                    }
+                    this->Send(Target, progress.Release());
+                    LastProgressStats = now;
+                }
             }
         }
 
@@ -2005,6 +2019,7 @@ protected:
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
+    TInstant LastAnalyzePlan;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
     TMaybe<TInstant> CancelAt;

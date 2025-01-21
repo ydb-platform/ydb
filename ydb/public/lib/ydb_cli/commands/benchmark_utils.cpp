@@ -14,6 +14,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/progress_indication.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
@@ -186,6 +187,13 @@ public:
         TProgressIndication progressIndication(true);
         TMaybe<NQuery::TExecStats> execStats;
 
+        TString currentStatsFileName;
+        TString currentPlanWithStatsFileName;
+        if (statsFileName) {
+            currentStatsFileName = TStringBuilder() << *statsFileName << ".stats";
+            currentPlanWithStatsFileName = TStringBuilder() << *statsFileName << ".plan.svg";
+        }
+
         for (;;) {
             auto streamPart = it.ReadNext().ExtractValueSync();
             ui64 rsIndex = 0;
@@ -201,8 +209,21 @@ public:
                     execStats = streamPart.ExtractStats();
 
                     if (statsFileName) {
-                        TFileOutput out(*statsFileName);
+                        TFileOutput out(currentStatsFileName);
                         out << execStats->ToString();
+                        {
+                            auto plan = execStats->GetPlan();
+                            if (plan) {
+                                TPlanVisualizer pv;
+                                TFileOutput out(currentPlanWithStatsFileName);
+                                try {
+                                    pv.LoadPlans(*execStats->GetPlan());
+                                    out << pv.PrintSvg();
+                                } catch (std::exception& e) {
+                                    out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";
+                                }
+                            }
+                        }
                     }
 
                     const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());

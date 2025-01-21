@@ -284,6 +284,7 @@ private:
             req->pool_id());
 
         ev->SetProgressStatsPeriod(TDuration::MilliSeconds(req->progress_stats_period_ms()));
+        ev->SetAnalyzePlanPeriod(TDuration::MilliSeconds(req->analyze_plan_period_ms()));
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId())) {
             NYql::TIssues issues;
@@ -365,8 +366,8 @@ private:
 
         if (NeedReportStats(*Request_->GetProtoRequest())) {
             if (record.HasQueryStats()) {
-                record.SetQueryPlan(NKqp::SerializeAnalyzePlan(record.GetQueryStats()));
                 FillQueryStats(*response.mutable_exec_stats(), record.GetQueryStats());
+                response.mutable_exec_stats()->set_query_plan(NKqp::SerializeAnalyzePlan(record.GetQueryStats()));
             }
         }
 

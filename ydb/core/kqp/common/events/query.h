@@ -325,6 +325,10 @@ public:
         ProgressStatsPeriod = progressStatsPeriod;
     }
 
+    void SetAnalyzePlanPeriod(TDuration analyzePlanPeriod) {
+        AnalyzePlanPeriod = analyzePlanPeriod;
+    }
+
     bool GetSupportsStreamTrailingResult() const {
         return QuerySettings.SupportsStreamTrailingResult;
     }
@@ -335,6 +339,10 @@ public:
 
     TDuration GetProgressStatsPeriod() const {
         return ProgressStatsPeriod;
+    }
+
+    TDuration GetAnalyzePlanPeriod() const {
+        return AnalyzePlanPeriod;
     }
 
     void SetPoolId(const TString& poolId) {
@@ -394,6 +402,7 @@ private:
     TDuration CancelAfter;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
+    TDuration AnalyzePlanPeriod;
     std::optional<NResourcePool::TPoolSettings> PoolConfig;
 };
 

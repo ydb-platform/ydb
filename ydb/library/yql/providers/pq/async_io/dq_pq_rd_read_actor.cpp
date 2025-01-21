@@ -176,11 +176,6 @@ private:
     std::unique_ptr<NKikimr::NMiniKQL::TValuePackerTransport<true>> DataUnpacker;
     ui64 CpuMicrosec = 0;
 
-    struct TPartition {
-        bool HasPendingData = false;
-        bool IsWaitingMessageBatch = false;
-    };
-
     THashMap<ui32, TMaybe<ui64>> NextOffsetFromRD;
 
     struct TPartition {

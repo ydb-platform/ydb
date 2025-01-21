@@ -1,4 +1,5 @@
 RECURSE(
+    example
     fq
     functional
     library

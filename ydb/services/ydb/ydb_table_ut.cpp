@@ -757,8 +757,8 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
     Y_UNIT_TEST(ConnectDbAclIsStrictlyChecked) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
-        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
-        appConfig.MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
         TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NActors::NLog::PRI_DEBUG);
@@ -875,8 +875,8 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
     Y_UNIT_TEST(ConnectDbAclIsOffWhenYdbRequestsWithoutDatabase) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(true);
-        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
-        appConfig.MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
         ui16 grpc = server.GetPort();
@@ -923,8 +923,8 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
     Y_UNIT_TEST(ConnectDbAclIsOffWhenTokenIsOptionalAndNull) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
-        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
-        appConfig.MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
         ui16 grpc = server.GetPort();
@@ -948,7 +948,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 /*
     Y_UNIT_TEST(SecurityTokenError) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         TKikimrWithGrpcAndRootSchema server(appConfig, true, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;

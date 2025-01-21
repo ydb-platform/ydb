@@ -100,9 +100,6 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
 
     if (res.Has("domains-file")) {
         Y_ABORT_UNLESS(ParsePBFromFile(res.Get("domains-file"), Config.AppConfig.MutableDomainsConfig()));
-        if (Config.AppConfig.HasDomainsConfig() && Config.AppConfig.GetDomainsConfig().HasSecurityConfig()) {
-            Config.AppConfig.MutableSecurityConfig()->CopyFrom(Config.AppConfig.GetDomainsConfig().GetSecurityConfig());
-        }
     }
 
     if (res.Has("bs-file")) {

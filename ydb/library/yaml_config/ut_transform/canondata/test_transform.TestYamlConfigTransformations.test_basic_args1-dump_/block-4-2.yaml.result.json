@@ -259,7 +259,7 @@
             [
               {
                 "Name":"root",
-                "Password":"1234"
+                "Password":""
               }
             ],
           "DefaultGroups":

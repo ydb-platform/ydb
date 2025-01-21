@@ -129,7 +129,7 @@ private:
         authConfig->SetUseBlackBox(false);
         authConfig->SetUseLoginProvider(true);
         authConfig->SetEnableLoginAuthentication(isLoginAuthenticationEnabled);
-        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
         initLdapSettings(authConfig->MutableLdapAuthentication(), LdapPort, CaCertificateFile);

@@ -206,13 +206,8 @@ namespace NKikimr::NYaml {
         });
         EraseMultipleByPath(json, GROUP_PATH, ERASURE_SPECIES_FIELD);
         // for security config
-        if (json.Has("disable_builtin_security")) {
-            ctx.DisableBuiltinSecurity = json["disable_builtin_security"].GetBoolean();
-            json.EraseValue("disable_builtin_security");
-        } else {
-            ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, DISABLE_BUILTIN_SECURITY_DOMAINS_PATH).value_or(false);
-            EraseByPath(json, DISABLE_BUILTIN_SECURITY_DOMAINS_PATH);
-        }
+        ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, DISABLE_BUILTIN_SECURITY_PATH).value_or(false);
+        EraseByPath(json, DISABLE_BUILTIN_SECURITY_PATH);
         ctx.ExplicitEmptyDefaultGroups = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_GROUPS_PATH).value_or(false);
         ctx.ExplicitEmptyDefaultAccess = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_ACCESS_PATH).value_or(false);
     }
@@ -421,21 +416,19 @@ namespace NKikimr::NYaml {
     }
 
     void PrepareSecurityConfig(const TTransformContext& ctx, NKikimrConfig::TAppConfig& config, bool relaxed) {
-        if (relaxed && !config.HasDomainsConfig() && !config.HasSecurityConfig()) {
+        if (relaxed && !config.HasDomainsConfig()) {
             return;
         }
 
-        Y_ENSURE_BT(config.HasDomainsConfig() || config.HasSecurityConfig());
+        Y_ENSURE_BT(config.HasDomainsConfig());
 
         auto* domainsConfig = config.MutableDomainsConfig();
 
         bool disabledDefaultSecurity = ctx.DisableBuiltinSecurity;
 
-        NKikimrConfig::TSecurityConfig* securityConfig = nullptr;
+        NKikimrConfig::TDomainsConfig::TSecurityConfig* securityConfig = nullptr;
         if (domainsConfig->HasSecurityConfig()) {
             securityConfig = domainsConfig->MutableSecurityConfig();
-        } else if (config.HasSecurityConfig()) {
-            securityConfig = config.MutableSecurityConfig();
         }
 
         TString defaultUserName;
@@ -444,14 +437,14 @@ namespace NKikimr::NYaml {
             defaultUserName = defaultUser.GetName();
         } else if (!disabledDefaultSecurity) {
             defaultUserName = TString(DEFAULT_ROOT_USERNAME);
-            securityConfig = config.MutableSecurityConfig();
+            securityConfig = domainsConfig->MutableSecurityConfig();
             auto* user = securityConfig->AddDefaultUsers();
             user->SetName(defaultUserName);
             user->SetPassword("");
         }
 
         if (!ctx.ExplicitEmptyDefaultGroups && !(securityConfig && securityConfig->DefaultGroupsSize()) && !disabledDefaultSecurity) {
-            securityConfig = config.MutableSecurityConfig();
+            securityConfig = domainsConfig->MutableSecurityConfig();
             {
                 auto* defaultGroupAdmins = securityConfig->AddDefaultGroups();
                 defaultGroupAdmins->SetName("ADMINS");
@@ -510,12 +503,12 @@ namespace NKikimr::NYaml {
         }
 
         if (!(securityConfig && securityConfig->HasAllUsersGroup()) && !disabledDefaultSecurity) {
-            securityConfig = config.MutableSecurityConfig();
+            securityConfig = domainsConfig->MutableSecurityConfig();
             securityConfig->SetAllUsersGroup("USERS");
         }
 
         if (!ctx.ExplicitEmptyDefaultAccess && !(securityConfig && securityConfig->DefaultAccessSize()) && !disabledDefaultSecurity) {
-            securityConfig = config.MutableSecurityConfig();
+            securityConfig = domainsConfig->MutableSecurityConfig();
             securityConfig->AddDefaultAccess("+(ConnDB):USERS"); // ConnectDatabase
             securityConfig->AddDefaultAccess("+(DS|RA):METADATA-READERS"); // DescribeSchema | ReadAttributes
             securityConfig->AddDefaultAccess("+(SR):DATA-READERS"); // SelectRow

@@ -1492,8 +1492,6 @@ private:
 public:
     static const NKikimrConfig::TDomainsConfig& GetDomainsConfig();
 
-    static const NKikimrConfig::TSecurityConfig& GetSecurityConfig();
-
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;
     }

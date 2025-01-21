@@ -105,7 +105,7 @@ public:
         Server_->EnableGRpc(grpcOption);
 
         NKikimr::Tests::TClient annoyingClient(*ServerSettings);
-        if (ServerSettings->AppConfig->GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+        if (ServerSettings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             annoyingClient.SetSecurityToken("root@builtin");
         }
         annoyingClient.InitRootScheme("Root");

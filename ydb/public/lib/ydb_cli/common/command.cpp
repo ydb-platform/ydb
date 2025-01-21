@@ -208,6 +208,7 @@ void TClientCommand::CheckForExecutableOptions(TConfig& config) {
 
 void TClientCommand::Config(TConfig& config) {
     config.Opts = &Opts;
+    config.OnlyExplicitProfile = OnlyExplicitProfile;
     TStringStream stream;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << Endl << Endl
@@ -251,9 +252,14 @@ void TClientCommand::Prepare(TConfig& config) {
     Parse(config);
 }
 
+void TClientCommand::PostPrepare(TConfig& config) {
+    Y_UNUSED(config);
+}
+
 int TClientCommand::ValidateAndRun(TConfig& config) {
     config.Opts = &Opts;
     config.ParseResult = ParseResult.get();
+    PostPrepare(config);
     Validate(config);
     return Run(config);
 }
@@ -316,7 +322,7 @@ void TClientCommand::RenderOneCommandDescription(
         prefix = "└─ ";
     }
     TString line = prefix + Name;
-    stream << prefix << colors.BoldColor() << Name << colors.OldColor();
+    stream << prefix << (Dangerous ? colors.Red() : "") << colors.BoldColor() << Name << colors.OldColor();
     if (!Description.empty()) {
         int namePartLength = GetNumberOfUTF8Chars(line);
         if (namePartLength < DESCRIPTION_ALIGNMENT)
@@ -339,6 +345,15 @@ void TClientCommand::RenderOneCommandDescription(
 
 void TClientCommand::Hide() {
     Hidden = true;
+    Visible = false;
+}
+
+void TClientCommand::MarkDangerous() {
+    Dangerous = true;
+}
+
+void TClientCommand::UseOnlyExplicitProfile() {
+    OnlyExplicitProfile = true;
 }
 
 TClientCommandTree::TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
@@ -358,6 +373,12 @@ void TClientCommandTree::AddCommand(std::unique_ptr<TClientCommand> command) {
 
 void TClientCommandTree::AddHiddenCommand(std::unique_ptr<TClientCommand> command) {
     command->Hide();
+    AddCommand(std::move(command));
+}
+
+void TClientCommandTree::AddDangerousCommand(std::unique_ptr<TClientCommand> command) {
+    command->MarkDangerous();
+    command->UseOnlyExplicitProfile();
     AddCommand(std::move(command));
 }
 

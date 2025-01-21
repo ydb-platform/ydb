@@ -66,6 +66,8 @@ void TClientCommandRootKikimrBase::Parse(TConfig& config) {
     ParseProfile();
     GetProfileVariable("path", config.Path);
     TClientCommandRootBase::Parse(config);
+    ParseCredentials(config);
+    ParseAddress(config);
     NClient::TKikimr::DUMP_REQUESTS = DumpRequests;
 }
 

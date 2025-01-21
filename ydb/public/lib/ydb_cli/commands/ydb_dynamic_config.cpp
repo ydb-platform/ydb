@@ -22,12 +22,26 @@ TString WrapYaml(const TString& yaml) {
     return out.Str();
 }
 
-TCommandConfig::TCommandConfig()
+TCommandConfig::TCommandConfig(std::optional<bool> overrideOnlyExplicitProfile)
     : TClientCommandTree("config", {}, "Dynamic config")
+    , OverrideOnlyExplicitProfile(overrideOnlyExplicitProfile)
 {
     AddCommand(std::make_unique<TCommandConfigFetch>());
     AddCommand(std::make_unique<TCommandConfigReplace>());
     AddCommand(std::make_unique<TCommandConfigResolve>());
+}
+
+
+void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
+    TClientCommand::PropagateFlags(flags);
+
+    if (OverrideOnlyExplicitProfile) {
+        OnlyExplicitProfile = *OverrideOnlyExplicitProfile;
+    }
+
+    for (auto& [_, cmd] : SubCommands) {
+        cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
+    }
 }
 
 TCommandConfigFetch::TCommandConfigFetch()

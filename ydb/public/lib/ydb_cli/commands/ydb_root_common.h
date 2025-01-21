@@ -31,6 +31,7 @@ class TClientCommandRootCommon : public TClientCommandRootBase {
 public:
     TClientCommandRootCommon(const TString& name, const TClientSettings& settings);
     void Config(TConfig& config) override;
+    void PostPrepare(TConfig& config) override;
     void Parse(TConfig& config) override;
     void ParseAddress(TConfig& config) override;
     void ParseCredentials(TConfig& config) override;

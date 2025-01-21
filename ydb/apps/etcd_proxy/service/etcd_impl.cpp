@@ -43,7 +43,6 @@ void MakeSimplePredicate(const TString& key, const TString& rangeEnd, TStringBui
     const auto keyParamName = TString("$Key") += ToString(paramsCounter++);
     params.AddParam(keyParamName).String(key).Build();
 
-    sql << "where ";
     if (rangeEnd.empty())
         sql << "`key` = " << keyParamName;
     else if (rangeEnd == key)
@@ -90,7 +89,7 @@ struct TRange : public TOperation {
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter) {
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter, const std::string_view& txnFilter = {}) {
         ResultIndex = resultsCounter++;
         sql << "select ";
         if (CountOnly)
@@ -102,6 +101,11 @@ struct TRange : public TOperation {
         sql << Endl << "from ";
         const bool fromHistory = KeyRevision || MinCreateRevision || MaxCreateRevision || MinModificateRevision || MaxModificateRevision;
         sql << '`' << (fromHistory ? "verhaal" : "huidig") << '`' << Endl;
+        sql << "where ";
+
+        if (!txnFilter.empty()) {
+            sql << txnFilter << Endl << '\t' << "and ";
+        }
 
         MakeSimplePredicate(Key, RangeEnd, sql, params, paramsCounter);
         if (KeyRevision) {
@@ -194,7 +198,8 @@ struct TPut : public TOperation {
         return !Key.empty();
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter) {
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter, const std::string_view& txnFilter = {}) {
+        Y_UNUSED(txnFilter);
         const bool update = IgnoreValue || IgnoreLease;
         sql << Endl << NResource::Find(update ? "update.sql" : "upsert.sql") << Endl;
 
@@ -243,8 +248,13 @@ struct TDeleteRange : public TOperation {
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter) {
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter, const std::string_view& txnFilter = {}) {
         TStringBuilder where;
+        where << "where ";
+        if (!txnFilter.empty()) {
+            where << txnFilter << Endl << '\t' << "and ";
+        }
+
         MakeSimplePredicate(Key, RangeEnd, where, params, paramsCounter);
         ResultIndex = resultsCounter++;
         sql << "select count(*) from `huidig` " << where << ';' << Endl;
@@ -312,6 +322,16 @@ struct TCompare {
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter) const {
+        static constexpr std::string_view Fields[] = {"version"sv, "created"sv, "modified"sv, "value"sv, "lease"sv};
+        static constexpr std::string_view Comparator[] = {"="sv, ">"sv, "<"sv, "!="sv};
+        const auto argParamName = TString("$Arg") += ToString(paramsCounter++);
+        sql << '`' << Fields[Target] << '`' << Comparator[Result] << argParamName;
+        if (const auto val = std::get_if<i64>(&Value))
+            params.AddParam(argParamName).Int64(*val).Build();
+        if (const auto val = std::get_if<TString>(&Value))
+            params.AddParam(argParamName).String(*val).Build();
+    }
 };
 
 struct TTxn : public TOperation {
@@ -369,46 +389,52 @@ struct TTxn : public TOperation {
         return !Compares.empty() && fill(Success, rec.success()) && fill(Failure, rec.failure());
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter) {
-        static constexpr std::string_view Fields[] = {"version"sv, "created"sv, "modified"sv, "value"sv, "lease"sv};
-        static constexpr std::string_view Comparator[] = {"="sv, ">"sv, "<"sv, "!="sv};
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t& paramsCounter, size_t& resultsCounter, const std::string_view& txnFilter = {}) {
 
         ResultIndex = resultsCounter++;
 
-        const bool singleRange = false;
+        std::unordered_map<std::pair<TString, TString>, std::vector<TCompare>> map(Compares.size());
+        for (const auto& compare : Compares)
+            map[std::make_pair(compare.Key, compare.RangeEnd)].emplace_back(compare);
+        const bool manyRanges = map.size() > 1U;
 
-        if (!singleRange)
-            sql << "$Compare = ";
+        sql << "$Compare = ";
 
+        if (manyRanges)
+            sql << "select bool_and(`cmp`) ?? false from (" << Endl;
 
-        sql << "select bool_and(`cmp`) ?? false from (" << Endl;
-        for (auto i = 0U; i < Compares.size(); ++i) {
-            if (i)
+        for (auto i = map.cbegin(); map.cend() != i; ++i) {
+            if (map.cbegin() != i)
                 sql << Endl << "union all" << Endl;
+
             const auto argParamName = TString("$Arg") += ToString(paramsCounter++);
-            sql << "select bool_and(`" << Fields[Compares[i].Target] << "` " << Comparator[Compares[i].Result] << ' ' << argParamName << ") ?? false as `cmp` from `huidig` ";
-            MakeSimplePredicate(Compares[i].Key, Compares[i].RangeEnd, sql, params, paramsCounter);
-            if (const auto val = std::get_if<i64>(&Compares[i].Value))
-                params.AddParam(argParamName).Int64(*val).Build();
-            if (const auto val = std::get_if<TString>(&Compares[i].Value))
-                params.AddParam(argParamName).String(*val).Build();
+            sql << "select bool_and(";
+            const auto& compares = i->second;
+            for (auto j = compares.cbegin(); compares.cend() != j; ++j) {
+                if (compares.cbegin() != j)
+                    sql << " and ";
+                j->MakeQueryWithParams(sql, params, paramsCounter);
+            }
+            sql << ") ?? false as `cmp` from `huidig` where ";
+            MakeSimplePredicate(i->first.first, i->first.second, sql, params, paramsCounter);
         }
 
-        sql << Endl << ");" << Endl;
+        if (manyRanges)
+            sql << Endl << ')';
+        sql << ';' << Endl;
 
-        if (!singleRange)
-            sql << "select * from $Compare;" << Endl;
+        sql << "select * from $Compare;" << Endl;
 
         const auto make = [&](std::vector<TRequestOp>& operations, const TString&) {
             for (auto& operation : operations) {
                 if (const auto oper = std::get_if<TRange>(&operation))
-                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter);
+                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter, txnFilter);
                 else if (const auto oper = std::get_if<TPut>(&operation))
-                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter);
+                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter, txnFilter);
                 else if (const auto oper = std::get_if<TDeleteRange>(&operation))
-                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter);
+                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter, txnFilter);
                 else if (const auto oper = std::get_if<TTxn>(&operation))
-                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter);
+                    oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter, txnFilter);
             }
         };
         TString filter;

@@ -2482,13 +2482,7 @@ state: STATE_ENABLED
 
                 auto* topic = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb");
                 UNIT_ASSERT(topic);
-                Cerr << *topic << Endl;
-                UNIT_ASSERT_VALUES_EQUAL(*topic, Sprintf(R"(self {
-  name: "update_feed%d"
-  owner: "root@builtin"
-  type: TOPIC
-}
-partitioning_settings {
+                UNIT_ASSERT_VALUES_EQUAL(*topic, Sprintf(R"(partitioning_settings {
   min_active_partitions: 1
   max_active_partitions: 1
   auto_partitioning_settings {

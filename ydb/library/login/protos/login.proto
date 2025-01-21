@@ -26,6 +26,7 @@ message TSid {
     uint64 LastSuccessfulLogin = 6; // microseconds
     uint64 LastFailedLogin = 7; // microseconds
     uint64 FailedLoginAttemptCount = 8;
+    bool IsEnabled = 9;
 }
 
 message TSecurityState {

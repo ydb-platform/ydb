@@ -32,8 +32,13 @@ public:
             switch (alterLogin.GetAlterCase()) {
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
-                    auto response = context.SS->LoginProvider.CreateUser(
-                        {.User = createUser.GetUser(), .Password = createUser.GetPassword()});
+
+                    NLogin::TLoginProvider::TCreateUserRequest request;
+                    request.User = createUser.GetUser();
+                    request.Password = createUser.GetPassword();
+                    request.CanLogin = createUser.GetCanLogin();
+
+                    auto response = context.SS->LoginProvider.CreateUser(request);
 
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
@@ -41,7 +46,9 @@ public:
                         auto& sid = context.SS->LoginProvider.Sids[createUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                            Schema::LoginSids::SidHash,
-                                                                           Schema::LoginSids::CreatedAt>(sid.Type, sid.Hash, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                           Schema::LoginSids::CreatedAt,
+                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MilliSeconds(), sid.IsEnabled);
+
                         if (securityConfig.HasAllUsersGroup()) {
                             auto response = context.SS->LoginProvider.AddGroupMembership({
                                 .Group = securityConfig.GetAllUsersGroup(),
@@ -59,12 +66,27 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kModifyUser: {
                     const auto& modifyUser = alterLogin.GetModifyUser();
-                    auto response = context.SS->LoginProvider.ModifyUser({.User = modifyUser.GetUser(), .Password = modifyUser.GetPassword()});
+
+                    NLogin::TLoginProvider::TModifyUserRequest request;
+
+                    request.User = modifyUser.GetUser();
+
+                    if (modifyUser.HasPassword()) {
+                        request.Password = modifyUser.GetPassword();
+                    }
+
+                    if (modifyUser.HasCanLogin()) {
+                        request.CanLogin = modifyUser.GetCanLogin();
+                    }
+
+                    auto response = context.SS->LoginProvider.ModifyUser(request);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
-                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
+                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
+                                                                           Schema::LoginSids::SidHash,
+                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, sid.IsEnabled);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);

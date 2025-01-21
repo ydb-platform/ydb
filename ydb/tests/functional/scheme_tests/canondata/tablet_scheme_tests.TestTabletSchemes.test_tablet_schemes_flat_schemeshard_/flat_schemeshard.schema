@@ -6593,11 +6593,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "CreatedAt",
-                "ColumnType": "Timestamp"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "SidName",
                 "ColumnType": "String"
@@ -6626,19 +6621,30 @@
                 "ColumnId": 6,
                 "ColumnName": "FailedAttemptCount",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "CreatedAt",
+                "ColumnType": "Timestamp"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "IsEnabled",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,

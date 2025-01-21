@@ -84,10 +84,10 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
 
     TSidRecord& user = itUserCreate.first->second;
     user.Name = request.User;
-    user.Hash = Impl->GenerateHash(request.Password);
+    user.PasswordHash = Impl->GenerateHash(request.Password);
     user.CreatedAt = std::chrono::system_clock::now();
     user.LastFailedLogin = std::chrono::system_clock::time_point();
-
+    user.IsEnabled = request.CanLogin;
     return response;
 }
 
@@ -109,14 +109,21 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
         return response;
     }
 
-    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
-    if (!passwordCheckResult.Success) {
-        response.Error = passwordCheckResult.Error;
-        return response;
+    TSidRecord& user = itUserModify->second;
+
+    if (request.Password.has_value()) {
+        TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password.value());
+        if (!passwordCheckResult.Success) {
+            response.Error = passwordCheckResult.Error;
+            return response;
+        }
+
+        user.PasswordHash = Impl->GenerateHash(request.Password.value());
     }
 
-    TSidRecord& user = itUserModify->second;
-    user.Hash = Impl->GenerateHash(request.Password);
+    if (request.CanLogin.has_value()) {
+        user.IsEnabled = request.CanLogin.value();
+    }
 
     return response;
 }
@@ -325,7 +332,8 @@ std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) 
 }
 
 bool TLoginProvider::CheckLockout(const TSidRecord& sid) const {
-    return (AccountLockout.AttemptThreshold != 0 && sid.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold);
+    return  !sid.IsEnabled
+            || AccountLockout.AttemptThreshold != 0 && sid.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold;
 }
 
 void TLoginProvider::ResetFailedLoginAttemptCount(TSidRecord* sid) {
@@ -347,7 +355,7 @@ bool TLoginProvider::ShouldResetFailedAttemptCount(const TSidRecord& sid) const 
 }
 
 bool TLoginProvider::ShouldUnlockAccount(const TSidRecord& sid) const {
-    return ShouldResetFailedAttemptCount(sid);
+    return sid.IsEnabled && ShouldResetFailedAttemptCount(sid);
 }
 
 TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCheckLockOutRequest& request) {
@@ -370,7 +378,7 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
             response.Status = TCheckLockOutResponse::EStatus::RESET;
         } else {
             response.Status = TCheckLockOutResponse::EStatus::SUCCESS;
-            response.Error = TStringBuilder() << "User " << request.User << " is locked out";
+            response.Error = TStringBuilder() << "User " << request.User << " is not permitted to log in";
         }
         return response;
     } else if (ShouldResetFailedAttemptCount(sid)) {
@@ -402,7 +410,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         }
 
         sid = &(itUser->second);
-        if (!Impl->VerifyHash(request.Password, itUser->second.Hash)) {
+        if (!Impl->VerifyHash(request.Password, itUser->second.PasswordHash)) {
             response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
             response.Error = "Invalid password";
             sid->LastFailedLogin = now;
@@ -662,9 +670,9 @@ TString TLoginProvider::TImpl::GenerateHash(const TString& password) {
     return NJson::WriteJson(json, false);
 }
 
-bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& hashJson) {
+bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& passwordHash) {
     NJson::TJsonValue json;
-    if (!NJson::ReadJsonTree(hashJson, &json)) {
+    if (!NJson::ReadJsonTree(passwordHash, &json)) {
         return false;
     }
     TString type = json["type"].GetStringRobust();
@@ -741,7 +749,8 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             TSidRecord& sid = Sids[pbSid.GetName()];
             sid.Type = pbSid.GetType();
             sid.Name = pbSid.GetName();
-            sid.Hash = pbSid.GetHash();
+            sid.PasswordHash = pbSid.GetHash();
+            sid.IsEnabled = pbSid.GetIsEnabled();
             for (const auto& pbSubSid : pbSid.GetMembers()) {
                 sid.Members.emplace(pbSubSid);
                 ChildToParentIndex[pbSubSid].emplace(sid.Name);

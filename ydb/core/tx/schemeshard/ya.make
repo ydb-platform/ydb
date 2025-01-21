@@ -76,6 +76,7 @@ SRCS(
     schemeshard__init_populator.cpp
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
+    schemeshard__list_users.cpp
     schemeshard__login.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp

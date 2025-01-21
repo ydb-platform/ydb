@@ -545,6 +545,9 @@ namespace NSchemeShardUT_Private {
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
         const TString& user, const TString& password);
 
+    void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& user, bool isEnabled);
+
     // Mimics data query to a single table with multiple partitions
     class TFakeDataReq {
     public:

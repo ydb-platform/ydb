@@ -446,6 +446,7 @@ message TExecuterTxResult {
     reserved 5; // (deprecated) Stats
     optional NYql.NDqProto.TDqExecutionStats Stats = 6;
     reserved 7;
+    repeated uint32 ParticipantNodes = 8;
 };
 
 message TExecuterTxResponse {

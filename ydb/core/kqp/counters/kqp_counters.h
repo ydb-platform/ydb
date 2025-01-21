@@ -457,6 +457,10 @@ public:
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsDuplicationsFound;
 
+    // Locality metrics for request
+    NMonitoring::TDynamicCounters::TCounterPtr TotalSingleNodeReqCount;
+    NMonitoring::TDynamicCounters::TCounterPtr NonLocalSingleNodeReqCount;
+
     TAlignedPagePoolCounters AllocCounters;
 
     // db counters

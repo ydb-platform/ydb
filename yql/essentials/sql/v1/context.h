@@ -314,6 +314,7 @@ namespace NSQLTranslationV1 {
         bool EmitStartsWith = true;
         TMaybe<bool> EmitAggApply;
         bool UseBlocks = false;
+        bool EmitTableSource = false;
         bool AnsiLike = false;
         bool FeatureR010 = false; //Row pattern recognition: FROM clause
         TMaybe<bool> CompactGroupBy;

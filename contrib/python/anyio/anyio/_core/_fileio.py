@@ -3,7 +3,13 @@ from __future__ import annotations
 import os
 import pathlib
 import sys
-from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Sequence
+from collections.abc import (
+    AsyncIterator,
+    Callable,
+    Iterable,
+    Iterator,
+    Sequence,
+)
 from dataclasses import dataclass
 from functools import partial
 from os import PathLike
@@ -220,11 +226,15 @@ class Path:
     Some methods may be unavailable or have limited functionality, based on the Python
     version:
 
+    * :meth:`~pathlib.Path.copy` (available on Python 3.14 or later)
+    * :meth:`~pathlib.Path.copy_into` (available on Python 3.14 or later)
     * :meth:`~pathlib.Path.from_uri` (available on Python 3.13 or later)
     * :meth:`~pathlib.Path.full_match` (available on Python 3.13 or later)
     * :meth:`~pathlib.Path.is_junction` (available on Python 3.12 or later)
     * :meth:`~pathlib.Path.match` (the ``case_sensitive`` paramater is only available on
       Python 3.13 or later)
+    * :meth:`~pathlib.Path.move` (available on Python 3.14 or later)
+    * :meth:`~pathlib.Path.move_into` (available on Python 3.14 or later)
     * :meth:`~pathlib.Path.relative_to` (the ``walk_up`` parameter is only available on
       Python 3.12 or later)
     * :meth:`~pathlib.Path.walk` (available on Python 3.12 or later)
@@ -395,6 +405,51 @@ class Path:
 
         def match(self, path_pattern: str) -> bool:
             return self._path.match(path_pattern)
+
+    if sys.version_info >= (3, 14):
+
+        async def copy(
+            self,
+            target: str | os.PathLike[str],
+            *,
+            follow_symlinks: bool = True,
+            dirs_exist_ok: bool = False,
+            preserve_metadata: bool = False,
+        ) -> Path:
+            func = partial(
+                self._path.copy,
+                follow_symlinks=follow_symlinks,
+                dirs_exist_ok=dirs_exist_ok,
+                preserve_metadata=preserve_metadata,
+            )
+            return Path(await to_thread.run_sync(func, target))
+
+        async def copy_into(
+            self,
+            target_dir: str | os.PathLike[str],
+            *,
+            follow_symlinks: bool = True,
+            dirs_exist_ok: bool = False,
+            preserve_metadata: bool = False,
+        ) -> Path:
+            func = partial(
+                self._path.copy_into,
+                follow_symlinks=follow_symlinks,
+                dirs_exist_ok=dirs_exist_ok,
+                preserve_metadata=preserve_metadata,
+            )
+            return Path(await to_thread.run_sync(func, target_dir))
+
+        async def move(self, target: str | os.PathLike[str]) -> Path:
+            # Upstream does not handle anyio.Path properly as a PathLike
+            target = pathlib.Path(target)
+            return Path(await to_thread.run_sync(self._path.move, target))
+
+        async def move_into(
+            self,
+            target_dir: str | os.PathLike[str],
+        ) -> Path:
+            return Path(await to_thread.run_sync(self._path.move_into, target_dir))
 
     def is_relative_to(self, other: str | PathLike[str]) -> bool:
         try:

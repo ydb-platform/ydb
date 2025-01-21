@@ -3005,6 +3005,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
         TTestHelper testHelper(settings);
 
@@ -3084,6 +3085,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(InsertIntoNullablePK) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
         auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
         TTestHelper testHelper(settings);
@@ -3133,6 +3135,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(InsertEmptyString) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
         TTestHelper testHelper(settings);
 

@@ -5,28 +5,30 @@
         [
           {
             "Type":"BASIC",
-            "Threads":2,
+            "Threads":56,
+            "SpinThreshold":1,
             "Name":"System"
           },
           {
             "Type":"BASIC",
-            "Threads":3,
+            "Threads":24,
+            "SpinThreshold":1,
             "Name":"User"
           },
           {
             "Type":"BASIC",
-            "Threads":2,
+            "Threads":24,
+            "SpinThreshold":1,
             "Name":"Batch"
           },
           {
             "Type":"IO",
             "Threads":1,
-            "Name":"IO",
-            "TimePerMailboxMicroSecs":100
+            "Name":"IO"
           },
           {
             "Type":"BASIC",
-            "Threads":1,
+            "Threads":16,
             "SpinThreshold":10,
             "Name":"IC",
             "TimePerMailboxMicroSecs":100
@@ -34,7 +36,7 @@
         ],
       "Scheduler":
         {
-          "Resolution":256,
+          "Resolution":64,
           "SpinThreshold":0,
           "ProgressThreshold":10000
         },
@@ -52,7 +54,10 @@
     },
   "LogConfig":
     {
-      "DefaultLevel":5
+      "SysLog":false,
+      "DefaultLevel":3,
+      "AllowDropEntries":false,
+      "BackendFileName":"/place/kikimr-logs/kikimr.txt"
     },
   "NameserviceConfig":
     {
@@ -61,108 +66,110 @@
           {
             "NodeId":1,
             "Port":19001,
-            "Host":"ydb-node-zone-a-1.local",
-            "InterconnectHost":"ydb-node-zone-a-1.local",
+            "Host":"ydb-vla-dev01-000.example.com",
+            "InterconnectHost":"ydb-vla-dev01-000.example.com",
             "WalleLocation":
               {
-                "Body":1,
-                "DataCenter":"zone-a",
-                "Rack":"1"
+                "Body":3939173309,
+                "DataCenter":"VLA",
+                "Rack":"fake-1"
               }
           },
           {
             "NodeId":2,
             "Port":19001,
-            "Host":"ydb-node-zone-a-2.local",
-            "InterconnectHost":"ydb-node-zone-a-2.local",
+            "Host":"ydb-vla-dev01-001.example.com",
+            "InterconnectHost":"ydb-vla-dev01-001.example.com",
             "WalleLocation":
               {
-                "Body":2,
-                "DataCenter":"zone-a",
-                "Rack":"2"
+                "Body":1026130917,
+                "DataCenter":"VLA",
+                "Rack":"fake-2"
               }
           },
           {
             "NodeId":3,
             "Port":19001,
-            "Host":"ydb-node-zone-a-3.local",
-            "InterconnectHost":"ydb-node-zone-a-3.local",
+            "Host":"ydb-vla-dev01-002.example.com",
+            "InterconnectHost":"ydb-vla-dev01-002.example.com",
             "WalleLocation":
               {
-                "Body":3,
-                "DataCenter":"zone-a",
-                "Rack":"3"
+                "Body":2659124556,
+                "DataCenter":"VLA",
+                "Rack":"fake-3"
               }
           },
           {
             "NodeId":4,
             "Port":19001,
-            "Host":"ydb-node-zone-a-4.local",
-            "InterconnectHost":"ydb-node-zone-a-4.local",
+            "Host":"ydb-vla-dev01-003.example.com",
+            "InterconnectHost":"ydb-vla-dev01-003.example.com",
             "WalleLocation":
               {
-                "Body":4,
-                "DataCenter":"zone-a",
-                "Rack":"4"
+                "Body":1235059988,
+                "DataCenter":"VLA",
+                "Rack":"fake-4"
               }
           },
           {
             "NodeId":5,
             "Port":19001,
-            "Host":"ydb-node-zone-a-5.local",
-            "InterconnectHost":"ydb-node-zone-a-5.local",
+            "Host":"ydb-vla-dev01-004.example.com",
+            "InterconnectHost":"ydb-vla-dev01-004.example.com",
             "WalleLocation":
               {
-                "Body":5,
-                "DataCenter":"zone-a",
-                "Rack":"5"
+                "Body":61017695,
+                "DataCenter":"VLA",
+                "Rack":"fake-5"
               }
           },
           {
             "NodeId":6,
             "Port":19001,
-            "Host":"ydb-node-zone-a-6.local",
-            "InterconnectHost":"ydb-node-zone-a-6.local",
+            "Host":"ydb-vla-dev01-005.example.com",
+            "InterconnectHost":"ydb-vla-dev01-005.example.com",
             "WalleLocation":
               {
-                "Body":6,
-                "DataCenter":"zone-a",
-                "Rack":"6"
+                "Body":3561065991,
+                "DataCenter":"VLA",
+                "Rack":"fake-6"
               }
           },
           {
             "NodeId":7,
             "Port":19001,
-            "Host":"ydb-node-zone-a-7.local",
-            "InterconnectHost":"ydb-node-zone-a-7.local",
+            "Host":"ydb-vla-dev01-006.example.com",
+            "InterconnectHost":"ydb-vla-dev01-006.example.com",
             "WalleLocation":
               {
-                "Body":7,
-                "DataCenter":"zone-a",
-                "Rack":"7"
+                "Body":1997998254,
+                "DataCenter":"VLA",
+                "Rack":"fake-7"
               }
           },
           {
             "NodeId":8,
             "Port":19001,
-            "Host":"ydb-node-zone-a-8.local",
-            "InterconnectHost":"ydb-node-zone-a-8.local",
+            "Host":"ydb-vla-dev01-007.example.com",
+            "InterconnectHost":"ydb-vla-dev01-007.example.com",
             "WalleLocation":
               {
-                "Body":8,
-                "DataCenter":"zone-a",
-                "Rack":"8"
+                "Body":2700445942,
+                "DataCenter":"VLA",
+                "Rack":"fake-8"
               }
           }
+        ],
+      "ClusterUUID":"alexvru-test",
+      "AcceptUUID":
+        [
+          "alexvru-test"
         ]
     },
   "InterconnectConfig":
     {
       "StartTcp":true,
-      "EncryptionMode":"OPTIONAL",
-      "PathToCertificateFile":"/opt/ydb/certs/node.crt",
-      "PathToPrivateKeyFile":"/opt/ydb/certs/node.key",
-      "PathToCaFile":"/opt/ydb/certs/ca.crt"
+      "SendBufferDieLimitInMB":0
     },
   "DomainsConfig":
     {
@@ -170,12 +177,8 @@
         [
           {
             "DomainId":1,
-            "SchemeRoot":72057594046678944,
+            "SchemeRoot":72075186232723360,
             "SSId":
-              [
-                1
-              ],
-            "HiveUid":
               [
                 1
               ],
@@ -184,20 +187,20 @@
             "StoragePoolTypes":
               [
                 {
-                  "Kind":"ssd",
+                  "Kind":"nvme",
                   "PoolConfig":
                     {
                       "BoxId":1,
                       "ErasureSpecies":"block-4-2",
                       "VDiskKind":"Default",
-                      "Kind":"ssd",
+                      "Kind":"nvme",
                       "PDiskFilter":
                         [
                           {
                             "Property":
                               [
                                 {
-                                  "Type":"SSD"
+                                  "Type":"NVME"
                                 }
                               ]
                           }
@@ -207,21 +210,21 @@
               ],
             "ExplicitMediators":
               [
-                72057594046382081,
-                72057594046382082,
-                72057594046382083
+                72075186232426497,
+                72075186232426498,
+                72075186232426499
               ],
             "ExplicitCoordinators":
               [
-                72057594046316545,
-                72057594046316546,
-                72057594046316547
+                72075186232360961,
+                72075186232360962,
+                72075186232360963
               ],
             "ExplicitAllocators":
               [
-                72057594046447617,
-                72057594046447618,
-                72057594046447619
+                72075186232492033,
+                72075186232492034,
+                72075186232492035
               ]
           }
         ],
@@ -249,98 +252,9 @@
       "HiveConfig":
         [
           {
-            "HiveUid":1,
             "Hive":72057594037968897
           }
-        ],
-      "SecurityConfig":
-        {
-          "DefaultUsers":
-            [
-              {
-                "Name":"root",
-                "Password":"1234"
-              }
-            ],
-          "DefaultGroups":
-            [
-              {
-                "Name":"ADMINS",
-                "Members":
-                  [
-                    "root"
-                  ]
-              },
-              {
-                "Name":"DATABASE-ADMINS",
-                "Members":
-                  [
-                    "ADMINS"
-                  ]
-              },
-              {
-                "Name":"ACCESS-ADMINS",
-                "Members":
-                  [
-                    "DATABASE-ADMINS"
-                  ]
-              },
-              {
-                "Name":"DDL-ADMINS",
-                "Members":
-                  [
-                    "DATABASE-ADMINS"
-                  ]
-              },
-              {
-                "Name":"DATA-WRITERS",
-                "Members":
-                  [
-                    "ADMINS"
-                  ]
-              },
-              {
-                "Name":"DATA-READERS",
-                "Members":
-                  [
-                    "DATA-WRITERS"
-                  ]
-              },
-              {
-                "Name":"METADATA-READERS",
-                "Members":
-                  [
-                    "DATA-READERS",
-                    "DDL-ADMINS"
-                  ]
-              },
-              {
-                "Name":"USERS",
-                "Members":
-                  [
-                    "METADATA-READERS",
-                    "DATA-READERS",
-                    "DATA-WRITERS",
-                    "DDL-ADMINS",
-                    "ACCESS-ADMINS",
-                    "DATABASE-ADMINS",
-                    "ADMINS",
-                    "root"
-                  ]
-              }
-            ],
-          "DefaultAccess":
-            [
-              "+(ConnDB):USERS",
-              "+(DS|RA):METADATA-READERS",
-              "+(SR):DATA-READERS",
-              "+(UR|ER):DATA-WRITERS",
-              "+(CD|CT|WA|AS|RS):DDL-ADMINS",
-              "+(GAR):ACCESS-ADMINS",
-              "+(CDB|DDB):DATABASE-ADMINS"
-            ],
-          "AllUsersGroup":"USERS"
-        }
+        ]
     },
   "BlobStorageConfig":
     {
@@ -351,58 +265,58 @@
               {
                 "NodeID":1,
                 "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
+                "PDiskGuid":16592301274203927769,
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":2,
                 "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
+                "PDiskGuid":4066024495825696064,
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":3,
                 "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
+                "PDiskGuid":11217585798395406445,
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":4,
                 "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
+                "PDiskGuid":7548336563826238532,
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":5,
                 "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
+                "PDiskGuid":12492930695751522617,
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":6,
                 "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
+                "PDiskGuid":17947853722703397685,
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":7,
                 "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
+                "PDiskGuid":13632005992896647536,
+                "PDiskCategory":144115188075855873
               },
               {
                 "NodeID":8,
                 "PDiskID":1,
-                "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                "PDiskGuid":1,
-                "PDiskCategory":1
+                "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
+                "PDiskGuid":3668985736129884660,
+                "PDiskCategory":144115188075855873
               }
             ],
           "VDisks":
@@ -421,7 +335,7 @@
                     "NodeID":1,
                     "PDiskID":1,
                     "VDiskSlotID":0,
-                    "PDiskGuid":1
+                    "PDiskGuid":16592301274203927769
                   },
                 "VDiskKind":"Default"
               },
@@ -439,7 +353,7 @@
                     "NodeID":2,
                     "PDiskID":1,
                     "VDiskSlotID":0,
-                    "PDiskGuid":1
+                    "PDiskGuid":4066024495825696064
                   },
                 "VDiskKind":"Default"
               },
@@ -457,7 +371,7 @@
                     "NodeID":3,
                     "PDiskID":1,
                     "VDiskSlotID":0,
-                    "PDiskGuid":1
+                    "PDiskGuid":11217585798395406445
                   },
                 "VDiskKind":"Default"
               },
@@ -475,7 +389,7 @@
                     "NodeID":4,
                     "PDiskID":1,
                     "VDiskSlotID":0,
-                    "PDiskGuid":1
+                    "PDiskGuid":7548336563826238532
                   },
                 "VDiskKind":"Default"
               },
@@ -493,7 +407,7 @@
                     "NodeID":5,
                     "PDiskID":1,
                     "VDiskSlotID":0,
-                    "PDiskGuid":1
+                    "PDiskGuid":12492930695751522617
                   },
                 "VDiskKind":"Default"
               },
@@ -511,7 +425,7 @@
                     "NodeID":6,
                     "PDiskID":1,
                     "VDiskSlotID":0,
-                    "PDiskGuid":1
+                    "PDiskGuid":17947853722703397685
                   },
                 "VDiskKind":"Default"
               },
@@ -529,7 +443,7 @@
                     "NodeID":7,
                     "PDiskID":1,
                     "VDiskSlotID":0,
-                    "PDiskGuid":1
+                    "PDiskGuid":13632005992896647536
                   },
                 "VDiskKind":"Default"
               },
@@ -547,7 +461,7 @@
                     "NodeID":8,
                     "PDiskID":1,
                     "VDiskSlotID":0,
-                    "PDiskGuid":1
+                    "PDiskGuid":3668985736129884660
                   },
                 "VDiskKind":"Default"
               }
@@ -570,7 +484,7 @@
                                   "NodeID":1,
                                   "PDiskID":1,
                                   "VDiskSlotID":0,
-                                  "PDiskGuid":1
+                                  "PDiskGuid":16592301274203927769
                                 }
                               ]
                           },
@@ -581,7 +495,7 @@
                                   "NodeID":2,
                                   "PDiskID":1,
                                   "VDiskSlotID":0,
-                                  "PDiskGuid":1
+                                  "PDiskGuid":4066024495825696064
                                 }
                               ]
                           },
@@ -592,7 +506,7 @@
                                   "NodeID":3,
                                   "PDiskID":1,
                                   "VDiskSlotID":0,
-                                  "PDiskGuid":1
+                                  "PDiskGuid":11217585798395406445
                                 }
                               ]
                           },
@@ -603,7 +517,7 @@
                                   "NodeID":4,
                                   "PDiskID":1,
                                   "VDiskSlotID":0,
-                                  "PDiskGuid":1
+                                  "PDiskGuid":7548336563826238532
                                 }
                               ]
                           },
@@ -614,7 +528,7 @@
                                   "NodeID":5,
                                   "PDiskID":1,
                                   "VDiskSlotID":0,
-                                  "PDiskGuid":1
+                                  "PDiskGuid":12492930695751522617
                                 }
                               ]
                           },
@@ -625,7 +539,7 @@
                                   "NodeID":6,
                                   "PDiskID":1,
                                   "VDiskSlotID":0,
-                                  "PDiskGuid":1
+                                  "PDiskGuid":17947853722703397685
                                 }
                               ]
                           },
@@ -636,7 +550,7 @@
                                   "NodeID":7,
                                   "PDiskID":1,
                                   "VDiskSlotID":0,
-                                  "PDiskGuid":1
+                                  "PDiskGuid":13632005992896647536
                                 }
                               ]
                           },
@@ -647,7 +561,7 @@
                                   "NodeID":8,
                                   "PDiskID":1,
                                   "VDiskSlotID":0,
-                                  "PDiskGuid":1
+                                  "PDiskGuid":3668985736129884660
                                 }
                               ]
                           }
@@ -672,18 +586,18 @@
               [
                 {
                   "ErasureSpecies":"block-4-2",
-                  "PDiskCategory":1,
-                  "StoragePoolKind":"ssd"
+                  "PDiskCategory":2,
+                  "VDiskCategory":"Default"
                 },
                 {
                   "ErasureSpecies":"block-4-2",
-                  "PDiskCategory":1,
-                  "StoragePoolKind":"ssd"
+                  "PDiskCategory":2,
+                  "VDiskCategory":"Default"
                 },
                 {
                   "ErasureSpecies":"block-4-2",
-                  "PDiskCategory":1,
-                  "StoragePoolKind":"ssd"
+                  "PDiskCategory":2,
+                  "VDiskCategory":"Default"
                 }
               ]
           }
@@ -816,7 +730,7 @@
               ],
             "Info":
               {
-                "TabletID":72057594046678944,
+                "TabletID":72075186232723360,
                 "Channels":
                   [
                     {
@@ -870,7 +784,7 @@
               ],
             "Info":
               {
-                "TabletID":72057594046316545,
+                "TabletID":72075186232360961,
                 "Channels":
                   [
                     {
@@ -924,7 +838,7 @@
               ],
             "Info":
               {
-                "TabletID":72057594046316546,
+                "TabletID":72075186232360962,
                 "Channels":
                   [
                     {
@@ -978,7 +892,7 @@
               ],
             "Info":
               {
-                "TabletID":72057594046316547,
+                "TabletID":72075186232360963,
                 "Channels":
                   [
                     {
@@ -1032,7 +946,7 @@
               ],
             "Info":
               {
-                "TabletID":72057594046382081,
+                "TabletID":72075186232426497,
                 "Channels":
                   [
                     {
@@ -1086,7 +1000,7 @@
               ],
             "Info":
               {
-                "TabletID":72057594046382082,
+                "TabletID":72075186232426498,
                 "Channels":
                   [
                     {
@@ -1140,7 +1054,7 @@
               ],
             "Info":
               {
-                "TabletID":72057594046382083,
+                "TabletID":72075186232426499,
                 "Channels":
                   [
                     {
@@ -1194,7 +1108,7 @@
               ],
             "Info":
               {
-                "TabletID":72057594046447617,
+                "TabletID":72075186232492033,
                 "Channels":
                   [
                     {
@@ -1248,7 +1162,7 @@
               ],
             "Info":
               {
-                "TabletID":72057594046447618,
+                "TabletID":72075186232492034,
                 "Channels":
                   [
                     {
@@ -1302,7 +1216,7 @@
               ],
             "Info":
               {
-                "TabletID":72057594046447619,
+                "TabletID":72075186232492035,
                 "Channels":
                   [
                     {
@@ -1559,18 +1473,69 @@
           }
         ]
     },
-  "GRpcConfig":
+  "VDiskConfig":
     {
-      "CA":"/opt/ydb/certs/ca.crt",
-      "Cert":"/opt/ydb/certs/node.crt",
-      "Key":"/opt/ydb/certs/node.key",
-      "ServicesEnabled":
+      "VDiskKinds":
         [
-          "legacy"
+          {
+            "Kind":"Log",
+            "BaseKind":"Default",
+            "Config":
+              {
+                "FreshUseDreg":true,
+                "AllowKeepFlags":false
+              }
+          },
+          {
+            "Kind":"LocalMode",
+            "BaseKind":"Default",
+            "Config":
+              {
+                "HullCompLevel0MaxSstsAtOnce":2,
+                "HullCompSortedPartsNum":1
+              }
+          }
         ]
     },
-  "TableServiceConfig":
+  "KQPConfig":
     {
-      "SqlVersion":1
+      "Enable":true
+    },
+  "GRpcConfig":
+    {
+      "StartGRpcProxy":true,
+      "Host":"[::]",
+      "Port":2135,
+      "GRpcMemoryQuotaBytes":1073741824,
+      "StreamingConfig":
+        {
+          "EnableOutputStreams":true
+        },
+      "KeepAliveEnable":true,
+      "KeepAliveIdleTimeoutTriggerSec":90,
+      "KeepAliveMaxProbeCount":3,
+      "KeepAliveProbeIntervalSec":10
+    },
+  "DynamicNameserviceConfig":
+    {
+      "MaxStaticNodeId":50000
+    },
+  "PQConfig":
+    {
+      "Enabled":false
+    },
+  "HiveConfig":
+    {
+      "MinScatterToBalance":10000,
+      "StorageSelectStrategy":"HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN",
+      "MaxNodeUsageToKick":10000,
+      "ResourceOvercommitment":10000,
+      "BalancerInflight":0,
+      "MinPeriodBetweenBalance":86400,
+      "ContinueAutoBalancer":false,
+      "MinNodeUsageToBalance":10000,
+      "NodeSelectStrategy":"HIVE_NODE_SELECT_STRATEGY_EXACT_MIN",
+      "EmergencyBalancerInflight":0,
+      "ContinueEmergencyBalancer":false
     }
 }

@@ -16,6 +16,7 @@
 #include <util/generic/string.h>
 
 #include <map>
+#include <optional>
 
 namespace NKikimr::NYaml {
 
@@ -42,7 +43,7 @@ namespace NKikimr::NYaml {
     };
 
     struct TTransformContext {
-        bool DisableBuiltinSecurity;
+        std::optional<bool> DisableBuiltinSecurity;
         bool ExplicitEmptyDefaultGroups;
         bool ExplicitEmptyDefaultAccess;
         std::map<TCombinedDiskInfoKey, NKikimrConfig::TCombinedDiskInfo> CombinedDiskInfo;

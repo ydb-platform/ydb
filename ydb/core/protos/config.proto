@@ -268,8 +268,6 @@ message TDomainsConfig {
     repeated TNamedCompactionPolicy NamedCompactionPolicy = 5;
     optional TSecurityConfig SecurityConfig = 6;
     optional bool ForbidImplicitStoragePools = 7 [default = true];
-    reserved 8;
-    reserved "SecurityConfig";
 }
 
 message TBlobStorageConfig {

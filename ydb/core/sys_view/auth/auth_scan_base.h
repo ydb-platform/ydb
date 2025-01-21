@@ -31,8 +31,10 @@ public:
     }
 
     TAuthScanBase(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
+        , UserToken(std::move(userToken))
     {
     }
 
@@ -158,6 +160,9 @@ protected:
     }
 
     virtual void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) = 0;
+
+protected:
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 
 private:
     TVector<TTraversingChildren> DeepFirstSearchStack;

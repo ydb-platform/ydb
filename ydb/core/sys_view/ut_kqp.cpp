@@ -2725,7 +2725,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             .SetEndpoint(env.GetEndpoint())
             .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
                 .User = "user1",
-                .Password = "password2",
+                .Password = "password1",
             }));
         auto user1Driver = TDriver(user1DriverConfig);
         TTableClient user1Client(user1Driver);

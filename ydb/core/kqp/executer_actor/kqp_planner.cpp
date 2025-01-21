@@ -244,7 +244,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         rlPath->SetCoordinationNode(RlPath->GetCoordinationNode());
         rlPath->SetResourcePath(RlPath->GetResourcePath());
         rlPath->SetDatabase(Database);
-        if (UserToken)
+        if (UserToken) // TODO: use request.UserToken
             rlPath->SetToken(UserToken->GetSerializedToken());
     }
 
@@ -273,6 +273,10 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         if (UserRequestContext->PoolConfig->ResourceWeight >= 0) {
             request.SetResourceWeight(UserRequestContext->PoolConfig->ResourceWeight);
         }
+    }
+
+    if (UserToken) {
+        request.SetUserToken(UserToken->SerializeAsString());
     }
 
     return result;

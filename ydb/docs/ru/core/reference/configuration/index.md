@@ -294,7 +294,7 @@ domains_config:
 Виртуальную группу не нужно явно создавать, она ведётся системой автоматически. Виртуальную группу нельзя удалить, нельзя получить или изменить список её членов.
 Пользователь может использовать её для выдачи [прав](../../concepts/glossary.md#access-right) на [схемных объектах](../../concepts/glossary.md#scheme-object).
 
-Значение по-умолчанию: `all-users@well-known`.
+Значение по умолчанию: `all-users@well-known`.
     ||
 || `all_users_group` | Имя [группы](../../concepts/glossary.md#access-group), в которой должны состоять все локальные [пользователи](../../concepts/glossary.md#access-user).
 

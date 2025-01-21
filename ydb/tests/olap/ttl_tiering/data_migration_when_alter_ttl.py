@@ -6,8 +6,6 @@ logger = logging.getLogger(__name__)
 
 
 class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
-    '''Implements https://github.com/ydb-platform/ydb/issues/13466'''
-
     test_name = "data_migration_when_alter_tier"
     row_count = 10**4
     single_upsert_row_count = 10**3
@@ -26,6 +24,8 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         )[0].rows[0]["Rows"]
 
     def test(self):
+        '''Implements https://github.com/ydb-platform/ydb/issues/13466'''
+
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/table"
         secret_prefix = self.test_name

@@ -334,8 +334,14 @@ private:
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
             const auto databaseRoot = TStringBuilder() << '/' << JoinSeq('/', Self->RootPathElements);
 
+            NBackup::TMetadata metadata;
+            // to do: enable view checksum validation
+            constexpr bool EnableChecksums = false;
+            metadata.SetVersion(EnableChecksums ? 1 : 0);
+
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
-                Self->SelfId(), exportInfo->Id, itemIdx, item.SourcePathId, exportSettings, databaseRoot
+                Self->SelfId(), exportInfo->Id, itemIdx, item.SourcePathId,
+                exportSettings, databaseRoot, metadata.Serialize()
             ));
         }
     }

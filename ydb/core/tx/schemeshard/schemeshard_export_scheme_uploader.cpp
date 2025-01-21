@@ -45,7 +45,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
     void HandleSchemeDescription(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& describeResult = ev->Get()->GetRecord();
 
-        LOG_D("HandleSchemeDescription TEvSchemeShard::TEvDescribeSchemeResult"
+        LOG_D("HandleSchemeDescription"
             << ", self: " << this->SelfId()
             << ", status: " << describeResult.GetStatus()
         );
@@ -109,7 +109,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
     void HandleSchemePutResponse(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleSchemePutResponse TEvExternalStorage::TEvPutObjectResponse"
+        LOG_D("HandleSchemePutResponse"
             << ", self: " << this->SelfId()
             << ", result: " << result
         );
@@ -137,7 +137,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
     void HandlePermissionsPutResponse(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandlePermissionsPutResponse TEvExternalStorage::TEvPutObjectResponse"
+        LOG_D("HandlePermissionsPutResponse"
             << ", self: " << this->SelfId()
             << ", result: " << result
         );
@@ -146,6 +146,34 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
             return;
         }
         PermissionsUploaded = true;
+        UploadMetadata();
+    }
+
+    void UploadMetadata() {
+        Y_ABORT_UNLESS(!MetadataUploaded);
+
+        if (!Metadata) {
+            return Finish(false, "empty metadata");
+        }
+        auto request = Aws::S3::Model::PutObjectRequest()
+            .WithKey(Sprintf("%s/metadata.json", DestinationPrefix.c_str()));
+
+        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Metadata)));
+        this->Become(&TThis::StateUploadMetadata);
+    }
+
+    void HandleMetadataPutResponse(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        LOG_D("HandleMetadataPutResponse"
+            << ", self: " << this->SelfId()
+            << ", result: " << result
+        );
+
+        if (!CheckResult(result, TStringBuf("PutObject (metadata)"))) {
+            return;
+        }
+        MetadataUploaded = true;
         Finish();
     }
 
@@ -212,7 +240,8 @@ public:
         ui32 itemIdx,
         TPathId sourcePathId,
         const Ydb::Export::ExportToS3Settings& settings,
-        const TString& databaseRoot
+        const TString& databaseRoot,
+        const TString& metadata
     )
         : SchemeShard(schemeShard)
         , ExportId(exportId)
@@ -221,6 +250,7 @@ public:
         , ExternalStorageConfig(new TS3ExternalStorageConfig(settings))
         , Retries(settings.number_of_retries())
         , DatabaseRoot(databaseRoot)
+        , Metadata(metadata)
     {
         if (itemIdx < ui32(settings.items_size())) {
             DestinationPrefix = settings.items(itemIdx).destination_prefix();
@@ -243,6 +273,10 @@ public:
         }
         if (!PermissionsUploaded) {
             UploadPermissions();
+            return;
+        }
+        if (!MetadataUploaded) {
+            UploadMetadata();
             return;
         }
         Finish();
@@ -279,6 +313,14 @@ public:
         }
     }
 
+    STATEFN(StateUploadMetadata) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleMetadataPutResponse);
+        default:
+            return StateBase(ev);
+        }
+    }
+
 private:
 
     TActorId SchemeShard;
@@ -306,12 +348,15 @@ private:
     TString Permissions;
     bool PermissionsUploaded = false;
 
+    TString Metadata;
+    bool MetadataUploaded = false;
+
 }; // TSchemeUploader
 
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata
 ) {
-    return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot);
+    return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot, metadata);
 }
 
 } // NKikimr::NSchemeShard

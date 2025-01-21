@@ -10,7 +10,7 @@ namespace Ydb::Export {
 namespace NKikimr::NSchemeShard {
 
 NActors::IActor* CreateSchemeUploader(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata
 );
 
 }

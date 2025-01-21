@@ -112,15 +112,24 @@ class SourcesConsumer:
             self.coverage.append(rel)
 
 
+def prepare_build_dirs(bindir):
+    for dir in [os.path.join(bindir, dirname) for dirname in ['cls', 'misc']]:
+        if not os.path.exists(dir):
+            os.makedirs(dir)
+
+
 def main():
     args = pcf.get_args(sys.argv[1:])
     parser = argparse.ArgumentParser()
     parser.add_argument('--moddir')
+    parser.add_argument('--bindir')
     parser.add_argument('--java')
     parser.add_argument('--kotlin')
     parser.add_argument('--coverage')
     parser.add_argument('--source-root')
     args, remaining_args = parser.parse_known_args(args)
+
+    prepare_build_dirs(args.bindir)
 
     src_sorter = SourcesSorter(args.moddir)
     src_consumer = SourcesConsumer(

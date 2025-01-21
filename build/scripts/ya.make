@@ -99,7 +99,7 @@ ELSEIF (PY3)
         make_container.py
         make_container_layer.py
         make_java_classpath_file.py
-        make_java_srclists.py
+        prepare_jar_build.py
         make_manifest_from_bf.py
         merge_coverage_data.py
         merge_files.py

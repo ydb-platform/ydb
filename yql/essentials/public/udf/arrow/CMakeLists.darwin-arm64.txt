@@ -31,6 +31,7 @@ target_sources(public-udf-arrow PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/udf_arrow_helpers.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/bit_util.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/util.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/block_builder.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/block_reader.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/block_item.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/block_item_hasher.cpp

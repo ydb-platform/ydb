@@ -139,6 +139,7 @@ target_sources(providers-yt-provider PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_field_subset.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_helper.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_key_range.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_ytql.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_merge.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_push.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_write.cpp

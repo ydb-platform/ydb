@@ -52,6 +52,7 @@ target_sources(library-cpp-unified_agent_client PRIVATE
   ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/clock.cpp
   ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/duration_counter.cpp
   ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/logger.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/stream.cpp
   ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/throttling.cpp
   ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/proto_weighing.cpp
 )

@@ -64,9 +64,9 @@ public:
             json["AuthType"] = userToken.GetAuthType();
         }
         auto token = std::make_unique<NACLib::TUserToken>(userToken);
-        json["IsViewerAllowed"] = CheckGroupMembership(token, AppData()->SecurityConfig.GetViewerAllowedSIDs());
-        json["IsMonitoringAllowed"] = CheckGroupMembership(token, AppData()->SecurityConfig.GetMonitoringAllowedSIDs());
-        json["IsAdministrationAllowed"] = CheckGroupMembership(token, AppData()->SecurityConfig.GetAdministrationAllowedSIDs());
+        json["IsViewerAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
+        json["IsMonitoringAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
+        json["IsAdministrationAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
         ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }

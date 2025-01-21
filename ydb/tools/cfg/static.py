@@ -10,7 +10,6 @@ import tempfile
 
 import yaml
 from ydb.core.fq.libs.config.protos.fq_config_pb2 import TConfig as TFederatedQueryConfig
-from ydb.library.yaml_config.protos.config_pb2 import TExtendedDomainsConfig
 from google.protobuf import json_format
 
 from ydb.core.protos import (
@@ -980,7 +979,7 @@ class StaticConfigGenerator(object):
         )
 
     def __generate_domains_txt(self):
-        self.__proto_configs["domains.txt"] = TExtendedDomainsConfig()
+        self.__proto_configs["domains.txt"] = config_pb2.TDomainsConfig()
 
         domains_config = self.__proto_configs["domains.txt"]
 

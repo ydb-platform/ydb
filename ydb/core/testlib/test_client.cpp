@@ -1848,10 +1848,8 @@ namespace Tests {
             return NBus::MESSAGE_UNKNOWN;
 
         const NKikimrClient::TResponse* response = &flatResponse->Record;
-
-        if (response->HasErrorReason()) {
-            Cerr << "reason: " << response->GetErrorReason() << Endl;
-        }
+        
+        UNIT_ASSERT_C(!response->HasErrorReason(), response->GetErrorReason());
 
         if (response->GetStatus() != NMsgBusProxy::MSTATUS_INPROGRESS) {
             return status;

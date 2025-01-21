@@ -16,6 +16,6 @@ This section describes the entities that {{ ydb-short-name }} uses within DBs. T
 * [External table](external_table.md)
 * [External data source](external_data_source.md)
 
-Schema objects in {{ ydb-short-name }} all follow the same naming rules described in the [section below](#object-naming-rules). However, requirements for column names are slightly [different](#column-naming-rules).
+[Scheme objects](../../concepts/glossary.md#scheme-object) in {{ ydb-short-name }} all follow the same naming rules described in the [section below](#object-naming-rules). However, requirements for column names are slightly [different](#column-naming-rules).
 
 {% include [object naming rules](./_includes/object-naming-rules.md) %}

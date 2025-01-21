@@ -1,8 +1,8 @@
 ## Database object naming rules {#object-naming-rules}
 
-Every database object in {{ ydb-short-name }}, such as a table, view, topic, index or directory, has a name. In YQL statements, object names are specified by identifiers that can be enclosed in backticks or not. For more information on identifiers, refer to [{#T}](../../../yql/reference/syntax/lexer.md#keywords-and-ids).
+Every [scheme object](../../../concepts/glossary.md#scheme-object) in {{ ydb-short-name }} has a name. In YQL statements, object names are specified by identifiers that can be enclosed in backticks or not. For more information on identifiers, refer to [{#T}](../../../yql/reference/syntax/lexer.md#keywords-and-ids).
 
-Database object names in {{ ydb-short-name }} must meet the following requirements:
+Scheme object names in {{ ydb-short-name }} must meet the following requirements:
 
 - Object names can include the following characters:
     - uppercase latin characters

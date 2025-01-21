@@ -199,6 +199,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         while (true) {
             std::vector<TPortionToMerge> toMerge;
             ui64 sumMemory = 0;
+            ui64 totalSumMemory = 0;
             std::vector<std::shared_ptr<ISubsetToMerge>> appendedToMerge;
             ui32 subsetsCount = 0;
             for (auto&& i : currentToMerge) {
@@ -211,6 +212,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                     sumMemory = 0;
                 }
                 sumMemory += i->GetColumnMaxChunkMemory();
+                totalSumMemory += i->GetColumnMaxChunkMemory();
                 auto mergePortions = i->BuildPortionsToMerge(context, seqDataColumnIds, resultFiltered, usedPortionIds);
                 toMerge.insert(toMerge.end(), mergePortions.begin(), mergePortions.end());
                 ++subsetsCount;
@@ -220,6 +222,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 if (appendedToMerge.size()) {
                     appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged)));
                 } else {
+                    context.Counters.OnCompactionCorrectMemory(totalSumMemory);
                     AppendedPortions = std::move(merged);
                     break;
                 }
@@ -228,6 +231,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 AFL_VERIFY(currentToMerge.size());
                 appendedToMerge.emplace_back(currentToMerge.back());
             }
+            context.Counters.OnCompactionHugeMemory(totalSumMemory, appendedToMerge.size());
             currentToMerge = std::move(appendedToMerge);
         }
     }

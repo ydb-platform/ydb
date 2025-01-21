@@ -26,6 +26,23 @@ The format of data files is `.csv`, where each row corresponds to a record in th
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
 ```
 
+## Checksums {#checksums}
+
+{% note info %}
+
+Checksums of exported files are only available for export to S3-compatible object storage for now.
+
+{% endnote %}
+
+For each export file there is a paired file with the extension `.sha256`, which stores its checksum.
+
+File checksum can be validated using the `sha256sum` console utility:
+
+```sh
+$ sha256sum -c scheme.pb.sha256
+scheme.pb: OK
+```
+
 ## Examples {#example}
 
 ### Tables {#example-table}

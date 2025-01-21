@@ -27,28 +27,6 @@ TString GetOsArchitecture() {
     struct utsname uts;
     uname(&uts);
     TString machine = uts.machine;
-    Cerr << "Machine: " << machine << Endl;
-
-    {
-        TShellCommand unameCommand("uname -m");
-        unameCommand.Run().Wait();
-        if (unameCommand.GetExitCode() != 0) {
-            Cerr << "Failed to run uname command. " << unameCommand.GetError() << Endl;
-            return "unknown";
-        }
-        Cerr << "uname -m output: " << unameCommand.GetOutput();
-    }
-
-    {
-        TShellCommand unameCommand("uname -p");
-        unameCommand.Run().Wait();
-        if (unameCommand.GetExitCode() != 0) {
-            Cerr << "Failed to run uname command. " << unameCommand.GetError() << Endl;
-            return "unknown";
-        }
-        Cerr << "uname -p output: " << unameCommand.GetOutput();
-    }
-
     if (machine == "arm64" || machine == "aarch64") {
         return "arm64";
     } else {

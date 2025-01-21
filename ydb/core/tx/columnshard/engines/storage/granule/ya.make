@@ -15,8 +15,6 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/base
     ydb/core/formats/arrow/reader
-    ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/optimizer
-    ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner
 )
 
 GENERATE_ENUM_SERIALIZATION(granule.h)

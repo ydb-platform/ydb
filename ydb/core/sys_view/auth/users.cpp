@@ -98,6 +98,10 @@ protected:
         // TODO: add rows according to request's sender user rights
 
         for (const auto& user : result.GetUsers()) {
+            if (!user.HasName() || !CanAccessUser(user.GetName())) {
+                continue;
+            }
+
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthUsers::Sid::ColumnId:
@@ -151,6 +155,25 @@ protected:
         }
 
         batch.Finished = true;
+    }
+
+private:
+    bool CanAccessUser(const TString& user) {
+        if (AppData()->AdministrationAllowedSIDs.empty()) {
+            return true;
+        }
+
+        if (!UserToken) {
+            return false;
+        }
+
+        for (const auto& sid : AppData()->AdministrationAllowedSIDs) {
+            if (UserToken->IsExist(sid)) {
+                return true;
+            }
+        }
+
+        return UserToken->IsExist(user);
     }
 
 private:

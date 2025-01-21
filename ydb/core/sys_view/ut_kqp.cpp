@@ -2207,6 +2207,54 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
+    Y_UNIT_TEST(AuthUsers_Filter) {
+        TTestEnv env;
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
+        CreateTenantsAndTables(env, true);
+        TTableClient client(env.GetDriver());
+
+        env.GetClient().CreateUser("/Root", "user1", "password1");
+        env.GetClient().CreateUser("/Root", "user2", "password2");
+        env.GetClient().CreateUser("/Root/Tenant1", "user3", "password3");
+        env.GetClient().CreateUser("/Root/Tenant1", "user4", "password4");
+
+        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user1");
+        // TODO: make user3 Tenant1 admin and check
+
+        {
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+            Cerr << ">ModifyACL" << Endl;
+            env.GetClient().ModifyACL("", "Root", acl.SerializeAsString());
+            Cerr << "<ModifyACL" << Endl;
+        }
+
+        Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
+
+        auto user1DriverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                .User = "user1",
+                .Password = "password1",
+            }));
+        auto user1Driver = TDriver(user1DriverConfig);
+        TTableClient user1Client(user1Driver);
+
+        {
+            auto it = user1Client.StreamExecuteScanQuery(R"(
+                SELECT Sid
+                FROM `Root/.sys/auth_users`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["user1"]];
+                [["user2"]];
+            ])";
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+    }
+
     Y_UNIT_TEST(AuthGroups) {
         TTestEnv env;
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
@@ -2697,48 +2745,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 [["/Root/Dir1/SubDir2"];["ydb.granular.select_row"];["user2"]];
             ])";
 
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
-
-    Y_UNIT_TEST(AuthFilterUsers) {
-        TTestEnv env;
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
-        CreateTenantsAndTables(env, true);
-        TTableClient client(env.GetDriver());
-
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant1", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant1", "user4", "password4");
-
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-            env.GetClient().ModifyACL("", "Root", acl.SerializeAsString());
-        }
-
-        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
-
-        auto user1DriverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                .User = "user1",
-                .Password = "password1",
-            }));
-        auto user1Driver = TDriver(user1DriverConfig);
-        TTableClient user1Client(user1Driver);
-
-        {
-            auto it = user1Client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_users`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user1"]];
-            ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }

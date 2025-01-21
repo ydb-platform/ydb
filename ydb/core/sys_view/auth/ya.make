@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    access_checker.cpp
     group_members.cpp
     group_members.h
     groups.cpp

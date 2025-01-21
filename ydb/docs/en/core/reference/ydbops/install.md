@@ -32,11 +32,11 @@ Currently, only building from source is available as an installation option. The
 
 4. To install binary file to the specific folder (folder `~/ydb/bin` is defined by default) execute this command
    ```bash
-   make install PREFIX=path_to_folder
+   make install INSTALL_DIR=path_to_folder
    ```
    You must replace source folder if you have created binary file manually: 
    ```
-   make install PREFIX=путь_к_каталогу BUILD_DIR=.
+   make install INSTALL_DIR=путь_к_каталогу BUILD_DIR=.
    ```
 
 ## Download the binary from releases page

@@ -896,7 +896,7 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
             if (auto* e = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
                 Cerr << e->HasCompressedMessages() << " " << e->GetMessagesCount() << Endl;
                 for (auto& m : e->GetMessages()) {
-                    messages.push_back(TString{m.GetData()});
+                    messages.emplace_back(m.GetData());
                 }
 
                 if (!tx) {

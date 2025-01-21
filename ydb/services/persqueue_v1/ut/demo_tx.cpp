@@ -227,7 +227,7 @@ auto TTxFixture::CreateTopicReadSession(const TString& topic,
                                         const TString& consumer) -> TTopicReadSessionPtr
 {
     NYdb::NPersQueue::TReadSessionSettings settings;
-    settings.AppendTopics(std::string{topic});
+    settings.AppendTopics(topic);
     settings.ConsumerName(consumer);
     settings.ReadOriginal({DC});
 

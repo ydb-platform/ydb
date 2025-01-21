@@ -228,7 +228,7 @@ def main():
             stability_cluster.cleanup()
         if action == "cleanup_logs":
             stability_cluster.cleanup('logs')
-        if action == "cleanup_dups":
+        if action == "cleanup_dumps":
             stability_cluster.cleanup('dumps')
         if action == "deploy_tools":
             stability_cluster.deploy_tools()

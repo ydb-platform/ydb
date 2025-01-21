@@ -14,18 +14,31 @@ Currently, only building from source is available as an installation option. The
     git clone https://github.com/ydb-platform/ydbops.git
     ```
 
-3. Invoke `go build` in the repository root folder:
+3. There two way to build `ydbops`:
+- Manual build. Invoke `go build` in the repository root folder:
 
     ```bash
     go build
     ```
 
     The `ydbops` executable will be available in the repository root folder.
+- Automated build. Invoke this command in the the repository root folder:
+
+  ```bash
+  make build-in-docker
+  ```
+
+  The `ydbops` executables will be available in the `bin` folder. There will be several binary files for Linux, MacOS (arm64, amd64).
+
+4. To install binary file to the specific folder (folder `~/ydb/bin` is defined by default) execute this command
+   ```bash
+   make install PREFIX=path_to_folder
+   ```
+   You must replace source folder if you have created binary file manually: 
+   ```
+   make install PREFIX=путь_к_каталогу BUILD_DIR=.
+   ```
 
 ## Download the binary from releases page
 
-{% note warning %}
-
-This option has yet to be made available.
-
-{% endnote %}
+You can download binary releases from GitHub - https://github.com/ydb-platform/ydbops/releases.

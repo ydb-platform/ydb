@@ -742,6 +742,10 @@ bool IsMainConfig(const TString& config) {
     return IsConfigKindEquals(config, "MainConfig");
 }
 
+bool IsDatabaseConfig(const TString& config) {
+    return IsConfigKindEquals(config, "DatabaseConfig");
+}
+
 TString StripMetadata(const TString& config) {
     auto doc = NFyaml::TDocument::Parse(config);
 

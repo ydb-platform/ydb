@@ -219,6 +219,11 @@ bool IsVolatileConfig(const TString& config);
 bool IsMainConfig(const TString& config);
 
 /**
+ * Checks whether string is main config or not
+ */
+bool IsDatabaseConfig(const TString& config);
+
+/**
  * Strips metadata from config
  */
 TString StripMetadata(const TString& config);

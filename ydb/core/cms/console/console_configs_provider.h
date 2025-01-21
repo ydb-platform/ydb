@@ -100,13 +100,24 @@ public:
         };
 
         struct TEvUpdateYamlConfig : public TEventLocal<TEvUpdateYamlConfig, EvUpdateYamlConfig> {
-            TEvUpdateYamlConfig(const TString &yamlConfig, const TMap<ui64, TString> &volatileYamlConfigs = {})
+            TEvUpdateYamlConfig(
+                const TString &yamlConfig,
+                const TMap<ui64, TString> &volatileYamlConfigs = {})
                 : YamlConfig(yamlConfig)
                 , VolatileYamlConfigs(volatileYamlConfigs)
             {
             }
 
+            TEvUpdateYamlConfig(
+                const TString &yamlConfig,
+                const THashMap<TString, TString> &yamlConfigPerDatabase)
+                : YamlConfig(yamlConfig)
+                , YamlConfigPerDatabase(yamlConfigPerDatabase)
+            {
+            }
+
             TString YamlConfig;
+            THashMap<TString, TString> YamlConfigPerDatabase;
             TMap<ui64, TString> VolatileYamlConfigs;
         };
 
@@ -229,6 +240,7 @@ private:
 
     TString YamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
+    THashMap<TString, TString> YamlConfigPerDatabase;
     ui64 YamlConfigVersion = 0;
     TMap<ui64, ui64> VolatileYamlConfigHashes;
 };

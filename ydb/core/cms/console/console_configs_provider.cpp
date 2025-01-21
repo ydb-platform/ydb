@@ -1224,10 +1224,12 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
 
 void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const TActorContext &ctx) {
     YamlConfig = ev->Get()->YamlConfig;
+    YamlConfigPerDatabase = ev->Get()->YamlConfigPerDatabase;
     VolatileYamlConfigs.clear();
 
     YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
     VolatileYamlConfigHashes.clear();
+
     for (auto& [id, config] : ev->Get()->VolatileYamlConfigs) {
         auto doc = NFyaml::TDocument::Parse(config);
         // we strip it to provide old format for config dispatcher
@@ -1262,6 +1264,10 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const T
             }
 
             subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
+
+            if (YamlConfigPerDatabase.contains(subscription->Tenant)) {
+                request->Record.SetDatabaseConfig(YamlConfigPerDatabase[subscription->Tenant]);
+            }
 
             ctx.Send(subscription->Worker, request.Release());
         }

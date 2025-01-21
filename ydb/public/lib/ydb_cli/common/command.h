@@ -17,6 +17,11 @@
 namespace NYdb {
 namespace NConsoleClient {
 
+struct TCommandFlags {
+    bool Dangerous = false;
+    bool OnlyExplicitProfile = false;
+};
+
 class TClientCommand {
 public:
     static bool TIME_REQUESTS; // measure time of requests
@@ -25,6 +30,9 @@ public:
     TVector<TString> Aliases;
     TString Description;
     bool Visible = true;
+    bool Hidden = false;
+    bool Dangerous = false;
+    bool OnlyExplicitProfile = false;
     const TClientCommand* Parent;
     NLastGetopt::TOpts Opts;
     TString Argument;
@@ -137,6 +145,8 @@ public:
         bool NeedToCheckForUpdate = true;
         bool ForceVersionCheck = false;
         bool AllowEmptyDatabase = false;
+        bool AllowEmptyAddress = false;
+        bool OnlyExplicitProfile = false;
 
         TCredentialsGetter CredentialsGetter;
 
@@ -307,7 +317,12 @@ public:
 
     virtual int Process(TConfig& config);
     virtual void Prepare(TConfig& config);
+    virtual void PostPrepare(TConfig& config);
     virtual int ValidateAndRun(TConfig& config);
+    virtual void PropagateFlags(const TCommandFlags& flags) {
+        Dangerous |= flags.Dangerous;
+        OnlyExplicitProfile |= flags.OnlyExplicitProfile;
+    }
 
     enum RenderEntryType {
         BEGIN,
@@ -322,6 +337,8 @@ public:
     );
 
     void Hide();
+    void MarkDangerous();
+    void UseOnlyExplicitProfile();
 
 protected:
     virtual void Config(TConfig& config);
@@ -342,7 +359,6 @@ private:
     void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
-    bool Hidden = false;
 };
 
 class TClientCommandTree : public TClientCommand {
@@ -350,6 +366,7 @@ public:
     TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases = std::initializer_list<TString>(), const TString& description = TString());
     void AddCommand(std::unique_ptr<TClientCommand> command);
     void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
+    void AddDangerousCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
     void RenderCommandsDescription(
         TStringStream& stream,
@@ -363,10 +380,15 @@ protected:
     virtual void SaveParseResult(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
+    virtual void PropagateFlags(const TCommandFlags& flags) override {
+        TClientCommand::PropagateFlags(flags);
+        for (auto& [_, cmd] : SubCommands) {
+            cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
+        }
+    }
 
     TClientCommand* SelectedCommand;
 
-private:
     bool HasOptionsToShow();
 
     TMap<TString, std::unique_ptr<TClientCommand>> SubCommands;

@@ -510,8 +510,8 @@ void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& 
         const auto& topicDescription = descTopicResult.GetTopicDescription();
         auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
         // Unnecessary fields
-        protoTopicDescription.Clearself();
-        protoTopicDescription.Cleartopic_stats();
+        protoTopicDescription.сlear_self();
+        protoTopicDescription.сlear_topic_stats();
 
         WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, NDump::NFiles::Changefeed());
         WriteProtoToFile(protoTopicDescription, changefeedDirPath, NDump::NFiles::Topic());

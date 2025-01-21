@@ -1,11 +1,11 @@
-#include "schemeshard_xxport__tx_base.h"
-#include "schemeshard_xxport__helpers.h"
-#include "schemeshard_import_flow_proposals.h"
-#include "schemeshard_import_scheme_getter.h"
-#include "schemeshard_import_helpers.h"
-#include "schemeshard_import.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_import.h"
+#include "schemeshard_import_flow_proposals.h"
+#include "schemeshard_import_helpers.h"
+#include "schemeshard_import_scheme_getter.h"
+#include "schemeshard_xxport__helpers.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
@@ -515,6 +515,23 @@ private:
         }
     }
 
+    void CancelAndPersist(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf itemIssue, TStringBuf marker) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items[itemIdx];
+
+        item.Issue = itemIssue;
+        PersistImportItemState(db, importInfo, itemIdx);
+
+        if (importInfo->State != EState::Waiting) {
+            return;
+        }
+
+        Cancel(importInfo, itemIdx, marker);
+        PersistImportState(db, importInfo);
+
+        SendNotificationsIfFinished(importInfo);
+    }
+
     TMaybe<TString> GetIssues(const TPathId& dstPathId, TTxId restoreTxId) {
         Y_ABORT_UNLESS(Self->Tables.contains(dstPathId));
         TTableInfo::TPtr table = Self->Tables.at(dstPathId);
@@ -671,13 +688,16 @@ private:
         }
     }
 
-    void OnSchemeResult(TTransactionContext& txc, const TActorContext&) {
+    void OnSchemeResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(SchemeResult);
 
         const auto& msg = *SchemeResult->Get();
 
         LOG_D("TImport::TTxProgress: OnSchemeResult"
-            << ": id# " << msg.ImportId);
+            << ": id# " << msg.ImportId
+            << ", itemIdx# " << msg.ItemIdx
+            << ", success# " << msg.Success
+        );
 
         if (!Self->Imports.contains(msg.ImportId)) {
             LOG_E("TImport::TTxProgress: OnSchemeResult received unknown id"
@@ -696,19 +716,12 @@ private:
         auto& item = importInfo->Items.at(msg.ItemIdx);
         NIceDb::TNiceDb db(txc.DB);
 
+        if (!msg.Success) {
+            return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
+        }
         TString error;
-        if (!msg.Success || !CreateTablePropose(Self, TTxId(), importInfo, msg.ItemIdx, error)) {
-            item.Issue = msg.Success ? error : msg.Error;
-            Self->PersistImportItemState(db, importInfo, msg.ItemIdx);
-
-            if (importInfo->State != EState::Waiting) {
-                return;
-            }
-
-            Cancel(importInfo, msg.ItemIdx, "cannot get/invalid scheme");
-            Self->PersistImportState(db, importInfo);
-
-            return SendNotificationsIfFinished(importInfo);
+        if (!CreateTablePropose(Self, TTxId(), importInfo, msg.ItemIdx, error)) {
+            return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid scheme");
         }
 
         Self->PersistImportItemScheme(db, importInfo, msg.ItemIdx);

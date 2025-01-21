@@ -171,11 +171,12 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
-    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+    auto record = db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx);
+    record.Update(
         NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Scheme.SerializeAsString())
     );
     if (item.Permissions.Defined()) {
-        db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+        record.Update(
             NIceDb::TUpdate<Schema::ImportItems::Permissions>(item.Permissions->SerializeAsString())
         );
     }

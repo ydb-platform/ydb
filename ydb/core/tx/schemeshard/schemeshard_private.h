@@ -1,7 +1,10 @@
 #pragma once
-#include "defs.h"
-
 #include "schemeshard_identificators.h"
+
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
+
+#include <util/datetime/base.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

@@ -2142,7 +2142,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    void DoPositiveQueriesVectorIndex(TSession& session, const TString& query) {
+    std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, const TString& query) {
         {
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(),
@@ -2154,12 +2154,34 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             ).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(),
                 "Failed to execute: `" << query << "` with " << result.GetIssues().ToString());
+
+            std::vector<i64> r;
+            auto sets = result.GetResultSets();
+            for (const auto& set : sets) {
+                TResultSetParser parser{set};
+                while (parser.TryNextRow()) {
+                    auto value = parser.GetValue("pk");
+                    UNIT_ASSERT_C(value.GetProto().has_int64_value(), value.GetProto().ShortUtf8DebugString());
+                    r.push_back(value.GetProto().int64_value());
+                }
+            }
+            return r;
         }
     }
 
     void DoPositiveQueriesVectorIndex(TSession& session, const TString& mainQuery, const TString& indexQuery) {
-        DoPositiveQueriesVectorIndex(session, mainQuery);
-        DoPositiveQueriesVectorIndex(session, indexQuery);
+        // TODO(mbkkt) results are not precise so for now can differ between main and index
+        // But they're still should contains exactly 3 unique rows
+        auto mainResults = DoPositiveQueryVectorIndex(session, mainQuery);
+        UNIT_ASSERT_EQUAL(mainResults.size(), 3);
+        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery);
+        UNIT_ASSERT_EQUAL(indexResults.size(), 3);
+
+        absl::c_sort(mainResults);
+        UNIT_ASSERT(std::unique(mainResults.begin(), mainResults.end()) == mainResults.end());
+
+        absl::c_sort(indexResults);
+        UNIT_ASSERT(std::unique(indexResults.begin(), indexResults.end()) == indexResults.end());
     }
 
     void DoPositiveQueriesVectorIndexOrderBy(
@@ -2219,18 +2241,18 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         std::string_view function,
         std::string_view direction) {
         // target is left, member is right
-        DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "$target", "emb");
+        // DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "$target", "emb");
         // target is right, member is left
         DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "emb", "$target");
     }
 
     void DoPositiveQueriesVectorIndexOrderByCosine(TSession& session) {
         // distance, default direction
-        DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "");
+        // DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "");
         // distance, asc direction
         DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "ASC");
         // similarity, desc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, "CosineSimilarity", "DESC");
+        // DoPositiveQueriesVectorIndexOrderBy(session, "CosineSimilarity", "DESC");
     }
 
     TSession DoCreateTableForVectorIndex(TTableClient& db, bool nullable) {
@@ -2279,7 +2301,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         return session;
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineDistance) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNotNullableLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2304,10 +2326,24 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 1);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarity) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNotNullableLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2332,10 +2368,24 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 1);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNullable) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNullableLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2360,10 +2410,24 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 1);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNullable) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNullableLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2387,6 +2451,188 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 1);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNotNullableLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, false);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 2);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNotNullableLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, false);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 2);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNullableLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, true);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 2);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNullableLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, true);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 2);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }

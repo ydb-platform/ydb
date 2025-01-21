@@ -4501,11 +4501,6 @@ const NKikimrConfig::TDomainsConfig& TSchemeShard::GetDomainsConfig() {
     return AppData()->DomainsConfig;
 }
 
-const NKikimrConfig::TSecurityConfig& TSchemeShard::GetSecurityConfig() {
-    Y_ABORT_UNLESS(AppData());
-    return AppData()->SecurityConfig;
-}
-
 NKikimrSubDomains::TProcessingParams TSchemeShard::CreateRootProcessingParams(const TActorContext &ctx) {
     const auto& domain = GetDomainDescription(ctx);
 

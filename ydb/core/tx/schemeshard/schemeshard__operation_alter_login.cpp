@@ -24,7 +24,7 @@ public:
         } else if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Wrong working dir");
         } else {
-            const NKikimrConfig::TSecurityConfig& securityConfig = context.SS->GetSecurityConfig();
+            const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = context.SS->GetDomainsConfig().GetSecurityConfig();
             const NKikimrSchemeOp::TAlterLogin& alterLogin = Transaction.GetAlterLogin();
 
             TParts additionalParts;

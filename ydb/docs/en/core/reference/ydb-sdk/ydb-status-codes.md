@@ -190,7 +190,7 @@ no
 |
 [SESSION_EXPIRED](#session-expired)
 |
-[conditionally-retryable](*condretryable)
+[retryable](*retryable)
 |
 [instant](*instant)
 |

@@ -190,7 +190,7 @@
 |
 [SESSION_EXPIRED](#session-expired)
 |
-[условно повторяемый](*condretryable)
+[повторяемый](*retryable)
 |
 [моментально](*instant)
 |

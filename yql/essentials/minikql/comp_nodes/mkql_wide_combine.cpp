@@ -31,6 +31,10 @@ extern TStatKey Combine_MaxRowsCount;
 
 namespace {
 
+bool HasMemoryForProcessing() {
+    return !TlsAllocState->IsMemoryYellowZoneEnabled();
+}
+
 struct TMyValueEqual {
     TMyValueEqual(const TKeyTypes& types)
         : Types(types)
@@ -245,7 +249,7 @@ private:
     }
 public:
     TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = true)
-        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), AllowOutOfMemory(allowOutOfMemory), States(hash, equal, CountRowsOnPage) {
+        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), AllowOutOfMemory(allowOutOfMemory), States(hash, equal, CountRowsOnPage), Hash(hash), Equal(equal) {
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
@@ -283,6 +287,7 @@ public:
         if (isNew) {
             GrowStates();
         }
+        IsOutOfMemory = IsOutOfMemory || (!HasMemoryForProcessing() && Rows > 1000);
         return isNew;
     }
 
@@ -316,13 +321,17 @@ public:
         {
             TStorage localStorage;
             std::swap(localStorage, Storage);
+
         }
+
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
         StoredDataSize = 0;
         IsOutOfMemory = false;
         Rows = 0;
+
+        States.Clear();
 
         CleanupCurrentContext();
         return true;
@@ -367,6 +376,8 @@ private:
     TRow* CurrentPage = nullptr;
     TStorage Storage;
     TStates States;
+    const THashFunc Hash;
+    const TEqualsFunc Equal;
 };
 
 class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
@@ -893,10 +904,6 @@ private:
         Mode = mode;
     }
 
-    bool HasMemoryForProcessing() const {
-        return !TlsAllocState->IsMemoryYellowZoneEnabled();
-    }
-
     bool IsSwitchToSpillingModeCondition() const {
         return !HasMemoryForProcessing() || TlsAllocState->GetMaximumLimitValueReached();
     }
@@ -1052,7 +1059,7 @@ public:
 
                     Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                     Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize) && !ptr->IsOutOfMemory && ptr->Rows < 100000);
+                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize) && !ptr->IsOutOfMemory);
 
                 ptr->PushStat(ctx.Stats);
             }

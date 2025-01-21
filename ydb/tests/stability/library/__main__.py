@@ -64,8 +64,8 @@ class StabilityCluster:
         safety_violations = safety_warden_factory(self.kikimr_cluster, self.ssh_username).list_of_safety_violations()
         liveness_violations = liveness_warden_factory(self.kikimr_cluster, self.ssh_username).list_of_liveness_violations
         coredumps_search_results = {}
-        for node in self.kikimr_cluster.nodes.values():  
-            result = node.ssh_command('find /coredumps/ -type f | wc -l', raise_on_error=False) 
+        for node in self.kikimr_cluster.nodes.values():
+            result = node.ssh_command('find /coredumps/ -type f | wc -l', raise_on_error=False)
             coredumps_search_results[node.host.split(':')[0]] = int(result.decode('utf-8'))
 
         print("SAFETY WARDEN:")
@@ -73,7 +73,7 @@ class StabilityCluster:
             print("[{}]".format(i))
             print(violation)
             print()
-        
+
         print("LIVENESS WARDEN:")
         for i, violation in enumerate(liveness_violations):
             print("[{}]".format(i))
@@ -91,18 +91,19 @@ class StabilityCluster:
             node.ssh_command("sudo service nemesis restart", raise_on_error=True)
 
     def stop_workloads(self):
-         for node in self.kikimr_cluster.nodes.values():
-                node.ssh_command(
-                    'sudo pkill screen',
-                    raise_on_error=True
-                )
+        for node in self.kikimr_cluster.nodes.values():
+            node.ssh_command(
+                'sudo pkill screen',
+                raise_on_error=True
+            )
+
     def stop_nemesis(self):
         for node in self.kikimr_cluster.nodes.values():
             node.ssh_command("sudo service nemesis stop", raise_on_error=False)
 
-    def cleanup(self, mode = 'all'):
+    def cleanup(self, mode='all'):
         self.stop_nemesis()
-        for node in self.kikimr_cluster.nodes.values():  
+        for node in self.kikimr_cluster.nodes.values():
             if mode in ['all', 'dumps']:
                 node.ssh_command('sudo rm -rf /coredumps/*', raise_on_error=False)
             if mode in ['all', 'logs']:
@@ -143,11 +144,11 @@ class StabilityCluster:
             node.ssh_command(["sudo", "mkdir", "-p", STRESS_BINARIES_DEPLOY_PATH], raise_on_error=False)
             for artifact in self.artifacts:
                 node_artifact_path = os.path.join(
-                        STRESS_BINARIES_DEPLOY_PATH,
-                        os.path.basename(
-                            artifact
-                        )
+                    STRESS_BINARIES_DEPLOY_PATH,
+                    os.path.basename(
+                        artifact
                     )
+                )
                 node.copy_file_or_dir(
                     artifact,
                     node_artifact_path

@@ -42,7 +42,6 @@ namespace {
     const TString homeDir = GetHomeDir();
 #elif defined(_win32_)
     const TString osVersion = "windows";
-    const TString osArch = "amd64";
     const TString binaryName = "ydb.exe";
     const TString homeDir = GetEnv("USERPROFILE");
 #else

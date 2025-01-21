@@ -81,10 +81,10 @@ public:
             while (parser.TryNextRow()) {
                 // Almost no type checking: assume here strict conformance to the schema.
                 // Records with empty color_class are skipped as invalid.
-                TMaybe<ui32> color_class = parser.ColumnParser("color_class").GetOptionalUint32();
-                if (!color_class.Empty()) {
+                auto color_class = parser.ColumnParser("color_class").GetOptionalUint32();
+                if (color_class.has_value()) {
                     versionInfoCache->emplace_back(
-                        parser.ColumnParser("version_str").GetUtf8(),
+                        TString{parser.ColumnParser("version_str").GetUtf8()},
                         *color_class
                     );
                 }

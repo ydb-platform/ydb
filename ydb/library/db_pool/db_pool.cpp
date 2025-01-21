@@ -12,7 +12,6 @@
 namespace NDbPool {
 
 using namespace NActors;
-using namespace NYql;
 
 class TDbPoolActor : public NActors::TActor<TDbPoolActor> {
 
@@ -62,7 +61,7 @@ public:
     )
 
     void PassAway() override {
-        NYql::TIssues issues;
+        NYdb::NIssue::TIssues issues;
         issues.AddIssue("DB connection closed");
         auto cancelled = NYdb::TStatus(NYdb::EStatus::CANCELLED, std::move(issues));
         for (const auto& x : Requests) {
@@ -93,7 +92,7 @@ public:
         if (auto pRequest = std::get_if<TRequest>(&requestVariant)) {
             auto& request = *pRequest;
             auto cookie = request.Cookie;
-            auto sharedResult = std::make_shared<TVector<NYdb::TResultSet>>();
+            auto sharedResult = std::make_shared<std::vector<NYdb::TResultSet>>();
             NYdb::NTable::TRetryOperationSettings settings;
             settings.Idempotent(request.Idempotent);
             TableClient.RetryOperation<NYdb::NTable::TDataQueryResult>([sharedResult, request](NYdb::NTable::TSession session) {

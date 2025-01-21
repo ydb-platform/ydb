@@ -1,9 +1,7 @@
 #include "application.h"
 #include "options.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-
-#include <util/stream/output.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <optional>
 
@@ -11,7 +9,7 @@ std::optional<TApplication> App;
 
 void StopHandler(int)
 {
-    Cout << "Stopping session" << Endl;
+    std::cout << "Stopping session" << std::endl;
     if (App) {
         App->Stop();
     } else {
@@ -27,10 +25,10 @@ int main(int argc, const char* argv[])
     TOptions options(argc, argv);
 
     App.emplace(options);
-    Cout << "Application initialized" << Endl;
+    std::cout << "Application initialized" << std::endl;
 
     App->Run();
-    Cout << "Event loop completed" << Endl;
+    std::cout << "Event loop completed" << std::endl;
 
     App->Finalize();
 }

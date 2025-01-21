@@ -2,7 +2,7 @@
 
 #include "type_switcher.h"
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 struct TSslCredentials {
     bool IsEnabled = false;

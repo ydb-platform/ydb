@@ -10,10 +10,10 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
@@ -572,7 +572,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
                 auto executeScrptsResult = client.ExecuteScript("SELECT 42").ExtractValueSync();
                 scriptStatus = executeScrptsResult.Status().GetStatus();
                 UNIT_ASSERT_C(scriptStatus == NYdb::EStatus::UNAVAILABLE || scriptStatus == NYdb::EStatus::SUCCESS, executeScrptsResult.Status().GetIssues().ToString());
-                UNIT_ASSERT(scriptStatus == NYdb::EStatus::UNAVAILABLE || executeScrptsResult.Metadata().ExecutionId);
+                UNIT_ASSERT(scriptStatus == NYdb::EStatus::UNAVAILABLE || !executeScrptsResult.Metadata().ExecutionId.empty());
                 Sleep(TDuration::MilliSeconds(10));
             } while (scriptStatus == NYdb::EStatus::UNAVAILABLE);
 

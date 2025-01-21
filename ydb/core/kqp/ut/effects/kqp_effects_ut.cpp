@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -41,8 +41,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
                 ("foo", 10u), ("bar", 11u), ("baz", 10u)
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("Duplicated keys found.");
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
+            return issue.GetMessage().contains("Duplicated keys found.");
         }));
 
         result = session.ExecuteDataQuery(R"(
@@ -63,8 +63,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
                 ("foo", 1u), ("bar", 11u)
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("Conflict with existing key.");
+        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
+            return issue.GetMessage().contains("Conflict with existing key.");
         }), result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
@@ -144,8 +144,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
             INSERT INTO `/Root/TwoShard` SELECT * FROM AS_TABLE($in)
         )", TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("Duplicated keys found.");
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
+            return issue.GetMessage().contains("Duplicated keys found.");
         }));
 
         result = session.ExecuteDataQuery(R"(
@@ -183,8 +183,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
             INSERT INTO `/Root/TwoShard` SELECT * FROM AS_TABLE($in)
         )", TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("Conflict with existing key.");
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
+            return issue.GetMessage().contains("Conflict with existing key.");
         }));
 
         result = session.ExecuteDataQuery(R"(
@@ -260,8 +260,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
             INSERT INTO `/Root/TwoShard` SELECT Value3 as Key, Value1, Value2 FROM `/Root/Foo`
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("Duplicated keys found.");
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
+            return issue.GetMessage().contains("Duplicated keys found.");
         }));
 
         result = session.ExecuteDataQuery(R"(
@@ -299,8 +299,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
             INSERT INTO `/Root/TwoShard` SELECT * FROM `/Root/Foo`
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("Conflict with existing key.");
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
+            return issue.GetMessage().contains("Conflict with existing key.");
         }));
 
         result = session.ExecuteDataQuery(R"(

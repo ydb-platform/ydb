@@ -6,7 +6,7 @@
 #include <util/generic/map.h>
 
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 TParams::TImpl::TImpl(::google::protobuf::Map<TString, Ydb::TypedValue>&& paramsMap) {
     ParamsMap_.swap(paramsMap);

@@ -12,7 +12,7 @@ namespace Coordination {
 }
 }
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace NScheme {
 struct TPermissions;
@@ -180,15 +180,15 @@ template<class TDerived>
 struct TNodeSettings : public TOperationRequestSettings<TDerived> {
     using TSelf = TDerived;
 
-    FLUENT_SETTING_OPTIONAL(TDuration, SelfCheckPeriod);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TDuration, SelfCheckPeriod);
 
-    FLUENT_SETTING_OPTIONAL(TDuration, SessionGracePeriod);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TDuration, SessionGracePeriod);
 
-    FLUENT_SETTING_DEFAULT(EConsistencyMode, ReadConsistencyMode, EConsistencyMode::UNSET);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EConsistencyMode, ReadConsistencyMode, EConsistencyMode::UNSET);
 
-    FLUENT_SETTING_DEFAULT(EConsistencyMode, AttachConsistencyMode, EConsistencyMode::UNSET);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EConsistencyMode, AttachConsistencyMode, EConsistencyMode::UNSET);
 
-    FLUENT_SETTING_DEFAULT(ERateLimiterCountersMode, RateLimiterCountersMode, ERateLimiterCountersMode::UNSET);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ERateLimiterCountersMode, RateLimiterCountersMode, ERateLimiterCountersMode::UNSET);
 };
 
 struct TCreateNodeSettings : public TNodeSettings<TCreateNodeSettings> { };
@@ -227,21 +227,21 @@ struct TSessionSettings : public TRequestSettings<TSessionSettings> {
     using TStateCallback = std::function<void(ESessionState)>;
     using TStoppedCallback = std::function<void()>;
 
-    FLUENT_SETTING(TString, Description);
+    FLUENT_SETTING_DEPRECATED(TString, Description);
 
-    FLUENT_SETTING(TStateCallback, OnStateChanged);
+    FLUENT_SETTING_DEPRECATED(TStateCallback, OnStateChanged);
 
-    FLUENT_SETTING(TStoppedCallback, OnStopped);
+    FLUENT_SETTING_DEPRECATED(TStoppedCallback, OnStopped);
 
-    FLUENT_SETTING_DEFAULT(TDuration, Timeout, TDuration::Seconds(5));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, Timeout, TDuration::Seconds(5));
 
-    FLUENT_SETTING_DEFAULT(TDuration, ReconnectBackoffDelay, TDuration::MilliSeconds(250));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, ReconnectBackoffDelay, TDuration::MilliSeconds(250));
 
-    FLUENT_SETTING_DEFAULT(double, ReconnectBackoffMultiplier, 2.0);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(double, ReconnectBackoffMultiplier, 2.0);
 
-    FLUENT_SETTING_DEFAULT(double, ReconnectSessionTimeoutMultiplier, 2.0);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(double, ReconnectSessionTimeoutMultiplier, 2.0);
 
-    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Zero());
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, ConnectTimeout, TDuration::Zero());
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -250,19 +250,19 @@ struct TAcquireSemaphoreSettings {
     using TSelf = TAcquireSemaphoreSettings;
     using TAcceptedCallback = std::function<void()>;
 
-    FLUENT_SETTING(TString, Data);
+    FLUENT_SETTING_DEPRECATED(TString, Data);
 
-    FLUENT_SETTING(TAcceptedCallback, OnAccepted);
+    FLUENT_SETTING_DEPRECATED(TAcceptedCallback, OnAccepted);
 
-    FLUENT_SETTING_DEFAULT(ui64, Count, 0);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui64, Count, 0);
 
-    FLUENT_SETTING_DEFAULT(TDuration, Timeout, TDuration::Max());
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, Timeout, TDuration::Max());
 
-    FLUENT_SETTING_FLAG(Ephemeral);
+    FLUENT_SETTING_FLAG_DEPRECATED(Ephemeral);
 
-    FLUENT_SETTING_FLAG_ALIAS(Shared, Count, ui64(1));
+    FLUENT_SETTING_FLAG_ALIAS_DEPRECATED(Shared, Count, ui64(1));
 
-    FLUENT_SETTING_FLAG_ALIAS(Exclusive, Count, ui64(-1));
+    FLUENT_SETTING_FLAG_ALIAS_DEPRECATED(Exclusive, Count, ui64(-1));
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -271,15 +271,15 @@ struct TDescribeSemaphoreSettings {
     using TSelf = TDescribeSemaphoreSettings;
     using TChangedCallback = std::function<void(bool)>;
 
-    FLUENT_SETTING(TChangedCallback, OnChanged);
+    FLUENT_SETTING_DEPRECATED(TChangedCallback, OnChanged);
 
-    FLUENT_SETTING_FLAG(WatchData);
+    FLUENT_SETTING_FLAG_DEPRECATED(WatchData);
 
-    FLUENT_SETTING_FLAG(WatchOwners);
+    FLUENT_SETTING_FLAG_DEPRECATED(WatchOwners);
 
-    FLUENT_SETTING_FLAG(IncludeOwners);
+    FLUENT_SETTING_FLAG_DEPRECATED(IncludeOwners);
 
-    FLUENT_SETTING_FLAG(IncludeWaiters);
+    FLUENT_SETTING_FLAG_DEPRECATED(IncludeWaiters);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

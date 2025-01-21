@@ -49,7 +49,7 @@ public:
         : DatabasePath(databasePath) {}
 
     TIntrusivePtr<NYql::TIssue> Run(const NYql::TIssue& issue) {
-        auto msg = RemoveDatabaseFromStr(issue.GetMessage(), DatabasePath);
+        auto msg = RemoveDatabaseFromStr(TString(issue.GetMessage()), DatabasePath);
         auto newIssue = MakeIntrusive<NYql::TIssue>(issue.Position, issue.EndPosition, msg);
         newIssue->SetCode(issue.GetCode(), issue.GetSeverity());
         for (auto issue : issue.GetSubIssues()) {

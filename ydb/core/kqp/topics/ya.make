@@ -7,6 +7,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/tx/scheme_cache
 )
 
 YQL_LAST_ABI_VERSION()

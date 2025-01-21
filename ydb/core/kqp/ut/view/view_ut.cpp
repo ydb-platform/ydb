@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/utils/log/log.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/folder/filelist.h>
 
@@ -117,14 +117,14 @@ TMaybe<bool> GetFromCacheStat(const TQueryStats& stats) {
     return proto.Getcompilation().Getfrom_cache();
 }
 
-void AssertFromCache(const TMaybe<TQueryStats>& stats, bool expectedValue) {
-    UNIT_ASSERT(stats.Defined());
+void AssertFromCache(const std::optional<TQueryStats>& stats, bool expectedValue) {
+    UNIT_ASSERT(stats.has_value());
     const auto isFromCache = GetFromCacheStat(*stats);
     UNIT_ASSERT_C(isFromCache.Defined(), stats->ToString());
     UNIT_ASSERT_VALUES_EQUAL_C(*isFromCache, expectedValue, stats->ToString());
 }
 
-void CompareResults(const TVector<TResultSet>& firstResults, const TVector<TResultSet>& secondResults) {
+void CompareResults(const std::vector<TResultSet>& firstResults, const std::vector<TResultSet>& secondResults) {
     UNIT_ASSERT_VALUES_EQUAL(firstResults.size(), secondResults.size());
     for (size_t i = 0; i < firstResults.size(); ++i) {
         CompareYson(FormatResultSetYson(firstResults[i]), FormatResultSetYson(secondResults[i]));

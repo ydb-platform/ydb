@@ -13,8 +13,9 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -278,7 +279,7 @@ public:
         }
         if (!status.IsSuccess()) {
             LOG_E("Create resource pool response (error): " << ProcessedResourcePools << " of " << WorkloadManagerConfig.ResourcePoolSize() << ", issues = " << status.GetIssues().ToOneLineString());
-            Issues.AddIssues(status.GetIssues());
+            Issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
             ProcessCreateResourcePool();
             return;
         }
@@ -613,7 +614,7 @@ private:
         try {
             return std::move(future.GetValueSync()); // can throw an exception
         } catch (...) {
-            return NYdb::TStatus{NYdb::EStatus::BAD_REQUEST, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}};
+            return NYdb::TStatus{NYdb::EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}};
         }
     }
 
@@ -646,7 +647,7 @@ private:
     }
 
     static bool IsPathExistsIssue(const NYdb::TStatus& status) {
-        return status.GetIssues().ToOneLineString().Contains("error: path exist");
+        return status.GetIssues().ToOneLineString().contains("error: path exist");
     }
 
     bool AlterResourcePool(size_t index) {

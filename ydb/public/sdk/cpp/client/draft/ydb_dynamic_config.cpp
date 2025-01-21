@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 
-namespace NYdb::NDynamicConfig {
+namespace NYdb::inline V2::NDynamicConfig {
 
 class TDynamicConfigClient::TImpl : public TClientImplCommon<TDynamicConfigClient::TImpl> {
 public:

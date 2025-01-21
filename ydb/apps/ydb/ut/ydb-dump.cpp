@@ -5,12 +5,14 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/stream/file.h>
 #include <util/string/printf.h>
+
+#include <google/protobuf/text_format.h>
 
 Y_UNIT_TEST_SUITE(YdbDump) {
 

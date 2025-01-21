@@ -73,8 +73,8 @@ public:
             return ClientId;
         }
 
-        TMaybe<ui64> GetNextMessageOffset() const override {
-            return Nothing();
+        std::optional<ui64> GetNextMessageOffset() const override {
+            return std::nullopt;
         }
 
         void OnClientError(TStatus status) override {

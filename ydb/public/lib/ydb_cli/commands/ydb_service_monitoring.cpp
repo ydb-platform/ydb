@@ -1,7 +1,7 @@
 #include "ydb_service_monitoring.h"
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -42,7 +42,7 @@ int TCommandSelfCheck::Run(TConfig& config) {
     NMonitoring::TSelfCheckResult result = client.SelfCheck(
         FillSettings(settings)
     ).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return PrintResponse(result);
 }
 

@@ -8,7 +8,7 @@
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 ////////////////////////////////////////////////////////////////////////////////
 

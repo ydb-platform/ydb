@@ -1,8 +1,8 @@
 LIBRARY()
 
 SRCS(
-    time_point.h
     constants.h
+    time_point.h
 )
 
 PEERDIR(

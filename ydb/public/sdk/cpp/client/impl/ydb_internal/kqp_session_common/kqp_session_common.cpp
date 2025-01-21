@@ -2,7 +2,7 @@
 
 #include <ydb/public/lib/operation_id/operation_id.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 using std::string;
 

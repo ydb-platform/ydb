@@ -44,8 +44,8 @@ public:
             return;
         }
 
-        ThreadsCount = result.ColumnParser("ThreadsCount").GetOptionalUint64().GetOrElse(0);
-        TotalLoad = result.ColumnParser("TotalLoad").GetOptionalDouble().GetOrElse(0.0);
+        ThreadsCount = result.ColumnParser("ThreadsCount").GetOptionalUint64().value_or(0);
+        TotalLoad = result.ColumnParser("TotalLoad").GetOptionalDouble().value_or(0.0);
 
         if (!ThreadsCount) {
             Finish(Ydb::StatusIds::NOT_FOUND, "Cpu info not found");

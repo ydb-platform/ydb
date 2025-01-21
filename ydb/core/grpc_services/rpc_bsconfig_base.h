@@ -11,8 +11,8 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 namespace NKikimr::NGRpcService {
 

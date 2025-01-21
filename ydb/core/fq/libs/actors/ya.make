@@ -87,9 +87,9 @@ PEERDIR(
     ydb/library/yql/utils/actor_log
     ydb/public/api/protos
     ydb/public/lib/fq
-    ydb/public/sdk/cpp/client/ydb_query
-    ydb/public/sdk/cpp/client/ydb_operation
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

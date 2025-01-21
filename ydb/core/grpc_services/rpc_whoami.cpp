@@ -70,7 +70,7 @@ private:
                 ReplyError("Empty token in Staff response");
             }
         } else {
-            ReplyError(result.Error.Message);
+            ReplyError(TString{result.Error.Message});
         }
         PassAway();
     }

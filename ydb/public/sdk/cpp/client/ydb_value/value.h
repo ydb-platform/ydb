@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 
@@ -10,7 +12,7 @@ namespace Ydb {
     class Value;
 }
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TResultSetParser;
 

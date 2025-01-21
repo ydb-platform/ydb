@@ -192,7 +192,7 @@ void TInteractiveCLI::Run() {
             sqlCommand.SetCollectStatsMode(std::move(queryStatsMode));
             sqlCommand.SetSyntax("yql");
             sqlCommand.Run(Config);
-        } catch (TYdbErrorException &error) {
+        } catch (NStatusHelpers::TYdbErrorException &error) {
             Cerr << error;
         } catch (yexception & error) {
             Cerr << error;

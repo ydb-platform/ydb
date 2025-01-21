@@ -26,6 +26,7 @@ SRCS(
 PEERDIR(
     ydb/mvp/core
     ydb/public/api/client/yc_private/oauth
+    library/cpp/getopt
 )
 
 YQL_LAST_ABI_VERSION()

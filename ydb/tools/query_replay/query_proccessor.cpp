@@ -97,7 +97,7 @@ public:
             if (col.Name == "_logfeller_timestamp")
                 continue;
 
-            TString value = parser.ColumnParser(col.Name).GetOptionalString().GetRef();
+            TString value = parser.ColumnParser(col.Name).GetOptionalString().value();
             json.InsertValue(col.Name, NJson::TJsonValue(std::move(value)));
         }
 

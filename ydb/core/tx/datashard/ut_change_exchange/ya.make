@@ -22,10 +22,10 @@ PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
     yql/essentials/public/udf/service/exception_policy
     ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/client/ydb_datastreams
-    ydb/public/sdk/cpp/client/ydb_topic
-    ydb/public/sdk/cpp/client/ydb_persqueue_public
-    ydb/public/sdk/cpp/client/ydb_result
+    ydb/public/sdk/cpp/src/client/datastreams
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/persqueue_public
+    ydb/public/sdk/cpp/src/client/result
 )
 
 YQL_LAST_ABI_VERSION()

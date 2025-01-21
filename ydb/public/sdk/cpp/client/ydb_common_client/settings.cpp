@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/parser.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 TCommonClientSettings& TCommonClientSettings::AuthToken(const TMaybe<TStringType>& token) {
     return CredentialsProviderFactory(CreateOAuthCredentialsProviderFactory(token.GetRef()));

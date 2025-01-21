@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <util/generic/vector.h>
@@ -9,7 +11,7 @@ namespace Ydb {
     class ResultSet;
 }
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TProtoAccessor;
 
@@ -31,7 +33,7 @@ bool operator!=(const TColumn& col1, const TColumn& col2);
 //! Collection of rows, represents result of query or part of the result in case of stream operations
 class TResultSet {
     friend class TResultSetParser;
-    friend class NYdb::TProtoAccessor;
+    friend class NYdb::V2::TProtoAccessor;
 public:
     TResultSet(const Ydb::ResultSet& proto);
     TResultSet(Ydb::ResultSet&& proto);

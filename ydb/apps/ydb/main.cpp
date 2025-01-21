@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         Cerr << "Try \"--help\" option for more info." << Endl;
         return EXIT_FAILURE;
     }
-    catch (const NYdb::NConsoleClient::TYdbErrorException& e) {
+    catch (const NYdb::NStatusHelpers::TYdbErrorException& e) {
         Cerr << e;
         return EXIT_FAILURE;
     }

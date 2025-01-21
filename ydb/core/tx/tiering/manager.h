@@ -7,7 +7,7 @@
 #include <ydb/core/tx/tiering/tier/identifier.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
+#include <ydb-cpp-sdk/client/types/s3_settings.h>
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>

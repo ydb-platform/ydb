@@ -40,7 +40,7 @@ int TCommandGetToken::Run(TConfig& config) {
         TDummyClient client(driver);
 
         auto authInfo = credentialsProviderFactory->CreateProvider(client.GetCoreFacility())->GetAuthInfo();
-        if (authInfo) {
+        if (!authInfo.empty()) {
             Cout << authInfo << Endl;
             return EXIT_SUCCESS;
         }

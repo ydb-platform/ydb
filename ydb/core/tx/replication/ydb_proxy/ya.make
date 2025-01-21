@@ -3,12 +3,12 @@ LIBRARY()
 PEERDIR(
     ydb/core/base
     ydb/core/protos
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
-    ydb/public/sdk/cpp/client/ydb_topic
-    ydb/public/sdk/cpp/client/ydb_types/credentials
-    ydb/public/sdk/cpp/client/ydb_types/credentials/login
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/types/credentials
+    ydb/public/sdk/cpp/src/client/types/credentials/login
 )
 
 SRCS(

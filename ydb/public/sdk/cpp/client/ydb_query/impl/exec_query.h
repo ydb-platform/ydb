@@ -7,7 +7,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 class TExecQueryImpl {
 public:

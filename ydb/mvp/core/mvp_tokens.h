@@ -2,7 +2,7 @@
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/spinlock.h>
 #include <util/generic/queue.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>

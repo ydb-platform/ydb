@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ydb/public/lib/ydb_cli/commands/ydb_command.h"
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_metadata_fields.h>

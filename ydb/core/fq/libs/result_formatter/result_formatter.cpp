@@ -11,7 +11,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/yson/json2yson.h>
 
@@ -208,7 +208,7 @@ TType MakeType(NYdb::TTypeParser& parser, TContext& env)
             if (!node) {
                 return nullptr;
             }
-            items.push_back({colName, node});
+            items.push_back({TString{colName}, node});
         }
         parser.CloseStruct();
         return MakeStructType(items, env);
@@ -251,7 +251,7 @@ TType MakeType(NYdb::TTypeParser& parser, TContext& env)
     case NYdb::TTypeParser::ETypeKind::Tagged: {
         parser.OpenTagged();
         auto tag = parser.GetTag();
-        auto node = MakeTaggedType(tag, MakeType<TType>(parser, env), env);
+        auto node = MakeTaggedType(TString{tag}, MakeType<TType>(parser, env), env);
         parser.CloseTagged();
         return node;
     }

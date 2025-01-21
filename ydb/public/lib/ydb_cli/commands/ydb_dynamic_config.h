@@ -49,7 +49,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    TMap<TString, TString> Labels;
+    std::map<std::string, std::string> Labels;
     bool All = false;
     TString Filename;
     TString Dir;

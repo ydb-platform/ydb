@@ -15,14 +15,14 @@
 class TLogBackend;
 class TLog;
 
-namespace NYdb {
+namespace NYdb::inline V3 {
 
 class TDriver;
 class TParams;
 
 }
 
-namespace NYdb::NTable {
+namespace NYdb::inline V3::NTable {
 
 class TSession;
 class TTableClient;

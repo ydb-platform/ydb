@@ -686,7 +686,7 @@ private:
     // Result
     std::vector<TResultSetInfo> ResultSetInfos;
     TMap<ui64, TProducerState> StreamChannels;
-    TMaybe<TInstant> ExpireAt;
+    std::optional<TInstant> ExpireAt;
     NJson::TJsonValue ResultSetMetas;
     ui32 SaveResultInflight = 0;
     ui64 SaveResultInflightBytes = 0;

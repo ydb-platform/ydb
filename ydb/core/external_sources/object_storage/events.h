@@ -11,7 +11,8 @@
 #include <ydb/core/external_sources/object_storage/inference/infer_config.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 namespace NKikimr::NExternalSource::NObjectStorage {
 
@@ -142,7 +143,7 @@ struct TEvInferredFileSchema : public NActors::TEventLocal<TEvInferredFileSchema
     {}
     TEvInferredFileSchema(TString path, NYql::TIssues&& issues)
         : Path{std::move(path)}
-        , Status{NYdb::EStatus::INTERNAL_ERROR, std::move(issues)}
+        , Status{NYdb::EStatus::INTERNAL_ERROR, NYdb::NAdapters::ToSdkIssues(std::move(issues))}
     {}
 
     TString Path;

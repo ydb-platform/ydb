@@ -7,9 +7,9 @@
 #include <ydb/core/mind/address_classification/net_classifier.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -501,7 +501,7 @@ public:
     void RunYqlSchemeQuery(TString query, bool expectSuccess = true) {
         auto tableClient = NYdb::NTable::TTableClient(*Driver);
 
-        NYdb::TStatus result(NYdb::EStatus::SUCCESS, NYql::TIssues());
+        NYdb::TStatus result(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues());
         for (size_t i = 0; i < 10; ++i) {
             result = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
                 return session.ExecuteSchemeQuery(query).GetValueSync();
@@ -552,7 +552,7 @@ public:
         TString endpoint = TStringBuilder() << "localhost:" << GRpcPort;
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
-            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         if (databaseName)
             driverConfig.SetDatabase(*databaseName);
         Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
@@ -895,12 +895,12 @@ public:
         auto pos = name.rfind("/");
         Y_ABORT_UNLESS(pos != TString::npos);
         auto pref = "/Root/PQ/" + name.substr(0, pos);
-        ModifyACL(pref, name.substr(pos + 1), acl.SerializeAsString());
+        ModifyACL(TString{pref}, name.substr(pos + 1), acl.SerializeAsString());
     }
 
     void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true,
-                             const TMaybe<TString>& dc = Nothing(), TVector<TString> rr = {"user"},
-                             const TMaybe<TString>& account = Nothing(), bool expectFail = false)
+                             const std::optional<TString>& dc = std::nullopt, std::vector<TString> rr = {"user"},
+                             const std::optional<TString>& account = std::nullopt, bool expectFail = false)
     {
         CreateTopicNoLegacy({
             .Name = name,
@@ -1371,7 +1371,7 @@ private:
     }
 
 public:
-    void AddTopic(const TString& topic, const TMaybe<TString>& dc = Nothing()) {
+    void AddTopic(const TString& topic, const std::optional<TString>& dc = std::nullopt) {
         Cerr << "AddTopic: " << topic << Endl;
         return AddOrRemoveTopic(topic, true, dc);
     }
@@ -1381,7 +1381,7 @@ public:
         return AddOrRemoveTopic(topic, false);
     }
 
-    void AddOrRemoveTopic(const TString& topic, bool add, const TMaybe<TString>& dc = Nothing()) {
+    void AddOrRemoveTopic(const TString& topic, bool add, const std::optional<TString>& dc = std::nullopt) {
         TStringBuilder query;
         query << "DECLARE $version as Int64; DECLARE $path AS Utf8; DECLARE $cluster as Utf8; ";
         if (add) {
@@ -1389,7 +1389,7 @@ public:
         } else {
             query << "DELETE FROM `/Root/PQ/Config/V2/Topics` WHERE path = $path AND dc = $cluster; ";
         }
-        TString cluster = dc.GetOrElse(NPersQueue::GetDC(topic));
+        TString cluster = dc.value_or(NPersQueue::GetDC(topic));
         query << GetAlterTopicsVersionQuery();
         NYdb::TParamsBuilder builder;
         auto params = builder
@@ -1418,11 +1418,11 @@ public:
         ui32 PartsCount;
         bool DoWait = true;
         bool CanWrite = true;
-        TMaybe<TString> Dc = Nothing();
-        TVector<TString> ReadRules = {"user"};
-        TMaybe<TString> Account = Nothing();
+        std::optional<TString> Dc = std::nullopt;
+        std::vector<TString> ReadRules = {"user"};
+        std::optional<TString> Account = std::nullopt;
         bool ExpectFail = false;
-        TVector<NYdb::NPersQueue::ECodec> Codecs = NYdb::NPersQueue::GetDefaultCodecs();
+        std::vector<NYdb::NPersQueue::ECodec> Codecs = NYdb::NPersQueue::GetDefaultCodecs();
     };
 
     void CreateTopicNoLegacy(const CreateTopicNoLegacyParams& params)
@@ -1430,7 +1430,7 @@ public:
         Cerr << "CreateTopicNoLegacy: " << params.Name << Endl;
 
         TString path = params.Name;
-        if (UseConfigTables && !path.StartsWith("/Root") && !params.Account.Defined()) {
+        if (UseConfigTables && !path.StartsWith("/Root") && !params.Account) {
             path = TStringBuilder() << "/Root/PQ/" << params.Name;
         }
 

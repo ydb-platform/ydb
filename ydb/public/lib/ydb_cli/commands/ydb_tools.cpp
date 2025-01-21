@@ -1,7 +1,7 @@
 #include "ydb_tools.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
@@ -110,7 +110,7 @@ int TCommandDump::Run(TConfig& config) {
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));
-    ThrowOnError(client.Dump(Path, FilePath, settings));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Dump(Path, FilePath, settings));
 
     return EXIT_SUCCESS;
 }
@@ -241,7 +241,7 @@ int TCommandRestore::Run(TConfig& config) {
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));
-    ThrowOnError(client.Restore(FilePath, Path, settings));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Restore(FilePath, Path, settings));
 
     return EXIT_SUCCESS;
 }
@@ -292,7 +292,7 @@ int TCommandCopy::Run(TConfig& config) {
     for (auto& item : Items) {
         copyItems.emplace_back(item.Source, item.Destination);
     }
-    ThrowOnError(
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
         GetSession(config).CopyTables(
             copyItems,
             FillSettings(NTable::TCopyTablesSettings())
@@ -385,7 +385,7 @@ int TCommandRename::Run(TConfig& config) {
             renameItems.back().SetReplaceDestination();
         }
     }
-    ThrowOnError(
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
         GetSession(config).RenameTables(
             renameItems,
             FillSettings(NTable::TRenameTablesSettings())

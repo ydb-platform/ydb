@@ -94,7 +94,7 @@ public:
     ui64 MemSize() const {
         switch (GetType()) {
         case EType::String:
-            return sizeof(Value) + std::get<TString>(Value).size();
+            return sizeof(Value) + std::get<std::string>(Value).size();
         default:
             return sizeof(Value);
         }
@@ -104,7 +104,7 @@ private:
     std::variant<
         TInf,
         TNull,
-        TString,
+        std::string,
         bool,
         ui8,
         i32,
@@ -351,7 +351,7 @@ public:
 using TSplitPoint = TKey;
 
 class TKeyBuilder {
-    static auto MakeKeyColumnIds(const TVector<TString>& keyColumns) {
+    static auto MakeKeyColumnIds(const std::vector<std::string>& keyColumns) {
         THashMap<TString, ui32> keyColumnIds;
 
         for (ui32 i = 0; i < keyColumns.size(); ++i) {
@@ -380,8 +380,8 @@ class TKeyBuilder {
 
 public:
     explicit TKeyBuilder(
-            const TVector<TColumn>& columns,
-            const TVector<TString>& keyColumns,
+            const std::vector<TColumn>& columns,
+            const std::vector<std::string>& keyColumns,
             const std::shared_ptr<TLog>& log)
         : Columns(columns)
         , KeyColumnIds(MakeKeyColumnIds(keyColumns))
@@ -418,7 +418,7 @@ public:
     }
 
 private:
-    const TVector<TColumn> Columns;
+    const std::vector<TColumn> Columns;
     const THashMap<TString, ui32> KeyColumnIds;
     const std::shared_ptr<TLog> Log;
 
@@ -517,7 +517,7 @@ class TTableRows {
     using TRows = TMap<TSplitPoint, TPartitionRows>;
     using TRowsBy = TMap<ui64, THashSet<TRows::iterator, TIteratorHash<TRows::iterator>>, TGreater<ui64>>;
 
-    static auto MakeSplitPoints(const TVector<TKeyRange>& keyRanges) {
+    static auto MakeSplitPoints(const std::vector<TKeyRange>& keyRanges) {
         Y_ENSURE(!keyRanges.empty());
 
         TVector<TSplitPoint> splitPoints;
@@ -526,7 +526,7 @@ class TTableRows {
         while (++it != keyRanges.end()) {
             const auto& from = it->From();
 
-            Y_ENSURE(from.Defined());
+            Y_ENSURE(from.has_value());
             Y_ENSURE(from->IsInclusive());
 
             TValueParser parser(from->GetValue());
@@ -584,7 +584,7 @@ class TTableRows {
     }
 
 public:
-    explicit TTableRows(const TVector<TKeyRange>& keyRanges)
+    explicit TTableRows(const std::vector<TKeyRange>& keyRanges)
         : ByPartition(MakeEmptyRows(MakeSplitPoints(keyRanges)))
         , MemSize(0)
     {
@@ -630,7 +630,7 @@ public:
         }
     }
 
-    void Reshard(const TVector<TKeyRange>& keyRanges) {
+    void Reshard(const std::vector<TKeyRange>& keyRanges) {
         auto newByPartition = MakeEmptyRows(MakeSplitPoints(keyRanges));
 
         for (auto& [_, rows] : ByPartition) {
@@ -770,7 +770,7 @@ public:
         return batch;
     }
 
-    void Reshard(const TVector<TKeyRange>& keyRanges) {
+    void Reshard(const std::vector<TKeyRange>& keyRanges) {
         TGuard<TMutex> lock(Mutex);
         Rows.Reshard(keyRanges);
     }
@@ -815,7 +815,7 @@ class TDataWriter: public NPrivate::IDataWriter {
 
             RequestLimiter.Use(1);
 
-            auto importResult = ImportClient.ImportData(Path, data, Settings).GetValueSync();
+            auto importResult = ImportClient.ImportData(Path, TString{data}, Settings).GetValueSync();
 
             if (importResult.IsSuccess()) {
                 return true;

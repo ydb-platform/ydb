@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NTable {
 
 TString EncodeQuery(const TString& text, bool reversible);

@@ -2,13 +2,13 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <util/generic/queue.h>
 #include <google/protobuf/text_format.h>
 
@@ -158,7 +158,7 @@ int TCommandSql::RunCommand(TConfig& config) {
                 );
 
             auto result = asyncResult.GetValueSync();
-            ThrowOnError(result);
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
             int printResult = PrintResponse(result);
             if (printResult != EXIT_SUCCESS) {
                 return printResult;
@@ -173,16 +173,16 @@ int TCommandSql::RunCommand(TConfig& config) {
         );
 
         auto result = asyncResult.GetValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         return PrintResponse(result);
     }
     return EXIT_SUCCESS;
 }
 
 int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
-    TMaybe<TString> stats;
-    TMaybe<TString> plan;
-    TMaybe<TString> ast;
+    std::optional<std::string> stats;
+    std::optional<std::string> plan;
+    std::optional<std::string> ast;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -196,7 +196,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
                 printer.Print(streamPart.GetResultSet());
             }
 
-            if (!streamPart.GetStats().Empty()) {
+            if (streamPart.GetStats().has_value()) {
                 const auto& queryStats = *streamPart.GetStats();
                 stats = queryStats.ToString();
                 ast = queryStats.GetAst();
@@ -232,7 +232,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             && (ExplainMode || ExplainAnalyzeMode)
             ? EDataFormat::PrettyTable : OutputFormat;
         TQueryPlanPrinter queryPlanPrinter(format, /* show actual costs */ !ExplainMode);
-        queryPlanPrinter.Print(*plan);
+        queryPlanPrinter.Print(TString{*plan});
     }
 
     if (IsInterrupted()) {

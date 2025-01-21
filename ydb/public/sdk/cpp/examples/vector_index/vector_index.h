@@ -1,14 +1,9 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/getopt/last_getopt.h>
-#include <util/generic/string.h>
-#include <util/generic/yexception.h>
-#include <util/stream/output.h>
-#include <util/string/builder.h>
-#include <util/string/printf.h>
 
 enum class ECommand {
     DropIndex,
@@ -22,17 +17,17 @@ enum class ECommand {
 ECommand Parse(std::string_view command);
 
 struct TOptions {
-    TString Database;
-    TString Table;
-    TString IndexType;
-    TString IndexQuantizer;
-    TString PrimaryKey;
-    TString Embedding;
-    TString Distance;
-    TString Data;
-    TString Target;
-    ui64 Rows = 0;
-    ui64 TopK = 0;
+    std::string Database;
+    std::string Table;
+    std::string IndexType;
+    std::string IndexQuantizer;
+    std::string PrimaryKey;
+    std::string Embedding;
+    std::string Distance;
+    std::string Data;
+    std::string Target;
+    uint64_t Rows = 0;
+    uint64_t TopK = 0;
 };
 
 int DropIndex(NYdb::TDriver& driver, const TOptions& options);

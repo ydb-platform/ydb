@@ -7,7 +7,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
 #include <util/stream/file.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 TDriverConfig CreateFromEnvironment(const TStringType& connectionString) {
     TDriverConfig driverConfig;

@@ -11,7 +11,7 @@
 
 #include <queue>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 ERetryErrorClass GetRetryErrorClass(EStatus status);
 ERetryErrorClass GetRetryErrorClassV2(EStatus status);

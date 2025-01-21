@@ -1,6 +1,6 @@
 #include "secondary_index.h"
 
-#include <util/folder/pathsplit.h>
+#include <filesystem>
 
 TCommand Parse(const char * stringCmd) {
 
@@ -21,19 +21,19 @@ TCommand Parse(const char * stringCmd) {
     return TCommand::NONE;
 }
 
-TString JoinPath(const TString& prefix, const TString& path) {
+std::string JoinPath(const std::string& prefix, const std::string& path) {
     if (prefix.empty()) {
         return path;
     }
 
-    TPathSplitUnix  prefixPathSplit(prefix);
-    prefixPathSplit.AppendComponent(path);
+    std::filesystem::path prefixPathSplit(prefix);
+    prefixPathSplit /= path;
 
-    return prefixPathSplit.Reconstruct();
+    return prefixPathSplit;
 }
 
 
-void ParseSelectSeries(TVector<TSeries>& parseResult, TResultSetParser&& parser) {
+void ParseSelectSeries(std::vector<TSeries>& parseResult, TResultSetParser&& parser) {
     parseResult.clear();
     while (parser.TryNextRow()) {
         auto& series = parseResult.emplace_back();

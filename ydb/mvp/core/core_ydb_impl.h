@@ -7,22 +7,22 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/string_utils/base64/base64.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-#include <yql/essentials/public/issue/yql_issue_manager.h>
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+
 #include "appdata.h"
 #include "merger.h"
 #include "core_ydb.h"
@@ -564,7 +564,7 @@ struct THandlerActorYdb {
     }
 
     static void WriteSchemeEntryPermissions(NJson::TJsonValue& value,
-                                            const TVector<NYdb::NScheme::TPermissions>& permissions,
+                                            const std::vector<NYdb::NScheme::TPermissions>& permissions,
                                             const TString& filterSubject = TString()) {
         value.SetType(NJson::JSON_ARRAY);
         THashMap<TString, THashSet<TString>> actualPermissions;
@@ -573,7 +573,7 @@ struct THandlerActorYdb {
                 continue;
             }
             auto& subjectPermissions = actualPermissions[permission.Subject];
-            for (const TString& perm : permission.PermissionNames) {
+            for (const auto& perm : permission.PermissionNames) {
                 subjectPermissions.emplace(perm);
             }
         }
@@ -630,7 +630,7 @@ struct THandlerActorYdb {
     }
 
     static void WriteColumns(NJson::TJsonValue& columns,
-                             const TVector<NYdb::TColumn>& columnsMeta,
+                             const std::vector<NYdb::TColumn>& columnsMeta,
                              const TVector<TString>& columnsKeysMeta = TVector<TString>(),
                              const std::function<void(NJson::TJsonValue&, NYdb::TType)>& columnTypeFormatter = ColumnTypeToString) {
         for (const NYdb::TColumn& columnMeta : columnsMeta) {
@@ -697,12 +697,12 @@ struct THandlerActorYdb {
             index["sizeBytes"] = indexMeta.GetSizeBytes();
             NJson::TJsonValue& indexColumns = index["indexColumns"];
             indexColumns.SetType(NJson::JSON_ARRAY);
-            for (const TString& column : indexMeta.GetIndexColumns()) {
+            for (const auto& column : indexMeta.GetIndexColumns()) {
                 indexColumns.AppendValue(column);
             }
             NJson::TJsonValue& dataColumns = index["dataColumns"];
             dataColumns.SetType(NJson::JSON_ARRAY);
-            for (const TString& column : indexMeta.GetDataColumns()) {
+            for (const auto& column : indexMeta.GetDataColumns()) {
                 dataColumns.AppendValue(column);
             }
         }
@@ -711,14 +711,14 @@ struct THandlerActorYdb {
     static void WriteShards(NJson::TJsonValue& shards,
                             const NYdb::NTable::TTableDescription& tableDescription) {
         shards.SetType(NJson::JSON_ARRAY);
-        const TVector<NYdb::NTable::TKeyRange>& ranges = tableDescription.GetKeyRanges();
-        const TVector<NYdb::NTable::TPartitionStats>& stats = tableDescription.GetPartitionStats();
+        const std::vector<NYdb::NTable::TKeyRange>& ranges = tableDescription.GetKeyRanges();
+        const std::vector<NYdb::NTable::TPartitionStats>& stats = tableDescription.GetPartitionStats();
         for (ui64 nPart = 0; nPart < tableDescription.GetPartitionsCount(); ++nPart) {
             NJson::TJsonValue& shard = shards.AppendValue(NJson::TJsonValue());
             shard.SetType(NJson::JSON_MAP);
             if (nPart > 0 && nPart < ranges.size()) {
                 const NYdb::NTable::TKeyRange& range = ranges[nPart];
-                NYdb::TValueParser parser(range.From().GetRef().GetValue());
+                NYdb::TValueParser parser(range.From().value().GetValue());
                 shard["boundary"] = ColumnValueToJsonValue(parser);
             }
             if (nPart < stats.size()) {
@@ -922,7 +922,7 @@ struct THandlerActorYdb {
     static NHttp::THttpOutgoingResponsePtr CreateStatusResponse(NHttp::THttpIncomingRequestPtr request, const NYdb::TStatus& status, const TJsonSettings& jsonSettings = TJsonSettings()) {
         Ydb::Operations::Operation operation;
         operation.set_status(static_cast<Ydb::StatusIds_StatusCode>(status.GetStatus()));
-        IssuesToMessage(status.GetIssues(), operation.mutable_issues());
+        NYdb::NIssue::IssuesToMessage(status.GetIssues(), operation.mutable_issues());
         return CreateStatusResponse(request, operation, jsonSettings);
     }
 

@@ -11,7 +11,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NSolomonStatExtension {
+namespace NSolomonStatExtension::inline V2 {
 
 class TSolomonStatPullExtension: public NYdb::IExtension {
 public:

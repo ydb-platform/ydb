@@ -149,7 +149,7 @@ IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
                 << " DqGraphIndex: " << params.DqGraphIndex
                 << " Resource.TopicConsumers: " << params.Resources.topic_consumers().size()
                 << " ExecutionId: " << params.ExecutionId
-                << " OperationId: " << (params.OperationId.GetKind() != Ydb::TOperationId::UNUSED ? ProtoToString(params.OperationId) : "<empty>")
+                << " OperationId: " << (params.OperationId.GetKind() != NKikimr::NOperationId::TOperationId::UNUSED ? params.OperationId.ToString() : "<empty>")
                 << " ComputeConnection: " << params.ComputeConnection.ShortDebugString()
                 << " ResultTtl: " << params.ResultTtl
                 << " QueryParameters: " << params.QueryParameters.size()

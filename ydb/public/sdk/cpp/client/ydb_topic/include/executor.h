@@ -4,7 +4,7 @@
 #include <util/system/spinlock.h>
 #include <util/thread/pool.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 class IExecutor: public TThrRefBase {
 public:

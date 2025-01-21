@@ -5,7 +5,7 @@
 
 #include <util/generic/map.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TOperation;
 namespace NSessionPool {

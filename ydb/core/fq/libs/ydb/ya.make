@@ -13,10 +13,11 @@ PEERDIR(
     ydb/core/fq/libs/config
     ydb/core/fq/libs/events
     ydb/library/security
-    ydb/public/sdk/cpp/client/ydb_coordination
-    ydb/public/sdk/cpp/client/ydb_rate_limiter
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/coordination
+    ydb/public/sdk/cpp/src/client/rate_limiter
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb.h)

@@ -4,13 +4,13 @@
 
 #include <util/generic/string.h>
 
-namespace NYdb::NTable {
+namespace NYdb::inline V2::NTable {
 
 class TTransaction;
 
 }
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 using TTransactionId = std::pair<TString, TString>;
 

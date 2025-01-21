@@ -2,8 +2,10 @@
 
 namespace NYdb {
 
+inline namespace V3 {
 namespace NScheme {
     struct TSchemeEntry;
+}
 }
 
 namespace NConsoleClient {

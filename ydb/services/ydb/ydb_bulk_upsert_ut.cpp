@@ -1,7 +1,7 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -1276,7 +1276,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                 auto status = db.RetryOperationSync([&failInjector](NYdb::NTable::TTableClient& db) {
                         EStatus injected = failInjector.GetInjectedStatus();
                         if (injected != EStatus::SUCCESS) {
-                            return NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYql::TIssues()));
+                            return NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYdb::NIssue::TIssues()));
                         }
 
                         NYdb::TValueBuilder rows;
@@ -1327,7 +1327,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                     [&failInjector](NYdb::NTable::TTableClient& db) {
                         EStatus injected = failInjector.GetInjectedStatus();
                         if (injected != EStatus::SUCCESS) {
-                            return NThreading::MakeFuture<NYdb::NTable::TBulkUpsertResult>(NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYql::TIssues())));
+                            return NThreading::MakeFuture<NYdb::NTable::TBulkUpsertResult>(NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYdb::NIssue::TIssues())));
                         }
 
                         NYdb::TValueBuilder rows;

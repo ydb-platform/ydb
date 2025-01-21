@@ -343,7 +343,7 @@ void TCommandWithParameters::GetParamTypes(const TDriver& driver, const TString&
         queryText,
         explainSettings
     ).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     ParamTypes = result.GetParameterTypes();
 }
 

@@ -2,7 +2,7 @@
 
 #include "table.h"
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 const Ydb::TableStats::QueryStats& TProtoAccessor::GetProto(const NTable::TQueryStats& queryStats) {
     return queryStats.GetProto();

@@ -313,7 +313,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     }
 
     TImportFileClient client(CreateDriver(config), config, settings);
-    ThrowOnError(client.Import(FilePaths, Path));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }
@@ -343,7 +343,7 @@ int TCommandImportFromJson::Run(TConfig& config) {
     settings.Threads(Threads);
 
     TImportFileClient client(CreateDriver(config), config, settings);
-    ThrowOnError(client.Import(FilePaths, Path));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }
@@ -362,7 +362,7 @@ int TCommandImportFromParquet::Run(TConfig& config) {
     settings.Threads(Threads);
 
     TImportFileClient client(CreateDriver(config), config, settings);
-    ThrowOnError(client.Import(FilePaths, Path));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }

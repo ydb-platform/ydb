@@ -7,10 +7,10 @@ ENV(YDB_ERASURE=block_4-2)
 
 PEERDIR(
     ydb/library/testlib/s3_recipe_helper
-    ydb/public/sdk/cpp/client/ydb_export
-    ydb/public/sdk/cpp/client/ydb_table
-    ydb/public/sdk/cpp/client/ydb_operation
-    ydb/public/sdk/cpp/client/draft
+    ydb/public/sdk/cpp/src/client/export
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/draft
 )
 
 SRCS(

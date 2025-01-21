@@ -1,6 +1,6 @@
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -33,7 +33,7 @@ void CreateTestTableWithIndex(NYdb::NTable::TTableClient& client) {
                 .AddNullableColumn("Timestamp", EPrimitiveType::Int64)
                 .AddNullableColumn("Data", EPrimitiveType::String)
                 .SetPrimaryKeyColumns({"NameHash", "Name"})
-                .AddSecondaryIndex("TimestampIndex",TVector<TString>({"Timestamp", "Name", "Version"}));
+                .AddSecondaryIndex("TimestampIndex", {"Timestamp", "Name", "Version"});
 
         auto tableSettings = NYdb::NTable::TCreateTableSettings().PartitioningPolicy(
             NYdb::NTable::TPartitioningPolicy().UniformPartitions(SHARD_COUNT));

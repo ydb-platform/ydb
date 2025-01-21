@@ -3,9 +3,9 @@
 #include "log_impl.h"
 #include <ydb/core/pgproxy/pg_proxy_events.h>
 #include <ydb/core/local_pgwire/local_pgwire_util.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 // temporarry borrowed from postgresql/src/backend/catalog/pg_type_d.h
@@ -104,7 +104,7 @@ public:
             try {
                 NYdb::NScripting::TExecuteYqlResult result = NYdb::NScripting::TAsyncExecuteYqlResult(feature).ExtractValue();
                 if (result.IsSuccess()) {
-                    const TVector<NYdb::TResultSet>& resultSets = result.GetResultSets();
+                    const std::vector<NYdb::TResultSet>& resultSets = result.GetResultSets();
                     if (!resultSets.empty()) {
                         NYdb::TResultSet resultSet = resultSets[0];
 
@@ -282,7 +282,7 @@ public:
             try {
                 NYdb::NScripting::TExecuteYqlResult result = NYdb::NScripting::TAsyncExecuteYqlResult(feature).ExtractValue();
                 if (result.IsSuccess()) {
-                    const TVector<NYdb::TResultSet>& resultSets = result.GetResultSets();
+                    const std::vector<NYdb::TResultSet>& resultSets = result.GetResultSets();
                     if (!resultSets.empty()) {
                         NYdb::TResultSet resultSet = resultSets[0];
 
@@ -381,7 +381,7 @@ public:
             try {
                 NYdb::NScripting::TExecuteYqlResult result = NYdb::NScripting::TAsyncExecuteYqlResult(feature).ExtractValue();
                 if (result.IsSuccess()) {
-                    const TVector<NYdb::TResultSet>& resultSets = result.GetResultSets();
+                    const std::vector<NYdb::TResultSet>& resultSets = result.GetResultSets();
                     if (!resultSets.empty()) {
                         NYdb::TResultSet resultSet = resultSets[0];
 

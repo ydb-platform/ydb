@@ -14,7 +14,7 @@
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/core/fq/libs/shared_resources/db_exec.h>
 
@@ -179,7 +179,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         );
     }
 
-    auto prepareParams = [=, as=TActivationContext::ActorSystem(), commonCounters=requestCounters.Common](const TVector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [=, as=TActivationContext::ActorSystem(), commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) mutable {
         const size_t countSets = (idempotencyKey ? 1 : 0) + (request.execute_mode() != FederatedQuery::SAVE ? 2 : 0);
         if (resultSets.size() != countSets) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
@@ -700,11 +700,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
 
         FederatedQuery::GetQueryStatusResult result;
         result.set_status(static_cast<FederatedQuery::QueryMeta_ComputeStatus>(*parser.ColumnParser(STATUS_COLUMN_NAME).GetOptionalInt64()));
-        result.set_meta_revision(parser.ColumnParser(META_REVISION_COLUMN_NAME).GetOptionalInt64().GetOrElse(0));
+        result.set_meta_revision(parser.ColumnParser(META_REVISION_COLUMN_NAME).GetOptionalInt64().value_or(0));
 
         const auto queryVisibility = static_cast<FederatedQuery::Acl::Visibility>(*parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64());
         const auto queryUser = *parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString();
-        const bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
+        const bool hasViewAccess = HasViewAccess(permissions, queryVisibility, TString{queryUser}, user);
         if (!hasViewAccess) {
             ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
@@ -812,7 +812,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);"
     );
 
-    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         const size_t countSets = 1 + (request.execute_mode() != FederatedQuery::SAVE ? 2 : 0);
 
         if (resultSets.size() != countSets) {
@@ -838,7 +838,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         }
         *internal.mutable_execution_ttl() = NProtoInterop::CastToProto(TDuration::MilliSeconds(executionLimitMills));
 
-        const TString resultId = request.execute_mode() == FederatedQuery::SAVE ? parser.ColumnParser(RESULT_ID_COLUMN_NAME).GetOptionalString().GetOrElse("") : "";
+        const TString resultId = request.execute_mode() == FederatedQuery::SAVE ? parser.ColumnParser(RESULT_ID_COLUMN_NAME).GetOptionalString().value_or("") : "";
 
         const auto queryVisibility = query.content().acl().visibility();
         const auto queryUser = query.meta().common().created_by();
@@ -1302,7 +1302,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
     );
 
-    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -1337,7 +1337,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
                 ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the id query or your access rights";
             }
 
-            if (!job.ParseFromString(parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString().GetOrElse(""))) {
+            if (!job.ParseFromString(parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString().value_or(""))) {
                 commonCounters->ParseProtobufError->Inc();
                 ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
             }
@@ -1562,8 +1562,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
                 ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
             }
 
-            FederatedQuery::Acl::Visibility queryVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
-            TString queryUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().GetOrElse("");
+            FederatedQuery::Acl::Visibility queryVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().value_or(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
+            TString queryUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().value_or("");
 
             bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
             if (!hasViewAccess) {

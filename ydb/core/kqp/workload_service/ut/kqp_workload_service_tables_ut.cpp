@@ -27,7 +27,7 @@ void DelayRequest(TIntrusivePtr<IYdbSetup> ydb, const TString& sessionId, TDurat
     auto runtime = ydb->GetRuntime();
     const auto& edgeActor = runtime->AllocateEdgeActor();
 
-    runtime->Register(CreateDelayRequestActor(edgeActor, CanonizePath(settings.DomainName_), settings.PoolId_, sessionId, TInstant::Now(), Nothing(), leaseDuration, runtime->GetAppData().Counters));
+    runtime->Register(CreateDelayRequestActor(edgeActor, CanonizePath(settings.DomainName_), settings.PoolId_, sessionId, TInstant::Now(), std::nullopt, leaseDuration, runtime->GetAppData().Counters));
     auto response = runtime->GrabEdgeEvent<TEvPrivate::TEvDelayRequestResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
     UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->SessionId, sessionId);

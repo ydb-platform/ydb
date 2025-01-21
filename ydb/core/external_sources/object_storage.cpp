@@ -20,7 +20,8 @@
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <library/cpp/scheme/scheme.h>
 #include <library/cpp/json/json_reader.h>
@@ -479,7 +480,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
                 if (!response.Status.IsSuccess()) {
-                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(response.Status.GetIssues()));
+                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(NYdb::NAdapters::ToYqlIssues(response.Status.GetIssues())));
                     return;
                 }
                 meta->Changed = true;

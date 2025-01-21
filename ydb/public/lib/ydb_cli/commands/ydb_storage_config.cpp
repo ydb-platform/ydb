@@ -1,6 +1,6 @@
 #include "ydb_storage_config.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_bsconfig/ydb_storage_config.h>
+#include <ydb-cpp-sdk/client/bsconfig/storage_config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <openssl/sha.h>
@@ -47,15 +47,15 @@ int TCommandStorageConfigFetch::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NStorageConfig::TStorageConfigClient(*driver);
     auto result = client.FetchStorageConfig().GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnError(result);
     auto cfg = result.GetConfig();
 
-    if (!cfg) {
+    if (cfg.empty()) {
         Cerr << "YAML config is absent on this cluster." << Endl;
         return EXIT_FAILURE;
     }
 
-    Cout << WrapYaml(cfg);
+    Cout << WrapYaml(TString{cfg});
 
     return EXIT_SUCCESS;
 }
@@ -93,7 +93,7 @@ int TCommandStorageConfigReplace::Run(TConfig& config) {
         return client.ReplaceStorageConfig(StorageConfig).GetValueSync();
     };
     auto status = exec();
-    ThrowOnError(status);
+    NStatusHelpers::ThrowOnError(status);
 
     if (!status.GetIssues()) {
         Cout << status << Endl;

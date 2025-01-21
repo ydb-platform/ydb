@@ -7,7 +7,7 @@
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NKikimr::NViewer {
 

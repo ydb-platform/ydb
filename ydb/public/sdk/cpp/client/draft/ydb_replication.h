@@ -15,7 +15,7 @@ namespace Ydb::Replication {
     class DescribeReplicationResult_Stats;
 }
 
-namespace NYdb {
+namespace NYdb::inline V2 {
     class TProtoAccessor;
 }
 
@@ -23,14 +23,14 @@ namespace NYql {
     class TIssues;
 }
 
-namespace NYdb::NReplication {
+namespace NYdb::inline V2::NReplication {
 
 class TDescribeReplicationResult;
 using TAsyncDescribeReplicationResult = NThreading::TFuture<TDescribeReplicationResult>;
 
 struct TDescribeReplicationSettings: public TOperationRequestSettings<TDescribeReplicationSettings> {
     using TSelf = TDescribeReplicationSettings;
-    FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, IncludeStats, false);
 };
 
 struct TStaticCredentials {

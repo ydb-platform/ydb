@@ -43,8 +43,8 @@ PEERDIR(
     ydb/library/yql/dq/common
     yql/essentials/core/dq_integration
     yql/essentials/parser/pg_wrapper/interface
-    ydb/public/lib/operation_id
-    ydb/public/lib/operation_id/protos
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id/protos
     ydb/core/grpc_services/cancelation
     library/cpp/lwtrace
     #library/cpp/lwtrace/protos

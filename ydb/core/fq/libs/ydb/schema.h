@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/retry/retry_policy.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/generic/maybe.h>
 #include <util/folder/path.h>
@@ -11,12 +11,14 @@ class TRegExMatch;
 
 namespace NYdb {
 
+inline namespace V3 {
 class TDriver;
 class TResultSetParser;
 class TValue;
 
 namespace NTable {
     class TTableDescription;
+}
 }
 
 namespace NBackup {

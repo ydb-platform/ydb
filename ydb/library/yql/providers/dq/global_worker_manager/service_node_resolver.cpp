@@ -79,7 +79,7 @@ public:
             conn.reset(ClientLow.CreateGRpcServiceConnection<Yql::DqsProto::DqService>(holder).release());
         });
 
-        return MakeFuture(TConnectionResult(std::move(conn), std::move(context), nodeInfo->NodeId, nodeInfo->ClientConfig.Locator));
+        return MakeFuture(TConnectionResult(std::move(conn), std::move(context), nodeInfo->NodeId, TString{nodeInfo->ClientConfig.Locator}));
     }
 
     void Stop() override {

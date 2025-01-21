@@ -12,9 +12,9 @@ PEERDIR(
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/pq/provider
     yql/essentials/utils
-    ydb/public/sdk/cpp/client/ydb_datastreams
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_topic
+    ydb/public/sdk/cpp/src/client/datastreams
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/topic
 )
 
 END()

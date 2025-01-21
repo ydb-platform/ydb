@@ -1,6 +1,6 @@
 #include "mrrun.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs/codecs.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/codecs/codecs.h>
 
 #include <yt/yql/providers/yt/lib/log/yt_logger.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
@@ -17,7 +17,7 @@
 #include <yql/essentials/core/url_preprocessing/url_preprocessing.h>
 
 #include <ydb/core/util/pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -668,7 +668,7 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetClickHouseDataProviderInitializer(httpGateway));
     }
 
-    const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
+    const auto driverConfig = NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(driverConfig);
 
     Y_DEFER {

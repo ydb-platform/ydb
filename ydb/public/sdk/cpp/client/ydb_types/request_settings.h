@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include "fluent_settings_helpers.h"
 
 #include <util/datetime/base.h>
@@ -7,17 +9,17 @@
 #include <vector>
 #include <utility>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 template<typename TDerived>
 struct TRequestSettings {
     using TSelf = TDerived;
     using THeader = std::vector<std::pair<TString, TString>>;
 
-    FLUENT_SETTING(TString, TraceId);
-    FLUENT_SETTING(TString, RequestType);
-    FLUENT_SETTING(THeader, Header);
-    FLUENT_SETTING(TDuration, ClientTimeout);
+    FLUENT_SETTING_DEPRECATED(TString, TraceId);
+    FLUENT_SETTING_DEPRECATED(TString, RequestType);
+    FLUENT_SETTING_DEPRECATED(THeader, Header);
+    FLUENT_SETTING_DEPRECATED(TDuration, ClientTimeout);
 
     TRequestSettings() = default;
 
@@ -47,11 +49,11 @@ struct TOperationRequestSettings : public TSimpleRequestSettings<TDerived> {
     using TSelf = TDerived;
 
     /* Cancel/timeout operation settings available from 18-8 YDB server version */
-    FLUENT_SETTING(TDuration, OperationTimeout);
-    FLUENT_SETTING(TDuration, CancelAfter);
-    FLUENT_SETTING(TDuration, ForgetAfter);
-    FLUENT_SETTING_DEFAULT(bool, UseClientTimeoutForOperation, true);
-    FLUENT_SETTING_DEFAULT(bool, ReportCostInfo, false);
+    FLUENT_SETTING_DEPRECATED(TDuration, OperationTimeout);
+    FLUENT_SETTING_DEPRECATED(TDuration, CancelAfter);
+    FLUENT_SETTING_DEPRECATED(TDuration, ForgetAfter);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, UseClientTimeoutForOperation, true);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, ReportCostInfo, false);
 
     TOperationRequestSettings() = default;
 

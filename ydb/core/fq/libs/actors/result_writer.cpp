@@ -136,7 +136,7 @@ private:
             statusCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
         }
         if (statusCode != NYql::NDqProto::StatusIds::UNSPECIFIED) {
-            SendIssuesAndSetErrorFlag(issues, statusCode);
+            SendIssuesAndSetErrorFlag(NYdb::NAdapters::ToYqlIssues(issues), statusCode);
             return;
         }
 

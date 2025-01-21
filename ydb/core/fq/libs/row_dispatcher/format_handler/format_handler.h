@@ -19,7 +19,7 @@ public:
     virtual const TString& GetWhereFilter() const = 0;
     virtual TPurecalcCompileSettings GetPurecalcSettings() const = 0;
     virtual NActors::TActorId GetClientId() const = 0;
-    virtual TMaybe<ui64> GetNextMessageOffset() const = 0;
+    virtual std::optional<ui64> GetNextMessageOffset() const = 0;
 
     virtual void OnClientError(TStatus status) = 0;
 
@@ -45,7 +45,7 @@ public:
     };
 
 public:
-    virtual void ParseMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) = 0;
+    virtual void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) = 0;
 
     // vector of (messages batch, [offsets])
     virtual TQueue<std::pair<TRope, TVector<ui64>>> ExtractClientData(NActors::TActorId clientId) = 0;

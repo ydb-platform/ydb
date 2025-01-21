@@ -6,7 +6,7 @@
 #include <ydb/core/protos/msgbus_kv.pb.h>
 
 #include <util/datetime/base.h>
-#include <ydb/library/grpc/client/grpc_common.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
 
 namespace NKikimr {
     namespace NGRpcProxy {

@@ -173,7 +173,7 @@ void PQWrite(
     NYdb::TDriverConfig cfg;
     cfg.SetEndpoint(endpoint);
     cfg.SetDatabase(GetDefaultPqDatabase());
-    cfg.SetLog(CreateLogBackend("cerr"));
+    cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(cfg);
     NYdb::NTopic::TTopicClient client(driver);
     NYdb::NTopic::TWriteSessionSettings sessionSettings;
@@ -200,12 +200,12 @@ std::vector<TString> PQReadUntil(
     NYdb::TDriverConfig cfg;
     cfg.SetEndpoint(endpoint);
     cfg.SetDatabase(GetDefaultPqDatabase());
-    cfg.SetLog(CreateLogBackend("cerr"));
+    cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(cfg);
     NYdb::NTopic::TTopicClient client(driver);
     NYdb::NTopic::TReadSessionSettings sessionSettings;
     sessionSettings
-        .AppendTopics(topic)
+        .AppendTopics(std::string{topic})
         .ConsumerName(DefaultPqConsumer);
 
     auto promise = NThreading::NewPromise();
@@ -233,7 +233,7 @@ void PQCreateStream(const TString& streamName)
     NYdb::TDriverConfig cfg;
     cfg.SetEndpoint(GetDefaultPqEndpoint());
     cfg.SetDatabase(GetDefaultPqDatabase());
-    cfg.SetLog(CreateLogBackend("cerr"));
+    cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(cfg);
 
     NYdb::NDataStreams::V1::TDataStreamsClient client = NYdb::NDataStreams::V1::TDataStreamsClient(

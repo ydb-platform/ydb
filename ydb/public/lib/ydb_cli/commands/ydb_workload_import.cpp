@@ -90,7 +90,7 @@ public:
 
     TAsyncStatus WriteDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) override {
         if (std::holds_alternative<NYdbWorkload::IBulkDataGenerator::TDataPortion::TSkip>(portion->MutableData())) {
-            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         }
         if (auto* value = std::get_if<TValue>(&portion->MutableData())) {
             return Owner.TableClient->BulkUpsert(portion->GetTable(), std::move(*value)).Apply(ConvertResult);
@@ -116,11 +116,11 @@ private:
         }
         auto arrowCsv = NKikimr::NFormats::TArrowCSVTable::Create(param.Columns, true);
         if (!arrowCsv.ok()) {
-            return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(arrowCsv.status().ToString())})));
+            return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue(arrowCsv.status().ToString())})));
         }
         Ydb::Formats::CsvSettings csvSettings;
         if (!csvSettings.ParseFromString(value->FormatString)) {
-            return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue("Invalid format string")})));
+            return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue("Invalid format string")})));
         };
 
         auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
@@ -129,7 +129,7 @@ private:
         TString error;
         if (auto batch = arrowCsv->ReadSingleBatch(value->Data, csvSettings, error)) {
             if (error) {
-                return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(error)})));
+                return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue(error)})));
             }
             return Owner.TableClient->RetryOperation([
                 parquet = NYdb_cli::NArrow::SerializeBatch(batch, writeOptions),
@@ -140,9 +140,9 @@ private:
             }, RetrySettings);
         }
         if (error) {
-            return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(error)})));
+            return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue(error)})));
         }
-        return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+        return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
     }
 
     static TStatus ConvertResult(const NTable::TAsyncBulkUpsertResult& result) {
@@ -150,8 +150,8 @@ private:
     }
 
     struct TArrowCSVParams {
-        TStatus Status = TStatus(EStatus::SUCCESS, NYql::TIssues());
-        TVector<NYdb::NTable::TTableColumn> Columns;
+        TStatus Status = TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues());
+        std::vector<NYdb::NTable::TTableColumn> Columns;
     };
 
     TArrowCSVParams GetCSVParams(const TString& table) {
@@ -193,7 +193,7 @@ public:
 
     TAsyncStatus WriteDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) override {
         if (std::holds_alternative<NYdbWorkload::IBulkDataGenerator::TDataPortion::TSkip>(portion->MutableData())) {
-            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         }
         if (auto* value = std::get_if<TValue>(&portion->MutableData())) {
             return NThreading::MakeErrorFuture<TStatus>(std::make_exception_ptr(yexception() << "Not implemented"));
@@ -207,13 +207,13 @@ public:
                 toWrite.ReadLine(firstLine);
             }
             out->Write(toWrite);
-            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         }
         if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TArrow>(&portion->MutableData())) {
             auto g = Guard(Lock);
             auto [out, created] = GetOutput(portion->GetTable());
             out->Write(value->Data);
-            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         }
         Y_FAIL_S("Invalid data portion");
     }

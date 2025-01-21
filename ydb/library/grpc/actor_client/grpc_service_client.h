@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/library/services/services.pb.h>
 #include <util/string/ascii.h>
 #include "grpc_service_settings.h"

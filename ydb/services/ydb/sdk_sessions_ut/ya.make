@@ -15,10 +15,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/core/testlib/default
     ydb/core/testlib
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/table
     ydb/public/lib/ut_helpers
 )
 

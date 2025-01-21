@@ -2,8 +2,8 @@
 #include "ydb_update.h"
 #include "ydb_version.h"
 
-#include <ydb/public/sdk/cpp/client/iam/common/iam.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 
 #include <filesystem>
@@ -27,7 +27,7 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
             return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
         }
         if (config.UseStaticCredentials) {
-            if (config.StaticCredentials.User) {
+            if (!config.StaticCredentials.User.empty()) {
                 return CreateLoginCredentialsProviderFactory(config.StaticCredentials);
             }
         }

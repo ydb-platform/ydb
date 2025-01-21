@@ -34,7 +34,7 @@
 #include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
 #include <yql/essentials/core/file_storage/file_storage.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <util/stream/tee.h>
 #include <util/string/cast.h>
@@ -118,7 +118,7 @@ bool RunPqProgram(
         NYql::CreateCommonDqTaskTransformFactory()
     });
 
-    const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
+    const auto driverConfig = NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(driverConfig);
     auto dqGateway = CreateLocalDqGateway(functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {}, false/*spilling*/, CreateAsyncIoFactory(driver, pqGateway));
 

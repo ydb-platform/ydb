@@ -6,7 +6,7 @@
 
 #include <util/datetime/base.h>
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 struct TWriteStat : public TThrRefBase {
     TDuration WriteTime;

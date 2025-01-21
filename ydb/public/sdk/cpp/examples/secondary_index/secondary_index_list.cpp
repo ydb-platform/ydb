@@ -5,10 +5,11 @@
 using namespace NLastGetopt;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NStatusHelpers;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void ParseSeries(TVector<TSeries>& results, TResultSetParser&& parser) {
+static void ParseSeries(std::vector<TSeries>& results, TResultSetParser&& parser) {
     results.clear();
     while (parser.TryNextRow()) {
         auto& series = results.emplace_back();
@@ -21,16 +22,16 @@ static void ParseSeries(TVector<TSeries>& results, TResultSetParser&& parser) {
 }
 
 static TStatus ListByViews(
-        TVector<TSeries>& results,
+        std::vector<TSeries>& results,
         TSession& session,
-        const TString& prefix,
-        ui64 limit,
-        ui64 lastSeriesId,
-        ui64 lastViews)
+        const std::string& prefix,
+        uint64_t limit,
+        uint64_t lastSeriesId,
+        uint64_t lastViews)
 {
-    auto queryText = Sprintf(R"(
+    auto queryText = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%1$s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $limit AS Uint64;
         DECLARE $lastSeriesId AS Uint64;
@@ -66,7 +67,7 @@ static TStatus ListByViews(
         FROM $filter AS t1
         INNER JOIN series AS t2 USING (series_id)
         ORDER BY views DESC, series_id ASC;
-    )", prefix.data());
+    )", prefix);
 
     auto prepareResult = session.PrepareDataQuery(queryText).ExtractValueSync();
     if (!prepareResult.IsSuccess()) {
@@ -99,14 +100,14 @@ static TStatus ListByViews(
 }
 
 static TStatus ListByViews(
-        TVector<TSeries>& results,
+        std::vector<TSeries>& results,
         TSession& session,
-        const TString& prefix,
-        ui64 limit)
+        const std::string& prefix,
+        uint64_t limit)
 {
-    auto queryText = Sprintf(R"(
+    auto queryText = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%1$s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $limit AS Uint64;
 
@@ -121,7 +122,7 @@ static TStatus ListByViews(
         FROM $filter AS t1
         INNER JOIN series AS t2 USING (series_id)
         ORDER BY views DESC, series_id ASC;
-    )", prefix.data());
+    )", prefix);
 
     auto prepareResult = session.PrepareDataQuery(queryText).ExtractValueSync();
     if (!prepareResult.IsSuccess()) {
@@ -148,15 +149,15 @@ static TStatus ListByViews(
 }
 
 static TStatus ListById(
-        TVector<TSeries>& results,
+        std::vector<TSeries>& results,
         TSession& session,
-        const TString& prefix,
-        ui64 limit,
-        ui64 lastSeriesId)
+        const std::string& prefix,
+        uint64_t limit,
+        uint64_t lastSeriesId)
 {
-    auto queryText = Sprintf(R"(
+    auto queryText = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%1$s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $limit AS Uint64;
         DECLARE $lastSeriesId AS Uint64;
@@ -166,7 +167,7 @@ static TStatus ListById(
         WHERE series_id > $lastSeriesId
         ORDER BY series_id
         LIMIT $limit;
-    )", prefix.data());
+    )", prefix);
 
     auto prepareResult = session.PrepareDataQuery(queryText).ExtractValueSync();
     if (!prepareResult.IsSuccess()) {
@@ -196,14 +197,14 @@ static TStatus ListById(
 }
 
 static TStatus ListById(
-        TVector<TSeries>& results,
+        std::vector<TSeries>& results,
         TSession& session,
-        const TString& prefix,
-        ui64 limit)
+        const std::string& prefix,
+        uint64_t limit)
 {
-    auto queryText = Sprintf(R"(
+    auto queryText = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%1$s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $limit AS Uint64;
 
@@ -211,7 +212,7 @@ static TStatus ListById(
         FROM series
         ORDER BY series_id
         LIMIT $limit;
-    )", prefix.data());
+    )", prefix);
 
     auto prepareResult = session.PrepareDataQuery(queryText).ExtractValueSync();
     if (!prepareResult.IsSuccess()) {
@@ -237,13 +238,13 @@ static TStatus ListById(
     return result;
 }
 
-int RunListSeries(TDriver& driver, const TString& prefix, int argc, char** argv) {
+int RunListSeries(TDriver& driver, const std::string& prefix, int argc, char** argv) {
     TOpts opts = TOpts::Default();
 
     bool byViews = false;
-    ui64 limit = 10;
-    ui64 lastSeriesId = -1;
-    ui64 lastViews = -1;
+    uint64_t limit = 10;
+    uint64_t lastSeriesId = -1;
+    uint64_t lastViews = -1;
 
     opts.AddLongOption("by-views", "Sort by views").NoArgument().SetFlag(&byViews);
     opts.AddLongOption("limit", "Maximum number of rows").Optional().RequiredArgument("NUM")
@@ -255,7 +256,7 @@ int RunListSeries(TDriver& driver, const TString& prefix, int argc, char** argv)
 
     TOptsParseResult res(&opts, argc, argv);
 
-    TVector<TSeries> results;
+    std::vector<TSeries> results;
     TTableClient client(driver);
     ThrowOnError(client.RetryOperationSync([&](TSession session) -> TStatus {
         if (byViews) {
@@ -274,7 +275,7 @@ int RunListSeries(TDriver& driver, const TString& prefix, int argc, char** argv)
     }));
 
     size_t rows = results.size() + 1;
-    TVector<TString> columns[5];
+    std::vector<std::string> columns[5];
     for (size_t i = 0; i < 5; ++i) {
         columns[i].reserve(rows);
     }
@@ -297,27 +298,27 @@ int RunListSeries(TDriver& driver, const TString& prefix, int argc, char** argv)
         }
     }
     auto printLine = [&]() {
-        Cout << '+';
+        std::cout << '+';
         for (size_t i = 0; i < 5; ++i) {
             for (size_t k = 0; k < widths[i]; ++k) {
-                Cout << '-';
+                std::cout << '-';
             }
-            Cout << '+';
+            std::cout << '+';
         }
-        Cout << Endl;
+        std::cout << std::endl;
     };
     auto printRow = [&](size_t row) {
-        Cout << '|';
+        std::cout << '|';
         for (size_t i = 0; i < 5; ++i) {
-            Cout << ' ' << columns[i][row];
+            std::cout << ' ' << columns[i][row];
             size_t printed = 1 + GetNumberOfUTF8Chars(columns[i][row]);
             while (printed < widths[i]) {
-                Cout << ' ';
+                std::cout << ' ';
                 ++printed;
             }
-            Cout << '|';
+            std::cout << '|';
         }
-        Cout << Endl;
+        std::cout << std::endl;
     };
 
     printLine();

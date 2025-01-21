@@ -11,11 +11,11 @@
 
 #include <util/generic/size_literals.h>
 
-namespace NYdb::NTable {
+namespace NYdb::inline V2::NTable {
     class TTransaction;
 }
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 using TTransaction = NTable::TTransaction;
 
@@ -36,22 +36,22 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     TWriteSessionSettings& operator=(TWriteSessionSettings&&) = default;
 
     //! Path of topic to write.
-    FLUENT_SETTING(TString, Path);
+    FLUENT_SETTING_DEPRECATED(TString, Path);
 
     //! ProducerId (aka SourceId) to use.
-    FLUENT_SETTING(TString, ProducerId);
+    FLUENT_SETTING_DEPRECATED(TString, ProducerId);
 
     //! MessageGroupId to use.
-    FLUENT_SETTING(TString, MessageGroupId);
+    FLUENT_SETTING_DEPRECATED(TString, MessageGroupId);
 
     //! Explicitly enables or disables deduplication for this write session.
     //! If ProducerId option is defined deduplication will always be enabled.
     //! If ProducerId option is empty, but deduplication is enable, a random ProducerId is generated.
-    FLUENT_SETTING_OPTIONAL(bool, DeduplicationEnabled);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, DeduplicationEnabled);
 
     //! Write to an exact partition. Generally server assigns partition automatically by message_group_id.
     //! Using this option is not recommended unless you know for sure why you need it.
-    FLUENT_SETTING_OPTIONAL(ui32, PartitionId);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, PartitionId);
 
     //! Direct write to the partition host.
     //! If both PartitionId and DirectWriteToPartition are set, write session goes directly to the partition host.
@@ -59,23 +59,23 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! 1. Get a partition ID.
     //! 2. Find out the location of the partition by its ID.
     //! 3. Connect directly to the partition host.
-    FLUENT_SETTING_DEFAULT(bool, DirectWriteToPartition, true);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, DirectWriteToPartition, true);
 
     //! codec and level to use for data compression prior to write.
-    FLUENT_SETTING_DEFAULT(ECodec, Codec, ECodec::GZIP);
-    FLUENT_SETTING_DEFAULT(i32, CompressionLevel, 4);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ECodec, Codec, ECodec::GZIP);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(i32, CompressionLevel, 4);
 
     //! Writer will not accept new messages if memory usage exceeds this limit.
     //! Memory usage consists of raw data pending compression and compressed messages being sent.
-    FLUENT_SETTING_DEFAULT(ui64, MaxMemoryUsage, 20_MB);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui64, MaxMemoryUsage, 20_MB);
 
     //! Maximum messages accepted by writer but not written (with confirmation from server).
     //! Writer will not accept new messages after reaching the limit.
-    FLUENT_SETTING_DEFAULT(ui32, MaxInflightCount, 100000);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, MaxInflightCount, 100000);
 
     //! Retry policy enables automatic retries for non-fatal errors.
     //! IRetryPolicy::GetDefaultPolicy() if null (not set).
-    FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
+    FLUENT_SETTING_DEPRECATED(IRetryPolicy::TPtr, RetryPolicy);
 
     //! User metadata that may be attached to write session.
     TWriteSessionSettings& AppendSessionMeta(const TString& key, const TString& value) {
@@ -91,16 +91,16 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! Greatly increases performance for small messages.
     //! Setting either value to zero means immediate write with no batching. (Unrecommended, especially for clients
     //! sending small messages at high rate).
-    FLUENT_SETTING_OPTIONAL(TDuration, BatchFlushInterval);
-    FLUENT_SETTING_OPTIONAL(ui64, BatchFlushSizeBytes);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TDuration, BatchFlushInterval);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, BatchFlushSizeBytes);
 
-    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, ConnectTimeout, TDuration::Seconds(30));
 
-    FLUENT_SETTING_OPTIONAL(TWriterCounters::TPtr, Counters);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TWriterCounters::TPtr, Counters);
 
     //! Executor for compression tasks.
     //! If not set, default executor will be used.
-    FLUENT_SETTING(IExecutor::TPtr, CompressionExecutor);
+    FLUENT_SETTING_DEPRECATED(IExecutor::TPtr, CompressionExecutor);
 
     struct TEventHandlers {
         using TSelf = TEventHandlers;
@@ -110,17 +110,17 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! Function to handle Acks events.
         //! If this handler is set, write ack events will be handled by handler,
         //! otherwise sent to TWriteSession::GetEvent().
-        FLUENT_SETTING(TWriteAckHandler, AcksHandler);
+        FLUENT_SETTING_DEPRECATED(TWriteAckHandler, AcksHandler);
 
         //! Function to handle ReadyToAccept event.
         //! If this handler is set, write these events will be handled by handler,
         //! otherwise sent to TWriteSession::GetEvent().
-        FLUENT_SETTING(TReadyToAcceptHandler, ReadyToAcceptHandler);
+        FLUENT_SETTING_DEPRECATED(TReadyToAcceptHandler, ReadyToAcceptHandler);
 
         //! Function to handle close session events.
         //! If this handler is set, close session events will be handled by handler
         //! and then sent to TWriteSession::GetEvent().
-        FLUENT_SETTING(TSessionClosedHandler, SessionClosedHandler);
+        FLUENT_SETTING_DEPRECATED(TSessionClosedHandler, SessionClosedHandler);
 
         //! Function to handle all event types.
         //! If event with current type has no handler for this type of event,
@@ -134,7 +134,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 
         //! Executor for handlers.
         //! If not set, default single threaded executor will be used.
-        FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
+        FLUENT_SETTING_DEPRECATED(IExecutor::TPtr, HandlersExecutor);
 
         [[deprecated("Typo in name. Use ReadyToAcceptHandler instead.")]]
         TSelf& ReadyToAcceptHander(const TReadyToAcceptHandler& value) {
@@ -143,10 +143,10 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     };
 
     //! Event handlers.
-    FLUENT_SETTING(TEventHandlers, EventHandlers);
+    FLUENT_SETTING_DEPRECATED(TEventHandlers, EventHandlers);
 
     //! Enables validation of SeqNo. If enabled, then writer will check writing with seqNo and without it and throws exception.
-    FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, ValidateSeqNo, true);
 };
 
 //! Contains the message to write and all the options.
@@ -183,16 +183,16 @@ public:
 
     //! Message SeqNo, optional. If not provided SDK core will calculate SeqNo automatically.
     //! NOTICE: Either all messages within one write session must have SeqNo provided or none of them.
-    FLUENT_SETTING_OPTIONAL(ui64, SeqNo);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui64, SeqNo);
 
     //! Message creation timestamp. If not provided, Now() will be used.
-    FLUENT_SETTING_OPTIONAL(TInstant, CreateTimestamp);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TInstant, CreateTimestamp);
 
     //! Message metadata. Limited to 4096 characters overall (all keys and values combined).
-    FLUENT_SETTING(TMessageMeta, MessageMeta);
+    FLUENT_SETTING_DEPRECATED(TMessageMeta, MessageMeta);
 
     //! Transaction id
-    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransaction>, Tx);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(std::reference_wrapper<TTransaction>, Tx);
 
     TTransaction* GetTxPtr() const
     {

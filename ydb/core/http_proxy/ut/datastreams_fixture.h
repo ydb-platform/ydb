@@ -24,10 +24,10 @@
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_common_client/settings.h>
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/services/ydb/ydb_common_ut.h>
 
@@ -461,7 +461,7 @@ private:
         TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
-            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(driverConfig);
         auto tableClient = NYdb::NTable::TTableClient(driver);
 

@@ -11,7 +11,7 @@
 
 #include <mutex>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 struct TListEndpointsResult {
     Ydb::Discovery::ListEndpointsResult Result;

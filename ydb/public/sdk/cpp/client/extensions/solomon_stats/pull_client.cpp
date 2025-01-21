@@ -1,6 +1,6 @@
 #include "pull_client.h"
 
-namespace NSolomonStatExtension {
+namespace NSolomonStatExtension::inline V2 {
 
 TSolomonStatPullExtension::TParams::TParams(const TString& host
     , ui16 port

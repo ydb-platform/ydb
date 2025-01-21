@@ -11,7 +11,7 @@
 #include <library/cpp/string_utils/csv/csv.h>
 #include <library/cpp/digest/md5/md5.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
@@ -187,16 +187,16 @@ public:
             if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
                 if (streamPart.HasQueryStats()) {
                     ServerTiming += streamPart.GetQueryStats().GetTotalDuration();
-                    QueryPlan = streamPart.GetQueryStats().GetPlan().GetOrElse("");
-                    PlanAst = streamPart.GetQueryStats().GetAst().GetOrElse("");
+                    QueryPlan = streamPart.GetQueryStats().GetPlan().value_or("");
+                    PlanAst = streamPart.GetQueryStats().GetAst().value_or("");
                 }
             } else {
                 const auto& stats = streamPart.GetStats();
                 rsIndex = streamPart.GetResultSetIndex();
                 if (stats) {
                     ServerTiming += stats->GetTotalDuration();
-                    QueryPlan = stats->GetPlan().GetOrElse("");
-                    PlanAst = stats->GetAst().GetOrElse("");
+                    QueryPlan = stats->GetPlan().value_or("");
+                    PlanAst = stats->GetAst().value_or("");
                 }
             }
 

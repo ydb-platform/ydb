@@ -8,7 +8,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_stats/stats.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 struct TEndpointRecord {
     std::string Endpoint;

@@ -446,7 +446,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
         return;
     }
     const auto& session = description.GetOwners()[0];
-    TString data = session.GetData();
+    auto data = TString{session.GetData()};
     auto generation = session.GetOrderId();
     NActorsProto::TActorId protoId;
     if (!protoId.ParseFromString(data)) {

@@ -16,7 +16,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/impl/exec_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 using TRetryContextResultAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
 using TRetryContextAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
@@ -130,7 +130,7 @@ public:
 
     TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex, const TFetchScriptResultsSettings& settings) {
         auto request = MakeRequest<Ydb::Query::FetchScriptResultsRequest>();
-        request.set_operation_id(NKikimr::NOperationId::ProtoToString(operationId));
+        request.set_operation_id(operationId.ToString());
         request.set_result_set_index(resultSetIndex);
         return FetchScriptResultsImpl(std::move(request), settings);
     }

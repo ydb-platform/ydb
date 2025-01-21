@@ -2,7 +2,10 @@ LIBRARY()
 
 SRCS(
     obfuscate.h
-    obfuscate.cpp
+)
+
+PEERDIR(
+    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
 )
 
 END()

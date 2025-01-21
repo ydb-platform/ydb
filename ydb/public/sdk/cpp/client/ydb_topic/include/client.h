@@ -4,16 +4,16 @@
 #include "read_session.h"
 #include "write_session.h"
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 struct TTopicClientSettings : public TCommonClientSettingsBase<TTopicClientSettings> {
     using TSelf = TTopicClientSettings;
 
     //! Default executor for compression tasks.
-    FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultCompressionExecutor, CreateThreadPoolExecutor(2));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(IExecutor::TPtr, DefaultCompressionExecutor, CreateThreadPoolExecutor(2));
 
     //! Default executor for callbacks.
-    FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultHandlersExecutor, CreateThreadPoolExecutor(1));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(IExecutor::TPtr, DefaultHandlersExecutor, CreateThreadPoolExecutor(1));
 };
 
 // Topic client.

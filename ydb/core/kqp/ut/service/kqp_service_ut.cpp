@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
             }
 
             auto session = sessions[id];
-            TMaybe<TTransaction> tx;
+            std::optional<TTransaction> tx;
 
             while (true) {
                 if (tx) {
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         ui32 busyResultCount = 0;
         auto status = db.RetryOperation([&queriesCount, &busyResultCount](TSession session) {
             UNIT_ASSERT(queriesCount);
-            UNIT_ASSERT(session.GetId());
+            UNIT_ASSERT(!session.GetId().empty());
 
             auto futures = simulateSessionBusy(queriesCount, session);
 
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
                     return NThreading::MakeFuture<TStatus>(result);
                 }
             }
-            return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+            return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
          }).GetValueSync();
          // Result should be SUCCESS in case of SESSION_BUSY
          UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         ui32 busyResultCount = 0;
         auto status = db.RetryOperationSync([&queriesCount, &busyResultCount](TSession session) {
             UNIT_ASSERT(queriesCount);
-            UNIT_ASSERT(session.GetId());
+            UNIT_ASSERT(!session.GetId().empty());
 
             auto futures = simulateSessionBusy(queriesCount, session);
 
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
                     return (TStatus)result;
                 }
             }
-            return TStatus(EStatus::SUCCESS, NYql::TIssues());
+            return TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues());
          });
          // Result should be SUCCESS in case of SESSION_BUSY
          UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());

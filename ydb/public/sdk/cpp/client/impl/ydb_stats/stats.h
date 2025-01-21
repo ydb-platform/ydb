@@ -12,7 +12,7 @@
 #include <atomic>
 #include <memory>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace NSdkStats {
 

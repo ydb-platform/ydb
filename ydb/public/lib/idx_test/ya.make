@@ -11,7 +11,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/string_utils/base64
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/table
 )
 
 GENERATE_ENUM_SERIALIZATION(idx_test.h)

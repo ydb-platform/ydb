@@ -3,7 +3,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federation_observer.h>
 
-namespace NYdb::NFederatedTopic {
+namespace NYdb::inline V2::NFederatedTopic {
 
 constexpr TDuration REDISCOVERY_DELAY = TDuration::Seconds(30);
 

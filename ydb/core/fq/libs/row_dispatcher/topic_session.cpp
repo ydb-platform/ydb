@@ -9,7 +9,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/queue.h>
 
@@ -121,7 +123,7 @@ private:
             return ReadActorId;
         }
 
-        TMaybe<ui64> GetNextMessageOffset() const override {
+        std::optional<ui64> GetNextMessageOffset() const override {
             return NextMessageOffset;
         }
 
@@ -191,7 +193,7 @@ private:
         ui64 UnreadRows = 0;
         ui64 UnreadBytes = 0;
         bool DataArrivedSent = false;
-        TMaybe<ui64> NextMessageOffset;                 // offset to restart topic session
+        std::optional<ui64> NextMessageOffset;          // offset to restart topic session
         TMaybe<ui64> ProcessedNextMessageOffset;        // offset of fully processed data (to save to checkpoint)
 
         // Metrics
@@ -284,7 +286,7 @@ private:
     void CreateTopicSession();
     void CloseTopicSession();
     void SubscribeOnNextEvent();
-    void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
+    void SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void SendData(TClientsInfo& info);
     void FatalError(TStatus status);
     void SendDataArrived(TClientsInfo& client);
@@ -525,7 +527,7 @@ void TTopicSession::HandleNewEvents() {
             LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << UnreadBytes << " bytes), stop reading from yds");
             break;
         }
-        TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+        std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
         if (!event) {
             break;
         }
@@ -567,14 +569,14 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClose
 
     Self.FatalError(TStatus::Fail(
         NYql::NDq::YdbStatusToDqStatus(static_cast<Ydb::StatusIds::StatusCode>(ev.GetStatus())),
-        ev.GetIssues()
+        NYdb::NAdapters::ToYqlIssues(ev.GetIssues())
     ).AddParentIssue(message));
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
     LOG_ROW_DISPATCHER_DEBUG("StartPartitionSessionEvent received");
 
-    TMaybe<ui64> minOffset;
+    std::optional<ui64> minOffset;
     for (const auto& [actorId, info] : Self.Clients) {
         if (!minOffset || (info->NextMessageOffset && *info->NextMessageOffset < *minOffset)) {
             minOffset = info->NextMessageOffset;
@@ -598,10 +600,10 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 }
 
 TString TTopicSession::GetSessionId() const {
-    return ReadSession ? ReadSession->GetSessionId() : TString{"empty"};
+    return ReadSession ? TString{ReadSession->GetSessionId()} : TString{"empty"};
 }
 
-void TTopicSession::SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
+void TTopicSession::SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
     LOG_ROW_DISPATCHER_TRACE("SendToParsing, messages: " << messages.size());
     for (const auto& [_, formatHandler] : FormatHandlers) {
         if (formatHandler->HasClients()) {
@@ -751,7 +753,7 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     if (!ReadSession || !info.NextMessageOffset) {
         return;
     }
-    TMaybe<ui64> minMessageOffset;
+    std::optional<ui64> minMessageOffset;
     for (auto& [readActorId, clientPtr] : Clients) {
         if (info.ReadActorId == readActorId || !clientPtr->NextMessageOffset) {
             continue;
@@ -852,8 +854,8 @@ void TTopicSession::SendStatistics() {
         clientStatistic.Offset = info.ProcessedNextMessageOffset.GetOrElse(0);
         clientStatistic.FilteredReadBytes = info.FilteredStat.Bytes;
         clientStatistic.ReadBytes = Statistics.Bytes;
-        clientStatistic.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.GetOrElse(0);
-        clientStatistic.ReadLagMessages = info.NextMessageOffset.GetOrElse(0) - LastMessageOffset - 1;
+        clientStatistic.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.value_or(0);
+        clientStatistic.ReadLagMessages = info.NextMessageOffset.value_or(0) - LastMessageOffset - 1;
         clientStatistic.InitialOffset = info.InitialOffset;
         info.FilteredStat.Clear();
         sessionStatistic.Clients.emplace_back(std::move(clientStatistic));

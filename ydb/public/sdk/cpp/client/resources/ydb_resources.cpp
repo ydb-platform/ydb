@@ -2,7 +2,7 @@
 
 #include "ydb_resources.h"
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 const char* YDB_AUTH_TICKET_HEADER = "x-ydb-auth-ticket";
 const char* YDB_DATABASE_HEADER = "x-ydb-database";

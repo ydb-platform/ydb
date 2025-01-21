@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 namespace NKikimr::NKqp {
 

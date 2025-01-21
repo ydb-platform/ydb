@@ -6,9 +6,9 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/monitoring/monitoring.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>

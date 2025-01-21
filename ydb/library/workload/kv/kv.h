@@ -64,8 +64,8 @@ class TKvWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TKvWorkload
 public:
     using TBase = TWorkloadQueryGeneratorBase<TKvWorkloadParams>;
     struct TRow {
-        TVector<ui64> Ints;
-        TVector<TString> Strings;
+        std::vector<ui64> Ints;
+        std::vector<std::string> Strings;
 
         TString ToString() const {
             std::stringstream ss;

@@ -1,7 +1,7 @@
 #include "query_executor.h"
 #include "get_value.h"
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 namespace NKikimr::NKqp {
 
@@ -31,7 +31,7 @@ TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPar
         }
 
         if (streamPart.HasDiagnostics()) {
-            TString diagnosticsString = streamPart.GetDiagnostics();
+            auto diagnosticsString = TString{streamPart.GetDiagnostics()};
             if (!diagnosticsString.empty() && diagnostics) {
                 UNIT_ASSERT(NJson::ReadJsonFastTree(diagnosticsString, diagnostics));
             }

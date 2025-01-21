@@ -39,13 +39,13 @@ struct TJwtCheck {
     }
     THolder<IAlgCheck> Alg_ = MakeHolder<TAlgCheck<jwt::algorithm::rs256>>(TestRSAPublicKeyContent);
 
-    FLUENT_SETTING_OPTIONAL(TString, KeyId);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, KeyId);
 
-    FLUENT_SETTING_OPTIONAL(TString, Issuer);
-    FLUENT_SETTING_OPTIONAL(TString, Subject);
-    FLUENT_SETTING_OPTIONAL(TString, Id);
-    FLUENT_SETTING_VECTOR_OR_SINGLE(TString, Audience);
-    FLUENT_SETTING_DEFAULT(TDuration, TokenTtl, TDuration::Hours(1));
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, Issuer);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, Subject);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, Id);
+    FLUENT_SETTING_VECTOR_OR_SINGLE_DEPRECATED(TString, Audience);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, TokenTtl, TDuration::Hours(1));
 
     void Check(const TString& token) {
         jwt::decoded_jwt decoded(token);

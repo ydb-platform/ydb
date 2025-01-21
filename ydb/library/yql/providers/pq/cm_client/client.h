@@ -1,7 +1,7 @@
 #pragma once
 #include <yql/essentials/public/issue/yql_issue.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <library/cpp/threading/future/future.h>
 

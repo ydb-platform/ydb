@@ -3,11 +3,11 @@
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <yql/essentials/utils/log/log.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/types/operation/operation.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -57,7 +57,7 @@ void WaitBucket(std::shared_ptr<TKikimrRunner> kikimr, const TString& externalDa
             )
         )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+        UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
         if (readyOp.Metadata().ExecStatus == EExecStatus::Completed) {
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                 )
             )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+            UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
             UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                 )
             )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+            UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
             UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                     )
                 )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-                UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+                UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
                 NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
                 UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                     )
                 )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-                UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+                UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
                 NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
                 UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                     )
                 )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-                UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+                UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
                 NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
                 UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                     SELECT "Hello, world!" AS Data
                 )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-                UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+                UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
                 NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
                 UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());             

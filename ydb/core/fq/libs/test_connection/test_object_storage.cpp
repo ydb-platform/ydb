@@ -157,7 +157,7 @@ private:
         const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
         TString requestId = CreateGuidAsString();
-        NYql::IHTTPGateway::THeaders headers = NYql::IHTTPGateway::MakeYcHeaders(requestId, authToken, {});
+        NYql::IHTTPGateway::THeaders headers = NYql::IHTTPGateway::MakeYcHeaders(requestId, TString{authToken}, {});
 
         const auto retryPolicy = NYql::IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(RetryS3SlowDown);
 

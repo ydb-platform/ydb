@@ -22,7 +22,6 @@ The SDK documentation contains the following sections:
 - [Installation](../install.md)
 - [Authentication](../auth.md)
 - [{#T}](../error_handling.md)
-- [{#T}](../status-codes.md)
 - [Code recipes](../../../recipes/ydb-sdk/index.md)
 - [Comparison of SDK features](../feature-parity.md)
 

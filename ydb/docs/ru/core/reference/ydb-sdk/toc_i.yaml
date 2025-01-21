@@ -11,12 +11,10 @@ items:
     href: topic.md
   - name: Обработка ошибок в API
     href: error_handling.md
-  - name: Статусы завершения
-    href: status-codes.md
     items:
-    - name: YDB server
+    - name: Статусы завершения сервера YDB
       href: ydb-status-codes.md
-    - name: gRPC
+    - name: Статусы завершения gRPC
       href: grpc-status-codes.md
   - name: gRPC API
     items:

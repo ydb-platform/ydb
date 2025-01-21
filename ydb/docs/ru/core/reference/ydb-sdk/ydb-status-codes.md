@@ -1,4 +1,4 @@
-# Status codes from the {{ ydb-short-name }} server
+# Статусы завершения сервера {{ ydb-short-name }}
 
 [//]: # (Information from https://GitHub.com/ydb-platform/ydb-go-sdk/blob/master/retry/errors_data_test.go)
 

@@ -33,13 +33,23 @@ When selecting an interval manually, the following strategies are usually used:
 * Random selection. Retries are made after a randomly selected time interval.
 
 
-When you select an interval and the number of retries, consider the {{ ydb-short-name }} [status codes](./status-codes.md).
+When you select an interval and the number of retries, consider the {{ ydb-short-name }} [status codes](#status-codes).
 
 Do not use endless retries. This may result in excessive load.
 
 Do not repeat instant retries more than once.
 
 For code samples, see [{#T}](../../recipes/ydb-sdk/retry.md)
+
+## Status codes {#status-codes}
+
+When an error occurs, YDB SDK returns an error object that includes status codes. The returned status code may come from the YDB server, gRPC transport, or the SDK itself.
+
+Status codes within the range of 400000-400999 are YDB server codes that are identical for all YDB SDKs. Refer to [Status codes from the YDB server](./ydb-status-codes.md).
+
+Status codes within the range of 401000-401999 are SDK-specific codes. For more information about SDK-specific codes, refer to the corresponding SDK documentation.
+
+For more information about gRPC status codes, see the [gRPC documentation](https://grpc.io/docs/guides/status-codes/).
 
 ## Logging errors {#log-errors}
 
@@ -51,5 +61,6 @@ When using the SDK, we recommend logging all errors and exceptions:
 
 ## See also
 
-- [Status codes](./status-codes.md)
+- [gRPC status codes](./grpc-status-codes.md)
+- [{{ ydb-short-name }} server status codes](./ydb-status-codes.md)
 - [Questions and answers: Errors](../../faq/errors.md)

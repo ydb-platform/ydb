@@ -11,12 +11,10 @@ items:
     href: topic.md
   - name: Handling errors in the API
     href: error_handling.md
-  - name: Status codes
-    href: status-codes.md
     items:
-    - name: YDB server
+    - name: YDB server status codes
       href: ydb-status-codes.md
-    - name: gRPC
+    - name: gRPC status codes
       href: grpc-status-codes.md
   - name: gRPC API
     items:

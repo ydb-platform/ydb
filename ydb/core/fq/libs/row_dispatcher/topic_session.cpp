@@ -850,7 +850,8 @@ void TTopicSession::SendStatistics() {
         clientStatistic.UnreadRows = info.UnreadRows;
         clientStatistic.UnreadBytes = info.UnreadBytes;
         clientStatistic.Offset = info.ProcessedNextMessageOffset.GetOrElse(0);
-        clientStatistic.FilteredReadBytes = info.FilteredStat.Bytes;
+        clientStatistic.FilteredBytes = info.FilteredStat.Bytes;
+        clientStatistic.FilteredRows = info.FilteredStat.Events;
         clientStatistic.ReadBytes = Statistics.Bytes;
         clientStatistic.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.GetOrElse(0);
         clientStatistic.ReadLagMessages = info.NextMessageOffset.GetOrElse(0) - LastMessageOffset - 1;

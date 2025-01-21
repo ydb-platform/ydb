@@ -107,7 +107,7 @@ struct TAggQueryStat {
     bool IsWaiting = false;
 
     void Add(const TTopicSessionClientStatistic& stat) {
-        FilteredReadBytes.Add(NYql::TCounters::TEntry(stat.FilteredReadBytes));
+        FilteredReadBytes.Add(NYql::TCounters::TEntry(stat.FilteredBytes));
         UnreadBytes.Add(NYql::TCounters::TEntry(stat.UnreadBytes));
         UnreadRows.Add(NYql::TCounters::TEntry(stat.UnreadRows));
         ReadLagMessages.Add(NYql::TCounters::TEntry(stat.ReadLagMessages));
@@ -1030,6 +1030,8 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
         }
         auto event = std::make_unique<TEvRowDispatcher::TEvStatistics>();
         ui64 readBytes = 0;
+        ui64 filteredBytes = 0;
+        ui64 filteredRows = 0;
         for (auto& [partitionId, partition] : consumer->Partitions) {
             if (!partition.StatisticsUpdated) {
                 continue;
@@ -1038,10 +1040,15 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
             partitionsProto->SetPartitionId(partitionId);
             partitionsProto->SetNextMessageOffset(partition.Stat.Offset);
             readBytes += partition.Stat.ReadBytes;
+            filteredBytes += partition.Stat.FilteredBytes;
+            filteredRows += partition.Stat.FilteredRows;
             partition.Stat.Clear();
             partition.StatisticsUpdated = false;
         }
         event->Record.SetReadBytes(readBytes);
+        event->Record.SetFilteredBytes(filteredBytes);
+        event->Record.SetFilteredRows(filteredRows);
+        event->Record.SetQueueBytes(0); // TODO
         LWPROBE(Statistics, consumer->ReadActorId.ToString(), consumer->QueryId, consumer->Generation, event->Record.ByteSizeLong());
         consumer->EventsQueue.Send(event.release(), consumer->Generation);
     }

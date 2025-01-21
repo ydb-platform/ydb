@@ -11,7 +11,8 @@ struct TTopicSessionClientStatistic {
     i64 UnreadRows = 0;         // Current value
     i64 UnreadBytes = 0;        // Current value
     ui64 Offset = 0;            // Current value
-    ui64 FilteredReadBytes = 0; // Increment / filtered
+    ui64 FilteredBytes = 0;     // Increment / filtered
+    ui64 FilteredRows = 0;      // Increment / filtered
     ui64 ReadBytes = 0;         // Increment
     bool IsWaiting = false;     // Current value
     i64 ReadLagMessages = 0;    // Current value
@@ -20,14 +21,16 @@ struct TTopicSessionClientStatistic {
         UnreadRows = stat.UnreadRows;
         UnreadBytes = stat.UnreadBytes;
         Offset = stat.Offset;
-        FilteredReadBytes += stat.FilteredReadBytes;
+        FilteredBytes += stat.FilteredBytes;
+        FilteredRows += stat.FilteredRows;
         ReadBytes += stat.ReadBytes;
         IsWaiting = stat.IsWaiting;
         ReadLagMessages = stat.ReadLagMessages;
         InitialOffset = stat.InitialOffset;
     }
     void Clear() {
-        FilteredReadBytes = 0;
+        FilteredBytes = 0;
+        FilteredRows = 0;
         ReadBytes = 0;
     }
 };

@@ -87,6 +87,9 @@ message TEvStatistics {
     uint64 NextMessageOffset = 2;       // deprecated
     uint64 ReadBytes = 3;
     repeated TPartitionStatistics Partition = 4;
+    uint64 FilteredBytes = 5;
+    uint64 FilteredRows = 6;
+    uint64 QueueBytes = 7;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

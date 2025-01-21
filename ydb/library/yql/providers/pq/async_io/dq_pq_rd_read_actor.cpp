@@ -581,6 +581,10 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
         return;
     }
     IngressStats.Bytes += ev->Get()->Record.GetReadBytes();
+    IngressStats.FilteredBytes += ev->Get()->Record.GetFilteredBytes();
+    IngressStats.FilteredRows += ev->Get()->Record.GetFilteredRows();
+    IngressStats.QueueBytes = ev->Get()->Record.GetQueueBytes();
+
     for (auto partition : ev->Get()->Record.GetPartition()) {
         ui64 partitionId = partition.GetPartitionId();
         auto& nextOffset = NextOffsetFromRD[partitionId];
@@ -645,13 +649,13 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartb
     Counters.PrivateHeartbeat++;
     auto readActorIt = ReadActorByEventQueueId.find(ev->Get()->EventQueueId);
     if (readActorIt == ReadActorByEventQueueId.end()) {
-        SRC_LOG_D("Ignore TEvRetry, wrong EventQueueId " << ev->Get()->EventQueueId);
+        SRC_LOG_D("Ignore TEvEvHeartbeat, wrong EventQueueId " << ev->Get()->EventQueueId);
         return;
     }
 
     auto sessionIt = Sessions.find(readActorIt->second);
     if (sessionIt == Sessions.end()) {
-        SRC_LOG_D("Ignore TEvRetry, wrong read actor id " << readActorIt->second);
+        SRC_LOG_D("Ignore TEvEvHeartbeat, wrong read actor id " << readActorIt->second);
         return;
     }
     auto& sessionInfo = sessionIt->second;
@@ -707,6 +711,7 @@ void TDqPqRdReadActor::Sleep() {
 
 void TDqPqRdReadActor::ReInit(const TString& reason) {
     SRC_LOG_I("ReInit state, reason " << reason);
+    // TODO add timeout
     Metrics.ReInit->Inc();
 
     State = EState::WAIT_COORDINATOR_ID;

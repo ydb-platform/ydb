@@ -273,7 +273,7 @@
 
 **Аутентификационный токен** или **auth token** — токен, используемый для [аутентификации](../security/authentication.md) в {{ ydb-short-name }}.
 
-{{ ydb-short-name }} поддерживает [разные виды аутентификации](../security/authentication.md) и разные типы токенов.
+{{ ydb-short-name }} поддерживает [разные виды аутентификации](../security/authentication.md) и различные типы токенов.
 
 ### Объект схемы {#scheme-object}
 

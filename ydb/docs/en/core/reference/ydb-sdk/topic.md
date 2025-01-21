@@ -845,18 +845,19 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 - Python
 
-  To write a message that includes metadata, create the `TopicWriterMessage` object with `metadata_items` argument as below:
+  To write a message that includes metadata, create the `TopicWriterMessage` object with the `metadata_items` argument as shown below:
 
   ```python
-  mess = ydb.TopicWriterMessage(data=f"mess-{i}", metadata_items={"meta-key": "meta-value"})
-  writer.write(mess)
+  message = ydb.TopicWriterMessage(data=f"message-data", metadata_items={"meta-key": "meta-value"})
+  writer.write(message)
   ```
 
-  While reading, get metadata from the `metadata_items` field of the `PublicMessage` object
+  While reading, retrieve metadata from the `metadata_items` field of the `PublicMessage` object:
 
   ```python
-  mess = reader.receive_message()
-  metadata_items = mess.metadata_items
+  message = reader.receive_message()
+  for meta_key, meta_value in message.metadata_items.items():
+      print(f"{meta_key}: {meta_value}")
   ```
 
 {% endlist %}

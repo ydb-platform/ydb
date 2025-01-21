@@ -72,15 +72,15 @@ defer db.Close(ctx)
 
 Объект `db` является входной точкой для работы со всеми сервисами `YDB`:
 
-* `db.Query()` - клиент query-сервиса
-* `db.Table()` - клиент table-сервиса
-* `db.Discovery()` - клиент discovery-сервиса
-* `db.Topic()` - клиент topic-сервиса
-* `db.Coordination()` - клиент coordination-сервиса
-* `db.Ratelimiter()` - клиент ratelimiter-сервиса
-* `db.Scripting()` - клиент scriptingYQL-сервиса
-* `db.Scheme()` - клиент scheme-сервиса
-* `db.Operation()` - клиент operation-сервиса
+* `db.Query()` - клиент query-сервиса;
+* `db.Table()` - клиент table-сервиса;
+* `db.Discovery()` - клиент discovery-сервиса;
+* `db.Topic()` - клиент topic-сервиса;
+* `db.Coordination()` - клиент coordination-сервиса;
+* `db.Ratelimiter()` - клиент ratelimiter-сервиса;
+* `db.Scripting()` - клиент scriptingYQL-сервиса;
+* `db.Scheme()` - клиент scheme-сервиса;
+* `db.Operation()` - клиент operation-сервиса.
 
 Выполнение YQL-запросов осуществляется на специальных объектах — сессиях `query.Session`. Сессии хранят контекст выполнения запросов (например, prepared statements и транзакции) и позволяют осуществлять серверную балансировку нагрузки на узлы кластера {{ ydb-short-name }}.
 

@@ -767,8 +767,8 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         if (sessionInfo.EventsQueue.HandleUndelivered(ev) == NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
             if (sessionInfo.Generation == ev->Cookie) {
                 SRC_LOG_D("Erase session to " << ev->Sender.ToString());
-                Sessions.erase(ev->Sender);
                 ReadActorByEventQueueId.erase(sessionInfo.EventQueueId);
+                Sessions.erase(ev->Sender);
                 ReInit("Reset session state");
             }
         }

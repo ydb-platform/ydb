@@ -92,6 +92,7 @@ struct TGraphMeta {
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
     ui32 LockNodeId;
+    TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
@@ -121,6 +122,10 @@ struct TGraphMeta {
 
     void SetLockNodeId(ui32 lockNodeId) {
         LockNodeId = lockNodeId;
+    }
+
+    void SetLockMode(NKikimrDataEvents::ELockMode lockMode) {
+        LockMode = lockMode;
     }
 };
 

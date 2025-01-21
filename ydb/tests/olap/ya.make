@@ -3,4 +3,5 @@ RECURSE(
     scenario
     docs
     load
+    ttl_tiering
 )

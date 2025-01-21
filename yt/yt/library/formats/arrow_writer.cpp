@@ -20,7 +20,8 @@
 
 #include <yt/yt/core/misc/blob_output.h>
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/range.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <vector>
 

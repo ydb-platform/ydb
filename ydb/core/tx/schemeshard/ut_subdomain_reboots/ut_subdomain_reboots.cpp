@@ -670,7 +670,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                 t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId} );
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
-                                   {NLs::PathVersionEqual(5),
+                                   {NLs::PathVersionEqual(6),
                                     NLs::PathsInsideDomain(2),
                                     NLs::ShardsInsideDomain(3)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),

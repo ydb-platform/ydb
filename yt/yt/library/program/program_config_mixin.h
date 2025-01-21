@@ -29,7 +29,8 @@ protected:
         : ArgumentName_(argumentName)
     {
         auto opt = opts
-            .AddLongOption(TString(argumentName), Format("path to %v file", argumentName))
+            .AddLongOption(TString(argumentName), Format("path to %v file (in YSON format)", argumentName))
+            .Handler0([&] { ConfigFlag_ = true; })
             .StoreMappedResult(&ConfigPath_, &CheckPathExistsArgMapper)
             .RequiredArgument("FILE");
         if (required) {
@@ -41,24 +42,42 @@ protected:
         opts
             .AddLongOption(
                 Format("%v-schema", argumentName),
-                Format("print %v schema and exit", argumentName))
+                Format("Prints %v schema", argumentName))
             .OptionalValue(YsonSchemaFormat_, "FORMAT")
+            .Handler0([&] { ConfigSchemaFlag_ = true; })
             .StoreResult(&ConfigSchema_);
         opts
             .AddLongOption(
                 Format("%v-template", argumentName),
-                Format("print %v template and exit", argumentName))
-            .SetFlag(&ConfigTemplate_);
+                Format("Prints %v template", argumentName))
+            .OptionalArgument()
+            .SetFlag(&ConfigTemplateFlag_);
         opts
             .AddLongOption(
                 Format("%v-actual", argumentName),
-                Format("print actual %v and exit", argumentName))
-            .SetFlag(&ConfigActual_);
+                Format("Prints actual %v", argumentName))
+            .OptionalArgument()
+            .SetFlag(&ConfigActualFlag_);
+        opts
+            .AddLongOption(
+                Format("%v-unrecognized", argumentName),
+                Format("Prints unrecognized %v", argumentName))
+            .OptionalArgument()
+            .SetFlag(&ConfigUnrecognizedFlag_);
+
         opts
             .AddLongOption(
                 Format("%v-unrecognized-strategy", argumentName),
-                Format("configure strategy for unrecognized attributes in %v", argumentName))
-            .Handler1T<TStringBuf>([this](TStringBuf value) {
+                Format("Configures strategy for unrecognized attributes in %v, variants: %v",
+                    argumentName,
+                    JoinToString(
+                        TEnumTraits<NYTree::EUnrecognizedStrategy>::GetDomainValues(),
+                        [] (TStringBuilderBase* builder, NYTree::EUnrecognizedStrategy strategy) {
+                            builder->AppendFormat(FormatEnum(strategy));
+                        },
+                        TStringBuf(", "))))
+            .DefaultValue(FormatEnum(UnrecognizedStrategy_))
+            .template Handler1T<TStringBuf>([&] (TStringBuf value) {
                 UnrecognizedStrategy_ = ParseEnum<NYTree::EUnrecognizedStrategy>(value);
             });
 
@@ -66,14 +85,16 @@ protected:
             opts
                 .AddLongOption(
                     Format("dynamic-%v-schema", argumentName),
-                    Format("print %v schema and exit", argumentName))
+                    Format("Prints %v schema", argumentName))
                 .OptionalValue(YsonSchemaFormat_, "FORMAT")
+                .Handler0([&] { DynamicConfigSchemaFlag_ = true; })
                 .StoreResult(&DynamicConfigSchema_);
             opts
                 .AddLongOption(
                     Format("dynamic-%v-template", argumentName),
-                    Format("print dynamic %v template and exit", argumentName))
-                .SetFlag(&DynamicConfigTemplate_);
+                    Format("Prints dynamic %v template", argumentName))
+                .OptionalArgument()
+                .SetFlag(&DynamicConfigTemplateFlag_);
         }
 
         RegisterMixinCallback([&] { Handle(); });
@@ -81,7 +102,7 @@ protected:
 
     TIntrusivePtr<TConfig> GetConfig(bool returnNullIfNotSupplied = false)
     {
-        if (returnNullIfNotSupplied && !ConfigPath_) {
+        if (returnNullIfNotSupplied && !ConfigFlag_) {
             return nullptr;
         }
 
@@ -93,7 +114,7 @@ protected:
 
     NYTree::INodePtr GetConfigNode(bool returnNullIfNotSupplied = false)
     {
-        if (returnNullIfNotSupplied && !ConfigPath_) {
+        if (returnNullIfNotSupplied && !ConfigFlag_) {
             return nullptr;
         }
 
@@ -106,12 +127,16 @@ protected:
 private:
     const TString ArgumentName_;
 
+    bool ConfigFlag_;
     TString ConfigPath_;
+    bool ConfigSchemaFlag_ = false;
     TString ConfigSchema_;
-    bool ConfigTemplate_;
-    bool ConfigActual_;
+    bool ConfigTemplateFlag_;
+    bool ConfigActualFlag_;
+    bool ConfigUnrecognizedFlag_;
+    bool DynamicConfigSchemaFlag_ = false;
     TString DynamicConfigSchema_;
-    bool DynamicConfigTemplate_ = false;
+    bool DynamicConfigTemplateFlag_ = false;
     NYTree::EUnrecognizedStrategy UnrecognizedStrategy_ = NYTree::EUnrecognizedStrategy::KeepRecursive;
 
     static constexpr auto YsonSchemaFormat_ = "yson-schema";
@@ -123,8 +148,8 @@ private:
     {
         using namespace NYTree;
 
-        if (!ConfigPath_){
-            THROW_ERROR_EXCEPTION("Missing --%v option", ArgumentName_);
+        if (!ConfigFlag_){
+            THROW_ERROR_EXCEPTION("Missing %qv option", ArgumentName_);
         }
 
         try {
@@ -162,7 +187,14 @@ private:
             using namespace NYson;
             TYsonWriter writer(&Cout, EYsonFormat::Pretty);
             config->Save(&writer);
-            Cout << Flush;
+            Cout << Endl;
+        };
+
+        auto printNode = [] (const auto& node) {
+            using namespace NYson;
+            TYsonWriter writer(&Cout, EYsonFormat::Pretty);
+            NYTree::Serialize(node, &writer);
+            Cout << Endl;
         };
 
         auto printSchema = [] (const auto& config, TString format) {
@@ -176,28 +208,34 @@ private:
             }
         };
 
-        if (!ConfigSchema_.empty()) {
+        if (ConfigSchemaFlag_) {
             printSchema(New<TConfig>(), ConfigSchema_);
             Exit(EProcessExitCode::OK);
         }
 
-        if (ConfigTemplate_) {
+        if (ConfigTemplateFlag_) {
             print(New<TConfig>());
             Exit(EProcessExitCode::OK);
         }
 
-        if (ConfigActual_) {
+        if (ConfigActualFlag_) {
             print(GetConfig());
             Exit(EProcessExitCode::OK);
         }
 
+        if (ConfigUnrecognizedFlag_) {
+            auto unrecognized = GetConfig()->GetRecursiveUnrecognized();
+            printNode(*unrecognized);
+            Exit(EProcessExitCode::OK);
+        }
+
         if constexpr (!std::is_same_v<TDynamicConfig, void>) {
-            if (!DynamicConfigSchema_.empty()) {
+            if (DynamicConfigSchemaFlag_) {
                 printSchema(New<TDynamicConfig>(), DynamicConfigSchema_);
                 Exit(EProcessExitCode::OK);
             }
 
-            if (DynamicConfigTemplate_) {
+            if (DynamicConfigTemplateFlag_) {
                 print(New<TDynamicConfig>());
                 Exit(EProcessExitCode::OK);
             }

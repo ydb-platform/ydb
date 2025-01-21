@@ -1587,7 +1587,12 @@ public:
 
     const TExprNode& GetResult() const {
         ENSURE_NOT_DELETED
-        return Type() == Callable ? *Result : *this;
+        if (Type() != Callable) {
+            return *this;
+        }
+
+        YQL_ENSURE(Result);
+        return *Result;
     }
 
     bool HasResult() const {

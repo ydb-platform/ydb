@@ -78,12 +78,12 @@ struct TRowDispatcherReadActorMetrics {
     explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
-        SubGroup = Counters->GetSubgroup("sink", "RdPqRead");
-        auto sink = SubGroup->GetSubgroup("tx_id", TxId);
-        ReInit = sink->GetCounter("ReInit", true);
-        auto task = sink->GetSubgroup("task_id", ToString(taskId));
+        SubGroup = Counters->GetSubgroup("source", "RdPqRead");
+        auto source = SubGroup->GetSubgroup("tx_id", TxId);
+        auto task = source->GetSubgroup("task_id", ToString(taskId));
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
+        ReInit = task->GetCounter("ReInit", true);
     }
 
     ~TRowDispatcherReadActorMetrics() {
@@ -176,6 +176,13 @@ private:
     std::unique_ptr<NKikimr::NMiniKQL::TValuePackerTransport<true>> DataUnpacker;
     THashMap<ui32, TMaybe<ui64>> NextOffsetFromRD;
     ui64 CpuMicrosec = 0;
+
+    struct TPartition {
+        bool HasPendingData = false;
+        bool IsWaitingMessageBatch = false;
+    };
+
+    THashMap<ui32, TMaybe<ui64>> NextOffsetFromRD;
 
     struct TPartition {
         bool HasPendingData = false;
@@ -299,7 +306,8 @@ public:
     void TrySendGetNextBatch(TSession& sessionInfo);
     TString GetInternalState();
     template <class TEventPtr>
-    TSession* FindSession(NActors::TActorId actorId, const TEventPtr& ev);
+    TSession* FindSession(const TEventPtr& ev);
+    void SendNoSession(const NActors::TActorId& recipient, ui64 cookie);
     void NotifyCA();
     void SendStartSession(TSession& sessionInfo);
     void Init();
@@ -553,8 +561,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& e
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_I("Received TEvStartSessionAck from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() <<  ", generation " << ev->Cookie);
     Counters.StartSessionAck++;
-
-    auto* session = FindSession(ev->Sender, ev);
+    auto* session = FindSession(ev);
     if (!session) {
         return;
     }
@@ -566,12 +573,10 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_I("Received TEvSessionError from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
     Counters.SessionError++;
-
-    auto* session = FindSession(ev->Sender, ev);
+    auto* session = FindSession(ev);
     if (!session) {
         return;
     }
-
     NYql::TIssues issues;
     IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
     Stop(ev->Get()->Record.GetStatusCode(), issues);
@@ -582,8 +587,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     SRC_LOG_T("Received TEvStatistics from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.Statistics++;
     CpuMicrosec += ev->Get()->Record.GetCpuMicrosec();
-
-    auto* session = FindSession(ev->Sender, ev);
+    auto* session = FindSession(ev);
     if (!session) {
         return;
     }
@@ -615,7 +619,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
     SRC_LOG_T("Received TEvNewDataArrived from " << ev->Sender << ", partition " << ev->Get()->Record.GetPartitionId() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.NewDataArrived++;
  
-    auto* session = FindSession(ev->Sender, ev);
+    auto* session = FindSession(ev);
     if (!session) {
         return;
     }
@@ -665,14 +669,23 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartb
     bool needSend = sessionInfo.EventsQueue.Heartbeat();
     if (needSend) {
         SRC_LOG_T("Send TEvEvHeartbeat");
-        sessionInfo.EventsQueue.Send(new NFq::TEvRowDispatcher::TEvHeartbeat(), sessionInfo.Generation);
+        Send(sessionInfo.RowDispatcherActorId, new NFq::TEvRowDispatcher::TEvHeartbeat(), sessionInfo.Generation);
     }
 }
 
 void TDqPqRdReadActor::Handle(const NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
-    SRC_LOG_T("Received TEvHeartbeat from " << ev->Sender);
+    SRC_LOG_T("Received TEvHeartbeat from " << ev->Sender << ", generation " << ev->Cookie);
     Counters.Heartbeat++;
-    FindSession(ev->Sender, ev);
+    auto sessionIt = Sessions.find(ev->Sender);
+    if (sessionIt == Sessions.end()) {
+        SRC_LOG_W("Ignore TEvHeartbeat from " << ev->Sender << ", generation " << ev->Cookie);
+        SendNoSession(ev->Sender, ev->Cookie);
+        return;
+    }
+
+    if (ev->Cookie != sessionIt->second.Generation) {
+        SendNoSession(ev->Sender, ev->Cookie);
+    }
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
@@ -784,7 +797,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_T("Received TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.MessageBatch++;
-    auto* session = FindSession(ev->Sender, ev);
+    auto* session = FindSession(ev);
     if (!session) {
         return;
     }
@@ -866,7 +879,7 @@ void TDqPqRdReadActor::PrintInternalState() {
 
 TString TDqPqRdReadActor::GetInternalState() {
     TStringStream str;
-    str << LogPrefix << "State: used buffer size " << ReadyBufferSizeBytes << " ready buffer event size " << ReadyBuffer.size() << " InFlyAsyncInputData " << InFlyAsyncInputData << "\n";
+    str << LogPrefix << "State: used buffer size " << ReadyBufferSizeBytes << " ready buffer event size " << ReadyBuffer.size()  << " state " << static_cast<ui64>(State) << " InFlyAsyncInputData " << InFlyAsyncInputData << "\n";
     str << "Counters: GetAsyncInputData " << Counters.GetAsyncInputData << " CoordinatorChanged " << Counters.CoordinatorChanged << " CoordinatorResult " << Counters.CoordinatorResult
         << " MessageBatch " << Counters.MessageBatch << " StartSessionAck " << Counters.StartSessionAck << " NewDataArrived " << Counters.NewDataArrived
         << " SessionError " << Counters.SessionError << " Statistics " << Counters.Statistics << " NodeDisconnected " << Counters.NodeDisconnected
@@ -915,23 +928,18 @@ void TDqPqRdReadActor::TrySendGetNextBatch(TSession& sessionInfo) {
 }
 
 template <class TEventPtr>
-TDqPqRdReadActor::TSession* TDqPqRdReadActor::FindSession(NActors::TActorId actorId, const TEventPtr& ev) {
+TDqPqRdReadActor::TSession* TDqPqRdReadActor::FindSession(const TEventPtr& ev) {
     auto sessionIt = Sessions.find(ev->Sender);
-    auto sendStop = [&]() {
-        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
-        *event->Record.MutableSource() = SourceParams;
-        Send(ev->Sender, event.release(), 0, ev->Cookie);
-    };
     if (sessionIt == Sessions.end()) {
         SRC_LOG_W("Ignore " << typeid(TEventPtr).name() << " from " << ev->Sender);
-        sendStop();
+        SendNoSession(ev->Sender, ev->Cookie);
         return nullptr;
     }
     auto& session = sessionIt->second;
 
     if (ev->Cookie != session.Generation) {
-        SRC_LOG_W("Ignore " << typeid(TEventPtr).name() << " from " << ev->Sender << ", wrong message generation (" << typeid(TEventPtr).name()  << "), cookie " << ev->Cookie << ", session generation " << session.Generation << ", send TEvStopSession");
-        sendStop();
+        SRC_LOG_W("Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << session.Generation << ", send TEvStopSession");
+        SendNoSession(ev->Sender, ev->Cookie);
         return nullptr;
     }
     if (!session.EventsQueue.OnEventReceived(ev)) {
@@ -950,6 +958,11 @@ TDqPqRdReadActor::TSession* TDqPqRdReadActor::FindSession(NActors::TActorId acto
         return nullptr;
     }
     return &session;
+}
+
+void TDqPqRdReadActor::SendNoSession(const NActors::TActorId& recipient, ui64 cookie) {
+    auto event = std::make_unique<NFq::TEvRowDispatcher::TEvNoSession>();
+    Send(recipient, event.release(), 0, cookie);
 }
 
 void TDqPqRdReadActor::NotifyCA() {

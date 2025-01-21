@@ -1,5 +1,6 @@
 #include "catalog.h"
 #include <yql/essentials/parser/pg_catalog/proto/pg_catalog.pb.h>
+#include <yql/essentials/utils/log/profile.h>
 #include <util/generic/array_size.h>
 #include <util/generic/utility.h>
 #include <util/generic/hash.h>
@@ -3649,6 +3650,7 @@ ISqlLanguageParser* GetSqlLanguageParser() {
 }
 
 void LoadSystemFunctions(ISystemFunctionsParser& parser) {
+    YQL_PROFILE_FUNC(DEBUG);
     auto& catalog = TCatalog::MutableInstance();
     with_lock (catalog.ExtensionsGuard) {
         if (catalog.State->SystemFunctionInit) {
@@ -3684,6 +3686,7 @@ void LoadSystemFunctions(ISystemFunctionsParser& parser) {
 
 void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,
     IExtensionSqlParser& parser, IExtensionLoader* loader) {
+    YQL_PROFILE_FUNC(DEBUG);
     if (extensions.size() > MaximumExtensionsCount) {
         throw yexception() << "Too many extensions: " << extensions.size();
     }

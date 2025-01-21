@@ -333,8 +333,11 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvPoison::TPtr&) {
-        with_lock(Alloc) {
-            Clients.clear();
+        if (Filters) {
+            for (const auto& [clientId, _] : Clients) {
+                Filters->RemoveFilter(clientId);
+            }
+            Filters.Reset();
         }
         PassAway();
     }
@@ -347,6 +350,10 @@ public:
 public:
     void ParseMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
         LOG_ROW_DISPATCHER_TRACE("Send " << messages.size() << " messages to parser");
+
+        if (messages) {
+            CurrentOffset = messages.back().GetOffset();
+        }
 
         if (Parser) {
             Parser->ParseMessages(messages);
@@ -366,6 +373,13 @@ public:
 
     TStatus AddClient(IClientDataConsumer::TPtr client) override {
         LOG_ROW_DISPATCHER_DEBUG("Add client with id " << client->GetClientId());
+
+        if (const auto clientOffset = client->GetNextMessageOffset()) {
+            if (Parser && CurrentOffset && *CurrentOffset > *clientOffset) {
+                LOG_ROW_DISPATCHER_DEBUG("Parser was flushed due to new historical offset " << *clientOffset << "(previous parser offset: " << *CurrentOffset << ")");
+                Parser->Refresh(true);
+            }
+        }
 
         auto clientHandler = MakeIntrusive<TClientHandler>(*this, client);
         if (!Clients.emplace(client->GetClientId(), clientHandler).second) {
@@ -553,6 +567,7 @@ private:
     ITopicParser::TPtr Parser;
     TParserHandler::TPtr ParserHandler;
     ITopicFilters::TPtr Filters;
+    std::optional<ui64> CurrentOffset;
 
     // Parsed data
     const TVector<ui64>* Offsets;

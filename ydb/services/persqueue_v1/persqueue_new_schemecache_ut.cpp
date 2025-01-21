@@ -68,7 +68,7 @@ namespace NKikimr::NPersQueueTests {
                 NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PQ_METACACHE}
             );
             PrepareForGrpcNoDC(*server.AnnoyingClient);
-            server.AnnoyingClient->GrantConnect("topic1@" BUILTIN_ACL_DOMAIN);            
+            server.AnnoyingClient->GrantConnect("topic1@" BUILTIN_ACL_DOMAIN);
 
             TPQDataWriter writer("source1", server, DEFAULT_TOPIC_PATH);
 
@@ -445,7 +445,7 @@ namespace NKikimr::NPersQueueTests {
                 static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| (some build info (codename); os 1.0)";
                 {
                     server.AnnoyingClient->GrantConnect("user@builtin");
-    
+
                     auto newDriverCfg = driverCfg;
                     newDriverCfg.SetAuthToken("user@builtin");
 
@@ -530,6 +530,7 @@ namespace NKikimr::NPersQueueTests {
                     checkUserAgentCounters(monPort, "BytesWrittenByUserAgent", "pqv1", userAgent, fullTopicName, "");
                     checkUserAgentCounters(monPort, "BytesReadByUserAgent", "pqv1", userAgent, "", consumerName);
                 }
+                Monitoring.Stop();
             };
 
             testWriteStat1stClass("user1");
@@ -739,6 +740,7 @@ namespace NKikimr::NPersQueueTests {
                     checkUserAgentCounters(monPort, "BytesWrittenByUserAgent", "topic", userAgent, fullTopicName, "");
                     checkUserAgentCounters(monPort, "BytesReadByUserAgent", "topic", userAgent, "", consumerName);
                 }
+                Monitoring.Stop();
             };
 
             testWriteStat1stClass("user1");

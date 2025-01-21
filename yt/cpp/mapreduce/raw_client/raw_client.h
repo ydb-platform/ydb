@@ -119,9 +119,28 @@ public:
 
     // Transactions
 
-    void PingTx(const TTransactionId& transactionId) override;
+    TTransactionId StartTransaction(
+        TMutationId& mutationId,
+        const TTransactionId& parentId,
+        const TStartTransactionOptions& options = {}) override;
+
+    void PingTransaction(const TTransactionId& transactionId) override;
+
+    void AbortTransaction(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId) override;
+
+    void CommitTransaction(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId) override;
 
     // Operations
+
+    TOperationId StartOperation(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        EOperationType type,
+        const TNode& spec) override;
 
     TOperationAttributes GetOperation(
         const TOperationId& operationId,
@@ -175,11 +194,6 @@ public:
         const TJobId& jobId,
         const TGetJobFailContextOptions& options = {}) override;
 
-    TString GetJobStderrWithRetries(
-        const TOperationId& operationId,
-        const TJobId& jobId,
-        const TGetJobStderrOptions& options = {}) override;
-
     IFileReaderPtr GetJobStderr(
         const TOperationId& operationId,
         const TJobId& jobId,
@@ -188,6 +202,28 @@ public:
     std::vector<TJobTraceEvent> GetJobTrace(
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) override;
+
+    // Files
+
+    std::unique_ptr<IInputStream> ReadFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileReaderOptions& options = {}) override;
+
+    // File cache
+
+    TMaybe<TYPath> GetFileFromCache(
+        const TTransactionId& transactionId,
+        const TString& md5Signature,
+        const TYPath& cachePath,
+        const TGetFileFromCacheOptions& options = {}) override;
+
+    TYPath PutFileToCache(
+        const TTransactionId& transactionId,
+        const TYPath& filePath,
+        const TString& md5Signature,
+        const TYPath& cachePath,
+        const TPutFileToCacheOptions& options = {}) override;
 
     // Tables
 
@@ -238,11 +274,68 @@ public:
         const TString& query,
         const TSelectRowsOptions& options = {}) override;
 
+    std::unique_ptr<IInputStream> ReadTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TMaybe<TFormat>& format,
+        const TTableReaderOptions& options = {}) override;
+
+    std::unique_ptr<IInputStream> ReadBlobTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TKey& key,
+        const TBlobTableReaderOptions& options = {}) override;
+
+    void AlterTable(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        const TAlterTableOptions& options = {}) override;
+
+    void AlterTableReplica(
+        TMutationId& mutationId,
+        const TReplicaId& replicaId,
+        const TAlterTableReplicaOptions& options = {}) override;
+
+    void DeleteRows(
+        const TYPath& path,
+        const TNode::TListType& keys,
+        const TDeleteRowsOptions& options = {}) override;
+
+    void FreezeTable(
+        const TYPath& path,
+        const TFreezeTableOptions& options = {}) override;
+
+    void UnfreezeTable(
+        const TYPath& path,
+        const TUnfreezeTableOptions& options = {}) override;
+
     // Misc
+
+    TCheckPermissionResponse CheckPermission(
+        const TString& user,
+        EPermission permission,
+        const TYPath& path,
+        const TCheckPermissionOptions& options = {}) override;
+
+    TVector<TTabletInfo> GetTabletInfos(
+        const TYPath& path,
+        const TVector<int>& tabletIndexes,
+        const TGetTabletInfosOptions& options = {}) override;
+
+    TVector<TTableColumnarStatistics> GetTableColumnarStatistics(
+        const TTransactionId& transactionId,
+        const TVector<TRichYPath>& paths,
+        const TGetTableColumnarStatisticsOptions& options = {}) override;
+
+    TMultiTablePartitions GetTablePartitions(
+        const TTransactionId& transactionId,
+        const TVector<TRichYPath>& paths,
+        const TGetTablePartitionsOptions& options = {}) override;
 
     ui64 GenerateTimestamp() override;
 
-    TAuthorizationInfo WhoAmI() override;
+    IRawBatchRequestPtr CreateRawBatchRequest() override;
 
 private:
     const TClientContext Context_;

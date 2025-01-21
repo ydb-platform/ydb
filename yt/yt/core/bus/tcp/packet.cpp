@@ -436,7 +436,7 @@ public:
         if (IsVariablePacket()) {
             AllocateVariableHeader();
 
-            for (int index = 0; index < static_cast<int>(Message_.Size()); ++index) {
+            for (int index = 0; index < std::ssize(Message_); ++index) {
                 if (const auto& part = Message_[index]) {
                     SetPartSize(index, part.Size());
                     SetPartChecksum(
@@ -451,7 +451,7 @@ public:
             SetPartChecksum(Message_.Size(),  generateChecksums ? GetVariableChecksum() : NullChecksum);
         }
 
-        BeginPhase(EPacketPhase::FixedHeader, &FixedHeader_, sizeof (TPacketHeader));
+        BeginPhase(EPacketPhase::FixedHeader, &FixedHeader_, sizeof(TPacketHeader));
         return true;
     }
 

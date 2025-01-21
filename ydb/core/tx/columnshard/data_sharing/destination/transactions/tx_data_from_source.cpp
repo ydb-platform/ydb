@@ -15,7 +15,7 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
     auto& index = Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
 
     for (auto& info : SchemeHistory) {
-        index.RegisterOldSchemaVersion(info.GetSnapshot(), info.GetSchema());
+        index.RegisterOldSchemaVersion(info.GetSnapshot(), info.GetProto().GetId(), info.GetSchema());
     }
 
     TDbWrapper dbWrapper(txc.DB, nullptr);

@@ -396,6 +396,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
 }
 
 void TConfiguration::Shutdown() {
+    Monitoring->Stop();
     ActorSystem1->Stop();
     ActorSystem1.reset();
 }

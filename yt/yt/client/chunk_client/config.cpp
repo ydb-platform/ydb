@@ -280,7 +280,7 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
         .Default(true);
-    registrar.Parameter("node_ping_interval", &TThis::NodePingPeriod)
+    registrar.Parameter("node_ping_period", &TThis::NodePingPeriod)
         .Default(TDuration::Seconds(10));
     registrar.Parameter("populate_cache", &TThis::PopulateCache)
         .Default(false);

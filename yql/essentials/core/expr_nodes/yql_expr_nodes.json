@@ -1613,6 +1613,21 @@
             ]
         },
         {
+            "Name": "TCoBlockMapJoinCore",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "BlockMapJoinCore"},
+            "Children": [
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+                {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "LeftKeyColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "LeftKeyDrops", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "RightKeyColumns", "Type": "TCoAtomList"},
+                {"Index": 6, "Name": "RightKeyDrops", "Type": "TCoAtomList"},
+                {"Index": 7, "Name": "Options", "Type": "TExprList"}
+            ]
+        },
+        {
             "Name": "TCoGraceJoinCore",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "GraceJoinCore"},

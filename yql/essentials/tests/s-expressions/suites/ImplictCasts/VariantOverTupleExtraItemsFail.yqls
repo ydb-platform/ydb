@@ -1,6 +1,6 @@
+/* custom error:Failed to convert type: Variant<Int32,Int32,Int32,Int32> to Variant<Int32,Int32,Int32>*/
 (
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 (let res_sink (DataSink 'result))
 
 (let origType (VariantType (TupleType (DataType 'Int32) (DataType 'Int32) (DataType 'Int32))))

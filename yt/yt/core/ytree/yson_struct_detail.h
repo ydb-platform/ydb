@@ -47,6 +47,21 @@ struct TYsonSourceTraits
 template <class TStruct, class TValue>
 using TYsonStructField = TValue(TStruct::*);
 
+// This is intended to be used as an equality-only comparator of YsonStruct fields.
+// dynamic_cast is used to compare generic #ITypeErasedYsonStructField to
+// a concrete #TTypedYsonStructField (see -inl.h).
+struct ITypeErasedYsonStructField
+    : public TRefCounted
+{ };
+
+DECLARE_REFCOUNTED_STRUCT(ITypeErasedYsonStructField);
+DEFINE_REFCOUNTED_TYPE(ITypeErasedYsonStructField);
+
+template <class TStruct, class TValue>
+ITypeErasedYsonStructFieldPtr CreateTypeErasedYsonStructField(TYsonStructField<TStruct, TValue> field);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TLoadParameterOptions
 {
     NYPath::TYPath Path;
@@ -92,6 +107,8 @@ struct IYsonStructParameter
     virtual bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const = 0;
 
     virtual int GetFieldIndex() const = 0;
+
+    virtual bool HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const = 0;
 };
 
 DECLARE_REFCOUNTED_STRUCT(IYsonStructParameter)
@@ -211,6 +228,7 @@ template <class TValue>
 struct IYsonFieldAccessor
 {
     virtual TValue& GetValue(const TYsonStructBase* source) = 0;
+    virtual bool HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const = 0;
     virtual ~IYsonFieldAccessor() = default;
 };
 
@@ -222,6 +240,7 @@ class TYsonFieldAccessor
 {
 public:
     explicit TYsonFieldAccessor(TYsonStructField<TStruct, TValue> field);
+    bool HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const override;
     TValue& GetValue(const TYsonStructBase* source) override;
 
 private:
@@ -236,6 +255,7 @@ class TUniversalYsonParameterAccessor
 {
 public:
     explicit TUniversalYsonParameterAccessor(std::function<TValue&(TStruct*)> field);
+    bool HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const override;
     TValue& GetValue(const TYsonStructBase* source) override;
 
 private:
@@ -287,6 +307,9 @@ public:
     bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const override;
 
     virtual int GetFieldIndex() const override;
+
+    const TValue& GetValue(const TYsonStructBase* source) const;
+    bool HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const override;
 
     // Mark as optional. Field will be default-initialized if `init` is true, initialization is skipped otherwise.
     TYsonStructParameter& Optional(bool init = true);

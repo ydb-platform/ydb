@@ -1,7 +1,6 @@
 (
 #comment
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let res_sink (DataSink 'result))
 (let data (AsList (String 'a) (String 'a) (String 'b)))
@@ -13,7 +12,7 @@
 (let combined (CombineByKey data preMap keyExtractor init update finish))
 (let map (Map combined (lambda '(x) (Nth x '1))))
 (let result (Sort map (Bool 'true) (lambda '(x) x)))
-(let world (Write! world res_sink (Key) result '()))
+(let world (Write! world res_sink (Key) result '('('type))))
 (let world (Commit! world res_sink))
 (return world)
 )

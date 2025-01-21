@@ -5,7 +5,6 @@ import os
 import socket
 import sys
 import tempfile
-
 import six
 import yaml
 from google.protobuf.text_format import Parse
@@ -157,6 +156,7 @@ class KikimrConfigGenerator(object):
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             kafka_api_port=None,
             metadata_section=None,
+            column_shard_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -263,6 +263,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["enable_kqp_data_query_stream_lookup"] = False
 
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
+
+        # for faster shutdown: there is no reason to wait while tablets are drained before whole cluster is stopping
+        self.yaml_config["feature_flags"]["enable_drain_on_shutdown"] = False
         for extra_feature_flag in extra_feature_flags:
             self.yaml_config["feature_flags"][extra_feature_flag] = True
         if enable_alter_database_create_hive_first:
@@ -279,11 +282,12 @@ class KikimrConfigGenerator(object):
             self.yaml_config['pqconfig']['require_credentials_in_new_protocol'] = False
             self.yaml_config['pqconfig']['root'] = '/Root/PQ'
             self.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = False
-
         if pq_client_service_types:
             self.yaml_config['pqconfig']['client_service_type'] = []
             for service_type in pq_client_service_types:
                 self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
+        if column_shard_config:
+            self.yaml_config["column_shard_config"] = column_shard_config
 
         self.yaml_config['grpc_config']['services'].extend(extra_grpc_services)
 
@@ -360,14 +364,14 @@ class KikimrConfigGenerator(object):
 
         if default_users is not None:
             # check for None for remove default users for empty dict
-            if "security_config" not in self.yaml_config["domains_config"]:
-                self.yaml_config["domains_config"]["security_config"] = dict()
+            if "security_config" not in self.yaml_config:
+                self.yaml_config["security_config"] = dict()
 
             # remove existed default users
-            self.yaml_config["domains_config"]["security_config"]["default_users"] = []
+            self.yaml_config["security_config"]["default_users"] = []
 
             for user, password in default_users.items():
-                self.yaml_config["domains_config"]["security_config"]["default_users"].append({
+                self.yaml_config["security_config"]["default_users"].append({
                     "name": user,
                     "password": password,
                 })
@@ -376,10 +380,10 @@ class KikimrConfigGenerator(object):
             self.yaml_config["monitoring_config"] = {"allow_origin": str(os.getenv("YDB_ALLOW_ORIGIN"))}
 
         if enforce_user_token_requirement:
-            self.yaml_config["domains_config"]["security_config"]["enforce_user_token_requirement"] = True
+            self.yaml_config["security_config"]["enforce_user_token_requirement"] = True
 
         if default_user_sid:
-            self.yaml_config["domains_config"]["security_config"]["default_user_sids"] = [default_user_sid]
+            self.yaml_config["security_config"]["default_user_sids"] = [default_user_sid]
 
         if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
             self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}

@@ -19,7 +19,6 @@
 #include <boost/asio/associator.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/detail/handler_cont_helpers.hpp>
-#include <boost/asio/detail/initiation_base.hpp>
 #include <boost/asio/detail/type_traits.hpp>
 #include <boost/asio/detail/utility.hpp>
 
@@ -71,31 +70,25 @@ struct async_result<consign_t<CompletionToken, Values...>, Signatures...>
   : async_result<CompletionToken, Signatures...>
 {
   template <typename Initiation>
-  struct init_wrapper : detail::initiation_base<Initiation>
+  struct init_wrapper
   {
-    using detail::initiation_base<Initiation>::initiation_base;
+    init_wrapper(Initiation init)
+      : initiation_(static_cast<Initiation&&>(init))
+    {
+    }
 
     template <typename Handler, typename... Args>
     void operator()(Handler&& handler,
-        std::tuple<Values...> values, Args&&... args) &&
+        std::tuple<Values...> values, Args&&... args)
     {
-      static_cast<Initiation&&>(*this)(
+      static_cast<Initiation&&>(initiation_)(
           detail::consign_handler<decay_t<Handler>, Values...>(
             static_cast<Handler&&>(handler),
             static_cast<std::tuple<Values...>&&>(values)),
           static_cast<Args&&>(args)...);
     }
 
-    template <typename Handler, typename... Args>
-    void operator()(Handler&& handler,
-        std::tuple<Values...> values, Args&&... args) const &
-    {
-      static_cast<const Initiation&>(*this)(
-          detail::consign_handler<decay_t<Handler>, Values...>(
-            static_cast<Handler&&>(handler),
-            static_cast<std::tuple<Values...>&&>(values)),
-          static_cast<Args&&>(args)...);
-    }
+    Initiation initiation_;
   };
 
   template <typename Initiation, typename RawCompletionToken, typename... Args>

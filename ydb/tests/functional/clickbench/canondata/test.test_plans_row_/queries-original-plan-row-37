@@ -93,6 +93,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableRangeScan",
+                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                         "ReadColumns": [
                                                                             "DontCountHits",
                                                                             "IsRefresh",

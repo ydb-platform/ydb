@@ -243,6 +243,13 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVMovedPatch: receive request;"
                     << " Event# " << ev->Get()->ToString());
+
+            TLogoBlobID patchedBlobId = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetPatchedBlobId());
+            if (patchedBlobId.BlobSize() == 0) {
+                ReplyError(NKikimrProto::ERROR, "Blob size must be non-zero", ev, ctx, TAppData::TimeProvider->Now());
+                return;
+            }
+
             if (!CheckIfWriteAllowed(ev, ctx)) {
                 LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVMovedPatch: is not allowed;"
                         << " Event# " << ev->Get()->ToString());
@@ -512,6 +519,13 @@ namespace NKikimr {
                         << " id# " << id
                         << " Marker# BSVS01");
                 return {NKikimrProto::ERROR, "buffer size mismatch"};
+            }
+
+            if (id.BlobSize() == 0) {
+                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": blob size cannot be 0;"
+                        << " id# " << id
+                        << " Marker# BSVS44");
+                return {NKikimrProto::ERROR, "part size is 0"};
             }
 
             if (bufSize > Config->MaxLogoBlobDataSize) {
@@ -1689,6 +1703,10 @@ namespace NKikimr {
             if (VDiskCompactionState && !results.empty()) {
                 VDiskCompactionState->Logged(ctx, results.back().Lsn);
             }
+            if (ev->Get()->StatusFlags & ui32(NKikimrBlobStorage::StatusIsValid)) {
+                i64 count = ev->Get()->LogChunkCount;
+                OverloadHandler->SetLogChunkCount(count >= 0 ? (ui32)count : 0);
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -1982,15 +2000,13 @@ namespace NKikimr {
                     this->PrivateHandle(ev, ctx);
                 };
                 NMonGroup::TSkeletonOverloadGroup overloadMonGroup(VCtx->VDiskCounters, "subsystem", "emergency");
-                OverloadHandler = std::make_unique<TOverloadHandler>(VCtx, PDiskCtx, Hull,
+                OverloadHandler = std::make_unique<TOverloadHandler>(Config, VCtx, PDiskCtx, Hull,
                     std::move(overloadMonGroup), std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
                     std::move(vMultiPutHandler), std::move(loc), std::move(aoput));
                 ScheduleWakeupEmergencyPutQueue(ctx);
 
                 // actualize weights before we start
                 OverloadHandler->ActualizeWeights(ctx, AllEHullDbTypes, true);
-
-                OverloadHandler->RegisterIcbControls(AppData()->Icb);
 
                 // run Anubis
                 if (Config->RunAnubis && !Config->BaseInfo.DonorMode) {

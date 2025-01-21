@@ -52,6 +52,7 @@ namespace NActors {
         };
 
         struct TActorMap : public absl::flat_hash_map<ui64, IActor*> {
+            absl::flat_hash_map<ui64, IActor*> Aliases;
             TMailboxStats Stats;
         };
 
@@ -100,6 +101,10 @@ namespace NActors {
         IActor* FindActor(ui64 localActorId) noexcept;
         void AttachActor(ui64 localActorId, IActor* actor) noexcept;
         IActor* DetachActor(ui64 localActorId) noexcept;
+
+        IActor* FindAlias(ui64 localActorId) noexcept;
+        void AttachAlias(ui64 localActorId, IActor* actor) noexcept;
+        IActor* DetachAlias(ui64 localActorId) noexcept;
 
         void EnableStats();
         void AddElapsedCycles(ui64);
@@ -182,6 +187,7 @@ namespace NActors {
         void Unlock(IExecutorPool* pool, NHPTimer::STime now, ui64& revolvingCounter);
 
     private:
+        void EnsureActorMap();
         void OnPreProcessed(IEventHandle* head, IEventHandle* tail) noexcept;
         void AppendPreProcessed(IEventHandle* head, IEventHandle* tail) noexcept;
         void PrependPreProcessed(IEventHandle* head, IEventHandle* tail) noexcept;

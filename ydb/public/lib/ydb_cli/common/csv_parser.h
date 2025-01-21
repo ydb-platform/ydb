@@ -4,10 +4,43 @@
 
 #include <library/cpp/string_utils/csv/csv.h>
 
+#include <shared_mutex>
+
 namespace NYdb {
 namespace NConsoleClient {
 
 class TCsvParseException : public yexception {};
+
+class TPossibleType {
+public:
+    TPossibleType();
+    TPossibleType(std::vector<TType>::const_iterator currentType);
+    void SetIterator(const std::vector<TType>::const_iterator& newIterator);
+    std::vector<TType>::const_iterator& GetIterator();
+    static const std::vector<TType>::const_iterator& GetAvailableTypesEnd();
+    void SetHasNulls(bool hasNulls);
+    bool GetHasNulls() const;
+    void SetHasNonNulls(bool hasNonNulls);
+    bool GetHasNonNulls() const;
+private:
+    std::vector<TType>::const_iterator CurrentType;
+    bool HasNulls = false;
+    bool HasNonNulls = false;
+};
+
+class TPossibleTypes {
+public:
+    TPossibleTypes(size_t size);
+    TPossibleTypes(std::vector<TPossibleType>& currentColumnTypes);
+    // Pass this copy to a worker to parse his chunk of data with it to merge it later back into this main chunk
+    TPossibleTypes GetCopy();
+    // Merge this main chunk with another chunk that parsed a CSV batch and maybe dismissed some types
+    void MergeWith(TPossibleTypes& newTypes);
+    std::vector<TPossibleType>& GetColumnPossibleTypes();
+private:
+    std::vector<TPossibleType> ColumnPossibleTypes;
+    std::shared_mutex Lock;
+};
 
 class TCsvParser {
 public:
@@ -36,6 +69,8 @@ public:
     TValue BuildList(std::vector<TString>& lines, const TString& filename,
                      std::optional<ui64> row = std::nullopt) const;
     void BuildLineType();
+    const TVector<TString>& GetHeader();
+    void ParseLineTypes(TString& line, TPossibleTypes& possibleTypes, const TParseMetadata& meta);
 
 private:
     TVector<TString> Header;

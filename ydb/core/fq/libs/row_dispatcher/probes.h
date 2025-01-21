@@ -77,8 +77,8 @@
         NAMES("sender", "readActor", "queryId", "generation", "size")) \
     PROBE(Statistics, \
         GROUPS(), \
-        TYPES(TString, TString, ui32, TString, ui64, ui64), \
-        NAMES("sender", "readActor", "partitionId","queryId", "generation", "size")) \
+        TYPES(TString, TString, ui64, ui64), \
+        NAMES("readActor", "queryId", "generation", "size")) \
     PROBE(UpdateMetrics, \
         GROUPS(), \
         TYPES(), \

@@ -37,9 +37,11 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("plan", "Query plans report file name")
         .DefaultValue("")
         .StoreResult(&PlanFileName);
-    config.Opts->AddLongOption("query-settings", "Query settings.\nEvery setting is a line that will be added to the beginning of each query. For multiple settings lines use this option several times.")
-        .DefaultValue("")
+    config.Opts->AddLongOption("query-settings")
+        .AppendTo(&QuerySettings).Hidden();
+    config.Opts->AddLongOption("query-prefix", "Query prefix.\nEvery prefix is a line that will be added to the beginning of each query. For multiple prefixes lines use this option several times.")
         .AppendTo(&QuerySettings);
+    config.Opts->MutuallyExclusive("query-prefix", "query-settings");
     auto fillTestCases = [](TStringBuf line, std::function<void(ui32)>&& op) {
         for (const auto& token : StringSplitter(line).Split(',').SkipEmpty()) {
             TStringBuf part = token.Token();
@@ -284,7 +286,7 @@ void CollectStats(TPrettyTable& table, IOutputStream* csv, NJson::TJsonValue* js
 }
 
 template <typename TClient>
-bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen) {
+bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen) {
     using namespace BenchmarkUtils;
     TOFStream outFStream{OutFilePath};
     TPrettyTable statTable(ColumnNames);
@@ -342,7 +344,11 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
         if (PlanFileName) {
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
             try {
-                res = Explain(query, client, GetDeadline());
+                if (client) {
+                    res = Explain(query, *client, GetDeadline());
+                } else {
+                    res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "");
+                }
             } catch (...) {
                 res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
             }
@@ -353,7 +359,11 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
             auto t1 = TInstant::Now();
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
             try {
-                res = Execute(query, client, GetDeadline());
+                if (client) {
+                    res = Execute(query, *client, GetDeadline());
+                } else {
+                    res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "");
+                }
             } catch (...) {
                 res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
             }
@@ -524,10 +534,10 @@ BenchmarkUtils::TQueryBenchmarkDeadline TWorkloadCommandBenchmark::GetDeadline()
 
 int TWorkloadCommandBenchmark::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& /*config*/) {
     if (QueryExecuterType == "scan") {
-        return !RunBench(*TableClient, workloadGen);
+        return !RunBench(TableClient.Get(), workloadGen);
     }
     if (QueryExecuterType == "generic") {
-        return !RunBench(*QueryClient, workloadGen);
+        return !RunBench(QueryClient.Get(), workloadGen);
     }
     ythrow yexception() << "Incorrect executer type. Available options: \"scan\", \"generic\"." << Endl;
 }

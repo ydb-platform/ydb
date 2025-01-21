@@ -179,59 +179,97 @@ namespace NKikimr {
 
     class TThrottlingController {
     private:
-        struct TControls {
-            TControlWrapper MinSstCount;
-            TControlWrapper MaxSstCount;
-            TControlWrapper DeviceSpeed;
-
-            TControls()
-                : MinSstCount(16, 1, 200)
-                , MaxSstCount(64, 1, 200)
-                , DeviceSpeed(50 << 20, 1 << 20, 1 << 30)
-            {}
-
-            void Register(TIntrusivePtr<TControlBoard> icb) {
-                icb->RegisterSharedControl(MinSstCount, "VDiskControls.ThrottlingMinSstCount");
-                icb->RegisterSharedControl(MaxSstCount, "VDiskControls.ThrottlingMaxSstCount");
-                icb->RegisterSharedControl(DeviceSpeed, "VDiskControls.ThrottlingDeviceSpeed");
-            }
-        };
-        TControls Controls;
+        NMonGroup::TSkeletonOverloadGroup& Mon;
+        TIntrusivePtr<TVDiskConfig> VCfg;
 
         ui64 CurrentSstCount = 0;
+        ui64 CurrentInplacedSize = 0;
+        ui64 CurrentOccupancy = 0;
+        ui64 CurrentLogChunkCount = 0;
 
         TInstant CurrentTime;
+        ui64 CurrentSpeedLimit = 0;
         ui64 AvailableBytes = 0;
 
-        ui64 GetCurrentSpeedLimit() const {
-            ui64 minSstCount = (ui64)Controls.MinSstCount;
-            ui64 maxSstCount = (ui64)Controls.MaxSstCount;
-            ui64 deviceSpeed = (ui64)Controls.DeviceSpeed;
-
-            if (maxSstCount <= minSstCount) {
-                return deviceSpeed;
+    private:
+        static ui64 LinearInterpolation(ui64 curX, ui64 minX, ui64 maxX, ui64 fromY) {
+            if (maxX <= minX) {
+                return fromY;
             }
-            if (CurrentSstCount <= minSstCount) {
-                return deviceSpeed;
+            if (curX <= minX) {
+                return fromY;
             }
-            if (CurrentSstCount >= maxSstCount) {
+            if (curX >= maxX) {
                 return 0;
             }
-            return (double)(maxSstCount - CurrentSstCount) * deviceSpeed / (maxSstCount - minSstCount);
+            return (double)(maxX - curX) * fromY / (maxX - minX);
+        }
+
+        ui64 CalcSstCountSpeedLimit() const {
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
+            ui64 maxSstCount = (ui64)VCfg->ThrottlingMaxSstCount;
+
+            return LinearInterpolation(CurrentSstCount, minSstCount, maxSstCount, deviceSpeed);
+        }
+
+        ui64 CalcInplacedSizeSpeedLimit() const {
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
+            ui64 maxInplacedSize = (ui64)VCfg->ThrottlingMaxInplacedSize;
+
+            return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, deviceSpeed);
+        }
+
+        ui64 CalcOccupancySpeedLimit() const {
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
+            ui64 maxOccupancy = (ui64)VCfg->ThrottlingMaxOccupancyPerMille * 1000;
+
+            return LinearInterpolation(CurrentOccupancy, minOccupancy, maxOccupancy, deviceSpeed);
+        }
+
+        ui64 CalcLogChunkCountSpeedLimit() const {
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
+            ui64 maxLogChunkCount = (ui64)VCfg->ThrottlingMaxLogChunkCount;
+
+            return LinearInterpolation(CurrentLogChunkCount, minLogChunkCount, maxLogChunkCount, deviceSpeed);
+        }
+
+        ui64 CalcSpeedLimit() const {
+            ui64 sstCountSpeedLimit = CalcSstCountSpeedLimit();
+            ui64 inplacedSizeSpeedLimit = CalcInplacedSizeSpeedLimit();
+            ui64 occupancySpeedLimit = CalcOccupancySpeedLimit();
+            ui64 logChunkCountSpeedLimit = CalcLogChunkCountSpeedLimit();
+
+            return std::min({
+                sstCountSpeedLimit,
+                inplacedSizeSpeedLimit,
+                occupancySpeedLimit,
+                logChunkCountSpeedLimit});
         }
 
     public:
-        void RegisterIcbControls(TIntrusivePtr<TControlBoard> icb) {
-            Controls.Register(icb);
-        }
+        explicit TThrottlingController(
+            const TIntrusivePtr<TVDiskConfig> &vcfg,
+            NMonGroup::TSkeletonOverloadGroup& mon)
+            : Mon(mon)
+            , VCfg(vcfg)
+        {}
 
         bool IsActive() const {
-            ui64 minSstCount = (ui64)Controls.MinSstCount;
-            return CurrentSstCount > minSstCount;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
+            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
+            ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
+
+            return CurrentSstCount > minSstCount ||
+                CurrentInplacedSize > minInplacedSize ||
+                CurrentOccupancy > minOccupancy;
         }
 
         TDuration BytesToDuration(ui64 bytes) const {
-            auto limit = GetCurrentSpeedLimit();
+            auto limit = CurrentSpeedLimit;
             if (limit == 0) {
                 return TDuration::Seconds(1);
             }
@@ -247,18 +285,38 @@ namespace NKikimr {
             return AvailableBytes;
         }
 
-        void UpdateState(TInstant now, ui64 sstCount) {
+        void UpdateState(TInstant now, ui64 sstCount, ui64 inplacedSize,
+            float occupancy, ui32 logChunkCount)
+        {
             bool prevActive = IsActive();
 
             CurrentSstCount = sstCount;
+            Mon.ThrottlingLevel0SstCount() = sstCount;
+
+            CurrentInplacedSize = inplacedSize;
+            Mon.ThrottlingAllLevelsInplacedSize() = inplacedSize;
+
+            CurrentOccupancy = occupancy * 1'000'000;
+            Mon.ThrottlingOccupancyPerMille() = occupancy * 1000;
+
+            CurrentLogChunkCount = logChunkCount;
+            Mon.ThrottlingLogChunkCount() = logChunkCount;
+
+            Mon.ThrottlingIsActive() = (ui64)IsActive();
 
             if (!IsActive()) {
                 CurrentTime = {};
                 AvailableBytes = 0;
-            } else if (!prevActive) {
-                CurrentTime = now;
-                AvailableBytes = 0;
+                CurrentSpeedLimit = (ui64)VCfg->ThrottlingDeviceSpeed;
+            } else {
+                if (!prevActive) {
+                    CurrentTime = now;
+                    AvailableBytes = 0;
+                }
+                CurrentSpeedLimit = CalcSpeedLimit();
             }
+
+            Mon.ThrottlingCurrentSpeedLimit() = CurrentSpeedLimit;
         }
 
         void UpdateTime(TInstant now) {
@@ -266,9 +324,9 @@ namespace NKikimr {
                 return;
             }
             auto us = (now - CurrentTime).MicroSeconds();
-            AvailableBytes += GetCurrentSpeedLimit() * us / 1000000; // overflow ?
-            ui64 deviceSpeed = (ui64)Controls.DeviceSpeed;
-            AvailableBytes = Min(AvailableBytes, deviceSpeed);
+            AvailableBytes += CurrentSpeedLimit * us / 1000000;
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            AvailableBytes = std::min(AvailableBytes, deviceSpeed);
             CurrentTime = now;
         }
     };
@@ -277,6 +335,7 @@ namespace NKikimr {
     // TOverloadHandler
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     TOverloadHandler::TOverloadHandler(
+            const TIntrusivePtr<TVDiskConfig> &vcfg,
             const TIntrusivePtr<TVDiskContext> &vctx,
             const TPDiskCtxPtr &pdiskCtx,
             std::shared_ptr<THull> hull,
@@ -287,12 +346,13 @@ namespace NKikimr {
             TVMultiPutHandler &&vMultiPut,
             TLocalSyncDataHandler &&loc,
             TAnubisOsirisPutHandler &&aoput)
-        : Hull(std::move(hull))
+        : VCtx(vctx)
+        , Hull(std::move(hull))
         , Mon(std::move(mon))
         , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
                 std::move(vMultiPut), std::move(loc), std::move(aoput)))
         , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx))
-        , ThrottlingController(new TThrottlingController)
+        , ThrottlingController(new TThrottlingController(vcfg, Mon))
     {}
 
     TOverloadHandler::~TOverloadHandler() {}
@@ -333,10 +393,13 @@ namespace NKikimr {
             auto snapshot = Hull->GetSnapshot(); // THullDsSnap
             auto& logoBlobsSnap = snapshot.LogoBlobsSnap; // TLogoBlobsSnapshot
             auto& sliceSnap = logoBlobsSnap.SliceSnap; // TLevelSliceSnapshot
-            auto sstCount = sliceSnap.GetLevel0SstsNum();
+
+            ui64 sstCount = sliceSnap.GetLevel0SstsNum();
+            ui64 dataInplacedSize = logoBlobsSnap.AllLevelsDataInplaced;
+            float occupancy = 1.f - VCtx->GetOutOfSpaceState().GetFreeSpaceShare();
 
             auto now = ctx.Now();
-            ThrottlingController->UpdateState(now, sstCount);
+            ThrottlingController->UpdateState(now, sstCount, dataInplacedSize, occupancy, LogChunkCount);
 
             if (ThrottlingController->IsActive()) {
                 ThrottlingController->UpdateTime(now);
@@ -412,8 +475,8 @@ namespace NKikimr {
         KickInFlight = false;
     }
 
-    void TOverloadHandler::RegisterIcbControls(TIntrusivePtr<TControlBoard> icb) {
-        ThrottlingController->RegisterIcbControls(icb);
+    void TOverloadHandler::SetLogChunkCount(ui32 logChunkCount) {
+        LogChunkCount = logChunkCount;
     }
 
     template <class TEv>

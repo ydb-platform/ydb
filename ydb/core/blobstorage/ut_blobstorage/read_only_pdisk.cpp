@@ -4,6 +4,25 @@
 
 Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
 
+    NKikimrBlobStorage::TConfigRequest CreateReadOnlyRequest(ui32 nodeId, ui32 pdiskId, bool readOnly, bool ignoreDegraded = false) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreDegradedGroupsChecks(ignoreDegraded);
+
+        NKikimrBlobStorage::TSetPDiskReadOnly* cmd = request.AddCommand()->MutableSetPDiskReadOnly();
+        auto pdisk = cmd->MutableTargetPDiskId();
+        cmd->SetValue(readOnly);
+        pdisk->SetNodeId(nodeId);
+        pdisk->SetPDiskId(pdiskId);
+
+        return std::move(request);
+    }
+
+    NKikimrBlobStorage::TConfigResponse SetReadOnly(TEnvironmentSetup& env, ui32 nodeId, ui32 pdiskId, bool readOnly, bool ignoreDegraded = false) {
+        NKikimrBlobStorage::TConfigRequest request = CreateReadOnlyRequest(nodeId, pdiskId, readOnly, ignoreDegraded);
+
+        return env.Invoke(request);
+    }
+
     Y_UNIT_TEST(ReadOnlyNotAllowed) {
         TEnvironmentSetup env({
             .NodeCount = 10,
@@ -34,16 +53,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         for (; it != diskGuids.end(); it++, i++) {
             auto& diskId =  it->first;
 
-            NKikimrBlobStorage::TConfigRequest request;
-            request.SetIgnoreDegradedGroupsChecks(true);
-
-            NKikimrBlobStorage::TSetPDiskReadOnly* cmd = request.AddCommand()->MutableSetPDiskReadOnly();
-            auto pdiskId = cmd->MutableTargetPDiskId();
-            cmd->SetValue(true);
-            pdiskId->SetNodeId(diskId.NodeId);
-            pdiskId->SetPDiskId(diskId.PDiskId);
-
-            auto response = env.Invoke(request);
+            auto response = SetReadOnly(env, diskId.NodeId, diskId.PDiskId, true, true);
 
             if (i < 2) {
                 // Two disks can be set ReadOnly.
@@ -72,6 +82,23 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         ev->Record.MutableRequest()->CopyFrom(request);
         env.Runtime->SendToPipe(env.TabletId, actorId, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+    }
+
+    void CheckDiskIsReadOnly(TEnvironmentSetup& env, const TPDiskId& diskId) {
+        auto config = env.FetchBaseConfig();
+        
+        for (const NKikimrBlobStorage::TBaseConfig::TPDisk& pdisk : config.GetPDisk()) {
+            if (pdisk.GetNodeId() == diskId.NodeId && pdisk.GetPDiskId() == diskId.PDiskId) {
+                UNIT_ASSERT_VALUES_EQUAL(true, pdisk.GetReadOnly());
+                break;
+            }
+        }
+
+        auto stateIt = env.PDiskMockStates.find(std::pair(diskId.NodeId, diskId.PDiskId));
+
+        UNIT_ASSERT(stateIt != env.PDiskMockStates.end());
+
+        UNIT_ASSERT(stateIt->second->IsDiskReadOnly());
     }
 
     Y_UNIT_TEST(RestartAndReadOnlyConsecutive) {
@@ -114,16 +141,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         }
 
         {
-            NKikimrBlobStorage::TConfigRequest request;
-            request.SetIgnoreDegradedGroupsChecks(true);
-
-            NKikimrBlobStorage::TSetPDiskReadOnly* cmd = request.AddCommand()->MutableSetPDiskReadOnly();
-            auto pdiskId = cmd->MutableTargetPDiskId();
-            cmd->SetValue(true);
-            pdiskId->SetNodeId(diskId.NodeId);
-            pdiskId->SetPDiskId(diskId.PDiskId);
-
-            auto response = env.Invoke(request);
+            auto response = SetReadOnly(env, diskId.NodeId, diskId.PDiskId, true, true);
 
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         }
@@ -153,11 +171,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
 
         UNIT_ASSERT(gotReport);
 
-        auto stateIt = env.PDiskMockStates.find(std::pair(diskId.NodeId, diskId.PDiskId));
-
-        UNIT_ASSERT(stateIt != env.PDiskMockStates.end());
-
-        UNIT_ASSERT(stateIt->second->IsDiskReadOnly());
+        CheckDiskIsReadOnly(env, diskId);
     }
 
     Y_UNIT_TEST(ReadOnlyOneByOne) {
@@ -191,16 +205,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
             auto& diskId =  it->first;
 
             for (auto val : {true, false}) {
-                NKikimrBlobStorage::TConfigRequest request;
-                request.SetIgnoreDegradedGroupsChecks(true);
-
-                NKikimrBlobStorage::TSetPDiskReadOnly* cmd = request.AddCommand()->MutableSetPDiskReadOnly();
-                auto pdiskId = cmd->MutableTargetPDiskId();
-                cmd->SetValue(val);
-                pdiskId->SetNodeId(diskId.NodeId);
-                pdiskId->SetPDiskId(diskId.PDiskId);
-
-                Invoke(env, request);
+                Invoke(env, CreateReadOnlyRequest(diskId.NodeId, diskId.PDiskId, val, true));
 
                 TInstant barrier = env.Runtime->GetClock() + TDuration::Minutes(5);
                 
@@ -233,6 +238,10 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
 
                 UNIT_ASSERT(gotServiceSetUpdate);
                 UNIT_ASSERT(gotConfigResponse);
+
+                if (val) {
+                    CheckDiskIsReadOnly(env, diskId);
+                }
 
                 // Wait for VSlot to become ready after PDisk restart due to ReadOnly status being changed.
                 env.Sim(TDuration::Seconds(30));
@@ -292,15 +301,8 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         // Restarting the owner of an already broken disk in a broken group must be allowed
         auto& [targetNodeId, targetPDiskId, unused1, unused2] = vdisks[0];
 
-        NKikimrBlobStorage::TConfigRequest request;
-
-        NKikimrBlobStorage::TSetPDiskReadOnly* cmd = request.AddCommand()->MutableSetPDiskReadOnly();
-        auto pdiskId = cmd->MutableTargetPDiskId();
-        cmd->SetValue(true);
-        pdiskId->SetNodeId(targetNodeId);
-        pdiskId->SetPDiskId(targetPDiskId);
-
-        auto response = env.Invoke(request);
+        auto response = SetReadOnly(env, targetNodeId, targetPDiskId, true);
+        
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
 
         // Wait until pdisk restarts and node warden sends "pdisk restarted" to BSC.
@@ -319,6 +321,8 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         });
 
         UNIT_ASSERT(gotPdiskReport);
+
+        CheckDiskIsReadOnly(env, {targetNodeId, targetPDiskId});
     }
 
     Y_UNIT_TEST(SetGoodDiskInBrokenGroupReadOnlyNotAllowed) {
@@ -352,17 +356,145 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         }
 
         // However making the owner of a single good disk ReadOnly must be prohibited
-        NKikimrBlobStorage::TConfigRequest request;
-
-        NKikimrBlobStorage::TSetPDiskReadOnly* cmd = request.AddCommand()->MutableSetPDiskReadOnly();
-        auto pdiskId = cmd->MutableTargetPDiskId();
-        cmd->SetValue(true);
-        pdiskId->SetNodeId(targetNodeId);
-        pdiskId->SetPDiskId(targetPDiskId);
-
-        auto response = env.Invoke(request);
+        auto response = SetReadOnly(env, targetNodeId, targetPDiskId, true);
 
         UNIT_ASSERT_C(!response.GetSuccess(), "ReadOnly should've been prohibited");
         UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "Disintegrated");
+    }
+
+    Y_UNIT_TEST(ReadOnlySlay) {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        env.EnableDonorMode();
+        env.CreateBoxAndPool(2, 1);
+        env.CommenceReplication();
+        env.Sim(TDuration::Seconds(30));
+
+        const ui32 groupId = env.GetGroups().front();
+
+        const TActorId edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        for (ui32 i = 0; i < 100; ++i) {
+            const TString buffer = TStringBuilder() << "blob number " << i;
+            TLogoBlobID id(1, 1, 1, 0, buffer.size(), 0);
+            runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max()));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        }
+
+        // Wait for sync and stuff.
+        env.Sim(TDuration::Seconds(3));
+
+        // Move slot out the disk.
+        auto info = env.GetGroupInfo(groupId);
+        const TVDiskID& vdiskId = info->GetVDiskId(0);
+        const TActorId& vdiskActorId = info->GetActorId(0);
+
+        ui32 targetNodeId, targetPDiskId;
+        std::tie(targetNodeId, targetPDiskId, std::ignore) = DecomposeVDiskServiceId(vdiskActorId);
+
+        {
+            auto response = SetReadOnly(env, targetNodeId, targetPDiskId, true);
+
+            UNIT_ASSERT_C(response.GetSuccess(), "ReadOnly should've been allowed");   
+        }
+        
+        env.SettlePDisk(vdiskActorId);
+        env.Sim(TDuration::Seconds(30));
+
+        // Find our donor and acceptor disks.
+        auto baseConfig = env.FetchBaseConfig();
+        bool found = false;
+        std::pair<ui32, ui32> donorPDiskId;
+        std::tuple<ui32, ui32, ui32> acceptor;
+        std::tuple<ui32, ui32, ui32> donorId;
+        for (const auto& slot : baseConfig.GetVSlot()) {
+            if (slot.DonorsSize()) {
+                UNIT_ASSERT(!found);
+                UNIT_ASSERT_VALUES_EQUAL(slot.DonorsSize(), 1);
+                const auto& donor = slot.GetDonors(0);
+                const auto& id = donor.GetVSlotId();
+                UNIT_ASSERT_VALUES_EQUAL(vdiskActorId, MakeBlobStorageVDiskID(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId()));
+                UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(donor.GetVDiskId()), vdiskId);
+                donorPDiskId = {id.GetNodeId(), id.GetPDiskId()};
+                donorId = {id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId()};
+                const auto& acceptorId = slot.GetVSlotId();
+                acceptor = {acceptorId.GetNodeId(), acceptorId.GetPDiskId(), acceptorId.GetVSlotId()};
+                found = true;
+            }
+        }
+        UNIT_ASSERT(found);
+
+        // Restart with formatting.
+        env.Cleanup();
+        const size_t num = env.PDiskMockStates.erase(donorPDiskId);
+        UNIT_ASSERT_VALUES_EQUAL(num, 1);
+        env.Initialize();
+
+        // Wait for initialization.
+        env.Sim(TDuration::Seconds(30));
+
+        // Ensure donor finished its job.
+        baseConfig = env.FetchBaseConfig();
+        found = false;
+        for (const auto& slot : baseConfig.GetVSlot()) {
+            const auto& id = slot.GetVSlotId();
+            if (std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId()) == acceptor) {
+                UNIT_ASSERT(!found);
+                UNIT_ASSERT_VALUES_EQUAL(slot.DonorsSize(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(slot.GetStatus(), "REPLICATING");
+                found = true;
+            }
+        }
+        UNIT_ASSERT(found);
+
+        // Ensure donor was not slain yet.
+        TInstant barrier = env.Runtime->GetClock() + TDuration::Minutes(10);
+        env.Runtime->Sim([&] { return env.Runtime->GetClock() <= barrier; }, [&](IEventHandle &witnessedEvent) {
+            switch (witnessedEvent.GetTypeRewrite()) {
+                case TEvBlobStorage::TEvControllerNodeReport::EventType: {
+                    UNIT_ASSERT(false);
+                    break;
+                }
+            }
+        });
+
+        // Now make disk not read-only so that it can slay donor vdisk.
+        {
+            auto response = SetReadOnly(env, targetNodeId, targetPDiskId, false);
+
+            UNIT_ASSERT_C(response.GetSuccess(), "ReadOnly should've been allowed");   
+        }
+
+        // Ensure donor vdisk was slain.
+        barrier = env.Runtime->GetClock() + TDuration::Minutes(10);
+        bool gotNodeReport = false;
+        env.Runtime->Sim([&] { return env.Runtime->GetClock() <= barrier && (!gotNodeReport); }, [&](IEventHandle &witnessedEvent) {
+            switch (witnessedEvent.GetTypeRewrite()) {
+                case TEvBlobStorage::TEvControllerNodeReport::EventType: {
+                    auto *nodeReport = witnessedEvent.Get<TEvBlobStorage::TEvControllerNodeReport>();
+                    if (nodeReport) {
+                        const auto& vdisks = nodeReport->Record.GetVDiskReports();
+                        if (vdisks.size() == 1) {
+                            auto& vdisk = vdisks[0];
+                            const auto& vslotId = vdisk.GetVSlotId();
+                            std::tuple<ui32, ui32, ui32> vdiskId = {vslotId.GetNodeId(), vslotId.GetPDiskId(), vslotId.GetVSlotId()};
+                            UNIT_ASSERT_VALUES_EQUAL(donorId, vdiskId);
+                            UNIT_ASSERT_EQUAL(vdisk.GetPhase(), NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED);
+                            gotNodeReport = true;
+                        }
+                    }
+                    break;
+                }
+            }
+        });
+
+        UNIT_ASSERT(gotNodeReport);
     }
 }

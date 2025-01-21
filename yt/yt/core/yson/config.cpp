@@ -9,7 +9,7 @@ void TProtobufInteropConfig::Register(TRegistrar registrar)
     registrar.Parameter("default_enum_yson_storage_type", &TThis::DefaultEnumYsonStorageType)
         .Default(EEnumYsonStorageType::String);
     registrar.Parameter("utf8_check", &TThis::Utf8Check)
-        .Default(EUtf8Check::Disable);
+        .Default(EUtf8Check::ThrowOnFail);
     registrar.Parameter("force_snake_case_names", &TThis::ForceSnakeCaseNames)
         .Default(false);
 }

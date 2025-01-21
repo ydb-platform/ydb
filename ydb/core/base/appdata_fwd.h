@@ -38,6 +38,7 @@ namespace NKikimrSharedCache {
 namespace NKikimrProto {
     class TKeyConfig;
     class TAuthConfig;
+    class TDataIntegrityTrailsConfig;
 
     namespace NFolderService {
         class TFolderServiceConfig;
@@ -63,6 +64,7 @@ namespace NKikimrConfig {
     class TAuditConfig;
     class TCompactionConfig;
     class TDomainsConfig;
+    class TSecurityConfig;
     class TBootstrap;
     class TAwsCompatibilityConfig;
     class TS3ProxyResolverConfig;
@@ -219,6 +221,7 @@ struct TAppData {
     NKikimrConfig::TAuditConfig& AuditConfig;
     NKikimrConfig::TCompactionConfig& CompactionConfig;
     NKikimrConfig::TDomainsConfig& DomainsConfig;
+    NKikimrConfig::TSecurityConfig& SecurityConfig;
     NKikimrConfig::TBootstrap& BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig& AwsCompatibilityConfig;
     NKikimrConfig::TS3ProxyResolverConfig& S3ProxyResolverConfig;
@@ -228,6 +231,7 @@ struct TAppData {
     NKikimrConfig::TMetadataCacheConfig& MetadataCacheConfig;
     NKikimrConfig::TMemoryControllerConfig& MemoryControllerConfig;
     NKikimrReplication::TReplicationDefaults& ReplicationConfig;
+    NKikimrProto::TDataIntegrityTrailsConfig& DataIntegrityTrailsConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request

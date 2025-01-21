@@ -28,6 +28,8 @@ else:
     from typing_extensions import TypeAlias
 
 if TYPE_CHECKING:
+    from _typeshed import HasFileno
+
     from .._core._synchronization import CapacityLimiter, Event, Lock, Semaphore
     from .._core._tasks import CancelScope
     from .._core._testing import TaskInfo
@@ -333,12 +335,12 @@ class AsyncBackend(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    async def wait_socket_readable(cls, sock: socket) -> None:
+    async def wait_readable(cls, obj: HasFileno | int) -> None:
         pass
 
     @classmethod
     @abstractmethod
-    async def wait_socket_writable(cls, sock: socket) -> None:
+    async def wait_writable(cls, obj: HasFileno | int) -> None:
         pass
 
     @classmethod

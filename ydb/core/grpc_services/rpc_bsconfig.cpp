@@ -109,7 +109,7 @@ public:
         } catch (const std::exception&) {
             return false; // assuming no distconf enabled in this config
         }
-        return newConfig.HasSelfManagementConfig() && newConfig.GetSelfManagementConfig().GetEnabled();
+        return newConfig.GetSelfManagementConfig().GetEnabled();
     }
 };
 

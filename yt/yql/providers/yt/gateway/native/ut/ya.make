@@ -1,5 +1,3 @@
-IF (NOT OPENSOURCE)
-
 UNITTEST()
 
 SRCS(
@@ -11,7 +9,7 @@ PEERDIR(
     yt/yql/providers/yt/gateway/file
     yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/llvm14
-    yql/essentials/core/ut_common
+    yt/yql/providers/yt/lib/ut_common
     library/cpp/testing/mock_server
     library/cpp/testing/common
     yql/essentials/public/udf/service/terminate_policy
@@ -23,6 +21,4 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-
-ENDIF()
 

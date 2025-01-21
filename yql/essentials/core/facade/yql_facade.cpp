@@ -1918,6 +1918,10 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         resultProviderDataSources.push_back(TString(DqProviderName));
     }
 
+    if (providerNames.contains(PureProviderName)) {
+        resultProviderDataSources.push_back(TString(PureProviderName));
+    }
+
     if (!resultProviderDataSources.empty())
     {
         auto resultFormat = ResultFormat_;

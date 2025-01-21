@@ -732,7 +732,7 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath->PathId);
 
         domainInfo->IncPathsInside();
-        parentPath->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;

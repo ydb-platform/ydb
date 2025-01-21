@@ -32,5 +32,7 @@ namespace NTable {
         THashMap<ui32, float> NormalizedFreeSpaceShareByChannel;
     };
 
+    using TDbRuntimeStats = TTableRuntimeStats;
+
 }
 }

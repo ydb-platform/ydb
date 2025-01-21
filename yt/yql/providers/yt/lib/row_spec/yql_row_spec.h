@@ -50,6 +50,7 @@ struct TYqlRowSpecInfo: public TThrRefBase {
     TString ToYsonString() const;
     void FillCodecNode(NYT::TNode& attrs, const NCommon::TStructMemberMapper& mapper = {}) const;
     void FillAttrNode(NYT::TNode& attrs, ui64 nativeTypeCompatibility, bool useCompactForm) const;
+    void FillColumnOrder(NYT::TNode& attr) const;
     NNodes::TExprBase ToExprNode(TExprContext& ctx, const TPositionHandle& pos) const;
 
     bool IsSorted() const {
@@ -129,6 +130,7 @@ private:
     bool ParsePatched(const NYT::TNode& rowSpecAttr, const THashMap<TString, TString>& attrs, TExprContext& ctx, const TPositionHandle& pos);
     bool ParseFull(const NYT::TNode& rowSpecAttr, const THashMap<TString, TString>& attrs, TExprContext& ctx, const TPositionHandle& pos);
     bool ParseType(const NYT::TNode& rowSpecAttr, TExprContext& ctx, const TPositionHandle& pos);
+    void ParseColumnOrder(const NYT::TNode& rowSpecAttr);
     bool ParseSort(const NYT::TNode& rowSpecAttr, TExprContext& ctx, const TPositionHandle& pos);
     void ParseFlags(const NYT::TNode& rowSpecAttr);
     void ParseConstraints(const NYT::TNode& rowSpecAttr);

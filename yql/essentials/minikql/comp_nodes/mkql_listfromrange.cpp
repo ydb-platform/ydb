@@ -279,19 +279,10 @@ public:
         const auto timezone = TzDate ? GetterForTimezone(context, startv, block) : ConstantInt::get(Type::getInt16Ty(context), 0);
 
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TListFromRangeWrapper::MakeList));
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto signature = FunctionType::get(valueType, {ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false);
-            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            const auto output = CallInst::Create(signature, creator, {ctx.Ctx, start, end, step, timezone}, "output", block);
-            return output;
-        } else {
-            const auto place = new AllocaInst(valueType, 0U, "place", block);
-            const auto signature = FunctionType::get(Type::getVoidTy(context), {place->getType(), ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false);
-            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            CallInst::Create(signature, creator, {place, ctx.Ctx, start, end, step, timezone}, "", block);
-            const auto output = new LoadInst(valueType, place, "output", block);
-            return output;
-        }
+        const auto signature = FunctionType::get(valueType, {ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false);
+        const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
+        const auto output = CallInst::Create(signature, creator, {ctx.Ctx, start, end, step, timezone}, "output", block);
+        return output;
     }
 #endif
 private:

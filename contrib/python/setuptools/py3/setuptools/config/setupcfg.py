@@ -15,46 +15,40 @@ import contextlib
 import functools
 import os
 from collections import defaultdict
-from functools import partial
-from functools import wraps
-from typing import (
-    TYPE_CHECKING,
-    Callable,
-    Any,
-    Dict,
-    Generic,
-    Iterable,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from collections.abc import Iterable, Iterator
+from functools import partial, wraps
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, TypeVar, cast
+
+from packaging.markers import default_environment as marker_env
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.specifiers import SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 from .._path import StrPath
 from ..errors import FileError, OptionError
-from ..extern.packaging.markers import default_environment as marker_env
-from ..extern.packaging.requirements import InvalidRequirement, Requirement
-from ..extern.packaging.specifiers import SpecifierSet
-from ..extern.packaging.version import InvalidVersion, Version
 from ..warnings import SetuptoolsDeprecationWarning
 from . import expand
 
 if TYPE_CHECKING:
-    from distutils.dist import DistributionMetadata
+    from typing_extensions import TypeAlias
 
     from setuptools.dist import Distribution
 
-SingleCommandOptions = Dict["str", Tuple["str", Any]]
+    from distutils.dist import DistributionMetadata
+
+SingleCommandOptions: TypeAlias = dict[str, tuple[str, Any]]
 """Dict that associate the name of the options of a particular command to a
 tuple. The first element of the tuple indicates the origin of the option value
 (e.g. the name of the configuration file where it was read from),
 while the second element of the tuple is the option value itself
 """
-AllCommandOptions = Dict["str", SingleCommandOptions]  # cmd name => its options
-Target = TypeVar("Target", bound=Union["Distribution", "DistributionMetadata"])
+AllCommandOptions: TypeAlias = dict[str, SingleCommandOptions]
+"""cmd name => its options"""
+Target = TypeVar("Target", "Distribution", "DistributionMetadata")
 
 
 def read_configuration(
-    filepath: StrPath, find_others=False, ignore_option_errors=False
+    filepath: StrPath, find_others: bool = False, ignore_option_errors: bool = False
 ) -> dict:
     """Read given configuration file and returns options from it as a dict.
 
@@ -93,7 +87,7 @@ def _apply(
     filepath: StrPath,
     other_files: Iterable[StrPath] = (),
     ignore_option_errors: bool = False,
-) -> tuple[ConfigHandler, ...]:
+) -> tuple[ConfigMetadataHandler, ConfigOptionsHandler]:
     """Read configuration from ``filepath`` and applies to the ``dist`` object."""
     from setuptools.dist import _Distribution
 
@@ -107,7 +101,8 @@ def _apply(
     filenames = [*other_files, filepath]
 
     try:
-        _Distribution.parse_config_files(dist, filenames=filenames)  # type: ignore[arg-type] # TODO: fix in distutils stubs
+        # TODO: Temporary cast until mypy 1.12 is released with upstream fixes from typeshed
+        _Distribution.parse_config_files(dist, filenames=cast(list[str], filenames))
         handlers = parse_configuration(
             dist, dist.command_options, ignore_option_errors=ignore_option_errors
         )
@@ -118,7 +113,7 @@ def _apply(
     return handlers
 
 
-def _get_option(target_obj: Target, key: str):
+def _get_option(target_obj: Distribution | DistributionMetadata, key: str):
     """
     Given a target object and option key, get that option from
     the target object, either through a get_{key} method or
@@ -130,10 +125,14 @@ def _get_option(target_obj: Target, key: str):
     return getter()
 
 
-def configuration_to_dict(handlers: tuple[ConfigHandler, ...]) -> dict:
+def configuration_to_dict(
+    handlers: Iterable[
+        ConfigHandler[Distribution] | ConfigHandler[DistributionMetadata]
+    ],
+) -> dict:
     """Returns configuration data gathered by given handlers as a dict.
 
-    :param list[ConfigHandler] handlers: Handlers list,
+    :param Iterable[ConfigHandler] handlers: Handlers list,
         usually from parse_configuration()
 
     :rtype: dict
@@ -151,7 +150,7 @@ def configuration_to_dict(handlers: tuple[ConfigHandler, ...]) -> dict:
 def parse_configuration(
     distribution: Distribution,
     command_options: AllCommandOptions,
-    ignore_option_errors=False,
+    ignore_option_errors: bool = False,
 ) -> tuple[ConfigMetadataHandler, ConfigOptionsHandler]:
     """Performs additional parsing of configuration options
     for a distribution.
@@ -235,7 +234,7 @@ class ConfigHandler(Generic[Target]):
 
     """
 
-    aliases: dict[str, str] = {}
+    aliases: ClassVar[dict[str, str]] = {}
     """Options aliases.
     For compatibility with various packages. E.g.: d2to1 and pbr.
     Note: `-` in keys is replaced with `_` by config parser.
@@ -248,9 +247,9 @@ class ConfigHandler(Generic[Target]):
         options: AllCommandOptions,
         ignore_option_errors,
         ensure_discovered: expand.EnsurePackagesDiscovered,
-    ):
+    ) -> None:
         self.ignore_option_errors = ignore_option_errors
-        self.target_obj = target_obj
+        self.target_obj: Target = target_obj
         self.sections = dict(self._section_options(options))
         self.set_options: list[str] = []
         self.ensure_discovered = ensure_discovered
@@ -260,9 +259,11 @@ class ConfigHandler(Generic[Target]):
         """
 
     @classmethod
-    def _section_options(cls, options: AllCommandOptions):
+    def _section_options(
+        cls, options: AllCommandOptions
+    ) -> Iterator[tuple[str, SingleCommandOptions]]:
         for full_name, value in options.items():
-            pre, sep, name = full_name.partition(cls.section_prefix)
+            pre, _sep, name = full_name.partition(cls.section_prefix)
             if pre:
                 continue
             yield name.lstrip('.'), value
@@ -274,7 +275,7 @@ class ConfigHandler(Generic[Target]):
             '%s must provide .parsers property' % self.__class__.__name__
         )
 
-    def __setitem__(self, option_name, value):
+    def __setitem__(self, option_name, value) -> None:
         target_obj = self.target_obj
 
         # Translate alias into real name.
@@ -295,7 +296,7 @@ class ConfigHandler(Generic[Target]):
             return
 
         simple_setter = functools.partial(target_obj.__setattr__, option_name)
-        setter = getattr(target_obj, 'set_%s' % option_name, simple_setter)
+        setter = getattr(target_obj, f"set_{option_name}", simple_setter)
         setter(parsed)
 
         self.set_options.append(option_name)
@@ -363,14 +364,14 @@ class ConfigHandler(Generic[Target]):
             exclude_directive = 'file:'
             if value.startswith(exclude_directive):
                 raise ValueError(
-                    'Only strings are accepted for the {0} field, '
-                    'files are not accepted'.format(key)
+                    f'Only strings are accepted for the {key} field, '
+                    'files are not accepted'
                 )
             return value
 
         return parser
 
-    def _parse_file(self, value, root_dir: StrPath):
+    def _parse_file(self, value, root_dir: StrPath | None):
         """Represents value as a string, allowing including text
         from nearest files using `file:` directive.
 
@@ -464,7 +465,7 @@ class ConfigHandler(Generic[Target]):
         parser = (lambda _, v: values_parser(v)) if values_parser else (lambda _, v: v)
         return cls._parse_section_to_dict_with_key(section_options, parser)
 
-    def parse_section(self, section_options):
+    def parse_section(self, section_options) -> None:
         """Parses configuration file section.
 
         :param dict section_options:
@@ -482,12 +483,12 @@ class ConfigHandler(Generic[Target]):
         for section_name, section_options in self.sections.items():
             method_postfix = ''
             if section_name:  # [section.option] variant
-                method_postfix = '_%s' % section_name
+                method_postfix = f"_{section_name}"
 
             section_parser_method: Callable | None = getattr(
                 self,
                 # Dots in section names are translated into dunderscores.
-                ('parse_section%s' % method_postfix).replace('.', '__'),
+                f'parse_section{method_postfix}'.replace('.', '__'),
                 None,
             )
 
@@ -538,8 +539,8 @@ class ConfigMetadataHandler(ConfigHandler["DistributionMetadata"]):
         ignore_option_errors: bool,
         ensure_discovered: expand.EnsurePackagesDiscovered,
         package_dir: dict | None = None,
-        root_dir: StrPath = os.curdir,
-    ):
+        root_dir: StrPath | None = os.curdir,
+    ) -> None:
         super().__init__(target_obj, options, ignore_option_errors, ensure_discovered)
         self.package_dir = package_dir
         self.root_dir = root_dir
@@ -601,7 +602,7 @@ class ConfigOptionsHandler(ConfigHandler["Distribution"]):
         options: AllCommandOptions,
         ignore_option_errors: bool,
         ensure_discovered: expand.EnsurePackagesDiscovered,
-    ):
+    ) -> None:
         super().__init__(target_obj, options, ignore_option_errors, ensure_discovered)
         self.root_dir = target_obj.src_root
         self.package_dir: dict[str, str] = {}  # To be filled by `find_packages`
@@ -646,7 +647,6 @@ class ConfigOptionsHandler(ConfigHandler["Distribution"]):
                 self._parse_requirements_list, "install_requires"
             ),
             'setup_requires': self._parse_list_semicolon,
-            'tests_require': self._parse_list_semicolon,
             'packages': self._parse_packages,
             'entry_points': self._parse_file_in_root,
             'py_modules': parse_list,
@@ -693,10 +693,7 @@ class ConfigOptionsHandler(ConfigHandler["Distribution"]):
         section_data = self._parse_section_to_dict(section_options, self._parse_list)
 
         valid_keys = ['where', 'include', 'exclude']
-
-        find_kwargs = dict([
-            (k, v) for k, v in section_data.items() if k in valid_keys and v
-        ])
+        find_kwargs = {k: v for k, v in section_data.items() if k in valid_keys and v}
 
         where = find_kwargs.get('where')
         if where is not None:
@@ -704,7 +701,7 @@ class ConfigOptionsHandler(ConfigHandler["Distribution"]):
 
         return find_kwargs
 
-    def parse_section_entry_points(self, section_options):
+    def parse_section_entry_points(self, section_options) -> None:
         """Parses `entry_points` configuration file section.
 
         :param dict section_options:
@@ -716,21 +713,21 @@ class ConfigOptionsHandler(ConfigHandler["Distribution"]):
         package_data = self._parse_section_to_dict(section_options, self._parse_list)
         return expand.canonic_package_data(package_data)
 
-    def parse_section_package_data(self, section_options):
+    def parse_section_package_data(self, section_options) -> None:
         """Parses `package_data` configuration file section.
 
         :param dict section_options:
         """
         self['package_data'] = self._parse_package_data(section_options)
 
-    def parse_section_exclude_package_data(self, section_options):
+    def parse_section_exclude_package_data(self, section_options) -> None:
         """Parses `exclude_package_data` configuration file section.
 
         :param dict section_options:
         """
         self['exclude_package_data'] = self._parse_package_data(section_options)
 
-    def parse_section_extras_require(self, section_options):
+    def parse_section_extras_require(self, section_options) -> None:
         """Parses `extras_require` configuration file section.
 
         :param dict section_options:
@@ -742,7 +739,7 @@ class ConfigOptionsHandler(ConfigHandler["Distribution"]):
 
         self['extras_require'] = parsed
 
-    def parse_section_data_files(self, section_options):
+    def parse_section_data_files(self, section_options) -> None:
         """Parses `data_files` configuration file section.
 
         :param dict section_options:

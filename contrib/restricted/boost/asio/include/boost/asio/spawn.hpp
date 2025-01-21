@@ -146,6 +146,7 @@ private:
   }
 };
 
+
 template <typename T>
 struct spawn_signature
 {

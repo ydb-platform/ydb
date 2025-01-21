@@ -276,31 +276,29 @@ void TClientBase::Concatenate(
 
 TRichYPath TClientBase::CanonizeYPath(const TRichYPath& path)
 {
-    return NRawClient::CanonizeYPath(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, path);
+    return NRawClient::CanonizeYPath(RawClient_, path);
 }
 
 TVector<TTableColumnarStatistics> TClientBase::GetTableColumnarStatistics(
     const TVector<TRichYPath>& paths,
     const TGetTableColumnarStatisticsOptions& options)
 {
-    return NRawClient::GetTableColumnarStatistics(
+    return RequestWithRetry<TVector<TTableColumnarStatistics>>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        Context_,
-        TransactionId_,
-        paths,
-        options);
+        [this, &paths, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetTableColumnarStatistics(TransactionId_, paths, options);
+        });
 }
 
 TMultiTablePartitions TClientBase::GetTablePartitions(
     const TVector<TRichYPath>& paths,
     const TGetTablePartitionsOptions& options)
 {
-    return NRawClient::GetTablePartitions(
+    return RequestWithRetry<TMultiTablePartitions>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        Context_,
-        TransactionId_,
-        paths,
-        options);
+        [this, &paths, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetTablePartitions(TransactionId_, paths, options);
+        });
 }
 
 TMaybe<TYPath> TClientBase::GetFileFromCache(
@@ -308,7 +306,11 @@ TMaybe<TYPath> TClientBase::GetFileFromCache(
     const TYPath& cachePath,
     const TGetFileFromCacheOptions& options)
 {
-    return NRawClient::GetFileFromCache(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, md5Signature, cachePath, options);
+    return RequestWithRetry<TMaybe<TYPath>>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &md5Signature, &cachePath, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetFileFromCache(TransactionId_, md5Signature, cachePath, options);
+        });
 }
 
 TYPath TClientBase::PutFileToCache(
@@ -317,7 +319,11 @@ TYPath TClientBase::PutFileToCache(
     const TYPath& cachePath,
     const TPutFileToCacheOptions& options)
 {
-    return NRawClient::PutFileToCache(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, filePath, md5Signature, cachePath, options);
+    return RequestWithRetry<TYPath>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &filePath, &md5Signature, &cachePath, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->PutFileToCache(TransactionId_, filePath, md5Signature, cachePath, options);
+        });
 }
 
 IFileReaderPtr TClientBase::CreateBlobTableReader(
@@ -739,7 +745,11 @@ void TClientBase::AlterTable(
     const TYPath& path,
     const TAlterTableOptions& options)
 {
-    NRawClient::AlterTable(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, TransactionId_, path, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &options] (TMutationId& mutationId) {
+            RawClient_->AlterTable(mutationId, TransactionId_, path, options);
+        });
 }
 
 ::TIntrusivePtr<TClientReader> TClientBase::CreateClientReader(
@@ -930,7 +940,7 @@ TTransaction::TTransaction(
     : TClientBase(rawClient, context, parentTransactionId, parentClient->GetRetryPolicy())
     , TransactionPinger_(parentClient->GetTransactionPinger())
     , PingableTx_(
-        MakeHolder<TPingableTransaction>(
+        std::make_unique<TPingableTransaction>(
             rawClient,
             parentClient->GetRetryPolicy(),
             context,
@@ -1005,7 +1015,7 @@ void TTransaction::Ping()
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this] (TMutationId /*mutationId*/) {
-            RawClient_->PingTx(TransactionId_);
+            RawClient_->PingTransaction(TransactionId_);
         });
 }
 
@@ -1087,7 +1097,11 @@ void TClient::FreezeTable(
     const TFreezeTableOptions& options)
 {
     CheckShutdown();
-    NRawClient::FreezeTable(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, path, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &options] (TMutationId /*mutationId*/) {
+            RawClient_->FreezeTable(path, options);
+        });
 }
 
 void TClient::UnfreezeTable(
@@ -1095,7 +1109,11 @@ void TClient::UnfreezeTable(
     const TUnfreezeTableOptions& options)
 {
     CheckShutdown();
-    NRawClient::UnfreezeTable(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, path, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &options] (TMutationId /*mutationId*/) {
+            RawClient_->UnfreezeTable(path, options);
+        });
 }
 
 void TClient::ReshardTable(
@@ -1143,7 +1161,11 @@ void TClient::DeleteRows(
     const TDeleteRowsOptions& options)
 {
     CheckShutdown();
-    return NRawClient::DeleteRows(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, path, keys, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
+            RawClient_->DeleteRows(path, keys, options);
+        });
 }
 
 void TClient::TrimRows(
@@ -1188,7 +1210,11 @@ TNode::TListType TClient::SelectRows(
 void TClient::AlterTableReplica(const TReplicaId& replicaId, const TAlterTableReplicaOptions& options)
 {
     CheckShutdown();
-    NRawClient::AlterTableReplica(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, replicaId, options);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &replicaId, &options] (TMutationId& mutationId) {
+            RawClient_->AlterTableReplica(mutationId, replicaId, options);
+        });
 }
 
 ui64 TClient::GenerateTimestamp()
@@ -1207,7 +1233,7 @@ TAuthorizationInfo TClient::WhoAmI()
     return RequestWithRetry<TAuthorizationInfo>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this] (TMutationId /*mutationId*/) {
-            return RawClient_->WhoAmI();
+            return NRawClient::WhoAmI(Context_);
         });
 }
 
@@ -1326,11 +1352,27 @@ TNode::TListType TClient::SkyShareTable(
     const TSkyShareTableOptions& options)
 {
     CheckShutdown();
-    return NRawClient::SkyShareTable(
-        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        Context_,
-        tablePaths,
-        options);
+
+    // As documented at https://wiki.yandex-team.ru/yt/userdoc/blob_tables/#shag3.sozdajomrazdachu
+    // first request returns HTTP status code 202 (Accepted). And we need retrying until we have 200 (OK).
+    NHttpClient::IHttpResponsePtr response;
+    do {
+        response = RequestWithRetry<NHttpClient::IHttpResponsePtr>(
+            ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+            [this, &tablePaths, &options] (TMutationId /*mutationId*/) {
+                return NRawClient::SkyShareTable(Context_, tablePaths, options);
+            });
+        TWaitProxy::Get()->Sleep(TDuration::Seconds(5));
+    } while (response->GetStatusCode() != 200);
+
+    if (options.KeyColumns_) {
+        return NodeFromJsonString(response->GetResponse())["torrents"].AsList();
+    } else {
+        TNode torrent;
+        torrent["key"] = TNode::CreateList();
+        torrent["rbtorrent"] = response->GetResponse();
+        return TNode::TListType{torrent};
+    }
 }
 
 TCheckPermissionResponse TClient::CheckPermission(
@@ -1340,7 +1382,11 @@ TCheckPermissionResponse TClient::CheckPermission(
     const TCheckPermissionOptions& options)
 {
     CheckShutdown();
-    return NRawClient::CheckPermission(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, user, permission, path, options);
+    return RequestWithRetry<TCheckPermissionResponse>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &user, &permission, &path, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->CheckPermission(user, permission, path, options);
+        });
 }
 
 TVector<TTabletInfo> TClient::GetTabletInfos(
@@ -1349,9 +1395,12 @@ TVector<TTabletInfo> TClient::GetTabletInfos(
     const TGetTabletInfosOptions& options)
 {
     CheckShutdown();
-    return NRawClient::GetTabletInfos(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, path, tabletIndexes, options);
+    return RequestWithRetry<TVector<TTabletInfo>>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &tabletIndexes, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetTabletInfos(path, tabletIndexes, options);
+        });
 }
-
 
 void TClient::SuspendOperation(
     const TOperationId& operationId,
@@ -1385,7 +1434,7 @@ TYtPoller& TClient::GetYtPoller()
         // We don't use current client and create new client because YtPoller_ might use
         // this client during current client shutdown.
         // That might lead to incrementing of current client refcount and double delete of current client object.
-        YtPoller_ = MakeHolder<TYtPoller>(Context_, ClientRetryPolicy_);
+        YtPoller_ = std::make_unique<TYtPoller>(Context_, ClientRetryPolicy_);
     }
     return *YtPoller_;
 }

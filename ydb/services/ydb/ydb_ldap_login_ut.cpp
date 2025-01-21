@@ -129,7 +129,7 @@ private:
         authConfig->SetUseBlackBox(false);
         authConfig->SetUseLoginProvider(true);
         authConfig->SetEnableLoginAuthentication(isLoginAuthenticationEnabled);
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
         initLdapSettings(authConfig->MutableLdapAuthentication(), LdapPort, CaCertificateFile);
@@ -412,7 +412,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + incorrectLdapDomain, .Password = password});
         TLoginClientConnection loginConnection(InitLdapSettings);
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Invalid user");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Cannot find user: ldapuser@ldap.domain");
 
         loginConnection.Stop();
     }

@@ -11,27 +11,6 @@ extern "C" {
 
 namespace NKikimr {
 namespace NKqp {
-
-    TString GetConfigProtoWithName(const TString & tierName) {
-        return TStringBuilder() << "Name : \"" << tierName << "\"\n" <<
-        R"(
-            ObjectStorage : {
-                Endpoint: "fake"
-                Bucket: "fake"
-                SecretableAccessKey: {
-                    Value: {
-                        Data: "secretAccessKey"
-                    }
-                }
-                SecretableSecretKey: {
-                    Value: {
-                        Data: "fakeSecret"
-                    }
-                }
-            }
-        )";
-    }
-
     using namespace NYdb;
 
     TTestHelper::TTestHelper(const TKikimrSettings& settings) {
@@ -39,9 +18,13 @@ namespace NKqp {
         if (!kikimrSettings.FeatureFlags.HasEnableTieringInColumnShard()) {
             kikimrSettings.SetEnableTieringInColumnShard(true);
         }
+        if (!kikimrSettings.FeatureFlags.HasEnableExternalDataSources()) {
+            kikimrSettings.SetEnableExternalDataSources(true);
+        }
 
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
-        TableClient = std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient());
+        TableClient =
+            std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));
         Session = std::make_unique<NYdb::NTable::TSession>(TableClient->CreateSession().GetValueSync().GetSession());
     }
 
@@ -64,7 +47,18 @@ namespace NKqp {
     }
 
     void TTestHelper::CreateTier(const TString& tierName) {
-        auto result = GetSession().ExecuteSchemeQuery("CREATE OBJECT " + tierName + " (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName(tierName) + "`").GetValueSync();
+        auto result = GetSession().ExecuteSchemeQuery(R"(
+            UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);
+            UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
+            CREATE EXTERNAL DATA SOURCE `)" + tierName + R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="http://fake.fake/fake",
+                AUTH_METHOD="AWS",
+                AWS_ACCESS_KEY_ID_SECRET_NAME="accessKey",
+                AWS_SECRET_ACCESS_KEY_SECRET_NAME="secretKey",
+                AWS_REGION="ru-central1"
+        );
+        )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 

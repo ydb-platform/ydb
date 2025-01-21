@@ -95,6 +95,12 @@ struct TFixture : public TPqIoTestFixture {
         UNIT_ASSERT_EQUAL(eventHolder->Cookie, expectedGeneration);
     }
 
+    void ExpectNoSession(NActors::TActorId rowDispatcherId, ui64 expectedGeneration = 1) {
+        auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvNoSession>(rowDispatcherId, TDuration::Seconds(5));
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+        UNIT_ASSERT(eventHolder->Cookie == expectedGeneration);
+    }
+
     void ExpectGetNextBatch(NActors::TActorId rowDispatcherId, ui64 partitionId = PartitionId1) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
@@ -239,9 +245,9 @@ struct TFixture : public TPqIoTestFixture {
         });
     }
 
-    void MockUndelivered(NActors::TActorId rowDispatcherId, ui64 generation = 1) {
+    void MockUndelivered(NActors::TActorId rowDispatcherId, ui64 generation = 0, NActors::TEvents::TEvUndelivered::EReason reason = NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
         CaSetup->Execute([&](TFakeActor& actor) {
-            auto event = new NActors::TEvents::TEvUndelivered(0, NActors::TEvents::TEvUndelivered::ReasonActorUnknown);
+            auto event = new NActors::TEvents::TEvUndelivered(0, reason);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
@@ -290,6 +296,13 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     Y_UNIT_TEST_F(TestReadFromTopic2, TFixture) {
         StartSession(Source1);
         ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1);
+    }
+
+    Y_UNIT_TEST_F(IgnoreUndeliveredWithWrongGeneration, TFixture) {
+        StartSession(Source1);
+        ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1);
+        MockUndelivered(RowDispatcher1, NActors::TEvents::TEvUndelivered::Disconnected);
+        ProcessSomeMessages(2, {Message3}, RowDispatcher1);
     }
 
     Y_UNIT_TEST_F(SessionError, TFixture) {
@@ -403,7 +416,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         ProcessSomeMessages(4, {Message4}, RowDispatcher2, UVPairParser, 2);
 
         MockHeartbeat(RowDispatcher1, 1);       // old generation
-        ExpectStopSession(RowDispatcher1);
+        ExpectNoSession(RowDispatcher1, 1);
 
         // change active Coordinator 
         MockCoordinatorChanged(Coordinator1Id);
@@ -442,7 +455,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1);
         MockDisconnected();
         MockConnected();
-        MockUndelivered(RowDispatcher1);
+        MockUndelivered(RowDispatcher1, 1);
 
         auto req = ExpectCoordinatorRequest(Coordinator1Id);
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);
@@ -516,12 +529,13 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
 
         MockCoordinatorChanged(Coordinator2Id);
         auto req = ExpectCoordinatorRequest(Coordinator2Id);
-        MockUndelivered(RowDispatcher1);
+        MockUndelivered(RowDispatcher1, 1);
         auto req2 = ExpectCoordinatorRequest(Coordinator2Id);
 
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req2->Cookie);
         ExpectStartSession({{PartitionId1, 2}}, RowDispatcher1, 2);
+
         MockAck(RowDispatcher1);
     }
 }

@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 704);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 728);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), 0);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetImmediateTxCompleted(), 1);
         }
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 752);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 800);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), 0);
         }
 
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 2000);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 196096);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 212096);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), 0);
         }
 
@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 5);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 4232);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 4312);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), 0);
         }
 

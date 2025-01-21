@@ -102,6 +102,7 @@
                                                                                                     "f1"
                                                                                                 ],
                                                                                                 "Node Type": "TableLookupJoin",
+                                                                                                "Path": "/Root/postgres_jointest/join4.test_plan/zt1",
                                                                                                 "PlanNodeId": 3,
                                                                                                 "PlanNodeType": "Connection",
                                                                                                 "Plans": [
@@ -115,6 +116,7 @@
                                                                                                                     {
                                                                                                                         "Inputs": [],
                                                                                                                         "Name": "TableFullScan",
+                                                                                                                        "Path": "/Root/postgres_jointest/join4.test_plan/zt3",
                                                                                                                         "ReadColumns": [
                                                                                                                             "f3"
                                                                                                                         ],
@@ -163,6 +165,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TablePointLookup",
+                                                                        "Path": "/Root/postgres_jointest/join4.test_plan/zt2",
                                                                         "ReadColumns": [
                                                                             "f2"
                                                                         ],

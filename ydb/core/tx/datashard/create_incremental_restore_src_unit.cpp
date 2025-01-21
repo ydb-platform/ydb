@@ -61,8 +61,8 @@ protected:
         const ::NKikimrSchemeOp::TRestoreIncrementalBackup& incrBackup,
         ui64 txId)
     {
-        TPathId tablePathId = PathIdFromPathId(incrBackup.GetSrcPathId());
-        TPathId dstTablePathId = PathIdFromPathId(incrBackup.GetDstPathId());
+        TPathId tablePathId = TPathId::FromProto(incrBackup.GetSrcPathId());
+        TPathId dstTablePathId = TPathId::FromProto(incrBackup.GetDstPathId());
         const ui64 tableId = incrBackup.GetSrcPathId().GetLocalId();
 
         return CreateIncrementalRestoreScan(

@@ -83,8 +83,8 @@ public:
     static void Register(TRegistrar registrar);
 
 protected:
-    virtual TFuture<NApi::ITableWriterPtr> CreateTableWriter(
-        const ICommandContextPtr& context) const;
+    virtual NApi::ITableWriterPtr CreateTableWriter(
+        const ICommandContextPtr& context);
 
     void DoExecuteImpl(const ICommandContextPtr& context);
 

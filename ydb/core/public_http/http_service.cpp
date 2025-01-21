@@ -57,6 +57,7 @@ namespace {
             Router.RegisterHandler(HTTP_METHOD_GET,  "/api/fq/v1/queries/{query_id}/status", CreateHttpHandler<TJsonGetQueryStatus>());
             Router.RegisterHandler(HTTP_METHOD_GET,  "/api/fq/v1/queries/{query_id}/results/{result_set_index}", CreateHttpHandler<TJsonGetResultData>());
             Router.RegisterHandler(HTTP_METHOD_POST, "/api/fq/v1/queries/{query_id}/stop", CreateHttpHandler<TJsonStopQuery>());
+            Router.RegisterHandler(HTTP_METHOD_POST, "/api/fq/v1/queries/{query_id}/start", CreateHttpHandler<TJsonStartQuery>());
         }
 
         void Bootstrap(const TActorContext& ctx) {

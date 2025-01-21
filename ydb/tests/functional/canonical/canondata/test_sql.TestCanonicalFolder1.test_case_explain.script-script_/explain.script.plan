@@ -114,6 +114,7 @@
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
+                                                                "Path": "/local/base_explain_script_script/ScriptingTest",
                                                                 "ReadColumns": null,
                                                                 "ReadRanges": [
                                                                     "Key (-\u221e, +\u221e)"
@@ -238,6 +239,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/base_explain_script_script/ScriptingTest",
                                                         "ReadColumns": null,
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
@@ -346,6 +348,7 @@
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
+                                                                "Path": "/local/base_explain_script_script/ScriptingTest",
                                                                 "ReadColumns": null,
                                                                 "ReadRanges": [
                                                                     "Key (-\u221e, +\u221e)"
@@ -470,6 +473,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/base_explain_script_script/ScriptingTest",
                                                         "ReadColumns": null,
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
@@ -529,6 +533,7 @@
                                             }
                                         ],
                                         "Name": "Upsert",
+                                        "Path": "/local/base_explain_script_script/ScriptingTest",
                                         "Table": "base_explain_script_script/ScriptingTest"
                                     },
                                     {
@@ -584,6 +589,7 @@
                                             }
                                         ],
                                         "Name": "Upsert",
+                                        "Path": "/local/base_explain_script_script/ScriptingTest",
                                         "Table": "base_explain_script_script/ScriptingTest"
                                     },
                                     {

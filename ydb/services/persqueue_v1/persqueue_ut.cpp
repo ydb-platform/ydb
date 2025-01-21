@@ -4189,6 +4189,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
                 checkUserAgentCounters(monPort, "BytesReadByUserAgent", "pqv1", userAgent, "", consumerPath);
             }
+            Monitoring.Stop();
         };
 
         testWriteStat("some@random@consumer", "some@random@consumer", "some/random/consumer");

@@ -87,7 +87,7 @@ enum class EYtSettingType: ui64 {
     ReduceBy                 /* "reduceBy" */,                 // hybrid supported
     ReduceFilterBy           /* "reduceFilterBy" */,
     ForceTransform           /* "forceTransform" */,           // hybrid supported
-    TransformColGroups       /* "transformColGroups" */,       // hybrid supported
+    SoftTransform            /* "softTransform" */,            // hybrid supported
     WeakFields               /* "weakFields" */,
     Sharded                  /* "sharded" */,
     CombineChunks            /* "combineChunks" */,
@@ -171,7 +171,7 @@ const auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType
 const auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
                                        EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
                                        EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputReady | EYtSettingType::BlockOutputApplied |
-                                       EYtSettingType::KeepSorted | EYtSettingType::KeySwitch | EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded | EYtSettingType::TransformColGroups;
+                                       EYtSettingType::KeepSorted | EYtSettingType::KeySwitch | EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded | EYtSettingType::SoftTransform;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 

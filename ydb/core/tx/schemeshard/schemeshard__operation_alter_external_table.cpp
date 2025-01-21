@@ -252,12 +252,12 @@ private:
         if (!isSameDataSource) {
             auto& reference = *externalDataSource->ExternalTableReferences.AddReferences();
             reference.SetPath(dstPath.PathString());
-            PathIdFromPathId(externalTable->PathId, reference.MutablePathId());
+            externalTable->PathId.ToProto(reference.MutablePathId());
 
             EraseIf(*oldDataSource->ExternalTableReferences.MutableReferences(),
                     [pathId = externalTable->PathId](
                         const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) {
-                        return PathIdFromPathId(reference.GetPathId()) == pathId;
+                        return TPathId::FromProto(reference.GetPathId()) == pathId;
                     });
         }
     }

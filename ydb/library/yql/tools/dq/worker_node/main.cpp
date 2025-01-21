@@ -115,11 +115,12 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, I
         std::make_shared<TPqGatewayConfig>(),
         nullptr
     );
-    RegisterDqPqReadActorFactory(*factory, driver, nullptr, CreatePqNativeGateway(std::move(pqServices)));
+    auto pqGateway = CreatePqNativeGateway(std::move(pqServices));
+    RegisterDqPqReadActorFactory(*factory, driver, nullptr, pqGateway);
 
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
-    RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
+    RegisterDqPqWriteActorFactory(*factory, driver, nullptr, pqGateway);
 
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
     auto retryPolicy = GetHTTPDefaultRetryPolicy();

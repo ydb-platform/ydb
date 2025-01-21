@@ -48,6 +48,9 @@ static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::Transaction
         case TTxSettings::TS_SNAPSHOT_RO:
             proto->mutable_snapshot_read_only();
             break;
+        case TTxSettings::TS_SNAPSHOT_RW:
+            proto->mutable_snapshot_read_write();
+            break;
         default:
             throw TContractViolation("Unexpected transaction mode.");
     }
@@ -338,7 +341,7 @@ public:
         const auto sessionId = resp->session_id();
         request.set_session_id(sessionId);
 
-        auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client);
+        auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client, client);
 
         // Do not pass client timeout here. Session must be alive
         TRpcRequestSettings rpcSettings;

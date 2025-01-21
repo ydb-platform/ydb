@@ -19,6 +19,9 @@ protected:
 
 protected:
     virtual void UnevictAll() = 0;
+    virtual TString GetTierPathOverride() const {
+        return "/Root/tier1";
+    }
 
 public:
     void RunTest() {
@@ -68,7 +71,7 @@ public:
             UNIT_ASSERT_GT(columnRawBytes, 0);
         }
 
-        TestHelper->SetTiering("/Root/olapStore/olapTable", "tier1", "timestamp");
+        TestHelper->SetTiering("/Root/olapStore/olapTable", GetTierPathOverride(), "timestamp");
         csController->WaitActualization(TDuration::Seconds(5));
 
         {
@@ -82,7 +85,7 @@ public:
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "/Root/tier1");
             UNIT_ASSERT_VALUES_EQUAL_C(GetUint64(rows[0].at("RawBytes")), columnRawBytes,
                 TStringBuilder() << "RawBytes changed after eviction: before=" << columnRawBytes
                                 << " after=" << GetUint64(rows[0].at("RawBytes")));
@@ -118,10 +121,17 @@ class TTestEvictionResetTiering : public TTestEvictionBase {
     }
 };
 
+class TTestEvictionWithStrippedEdsPath : public TTestEvictionResetTiering  {
+    private:
+    TString GetTierPathOverride() const {
+        return "Root/tier1";
+    }
+};
+
 class TTestEvictionIncreaseDuration : public TTestEvictionBase {
     private:
     void UnevictAll() {
-        const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P30000D") TO EXTERNAL DATA SOURCE tier1 ON timestamp)";
+        const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P30000D") TO EXTERNAL DATA SOURCE `/Root/tier1` ON timestamp)";
         auto result = TestHelper->GetSession().ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -135,6 +145,10 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
     Y_UNIT_TEST(EvictionIncreaseDuration) {
         TTestEvictionIncreaseDuration().RunTest();
+    }
+
+    Y_UNIT_TEST(EvictionWithStrippedEdsPath) {
+        TTestEvictionWithStrippedEdsPath().RunTest();
     }
 
     Y_UNIT_TEST(TieringValidation) {
@@ -152,18 +166,18 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         testHelper.CreateTier("tier1");
 
         {
-            const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE tier1 ON unknown_column;)";
+            const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `/Root/tier1` ON unknown_column;)";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
 
         {
-            const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE tier1 ON uid;)";
+            const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `/Root/tier1` ON uid;)";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
 
-        testHelper.SetTiering("/Root/olapStore/olapTable", "tier1", "timestamp");
+        testHelper.SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
     }
 }
 

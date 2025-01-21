@@ -1503,12 +1503,28 @@ TRuntimeNode TProgramBuilder::FromBlocks(TRuntimeNode flow) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode flow) {
-    auto outputItems = ValidateBlockFlowType(flow.GetStaticType());
+TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode stream) {
+    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected WideStream as input type");
+    if constexpr (RuntimeVersion < 55U) {
+        // Preserve the old behaviour for ABI compatibility.
+        // Emit (FromFlow (WideFromBlocks (ToFlow (<stream>)))) to
+        // process the flow in favor to the given stream following
+        // the older MKQL ABI.
+        // FIXME: Drop the branch below, when the time comes.
+        const auto inputFlow = ToFlow(stream);
+        auto outputItems = ValidateBlockFlowType(inputFlow.GetStaticType());
+        outputItems.pop_back();
+        TType* outputMultiType = NewMultiType(outputItems);
+        TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
+        callableBuilder.Add(inputFlow);
+        const auto outputFlow = TRuntimeNode(callableBuilder.Build(), false);
+        return FromFlow(outputFlow);
+    }
+    auto outputItems = ValidateBlockStreamType(stream.GetStaticType());
     outputItems.pop_back();
     TType* outputMultiType = NewMultiType(outputItems);
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
-    callableBuilder.Add(flow);
+    TCallableBuilder callableBuilder(Env, __func__, NewStreamType(outputMultiType));
+    callableBuilder.Add(stream);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -4600,7 +4616,8 @@ TRuntimeNode TProgramBuilder::ToDecimal(TRuntimeNode data, ui8 precision, ui8 sc
         } else if (params.second < scale) {
             return Invoke("ScaleUp_" + ::ToString(scale - params.second), decimal, args);
         } else if (params.second > scale) {
-            return Invoke("ScaleDown_" + ::ToString(params.second - scale), decimal, args);
+            TRuntimeNode scaled = Invoke("ScaleDown_" + ::ToString(params.second - scale), decimal, args);
+            return Invoke("CheckBounds_" + ::ToString(precision), decimal, {{ scaled }});
         } else if (precision < params.first) {
             return Invoke("CheckBounds_" + ::ToString(precision), decimal, args);
         } else if (precision > params.first) {
@@ -6195,7 +6212,7 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
         defineLookup[name] = i;
     }
 
-    TVector<TRuntimeNode> defineNames(defineVarNames.size());
+    TVector<TRuntimeNode> defineNames(patternVarLookup.size());
     TVector<TRuntimeNode> defineNodes(patternVarLookup.size());
     const auto inputDataArg = Arg(NewListType(inputRowType));
     const auto currentRowIndexArg = Arg(NewDataType(NUdf::EDataSlot::Uint64));
@@ -6243,7 +6260,7 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
         callableBuilder.Add(NewDataLiteral(static_cast<i32>(skipTo.To)));
         callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(skipTo.Var));
     }
-    if constexpr (RuntimeVersion >= 53U) {
+    if constexpr (RuntimeVersion >= 54U) {
         callableBuilder.Add(NewDataLiteral(static_cast<i32>(rowsPerMatch)));
         callableBuilder.Add(NewList(outputColumnEntryType, outputColumnOrder));
     }

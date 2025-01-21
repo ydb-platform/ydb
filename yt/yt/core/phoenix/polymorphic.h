@@ -1,6 +1,6 @@
 #pragma once
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -19,7 +19,7 @@ struct TPolymorphicBase
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 
 #define POLYMORPHIC_INL_H_
 #include "polymorphic-inl.h"

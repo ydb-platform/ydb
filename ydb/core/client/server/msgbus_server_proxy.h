@@ -53,7 +53,6 @@ public:
     TActorId TxProxy;
 
 private:
-    void Handle(TEvBusProxy::TEvRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBusProxy::TEvNavigate::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBusProxy::TEvPersQueue::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBusProxy::TEvFlatTxRequest::TPtr &ev, const TActorContext &ctx);
@@ -81,7 +80,6 @@ public:
     //STFUNC(StateFunc)
     void StateFunc(TAutoPtr<NActors::IEventHandle> &ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvBusProxy::TEvRequest, Handle);
             HFunc(TEvBusProxy::TEvPersQueue, Handle);
             HFunc(TEvBusProxy::TEvFlatTxRequest, Handle);
             HFunc(TEvBusProxy::TEvFlatDescribeRequest, Handle);

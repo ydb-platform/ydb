@@ -105,6 +105,9 @@ namespace NActors {
         virtual TActorId Register(IActor* actor, TMailboxCache& cache, ui64 revolvingCounter, const TActorId& parentId) = 0;
         virtual TActorId Register(IActor* actor, TMailbox* mailbox, const TActorId& parentId) = 0;
 
+        virtual TActorId RegisterAlias(TMailbox* mailbox, IActor* actor) = 0;
+        virtual void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) = 0;
+
         virtual void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
             // TODO: make pure virtual and override everywhere
             Y_UNUSED(poolStats);

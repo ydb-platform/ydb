@@ -98,7 +98,7 @@ namespace NKikimr {
                 << " Marker# BSVSLR02");
 
         Span.EndOk();
-        ctx.Send(Recipient, Result.release(), RecipientCookie);
+        ctx.Send(Recipient, Result.release(), 0, RecipientCookie);
     }
 
     NWilson::TTraceId TLoggedRecVMultiPutItem::GetTraceId() const {

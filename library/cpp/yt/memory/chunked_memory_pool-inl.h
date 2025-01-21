@@ -71,7 +71,9 @@ inline TChunkedMemoryPool::TChunkedMemoryPool(
     : TChunkedMemoryPool(
         GetRefCountedTypeCookie<TTag>(),
         startChunkSize)
-{ }
+{
+    static_assert(IsEmptyClass<TTag>());
+}
 
 inline char* TChunkedMemoryPool::AllocateUnaligned(size_t size)
 {

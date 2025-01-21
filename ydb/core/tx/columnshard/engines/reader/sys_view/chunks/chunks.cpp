@@ -166,7 +166,7 @@ ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& gran
             break;
         }
     }
-    AFL_VERIFY(recordsCount);
+    AFL_VERIFY(recordsCount || granule.GetPortions().empty());
     return recordsCount;
 }
 
@@ -189,6 +189,22 @@ TConclusionStatus TStatsIterator::Start() {
     return TConclusionStatus::Success();
 }
 
+bool TStatsIterator::IsReadyForBatch() const {
+    if (!IndexGranules.size()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", false)("reason", "no_granules");
+        return false;
+    }
+    if (!IndexGranules.front().GetPortions().size()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", true)("reason", "no_granule_portions");
+        return true;
+    }
+    if (FetchedAccessors.contains(IndexGranules.front().GetPortions().front()->GetPortionId())) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", true)("reason", "portion_fetched");
+        return true;
+    }
+    return false;
+}
+
 TStatsIterator::TFetchingAccessorAllocation::TFetchingAccessorAllocation(
     const std::shared_ptr<TDataAccessorsRequest>& request, const ui64 mem, const std::shared_ptr<NReader::TReadContext>& context)
     : TBase(mem)
@@ -200,7 +216,12 @@ TStatsIterator::TFetchingAccessorAllocation::TFetchingAccessorAllocation(
 }
 
 void TStatsIterator::TFetchingAccessorAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
+    Request = nullptr;
     Context->AbortWithError("cannot allocate memory for take accessors info: " + errorMessage);
+}
+
+const std::shared_ptr<const TAtomicCounter>& TStatsIterator::TFetchingAccessorAllocation::DoGetAbortionFlag() const {
+    return Context->GetAbortionFlag();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSysView::NChunks

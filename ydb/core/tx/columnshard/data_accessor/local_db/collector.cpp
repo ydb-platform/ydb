@@ -3,23 +3,25 @@
 #include <ydb/core/tx/columnshard/data_accessor/events.h>
 namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB {
 
-THashMap<ui64, TPortionDataAccessor> TCollector::DoAskData(
+void TCollector::DoAskData(
     const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) {
-    THashMap<ui64, TPortionDataAccessor> accessors;
-    THashMap<ui64, TPortionInfo::TConstPtr> portionsToDirectAsk;
+    if (portions.size()) {
+        NActors::TActivationContext::Send(
+            TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(portions, callback, consumer));
+    }
+}
+
+TDataCategorized TCollector::DoAnalyzeData(const std::vector<TPortionInfo::TConstPtr>& portions, const TString& /* consumer */) {
+    TDataCategorized result;
     for (auto&& p : portions) {
         auto it = AccessorsCache.Find(p->GetPortionId());
         if (it != AccessorsCache.End() && it.Key() == p->GetPortionId()) {
-            accessors.emplace(p->GetPortionId(), it.Value());
+            result.AddFromCache(it.Value());
         } else {
-            portionsToDirectAsk.emplace(p->GetPortionId(), p);
+            result.AddToAsk(p);
         }
     }
-    if (portionsToDirectAsk.size()) {
-        NActors::TActivationContext::Send(
-            TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(portionsToDirectAsk, callback, consumer));
-    }
-    return accessors;
+    return result;
 }
 
 void TCollector::DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) {

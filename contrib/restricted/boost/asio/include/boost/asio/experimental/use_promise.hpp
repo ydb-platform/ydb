@@ -100,7 +100,7 @@ private:
   Allocator allocator_;
 };
 
-BOOST_ASIO_INLINE_VARIABLE constexpr use_promise_t<> use_promise;
+constexpr use_promise_t<> use_promise;
 
 } // namespace experimental
 } // namespace asio

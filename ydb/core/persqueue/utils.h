@@ -85,6 +85,7 @@ class TLastCounter {
 public:
     void Use(const TString& value, const TInstant& now);
     size_t Count(const TInstant& expirationTime);
+    const TString& LastValue() const;
 
 private:
     struct Data {

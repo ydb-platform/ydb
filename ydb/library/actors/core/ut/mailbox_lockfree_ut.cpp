@@ -96,6 +96,39 @@ Y_UNIT_TEST_SUITE(LockFreeMailbox) {
         }
     }
 
+    Y_UNIT_TEST(RegisterAliases) {
+        TMailbox m;
+        std::vector<std::unique_ptr<IActor>> actors;
+        for (int i = 1; i <= 4; ++i) {
+            actors.emplace_back(new TSimpleActor);
+            IActor* actor = actors.back().get();
+            m.AttachActor(i * 100, actor);
+            UNIT_ASSERT(m.FindActor(i * 100) == actor);
+            for (int j = 1; j <= 16; ++j) {
+                m.AttachAlias(i * 100 + j, actor);
+                UNIT_ASSERT(m.FindActor(i * 100 + j) == nullptr);
+                UNIT_ASSERT(m.FindAlias(i * 100 + j) == actor);
+            }
+        }
+        for (int i = 1; i <= 4; ++i) {
+            IActor* actor = actors[i - 1].get();
+            UNIT_ASSERT(m.FindActor(i * 100) == actor);
+            // Verify every alias can be removed individually
+            for (int j = 1; j <= 8; ++j) {
+                UNIT_ASSERT(m.FindAlias(i * 100 + j) == actor);
+                IActor* detached = m.DetachAlias(i * 100 + j);
+                UNIT_ASSERT(detached == actor);
+                UNIT_ASSERT(m.FindAlias(i * 100 + j) == nullptr);
+            }
+            UNIT_ASSERT(m.DetachActor(i * 100) == actor);
+            // Verify all aliases are detached with the actor
+            for (int j = 9; j <= 16; ++j) {
+                UNIT_ASSERT(m.FindAlias(i * 100 + j) == nullptr);
+            }
+        }
+        UNIT_ASSERT(m.IsEmpty());
+    }
+
     Y_UNIT_TEST(MultiThreadedPushPop) {
         constexpr size_t nThreads = 3;
         constexpr size_t nEvents = NSan::PlainOrUnderSanitizer(1000000, 100000);

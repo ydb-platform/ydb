@@ -471,6 +471,82 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["EquiJoin"]);
     }
 
+    Y_UNIT_TEST(CreateAlterUserWithLoginNoLogin) {
+        auto reqCreateUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1;
+        )");
+
+        UNIT_ASSERT(reqCreateUser.IsOk());
+        UNIT_ASSERT(reqCreateUser.Root);
+
+        auto reqAlterUser = SqlToYql(R"(
+            USE plato;
+            ALTER USER user1;
+        )");
+
+        UNIT_ASSERT(!reqAlterUser.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: mismatched input ';' expecting {ENCRYPTED, LOGIN, NOLOGIN, PASSWORD, RENAME, WITH}");
+
+        auto reqPasswordAndLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOgin;
+        )");
+
+        UNIT_ASSERT(reqPasswordAndLogin.IsOk());
+        UNIT_ASSERT(reqPasswordAndLogin.Root);
+
+        auto reqPasswordAndNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 PASSWORD '123' NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqPasswordAndNoLogin.IsOk());
+        UNIT_ASSERT(reqPasswordAndNoLogin.Root);
+
+        auto reqLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+        )");
+
+        UNIT_ASSERT(reqLogin.IsOk());
+        UNIT_ASSERT(reqLogin.Root);
+
+        auto reqNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqNoLogin.IsOk());
+        UNIT_ASSERT(reqNoLogin.Root);
+
+        auto reqLoginNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN NOLOGIN;
+        )");
+
+        UNIT_ASSERT(!reqLoginNoLogin.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqLoginNoLogin.Issues.ToString(), "Error: Conflicting or redundant options");
+
+        auto reqAlterLoginNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+            ALTER USER user1 NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqAlterLoginNoLogin.IsOk());
+        UNIT_ASSERT(reqAlterLoginNoLogin.Root);
+
+        auto reqAlterLoginNoLoginWithPassword = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+            ALTER USER user1 PASSWORD '321' NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.IsOk());
+        UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.Root);
+    }
+
     Y_UNIT_TEST(JoinWithoutConcreteColumns) {
         NYql::TAstParseResult res = SqlToYql(
             " use plato;"
@@ -1214,6 +1290,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DeleteFromTableBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch delete from plato.Input;", 10, "kikimr");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'delete)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('is_batch 'true)"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(DeleteFromTableOnValues) {
         NYql::TAstParseResult res = SqlToYql("delete from plato.Input on (key) values (1);",
             10, "kikimr");
@@ -1248,6 +1341,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DeleteFromTableOnBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch delete from plato.Input on (key) values (1);",
+            10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH DELETE is unsupported with ON\n");
+    }
+
     Y_UNIT_TEST(UpdateByValues) {
         NYql::TAstParseResult res = SqlToYql("update plato.Input set key = 777, value = 'cool' where key = 200;", 10, "kikimr");
         UNIT_ASSERT(res.Root);
@@ -1272,6 +1372,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
+    }
+
+    Y_UNIT_TEST(UpdateByValuesBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch update plato.Input set key = 777, value = 'cool' where key = 200;", 10, "kikimr");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('is_batch 'true)"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
     Y_UNIT_TEST(UpdateByMultiValues) {
@@ -1382,6 +1499,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(UpdateOnBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch update plato.Input on (key, value) values (5, 'cool')", 10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH UPDATE is unsupported with ON\n");
     }
 
     Y_UNIT_TEST(UnionAllTest) {
@@ -5784,7 +5907,7 @@ Y_UNIT_TEST_SUITE(AnsiIdentsNegative) {
               "*/ select 1;";
         res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {';', '(', '$', ALTER, ANALYZE, BACKUP, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, UPDATE, UPSERT, USE, VALUES}\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, UPDATE, UPSERT, USE, VALUES}\n");
         res = SqlToYqlWithAnsiLexer(req);
         UNIT_ASSERT(res.Root);
     }

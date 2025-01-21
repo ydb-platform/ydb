@@ -1,7 +1,8 @@
 #pragma once
-#include "common/owner.h"
 #include "initialization.h"
 #include "tx_progress.h"
+
+#include "common/owner.h"
 
 #include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 
@@ -26,20 +27,38 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr VolumeWriteData;
     NMonitoring::THistogramPtr HistogramBytesWriteDataCount;
     NMonitoring::THistogramPtr HistogramBytesWriteDataBytes;
+    NMonitoring::THistogramPtr HistogramDurationQueueWait;
+    NMonitoring::THistogramPtr HistogramBatchDataCount;
+    NMonitoring::THistogramPtr HistogramBatchDataSize;
 
 public:
+    const NMonitoring::TDynamicCounters::TCounterPtr QueueWaitSize;
+
+    void OnWritingTaskDequeue(const TDuration d){ 
+        HistogramDurationQueueWait->Collect(d.MilliSeconds());
+    }
+
     TWriteCounters(TCommonCountersOwner& owner)
         : TBase(owner, "activity", "writing")
+        , QueueWaitSize(TBase::GetValue("Write/Queue/Size"))
     {
         VolumeWriteData = TBase::GetDeriviative("Write/Incoming/Bytes");
         HistogramBytesWriteDataCount = TBase::GetHistogram("Write/Incoming/ByBytes/Count", NMonitoring::ExponentialHistogram(18, 2, 100));
         HistogramBytesWriteDataBytes = TBase::GetHistogram("Write/Incoming/ByBytes/Bytes", NMonitoring::ExponentialHistogram(18, 2, 100));
+        HistogramDurationQueueWait = TBase::GetHistogram("Write/Queue/Waiting/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 100));
+        HistogramBatchDataCount = TBase::GetHistogram("Write/Batch/Size/Count", NMonitoring::ExponentialHistogram(18, 2, 1));
+        HistogramBatchDataSize = TBase::GetHistogram("Write/Batch/Size/Bytes", NMonitoring::ExponentialHistogram(18, 2, 128));
     }
 
     void OnIncomingData(const ui64 dataSize) const {
         VolumeWriteData->Add(dataSize);
         HistogramBytesWriteDataCount->Collect((i64)dataSize, 1);
         HistogramBytesWriteDataBytes->Collect((i64)dataSize, dataSize);
+    }
+
+    void OnAggregationWrite(const ui64 count, const ui64 dataSize) const {
+        HistogramBatchDataCount->Collect((i64)count, 1);
+        HistogramBatchDataSize->Collect((i64)dataSize, 1);
     }
 };
 
@@ -231,4 +250,4 @@ public:
     TCSCounters();
 };
 
-}
+}   // namespace NKikimr::NColumnShard

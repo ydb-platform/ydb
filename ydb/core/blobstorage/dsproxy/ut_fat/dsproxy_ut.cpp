@@ -4230,7 +4230,7 @@ public:
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(args.EnablePutBatching, false, true);
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
-        std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
+        std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), nullptr, false,
                 dsProxyNodeMon, TIntrusivePtr(storagePoolCounters),
                 TBlobStorageProxyParameters{
                     .Controls = TBlobStorageProxyControlWrappers{

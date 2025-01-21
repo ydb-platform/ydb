@@ -33,6 +33,30 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     BSL-1.0              089f5df1fde5e9be79fa00a24c4269ff
+BELONGS ya.make
+    License text:
+        http://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [48:48]
+
+KEEP     BSL-1.0              483dde97b6686cd137961e30f0fe963e
+BELONGS ya.make
+    License text:
+        under the [Boost Software License, Version 1.0](
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [48:48]
+
 KEEP     Mit-Old-Style        99b210ed9efe704d061e43a6c4c4beb3
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -157,3 +181,14 @@ BELONGS ya.make
         include/boost/multi_index/tag.hpp [2:4]
         include/boost/multi_index_container.hpp [4:6]
         include/boost/multi_index_container_fwd.hpp [2:4]
+
+KEEP     BSL-1.0              d21fe46368a553b08b3dd6193f2c907c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [5:5]

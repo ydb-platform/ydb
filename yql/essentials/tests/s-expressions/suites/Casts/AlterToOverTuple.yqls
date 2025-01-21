@@ -4,7 +4,6 @@
 (import alterto_module '"alterto.yql")
 
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let targetType (TupleType (DataType 'Uint8) (DataType 'Utf8)))
 (let failValue '((Uint8 '0) (Utf8 '"not converted")))

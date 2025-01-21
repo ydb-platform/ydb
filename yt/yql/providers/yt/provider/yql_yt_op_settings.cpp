@@ -423,7 +423,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::IgnoreNonExisting:
         case EYtSettingType::WarnNonExisting:
         case EYtSettingType::ForceTransform:
-        case EYtSettingType::TransformColGroups:
+        case EYtSettingType::SoftTransform:
         case EYtSettingType::CombineChunks:
         case EYtSettingType::WithQB:
         case EYtSettingType::Inline:

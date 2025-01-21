@@ -35,6 +35,7 @@ enum class EComponent {
     HttpGateway,
     ProviderGeneric,
     ProviderPg,
+    ProviderPure,
     // <--- put other log components here
     MaxValue
 };
@@ -79,6 +80,7 @@ struct EComponentHelpers {
         case EComponent::HttpGateway: return TStringBuf("http gw");
         case EComponent::ProviderGeneric: return TStringBuf("generic");
         case EComponent::ProviderPg: return TStringBuf("PG");
+        case EComponent::ProviderPure: return TStringBuf("pure");
         default:
             ythrow yexception() << "invalid log component value: "
                                 << ToInt(component);
@@ -112,6 +114,7 @@ struct EComponentHelpers {
         if (str == TStringBuf("http gw")) return EComponent::HttpGateway;
         if (str == TStringBuf("generic")) return EComponent::ProviderGeneric;
         if (str == TStringBuf("PG")) return EComponent::ProviderPg;
+        if (str == TStringBuf("pure")) return EComponent::ProviderPure;
         ythrow yexception() << "unknown log component: '" << str << '\'';
     }
 

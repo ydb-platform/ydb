@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
 
     Y_UNIT_TEST(GrpcRequestProxy) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
         ui16 grpc = server.GetPort();
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
 
     Y_UNIT_TEST(GrpcRequestProxyWithoutToken) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
         ui16 grpc = server.GetPort();
@@ -253,8 +253,8 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
 
     void GrpcRequestProxyCheckTokenWhenItIsSpecified(bool enforceUserTokenCheckRequirement) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenCheckRequirement(enforceUserTokenCheckRequirement);
+        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+        appConfig.MutableSecurityConfig()->SetEnforceUserTokenCheckRequirement(enforceUserTokenCheckRequirement);
         TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
         ui16 grpc = server.GetPort();
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
 
     Y_UNIT_TEST(BiStreamPing) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
         ui16 grpc = server.GetPort();
@@ -343,7 +343,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
 
     Y_UNIT_TEST(BiStreamCancelled) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
         ui16 grpc = server.GetPort();
@@ -421,6 +421,10 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
 
+        {
+            TClient client(*server.ServerSettings);
+            client.CreateUser("/Root", "qqq", "password");
+        }
         {
             NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Scheme::V1::SchemeService>(clientConfig);

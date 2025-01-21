@@ -192,6 +192,9 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         AtomicSet(isLastExceptionSet, 1);
     }
 
+    if (IsMonitoringEnabled) {
+        monitoring->Stop();
+    }
     monitoring.Destroy();
     if (actorSystem1.Get()) {
         actorSystem1->Stop();

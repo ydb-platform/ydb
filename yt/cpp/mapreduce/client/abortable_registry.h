@@ -31,13 +31,17 @@ class TTransactionAbortable
     : public IAbortable
 {
 public:
-    TTransactionAbortable(const TClientContext& context, const TTransactionId& transactionId);
+    TTransactionAbortable(
+        const IRawClientPtr& rawClient,
+        const TClientContext& context,
+        const TTransactionId& transactionId);
     void Abort() override;
     TString GetType() const override;
 
 private:
-    TClientContext Context_;
-    TTransactionId TransactionId_;
+    const IRawClientPtr RawClient_;
+    const TClientContext Context_;
+    const TTransactionId TransactionId_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

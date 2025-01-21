@@ -51,7 +51,7 @@ public:
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside();
-        parentDir->DecAliveChildren();
+        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
 
         // KIKIMR-13173
         // Repeat it here for a while, delete it from TDeleteParts after

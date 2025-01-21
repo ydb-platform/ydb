@@ -47,13 +47,13 @@ protected:
         return check;
     }
 
-    Value* GenMakeKeysTuple(Value* keysPtr, const ICodegeneratorInlineWideNode::TGettersList& getters, Value* itemsPtr, const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* GenMakeKeysTuple(Value* keysPtr, const ICodegeneratorInlineWideNode::TGettersList& getters, Value* itemsPtr, Type* keysType, const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
         const auto idxType = Type::getInt32Ty(context);
         const auto zero = ConstantInt::get(Type::getInt128Ty(context), 0);
 
         const auto keys = KeyTuple.GenNewArray(LeftKeyColumns.size(), itemsPtr, ctx, block);
-        const auto items = new LoadInst(itemsPtr->getType()->getPointerElementType(), itemsPtr, "items", block);
+        const auto items = new LoadInst(PointerType::getUnqual(keysType), itemsPtr, "items", block);
 
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
         const auto result = PHINode::Create(Type::getInt1Ty(context), (LeftKeyColumns.size() + 1U) << 1U , "result", done);
@@ -61,7 +61,7 @@ protected:
         const auto keyType = AS_TYPE(TTupleType, DictType->GetKeyType());
         for (ui32 i = 0; i < LeftKeyColumns.size(); ++i) {
             const auto index = ConstantInt::get(idxType, i);
-            const auto ptr = GetElementPtrInst::CreateInBounds(items->getType()->getPointerElementType(), items, {ConstantInt::get(idxType, 0), index}, (TString("ptr_") += ToString(i)).c_str(), block);
+            const auto ptr = GetElementPtrInst::CreateInBounds(keysType, items, {ConstantInt::get(idxType, 0), index}, (TString("ptr_") += ToString(i)).c_str(), block);
             const auto elem = getters[LeftKeyColumns[i]](ctx, block);
             const auto converter = reinterpret_cast<TGeneratorPtr>(LeftKeyConverters[i].Generator);
             const auto conv = converter ? converter(reinterpret_cast<Value *const *>(&elem), ctx, block) : elem;
@@ -88,7 +88,10 @@ protected:
 
     void GenFillLeftStruct(const std::vector<Value*>& pointers, ICodegeneratorInlineWideNode::TGettersList& output) const {
         for (auto i = 0U; i < pointers.size(); ++i) {
-            output[LeftRenames[(i << 1U) + 1U]] = [p = pointers[i]](const TCodegenContext&, BasicBlock*& block) { return new LoadInst(p->getType()->getPointerElementType(), p, "value", block); };
+            output[LeftRenames[(i << 1U) + 1U]] = [p = pointers[i]](const TCodegenContext& ctx, BasicBlock*& block) {
+                auto& context = ctx.Codegen.GetContext();
+                return new LoadInst(Type::getInt128Ty(context), p, "value", block);
+            };
         }
     }
 
@@ -344,7 +347,7 @@ public:
         block = next;
 
         const auto none = IsTuple ?
-            this->GenMakeKeysTuple(keysPtr, current.second, kitmsPtr, ctx, block):
+            this->GenMakeKeysTuple(keysPtr, current.second, kitmsPtr, keysType, ctx, block):
             this->GenMakeKeysTuple(keysPtr, current.second, ctx, block);
 
         ICodegeneratorInlineWideNode::TGettersList getters(this->OutputRepresentations.size());
@@ -528,7 +531,7 @@ public:
 
         ICodegeneratorInlineWideNode::TGettersList getters(this->OutputRepresentations.size());
 
-        BranchInst::Create(hasi, part, HasValue(subiter, block), block);
+        BranchInst::Create(hasi, part, HasValue(subiter, block, context), block);
 
         block = part;
 
@@ -585,7 +588,7 @@ public:
         block = next;
 
         const auto none = IsTuple ?
-            this->GenMakeKeysTuple(keysPtr, current.second, kitmsPtr, ctx, block):
+            this->GenMakeKeysTuple(keysPtr, current.second, kitmsPtr, keysType, ctx, block):
             this->GenMakeKeysTuple(keysPtr, current.second, ctx, block);
 
         if constexpr (RightRequired)
@@ -720,7 +723,7 @@ protected:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    void GenFillLeftStruct(Value* left, Value* items, const TCodegenContext& ctx, BasicBlock*& block) const {
+    void GenFillLeftStruct(Value* left, Value* items, Type* arrayType, const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
         const auto idxType = Type::getInt32Ty(context);
         const auto valType = Type::getInt128Ty(context);
@@ -742,7 +745,7 @@ protected:
                 const auto oldIndex = ConstantInt::get(idxType, oldI);
                 const auto newIndex = ConstantInt::get(idxType, newI);
                 const auto oldPtr = GetElementPtrInst::CreateInBounds(valType, elements, {oldIndex}, "old", block);
-                const auto newPtr = GetElementPtrInst::CreateInBounds(items->getType()->getPointerElementType(), items, {ConstantInt::get(idxType, 0), newIndex}, "new", block);
+                const auto newPtr = GetElementPtrInst::CreateInBounds(arrayType, items, {ConstantInt::get(idxType, 0), newIndex}, "new", block);
                 const auto item = new LoadInst(valType, oldPtr, "item", block);
                 new StoreInst(item, newPtr, block);
                 ValueAddRef(OutputRepresentations[newI], newPtr, ctx, block);
@@ -756,7 +759,7 @@ protected:
                 const auto newI = LeftRenames[i++];
                 const auto oldIndex = ConstantInt::get(idxType, oldI);
                 const auto newIndex = ConstantInt::get(idxType, newI);
-                const auto item = GetElementPtrInst::CreateInBounds(items->getType()->getPointerElementType(), items, {ConstantInt::get(idxType, 0), newIndex}, "item", block);
+                const auto item = GetElementPtrInst::CreateInBounds(arrayType, items, {ConstantInt::get(idxType, 0), newIndex}, "item", block);
                 CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(item, left, ctx.Codegen, block, oldIndex);
             }
             BranchInst::Create(done, block);
@@ -764,7 +767,7 @@ protected:
         block = done;
     }
 
-    void GenFillRightStruct(Value* right, Value* items, const TCodegenContext& ctx, BasicBlock*& block) const {
+    void GenFillRightStruct(Value* right, Value* items, Type* arrayType, const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
         const auto idxType = Type::getInt32Ty(context);
         const auto valType = Type::getInt128Ty(context);
@@ -786,7 +789,7 @@ protected:
                 const auto oldIndex = ConstantInt::get(idxType, oldI);
                 const auto newIndex = ConstantInt::get(idxType, newI);
                 const auto oldPtr = GetElementPtrInst::CreateInBounds(valType, elements, {oldIndex}, "old", block);
-                const auto newPtr = GetElementPtrInst::CreateInBounds(items->getType()->getPointerElementType(), items, {ConstantInt::get(idxType, 0), newIndex}, "new", block);
+                const auto newPtr = GetElementPtrInst::CreateInBounds(arrayType, items, {ConstantInt::get(idxType, 0), newIndex}, "new", block);
                 const auto elem = new LoadInst(valType, oldPtr, "elem", block);
                 new StoreInst(elem, newPtr, block);
                 ValueAddRef(OutputRepresentations[newI], newPtr, ctx, block);
@@ -800,7 +803,7 @@ protected:
                 const auto newI = RightRenames[i++];
                 const auto oldIndex = ConstantInt::get(idxType, oldI);
                 const auto newIndex = ConstantInt::get(idxType, newI);
-                const auto item = GetElementPtrInst::CreateInBounds(items->getType()->getPointerElementType(), items, {ConstantInt::get(idxType, 0), newIndex}, "item", block);
+                const auto item = GetElementPtrInst::CreateInBounds(arrayType, items, {ConstantInt::get(idxType, 0), newIndex}, "item", block);
                 CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(item, right, ctx.Codegen, block, oldIndex);
             }
             BranchInst::Create(done, block);
@@ -816,26 +819,26 @@ protected:
         const auto index = ConstantInt::get(idxType, LeftKeyColumns.front());
         CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(keysPtr, current, ctx.Codegen, block, index);
         if (const auto converter = reinterpret_cast<TGeneratorPtr>(LeftKeyConverters.front().Generator)) {
-            Value *const elem = new LoadInst(keysPtr->getType()->getPointerElementType(), keysPtr, "elem", block);
+            Value *const elem = new LoadInst(Type::getInt128Ty(context), keysPtr, "elem", block);
             const auto conv = converter(&elem, ctx, block);
             new StoreInst(conv, keysPtr, block);
             const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, conv, zero, "check", block);
             return check;
         } else {
-            const auto keys = new LoadInst(keysPtr->getType()->getPointerElementType(), keysPtr, "keys", block);
+            const auto keys = new LoadInst(Type::getInt128Ty(context), keysPtr, "keys", block);
             const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, keys, zero, "check", block);
             return check;
         }
     }
 
-    Value* GenMakeKeysTuple(Value* keysPtr, Value* current, Value* itemsPtr, const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* GenMakeKeysTuple(Value* keysPtr, Value* current, Value* itemsPtr, Type* keysType, const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
         const auto idxType = Type::getInt32Ty(context);
         const auto valueType = Type::getInt128Ty(context);
         const auto zero = ConstantInt::get(valueType, 0);
 
         const auto keys = KeyTuple.GenNewArray(LeftKeyColumns.size(), itemsPtr, ctx, block);
-        const auto items = new LoadInst(itemsPtr->getType()->getPointerElementType(), itemsPtr, "items", block);
+        const auto items = new LoadInst(PointerType::getUnqual(keysType), itemsPtr, "items", block);
 
         const auto ptrType = PointerType::getUnqual(valueType);
         const auto elements = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElements>(ptrType, current, ctx.Codegen, block);
@@ -856,7 +859,7 @@ protected:
                 const auto oldIndex = ConstantInt::get(idxType, LeftKeyColumns[i]);
                 const auto newIndex = ConstantInt::get(idxType, i);
                 const auto oldPtr = GetElementPtrInst::CreateInBounds(valueType, elements, {oldIndex}, "old", block);
-                const auto newPtr = GetElementPtrInst::CreateInBounds(items->getType()->getPointerElementType(), items, {ConstantInt::get(idxType, 0), newIndex}, "new", block);
+                const auto newPtr = GetElementPtrInst::CreateInBounds(keysType, items, {ConstantInt::get(idxType, 0), newIndex}, "new", block);
                 const auto elem = new LoadInst(valueType, oldPtr, "elem", block);
                 const auto converter = reinterpret_cast<TGeneratorPtr>(LeftKeyConverters[i].Generator);
                 const auto conv = converter ? converter(reinterpret_cast<Value *const *>(&elem), ctx, block) : elem;
@@ -880,7 +883,7 @@ protected:
             block = slow;
 
             for (ui32 i = 0; i < LeftKeyColumns.size(); ++i) {
-                const auto item = GetElementPtrInst::CreateInBounds(items->getType()->getPointerElementType(), items, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, i)}, "item", block);
+                const auto item = GetElementPtrInst::CreateInBounds(keysType, items, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, i)}, "item", block);
                 const auto index = ConstantInt::get(idxType, LeftKeyColumns[i]);
                 CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(item, current, ctx.Codegen, block, index);
 
@@ -1065,11 +1068,11 @@ public:
         result->addIncoming(current, block);
 
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
-        BranchInst::Create(stop, next, IsSpecial(current, block), block);
+        BranchInst::Create(stop, next, IsSpecial(current, block, context), block);
         block = next;
 
         const auto none = IsTuple ?
-            this->GenMakeKeysTuple(keysPtr, current, kitmsPtr, ctx, block):
+            this->GenMakeKeysTuple(keysPtr, current, kitmsPtr, keysType, ctx, block):
             this->GenMakeKeysTuple(keysPtr, current, ctx, block);
 
         const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
@@ -1116,8 +1119,8 @@ public:
                 const auto out = this->ResStruct.GenNewArray(this->OutputRepresentations.size(), itemsPtr, ctx, block);
                 const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
 
-                this->GenFillLeftStruct(current, items, ctx, block);
-                this->GenFillRightStruct(lookup, items, ctx, block);
+                this->GenFillLeftStruct(current, items, arrayType, ctx, block);
+                this->GenFillRightStruct(lookup, items, arrayType, ctx, block);
 
                 UnRefBoxed(lookup, ctx, block);
                 ValueCleanup(static_cast<const IComputationNode*>(this)->GetRepresentation(), current, ctx, block);
@@ -1137,7 +1140,7 @@ public:
             const auto out = this->ResStruct.GenNewArray(this->OutputRepresentations.size(), itemsPtr, ctx, block);
             const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
 
-            this->GenFillLeftStruct(current, items, ctx, block);
+            this->GenFillLeftStruct(current, items, arrayType, ctx, block);
 
             ValueCleanup(static_cast<const IComputationNode*>(this)->GetRepresentation(), current, ctx, block);
 
@@ -1191,7 +1194,7 @@ public:
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
         const auto result = PHINode::Create(valueType, 3U, "result", exit);
 
-        BranchInst::Create(hasi, part, HasValue(subiter, block), block);
+        BranchInst::Create(hasi, part, HasValue(subiter, block, context), block);
 
         block = hasi;
         const auto curr = new LoadInst(valueType, currentPtr, "curr", block);
@@ -1205,8 +1208,8 @@ public:
             const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
             const auto item = new LoadInst(valueType, itemPtr, "item", block);
 
-            this->GenFillLeftStruct(curr, items, ctx, block);
-            this->GenFillRightStruct(item, items, ctx, block);
+            this->GenFillLeftStruct(curr, items, arrayType, ctx, block);
+            this->GenFillRightStruct(item, items, arrayType, ctx, block);
 
             UnRefBoxed(item, ctx, block);
 
@@ -1230,7 +1233,7 @@ public:
         block = loop;
         GetNodeValue(currentPtr, this->Stream, ctx, block);
         const auto current = new LoadInst(valueType, currentPtr, "current", block);
-        BranchInst::Create(stop, next, IsSpecial(current, block), block);
+        BranchInst::Create(stop, next, IsSpecial(current, block, context), block);
 
         block = stop;
 
@@ -1242,7 +1245,7 @@ public:
 
         block = next;
         const auto none = IsTuple ?
-            this->GenMakeKeysTuple(keysPtr, current, kitmsPtr, ctx, block):
+            this->GenMakeKeysTuple(keysPtr, current, kitmsPtr, keysType, ctx, block):
             this->GenMakeKeysTuple(keysPtr, current, ctx, block);
 
         const auto step = BasicBlock::Create(context, "step", ctx.Func);
@@ -1277,7 +1280,7 @@ public:
             const auto out = this->ResStruct.GenNewArray(this->OutputRepresentations.size(), itemsPtr, ctx, block);
             const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
 
-            this->GenFillLeftStruct(current, items, ctx, block);
+            this->GenFillLeftStruct(current, items, arrayType, ctx, block);
             UnRefBoxed(current, ctx, block);
             new StoreInst(zero, currentPtr, block);
 
@@ -1541,7 +1544,7 @@ private:
         const auto valueType = Type::getInt128Ty(context);
         const auto arrayType = ArrayType::get(valueType, this->OutputRepresentations.size());
         const auto keysType = IsTuple ? ArrayType::get(valueType, this->LeftKeyColumns.size()) : nullptr;
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, containerType, PointerType::getUnqual(valueType)}, false);
@@ -1550,7 +1553,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -1562,11 +1564,9 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        const auto stream = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, streamArg, "load_stream", false, block) : static_cast<Value*>(streamArg);
+        const auto stream = static_cast<Value*>(streamArg);
 
-        const auto dict = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, dictArg, "load_dict", false, block) : static_cast<Value*>(dictArg);
+        const auto dict = static_cast<Value*>(dictArg);
 
         const auto zero = ConstantInt::get(valueType, 0);
         const auto fsok = ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok));
@@ -1596,7 +1596,7 @@ private:
 
         const auto current = new LoadInst(valueType, itemPtr, "current", block);
         const auto none = IsTuple ?
-            this->GenMakeKeysTuple(keysPtr, current, kitmsPtr, ctx, block):
+            this->GenMakeKeysTuple(keysPtr, current, kitmsPtr, keysType, ctx, block):
             this->GenMakeKeysTuple(keysPtr, current, ctx, block);
 
         const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
@@ -1643,10 +1643,10 @@ private:
                 const auto result = this->ResStruct.GenNewArray(this->OutputRepresentations.size(), itemsPtr, ctx, block);
                 const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
 
-                this->GenFillLeftStruct(current, items, ctx, block);
-                this->GenFillRightStruct(lookup, items, ctx, block);
+                this->GenFillLeftStruct(current, items, arrayType, ctx, block);
+                this->GenFillRightStruct(lookup, items, arrayType, ctx, block);
 
-                SafeUnRefUnboxed(valuePtr, ctx, block);
+                SafeUnRefUnboxedOne(valuePtr, ctx, block);
                 AddRefBoxed(result, ctx, block);
                 new StoreInst(result, valuePtr, block);
 
@@ -1667,9 +1667,9 @@ private:
             const auto result = this->ResStruct.GenNewArray(this->OutputRepresentations.size(), itemsPtr, ctx, block);
             const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
 
-            this->GenFillLeftStruct(current, items, ctx, block);
+            this->GenFillLeftStruct(current, items, arrayType, ctx, block);
 
-            SafeUnRefUnboxed(valuePtr, ctx, block);
+            SafeUnRefUnboxedOne(valuePtr, ctx, block);
             AddRefBoxed(result, ctx, block);
             new StoreInst(result, valuePtr, block);
 
@@ -1699,7 +1699,7 @@ private:
         const auto valueType = Type::getInt128Ty(context);
         const auto arrayType = ArrayType::get(valueType, this->OutputRepresentations.size());
         const auto keysType = IsTuple ? ArrayType::get(valueType, this->LeftKeyColumns.size()) : nullptr;
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
@@ -1708,7 +1708,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -1722,11 +1721,9 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        const auto stream = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, streamArg, "load_stream", false, block) : static_cast<Value*>(streamArg);
+        const auto stream = static_cast<Value*>(streamArg);
 
-        const auto dict = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, dictArg, "load_dict", false, block) : static_cast<Value*>(dictArg);
+        const auto dict = static_cast<Value*>(dictArg);
 
         const auto zero = ConstantInt::get(valueType, 0);
         const auto fsok = ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok));
@@ -1775,10 +1772,10 @@ private:
             const auto curr = new LoadInst(valueType, currentArg, "curr", block);
             const auto item = new LoadInst(valueType, itemPtr, "item", block);
 
-            this->GenFillLeftStruct(curr, items, ctx, block);
-            this->GenFillRightStruct(item, items, ctx, block);
+            this->GenFillLeftStruct(curr, items, arrayType, ctx, block);
+            this->GenFillRightStruct(item, items, arrayType, ctx, block);
 
-            SafeUnRefUnboxed(valuePtr, ctx, block);
+            SafeUnRefUnboxedOne(valuePtr, ctx, block);
             AddRefBoxed(result, ctx, block);
             new StoreInst(result, valuePtr, block);
 
@@ -1804,7 +1801,7 @@ private:
             const auto current = new LoadInst(valueType, currentArg, "current", block);
 
             const auto none = IsTuple ?
-                this->GenMakeKeysTuple(keysPtr, current, kitmsPtr, ctx, block):
+                this->GenMakeKeysTuple(keysPtr, current, kitmsPtr, keysType, ctx, block):
                 this->GenMakeKeysTuple(keysPtr, current, ctx, block);
 
             const auto step = BasicBlock::Create(context, "step", ctx.Func);
@@ -1834,9 +1831,9 @@ private:
                 const auto result = this->ResStruct.GenNewArray(this->OutputRepresentations.size(), itemsPtr, ctx, block);
                 const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
 
-                this->GenFillLeftStruct(current, items, ctx, block);
+                this->GenFillLeftStruct(current, items, arrayType, ctx, block);
 
-                SafeUnRefUnboxed(valuePtr, ctx, block);
+                SafeUnRefUnboxedOne(valuePtr, ctx, block);
                 AddRefBoxed(result, ctx, block);
                 new StoreInst(result, valuePtr, block);
 

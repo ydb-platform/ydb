@@ -19,6 +19,7 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/data_integrity_trails.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -59,6 +60,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TAuditConfig AuditConfig;
     NKikimrConfig::TCompactionConfig CompactionConfig;
     NKikimrConfig::TDomainsConfig DomainsConfig;
+    NKikimrConfig::TSecurityConfig SecurityConfig;
     NKikimrConfig::TBootstrap BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig AwsCompatibilityConfig;
     NKikimrConfig::TS3ProxyResolverConfig S3ProxyResolverConfig;
@@ -68,6 +70,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TMetadataCacheConfig MetadataCacheConfig;
     NKikimrConfig::TMemoryControllerConfig MemoryControllerConfig;
     NKikimrReplication::TReplicationDefaults ReplicationConfig;
+    NKikimrProto::TDataIntegrityTrailsConfig DataIntegrityTrailsConfig;
 };
 
 TAppData::TAppData(
@@ -114,6 +117,7 @@ TAppData::TAppData(
     , AuditConfig(Impl->AuditConfig)
     , CompactionConfig(Impl->CompactionConfig)
     , DomainsConfig(Impl->DomainsConfig)
+    , SecurityConfig(Impl->SecurityConfig)
     , BootstrapConfig(Impl->BootstrapConfig)
     , AwsCompatibilityConfig(Impl->AwsCompatibilityConfig)
     , S3ProxyResolverConfig(Impl->S3ProxyResolverConfig)
@@ -123,6 +127,7 @@ TAppData::TAppData(
     , MetadataCacheConfig(Impl->MetadataCacheConfig)
     , MemoryControllerConfig(Impl->MemoryControllerConfig)
     , ReplicationConfig(Impl->ReplicationConfig)
+    , DataIntegrityTrailsConfig(Impl->DataIntegrityTrailsConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

@@ -33,7 +33,7 @@ struct executor_t
 };
 
 /// Awaitable object that returns the executor of the current coroutine.
-BOOST_ASIO_INLINE_VARIABLE constexpr executor_t executor;
+constexpr executor_t executor;
 
 /// Awaitable type that returns the cancellation state of the current coroutine.
 struct cancellation_state_t
@@ -58,7 +58,7 @@ struct cancellation_state_t
  *     // ...
  * } @endcode
  */
-BOOST_ASIO_INLINE_VARIABLE constexpr cancellation_state_t cancellation_state;
+constexpr cancellation_state_t cancellation_state;
 
 #if defined(GENERATING_DOCUMENTATION)
 

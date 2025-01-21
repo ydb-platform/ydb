@@ -696,7 +696,7 @@ void TAsyncExpiringCache<TKey, TValue>::Reconfigure(TAsyncExpiringCacheConfigPtr
 template <class TKey, class TValue>
 const TAsyncExpiringCacheConfigPtr& TAsyncExpiringCache<TKey, TValue>::Config() const
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
     return Config_;
 }

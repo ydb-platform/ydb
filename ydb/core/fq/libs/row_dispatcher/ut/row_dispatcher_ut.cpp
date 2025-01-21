@@ -51,12 +51,23 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
 };
 
 class TFixture : public NUnitTest::TBaseFixture {
-
+    const ui64 NodesCount = 2;
 public:
     TFixture()
-    : Runtime(1) {}
+    : Runtime(NodesCount) {}
 
     void SetUp(NUnitTest::TTestContext&) override {
+        TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
+        TPortManager pm;
+        for (ui32 i = 0; i < NodesCount; ++i) {
+            nameserverTable->StaticNodeTable[Runtime.GetNodeId(i)] = std::pair<TString, ui32>("127.0.0." + std::to_string(i + 1), pm.GetPort(12001 + i));
+        }
+        const TActorId nameserviceId = GetNameserviceActorId();
+        for (ui32 i = 0; i < NodesCount; ++i) {
+            TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
+            Runtime.AddLocalService(nameserviceId, std::move(nameserviceSetup), i);
+        }
+
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
@@ -78,6 +89,7 @@ public:
         EdgeActor = Runtime.AllocateEdgeActor();
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
+        ReadActorId3 = Runtime.AllocateEdgeActor(1);
         TestActorFactory = MakeIntrusive<TTestActorFactory>(Runtime);
         
         NYql::TPqGatewayServices pqServices(
@@ -133,12 +145,19 @@ public:
             {},         // readOffset,
             0,          // StartingMessageTimestamp;
             "QueryId");
+        event->Record.MutableTransportMeta()->SetSeqNo(1);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event, 0, generation));
     }
 
-    void MockStopSession(const NYql::NPq::NProto::TDqPqTopicSource& source, ui64 partitionId, TActorId readActorId) {
+    void MockStopSession(const NYql::NPq::NProto::TDqPqTopicSource& source, TActorId readActorId) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         event->Record.MutableSource()->CopyFrom(source);
+        event->Record.MutableTransportMeta()->SetSeqNo(1);
+        Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
+    }
+
+    void MockNoSession(TActorId readActorId) {
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvNoSession>();
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
     }
 
@@ -156,7 +175,7 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release(), 0, generation));
     }
 
-    void MockSessionError(ui64 partitionId, TActorId topicSessionId, TActorId readActorId) {
+    void MockSessionError(TActorId topicSessionId, TActorId readActorId) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvSessionError>();
         event->ReadActorId = readActorId;
         Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
@@ -165,6 +184,7 @@ public:
     void MockGetNextBatch(ui64 partitionId, TActorId readActorId, ui64 generation) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
         event->Record.SetPartitionId(partitionId);
+        event->Record.MutableTransportMeta()->SetSeqNo(2);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, generation));
     }
 
@@ -206,7 +226,7 @@ public:
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
-    void ExpectSessionError(NActors::TActorId readActorId, ui64 partitionId) {
+    void ExpectSessionError(NActors::TActorId readActorId) {
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvSessionError>(readActorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
@@ -235,6 +255,7 @@ public:
     NActors::TActorId EdgeActor;
     NActors::TActorId ReadActorId1;
     NActors::TActorId ReadActorId2;
+    NActors::TActorId ReadActorId3;
     TIntrusivePtr<TTestActorFactory> TestActorFactory;
 
     NYql::NPq::NProto::TDqPqTopicSource Source1 = BuildPqTopicSourceSettings("Endpoint1", "Database1", "topic", "connection_id1");
@@ -254,7 +275,7 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
 
         ProcessData(ReadActorId1, PartitionId0, topicSessionId);
 
-        MockStopSession(Source1, PartitionId0, ReadActorId1);
+        MockStopSession(Source1, ReadActorId1);
         ExpectStopSession(topicSessionId);
     }
 
@@ -271,11 +292,11 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId1, PartitionId0, topicSessionId);
         ProcessData(ReadActorId2, PartitionId0, topicSessionId);
 
-        MockSessionError(PartitionId0, topicSessionId, ReadActorId1);
-        ExpectSessionError(ReadActorId1, PartitionId0);
+        MockSessionError(topicSessionId, ReadActorId1);
+        ExpectSessionError(ReadActorId1);
 
-        MockSessionError(PartitionId0, topicSessionId, ReadActorId2);
-        ExpectSessionError(ReadActorId2, PartitionId0);
+        MockSessionError(topicSessionId, ReadActorId2);
+        ExpectSessionError(ReadActorId2);
     }
 
     Y_UNIT_TEST_F(SessionError, TFixture) {
@@ -284,8 +305,8 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ExpectStartSessionAck(ReadActorId1);
         ExpectStartSession(topicSessionId);
 
-        MockSessionError(PartitionId0, topicSessionId, ReadActorId1);
-        ExpectSessionError(ReadActorId1, PartitionId0);
+        MockSessionError(topicSessionId, ReadActorId1);
+        ExpectSessionError(ReadActorId1);
     }
 
     Y_UNIT_TEST_F(CoordinatorSubscribe, TFixture) {
@@ -335,20 +356,20 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId2, PartitionId0, topicSession3);
         ProcessData(ReadActorId2, PartitionId1, topicSession4);
 
-        MockSessionError(PartitionId0, topicSession1, ReadActorId1);
-        ExpectSessionError(ReadActorId1, PartitionId0);
+        MockSessionError(topicSession1, ReadActorId1);
+        ExpectSessionError(ReadActorId1);
 
         ProcessData(ReadActorId1, PartitionId1, topicSession2);
         ProcessData(ReadActorId2, PartitionId0, topicSession3);
         ProcessData(ReadActorId2, PartitionId1, topicSession4);
 
-        MockStopSession(Source1, PartitionId1, ReadActorId1);
+        MockStopSession(Source1, ReadActorId1);
         ExpectStopSession(topicSession2);
         
-        MockStopSession(Source2, PartitionId0, ReadActorId2);
+        MockStopSession(Source2, ReadActorId2);
         ExpectStopSession(topicSession3);
 
-        MockStopSession(Source2, PartitionId1, ReadActorId2);
+        MockStopSession(Source2, ReadActorId2);
         ExpectStopSession(topicSession4);
 
         // Ignore data after StopSession
@@ -411,11 +432,22 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId1, PartitionId0, session1);
         ProcessData(ReadActorId2, PartitionId0, session2);
 
-        MockStopSession(Source1, PartitionId0, ReadActorId1);
+        MockStopSession(Source1, ReadActorId1);
         ExpectStopSession(session1);
 
-        MockStopSession(Source1Connection2, PartitionId0, ReadActorId2);
+        MockStopSession(Source1Connection2, ReadActorId2);
         ExpectStopSession(session2);
+    }
+
+    Y_UNIT_TEST_F(ProcessNoSession, TFixture) {
+        MockAddSession(Source1, {PartitionId0}, ReadActorId3);
+        auto topicSessionId = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId3);
+        ExpectStartSession(topicSessionId);
+        ProcessData(ReadActorId3, PartitionId0, topicSessionId);
+
+        MockNoSession(ReadActorId3);
+        ExpectStopSession(topicSessionId);
     }
 }
 

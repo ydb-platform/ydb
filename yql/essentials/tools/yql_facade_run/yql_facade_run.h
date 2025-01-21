@@ -127,6 +127,7 @@ public:
     bool EnableResultPosition = false;
     bool EnableCredentials = false;
     bool EnableQPlayer = false;
+    bool OptimizeLibs = true;
 
     void Parse(int argc, const char *argv[]);
 

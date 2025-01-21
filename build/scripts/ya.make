@@ -41,7 +41,6 @@ ELSEIF (PY3)
     TEST_SRCS(
         append_file.py
         autotar_gendirs.py
-        build_dll_and_java.py
         build_info_gen.py
         build_java_codenav_index.py
         build_java_with_error_prone2.py

@@ -32,9 +32,9 @@
 |
 [CANCELLED](#cancelled)
 |
-условно повторяемый
+[условно повторяемый](*condretryable)
 |
-короткая
+[короткая](*fastbackoff)
 |
 да
 ||
@@ -44,7 +44,7 @@
 |
 [UNKNOWN](#unknown)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -56,7 +56,7 @@
 |
 [INVALID_ARGUMENT](#invalid-argument)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -68,9 +68,9 @@
 |
 [DEADLINE_EXCEEDED](#deadline-exceeded)
 |
-условно повторяемый
+[условно повторяемый](*condretryable)
 |
-короткая
+[короткая](*fastbackoff)
 |
 да
 ||
@@ -80,7 +80,7 @@
 |
 [NOT_FOUND](#not-found)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -92,7 +92,7 @@
 |
 [ALREADY_EXISTS](#already-exists)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -104,7 +104,7 @@
 |
 [PERMISSION_DENIED](#permission-denied)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -116,9 +116,9 @@
 |
 [RESOURCE_EXHAUSTED](#resource-exhausted)
 |
-повторяемый
+[повторяемый](*retryable)
 |
-большая
+[большая](*slowbackoff)
 |
 нет
 ||
@@ -128,7 +128,7 @@
 |
 [FAILED_PRECONDITION](#failed-precondition)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -140,9 +140,9 @@
 |
 [ABORTED](#aborted)
 |
-повторяемый
+[повторяемый](*retryable)
 |
-моментально
+[моментально](*instant)
 |
 да
 ||
@@ -152,7 +152,7 @@
 |
 [OUT_OF_RANGE](#out-of-range)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -164,7 +164,7 @@
 |
 [UNIMPLEMENTED](#unimplemented)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -176,9 +176,9 @@
 |
 [INTERNAL](#internal)
 |
-условно повторяемый
+[условно повторяемый](*condretryable)
 |
-короткая
+[короткая](*fastbackoff)
 |
 да
 ||
@@ -188,9 +188,9 @@
 |
 [UNAVAILABLE](#unavailable)
 |
-условно повторяемый
+[условно повторяемый](*condretryable)
 |
-короткая
+[короткая](*fastbackoff)
 |
 да
 ||
@@ -200,7 +200,7 @@
 |
 [DATA_LOSS](#data-loss)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -212,7 +212,7 @@
 |
 [UNAUTHENTICATED](#unauthenticated)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -393,3 +393,15 @@
 Запрос не содержит действительных учётных данных для аутентификации операции.
 
 Проверить использующийся токен. С актуальным токеном повторить запрос.
+
+[*instant]: {% include [instant](./_includes/tooltips/instant.md) %}
+
+[*fastbackoff]: {% include [fast backoff](./_includes/tooltips/fast_backoff.md) %}
+
+[*slowbackoff]: {% include [slow backoff](./_includes/tooltips/slow_backoff.md) %}
+
+[*retryable]: {% include [retryable](./_includes/tooltips/retryable.md) %}
+
+[*nonretryable]: {% include [nonretryable](./_includes/tooltips/nonretryable.md) %}
+
+[*condretryable]: {% include [conditionally retryable](./_includes/tooltips/condretryable.md) %}

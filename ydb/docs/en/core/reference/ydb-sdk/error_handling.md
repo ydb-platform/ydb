@@ -8,21 +8,21 @@ Errors can be divided into three categories:
 
 * **Errors that cannot be fixed with a retry** (non-retryable) include incorrectly written queries, {{ ydb-short-name }} internal errors, or queries that mismatch the data schema. Retrying such queries will not resolve the issue. This situation requires developer attention.
 
-* **Errors that can presumably be fixed with a retry after the client application response** (conditionally retryable) include no response within the set timeout or an authentication request.
+* **Errors that can presumably be fixed with a retry after the client application response** (conditionally retryable) include such idempotent operations as no response within the set timeout or an authentication request.
 
-## Handling retryable errors
+## Handling retryable errors {#handling-retryable-errors}
 
 The {{ ydb-short-name }} SDK provides [a built-in mechanism for handling temporary failures](../../recipes/ydb-sdk/retry.md). By default, the SDK uses the recommended retry policy that can be changed to meet the requirements of the client app. {{ ydb-short-name }} returns status codes that let you determine whether a retry is appropriate and which interval to select.
-
-{{ ydb-short-name }} SDKs use the following backoff strategies depending on the returned status code:
-
-* Instant retry. Retries are made immediately.
-* Fast exponential backoff. The initial interval is several milliseconds. For each subsequent attempt, the interval increases exponentially.
-* Slow exponential backoff. The initial interval is several seconds. For each subsequent attempt, the interval increases exponentially.
 
 You should retry an operation only if an error refers to a temporary failure. Do not retry invalid operations, such as inserting a row with an existing primary key value into a table or inserting data that mismatches the table schema.
 
 It is extremely important to optimize the number of retries and the interval between them. An excessive number of retries and too short an interval between them result in excessive load. An insufficient number of retries prevents the operation from completion.
+
+The built-in retryers in {{ ydb-short-name }} SDKs use the following backoff strategies depending on the returned status code:
+
+* Instant retry. Retries are made immediately.
+* Fast exponential backoff. The initial interval is several milliseconds. For each subsequent attempt, the interval increases exponentially.
+* Slow exponential backoff. The initial interval is several seconds. For each subsequent attempt, the interval increases exponentially.
 
 When selecting an interval manually, the following strategies are usually used:
 

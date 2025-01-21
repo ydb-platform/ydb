@@ -32,9 +32,9 @@ Recreate session
 |
 [CANCELLED](#cancelled)
 |
-conditionally-retryable
+[conditionally-retryable](*condretryable)
 |
-fast
+[fast](*fastbackoff)
 |
 yes
 ||
@@ -44,7 +44,7 @@ yes
 |
 [UNKNOWN](#unknown)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -56,7 +56,7 @@ yes
 |
 [INVALID_ARGUMENT](#invalid-argument)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -68,9 +68,9 @@ yes
 |
 [DEADLINE_EXCEEDED](#deadline-exceeded)
 |
-conditionally-retryable
+[conditionally-retryable](*condretryable)
 |
-fast
+[fast](*fastbackoff)
 |
 yes
 ||
@@ -80,7 +80,7 @@ yes
 |
 [NOT_FOUND](#not-found)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -92,7 +92,7 @@ yes
 |
 [ALREADY_EXISTS](#already-exists)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -104,7 +104,7 @@ yes
 |
 [PERMISSION_DENIED](#permission-denied)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -116,9 +116,9 @@ yes
 |
 [RESOURCE_EXHAUSTED](#resource-exhausted)
 |
-retryable
+[retryable](*retryable)
 |
-slow
+[slow](*slowbackoff)
 |
 no
 ||
@@ -128,7 +128,7 @@ no
 |
 [FAILED_PRECONDITION](#failed-precondition)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -140,9 +140,9 @@ yes
 |
 [ABORTED](#aborted)
 |
-retryable
+[retryable](*retryable)
 |
-instant
+[instant](*instant)
 |
 yes
 ||
@@ -152,7 +152,7 @@ yes
 |
 [OUT_OF_RANGE](#out-of-range)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -164,7 +164,7 @@ no
 |
 [UNIMPLEMENTED](#unimplemented)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -176,9 +176,9 @@ yes
 |
 [INTERNAL](#internal)
 |
-conditionally-retryable
+[conditionally-retryable](*condretryable)
 |
-fast
+[fast](*fastbackoff)
 |
 yes
 ||
@@ -188,9 +188,9 @@ yes
 |
 [UNAVAILABLE](#unavailable)
 |
-conditionally-retryable
+[conditionally-retryable](*condretryable)
 |
-fast
+[fast](*fastbackoff)
 |
 yes
 ||
@@ -200,7 +200,7 @@ yes
 |
 [DATA_LOSS](#data-loss)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -212,7 +212,7 @@ yes
 |
 [UNAUTHENTICATED](#unauthenticated)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -389,3 +389,15 @@ Unrecoverable data loss or corruption.
 </div>
 
 The request does not have valid authentication credentials for the operation.
+
+[*instant]: {% include [instant](./_includes/tooltips/instant.md) %}
+
+[*fastbackoff]: {% include [fast backoff](./_includes/tooltips/fast_backoff.md) %}
+
+[*slowbackoff]: {% include [slow backoff](./_includes/tooltips/slow_backoff.md) %}
+
+[*retryable]: {% include [retryable](./_includes/tooltips/retryable.md) %}
+
+[*nonretryable]: {% include [nonretryable](./_includes/tooltips/nonretryable.md) %}
+
+[*condretryable]: {% include [conditionally retryable](./_includes/tooltips/condretryable.md) %}

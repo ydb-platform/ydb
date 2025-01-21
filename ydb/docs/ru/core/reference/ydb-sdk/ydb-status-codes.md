@@ -32,7 +32,7 @@
 |
 [BAD_REQUEST](#bad-request)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -44,7 +44,7 @@
 |
 [UNAUTHORIZED](#unauthorized)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -56,7 +56,7 @@
 |
 [INTERNAL_ERROR](#internal-error)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -68,9 +68,9 @@
 |
 [ABORTED](#aborted)
 |
-повторяемый
+[повторяемый](*retryable)
 |
-короткая
+[короткая](*fastbackoff)
 |
 нет
 ||
@@ -80,9 +80,9 @@
 |
 [UNAVAILABLE](#unavailable)
 |
-повторяемый
+[повторяемый](*retryable)
 |
-короткая
+[короткая](*fastbackoff)
 |
 нет
 ||
@@ -92,9 +92,9 @@
 |
 [OVERLOADED](#overloaded)
 |
-повторяемый
+[повторяемый](*retryable)
 |
-большая
+[большая](*slowbackoff)
 |
 нет
 ||
@@ -104,7 +104,7 @@
 |
 [SCHEME_ERROR](#scheme-error)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -116,7 +116,7 @@
 |
 [GENERIC_ERROR](#generic-error)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -128,7 +128,7 @@
 |
 [TIMEOUT](#timeout)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 <!-- conditionally-retryable -->
 <!-- TODO: Why is it non-retryable ? -->
 |
@@ -142,9 +142,9 @@
 |
 [BAD_SESSION](#bad-session)
 |
-повторяемый
+[повторяемый](*retryable)
 |
-моментально
+[моментально](*instant)
 |
 да
 ||
@@ -154,7 +154,7 @@
 |
 [PRECONDITION_FAILED](#precondition-failed)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -166,7 +166,7 @@
 |
 [ALREADY_EXISTS](#already-exists)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -178,7 +178,7 @@
 |
 [NOT_FOUND](#not-found)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -190,9 +190,9 @@
 |
 [SESSION_EXPIRED](#session-expired)
 |
-условно повторяемый
+[условно повторяемый](*condretryable)
 |
-моментально
+[моментально](*instant)
 |
 да
 ||
@@ -202,10 +202,9 @@
 |
 [CANCELLED](#cancelled)
 |
-неповторяемый
-<!-- retryable -->
+[неповторяемый](*nonretryable)
 |
-короткая
+–
 |
 нет
 ||
@@ -215,9 +214,9 @@
 |
 [UNDETERMINED](#undetermined)
 |
-условно повторяемый
+[условно повторяемый](*condretryable)
 |
-короткая
+[короткая](*fastbackoff)
 |
 нет
 ||
@@ -227,7 +226,7 @@
 |
 [UNSUPPORTED](#unsupported)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -239,9 +238,9 @@
 |
 [SESSION_BUSY](#session-busy)
 |
-повторяемый
+[повторяемый](*retryable)
 |
-короткая
+[короткая](*fastbackoff)
 |
 да
 ||
@@ -251,7 +250,7 @@
 |
 [EXTERNAL_ERROR](#external-error)
 |
-неповторяемый
+[неповторяемый](*nonretryable)
 |
 –
 |
@@ -494,7 +493,19 @@
 
 Проанализировать подробное сообщение об ошибке и обратиться к разработчикам.
 
-
 ## See also
 
 [Questions and answers: Errors](../../faq/errors.md)
+
+
+[*instant]: {% include [instant](./_includes/tooltips/instant.md) %}
+
+[*fastbackoff]: {% include [fast backoff](./_includes/tooltips/fast_backoff.md) %}
+
+[*slowbackoff]: {% include [slow backoff](./_includes/tooltips/slow_backoff.md) %}
+
+[*retryable]: {% include [retryable](./_includes/tooltips/retryable.md) %}
+
+[*nonretryable]: {% include [nonretryable](./_includes/tooltips/nonretryable.md) %}
+
+[*condretryable]: {% include [conditionally retryable](./_includes/tooltips/condretryable.md) %}

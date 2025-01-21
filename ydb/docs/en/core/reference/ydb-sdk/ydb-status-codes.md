@@ -32,7 +32,7 @@ Recreate session
 |
 [BAD_REQUEST](#bad-request)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -44,7 +44,7 @@ no
 |
 [UNAUTHORIZED](#unauthorized)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -56,7 +56,7 @@ no
 |
 [INTERNAL_ERROR](#internal-error)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -68,9 +68,9 @@ no
 |
 [ABORTED](#aborted)
 |
-retryable
+[retryable](*retryable)
 |
-fast
+[fast](*fastbackoff)
 |
 no
 ||
@@ -80,9 +80,9 @@ no
 |
 [UNAVAILABLE](#unavailable)
 |
-retryable
+[retryable](*retryable)
 |
-fast
+[fast](*fastbackoff)
 |
 no
 ||
@@ -92,9 +92,9 @@ no
 |
 [OVERLOADED](#overloaded)
 |
-retryable
+[retryable](*retryable)
 |
-slow
+[slow](*slowbackoff)
 |
 no
 ||
@@ -104,7 +104,7 @@ no
 |
 [SCHEME_ERROR](#scheme-error)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -116,7 +116,7 @@ no
 |
 [GENERIC_ERROR](#generic-error)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -128,7 +128,7 @@ no
 |
 [TIMEOUT](#timeout)
 |
-non-retryable
+[non-retryable](*nonretryable)
 <!-- conditionally-retryable -->
 <!-- TODO: Why is it non-retryable ? -->
 |
@@ -142,9 +142,9 @@ no
 |
 [BAD_SESSION](#bad-session)
 |
-retryable
+[retryable](*retryable)
 |
-instant
+[instant](*instant)
 |
 yes
 ||
@@ -154,7 +154,7 @@ yes
 |
 [PRECONDITION_FAILED](#precondition-failed)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -166,7 +166,7 @@ no
 |
 [ALREADY_EXISTS](#already-exists)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -178,7 +178,7 @@ no
 |
 [NOT_FOUND](#not-found)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -190,9 +190,9 @@ no
 |
 [SESSION_EXPIRED](#session-expired)
 |
-conditionally-retryable
+[conditionally-retryable](*condretryable)
 |
-instant
+[instant](*instant)
 |
 yes
 ||
@@ -202,10 +202,9 @@ yes
 |
 [CANCELLED](#cancelled)
 |
-non-retryable
-<!-- retryable -->
+[non-retryable](*nonretryable)
 |
-fast
+–
 |
 no
 ||
@@ -215,9 +214,9 @@ no
 |
 [UNDETERMINED](#undetermined)
 |
-conditionally-retryable
+[conditionally-retryable](*condretryable)
 |
-fast
+[fast](*fastbackoff)
 |
 no
 ||
@@ -227,7 +226,7 @@ no
 |
 [UNSUPPORTED](#unsupported)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -239,9 +238,9 @@ no
 |
 [SESSION_BUSY](#session-busy)
 |
-retryable
+[retryable](*retryable)
 |
-fast
+[fast](*fastbackoff)
 |
 yes
 ||
@@ -251,7 +250,7 @@ yes
 |
 [EXTERNAL_ERROR](#external-error)
 |
-non-retryable
+[non-retryable](*nonretryable)
 |
 –
 |
@@ -498,3 +497,16 @@ See the detailed error message and contact the developers.
 ## See also
 
 [Questions and answers: Errors](../../faq/errors.md)
+
+
+[*instant]: {% include [instant](./_includes/tooltips/instant.md) %}
+
+[*fastbackoff]: {% include [fast backoff](./_includes/tooltips/fast_backoff.md) %}
+
+[*slowbackoff]: {% include [slow backoff](./_includes/tooltips/slow_backoff.md) %}
+
+[*retryable]: {% include [retryable](./_includes/tooltips/retryable.md) %}
+
+[*nonretryable]: {% include [nonretryable](./_includes/tooltips/nonretryable.md) %}
+
+[*condretryable]: {% include [conditionally retryable](./_includes/tooltips/condretryable.md) %}

@@ -1,0 +1,1 @@
+**Errors that cannot be fixed with a retry** (non-retryable) include incorrectly written queries, YDB internal errors, or queries that mismatch the data schema. Retrying such queries will not resolve the issue. This situation requires developer attention.

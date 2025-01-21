@@ -1,0 +1,1 @@
+**Errors that can presumably be fixed with a retry after the client application response** (conditionally retryable) include such idempotent operations as no response within the set timeout or an authentication request.

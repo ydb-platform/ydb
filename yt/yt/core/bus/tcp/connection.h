@@ -282,7 +282,7 @@ private:
 
     NYTree::IAttributeDictionaryPtr PeerAttributes_;
 
-    size_t MaxFragmentsPerWrite_ = 256;
+    int MaxFragmentsPerWrite_ = 256;
 
     ILocalMessageHandlerPtr LocalBypassHandler_;
     IBusPtr LocalBypassReplyBus_;

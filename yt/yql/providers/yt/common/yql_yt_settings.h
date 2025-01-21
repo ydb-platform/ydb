@@ -274,6 +274,8 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> UseNewPredicateExtraction;
     NCommon::TConfSetting<bool, false> PruneKeyFilterLambda;
     NCommon::TConfSetting<bool, false> DqPruneKeyFilterLambda;
+    NCommon::TConfSetting<bool, false> UseQLFilter;
+    NCommon::TConfSetting<bool, false> PruneQLFilterLambda;
     NCommon::TConfSetting<bool, false> MergeAdjacentPointRanges;
     NCommon::TConfSetting<bool, false> KeyFilterForStartsWith;
     NCommon::TConfSetting<ui64, false> MaxKeyRangeCount;

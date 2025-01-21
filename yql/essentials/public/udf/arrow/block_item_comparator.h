@@ -1,8 +1,6 @@
 #pragma once
 
 #include "block_item.h"
-#include "block_reader.h"
-
 
 #include <yql/essentials/public/udf/udf_ptr.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
@@ -179,7 +177,7 @@ public:
     bool DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         const auto x = lhs.Get<TLayout>();
         const auto y = rhs.Get<TLayout>();
-        
+
         if (x == y) {
             const auto tx = lhs.GetTimezoneId();
             const auto ty = rhs.GetTimezoneId();
@@ -196,8 +194,7 @@ public:
     bool DoEquals(TBlockItem lhs, TBlockItem rhs) const {
         return lhs.Get<TLayout>() == rhs.Get<TLayout>() && lhs.GetTimezoneId() == rhs.GetTimezoneId();
     }
-    
-    
+
     bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
         return std::forward_as_tuple(lhs.Get<TLayout>(), lhs.GetTimezoneId()) < std::forward_as_tuple(rhs.Get<TLayout>(), rhs.GetTimezoneId());
     }

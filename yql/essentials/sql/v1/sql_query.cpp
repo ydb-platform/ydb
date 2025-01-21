@@ -3046,6 +3046,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableuseblocks") {
             Ctx.UseBlocks = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableUseBlocks");
+        } else if (normalizedPragma == "emittablesource") {
+            Ctx.EmitTableSource = true;
+            Ctx.IncrementMonCounter("sql_pragma", "EmitTableSource");
+        } else if (normalizedPragma == "disableemittablesource") {
+            Ctx.EmitTableSource = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableEmitTableSource");
         } else if (normalizedPragma == "ansilike") {
             Ctx.AnsiLike = true;
             Ctx.IncrementMonCounter("sql_pragma", "AnsiLike");

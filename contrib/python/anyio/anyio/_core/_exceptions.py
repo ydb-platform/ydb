@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Generator
+from textwrap import dedent
+from typing import Any
 
 if sys.version_info < (3, 11):
     from exceptiongroup import BaseExceptionGroup
@@ -19,6 +21,41 @@ class BrokenWorkerProcess(Exception):
     Raised by :meth:`~anyio.to_process.run_sync` if the worker process terminates abruptly or
     otherwise misbehaves.
     """
+
+
+class BrokenWorkerIntepreter(Exception):
+    """
+    Raised by :meth:`~anyio.to_interpreter.run_sync` if an unexpected exception is
+    raised in the subinterpreter.
+    """
+
+    def __init__(self, excinfo: Any):
+        # This was adapted from concurrent.futures.interpreter.ExecutionFailed
+        msg = excinfo.formatted
+        if not msg:
+            if excinfo.type and excinfo.msg:
+                msg = f"{excinfo.type.__name__}: {excinfo.msg}"
+            else:
+                msg = excinfo.type.__name__ or excinfo.msg
+
+        super().__init__(msg)
+        self.excinfo = excinfo
+
+    def __str__(self) -> str:
+        try:
+            formatted = self.excinfo.errdisplay
+        except Exception:
+            return super().__str__()
+        else:
+            return dedent(
+                f"""
+                {super().__str__()}
+
+                Uncaught in the interpreter:
+
+                {formatted}
+                """.strip()
+            )
 
 
 class BusyResourceError(Exception):

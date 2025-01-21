@@ -6,6 +6,7 @@
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/arrow/block_item_comparator.h>
 #include <yql/essentials/public/udf/arrow/block_item_hasher.h>
+#include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
@@ -2552,6 +2553,8 @@ struct TComparatorTraits {
     template <typename T, bool Nullable>
     using TTzDateComparator = NUdf::TTzDateBlockItemComparator<T, Nullable>;
 
+    constexpr static bool PassType = false;
+
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
         return std::unique_ptr<TResult>(MakePgItemComparator(desc.TypeId).Release());
@@ -2584,6 +2587,8 @@ struct THasherTraits {
     template <typename T, bool Nullable>
     using TTzDateHasher = NYql::NUdf::TTzDateBlockItemHasher<T, Nullable>;
 
+    constexpr static bool PassType = false;
+
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
         return std::unique_ptr<TResult>(MakePgItemHasher(desc.TypeId).Release());
@@ -2605,11 +2610,11 @@ struct THasherTraits {
 };
 
 NUdf::IBlockItemComparator::TPtr TBlockTypeHelper::MakeComparator(NUdf::TType* type) const {
-    return NUdf::MakeBlockReaderImpl<TComparatorTraits>(TTypeInfoHelper(), type, nullptr).release();
+    return NUdf::DispatchByArrowTraits<TComparatorTraits>(TTypeInfoHelper(), type, nullptr).release();
 }
 
 NUdf::IBlockItemHasher::TPtr TBlockTypeHelper::MakeHasher(NUdf::TType* type) const {
-    return NUdf::MakeBlockReaderImpl<THasherTraits>(TTypeInfoHelper(), type, nullptr).release();
+    return NUdf::DispatchByArrowTraits<THasherTraits>(TTypeInfoHelper(), type, nullptr).release();
 }
 
 TType* TTypeBuilder::NewVoidType() const {

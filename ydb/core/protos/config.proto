@@ -42,6 +42,8 @@ import "yql/essentials/providers/common/proto/gateways_config.proto";
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
+// x-compat: body
+
 message TAffinity {
     repeated uint32 X = 1; // DEPRECATED: Use `CpuList` instead
 
@@ -2130,7 +2132,7 @@ message TAppConfig {
     optional TLogConfig LogConfig = 2;
     optional TStaticNameserviceConfig NameserviceConfig = 3;
     optional TInterconnectConfig InterconnectConfig = 4;
-    optional TDomainsConfig DomainsConfig = 5;
+    optional TDomainsConfig DomainsConfig = 5; // x-compat: extended
     optional TBlobStorageConfig BlobStorageConfig = 6;
     optional TChannelProfileConfig ChannelProfileConfig = 7;
     optional TBootstrap BootstrapConfig = 8;
@@ -2147,7 +2149,8 @@ message TAppConfig {
     optional TMemoryLogConfig MemoryLogConfig = 19;
     optional TGRpcConfig GRpcConfig = 20;
     optional TDynamicNameserviceConfig DynamicNameserviceConfig = 22;
-    //optional TLocalConfig LocalConfig = 23; DEPRECATED
+    reserved 23;
+    reserved "LocalConfig";
     optional TDynamicNodeConfig DynamicNodeConfig = 24;
     optional NKikimrCms.TCmsConfig CmsConfig = 25;
     optional TFeatureFlags FeatureFlags = 26;
@@ -2215,7 +2218,7 @@ message TAppConfig {
     repeated TLabel Labels = 103;
     optional TSecurityConfig SecurityConfig = 104;
     optional bool DisableBuiltinSecurity = 105;
-}
+} // message TAppConfig
 
 message TYdbVersion {
     optional uint32 Year = 1;

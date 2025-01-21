@@ -1227,11 +1227,11 @@ public:
 
 class TMarkDirty : public TRequestBase {
 public:
-    TChunkIdx ChunkToMarkDirty;
+    TStackVec<TChunkIdx, 1> ChunksToMarkDirty;
 
     TMarkDirty(NPDisk::TEvMarkDirty& ev, TActorId sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::MarkDirty, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
-        , ChunkToMarkDirty(ev.ChunkToMarkDirty)
+        , ChunksToMarkDirty(ev.ChunksToMarkDirty)
     {}
 
     ERequestType GetType() const override {
@@ -1243,38 +1243,9 @@ public:
         str << "TMarkDirty {";
         str << " Owner# " << Owner;
         str << " OwnerRound# " << OwnerRound;
-        str << " ChunkToMarkDirty# " << ChunkToMarkDirty;
+        str << " ChunksToMarkDirty# ";
+        FormatList(str, ChunksToMarkDirty);
         str << "}";
-        return str.Str();
-    }
-};
-
-class TMarkDirtyBatch : public TRequestBase {
-public:
-    std::vector<TChunkIdx> ChunksToMarkDirty;
-
-    TMarkDirtyBatch(NPDisk::TEvMarkDirtyBatch& ev, TActorId sender, TAtomicBase reqIdx)
-        : TRequestBase(sender, TReqId(TReqId::MarkDirtyBatch, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
-        , ChunksToMarkDirty(ev.ChunksToMarkDirty)
-    {}
-
-    ERequestType GetType() const override {
-        return ERequestType::RequestMarkDirtyBatch;
-    }
-
-    TString ToString() const {
-        TStringStream str;
-        str << "TMarkDirtyBatch {";
-        str << " Owner# " << Owner;
-        str << " OwnerRound# " << OwnerRound;
-        str << " ChunksToMarkDirty# {";
-        for (size_t i = 0; i < ChunksToMarkDirty.size(); ++i) {
-            if (i != 0) {
-                str << ", ";
-            }
-            str << ChunksToMarkDirty[i];
-        }
-        str << "}}";
         return str.Str();
     }
 };

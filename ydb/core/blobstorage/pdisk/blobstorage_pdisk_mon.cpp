@@ -229,7 +229,6 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, PreShredCompactVDisk, PreShredCompactVDisk);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ShredVDiskResult, ShredVDiskResult);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, MarkDirty, MarkDirty);
-    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, MarkDirtyBatch, MarkDirtyBatch);
 
     IO_REQ_INIT(PDiskGroup, WriteSyncLog, WriteSyncLog);
     IO_REQ_INIT(PDiskGroup, WriteFresh, WriteFresh);

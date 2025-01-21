@@ -473,7 +473,6 @@ struct TPDiskMon {
     TReqCounters PreShredCompactVDisk;
     TReqCounters ShredVDiskResult;
     TReqCounters MarkDirty;
-    TReqCounters MarkDirtyBatch;
 
     TIoCounters WriteSyncLog;
     TIoCounters WriteFresh;

@@ -694,12 +694,6 @@ public:
         Y_UNUSED(ev);
     }
 
-    void InitHandle(NPDisk::TEvMarkDirtyBatch::TPtr &ev) {
-        // Just ignore the event, can't mark dirty in this state.
-        Y_UNUSED(ev);
-    }
-
-
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Error state
@@ -872,11 +866,6 @@ public:
     }
 
     void ErrorHandle(NPDisk::TEvMarkDirty::TPtr &ev) {
-        // Just ignore the event, can't mark dirty in this state.
-        Y_UNUSED(ev);
-    }
-
-    void ErrorHandle(NPDisk::TEvMarkDirtyBatch::TPtr &ev) {
         // Just ignore the event, can't mark dirty in this state.
         Y_UNUSED(ev);
     }
@@ -1095,11 +1084,6 @@ public:
 
     void Handle(NPDisk::TEvMarkDirty::TPtr &ev) {
         auto* request = PDisk->ReqCreator.CreateFromEv<TMarkDirty>(*ev->Get(), ev->Sender);
-        PDisk->InputRequest(request);
-    }
-
-    void Handle(NPDisk::TEvMarkDirtyBatch::TPtr &ev) {
-        auto* request = PDisk->ReqCreator.CreateFromEv<TMarkDirtyBatch>(*ev->Get(), ev->Sender);
         PDisk->InputRequest(request);
     }
 
@@ -1460,7 +1444,6 @@ public:
             hFunc(NPDisk::TEvShredPDisk, InitHandle);
             hFunc(NPDisk::TEvPreShredCompactVDiskResult, InitHandle);
             hFunc(NPDisk::TEvShredVDiskResult, InitHandle);
-            hFunc(NPDisk::TEvMarkDirtyBatch, InitHandle);
             hFunc(NPDisk::TEvMarkDirty, InitHandle);
 
             hFunc(TEvReadMetadata, Handle);
@@ -1492,7 +1475,6 @@ public:
             hFunc(NPDisk::TEvShredPDisk, Handle);
             hFunc(NPDisk::TEvPreShredCompactVDiskResult, Handle);
             hFunc(NPDisk::TEvShredVDiskResult, Handle);
-            hFunc(NPDisk::TEvMarkDirtyBatch, Handle);
             hFunc(NPDisk::TEvMarkDirty, Handle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
@@ -1527,7 +1509,6 @@ public:
             hFunc(NPDisk::TEvShredPDisk, ErrorHandle);
             hFunc(NPDisk::TEvPreShredCompactVDiskResult, ErrorHandle);
             hFunc(NPDisk::TEvShredVDiskResult, ErrorHandle);
-            hFunc(NPDisk::TEvMarkDirtyBatch, ErrorHandle);
             hFunc(NPDisk::TEvMarkDirty, ErrorHandle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);

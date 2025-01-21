@@ -2564,9 +2564,6 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestMarkDirty:
                 ProcessMarkDirty(static_cast<TMarkDirty&>(*req));
                 break;
-            case ERequestType::RequestMarkDirtyBatch:
-                ProcessMarkDirtyBatch(static_cast<TMarkDirtyBatch&>(*req));
-                break;
             default:
                 Y_FAIL_S("Unexpected request type# " << TypeName(*req));
                 break;
@@ -3177,7 +3174,6 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestPreShredCompactVDiskResult:
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestMarkDirty:
-        case ERequestType::RequestMarkDirtyBatch:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();
@@ -3874,7 +3870,6 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestPreShredCompactVDiskResult:
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestMarkDirty:
-        case ERequestType::RequestMarkDirtyBatch:
             // These requests don't require response.
             return true;
     }
@@ -4143,10 +4138,6 @@ void TPDisk::ProcessShredVDiskResult(TShredVDiskResult& request) {
 }
 
 void TPDisk::ProcessMarkDirty(TMarkDirty& request) {
-    Y_UNUSED(request);
-}
-
-void TPDisk::ProcessMarkDirtyBatch(TMarkDirtyBatch& request) {
     Y_UNUSED(request);
 }
 

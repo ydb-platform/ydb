@@ -413,7 +413,6 @@ public:
     void ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& request);
     void ProcessShredVDiskResult(TShredVDiskResult& request);
     void ProcessMarkDirty(TMarkDirty& request);
-    void ProcessMarkDirtyBatch(TMarkDirtyBatch& request);
 
     void DropAllMetadataRequests();
 

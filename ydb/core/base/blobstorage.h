@@ -747,7 +747,6 @@ struct TEvBlobStorage {
         EvPreShredCompactVDisk,
         EvShredVDisk,
         EvMarkDirty,
-        EvMarkDirtyBatch,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -801,8 +800,6 @@ struct TEvBlobStorage {
         EvShredPDiskResult,
         EvPreShredCompactVDiskResult,
         EvShredVDiskResult,
-        EvMarkDirtyResult,
-        EvMarkDirtyBatchResult,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184

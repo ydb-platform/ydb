@@ -1637,14 +1637,9 @@ struct TEvShredVDisk : TEventLocal<TEvShredVDisk, TEvBlobStorage::EvShredVDisk> 
     TString ToString() const {
         TStringStream str;
         str << "{EvShredVDisk ShredGeneration# " << ShredGeneration << "}";
-        str << " ChunksToShred# {";
-        for (size_t i = 0; i < ChunksToShred.size(); ++i) {
-            if (i) {
-                str << ", ";
-            }
-            str << ChunksToShred[i];
-        }
-        str << "}}";
+        str << " ChunksToShred# ";
+        FormatList(str, ChunksToShred);
+        str << "}";
         return str.Str();
     }
 };
@@ -1681,49 +1676,21 @@ struct TEvShredVDiskResult : TEventLocal<TEvShredVDiskResult, TEvBlobStorage::Ev
 struct TEvMarkDirty : TEventLocal<TEvMarkDirty, TEvBlobStorage::EvMarkDirty> {
     TOwner Owner;
     TOwnerRound OwnerRound;
-    TChunkIdx ChunkToMarkDirty;
+    TStackVec<TChunkIdx, 1> ChunksToMarkDirty;
 
-    TEvMarkDirty(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkToMarkDirty)
+    TEvMarkDirty(TOwner owner, TOwnerRound ownerRound, TStackVec<TChunkIdx, 1> chunksToMarkDirty)
         : Owner(owner)
         , OwnerRound(ownerRound)
-        , ChunkToMarkDirty(chunkToMarkDirty)
+        , ChunksToMarkDirty(chunksToMarkDirty)
     {}
 
     TString ToString() const {
         TStringStream str;
         str << "{EvMarkDirty OwnerId# " << (ui32)Owner
             << " OwnerRound# " << OwnerRound
-            << " ChunkToMarkDirty# " << ChunkToMarkDirty
-            << "}";
-        return str.Str();
-    }
-};
-
-// VDisk sends this message to PDisk to mark a batch of chunks as dirty
-// No response is expected from PDisk as the operation has very high priority and always succeeds
-struct TEvMarkDirtyBatch : TEventLocal<TEvMarkDirtyBatch, TEvBlobStorage::EvMarkDirtyBatch> {
-    TOwner Owner;
-    TOwnerRound OwnerRound;
-    std::vector<TChunkIdx> ChunksToMarkDirty;
-
-    TEvMarkDirtyBatch(TOwner owner, TOwnerRound ownerRound, std::vector<TChunkIdx> chunksToMarkDirty)
-        : Owner(owner)
-        , OwnerRound(ownerRound)
-        , ChunksToMarkDirty(std::move(chunksToMarkDirty))
-    {}
-
-    TString ToString() const {
-        TStringStream str;
-        str << "{EvMarkDirtyBatch ownerId# " << (ui32)Owner
-            << " ownerRound# " << OwnerRound
-            << " ChunksToMarkDirty# {";
-        for (size_t i = 0; i < ChunksToMarkDirty.size(); ++i) {
-            if (i) {
-                str << ", ";
-            }
-            str << ChunksToMarkDirty[i];
-        }
-        str << "}}";
+            << " ChunkToMarkDirty# ";
+        FormatList(str, ChunksToMarkDirty);
+        str << "}";
         return str.Str();
     }
 };

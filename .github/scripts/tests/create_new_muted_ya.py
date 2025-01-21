@@ -3,13 +3,10 @@ import argparse
 import configparser
 import datetime
 import os
-import posixpath
 import re
 import ydb
 import logging
 
-from get_diff_lines_of_file import get_diff_lines_of_file
-from mute_utils import pattern_to_re
 from transform_ya_junit import YaMuteCheck
 from update_mute_issues import (
     create_and_add_issue_to_project,
@@ -296,7 +293,7 @@ def read_tests_from_file(file_path):
                 testsuite, testcase = line.split(" ", maxsplit=1)
                 result.append({'testsuite': testsuite, 'testcase': testcase, 'full_name': f"{testsuite}/{testcase}"})
             except ValueError:
-                log_print(f"cant parse line: {line!r}")
+                logging.error(f"cant parse line: {line!r}")
                 continue
     return result
 
@@ -338,9 +335,8 @@ def create_mute_issues(all_tests, file_path):
     for item in prepared_tests_by_suite:
 
         title, body = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
-        result = create_and_add_issue_to_project(
-            title, body, state='Muted', owner=prepared_tests_by_suite[item][0]['owner'].split('/', 1)[1]
-        )
+        owner_value = prepared_tests_by_suite[item][0]['owner'].split('/', 1)[1] if '/' in prepared_tests_by_suite[item][0]['owner'] else prepared_tests_by_suite[item][0]['owner']
+        result = create_and_add_issue_to_project(title, body, state='Muted', owner=owner_value)
         if not result:
             break
         else:

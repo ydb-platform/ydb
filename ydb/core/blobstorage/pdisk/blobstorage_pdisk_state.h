@@ -230,6 +230,8 @@ struct TOwnerData {
             InFlight.Reset(TIntrusivePtr<TOwnerInflight>(new TOwnerInflight));
         }
         OnQuarantine = quarantine;
+        LastShredGeneration = 0;
+        ShredState = VDISK_SHRED_STATE_NOT_REQUESTED;
     }
 };
 

@@ -348,6 +348,12 @@ struct TVDiskMock {
         return LastUsedLsn + 1 - FirstLsnToKeep;
     }
 
+    void PerformHarakiri() {
+        TestCtx->TestResponse<NPDisk::TEvHarakiriResult>(
+            new NPDisk::TEvHarakiri(PDiskParams->Owner, PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+    }
+
     void RespondToPreShredCompact(ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString& errorReason) {
         THolder<NPDisk::TEvPreShredCompactVDisk> evReq = TestCtx->Recv<NPDisk::TEvPreShredCompactVDisk>();
         if (evReq) {

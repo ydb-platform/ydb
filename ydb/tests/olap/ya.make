@@ -3,7 +3,7 @@ PY3TEST()
     ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
     TEST_SRCS(
-        test_disk_exhaustion.py
+        test_quota_exhaustion.py
     )
 
     SIZE(MEDIUM)

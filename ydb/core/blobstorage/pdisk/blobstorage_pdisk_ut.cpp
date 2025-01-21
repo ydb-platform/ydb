@@ -1431,4 +1431,34 @@ Y_UNIT_TEST_SUITE(ReadOnlyPDisk) {
     }
 }
 
+Y_UNIT_TEST_SUITE(ShredPDisk) {
+    Y_UNIT_TEST(EmptyShred) {
+        ui64 shredGeneration = 1;
+
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(new NPDisk::TEvShredPDisk(shredGeneration), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
+        UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
+    }
+    Y_UNIT_TEST(SimpleShred) {
+        ui64 shredGeneration = 1;
+
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+
+        vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
+
+        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+
+        UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
+        UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
+    }
+}
+
 } // namespace NKikimr

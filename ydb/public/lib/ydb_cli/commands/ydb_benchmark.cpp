@@ -6,6 +6,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <util/string/printf.h>
 #include <util/folder/path.h>
+#include <optional>
 
 namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
@@ -37,6 +38,13 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("plan", "Query plans report file name")
         .DefaultValue("")
         .StoreResult(&PlanFileName);
+    config.Opts->AddLongOption("full-stats", "Full stats report file name. "
+            "Requires generic query executer type.")
+        .DefaultValue("")
+        .StoreResult(&FullStatsFileName);
+    config.Opts->AddLongOption("print-progress", "Print progress of query execution. "
+            "Requires generic query executer type.")
+        .StoreTrue(&PrintProgress);
     config.Opts->AddLongOption("query-settings")
         .AppendTo(&QuerySettings).Hidden();
     config.Opts->AddLongOption("query-prefix", "Query prefix.\nEvery prefix is a line that will be added to the beginning of each query. For multiple prefixes lines use this option several times.")
@@ -92,6 +100,18 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request")
         .StoreResult(&RequestTimeout);
 
+}
+
+void TWorkloadCommandBenchmark::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+
+    if (QueryExecuterType == "scan" && PrintProgress) {
+        throw TMisuseException() << "Option \"--print-progress\" requires generic query executer type.";
+    }
+
+    if (QueryExecuterType == "scan" && FullStatsFileName) {
+        throw TMisuseException() << "Option \"--full-stats\" requires generic query executer type.";
+    }
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
@@ -355,12 +375,24 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
             SavePlans(res, queryN, "explain");
         }
 
+        TMaybe<TString> currentStatsFileName;
+        if (FullStatsFileName) {
+            TFsPath(FullStatsFileName).Parent().MkDirs();
+            currentStatsFileName =  TStringBuilder() << FullStatsFileName << "." << queryN;
+        }
+
         for (ui32 i = 0; i < IterationsCount && Now() < GlobalDeadline; ++i) {
             auto t1 = TInstant::Now();
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
+
+            TQueryBenchmarkSettings settings;
+            settings.Deadline = GetDeadline();
+            settings.WithProgress = PrintProgress;
+            settings.StatsFileName = currentStatsFileName;
+
             try {
                 if (client) {
-                    res = Execute(query, *client, GetDeadline());
+                    res = Execute(query, *client, settings);
                 } else {
                     res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "");
                 }

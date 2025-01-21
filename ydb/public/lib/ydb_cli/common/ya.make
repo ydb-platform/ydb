@@ -19,6 +19,7 @@ SRCS(
     print_utils.cpp
     profile_manager.cpp
     progress_bar.cpp
+    progress_indication.cpp
     query_stats.cpp
     recursive_list.cpp
     recursive_remove.cpp

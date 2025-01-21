@@ -51,7 +51,7 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
     o << entry.Name << colors.OldColor();
 }
 
-TString PrettySize(size_t size) {
+TString PrettySize(ui64 size) {
     double sizeFormat = size;
     TString mod = "b";
     const char* mods[] = { "Kb", "Mb", "Gb", "Tb", "Pb", "Eb" };
@@ -68,6 +68,26 @@ TString PrettySize(size_t size) {
     }
 
     return Sprintf((numFormat + " %s").data(), sizeFormat, mod.data());
+}
+
+TString PrettyNumber(ui64 size) {
+    double sizeFormat = size;
+    TString mod = "";
+    const char* mods[] = { " thousand", " million", " billion", " trillion", " quadrillion",
+        " quintillion", " sextillion", " septillion", " octillion", " nonillion", " decillion" };
+    TString numFormat = "%.0f";
+
+    for (const char* nextMod : mods) {
+        if (sizeFormat > 1000) {
+            sizeFormat /= 1000;
+            mod = nextMod;
+            numFormat = "%.02f";
+        } else {
+            break;
+        }
+    }
+
+    return Sprintf((numFormat + "%s").data(), sizeFormat, mod.data());
 }
 
 TString FormatTime(TInstant time) {

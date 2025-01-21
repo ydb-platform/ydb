@@ -249,10 +249,11 @@ private:
     }
 public:
     TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = true)
-        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), AllowOutOfMemory(allowOutOfMemory), States(hash, equal, CountRowsOnPage), Hash(hash), Equal(equal) {
+        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), AllowOutOfMemory(allowOutOfMemory), Hash(hash), Equal(equal) {
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
+        States = std::make_unique<TStates>(Hash, Equal, CountRowsOnPage);
     }
 
     ~TState() {
@@ -265,7 +266,7 @@ public:
 
         ExtractIt.reset();
         Storage.clear();
-        States.Clear();
+        States->Clear();
 
         CleanupCurrentContext();
     }
@@ -274,7 +275,7 @@ public:
         Y_ABORT_UNLESS(!ExtractIt);
         ++Rows;
         bool isNew = false;
-        auto itInsert = States.Insert(Tongue, isNew);
+        auto itInsert = States->Insert(Tongue, isNew);
         if (isNew) {
             CurrentPosition += RowSize();
             if (CurrentPosition == CurrentPage->size()) {
@@ -283,7 +284,7 @@ public:
             }
             Tongue = CurrentPage->data() + CurrentPosition;
         }
-        Throat = States.GetKey(itInsert) + KeyWidth;
+        Throat = States->GetKey(itInsert) + KeyWidth;
         if (isNew) {
             GrowStates();
         }
@@ -293,7 +294,7 @@ public:
 
     void GrowStates() {
         try {
-            States.CheckGrow();
+            States->CheckGrow();
         } catch (TMemoryLimitExceededException) {
             YQL_LOG(INFO) << "State failed to grow";
             if (IsOutOfMemory || !AllowOutOfMemory) {
@@ -315,7 +316,7 @@ public:
                 return true;
         }
 
-        if (!States.Empty())
+        if (!States->Empty())
             return false;
 
         {
@@ -331,28 +332,28 @@ public:
         IsOutOfMemory = false;
         Rows = 0;
 
-        States.Clear();
 
+        States = std::make_unique<TStates>(Hash, Equal, CountRowsOnPage);
         CleanupCurrentContext();
         return true;
     }
 
     void PushStat(IStatsRegistry* stats) const {
-        if (!States.Empty()) {
-            MKQL_SET_MAX_STAT(stats, Combine_MaxRowsCount, static_cast<i64>(States.GetSize()));
+        if (!States->Empty()) {
+            MKQL_SET_MAX_STAT(stats, Combine_MaxRowsCount, static_cast<i64>(States->GetSize()));
             MKQL_INC_STAT(stats, Combine_FlushesCount);
         }
     }
 
     NUdf::TUnboxedValuePod* Extract() {
         if (!ExtractIt) {
-            ExtractIt.emplace(Storage, RowSize(), States.GetSize());
+            ExtractIt.emplace(Storage, RowSize(), States->GetSize());
         } else {
             ExtractIt->Next();
         }
         if (!ExtractIt->IsValid()) {
             ExtractIt.reset();
-            States.Clear();
+            States->Clear();
             return nullptr;
         }
         NUdf::TUnboxedValuePod* result = ExtractIt->GetValuePtr();
@@ -375,7 +376,7 @@ private:
     ui64 CurrentPosition = 0;
     TRow* CurrentPage = nullptr;
     TStorage Storage;
-    TStates States;
+    std::unique_ptr<TStates> States;
     const THashFunc Hash;
     const TEqualsFunc Equal;
 };

@@ -7,6 +7,18 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
+class TPortionToMerge {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
+
+public:
+    TPortionToMerge(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter)
+        : Batch(batch)
+        , Filter(filter) {
+    }
+};
+
 class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges,
                                           public NColumnShard::TMonitoringObjectsCounter<TGeneralCompactColumnEngineChanges> {
 private:
@@ -15,7 +27,10 @@ private:
     std::shared_ptr<NPrioritiesQueue::TAllocationGuard> PrioritiesAllocationGuard;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     NArrow::NMerger::TIntervalPositions CheckPoints;
-    void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept;
+
+    [[nodiscard]] std::vector<TWritePortionInfoWithBlobsResult> BuildAppendedPortionsByChunks(TConstructionContext& context,
+        std::vector<TPortionToMerge>&& portionsToMerge,
+        const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats) noexcept;
 
     std::shared_ptr<NArrow::TColumnFilter> BuildPortionFilter(const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual,
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage,

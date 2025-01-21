@@ -2,7 +2,9 @@
 
 #include "defs.h"
 #include "actorid.h"
+#ifdef USE_ACTOR_CALLSTACK
 #include "callstack.h"
+#endif
 #include "event_load.h"
 
 #include <ydb/library/actors/wilson/wilson_trace.h>

@@ -4,20 +4,6 @@ import ydb
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
-
-class YdbClient:
-    def __init__(self, endpoint, database):
-        self.driver = ydb.Driver(endpoint=endpoint, database=database, oauth=None)
-        self.database = database
-        self.session_pool = ydb.QuerySessionPool(self.driver)
-
-    def wait_connection(self, timeout=5):
-        self.driver.wait(timeout, fail_fast=True)
-
-    def query(self, statement):
-        return self.session_pool.execute_with_retries(statement, None, ydb.retries.RetrySettings(max_retries=1))
-
-
 ROWS_CHUNK_SIZE = 3000000
 ROWS_CHUNKS_COUNT = 100000
 
@@ -37,10 +23,12 @@ class TestYdbWorkload(object):
         cls.cluster.stop()
 
     def test(self):
-        client = YdbClient(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root')
+        driver = ydb.Driver(endpoint=f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', database='/Root')
+        session = ydb.QuerySessionPool(driver)
+        driver.wait(5, fail_fast=True)
 
         def create_table(table):
-            return client.query(f"""
+            return session.execute_with_retries(f"""
                 CREATE TABLE {table} (
                     k Int32 NOT NULL,
                     v Uint64,
@@ -48,26 +36,26 @@ class TestYdbWorkload(object):
                 ) WITH (STORE = COLUMN)
             """)
 
-        def upsert_chunk(table, chunk_id):
-            return client.query(f"""
+        def upsert_chunk(table, chunk_id, retries=10):
+            return session.execute_with_retries(f"""
                 $n = {ROWS_CHUNK_SIZE};
                 $values_list = ListReplicate(42ul, $n);
-                $rows_list = ListFoldMap($values_list, {chunk_id * ROWS_CHUNK_SIZE}, ($val, $i) -> ((<|k:$i, v:$val|>, $i + 1)));
+                $rows_list = ListFoldMap($values_list, {chunk_id * ROWS_CHUNK_SIZE}, ($val, $i) ->  ((<|k:$i, v:$val|>, $i + 1)));
 
                 UPSERT INTO {table}
                 SELECT * FROM AS_TABLE($rows_list);
-            """)
+            """, None, ydb.retries.RetrySettings(max_retries=retries))
 
         create_table('huge')
 
         try:
             for i in range(ROWS_CHUNKS_COUNT):
-                res = upsert_chunk('huge', i)
+                res = upsert_chunk('huge', i, retries=0)
                 print(f"query #{i} ok, result:", res, file=sys.stderr)
         except ydb.issues.Overloaded:
             print('got overload issue', file=sys.stderr)
 
-        client.query("""DROP TABLE huge""")
+        session.execute_with_retries("""DROP TABLE huge""")
 
         # Check database health after cleanup
         create_table('small')

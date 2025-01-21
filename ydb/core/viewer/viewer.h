@@ -118,7 +118,7 @@ struct TRequestState {
             return TString((*request)->Request.GetUri());
         }
         if (auto* request = std::get_if<const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*>(&Request)) {
-            return TString((*request)->Request->URL.Before('?'));
+            return TString((*request)->Request->URL);
         }
         return {};
     }

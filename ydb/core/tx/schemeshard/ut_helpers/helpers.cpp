@@ -2040,6 +2040,22 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
+    void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, bool isEnabled) {
+        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto transaction = modifyTx->Record.AddTransaction();
+        transaction->SetWorkingDir(database);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+
+        auto alterUser = transaction->MutableAlterLogin()->MutableModifyUser();
+
+        alterUser->SetUser(user);
+        alterUser->SetCanLogin(isEnabled);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
+        TAutoPtr<IEventHandle> handle;
+        [[maybe_unused]]auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle); // wait()
+    }
+
     // class TFakeDataReq {
     TFakeDataReq::TFakeDataReq(NActors::TTestActorRuntime &runtime, ui64 txId, const TString &table, const TString &query)
         : Runtime(runtime)

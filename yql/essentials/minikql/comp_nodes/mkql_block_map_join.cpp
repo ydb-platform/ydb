@@ -3,9 +3,11 @@
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
+#include <yql/essentials/minikql/computation/mkql_block_trimmer.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_block_map_join_utils.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
@@ -307,8 +309,6 @@ class TBlockIndex : public TComputationValue<TBlockIndex> {
         };
     };
 
-    static_assert(sizeof(TIndexMapValue) == 8);
-
     using TBase = TComputationValue<TBlockIndex>;
     using TIndexMap = TRobinHoodHashFixedMap<
         ui64,
@@ -317,6 +317,9 @@ class TBlockIndex : public TComputationValue<TBlockIndex> {
         std::hash<ui64>,
         TMKQLAllocator<char>
     >;
+
+    static_assert(sizeof(TIndexMapValue) == 8);
+    static_assert(std::max(TIndexMap::GetCellSize(), static_cast<ui32>(sizeof(TIndexNode))) == BlockMapJoinIndexEntrySize);
 
 public:
     class TIterator {
@@ -329,12 +332,12 @@ public:
     public:
         TIterator() = default;
 
-        TIterator(TBlockIndex* blockIndex)
+        TIterator(const TBlockIndex* blockIndex)
             : Type_(EIteratorType::EMPTY)
             , BlockIndex_(blockIndex)
         {}
 
-        TIterator(TBlockIndex* blockIndex, TIndexEntry entry, std::vector<NYql::NUdf::TBlockItem> itemsToLookup)
+        TIterator(const TBlockIndex* blockIndex, TIndexEntry entry, std::vector<NYql::NUdf::TBlockItem> itemsToLookup)
             : Type_(EIteratorType::INPLACE)
             , BlockIndex_(blockIndex)
             , Entry_(entry)
@@ -342,7 +345,7 @@ public:
             , ItemsToLookup_(std::move(itemsToLookup))
         {}
 
-        TIterator(TBlockIndex* blockIndex, TIndexNode* node, std::vector<NYql::NUdf::TBlockItem> itemsToLookup)
+        TIterator(const TBlockIndex* blockIndex, TIndexNode* node, std::vector<NYql::NUdf::TBlockItem> itemsToLookup)
             : Type_(EIteratorType::LIST)
             , BlockIndex_(blockIndex)
             , Node_(node)
@@ -432,7 +435,7 @@ public:
 
     private:
         EIteratorType Type_;
-        TBlockIndex* BlockIndex_ = nullptr;
+        const TBlockIndex* BlockIndex_ = nullptr;
 
         union {
             TIndexNode* Node_;
@@ -451,7 +454,8 @@ public:
         const TVector<TType*>& itemTypes,
         const TVector<ui32>& keyColumns,
         NUdf::TUnboxedValue stream,
-        bool any
+        bool any,
+        arrow::MemoryPool* pool
     )
         : TBase(memInfo)
         , InputsDescr_(ToValueDescr(itemTypes))
@@ -466,6 +470,7 @@ public:
             Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
             Hashers_.push_back(helper.MakeHasher(blockItemType));
             Comparators_.push_back(helper.MakeComparator(blockItemType));
+            Trimmers_.push_back(MakeBlockTrimmer(TTypeInfoHelper(), blockItemType, pool));
         }
     }
 
@@ -484,7 +489,12 @@ public:
             for (size_t i = 0; i < Inputs_.size() - 1; i++) {
                 auto& datum = TArrowBlock::From(Inputs_[i]).GetDatum();
                 ARROW_DEBUG_CHECK_DATUM_TYPES(InputsDescr_[i], datum.descr());
-                block.push_back(std::move(datum));
+                if (datum.is_scalar()) {
+                    block.push_back(datum);
+                } else {
+                    MKQL_ENSURE(datum.is_array(), "Expecting array");
+                    block.push_back(Trimmers_[i]->Trim(datum.array()));
+                }
             }
             Data_.push_back(std::move(block));
         }
@@ -565,7 +575,7 @@ public:
                 return;
             }
 
-            auto value = static_cast<TIndexMapValue*>(Index_.GetMutablePayload(iter));
+            auto value = static_cast<const TIndexMapValue*>(Index_.GetPayload(iter));
             if (value->IsInplace()) {
                 iterators[i] = TIterator(this, value->GetEntry(), std::move(itemsBatch[i]));
             } else {
@@ -574,23 +584,20 @@ public:
         });
     }
 
-    TBlockItem GetItem(TIndexEntry entry, ui32 columnIdx) {
+    TBlockItem GetItem(TIndexEntry entry, ui32 columnIdx) const {
         Y_ENSURE(entry.BlockOffset < Data_.size());
         Y_ENSURE(columnIdx < Inputs_.size() - 1);
-
-        auto& datum = Data_[entry.BlockOffset][columnIdx];
-        MKQL_ENSURE(datum.is_array(), "Expecting array");
-        return Readers_[columnIdx]->GetItem(*datum.array(), entry.ItemOffset);
+        return GetItemFromBlock(Data_[entry.BlockOffset], columnIdx, entry.ItemOffset);
     }
 
-    void GetRow(TIndexEntry entry, const TVector<ui32>& ioMap, std::vector<NYql::NUdf::TBlockItem>& row) {
+    void GetRow(TIndexEntry entry, const TVector<ui32>& ioMap, std::vector<NYql::NUdf::TBlockItem>& row) const {
         Y_ENSURE(row.size() == ioMap.size());
         for (size_t i = 0; i < row.size(); i++) {
             row[i] = GetItem(entry, ioMap[i]);
         }
     }
 
-    bool IsKeyEquals(TIndexEntry entry, const std::vector<NYql::NUdf::TBlockItem>& keyItems) {
+    bool IsKeyEquals(TIndexEntry entry, const std::vector<NYql::NUdf::TBlockItem>& keyItems) const {
         Y_ENSURE(keyItems.size() == KeyColumns_.size());
         for (size_t i = 0; i < KeyColumns_.size(); i++) {
             auto indexItem = GetItem(entry, KeyColumns_[i]);
@@ -607,10 +614,7 @@ private:
         ui64 keyHash = 0;
         keyItems.clear();
         for (ui32 keyColumn : KeyColumns_) {
-            auto& datum = block[keyColumn];
-            MKQL_ENSURE(datum.is_array(), "Expecting array");
-
-            auto item = Readers_[keyColumn]->GetItem(*datum.array(), offset);
+            auto item = GetItemFromBlock(block, keyColumn, offset);
             if (!item) {
                 keyItems.clear();
                 return 0;
@@ -623,11 +627,21 @@ private:
         return keyHash;
     }
 
+    TBlockItem GetItemFromBlock(const std::vector<arrow::Datum>& block, ui32 columnIdx, size_t offset) const {
+        const auto& datum = block[columnIdx];
+        if (datum.is_scalar()) {
+            return Readers_[columnIdx]->GetScalarItem(*datum.scalar());
+        } else {
+            MKQL_ENSURE(datum.is_array(), "Expecting array");
+            return Readers_[columnIdx]->GetItem(*datum.array(), offset);
+        }
+    }
+
     TIndexNode* InsertIndexNode(TIndexEntry entry, TIndexNode* currentHead = nullptr) {
         return &IndexNodes_.emplace_back(entry, currentHead);
     }
 
-    bool ContainsKey(const TIndexMapValue* chain, const std::vector<NYql::NUdf::TBlockItem>& keyItems) {
+    bool ContainsKey(const TIndexMapValue* chain, const std::vector<NYql::NUdf::TBlockItem>& keyItems) const {
         if (chain->IsInplace()) {
             return IsKeyEquals(chain->GetEntry(), keyItems);
         } else {
@@ -650,6 +664,7 @@ private:
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<NUdf::IBlockItemHasher::TPtr> Hashers_;
     TVector<NUdf::IBlockItemComparator::TPtr> Comparators_;
+    TVector<IBlockTrimmer::TPtr> Trimmers_;
 
     std::vector<std::vector<arrow::Datum>> Data_;
 
@@ -705,7 +720,8 @@ public:
             RightItemTypes_,
             RightKeyColumns_,
             std::move(RightStream_->GetValue(ctx)),
-            RightAny
+            RightAny,
+            &ctx.ArrowMemoryPool
         );
 
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,

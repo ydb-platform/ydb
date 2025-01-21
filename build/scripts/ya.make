@@ -79,7 +79,6 @@ ELSEIF (PY3)
         gen_join_srcs.py
         gen_py_protos.py
         gen_py_reg.py
-        gen_swiftc_output_map.py
         gen_tasklet_reg.py
         gen_test_apk_gradle_script.py
         gen_yql_python_udf.py

@@ -203,12 +203,6 @@ public:
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) override;
 
-    // SkyShare
-
-    NHttpClient::IHttpResponsePtr SkyShareTable(
-        const std::vector<TYPath>& tablePaths,
-        const TSkyShareTableOptions& options = {}) override;
-
     // Files
 
     std::unique_ptr<IInputStream> ReadFile(
@@ -341,7 +335,7 @@ public:
 
     ui64 GenerateTimestamp() override;
 
-    TAuthorizationInfo WhoAmI() override;
+    IRawBatchRequestPtr CreateRawBatchRequest() override;
 
 private:
     const TClientContext Context_;

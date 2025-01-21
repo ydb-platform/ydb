@@ -32,6 +32,7 @@ PEERDIR(
     library/cpp/resource
     library/python/resource
     ydb/core/protos
+    ydb/library/yaml_config/protos
 )
 
 END()

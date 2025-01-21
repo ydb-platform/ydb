@@ -99,7 +99,7 @@ TMutableUnversionedRow TRowBuffer::CaptureRow(TUnversionedValueRange values, boo
     auto capturedRow = TMutableUnversionedRow::Allocate(&Pool_, count);
     auto* capturedBegin = capturedRow.Begin();
 
-    ::memcpy(capturedBegin, values.Begin(), count * sizeof (TUnversionedValue));
+    ::memcpy(capturedBegin, values.Begin(), count * sizeof(TUnversionedValue));
 
     if (captureValues) {
         for (int index = 0; index < count; ++index) {
@@ -270,8 +270,8 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
         writeTimestampCount,
         deleteTimestampCount);
 
-    ::memcpy(capturedRow.BeginWriteTimestamps(), writeTimestamps.data(), sizeof (TTimestamp) * writeTimestampCount);
-    ::memcpy(capturedRow.BeginDeleteTimestamps(), row.BeginDeleteTimestamps(), sizeof (TTimestamp) * deleteTimestampCount);
+    ::memcpy(capturedRow.BeginWriteTimestamps(), writeTimestamps.data(), sizeof(TTimestamp) * writeTimestampCount);
+    ::memcpy(capturedRow.BeginDeleteTimestamps(), row.BeginDeleteTimestamps(), sizeof(TTimestamp) * deleteTimestampCount);
 
     if (!allowMissingKeyColumns) {
         int index = 0;

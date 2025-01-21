@@ -9,6 +9,11 @@ def post_install(self):
         libunwind.NO_RUNTIME = True
         libunwind.NO_SANITIZE = True
         libunwind.NO_SANITIZE_COVERAGE = True
+        # There should be a clang option to disable pragma comment(lib) completely.
+        # Having these defines breaks musl build, as there is no such libs in musl
+        libunwind.CFLAGS.remove("-D_LIBUNWIND_LINK_DL_LIB")
+        libunwind.CFLAGS.remove("-D_LIBUNWIND_LINK_PTHREAD_LIB")
+
         # original build uses -f options heavily, keep only necessary subset
         libunwind.CFLAGS += ["-fno-exceptions", "-fno-rtti", "-funwind-tables"]
         libunwind.after("CFLAGS", Switch({"SANITIZER_TYPE == memory": "CFLAGS(-fPIC)"}))
@@ -25,7 +30,6 @@ def post_install(self):
                 {
                     "NOT OS_EMSCRIPTEN": Linkable(
                         SRCS=sources,
-                        CFLAGS=["-D_LIBUNWIND_IS_NATIVE_ONLY"],
                     ),
                     "OS_EMSCRIPTEN AND ARCH_WASM32": Linkable(
                         SRCS=["src/Unwind-wasm.c"],
@@ -39,7 +43,7 @@ def post_install(self):
                         PEERDIR=["contrib/restricted/emscripten/include"],
                         CFLAGS=[
                             "-D_LIBUNWIND_HIDE_SYMBOLS",
-                            "-D__USING_WASM_EXCEPTIONS__",
+                            "-D__WASM_EXCEPTIONS__",
                         ],
                     ),
                 }

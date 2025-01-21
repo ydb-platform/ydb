@@ -316,7 +316,6 @@ namespace NKikimr {
             Impl->Issue(request, std::move(callback), &TImpl::TStub::Async ## NAME); \
         }
 
-        IMPL_REQUEST(Request, TRequest, TResponse)
         IMPL_REQUEST(SchemeOperation, TSchemeOperation, TResponse)
         IMPL_REQUEST(SchemeOperationStatus, TSchemeOperationStatus, TResponse)
         IMPL_REQUEST(SchemeDescribe, TSchemeDescribe, TResponse)

@@ -350,7 +350,8 @@ public:
     }
 
     void Abort(TActorSystem* actorSystem) override {
-        auto *result = new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, "TLogWrite is being aborted");
+        auto *result = new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED,
+            0, "TLogWrite is being aborted", 0);
         result->Results.emplace_back(Lsn, Cookie);
         actorSystem->Send(Sender, result);
         Replied = true;

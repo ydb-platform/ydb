@@ -45,6 +45,7 @@ struct TBackup {
             context.OnComplete.BindMsgToPipe(opId, datashardId, idx, event.Release());
 
             backup.ClearTable();
+            backup.ClearChangefeedUnderlyingTopics();
         }
     }
 

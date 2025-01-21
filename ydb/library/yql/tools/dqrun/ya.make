@@ -81,7 +81,7 @@ ENDIF()
         yql/essentials/core/url_lister
         yql/essentials/core/pg_ext
         ydb/library/yql/providers/yt/actors
-        yt/yql/providers/yt/comp_nodes/dq
+        yt/yql/providers/yt/comp_nodes/dq/llvm14
         ydb/library/yql/providers/yt/dq_task_preprocessor
         yt/yql/providers/yt/gateway/file
         yt/yql/providers/yt/gateway/native

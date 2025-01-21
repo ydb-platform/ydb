@@ -96,6 +96,27 @@ namespace NHyperscan {
             return db;
         }
 
+        TDatabase CompileLiteral(const TStringBuf& literal, unsigned int flags, hs_platform_info_t* platform) {
+            hs_database_t* rawDb = nullptr;
+            hs_compile_error_t* rawCompileErr = nullptr;
+            hs_error_t status = hs_compile_lit(
+                    literal.data(),
+                    flags,
+                    literal.size(),
+                    HS_MODE_BLOCK,
+                    platform,
+                    &rawDb,
+                    &rawCompileErr);
+            TDatabase db(rawDb);
+            NHyperscan::TCompileError compileError(rawCompileErr);
+            if (status != HS_SUCCESS) {
+                ythrow TCompileException()
+                        << "Failed to compile literal: " << literal << ". "
+                        << "Error message (hyperscan): " << compileError->message;
+            }
+            return db;
+        }
+
         TDatabase CompileMulti(
                 const TVector<const char*>& regexs,
                 const TVector<unsigned int>& flags,
@@ -150,6 +171,61 @@ namespace NHyperscan {
             return db;
         }
 
+        TDatabase CompileMultiLiteral(
+            const TVector<const char*>& literals,
+            const TVector<unsigned int>& flags,
+            const TVector<unsigned int>& ids,
+            const TVector<size_t>& lens,
+            hs_platform_info_t* platform)
+        {
+            unsigned int count = literals.size();
+            if (flags.size() != count) {
+                ythrow yexception()
+                        << "Mismatch of sizes vectors passed to CompileMultiLiteral. "
+                        << "size(literals) = " << literals.size() << ". "
+                        << "size(flags) = " << flags.size() << ".";
+            }
+            if (ids.size() != count) {
+                ythrow yexception()
+                        << "Mismatch of sizes vectors passed to CompileMultiLiteral. "
+                        << "size(literals) = " << literals.size() << ". "
+                        << "size(ids) = " << ids.size() << ".";
+            }
+            if (lens.size() != count) {
+                ythrow yexception()
+                        << "Mismatch of sizes vectors passed to CompileMultiLiteral. "
+                        << "size(literals) = " << literals.size() << ". "
+                        << "size(lens) = " << lens.size() << ".";
+            }
+            hs_database_t* rawDb = nullptr;
+            hs_compile_error_t* rawCompileErr = nullptr;
+            hs_error_t status = hs_compile_lit_multi(
+                    literals.data(),
+                    flags.data(),
+                    ids.data(),
+                    lens.data(),
+                    count,
+                    HS_MODE_BLOCK,
+                    platform,
+                    &rawDb,
+                    &rawCompileErr);
+            TDatabase db(rawDb);
+            NHyperscan::TCompileError compileError(rawCompileErr);
+            if (status != HS_SUCCESS) {
+                if (compileError->expression >= 0) {
+                    const char* literal = literals[compileError->expression];
+                    ythrow TCompileException()
+                            << "Failed to compile literal: " << literal << ". "
+                            << "Error message (hyperscan): " << compileError->message;
+                } else {
+                    ythrow TCompileException()
+                            << "Failed to compile multiple literals. "
+                            << "Error message (hyperscan): " << compileError->message;
+                }
+            }
+            return db;
+        }
+
         bool Matches(
                 const TDatabase& db,
                 const TScratch& scratch,
@@ -180,6 +256,16 @@ namespace NHyperscan {
         return NPrivate::Compile(regex, flags, &platformInfo);
     }
 
+    TDatabase CompileLiteral(const TStringBuf& literal, unsigned int flags) {
+        auto platformInfo = NPrivate::MakeCurrentPlatformInfo();
+        return NPrivate::CompileLiteral(literal, flags, &platformInfo);
+    }
+
+    TDatabase CompileLiteral(const TStringBuf& literal, unsigned int flags, TCPUFeatures cpuFeatures) {
+        auto platformInfo = NPrivate::MakePlatformInfo(cpuFeatures);
+        return NPrivate::CompileLiteral(literal, flags, &platformInfo);
+    }
+
     TDatabase CompileMulti(
             const TVector<const char*>& regexs,
             const TVector<unsigned int>& flags,
@@ -199,6 +285,27 @@ namespace NHyperscan {
     {
         auto platformInfo = NPrivate::MakePlatformInfo(cpuFeatures);
         return NPrivate::CompileMulti(regexs, flags, ids, &platformInfo, extendedParameters);
+    }
+
+    TDatabase CompileMultiLiteral(
+        const TVector<const char*>& literals,
+        const TVector<unsigned int>& flags,
+        const TVector<unsigned int>& ids,
+        const TVector<size_t>& lens)
+    {
+        auto platformInfo = NPrivate::MakeCurrentPlatformInfo();
+        return NPrivate::CompileMultiLiteral(literals, flags, ids, lens, &platformInfo);
+    }
+
+    TDatabase CompileMultiLiteral(
+        const TVector<const char*>& literals,
+        const TVector<unsigned int>& flags,
+        const TVector<unsigned int>& ids,
+        const TVector<size_t>& lens,
+        TCPUFeatures cpuFeatures)
+    {
+        auto platformInfo = NPrivate::MakePlatformInfo(cpuFeatures);
+        return NPrivate::CompileMultiLiteral(literals, flags, ids, lens, &platformInfo);
     }
 
     TScratch MakeScratch(const TDatabase& db) {

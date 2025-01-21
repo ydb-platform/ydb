@@ -67,7 +67,7 @@ public:
 class IFetchingStep: public TNonCopyable {
 private:
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY(TDuration, SumDuration, TDuration::Zero());
+    TAtomicCounter SumDuration;
     YDB_READONLY(ui64, SumSize, 0);
     TFetchingStepSignals Signals;
 
@@ -78,8 +78,12 @@ protected:
     }
 
 public:
+    TDuration GetSumDuration() const {
+        return TDuration::MicroSeconds(SumDuration.Val());
+    }
+
     void AddDuration(const TDuration d) {
-        SumDuration += d;
+        SumDuration.Add(d.MicroSeconds());
         Signals.AddDuration(d);
     }
     void AddDataSize(const ui64 size) {
@@ -109,8 +113,8 @@ class TFetchingScript {
 private:
     YDB_ACCESSOR(TString, BranchName, "UNDEFINED");
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
-    std::optional<TMonotonic> StartInstant;
-    std::optional<TMonotonic> FinishInstant;
+    TAtomic StartInstant;
+    TAtomic FinishInstant;
 
 public:
     TFetchingScript(const TSpecialReadContext& context);
@@ -122,14 +126,12 @@ public:
     }
 
     void AddStepDuration(const ui32 index, const TDuration d) {
-        FinishInstant = TMonotonic::Now();
+        AtomicSet(FinishInstant, TMonotonic::Now().MicroSeconds());
         GetStep(index)->AddDuration(d);
     }
 
     void OnExecute() {
-        if (!StartInstant) {
-            StartInstant = TMonotonic::Now();
-        }
+        AtomicCas(&StartInstant, TMonotonic::Now().MicroSeconds(), 0);
     }
 
     TString DebugString() const;

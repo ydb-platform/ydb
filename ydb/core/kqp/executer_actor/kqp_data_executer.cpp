@@ -145,6 +145,7 @@ public:
         , AllowOlapDataQuery(tableServiceConfig.GetAllowOlapDataQuery())
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(tableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
+        , VerboseMemoryLimitException(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException())
     {
         if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
@@ -307,7 +308,7 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release());
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -315,7 +316,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release());
             MakeResponseAndPassAway();
             return;
         } else if (Request.UseImmediateEffects) {
@@ -324,7 +325,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release());
             return;
         } else {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -1311,6 +1312,8 @@ private:
         const ui64 shardId = res->GetOrigin();
         LastShard = shardId;
 
+        ParticipantNodes.emplace(ev->Sender.NodeId());
+
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState);
 
@@ -2104,7 +2107,8 @@ private:
         if (i64 msc = (i64) Request.MaxShardCount; msc > 0) {
             shardsLimit = std::min(shardsLimit, (ui32) msc);
         }
-        size_t shards = datashardTasks.size() + sourceScanPartitionsCount;
+        const size_t shards = datashardTasks.size() + sourceScanPartitionsCount;
+
         if (shardsLimit > 0 && shards > shardsLimit) {
             LOG_W("Too many affected shards: datashardTasks=" << shards << ", limit: " << shardsLimit);
             Counters->TxProxyMon->TxResultError->Inc();
@@ -2186,6 +2190,14 @@ private:
 
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
+
+        if (TxManager) {
+            for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+                if (stageInfo.Meta.ShardKey) {
+                    TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+                }
+            }
+        }
 
         if (StreamResult || EnableReadsMerge || AllowOlapDataQuery) {
             TSet<ui64> shardIds;
@@ -2561,6 +2573,7 @@ private:
                     auto arbiterIterator = std::begin(shards);
                     std::advance(arbiterIterator, index);
                     columnShardArbiter = *arbiterIterator;
+                    receivingShardsSet.insert(*columnShardArbiter);
                 }
             }
 
@@ -2575,7 +2588,13 @@ private:
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (columnShardArbiter) {
+                    if (!columnShardArbiter) {
+                        *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
+                        *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                        if (arbiter) {
+                            shardTx->MutableLocks()->SetArbiterShard(arbiter);
+                        }
+                    } else if (!sendingShardsSet.empty() && !receivingShards.empty()) {
                         shardTx->MutableLocks()->AddSendingShards(*columnShardArbiter);
                         shardTx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
                         if (sendingShardsSet.contains(shardId)) {
@@ -2584,23 +2603,30 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             shardTx->MutableLocks()->AddReceivingShards(shardId);
                         }
+                        std::sort(
+                            std::begin(*shardTx->MutableLocks()->MutableSendingShards()),
+                            std::end(*shardTx->MutableLocks()->MutableSendingShards()));
+                        std::sort(
+                            std::begin(*shardTx->MutableLocks()->MutableReceivingShards()),
+                            std::end(*shardTx->MutableLocks()->MutableReceivingShards()));
                         AFL_ENSURE(!arbiter);
-                    } else {
-                        *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
-                        *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                        if (arbiter) {
-                            shardTx->MutableLocks()->SetArbiterShard(arbiter);
-                        }
                     }
                 }
 
                 for (auto& [shardId, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    if (columnShardArbiter && *columnShardArbiter == shardId) {
+                    if (!columnShardArbiter) {
+                        *tx->MutableLocks()->MutableSendingShards() = sendingShards;
+                        *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                        if (arbiter) {
+                            tx->MutableLocks()->SetArbiterShard(arbiter);
+                        }
+                    } else if (*columnShardArbiter == shardId
+                            && !sendingShardsSet.empty() && !receivingShardsSet.empty()) {
                         tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
                         *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                    } else if (columnShardArbiter) {
+                    } else if (!sendingShardsSet.empty() && !receivingShardsSet.empty()) {
                         tx->MutableLocks()->SetArbiterColumnShard(*columnShardArbiter);
                         tx->MutableLocks()->AddSendingShards(*columnShardArbiter);
                         tx->MutableLocks()->AddReceivingShards(*columnShardArbiter);
@@ -2610,18 +2636,21 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             tx->MutableLocks()->AddReceivingShards(shardId);
                         }
-                    } else {
-                        *tx->MutableLocks()->MutableSendingShards() = sendingShards;
-                        *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
-                        if (arbiter) {
-                            tx->MutableLocks()->SetArbiterShard(arbiter);
-                        }
+                        std::sort(
+                            std::begin(*tx->MutableLocks()->MutableSendingShards()),
+                            std::end(*tx->MutableLocks()->MutableSendingShards()));
+                        std::sort(
+                            std::begin(*tx->MutableLocks()->MutableReceivingShards()),
+                            std::end(*tx->MutableLocks()->MutableReceivingShards()));
                     }
                 }
 
                 for (auto& [shardId, t] : topicTxs) {
                     t.tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
-                    if (columnShardArbiter) {
+                    if (!columnShardArbiter) {
+                        *t.tx.MutableSendingShards() = sendingShards;
+                        *t.tx.MutableReceivingShards() = receivingShards;
+                    } else if (!sendingShardsSet.empty() && !receivingShardsSet.empty()) {
                         t.tx.AddSendingShards(*columnShardArbiter);
                         t.tx.AddReceivingShards(*columnShardArbiter);
                         if (sendingShardsSet.contains(shardId)) {
@@ -2630,9 +2659,12 @@ private:
                         if (receivingShardsSet.contains(shardId)) {
                             t.tx.AddReceivingShards(shardId);
                         }
-                    } else {
-                        *t.tx.MutableSendingShards() = sendingShards;
-                        *t.tx.MutableReceivingShards() = receivingShards;
+                        std::sort(
+                            std::begin(*t.tx.MutableSendingShards()),
+                            std::end(*t.tx.MutableSendingShards()));
+                        std::sort(
+                            std::begin(*t.tx.MutableReceivingShards()),
+                            std::end(*t.tx.MutableReceivingShards()));
                     }
                     YQL_ENSURE(!arbiter);
                 }
@@ -2701,6 +2733,7 @@ private:
             .CaFactory_ = Request.CaFactory_,
             .BlockTrackingMode = BlockTrackingMode,
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
+            .VerboseMemoryLimitException = VerboseMemoryLimitException,
         });
 
         auto err = Planner->PlanExecution();
@@ -3025,6 +3058,7 @@ private:
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TDuration WaitCAStatsTimeout;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
+    const bool VerboseMemoryLimitException;
 };
 
 } // namespace

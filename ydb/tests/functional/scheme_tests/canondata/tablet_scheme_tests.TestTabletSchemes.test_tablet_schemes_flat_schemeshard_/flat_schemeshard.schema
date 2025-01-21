@@ -6168,6 +6168,11 @@
                 "ColumnId": 11,
                 "ColumnName": "Permissions",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "Metadata",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6184,7 +6189,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6615,6 +6621,16 @@
                 "ColumnId": 6,
                 "ColumnName": "FailedAttemptCount",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "CreatedAt",
+                "ColumnType": "Timestamp"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "IsEnabled",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6626,7 +6642,9 @@
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -21,7 +21,6 @@
 #include <ydb/library/yaml_json/yaml_to_json.h>
 
 #include <util/generic/string.h>
-#include <util/generic/set.h>
 
 template <>
 NKikimrBlobStorage::EPDiskType
@@ -275,50 +274,49 @@ namespace NKikimr::NYaml {
         return species;
     }
 
-    TSet<TString> ListEphemeralFields() {
-        TSet<TString> result;
+    TVector<TString> ListEphemeralFields() {
+        TVector<TString> result;
 
         auto& inst = NKikimrConfig::TEphemeralInputFields::default_instance();
         const auto* descriptor = inst.GetDescriptor();
         for (int i = 0; i < descriptor->field_count(); ++i) {
             const auto* fieldDescriptor = descriptor->field(i);
-            auto name = fieldDescriptor->name();
-            NProtobufJson::ToSnakeCaseDense(&name);
-            result.emplace(name);
+            result.push_back(fieldDescriptor->name());
         }
         for (int i = 0; i < descriptor->reserved_name_count(); ++i) {
-            auto name = descriptor->reserved_name(i);
-            NProtobufJson::ToSnakeCaseDense(&name);
+            result.push_back(descriptor->reserved_name(i));
+        }
+
+        for (auto& str : result) {
+            NProtobufJson::ToSnakeCaseDense(&str);
         }
 
         return result;
     }
 
-    TSet<TString> ListNonEphemeralFields() {
-        TSet<TString> result;
+    TVector<TString> ListNonEphemeralFields() {
+        TVector<TString> result;
 
         auto& inst = NKikimrConfig::TAppConfig::default_instance();
         const auto* descriptor = inst.GetDescriptor();
         for (int i = 0; i < descriptor->field_count(); ++i) {
             const auto* fieldDescriptor = descriptor->field(i);
-            auto name = fieldDescriptor->name();
-            NProtobufJson::ToSnakeCaseDense(&name);
-            result.emplace(name);
+            result.push_back(fieldDescriptor->name());
         }
         for (int i = 0; i < descriptor->reserved_name_count(); ++i) {
-            auto name = descriptor->reserved_name(i);
-            NProtobufJson::ToSnakeCaseDense(&name);
+            result.push_back(descriptor->reserved_name(i));
+        }
+
+        for (auto& str : result) {
+            NProtobufJson::ToSnakeCaseDense(&str);
         }
 
         return result;
     }
 
     void ClearNonEphemeralFields(NJson::TJsonValue& json){
-        auto exclude = ListEphemeralFields();
         for (const auto& field : ListNonEphemeralFields()) {
-            if (!exclude.contains(field)) {
-                json.EraseValue(field);
-            }
+            json.EraseValue(field);
         }
     }
 
@@ -422,19 +420,20 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareSecurityConfig(const TTransformContext& ctx, NKikimrConfig::TAppConfig& config, const NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
+    void PrepareSecurityConfig(const TTransformContext& ctx, NKikimrConfig::TAppConfig& config, bool relaxed) {
         if (relaxed && !config.HasDomainsConfig() && !config.HasSecurityConfig()) {
             return;
         }
 
         Y_ENSURE_BT(config.HasDomainsConfig() || config.HasSecurityConfig());
 
+        auto* domainsConfig = config.MutableDomainsConfig();
+
         bool disabledDefaultSecurity = ctx.DisableBuiltinSecurity;
 
         NKikimrConfig::TSecurityConfig* securityConfig = nullptr;
-        if (ephemeralConfig.HasDomainsConfig() && ephemeralConfig.GetDomainsConfig().HasSecurityConfig()) {
-            securityConfig = config.MutableSecurityConfig();
-            securityConfig->CopyFrom(ephemeralConfig.GetDomainsConfig().GetSecurityConfig());
+        if (domainsConfig->HasSecurityConfig()) {
+            securityConfig = domainsConfig->MutableSecurityConfig();
         } else if (config.HasSecurityConfig()) {
             securityConfig = config.MutableSecurityConfig();
         }
@@ -1399,9 +1398,6 @@ namespace NKikimr::NYaml {
     }
 
     void TransformProtoConfig(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
-        if (ephemeralConfig.HasDomainsConfig()) {
-            ephemeralConfig.GetDomainsConfig().CopyToTDomainsConfig(*config.MutableDomainsConfig());
-        }
         PrepareHosts(ephemeralConfig);
         ApplyDefaultConfigs(ctx, config, ephemeralConfig);
         PrepareNameserviceConfig(config, ephemeralConfig);
@@ -1412,7 +1408,7 @@ namespace NKikimr::NYaml {
         PrepareBootstrapConfig(config, ephemeralConfig, relaxed);
         PrepareIcConfig(config, ephemeralConfig);
         PrepareGrpcConfig(config, ephemeralConfig);
-        PrepareSecurityConfig(ctx, config, ephemeralConfig, relaxed);
+        PrepareSecurityConfig(ctx, config, relaxed);
         PrepareAuthConfig(config, ephemeralConfig);
         PrepareActorSystemConfig(config);
         PrepareLogConfig(config);

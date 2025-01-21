@@ -266,6 +266,7 @@ message TDomainsConfig {
     repeated TExecLevel ExecLevel = 3;
     repeated THiveConfig HiveConfig = 4;
     repeated TNamedCompactionPolicy NamedCompactionPolicy = 5;
+    optional TSecurityConfig SecurityConfig = 6; // deprecated, use top-level SecurityConfig instead
     optional bool ForbidImplicitStoragePools = 7 [default = true];
     reserved 6;
     reserved "SecurityConfig";

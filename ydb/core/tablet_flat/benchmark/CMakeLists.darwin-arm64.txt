@@ -12,10 +12,10 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_executable(benchmark)
+add_executable(core_tablet_flat_benchmark)
 
 
-target_link_libraries(benchmark PUBLIC
+target_link_libraries(core_tablet_flat_benchmark PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-gbenchmark
@@ -26,11 +26,11 @@ target_link_libraries(benchmark PUBLIC
   core-testlib-default
 )
 
-target_allocator(benchmark
+target_allocator(core_tablet_flat_benchmark
   system_allocator
 )
 
-target_link_options(benchmark PRIVATE
+target_link_options(core_tablet_flat_benchmark PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
@@ -38,31 +38,31 @@ target_link_options(benchmark PRIVATE
   CoreFoundation
 )
 
-target_sources(benchmark PRIVATE
+target_sources(core_tablet_flat_benchmark PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/benchmark/b_part.cpp
 )
 
 
 add_test(
   NAME
-  benchmark
+  core_tablet_flat_benchmark
   COMMAND
-  benchmark
+  core_tablet_flat_benchmark
 )
 
 set_property(
   TEST
-  benchmark
+  core_tablet_flat_benchmark
   PROPERTY
   LABELS
   SMALL
 )
 
-vcs_info(benchmark)
+vcs_info(core_tablet_flat_benchmark)
 
 set_property(
   TEST
-  benchmark
+  core_tablet_flat_benchmark
   PROPERTY
   PROCESSORS
   1

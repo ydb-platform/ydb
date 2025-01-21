@@ -12,21 +12,21 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_executable(benchmark)
+add_executable(library_aclib_benchmark)
 
 
-target_link_libraries(benchmark PUBLIC
+target_link_libraries(library_aclib_benchmark PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-gbenchmark
   ydb-library-aclib
 )
 
-target_allocator(benchmark
+target_allocator(library_aclib_benchmark
   system_allocator
 )
 
-target_link_options(benchmark PRIVATE
+target_link_options(library_aclib_benchmark PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
@@ -34,31 +34,31 @@ target_link_options(benchmark PRIVATE
   CoreFoundation
 )
 
-target_sources(benchmark PRIVATE
+target_sources(library_aclib_benchmark PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/aclib/benchmark/b_aclib.cpp
 )
 
 
 add_test(
   NAME
-  benchmark
+  library_aclib_benchmark
   COMMAND
-  benchmark
+  library_aclib_benchmark
 )
 
 set_property(
   TEST
-  benchmark
+  library_aclib_benchmark
   PROPERTY
   LABELS
   SMALL
 )
 
-vcs_info(benchmark)
+vcs_info(library_aclib_benchmark)
 
 set_property(
   TEST
-  benchmark
+  library_aclib_benchmark
   PROPERTY
   PROCESSORS
   1

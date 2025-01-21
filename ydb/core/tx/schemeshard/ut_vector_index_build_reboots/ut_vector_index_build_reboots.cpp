@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
@@ -69,8 +70,8 @@ static void WriteRows(TTestActorRuntime& runtime, ui64 tabletId, ui32 key, ui32 
 }
 
 Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
-    Y_UNIT_TEST(BaseCase) {
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS(BaseCase) {
+        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -125,22 +126,26 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
                 UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
             }
 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table"),
-                               {NLs::PathExist,
-                                NLs::IndexesCount(1)});
-            const TString indexPath = "/MyRoot/dir/Table/index1";
-            TestDescribeResult(DescribePath(runtime, indexPath, true, true, true),
-                               {NLs::PathExist,
-                                NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
-            using namespace NTableIndex::NTableVectorKmeansTreeIndex;
-            TestDescribeResult(DescribePath(runtime, indexPath + "/" + LevelTable, true, true, true),
-                               {NLs::PathExist});
-            TestDescribeResult(DescribePath(runtime, indexPath + "/" + PostingTable, true, true, true),
-                               {NLs::PathExist});
-            TestDescribeResult(DescribePath(runtime, indexPath + "/" + PostingTable + BuildSuffix0, true, true, true),
-                               {NLs::PathNotExist});
-            TestDescribeResult(DescribePath(runtime, indexPath + "/" + PostingTable + BuildSuffix1, true, true, true),
-                               {NLs::PathNotExist});
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table"),
+                                   {NLs::PathExist,
+                                    NLs::IndexesCount(1)});
+                const TString indexPath = "/MyRoot/dir/Table/index1";
+                TestDescribeResult(DescribePath(runtime, indexPath, true, true, true),
+                                   {NLs::PathExist,
+                                    NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+                using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+                TestDescribeResult(DescribePath(runtime, indexPath + "/" + LevelTable, true, true, true),
+                                   {NLs::PathExist});
+                TestDescribeResult(DescribePath(runtime, indexPath + "/" + PostingTable, true, true, true),
+                                   {NLs::PathExist});
+                TestDescribeResult(DescribePath(runtime, indexPath + "/" + PostingTable + BuildSuffix0, true, true, true),
+                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, indexPath + "/" + PostingTable + BuildSuffix1, true, true, true),
+                                   {NLs::PathNotExist});
+            }
         });
     }
 }

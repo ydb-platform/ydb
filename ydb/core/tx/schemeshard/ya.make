@@ -53,6 +53,7 @@ RECURSE_FOR_TESTS(
     ut_ttl
     ut_user_attributes
     ut_user_attributes_reboots
+    ut_vector_index_build_reboots
     ut_view
 )
 

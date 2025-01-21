@@ -6,7 +6,7 @@ IF (WITH_VALGRIND)
     SPLIT_FACTOR(40)
 ENDIF()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (BUILD_TYPE == "DEBUG" OR SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -26,7 +26,7 @@ PEERDIR(
 )
 
 SRCS(
-    ut_index_build_reboots.cpp
+    ut_vector_index_build_reboots.cpp
 )
 
 YQL_LAST_ABI_VERSION()

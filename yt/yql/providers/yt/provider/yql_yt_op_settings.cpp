@@ -1005,6 +1005,9 @@ bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowTy
 TString NormalizeColumnGroupSpec(const TStringBuf spec) {
     try {
         auto columnGroups = NYT::NodeFromYsonString(spec);
+        if (columnGroups.AsMap().empty()) {
+            return {};
+        }
         for (auto& grp: columnGroups.AsMap()) {
             if (!grp.second.IsEntity()) {
                 std::stable_sort(grp.second.AsList().begin(), grp.second.AsList().end(), [](const auto& l, const auto& r) { return l.AsString() < r.AsString(); });

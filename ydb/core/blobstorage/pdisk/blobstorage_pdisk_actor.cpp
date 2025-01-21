@@ -56,25 +56,18 @@ void CreatePDiskActor(TGenericExecutorThread& executorThread,
 
 class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     struct TInitQueueItem {
-        TOwnerRound OwnerRound;
-        TVDiskID VDisk;
-        ui64 PDiskGuid;
+        TOwnerRound OwnerRound = 0;
+        TVDiskID VDisk = TVDiskID::InvalidId;
+        ui64 PDiskGuid = 0;
         TActorId Sender;
         TActorId CutLogId;
         TActorId WhiteboardProxyId;
-        ui32 SlotId;
-
-        bool IsShred;
-        ui64 ShredGeneration;
+        ui32 SlotId = 0;
+        bool IsShred = false;
+        ui64 ShredGeneration = 0;
 
         TInitQueueItem(const TActorId sender, const ui64 shredGeneration)
-            : OwnerRound(0)
-            , VDisk(TVDiskID::InvalidId)
-            , PDiskGuid(0)
-            , Sender(sender)
-            , CutLogId(TActorId())
-            , WhiteboardProxyId(TActorId())
-            , SlotId(0)
+            : Sender(sender)
             , IsShred(true)
             , ShredGeneration(shredGeneration)
         {}
@@ -88,8 +81,6 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
             , CutLogId(cutLogId)
             , WhiteboardProxyId(whiteboardProxyId)
             , SlotId(slotId)
-            , IsShred(false)
-            , ShredGeneration(0)
         {}
     };
 

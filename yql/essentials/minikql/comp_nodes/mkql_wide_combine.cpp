@@ -244,7 +244,7 @@ private:
         return KeyWidth + StateWidth;
     }
 public:
-    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = false)
+    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = true)
         : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), AllowOutOfMemory(allowOutOfMemory), States(hash, equal, CountRowsOnPage) {
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
@@ -268,6 +268,7 @@ public:
 
     bool TasteIt() {
         Y_ABORT_UNLESS(!ExtractIt);
+        ++Rows;
         bool isNew = false;
         auto itInsert = States.Insert(Tongue, isNew);
         if (isNew) {
@@ -320,6 +321,8 @@ public:
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
         StoredDataSize = 0;
+        IsOutOfMemory = false;
+        Rows = 0;
 
         CleanupCurrentContext();
         return true;
@@ -352,13 +355,14 @@ public:
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
     i64 StoredDataSize = 0;
+    bool IsOutOfMemory = false;
     NYql::NUdf::TCounter CounterOutputRows_;
+    ui64 Rows = 0;
 
 private:
     std::optional<TStorageIterator> ExtractIt;
     const ui32 KeyWidth, StateWidth;
     const bool AllowOutOfMemory;
-    bool IsOutOfMemory = false;
     ui64 CurrentPosition = 0;
     TRow* CurrentPage = nullptr;
     TStorage Storage;
@@ -861,7 +865,7 @@ private:
                 for (auto &b: SpilledBuckets) {
                     b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
-                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
+                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal, false);
                 }
                 break;
             }
@@ -1048,7 +1052,7 @@ public:
 
                     Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                     Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize));
+                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize) && !ptr->IsOutOfMemory && ptr->Rows < 100000);
 
                 ptr->PushStat(ctx.Stats);
             }

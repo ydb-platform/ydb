@@ -23,6 +23,8 @@ class TestYdbWorkload(object):
         cls.cluster.stop()
 
     def test(self):
+        """As per https://github.com/ydb-platform/ydb/issues/13529"""
+
         driver = ydb.Driver(endpoint=f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', database='/Root')
         session = ydb.QuerySessionPool(driver)
         driver.wait(5, fail_fast=True)

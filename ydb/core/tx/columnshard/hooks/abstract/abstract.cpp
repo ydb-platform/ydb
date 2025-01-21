@@ -28,7 +28,7 @@ bool ICSController::CheckPortionForEvict(const NOlap::TPortionInfo& portion) con
     return portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized) && !portion.HasInsertWriteId();
 }
 
-bool ICSController::CheckPortionsToMergeOnCompaction(const ui64 memoryAfterAdd, const ui32 currentSubsetsCount) {
+bool ICSController::CheckPortionsToMergeOnCompaction(const ui64 memoryAfterAdd, const ui32 /*currentSubsetsCount*/) {
     return memoryAfterAdd > GetConfig().GetMemoryLimitMergeOnCompactionRawData();
 }
 

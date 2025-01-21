@@ -106,10 +106,8 @@ column_families {
 Contents of the `series/update_feed/topic_description.pb` file:
 
 ```proto
-self {
-  name: "update_feed"
-  owner: "Alice"
-  type: TOPIC
+retention_period {
+  seconds: 86400
 }
 consumers {
   name: "my_consumer"

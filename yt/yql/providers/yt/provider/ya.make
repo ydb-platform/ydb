@@ -61,6 +61,7 @@ SRCS(
     phy_opt/yql_yt_phy_opt_field_subset.cpp
     phy_opt/yql_yt_phy_opt_helper.cpp
     phy_opt/yql_yt_phy_opt_key_range.cpp
+    phy_opt/yql_yt_phy_opt_ytql.cpp
     phy_opt/yql_yt_phy_opt_merge.cpp
     phy_opt/yql_yt_phy_opt_push.cpp
     phy_opt/yql_yt_phy_opt_write.cpp

@@ -917,6 +917,17 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             return true;
         }
+        case EYtSettingType::QLFilter: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+            const auto qlFilter = setting->Child(1);
+            if (!qlFilter->IsCallable("YtQLFilter")) {
+                ctx.AddError(TIssue(ctx.GetPosition(qlFilter->Pos()), TStringBuilder()
+                    << "Expected YtQLFilter node, got: " << qlFilter->Content()));
+            }
+            break;
+        }
         case EYtSettingType::LAST: {
             YQL_ENSURE(false, "Unexpected EYtSettingType");
         }

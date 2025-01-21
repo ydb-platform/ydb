@@ -21,6 +21,23 @@ class Selector:
         self._send, self._receive = socket.socketpair()
         self._send.setblocking(False)
         self._receive.setblocking(False)
+        # This somewhat reduces the amount of memory wasted queueing up data
+        # for wakeups. With these settings, maximum number of 1-byte sends
+        # before getting BlockingIOError:
+        #   Linux 4.8: 6
+        #   macOS (darwin 15.5): 1
+        #   Windows 10: 525347
+        # Windows you're weird. (And on Windows setting SNDBUF to 0 makes send
+        # blocking, even on non-blocking sockets, so don't do that.)
+        self._receive.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1)
+        self._send.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1)
+        # On Windows this is a TCP socket so this might matter. On other
+        # platforms this fails b/c AF_UNIX sockets aren't actually TCP.
+        try:
+            self._send.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            pass
+
         self._selector.register(self._receive, EVENT_READ)
         self._closed = False
 

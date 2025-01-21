@@ -1301,6 +1301,34 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_bitcast_implicit-sub_bitcast_/sql.yql"
         }
     ],
+    "test_sql2yql.test[blocks-empty_as_table]": [
+        {
+            "checksum": "bbda02d622e3f3c4f698ea1962d9f902",
+            "size": 1184,
+            "uri": "https://{canondata_backend}/1130705/7bfa4c7bef8ecf6ffba8b79d210708dc39bab04e/resource.tar.gz#test_sql2yql.test_blocks-empty_as_table_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-filter]": [
+        {
+            "checksum": "e09ada2d8790a1c8d43bdc76683eaa40",
+            "size": 1194,
+            "uri": "https://{canondata_backend}/1130705/7bfa4c7bef8ecf6ffba8b79d210708dc39bab04e/resource.tar.gz#test_sql2yql.test_blocks-filter_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-projection_add_ints]": [
+        {
+            "checksum": "f84fc85138d4f1d4b72cf4d37a2b8ff2",
+            "size": 1253,
+            "uri": "https://{canondata_backend}/1130705/7bfa4c7bef8ecf6ffba8b79d210708dc39bab04e/resource.tar.gz#test_sql2yql.test_blocks-projection_add_ints_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-projection_add_ints_filter]": [
+        {
+            "checksum": "536842d82fabe43f225eb25b37589b8b",
+            "size": 1372,
+            "uri": "https://{canondata_backend}/1130705/7bfa4c7bef8ecf6ffba8b79d210708dc39bab04e/resource.tar.gz#test_sql2yql.test_blocks-projection_add_ints_filter_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[case-case_many_val]": [
         {
             "checksum": "70c9fb3c41da9a56ff7346cfe50d2c82",
@@ -7717,6 +7745,26 @@
     "test_sql_format.test[bitcast_implicit-sub_bitcast]": [
         {
             "uri": "file://test_sql_format.test_bitcast_implicit-sub_bitcast_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-empty_as_table]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-empty_as_table_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-filter]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-filter_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-projection_add_ints]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-projection_add_ints_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-projection_add_ints_filter]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-projection_add_ints_filter_/formatted.sql"
         }
     ],
     "test_sql_format.test[case-case_many_val]": [

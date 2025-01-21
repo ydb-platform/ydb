@@ -31,6 +31,7 @@ namespace TEvPrivate {
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
+        EvRunIncrRestorePipeline,
         EvEnd
     };
 
@@ -178,6 +179,14 @@ namespace TEvPrivate {
         const TPathId StreamPathId;
 
         TEvRunCdcStreamScan(const TPathId& streamPathId)
+            : StreamPathId(streamPathId)
+        {}
+    };
+
+    struct TEvRunIncrRestorePipeline: public TEventLocal<TEvRunIncrRestorePipeline, EvRunIncrRestorePipeline> {
+        const TPathId StreamPathId;
+
+        TEvRunIncrRestorePipeline(const TPathId& streamPathId)
             : StreamPathId(streamPathId)
         {}
     };

@@ -349,6 +349,9 @@ namespace TEvDataShard {
         EvForceDataCleanup,
         EvForceDataCleanupResult,
 
+        EvIncrRestorePipelineRequest,
+        EvIncrRestorePipelineResponse,
+
         EvEnd
     };
 
@@ -1794,6 +1797,33 @@ namespace TEvDataShard {
             Record.SetErrorDescription(error);
         }
     };
+
+    struct TEvIncrRestorePipelineRequest
+        : public TEventPB<TEvIncrRestorePipelineRequest,
+                          NKikimrTxDataShard::TEvIncrRestorePipelineRequest,
+                          EvIncrRestorePipelineRequest>
+    {
+    };
+
+    struct TEvIncrRestorePipelineResponse
+        : public TEventPB<TEvIncrRestorePipelineResponse,
+                          NKikimrTxDataShard::TEvIncrRestorePipelineResponse,
+                          EvIncrRestorePipelineResponse>
+    {
+        TEvIncrRestorePipelineResponse() = default;
+
+        explicit TEvIncrRestorePipelineResponse(
+                const NKikimrTxDataShard::TEvIncrRestorePipelineRequest& request, ui64 tabletId,
+                NKikimrTxDataShard::TEvIncrRestorePipelineResponse::EStatus status, const TString& error = {})
+        {
+            Record.SetTabletId(tabletId);
+            Record.MutableTablePathId()->CopyFrom(request.GetTablePathId());
+            Record.MutableStreamPathId()->CopyFrom(request.GetStreamPathId());
+            Record.SetStatus(status);
+            Record.SetErrorDescription(error);
+        }
+    };
+
 
     struct TEvInMemoryStateRequest
         : public TEventPB<TEvInMemoryStateRequest,

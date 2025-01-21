@@ -270,12 +270,12 @@ domains_config:
 || Параметр | Описание ||
 || `enforce_user_token_requirement` | Режим обязательной [аутентификации](../../security/authentication.md).
 
-- `true` — аутентификация обязательна, запросы к {{ ydb-short-name }} обязаны сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token)
-- `false` — аутентификация опциональна, запросы могут не сопровождаться аутентификационным токеном, тогда в качестве токена будет использоваться `default_user_sids`, если он не пустой
+- `true` — аутентификация обязательна, запросы к {{ ydb-short-name }} обязаны сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token).
+- `false` — аутентификация опциональна, запросы могут не сопровождаться аутентификационным токеном, тогда в качестве токена будет использоваться `default_user_sids`, если он не пустой.
 
 Токен (или `default_user_sids`) будет проверяться даже при `enforce_user_token_requirement: false`, если `enforce_user_token_check_requirement: true`.
 
-Значение по-умолчанию: `false`.
+Значение по умолчанию: `false`.
     ||
 || `enforce_user_token_check_requirement` | Проверять [аутентификационный токен](../../concepts/glossary.md#auth-token) (приходящий с запросом или `default_user_sids`) даже при `enforce_user_token_requirement: false`.
 

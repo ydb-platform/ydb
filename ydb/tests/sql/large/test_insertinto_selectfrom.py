@@ -1,6 +1,6 @@
 import concurrent.futures
 import random
-from ydb.tests.sql.lib.test_base import TpchTestBaseH1, TestBase
+from ydb.tests.sql.lib.test_base import TpchTestBaseH1
 from ydb.tests.sql.lib.helpers import split_data_into_fixed_size_chunks
 
 

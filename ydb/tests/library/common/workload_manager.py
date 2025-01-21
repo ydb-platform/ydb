@@ -1,5 +1,6 @@
 import yatest.common
 
+
 def get_pool(self, ydb_cli_path, endpoint, database, user, query):
     # It's funny, but the only way to find resource pool that was used is to use YDB CLI
 
@@ -7,11 +8,11 @@ def get_pool(self, ydb_cli_path, endpoint, database, user, query):
         ydb_cli_path,
         '-e', 'grpc://' + endpoint,
         '-d', database,
-        "--user", user, 
-        '--no-password', 
-        "sql", 
-        "-s", query, 
-        '--stats', 'full', 
+        "--user", user,
+        '--no-password',
+        "sql",
+        "-s", query,
+        '--stats', 'full',
         '--format', 'json-unicode'
     ]
 
@@ -34,4 +35,3 @@ def _find_resource_pool_id(text):
             if end_idx != -1:
                 return text[start_idx:end_idx]
     return None
-

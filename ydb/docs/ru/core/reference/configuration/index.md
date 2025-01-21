@@ -279,7 +279,7 @@ domains_config:
     ||
 || `enforce_user_token_check_requirement` | Проверять [аутентификационный токен](../../concepts/glossary.md#auth-token) (приходящий с запросом или `default_user_sids`) даже при `enforce_user_token_requirement: false`.
 
-Значение по-умолчанию: `false`.
+Значение по умолчанию: `false`.
     ||
 || `default_user_sids` | Список [SID](../../concepts/glossary.md#access-sid)'ов для использования в проверке аутентификации в случае, когда входящий запрос не сопровождается явным [аутентификационным токеном](../../concepts/glossary.md#auth-token).
 

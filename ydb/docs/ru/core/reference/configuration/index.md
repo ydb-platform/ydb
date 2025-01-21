@@ -262,7 +262,7 @@ domains_config:
     administration_allowed_sids: <список SID'ов с доступом администратора кластера>
 ```
 
-[//]: # (TODO: wait for pull/9387, dinamic_node_registration to add info about "register_dynamic_node_allowed_sids: <список SID'ов с правами подключения динамических нод в кластер>")
+[//]: # (TODO: wait for pull/9387, dynamic_node_registration to add info about "register_dynamic_node_allowed_sids: <список SID'ов с правами подключения динамических нод в кластер>")
 
 #### Настройки режима аутентификации {#security-auth}
 

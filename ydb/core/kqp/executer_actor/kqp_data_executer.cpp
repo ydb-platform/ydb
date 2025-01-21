@@ -1382,6 +1382,8 @@ private:
 
         LOG_D("Got transaction restart event from tabletId: " << shardId << ", state: " << ToString(shardState->State)
             << ", txPlanned: " << TxPlanned);
+        
+        Y_ABORT_UNLESS(false);
 
         switch (shardState->State) {
             case TShardState::EState::Preparing:

@@ -22,12 +22,14 @@ UNCOVERED_FILE=${1:-$(mktemp --tmpdir yql-essentials-core-type_ann-uncovered-XXX
 # * --coverage-report --output $REPORT_ROOT -- build the HTML
 #                       report for the collected code coverage;
 # See more info here: https://docs.yandex-team.ru/devtools/test/coverage.
-ya make -tA -C ${ARC_ROOT}/yql/essentials/tests/sql/minirun/ \
-    --build profile                                          \
-    --clang-coverage                                         \
-    --coverage-prefix-filter yql/essentials/core/type_ann    \
-    --coverage-report                                        \
-    --output $REPORT_ROOT                                    \
+ya make -tA                                                    \
+    -C ${ARC_ROOT}/yql/essentials/tests/sql/minirun            \
+    -C ${ARC_ROOT}/yql/essentials/tests/s-expressions/minirun  \
+    --build profile                                            \
+    --clang-coverage                                           \
+    --coverage-prefix-filter yql/essentials/core/type_ann      \
+    --coverage-report                                          \
+    --output $REPORT_ROOT                                      \
     --test-disable-timeout
 
 # Find an anchor to uncovered line in HTML report, ...

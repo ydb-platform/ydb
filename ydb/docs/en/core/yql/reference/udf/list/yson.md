@@ -5,7 +5,6 @@
 YSON is a JSON-like data format developed at Yandex.
 
 
-
 * Similarities with JSON:
 
   * Does not have a strict scheme.
@@ -306,5 +305,5 @@ If you need to use the same Yson library settings throughout the query, it's mor
 
 ## See also
 
-* [{#T}](../../../../recipes/yql/accessing-json.md)
-* [{#T}](../../../../recipes/yql/modifying-json.md)
+* [{#T}](../../recipes/accessing-json.md)
+* [{#T}](../../recipes/modifying-json.md)

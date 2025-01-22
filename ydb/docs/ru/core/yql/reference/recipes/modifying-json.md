@@ -17,7 +17,7 @@ SELECT Yson::SerializeJson(Yson::From($result_dict));
 
 ## Смотрите также
 
-- [{#T}](../../yql/reference/udf/list/yson.md)
-- [{#T}](../../yql/reference/builtins/list.md)
-- [{#T}](../../yql/reference/builtins/dict.md)
+- [{#T}](../udf/list/yson.md)
+- [{#T}](../builtins/list.md)
+- [{#T}](../builtins/dict.md)
 - [{#T}](accessing-json.md)

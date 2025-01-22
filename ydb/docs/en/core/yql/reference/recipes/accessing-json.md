@@ -2,8 +2,8 @@
 
 YQL provides two main ways to retrieve values from JSON:
 
-- Using [**JSON functions from the SQL standard**](../../yql/reference/builtins/json.md). This approach is recommended for simple cases and for teams that are familiar with them from other DBMSs.
-- Using [**Yson UDF**](../../yql/reference/udf/list/yson.md), [list](../../yql/reference/builtins/list.md) and [dict](../../yql/reference/builtins/dict.md) builtins, and [lambdas](../../yql/reference/syntax/expressions.md#lambda). This approach is more flexible and tightly integrated with {{ ydb-short-name }}'s data type system, thus recommended for complex cases.
+- Using [**JSON functions from the SQL standard**](../builtins/json.md). This approach is recommended for simple cases and for teams that are familiar with them from other DBMSs.
+- Using [**Yson UDF**](../udf/list/yson.md), [list](../builtins/list.md) and [dict](../builtins/dict.md) builtins, and [lambdas](../syntax/expressions.md#lambda). This approach is more flexible and tightly integrated with {{ ydb-short-name }}'s data type system, thus recommended for complex cases.
 
 Below are the recipes that will use the same input JSON to demonstrate how to use each option to check whether a key exists, get a specific value, and retrieve a subtree.
 

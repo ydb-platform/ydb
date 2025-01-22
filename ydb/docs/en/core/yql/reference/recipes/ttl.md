@@ -12,7 +12,7 @@ ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON created_at);
 
 {% note tip %}
 
-An `Interval` is created from a string literal in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format with [some restrictions](../../yql/reference/builtins/basic#data-type-literals).
+An `Interval` is created from a string literal in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format with [some restrictions](../builtins/basic#data-type-literals).
 
 {% endnote %}
 
@@ -24,7 +24,7 @@ ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON modified_at AS SECONDS);
 
 ## Enabling data eviction to S3-compatible external storage {#enable-tiering-on-existing-tables}
 
-{% include [OLTP_not_allow_note](../../_includes/not_allow_for_oltp_note.md) %}
+{% include [OLTP_not_allow_note](../../../_includes/not_allow_for_oltp_note.md) %}
 
 In the following example, rows of the table `mytable` will be moved to the bucket described in the external data source `/Root/s3_cold_data` one hour after the time recorded in the column `created_at` and will be deleted after 24 hours:
 
@@ -37,9 +37,9 @@ ALTER TABLE `mytable` SET (
 );
 ```
 
-{% include [OLTP_not_allow_note](../../_includes/not_allow_for_oltp_note.md) %}
+{% include [OLTP_not_allow_note](../../../_includes/not_allow_for_oltp_note.md) %}
 
-To enable data eviction, an [external data source](../../concepts/datamodel/external_data_source.md) object that describes a connection to the external storage is needed.
+To enable data eviction, an [external data source](../../../concepts/datamodel/external_data_source.md) object that describes a connection to the external storage is needed.
 In the example below, an external data source `/Root/s3_cold_data` is created. It describes a connection to bucket `test_cold_data` located in Yandex Object Storage with authorization by static access keys provided via secrets `access_key` and `secret_key`.
 
 ```yql

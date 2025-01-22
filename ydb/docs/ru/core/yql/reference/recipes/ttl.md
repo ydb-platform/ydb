@@ -12,7 +12,7 @@ ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON created_at);
 
 {% note tip %}
 
-`Interval` создается из строкового литерала в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) с [некоторыми ограничениями](../../yql/reference/builtins/basic#data-type-literals).
+`Interval` создается из строкового литерала в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) с [некоторыми ограничениями](../builtins/basic#data-type-literals).
 
 {% endnote %}
 
@@ -24,9 +24,9 @@ ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON modified_at AS SECONDS);
 
 ## Включение вытеснения данных во внешнее S3-совместимое хранилище {#enable-tiering-on-existing-tables}
 
-{% include [OLTP_not_allow_note](../../_includes/not_allow_for_oltp_note.md) %}
+{% include [OLTP_not_allow_note](../../../_includes/not_allow_for_oltp_note.md) %}
 
-Для включения вытеснения требуется объект [external data source](../../concepts/datamodel/external_data_source.md), описывающий подключение к внешнему хранилищу.
+Для включения вытеснения требуется объект [external data source](../../../concepts/datamodel/external_data_source.md), описывающий подключение к внешнему хранилищу.
 В приведённом ниже примере создаётся external data source `/Root/s3_cold_data`: он описывает подключение к бакету `test_cold_data`, расположенному в Yandex Object Storage, с авторизацией через статический ключ доступа, данные которого хранятся в секретах `access_key` и `secret_key`.
 
 ```yql

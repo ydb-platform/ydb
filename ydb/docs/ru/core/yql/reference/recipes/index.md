@@ -10,5 +10,5 @@
 
 Смотрите также:
 
-- [{#T}](../../yql/reference/index.md)
-- [{#T}](../../dev/index.md)
+- [{#T}](../index.md)
+- [{#T}](../../../dev/index.md)

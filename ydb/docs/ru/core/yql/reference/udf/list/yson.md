@@ -307,7 +307,7 @@ SELECT Yson::ConvertToDoubleDict($yson, Yson::Options(false as Strict)); --- { "
 
 ## Смотрите также
 
-* [{#T}](../../../../recipes/yql/accessing-json.md)
-* [{#T}](../../../../recipes/yql/modifying-json.md)
+* [{#T}](../../recipes/accessing-json.md)
+* [{#T}](../../recipes/modifying-json.md)
 
 {% endif %}

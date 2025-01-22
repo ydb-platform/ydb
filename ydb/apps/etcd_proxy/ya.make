@@ -17,8 +17,4 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
 )
 
-RESOURCE(
-    ydb/apps/etcd_proxy/create.sql create.sql
-)
-
 END()

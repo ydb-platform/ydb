@@ -8,6 +8,7 @@
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
+#include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
 #include <ydb/apps/etcd_proxy/service/grpc_service.h>
 #include <ydb/core/grpc_services/base/base.h>
 
@@ -59,7 +60,7 @@ int TProxy::Discovery() {
 }
 
 int TProxy::StartServer() {
-    const auto res = AppData.Client->ExecuteQuery("select coalesce(max(`modified`), 0L) + 1L from `verhaal`;", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    const auto res = AppData.Client->ExecuteQuery(NEtcd::GetLastRevisionSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     if (res.IsSuccess()) {
         if (auto result = res.GetResultSetParser(0); result.TryNextRow()) {
             const auto revision = NYdb::TValueParser(result.GetValue(0)).GetInt64();
@@ -104,8 +105,7 @@ int TProxy::Run() {
 }
 
 int TProxy::InitDatabase() {
-    const auto query = NResource::Find("create.sql");
-    const auto res = AppData.Client->ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    const auto res = AppData.Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
     if (res.IsSuccess()) {
         Cout << "Database " << Database << " on " << Endpoint << " was initialized." << Endl;

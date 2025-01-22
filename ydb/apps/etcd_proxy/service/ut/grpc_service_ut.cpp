@@ -2,6 +2,8 @@
 #include <ydb/services/keyvalue/grpc_service.h>
 
 #include <ydb/public/api/grpc/ydb_keyvalue_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -117,6 +119,7 @@ public:
         Tests::TClient annoyingClient(*ServerSettings);
 
         annoyingClient.InitRootScheme("Root");
+
         GRpcPort_ = grpc;
     }
 
@@ -153,14 +156,6 @@ private:
 using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings>;
 
 Y_UNIT_TEST_SUITE(EtcdGRPCService) {
-
-    void InitTablet(TKikimrWithGrpcAndRootSchema &server, ui64 tabletId) {
-        server.GetRuntime()->SetScheduledLimit(100);
-        CreateTestBootstrapper(*server.GetRuntime(),
-            CreateTestTabletInfo(tabletId, TTabletTypes::KeyValue),
-            &CreateKeyValueFlat);
-        NanoSleep(3'000'000'000);
-    }
 
     void CmdWrite(ui64 tabletId, const TDeque<TString> &keys, const TDeque<TString> &values, TKikimrWithGrpcAndRootSchema &server)
     {
@@ -219,25 +214,71 @@ Y_UNIT_TEST_SUITE(EtcdGRPCService) {
         UNIT_ASSERT_CHECK_STATUS(makeDirectoryResponse.operation(), Ydb::StatusIds::SUCCESS);
     }
 
-    void MakeTable(auto &channel, const TString &path) {
-        const auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+    void Discovery(auto &channel) {
+        const auto stub = Ydb::Discovery::V1::DiscoveryService::NewStub(channel);
 
-        Ydb::KeyValue::CreateVolumeRequest createVolumeRequest;
-        createVolumeRequest.set_path(path);
-        createVolumeRequest.set_partition_count(1);
-        auto *storage_config = createVolumeRequest.mutable_storage_config();
-        storage_config->add_channel()->set_media("ssd");
-        storage_config->add_channel()->set_media("ssd");
-        storage_config->add_channel()->set_media("ssd");
+        Ydb::Discovery::ListEndpointsRequest listEndpointsRequest;
+        listEndpointsRequest.set_database("/Root/etcd");
+        Ydb::Discovery::ListEndpointsResponse listEndpointsResponse;
 
-        Ydb::KeyValue::CreateVolumeResponse createVolumeResponse;
-        Ydb::KeyValue::CreateVolumeResult createVolumeResult;
+        grpc::ClientContext listDirectoryCtx;
+        AdjustCtxForDB(listDirectoryCtx);
+        stub->ListEndpoints(&listDirectoryCtx, listEndpointsRequest, &listEndpointsResponse);
 
-        grpc::ClientContext createVolumeCtx;
-        AdjustCtxForDB(createVolumeCtx);
-        stub->CreateVolume(&createVolumeCtx, createVolumeRequest, &createVolumeResponse);
-        UNIT_ASSERT_CHECK_STATUS(createVolumeResponse.operation(), Ydb::StatusIds::SUCCESS);
-        createVolumeResponse.operation().result().UnpackTo(&createVolumeResult);
+        UNIT_ASSERT_CHECK_STATUS(listEndpointsResponse.operation(), Ydb::StatusIds::SUCCESS);
+
+        Ydb::Discovery::ListEndpointsResult listEndpointsResult;
+        listEndpointsResponse.operation().result().UnpackTo(&listEndpointsResult);
+//        return listDirectoryResult;
+    }
+
+    void MakeTables(auto &channel) {
+        Discovery(channel);
+
+        const auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
+        Ydb::Query::ExecuteQueryRequest request;
+ //       request.set_session_id(sessionId);
+        request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
+      //  request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
+     //   request.mutable_tx_control()->set_commit_tx(true);
+        request.mutable_query_content()->set_text(R"(
+CREATE TABLE huidig
+(
+    `key` Bytes NOT NULL,
+    `created` Int64 NOT NULL,
+    `modified` Int64 NOT NULL,
+    `version` Int64 NOT NULL,
+    `value` Bytes NOT NULL,
+    `lease` Int64 NOT NULL,
+    PRIMARY KEY (`key`)
+);
+
+CREATE TABLE verhaal
+(
+    `key` Bytes NOT NULL,
+    `created` Int64 NOT NULL,
+    `modified` Int64 NOT NULL,
+    `version` Int64 NOT NULL,
+    `value` Bytes NOT NULL,
+    `lease` Int64 NOT NULL,
+    PRIMARY KEY (`key`, `modified`)
+);
+
+        )");
+
+
+        grpc::ClientContext executeCtx;
+        AdjustCtxForDB(executeCtx);
+        Ydb::Query::ExecuteQueryResponsePart response;
+        auto reader = stub->ExecuteQuery(&executeCtx, request);
+        bool res = true;
+        while (res) {
+            res = reader->Read(&response);
+            if (res) {
+                UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::BAD_REQUEST);
+            }
+        }
+
     }
 
     Ydb::Scheme::ListDirectoryResult ListDirectory(auto &channel, const TString &path) {
@@ -287,11 +328,12 @@ Y_UNIT_TEST_SUITE(EtcdGRPCService) {
         TKikimrWithGrpcAndRootSchema server;
         const auto grpc = server.GetPort();
         const auto channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
-        MakeDirectory(channel, "/Root/mydb");
-        MakeTable(channel, tablePath);
+        MakeDirectory(channel, "/Root/etcd");
+
+        MakeTables(channel);
         const auto pr = SplitPath(tablePath);
-        Ydb::Scheme::ListDirectoryResult listDirectoryResult = ListDirectory(channel, "/Root/mydb");
-        UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.self().name(), "mydb");
+        Ydb::Scheme::ListDirectoryResult listDirectoryResult = ListDirectory(channel, "/Root/etcd");
+        UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.self().name(), "etcd");
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.children(0).name(), pr.back());
 
         WaitTableCreation(server, tablePath);

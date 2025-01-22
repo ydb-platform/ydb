@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    etcd_base_init.cpp
     etcd_impl.cpp
     grpc_service.cpp
 )
@@ -15,6 +16,7 @@ PEERDIR(
 )
 
 RESOURCE(
+    ydb/apps/etcd_proxy/service/create.sql create.sql
     ydb/apps/etcd_proxy/service/update.sql update.sql
     ydb/apps/etcd_proxy/service/upsert.sql upsert.sql
 )

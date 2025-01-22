@@ -86,7 +86,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Sprintf("%s/create_view.sql", DestinationPrefix.c_str()));
+            .WithKey(Sprintf("%s/create_view.sql", DestinationPrefix->c_str()));
 
         Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Scheme)));
         Become(&TThis::StateUploadScheme);
@@ -114,7 +114,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
             return Finish(false, "cannot infer permissions");
         }
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Sprintf("%s/permissions.pb", DestinationPrefix.c_str()));
+            .WithKey(Sprintf("%s/permissions.pb", DestinationPrefix->c_str()));
 
         Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Permissions)));
         Become(&TThis::StateUploadPermissions);
@@ -142,7 +142,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
             return Finish(false, "empty metadata");
         }
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Sprintf("%s/metadata.json", DestinationPrefix.c_str()));
+            .WithKey(Sprintf("%s/metadata.json", DestinationPrefix->c_str()));
 
         Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Metadata)));
         Become(&TThis::StateUploadMetadata);
@@ -310,7 +310,7 @@ private:
     TPathId SourcePathId;
 
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
-    TString DestinationPrefix;
+    TMaybe<TString> DestinationPrefix;
 
     ui32 Attempt = 0;
     const ui32 Retries;

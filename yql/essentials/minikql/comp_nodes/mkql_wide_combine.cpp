@@ -954,6 +954,7 @@ private:
     llvm::PointerType* PtrValueType;
     llvm::IntegerType* StatusType;
     llvm::IntegerType* StoredType;
+    llvm::IntegerType* BoolType;
 protected:
     using TBase::Context;
 public:
@@ -963,6 +964,7 @@ public:
         result.emplace_back(PtrValueType); //tongue
         result.emplace_back(PtrValueType); //throat
         result.emplace_back(StoredType); //StoredDataSize
+        result.emplace_back(BoolType); //IsOutOfMemory
         result.emplace_back(Type::getInt32Ty(Context)); //size
         result.emplace_back(Type::getInt32Ty(Context)); //size
         return result;
@@ -984,12 +986,17 @@ public:
         return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 3);
     }
 
+    llvm::Constant* GetIsOutOfMemory() {
+        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 4);
+    }
+
     TLLVMFieldsStructureState(llvm::LLVMContext& context)
         : TBase(context)
         , ValueType(Type::getInt128Ty(Context))
         , PtrValueType(PointerType::getUnqual(ValueType))
         , StatusType(Type::getInt32Ty(Context))
-        , StoredType(Type::getInt64Ty(Context)) {
+        , StoredType(Type::getInt64Ty(Context))
+		, BoolType(Type::getInt1Ty(Context)) {
 
     }
 };
@@ -1340,7 +1347,13 @@ public:
             }
 
             const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, totalUsed, ctx, block);
-            BranchInst::Create(done, loop, check, block);
+
+            const auto isOutOfMemoryPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIsOutOfMemory() }, "is_out_of_memory_ptr", block);
+            const auto isOutOfMemory = new LoadInst(Type::getInt1Ty(context), isOutOfMemoryPtr, "is_out_of_memory", block);
+            const auto checkIsOutOfMemory = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, isOutOfMemory, ConstantInt::getTrue(context), "check_is_out_of_memory", block);
+
+            const auto any = BinaryOperator::CreateOr(check, checkIsOutOfMemory, "any", block);
+            BranchInst::Create(done, loop, any, block);
 
             block = done;
 

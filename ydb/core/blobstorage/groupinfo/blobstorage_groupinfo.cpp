@@ -25,6 +25,8 @@
 
 namespace NKikimr {
 
+TCypherKey TEncryptionKeys::EmptyCypherKey;
+
 class TQuorumCheckerBase : public TBlobStorageGroupInfo::IQuorumChecker {
 protected:
     const TBlobStorageGroupInfo::TTopology *Top;
@@ -634,7 +636,7 @@ TBlobStorageGroupInfo::~TBlobStorageGroupInfo()
 {}
 
 TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrBlobStorage::TGroupInfo& group,
-        const TEncryptionKey *key, IOutputStream *err) {
+        const TEncryptionKeys *keys, IOutputStream *err) {
     auto erasure = (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies();
     TBlobStorageGroupType type(erasure);
     TBlobStorageGroupInfo::TTopology topology(type);
@@ -689,23 +691,38 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
                 const TString encryptedGroupKey = group.GetEncryptedGroupKey();
                 const ui64 groupKeyNonce = group.GetGroupKeyNonce();
 
-                if (!key || !*key) {
+                if (!keys || !*keys) {
                     lcp = ELCP_KEY_NOT_LOADED;
-                } else if (mainKeyId != key->Id) {
-                    lcp = ELCP_KEY_ID_ERROR;
-                } else if (mainKeyVersion != key->Version) {
-                    lcp = ELCP_KEY_VERSION_ERROR;
-                } else if (!DecryptGroupKey(res->EncryptionMode, mainKeyId, encryptedGroupKey, groupKeyNonce, key->Key,
-                        &res->Key, group.GetGroupID())) {
-                    lcp = ELCP_KEY_CRC_ERROR;
-                    res->Key.Wipe();
                 } else {
-                    break;
-                }
-                if (err) {
-                    *err << "LifeCyclePhase# " << lcp << " Key.Id# \"" << EscapeC(key->Id)
-                        << "\" Key.Version# " << key->Version << " MainKey.Id# \"" << EscapeC(mainKeyId)
-                        << "\" MainKey.Version# " << mainKeyVersion << " GroupKeyNonce# " << groupKeyNonce;
+                    bool keyDecrypted = false;
+                    bool keyVersionFound = false;
+                    for (const TEncryptionKey& key : *keys) {
+                        if (mainKeyVersion == key.Version) {
+                            keyVersionFound = true;
+                            if (mainKeyId == key.Id) {
+                                if (DecryptGroupKey(res->EncryptionMode, mainKeyId, encryptedGroupKey, groupKeyNonce, key.Key, &res->Key, group.GetGroupID())) {
+                                    keyDecrypted = true;
+                                }
+                                break;
+                            } else {
+                                lcp = ELCP_KEY_ID_ERROR;
+                                break;
+                            }
+                        }
+                    }
+                    if (!keyDecrypted) {
+                        if (!keyVersionFound) {
+                            lcp = ELCP_KEY_VERSION_ERROR;
+                        } else {
+                            lcp = ELCP_KEY_CRC_ERROR;
+                            res->Key.Wipe();
+                        }
+
+                        if (err) {
+                            *err << "LifeCyclePhase# " << lcp << " Keys " << *keys << " MainKey.Id# \"" << EscapeC(mainKeyId)
+                                << "\" MainKey.Version# " << mainKeyVersion << " GroupKeyNonce# " << groupKeyNonce;
+                        }
+                    }
                 }
                 break;
             }

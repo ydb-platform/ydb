@@ -27,8 +27,8 @@ namespace NKikimr::NStorage {
                 case TBlobStorageGroupInfo::ELCP_INITIAL:
                     // we have to request key here, if we haven't done this yet; if there is no main key set, then we
                     // just return group without key and use it in limited mode
-                    if (const TEncryptionKey& mainKey = GetGroupMainKey(groupId)) {
-                        ProposeKey(groupId, mainKey, group.EncryptionParams);
+                    if (const TEncryptionKeys& tenantKeys = GetGroupMainKeys(groupId)) {
+                        ProposeKey(groupId, tenantKeys, group.EncryptionParams);
                         return nullptr;
                     } else {
                         Y_ABORT_UNLESS(!info->GetCypherKey()->GetIsKeySet()); // ensure no key loaded
@@ -57,7 +57,7 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::ProposeKey(ui32 groupId, const TEncryptionKey& mainKey, const NKikimrBlobStorage::TGroupInfo& encryptionParams) {
+    void TNodeWarden::ProposeKey(ui32 groupId, const TEncryptionKeys& tenantKeys, const NKikimrBlobStorage::TGroupInfo& encryptionParams) {
         TCypherKey groupKey;
         ui8 *keyBytes = nullptr;
         ui32 keySizeBytes = 0;
@@ -71,7 +71,7 @@ namespace NKikimr::NStorage {
         const ui64 groupKeyNonce = encryptionParams.GetGroupKeyNonce();
 
         TStreamCypher cypher;
-        bool isKeySet = cypher.SetKey(static_cast<const TCypherKey&>(mainKey));
+        bool isKeySet = cypher.SetKey(static_cast<const TCypherKey&>(tenantKeys));
         Y_ABORT_UNLESS(isKeySet);
         cypher.StartMessage(groupKeyNonce, 0);
         cypher.Encrypt(destination, keyBytes, keySizeBytes);
@@ -81,15 +81,15 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(encryptedGroupKey.size() == groupKey.GetKeySizeBytes() + sizeof(ui32));
 
         // Send the request
-        STLOG(PRI_DEBUG, BS_NODE, NW68, "ConfigureLocalProxy propose", (GroupId, groupId), (MainKey, mainKey));
+        STLOG(PRI_DEBUG, BS_NODE, NW68, "ConfigureLocalProxy propose", (GroupId, groupId), (MainKey, tenantKeys.GetCurrentEncryptionKey()));
         SendToController(std::make_unique<TEvBlobStorage::TEvControllerProposeGroupKey>(LocalNodeId, groupId,
-            TBlobStorageGroupInfo::ELCP_PROPOSE, mainKey.Id, encryptedGroupKey, mainKey.Version, groupKeyNonce));
+            TBlobStorageGroupInfo::ELCP_PROPOSE, tenantKeys.GetCurrentEncryptionKey().Id, encryptedGroupKey, tenantKeys.GetCurrentEncryptionKey().Version, groupKeyNonce));
     }
 
-    TEncryptionKey& TNodeWarden::GetGroupMainKey(ui32 groupId) {
+    TEncryptionKeys& TNodeWarden::GetGroupMainKeys(ui32 groupId) {
         return TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static
-            ? Cfg->StaticKey
-            : Cfg->TenantKey;
+            ? Cfg->StaticKeys
+            : Cfg->TenantKeys;
     }
 
     void TNodeWarden::ApplyGroupInfo(ui32 groupId, ui32 generation, const NKikimrBlobStorage::TGroupInfo *newGroup,
@@ -200,9 +200,9 @@ namespace NKikimr::NStorage {
             }
         } else if (groupChanged) {
             // group has changed; obtain main encryption key for this group and try to parse group info from the protobuf
-            auto& mainKey = GetGroupMainKey(groupId);
+            auto& tenantKeys = GetGroupMainKeys(groupId);
             TStringStream err;
-            group.Info = TBlobStorageGroupInfo::Parse(*currentGroup, &mainKey, &err);
+            group.Info = TBlobStorageGroupInfo::Parse(*currentGroup, &tenantKeys, &err);
             if (group.Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
                 group.NodeLayoutInfo = MakeIntrusive<TNodeLayoutInfo>(NodeLocationMap[LocalNodeId], group.Info, NodeLocationMap);
             }

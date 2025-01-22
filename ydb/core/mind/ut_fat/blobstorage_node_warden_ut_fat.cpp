@@ -194,8 +194,8 @@ void SetupServices(TTestActorRuntime &runtime) {
         google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig.MutableServiceSet());
 
         app.SetKeyForNode(keyfile, nodeIndex);
-        ObtainTenantKey(&nodeWardenConfig->TenantKey, app.Keys[nodeIndex]);
-        ObtainStaticKey(&nodeWardenConfig->StaticKey);
+        ObtainTenantKeys(&nodeWardenConfig->TenantKeys, app.Keys[nodeIndex]);
+        ObtainStaticKeys(&nodeWardenConfig->StaticKeys);
 
         if (nodeIndex == 0) {
             static TTempDir tempDir;

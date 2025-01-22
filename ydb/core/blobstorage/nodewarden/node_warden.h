@@ -30,8 +30,8 @@ namespace NKikimr {
         NKikimrBlobStorage::TIncrHugeConfig IncrHugeConfig;
         THashMap<TString, TIntrusivePtr<NPDisk::TSectorMap>> SectorMaps;
         std::unique_ptr<ICacheAccessor> CacheAccessor;
-        TEncryptionKey TenantKey;
-        TEncryptionKey StaticKey;
+        TEncryptionKeys TenantKeys;
+        TEncryptionKeys StaticKeys;
         NPDisk::TMainKey PDiskKey;
         bool CachePDisks = false;
         bool CacheVDisks = false;
@@ -56,8 +56,8 @@ namespace NKikimr {
 
     IActor* CreateBSNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg);
 
-    bool ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig);
-    bool ObtainStaticKey(TEncryptionKey *key);
+    bool ObtainTenantKeys(TEncryptionKeys *keys, const NKikimrProto::TKeyConfig& keyConfig);
+    bool ObtainStaticKeys(TEncryptionKeys *keys);
     bool ObtainPDiskKey(NPDisk::TMainKey *key, const NKikimrProto::TKeyConfig& keyConfig);
 
     std::unique_ptr<ICacheAccessor> CreateFileCacheAccessor(const TString& templ, const std::unordered_map<char, TString>& vars);

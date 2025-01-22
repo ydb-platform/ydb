@@ -42,7 +42,7 @@ namespace NKikimr {
                     p++;
                     *p ^= hash2;
 
-                    // Preapre nonce = {Step(32), Cookie(24), Channel(8)}
+                    // Prepare nonce = {Step(32), Cookie(24), Channel(8)}
                     ui64 nonce = (ui64(id.Step()) << 32) | (ui64(id.Cookie()) << 8) | (ui64(id.Channel()));
 
                     // Encrypt the data

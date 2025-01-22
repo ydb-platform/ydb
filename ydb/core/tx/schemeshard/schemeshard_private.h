@@ -97,10 +97,10 @@ namespace TEvPrivate {
     };
 
     struct TEvExportSchemeUploadResult: public TEventLocal<TEvExportSchemeUploadResult, EvExportSchemeUploadResult> {
-        ui64 ExportId;
-        ui32 ItemIdx;
-        bool Success;
-        TString Error;
+        const ui64 ExportId;
+        const ui32 ItemIdx;
+        const bool Success;
+        const TString Error;
 
         TEvExportSchemeUploadResult(ui64 id, ui32 itemIdx, bool success, const TString& error)
             : ExportId(id)
@@ -108,11 +108,6 @@ namespace TEvPrivate {
             , Success(success)
             , Error(error)
         {}
-
-        void SetError(const TString& error) {
-            Success = false;
-            Error = error;
-        }
     };
 
     struct TEvServerlessStorageBilling: public TEventLocal<TEvServerlessStorageBilling, EvServerlessStorageBilling> {

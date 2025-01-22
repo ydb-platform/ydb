@@ -1,23 +1,12 @@
 # -*- coding: utf-8 -*-
-import os
 import logging
-import time
-import copy
-import pytest
 
 from hamcrest import (
-    any_of,
     assert_that,
-    calling,
-    equal_to,
-    raises,
     has_length,
-    has_properties,
 )
 
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.library.harness.util import LogLevels
-
 
 logger = logging.getLogger(__name__)
 
@@ -25,42 +14,43 @@ logger = logging.getLogger(__name__)
 # local configuration for the ydb cluster (fetched by ydb_cluster_configuration fixture)
 CLUSTER_CONFIG = dict(
     additional_log_configs={
-        #'TX_PROXY': LogLevels.DEBUG,
+        # 'TX_PROXY': LogLevels.DEBUG,
     }
 )
+
 
 def test_create_user(ydb_cluster):
     database = '/Root/users/database'
     ydb_cluster.create_database(
         database,
-        storage_pool_units_count={'hdd':1}
+        storage_pool_units_count={'hdd': 1}
     )
     database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
     ydb_cluster.wait_tenant_up(database)
 
-    domain_admin_driver_config = ydb.DriverConfig(
+    domain_admin_config = ydb.DriverConfig(
         endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
         database="/Root",
     )
-    tenant_admin_driver_config = ydb.DriverConfig(
+    tenant_admin_config = ydb.DriverConfig(
         endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
         database=database,
     )
-    tenant_user_driver_config = ydb.DriverConfig(
+    tenant_user_config = ydb.DriverConfig(
         endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
         database=database,
         credentials=ydb.StaticCredentials.from_user_password("user", ""),
     )
 
-    with ydb.Driver(domain_admin_driver_config) as driver:
+    with ydb.Driver(domain_admin_config) as driver:
         with ydb.QuerySessionPool(driver, size=1) as pool:
             pool.execute_with_retries("CREATE USER user;")
 
-    with ydb.Driver(tenant_admin_driver_config) as driver:
+    with ydb.Driver(tenant_admin_config) as driver:
         with ydb.QuerySessionPool(driver, size=1) as pool:
-            pool.execute_with_retries(f"GRANT ALL ON `{database}` TO user;")               
+            pool.execute_with_retries(f"GRANT ALL ON `{database}` TO user;")
 
-    with ydb.Driver(tenant_user_driver_config) as driver:
+    with ydb.Driver(tenant_user_config) as driver:
         with ydb.QuerySessionPool(driver, size=1) as pool:
             pool.execute_with_retries("CREATE TABLE table (key Int32, value String, primary key(key));")
 
@@ -74,4 +64,3 @@ def test_create_user(ydb_cluster):
 
     ydb_cluster.remove_database(database)
     ydb_cluster.unregister_and_stop_slots(database_nodes)
-

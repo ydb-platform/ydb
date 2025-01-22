@@ -2207,11 +2207,15 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    Y_UNIT_TEST(AuthUsers_Filter) {
+    Y_UNIT_TEST(AuthUsers_Access) {
         TTestEnv env;
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user1");
+        env.GetClient().SetSecurityToken("root@builtin");
         CreateTenantsAndTables(env, true);
+        
         TTableClient client(env.GetDriver());
 
         env.GetClient().CreateUser("/Root", "user1", "password1");
@@ -2219,39 +2223,100 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().CreateUser("/Root/Tenant1", "user3", "password3");
         env.GetClient().CreateUser("/Root/Tenant1", "user4", "password4");
 
-        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user1");
-        // TODO: make user3 Tenant1 admin and check
-
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-            Cerr << ">ModifyACL" << Endl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
             env.GetClient().ModifyACL("", "Root", acl.SerializeAsString());
-            Cerr << "<ModifyACL" << Endl;
         }
 
-        Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
+        { // anonymous
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint());
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
 
-        auto user1DriverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                .User = "user1",
-                .Password = "password1",
-            }));
-        auto user1Driver = TDriver(user1DriverConfig);
-        TTableClient user1Client(user1Driver);
-
-        {
-            auto it = user1Client.StreamExecuteScanQuery(R"(
+            auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid
                 FROM `Root/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
-                [["user1"]];
-                [["user2"]];
+
             ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+        
+        { // user1
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "password1",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_users`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["user2"]];
+                    [["user1"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_users`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["user4"]];
+                    [["user3"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+        }
+
+        { // user2
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user2",
+                    .Password = "password2",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_users`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["user2"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_users`
+                )").GetValueSync();
+
+                auto expected = R"([
+
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
         }
     }
 

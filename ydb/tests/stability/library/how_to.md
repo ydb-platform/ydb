@@ -1,0 +1,99 @@
+# How to test stability 
+1) build ydbd (not stripped)
+    ```
+    ./ya make -r ydb/apps/ydbd
+    ```
+2) build library
+    ```
+    ./ya make -r /ydb/tests/stability/library
+    ```
+3) deploy ydb to test specific build version
+    ```
+    cd ydb/tests/stability/library; ./library deploy_ydb --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+    ```
+4) deploy tools 
+    ```
+    ./library deploy_tools --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+    ```
+5) start workload:
+    - `start_all_workloads` - start all listed below workloads 
+    - `start_workload_simple_queue_row`
+    - `start_workload_simple_queue_column`
+    - `start_workload_olap_workload`
+
+    ```
+    ./library start_all_workloads --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+    ```
+    to stop workload, use command `stop_workloads`
+    
+    to check is it working on node host
+    - workload simple_queue row  - ``ps -aux | grep "/Berkanavt/nemesis/bin/simple" | grep row | grep -v grep
+    ``
+    - workload simple_queue column  - ``ps -aux | grep "/Berkanavt/nemesis/bin/simple" | grep column | grep -v grep
+    ``
+    - workload simple_queue column  - ``ps -aux | grep "/Berkanavt/nemesis/bin/olap_workload" | grep -v grep
+    ``
+
+6) start nemesis:
+    ```
+    ./library start_nemesis --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+    ```
+    to stop, use the command `stop_nemesis`
+
+7) check states
+    1) yq to get all node hosts
+
+        ``pip install yq``
+        
+        ``yq '.hosts[].name' <path_to_cluster.yaml> > hosts.txt``
+    2) Get status of nemesis and workloads (ad-hoc)
+        ```
+        parallel-ssh -h hosts.txt -i '
+        if systemctl is-active --quiet nemesis; then
+            echo "nemesis: Active"
+        else
+            echo "nemesis: Down"
+        fi
+        if ps aux | grep "/Berkanavt/nemesis/bin/olap_workload" | grep -v grep > /dev/null; then
+            echo "olap_workload: Running"
+        else
+            echo "olap_workload: Stopped"
+        fi
+        if ps aux | grep "/Berkanavt/nemesis/bin/simple" | grep column | grep -v grep > /dev/null; then
+            echo "simple_queue_column: Running"
+        else
+            echo "simple_queue_column: Stopped"
+        fi
+        if ps aux | grep "/Berkanavt/nemesis/bin/simple" | grep row | grep -v grep > /dev/null; then
+            echo "simple_queue_column: Running"
+        else
+            echo "simple_queue_column: Stopped"
+        fi
+        '
+        ```
+8) check cluster stability
+    1) ``perform_checks`` - return summary of errors and coredumps for cluster:
+
+        ```
+        SAFETY WARDEN (total: 8)
+        LIVENESS WARDEN (total: 0)
+        COREDUMPS:
+            ydb-sas-testing-0000.search.yandex.net: 1
+            ydb-sas-testing-0001.search.yandex.net: 0
+            ydb-sas-testing-0002.search.yandex.net: 1
+            ydb-sas-testing-0003.search.yandex.net: 1
+            ydb-sas-testing-0004.search.yandex.net: 0
+            ydb-sas-testing-0005.search.yandex.net: 1
+            ydb-sas-testing-0006.search.yandex.net: 2
+            ydb-sas-testing-0007.search.yandex.net: 0
+        ```
+        to run:
+        ```
+        ./library perform_checks --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+        ``` 
+    2) get unique traces
+
+        ```
+         ./library get_errors --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+        ```
+9) create issue in github about new traces

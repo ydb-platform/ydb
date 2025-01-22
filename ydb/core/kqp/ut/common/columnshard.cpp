@@ -49,7 +49,7 @@ namespace NKqp {
     void TTestHelper::SetTestCompactionPlanner(const TColumnTableBase& table, const EStatus expectedStatus) {
         const TString features = R"(
             {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "1s", "portions_count_available": 1},
-                         {"class_name" : "Zero"}]}`);
+                         {"class_name" : "Zero"}]}
         )";
         std::cerr << (table.BuildAlterCompactionPlannerQuery(features)) << std::endl;
         auto result = GetSession().ExecuteSchemeQuery(table.BuildAlterCompactionPlannerQuery(features)).GetValueSync();

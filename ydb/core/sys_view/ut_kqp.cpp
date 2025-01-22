@@ -4178,6 +4178,68 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }
+
+    Y_UNIT_TEST(PlayWithTenant) {
+        TTestEnv env;
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+        env.GetServer().GetRuntime()->GetAppData().AuthConfig.SetDomainLoginOnly(false);
+        env.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetCheckDatabaseAccessPermission(false);
+        env.GetClient().SetSecurityToken("root@builtin");
+        CreateTenantsAndTables(env, true);
+        
+        env.GetClient().CreateUser("/Root", "user1", "password1");
+        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
+        
+        Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
+
+        {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "password1",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT 1
+            )").GetValueSync();
+
+            auto expected = R"([
+                [1]
+            ])";
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant1").DebugString() << Endl;
+
+        {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetDatabase("/Root/Tenant1")
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user2",
+                    .Password = "password2",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT 1
+            )").GetValueSync();
+
+            auto expected = R"([
+                [1]
+            ])";
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+    }
 }
 
 } // NSysView

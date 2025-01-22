@@ -38,9 +38,9 @@ target_link_libraries(cpp-mapreduce-client PUBLIC
   library-cpp-yson
   cpp-mapreduce-common
   cpp-mapreduce-http
+  cpp-mapreduce-http_client
   cpp-mapreduce-interface
   cpp-mapreduce-io
-  cpp-mapreduce-raw_client
   yt-yt-core
   yt-core-http
   tools-enum_parser-enum_serialization_runtime

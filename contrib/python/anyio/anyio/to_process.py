@@ -35,7 +35,7 @@ _process_pool_idle_workers: RunVar[deque[tuple[Process, float]]] = RunVar(
 _default_process_limiter: RunVar[CapacityLimiter] = RunVar("_default_process_limiter")
 
 
-async def run_sync(
+async def run_sync(  # type: ignore[return]
     func: Callable[[Unpack[PosArgsT]], T_Retval],
     *args: Unpack[PosArgsT],
     cancellable: bool = False,

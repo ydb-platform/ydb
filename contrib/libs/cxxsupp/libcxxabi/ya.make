@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(17.0.6)
+VERSION(18.1.8)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-17.0.6.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-18.1.8.tar.gz)
 
 PEERDIR(
     contrib/libs/libunwind
@@ -74,6 +74,7 @@ ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32)
     CFLAGS(
         -D_LIBCPP_SAFE_STATIC=
         -D_LIBCXXABI_DTOR_FUNC=
+        -D__USING_WASM_EXCEPTIONS__
     )
 ENDIF()
 

@@ -6,7 +6,7 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -1734,7 +1734,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             THashSet<TString> names;
             for (const auto& child : children) {
-                names.insert(child.Name);
+                names.insert(TString{child.Name});
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
@@ -1752,7 +1752,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             THashSet<TString> names;
             for (const auto& child : children) {
-                names.insert(child.Name);
+                names.insert(TString{child.Name});
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
@@ -2155,12 +2155,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         {
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
+                SELECT Sid, IsEnabled, IsLockedOut, LastSuccessfulAttemptAt, LastFailedAttemptAt, FailedAttemptCount
                 FROM `Root/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
-                [["user1"]];
+                [["user1"];#;#;#;#;#];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -2168,12 +2168,25 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         {
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
+                SELECT PasswordHash
+                FROM `Root/.sys/auth_users`
+            )").GetValueSync();
+
+            auto actual = NKqp::StreamResultToYson(it);
+            UNIT_ASSERT_STRING_CONTAINS(actual, "hash");
+            UNIT_ASSERT_STRING_CONTAINS(actual, "salt");
+            UNIT_ASSERT_STRING_CONTAINS(actual, "type");
+            UNIT_ASSERT_STRING_CONTAINS(actual, "argon2id");
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT Sid, IsEnabled, IsLockedOut, LastSuccessfulAttemptAt, LastFailedAttemptAt, FailedAttemptCount
                 FROM `Root/Tenant1/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
-                [["user2"]]
+                [["user2"];#;#;#;#;#];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -2181,13 +2194,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         {
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
+                SELECT Sid, IsEnabled, IsLockedOut, LastSuccessfulAttemptAt, LastFailedAttemptAt, FailedAttemptCount
                 FROM `Root/Tenant2/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
-                [["user4"]];
-                [["user3"]];
+                [["user4"];#;#;#;#;#];
+                [["user3"];#;#;#;#;#];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));

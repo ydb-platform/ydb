@@ -136,6 +136,13 @@ static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out
     return true;
 }
 
+static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
+        const TRule_alter_replication_action& in, TSqlExpression& ctx)
+{
+    // TODO(ilnaz): support other actions
+    return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, false);
+}
+
 static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         const TRule_transfer_settings_entry& in, TSqlExpression& ctx, bool create)
 {
@@ -197,13 +204,6 @@ static bool TransferSettings(std::map<TString, TNodePtr>& out,
     return true;
 }
 
-static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
-        const TRule_alter_replication_action& in, TSqlExpression& ctx)
-{
-    // TODO(ilnaz): support other actions
-    return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, false);
-}
-
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber) {
     TString internalStatementName;
     TString humanStatementName;
@@ -263,7 +263,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!nodeExpr) {
                 return false;
             }
-
             TVector<TNodePtr> nodes;
             auto subquery = nodeExpr->GetSource();
             if (subquery && Mode == NSQLTranslation::ESqlMode::LIBRARY && Ctx.ScopeLevel == 0) {
@@ -1829,7 +1828,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildAlterSequence(pos, service, cluster, id, params, Ctx.Scoped));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore58: {
+       case TRule_sql_stmt_core::kAltSqlStmtCore58: {
             // create_transfer_stmt: CREATE TRANSFER
 
             auto& node = core.GetAlt_sql_stmt_core58().GetRule_create_transfer_stmt1();
@@ -1873,7 +1872,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     return false;
                 }
             }
-
 
             std::map<TString, TNodePtr> settings;
             std::optional<TString> transformLambda;
@@ -3210,6 +3208,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableuseblocks") {
             Ctx.UseBlocks = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableUseBlocks");
+        } else if (normalizedPragma == "emittablesource") {
+            Ctx.EmitTableSource = true;
+            Ctx.IncrementMonCounter("sql_pragma", "EmitTableSource");
+        } else if (normalizedPragma == "disableemittablesource") {
+            Ctx.EmitTableSource = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableEmitTableSource");
         } else if (normalizedPragma == "ansilike") {
             Ctx.AnsiLike = true;
             Ctx.IncrementMonCounter("sql_pragma", "AnsiLike");

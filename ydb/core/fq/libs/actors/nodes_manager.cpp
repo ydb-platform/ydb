@@ -8,8 +8,8 @@
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 #include <ydb/library/actors/core/log.h>

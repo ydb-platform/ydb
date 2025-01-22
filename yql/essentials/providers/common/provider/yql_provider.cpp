@@ -912,7 +912,7 @@ bool FillUsedFilesImpl(
     if (node.GetTypeAnn()) {
         usedPgExtensions |= node.GetTypeAnn()->GetUsedPgExtensions();
     }
-    
+
     if (node.IsCallable("PgResolvedCall")) {
         auto procId = FromString<ui32>(node.Child(1)->Content());
         const auto& proc = NPg::LookupProc(procId);
@@ -1126,7 +1126,7 @@ void FillSecureParams(
     }
 }
 
-bool AddPgFile(bool isPath, const TString& pathOrContent, const TString& md5, const TString& alias, TUserDataTable& files, 
+bool AddPgFile(bool isPath, const TString& pathOrContent, const TString& md5, const TString& alias, TUserDataTable& files,
     const TTypeAnnotationContext& types, TPositionHandle pos, TExprContext& ctx) {
 
     TUserDataBlock block;
@@ -1194,7 +1194,7 @@ bool FillUsedFiles(
             return false;
         }
     }
-    
+
     Y_ENSURE(remainingPgExtensions == 0);
     if (!needFullPgCatalog) {
         return true;

@@ -10,7 +10,6 @@ from datetime import date
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
-from .test_lib import TestLib
 from .test_query import Query
 from ydb.tests.library.harness.util import LogLevels
 
@@ -18,7 +17,7 @@ from ydb.tests.library.harness.util import LogLevels
 logger = logging.getLogger(__name__)
 
 
-class TestBase(TestLib, Query):
+class TestBase(Query):
 
     @classmethod
     def setup_class(cls):
@@ -195,3 +194,11 @@ class TpchTestBaseH1(TestBase):
 
     def tpch_est_records_count(self):
         return 600_000_000
+
+    # Function to perform bulk upserts
+    def bulk_upsert_operation(self, table_name, data_slice):
+        self.driver.table_client.bulk_upsert(
+            f"{self.database}/{table_name}",
+            data_slice,
+            self.tpch_bulk_upsert_col_types()
+        )

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.7.0)
+VERSION(4.8.0)
 
 LICENSE(MIT)
 
@@ -57,6 +57,7 @@ PY_SRCS(
     anyio/streams/stapled.py
     anyio/streams/text.py
     anyio/streams/tls.py
+    anyio/to_interpreter.py
     anyio/to_process.py
     anyio/to_thread.py
 )

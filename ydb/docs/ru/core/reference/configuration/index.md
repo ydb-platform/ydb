@@ -162,7 +162,7 @@ domains_config:
   - kind: <имя пула хранения>
     pool_config:
       box_id: 1
-      encryption: <опциональный, укажите 1 для шифрования данных на диске>
+      encryption_mode: <опциональный, укажите 1 для шифрования данных на диске>
       erasure_species: <имя режима отказоустойчивости - none, block-4-2, or mirror-3-dc>
       kind: <имя пула хранения - укажите то же значение, что выше>
       pdisk_filter:

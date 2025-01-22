@@ -9,7 +9,6 @@
 #include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/sql/settings/partitioning.h>
-#include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 
 #include <util/generic/scope.h>
@@ -1480,7 +1479,7 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
                 return TMaybe<TSourcePtr>(nullptr);
             }
 
-            return BuildNodeSource(Ctx.Pos(), arg->Expr, true);
+            return BuildNodeSource(Ctx.Pos(), arg->Expr, true, Ctx.EmitTableSource);
         }
     }
 
@@ -1999,7 +1998,6 @@ namespace {
         case TRule_table_setting_value::kAltTableSettingValue5: {
             auto columnName = IdEx(from.GetAlt_table_setting_value5().GetRule_an_id3(), txc);
             auto tiersLiteral = from.GetAlt_table_setting_value5().GetRule_ttl_tier_list1();
-
             TNodePtr firstInterval;
             if (!FillTieringInterval(tiersLiteral.GetRule_expr1(), firstInterval, expr, ctx)) {
                 return false;
@@ -4652,6 +4650,7 @@ bool TSqlTranslation::DefineActionOrSubqueryBody(TSqlQuery& query, TBlocks& bloc
         Y_DEFER {
             Ctx.PopCurrentBlocks();
         };
+
         size_t statementNumber = 0;
         if (!query.Statement(blocks, body.GetBlock2().GetRule_sql_stmt_core1(), statementNumber++)) {
             return false;
@@ -5157,7 +5156,7 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
             if (begin == std::string::npos || end == std::string::npos) {
                 return {};
             }
-            
+
             result << "$__ydb_transfer_lambda = " << Ctx.Query.substr(begin, end - begin + endToken->value().size()) << statementSeparator;
 
             return result;

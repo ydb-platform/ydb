@@ -9,13 +9,13 @@ namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class ISignatureValidator
+class TSignatureValidatorBase
     : public TRefCounted
 {
 public:
     virtual TFuture<bool> Validate(const TSignaturePtr& signature) = 0;
 
-    virtual ~ISignatureValidator() = default;
+    virtual ~TSignatureValidatorBase() = default;
 
 protected:
     const NYson::TYsonString& GetHeader(const TSignaturePtr& signature);
@@ -23,7 +23,13 @@ protected:
     const std::vector<std::byte>& GetSignature(const TSignaturePtr& signature);
 };
 
-DEFINE_REFCOUNTED_TYPE(ISignatureValidator)
+DEFINE_REFCOUNTED_TYPE(TSignatureValidatorBase)
+
+////////////////////////////////////////////////////////////////////////////////
+
+TSignatureValidatorBasePtr CreateDummySignatureValidator();
+
+TSignatureValidatorBasePtr CreateAlwaysThrowingSignatureValidator();
 
 ////////////////////////////////////////////////////////////////////////////////
 

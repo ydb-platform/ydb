@@ -848,11 +848,13 @@ message TReshardColumnTable {
 message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3 [default = true];
 }
 
 message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3;
 }
 
 message TLoginRemoveUser {

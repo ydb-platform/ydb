@@ -44,8 +44,8 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                [] (const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("/Root/Test");
+                [] (const auto& issue) {
+                    return issue.GetMessage().contains("/Root/Test");
                 }), result.GetIssues().ToString());
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -97,8 +97,8 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
             commitResult.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                [] (const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("/Root/Test");
+                [] (const auto& issue) {
+                    return issue.GetMessage().contains("/Root/Test");
                 }), commitResult.GetIssues().ToString());
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -194,8 +194,8 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                [] (const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("/Root/Test");
+                [] (const auto& issue) {
+                    return issue.GetMessage().contains("/Root/Test");
                 }), result.GetIssues().ToString());
 
             result = session1.ExecuteQuery(Q1_(R"(
@@ -253,8 +253,8 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                [] (const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("/Root/Test");
+                [] (const auto& issue) {
+                    return issue.GetMessage().contains("/Root/Test");
                 }), result.GetIssues().ToString());
 
             result = session1.ExecuteQuery(Q1_(R"(

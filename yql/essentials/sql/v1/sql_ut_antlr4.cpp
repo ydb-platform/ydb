@@ -5998,7 +5998,6 @@ Y_UNIT_TEST_SUITE(SessionWindowNegative) {
         ExpectFailWithError("SELECT 1 + SessionState() from plato.Input;",
             "<main>:1:12: Error: SessionState can not be used without aggregation by SessionWindow\n");
     }
-
     Y_UNIT_TEST(SessionStartStateWithGroupByWithoutSession) {
         ExpectFailWithError("SELECT 1 + SessionStart() from plato.Input group by user;",
             "<main>:1:12: Error: SessionStart can not be used here: SessionWindow specification is missing in GROUP BY\n");
@@ -7998,7 +7997,6 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         UNIT_ASSERT(res.Issues.Size() == 1);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
     }
-
     Y_UNIT_TEST(AlterCompressionCorrectUsage) {
         NYql::TAstParseResult res = SqlToYql(R"( use plato;
             ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION "lz4";
@@ -8075,6 +8073,6 @@ $__ydb_transfer_lambda = ($x) -> {
 ))";
 
         UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, programm.find(expected));
-        
+
     }
 }

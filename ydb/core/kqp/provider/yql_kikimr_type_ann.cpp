@@ -1892,8 +1892,23 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
+        const THashSet<TString> supportedSettings = {
+            "password",
+            "passwordEncrypted",
+            "nullPassword",
+            "login",
+            "noLogin"
+        };
+
         for (const auto& setting : node.Settings()) {
             auto name = setting.Name().Value();
+
+            if (!supportedSettings.contains(name)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown create user setting: " << name));
+                return TStatus::Error;
+            }
+
             if (name == "password") {
                 if (!EnsureAtom(setting.Value().Ref(), ctx)) {
                     return TStatus::Error;
@@ -1908,10 +1923,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
                         TStringBuilder() << "nullPassword node shouldn't have value" << name));
                 }
-            } else {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    TStringBuilder() << "Unknown create user setting: " << name));
-                return TStatus::Error;
             }
         }
 
@@ -1920,8 +1931,23 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
+        const THashSet<TString> supportedSettings = {
+            "password",
+            "passwordEncrypted",
+            "nullPassword",
+            "login",
+            "noLogin"
+        };
+
         for (const auto& setting : node.Settings()) {
             auto name = setting.Name().Value();
+
+            if (!supportedSettings.contains(name)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown alter user setting: " << name));
+                return TStatus::Error;
+            }
+
             if (name == "password") {
                 if (!EnsureAtom(setting.Value().Ref(), ctx)) {
                     return TStatus::Error;
@@ -1936,10 +1962,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
                         TStringBuilder() << "nullPassword node shouldn't have value" << name));
                 }
-            } else {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    TStringBuilder() << "Unknown alter user setting: " << name));
-                return TStatus::Error;
             }
         }
 

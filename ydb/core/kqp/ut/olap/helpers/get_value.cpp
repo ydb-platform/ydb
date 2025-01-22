@@ -86,7 +86,7 @@ TString GetUtf8(const NYdb::TValue& v) {
     if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
         return *value.GetOptionalUtf8();
     } else {
-        return value.GetUtf8();
+        return TString{value.GetUtf8()};
     }
 }
 

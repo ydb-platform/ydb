@@ -9,7 +9,7 @@
  #include <string>
 #endif
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 #ifndef EXTERNAL_BUILD
     using TStringType = TString;

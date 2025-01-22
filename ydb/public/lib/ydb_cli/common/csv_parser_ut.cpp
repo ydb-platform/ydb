@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
     }
 
     void CommonTestParams(TString&& header, TString&& data, const std::map<TString, TValue>& estimatedResult) {
-        std::map<TString, TType> paramTypes;
+        std::map<std::string, TType> paramTypes;
         for (const auto& [name, value] : estimatedResult) {
             paramTypes.insert({name, value.GetType()});
         }
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
     }
 
     void CommonTestValue(TString&& header, TString&& data, const TValue& estimatedResult) {
-        std::map<TString, TType> paramTypes;
+        std::map<std::string, TType> paramTypes;
         for (auto member : estimatedResult.GetType().GetProto().struct_type().members()) {
             paramTypes.insert({member.name(), member.type()});
         }
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
     }
 
     void CommonTestBuildList(TString&& header, std::vector<TString>&& data, const TValue& estimatedResult) {
-        std::map<TString, TType> columnTypes;
+        std::map<std::string, TType> columnTypes;
         for (auto member : estimatedResult.GetType().GetProto().list_type().item().struct_type().members()) {
             columnTypes.insert({member.name(), member.type()});
         }
@@ -209,7 +209,6 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestValue("name", "550e8400-e29b-41d4-a716-446655440000", MakeStruct("name", TValueBuilder().Uuid(TUuidValue("550e8400-e29b-41d4-a716-446655440000")).Build()));
         CommonTestValue("name", "\"{\"\"a\"\":10, \"\"b\"\":\"\"string\"\"}\"", MakeStruct("name", TValueBuilder().Json("{\"a\":10, \"b\":\"string\"}").Build()));
         CommonTestValue("name", "строка", MakeStruct("name", TValueBuilder().OptionalUtf8("строка").Build()));
-        CommonTestValue("name", "\"\"", MakeStruct("name", TValueBuilder().OptionalUtf8({}).Build()));
         CommonTestValue("name", "данные", MakeStruct("name", TValueBuilder().Pg(TPgValue(TPgValue::VK_TEXT, "данные", TPgType("some_type"))).Build()));
     }
 
@@ -313,7 +312,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
     }
 
     Y_UNIT_TEST(ShuffledColumns) {
-        std::map<TString, TType> tableColumnTypes = {
+        std::map<std::string, TType> tableColumnTypes = {
             {"col1", TTypeBuilder().Primitive(EPrimitiveType::Utf8).Build()},
             {"col2", TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Int64).EndOptional().Build()},
             {"col3", TTypeBuilder().Primitive(EPrimitiveType::Bool).Build()},

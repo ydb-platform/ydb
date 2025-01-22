@@ -58,6 +58,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"EmitStartsWith", &TContext::EmitStartsWith},
     {"AnsiLike", &TContext::AnsiLike},
     {"UseBlocks", &TContext::UseBlocks},
+    {"EmitTableSource", &TContext::EmitTableSource},
     {"BlockEngineEnable", &TContext::BlockEngineEnable},
     {"BlockEngineForce", &TContext::BlockEngineForce},
     {"UnorderedResult", &TContext::UnorderedResult},

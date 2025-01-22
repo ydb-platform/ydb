@@ -148,6 +148,24 @@ public:
     ui64 InsaneLogChunks = 0;  // Set when pdisk sees insanely large log, to give vdisks a chance to cut it
     ui32 FirstLogChunkToParseCommits = 0;
 
+    enum EShredState {
+        EShredStateDefault = 0,
+        EShredStateSendPreShredCompactVDisk = 1,
+        EShredStateGatherPreShredCompactVDisksResponse = 2,
+        EShredStateSendShredVDisk = 3,
+        EShredStateGatherShredVDisksResponse = 4,
+        EShredStateFinished = 5,
+        EShredStateFailed = 6,
+    };
+    EShredState ShredState = EShredStateDefault;
+    ui64 ShredGeneration = 0;
+    std::deque<TActorId> ShredRequesters;
+
+    i64 PreShredCompactVDiskRequestsSent = 0;
+    i64 PreShredCompactVDiskResponsesReceived = 0;
+    i64 ShredRequestsSent = 0;
+    i64 ShredResponsesReceived = 0;
+
     // Chunks that are owned by killed owner, but have operations InFlight
     TVector<TChunkIdx> QuarantineChunks;
     TVector<TOwner> QuarantineOwners;
@@ -387,6 +405,14 @@ public:
     void ProcessWriteMetadata(std::unique_ptr<TRequestBase> req);
     void HandleNextWriteMetadata();
     void ProcessWriteMetadataResult(TWriteMetadataResult& request);
+
+    void SendPreShredCompactVDiskRequests();
+    void SendShredVDiskRequests();
+    void ProgressShredState();
+    void ProcessShredPDisk(TShredPDisk& request);
+    void ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& request);
+    void ProcessShredVDiskResult(TShredVDiskResult& request);
+    void ProcessMarkDirty(TMarkDirty& request);
 
     void DropAllMetadataRequests();
 

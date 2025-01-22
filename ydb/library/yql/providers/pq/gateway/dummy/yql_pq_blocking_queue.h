@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/deque.h>
 #include <util/system/condvar.h>
@@ -27,7 +27,7 @@ public:
         }
     }
 
-    TMaybe<TEvent> Pop(bool block) {
+    std::optional<TEvent> Pop(bool block) {
         with_lock(Mutex_) {
             if (block) {
                 CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});

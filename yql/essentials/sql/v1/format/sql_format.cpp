@@ -3078,7 +3078,6 @@ public:
         bool prevAddLine = false;
         TMaybe<ui32> prevStmtCoreAltCase;
         for (const TString& currentQuery : statements) {
-
             TVector<NSQLTranslation::TParsedToken> comments;
             TParsedTokenList parsedTokens, stmtTokens;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {

@@ -18,7 +18,7 @@
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 static void CheckKind(TTypeParser::ETypeKind actual, TTypeParser::ETypeKind expected, const TString& method)
 {

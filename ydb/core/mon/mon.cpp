@@ -6,6 +6,8 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/ticket_parser.h>
 
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
@@ -152,7 +154,7 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
 }
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status) {
-    MakeJsonErrorReply(jsonResponse, message, status.GetIssues(), status.GetStatus());
+    MakeJsonErrorReply(jsonResponse, message, NYdb::NAdapters::ToYqlIssues(status.GetIssues()), status.GetStatus());
 }
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYql::TIssues& issues, NYdb::EStatus status) {

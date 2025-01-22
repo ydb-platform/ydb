@@ -9,7 +9,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NView {
 
 TViewDescription::TViewDescription(const Ydb::View::DescribeViewResult& desc)

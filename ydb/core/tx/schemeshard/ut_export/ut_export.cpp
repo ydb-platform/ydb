@@ -2479,10 +2479,48 @@ mode: MODE_UPDATES
 format: FORMAT_JSON
 state: STATE_ENABLED
 )", i));
-                UNIT_ASSERT_VALUES_EQUAL(*changefeed, Sprintf("name: \"update_feed%d\"\nmode: MODE_UPDATES\nformat: FORMAT_JSON\nstate: STATE_ENABLED\n", i));
 
                 auto* topic = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb");
                 UNIT_ASSERT(topic);
+                UNIT_ASSERT_VALUES_EQUAL(*topic, Sprintf(R"(partitioning_settings {
+  min_active_partitions: 1
+  max_active_partitions: 1
+  auto_partitioning_settings {
+    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+    partition_write_speed {
+      stabilization_window {
+        seconds: 300
+      }
+      up_utilization_percent: 80
+      down_utilization_percent: 20
+    }
+  }
+}
+partitions {
+  active: true
+}
+retention_period {
+  seconds: 86400
+}
+partition_write_speed_bytes_per_second: 1048576
+partition_write_burst_bytes: 1048576
+attributes {
+  key: "__max_partition_message_groups_seqno_stored"
+  value: "6000000"
+}
+attributes {
+  key: "_allow_unauthenticated_read"
+  value: "true"
+}
+attributes {
+  key: "_allow_unauthenticated_write"
+  value: "true"
+}
+attributes {
+  key: "_message_group_seqno_retention_period_ms"
+  value: "1382400000"
+}
+)", i));
 
                 const auto* changefeedChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb.sha256");
                 UNIT_ASSERT(changefeedChecksum);

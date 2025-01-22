@@ -585,7 +585,8 @@ PEERDIR(
     ydb/public/lib/json_value
     ydb/public/lib/ydb_cli/common
     ydb/public/api/grpc
-    ydb/public/sdk/cpp/client/ydb_types
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/types
     contrib/libs/yaml-cpp
 )
 

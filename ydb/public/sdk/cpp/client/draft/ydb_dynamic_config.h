@@ -14,7 +14,7 @@
 
 #include <memory>
 
-namespace NYdb::NDynamicConfig {
+namespace NYdb::inline V2::NDynamicConfig {
 
 struct TGetConfigResult : public TStatus {
     TGetConfigResult(

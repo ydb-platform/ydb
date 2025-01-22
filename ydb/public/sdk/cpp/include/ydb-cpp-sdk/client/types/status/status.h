@@ -55,7 +55,6 @@ public:
     TYdbErrorException(TStatus status)
         : Status_(std::move(status))
     {
-        *this << status;
     }
 
     friend IOutputStream& operator<<(IOutputStream& out, const TYdbErrorException& e) {

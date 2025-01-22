@@ -6,11 +6,11 @@
 set -eu
 
 ARC_ROOT=$(arc rev-parse --show-toplevel)
-REPORT_ROOT=$(mktemp -p $TMPDIR -d yql-essentials-core-type_ann-coverage-XXXXXXX)
+REPORT_ROOT=$(mktemp --tmpdir -d yql-essentials-core-type_ann-coverage-XXXXXXX)
 # Save the list with uncovered callbacks into the file, that is
 # given by the first parameter of this script; otherwise, save
 # the list into the temporary file.
-UNCOVERED_FILE=${1:-$(mktemp -p $TMPDIR yql-essentials-core-type_ann-uncovered-XXXXXXX.list)}
+UNCOVERED_FILE=${1:-$(mktemp --tmpdir yql-essentials-core-type_ann-uncovered-XXXXXXX.list)}
 
 # Run the command to collect code coverage over the sources in
 # /yql/essentials/core/type_ann by the minirun test suite.
@@ -46,3 +46,5 @@ grep -oP "$UNCOVERED_ANCHOR$CALLBACK_PREFIX(\w+)$CALLBACK_SUFFIX" \
 
 rm -rf $REPORT_ROOT
 echo "The list of the uncovered functions: $UNCOVERED_FILE"
+# Make script fail if uncovered list is not empty.
+test ! -s $UNCOVERED_FILE

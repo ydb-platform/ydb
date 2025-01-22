@@ -53,8 +53,8 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
 
 TString PrettySize(ui64 size) {
     double sizeFormat = size;
-    TString mod = "b";
-    const char* mods[] = { "Kb", "Mb", "Gb", "Tb", "Pb", "Eb" };
+    TString mod = "B";
+    const char* mods[] = { "KB", "MB", "GB", "TB", "PB", "EB" };
     TString numFormat = "%.0f";
 
     for (const char* nextMod : mods) {
@@ -67,14 +67,13 @@ TString PrettySize(ui64 size) {
         }
     }
 
-    return Sprintf((numFormat + " %s").data(), sizeFormat, mod.data());
+    return Sprintf((numFormat + "%s").data(), sizeFormat, mod.data());
 }
 
 TString PrettyNumber(ui64 size) {
     double sizeFormat = size;
     TString mod = "";
-    const char* mods[] = { " thousand", " million", " billion", " trillion", " quadrillion",
-        " quintillion", " sextillion", " septillion", " octillion", " nonillion", " decillion" };
+    const char* mods[] = { "K", "M", "G", "T", "P", "E", "Z", "Y" };
     TString numFormat = "%.0f";
 
     for (const char* nextMod : mods) {

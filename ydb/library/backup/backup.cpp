@@ -573,7 +573,8 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
     NView::TViewClient client(driver);
     auto viewDescription = DescribeView(client, dbPath);
 
-    NDump::ValidateViewQuery(viewDescription.GetQueryText(), dbPath, issues);
+    const auto queryText = TString(viewDescription.GetQueryText());
+    NDump::ValidateViewQuery(queryText, dbPath, issues);
 
     const auto fsPath = fsBackupDir.Child(NDump::NFiles::CreateView().FileName);
     LOG_D("Write view creation query to " << fsPath.GetPath().Quote());
@@ -581,7 +582,7 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
     const auto creationQuery = NDump::BuildCreateViewQuery(
         TFsPath(dbPathRelativeToBackupRoot).GetName(),
         dbPath,
-        viewDescription.GetQueryText(),
+        queryText,
         dbBackupRoot,
         issues
     );

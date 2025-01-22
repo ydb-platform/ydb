@@ -46,10 +46,17 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
     TKikimrSettings GetSettings(bool enableCompression, bool enableAlterObject) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enableAlterObject);
-        return TKikimrSettings().SetWithSampleTables(false).SetEnableOlapCompression(enableCompression).SetAppConfig(appConfig);
+        return TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapCompression(enableCompression)
+            .SetAlterObjectEnabledForColumnTables(enableAlterObject);
     }
     Y_UNIT_TEST(DisabledAlterCompression) {
-        TTestHelper testHelper(GetSettings(true, true));
+        auto settings = TKikimrSettings()
+            .SetEnableOlapCompression(false)
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("pk_int").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
         };
@@ -72,7 +79,10 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
     }
 
     Y_UNIT_TEST(OffCompression) {
-        TTestHelper testHelper(GetSettings(false, true));
+        auto settings = TKikimrSettings()
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("pk_int").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
         };

@@ -5518,8 +5518,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AlterColumnTableTtl) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings{}
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -9225,9 +9226,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
 
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -9487,8 +9489,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 */
     Y_UNIT_TEST(AddColumnWithStore) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings{}
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -9551,8 +9554,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(AddPgColumnWithStore) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings{}
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -9893,8 +9897,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(DropTtlColumn) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings{}
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -9958,8 +9963,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(DropColumnTableStoreErrors) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings{}
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -11457,8 +11463,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(DropColumnAndResetTtl) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings{}
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -11493,8 +11500,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(InitTtlSettingsOnShardStart) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings{}
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

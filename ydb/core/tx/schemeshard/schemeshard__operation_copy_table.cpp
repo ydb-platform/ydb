@@ -712,8 +712,8 @@ public:
         const ui32 shardsToCreate = tableInfo->GetPartitions().size();
         Y_VERIFY_S(shardsToCreate <= maxShardsToCreate, "shardsToCreate: " << shardsToCreate << " maxShardsToCreate: " << maxShardsToCreate);
 
-        dstPath.DomainInfo()->IncPathsInside(1, isBackup);
-        dstPath.DomainInfo()->AddInternalShards(txState, isBackup);
+        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, isBackup);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS, isBackup);
         dstPath.Base()->IncShardsInside(shardsToCreate);
         IncAliveChildrenSafeWithUndo(OperationId, parent, context, isBackup);
 

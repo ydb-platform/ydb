@@ -259,7 +259,7 @@ public:
                 newDir->TempDirOwnerActorId, newDir->PathId);
         }
 
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         context.OnComplete.ActivateTx(OperationId);

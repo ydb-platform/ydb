@@ -287,7 +287,8 @@ std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCo
 ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPortion(const TPortionInfo::TConstPtr& portionInfo) {
     SumMemoryFix += portionInfo->GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16)) + portionInfo->GetTotalBlobBytes();
     SumMemoryRaw += portionInfo->GetTotalRawBytes();
-    return SumMemoryFix + std::min<ui64>(SumMemoryRaw, AppDataVerified().ColumnShardConfig.GetMemoryLimitMergeOnCompactionRawData());
+    return SumMemoryFix + std::min<ui64>(SumMemoryRaw,
+                              NYDBTest::TControllers::GetColumnShardController()->GetConfig().GetMemoryLimitMergeOnCompactionRawData());
 }
 
 }   // namespace NKikimr::NOlap::NCompaction

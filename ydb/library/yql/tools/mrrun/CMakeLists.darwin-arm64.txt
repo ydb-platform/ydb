@@ -23,7 +23,7 @@ target_link_libraries(mrrun PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-protobuf
-  client-ydb_persqueue_public-codecs
+  client-persqueue_public-codecs
   cpp-digest-md5
   library-cpp-getopt
   library-cpp-logger
@@ -69,7 +69,7 @@ target_link_libraries(mrrun PUBLIC
   essentials-utils-log
   essentials-utils-backtrace
   essentials-utils-failure_injector
-  cpp-client-ydb_driver
+  src-client-driver
   essentials-core-url_preprocessing
   comp_nodes-dq-llvm14
   yt-comp_nodes-llvm14

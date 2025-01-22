@@ -34,7 +34,7 @@ target_link_libraries(ydb-core-kqp-ut-data PUBLIC
   core-testlib-default
   ydb-core-tx
   tx-datashard-ut_common
-  cpp-client-ydb_types
+  src-client-types
 )
 
 target_allocator(ydb-core-kqp-ut-data

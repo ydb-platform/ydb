@@ -15,10 +15,14 @@
 add_executable(simple_persqueue_reader)
 
 
+target_include_directories(simple_persqueue_reader PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
+)
+
 target_link_libraries(simple_persqueue_reader PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-client-ydb_topic
+  src-client-topic
   library-cpp-getopt
 )
 

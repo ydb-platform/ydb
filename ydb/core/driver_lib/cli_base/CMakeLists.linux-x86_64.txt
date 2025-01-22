@@ -27,10 +27,10 @@ target_link_libraries(cli_base PUBLIC
   ydb-library-aclib
   lib-deprecated-kicli
   common
-  cpp-client-resources
-  cpp-client-ydb_table
-  cpp-client-ydb_driver
-  client-ydb_types-credentials
+  src-client-resources
+  src-client-table
+  src-client-driver
+  client-types-credentials
   ydb_sdk_core_access
   ydb_cli_command_ydb_discovery
 )

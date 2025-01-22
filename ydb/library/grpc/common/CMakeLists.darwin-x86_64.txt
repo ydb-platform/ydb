@@ -22,7 +22,7 @@ target_link_libraries(library-grpc-common INTERFACE
 )
 
 target_sources(library-grpc-common INTERFACE
-  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/common/time_point.h
   ${PROJECT_SOURCE_DIR}/ydb/library/grpc/common/constants.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/common/time_point.h
 )
 

@@ -27,9 +27,9 @@ target_link_libraries(ydb-services-datastreams PUBLIC
   ydb-core-mind
   api-grpc
   api-grpc-draft
-  public-lib-operation_id
-  cpp-client-resources
-  cpp-client-ydb_datastreams
+  src-library-operation_id
+  src-client-resources
+  src-client-datastreams
   services-lib-actors
   services-lib-sharding
   ydb-services-persqueue_v1

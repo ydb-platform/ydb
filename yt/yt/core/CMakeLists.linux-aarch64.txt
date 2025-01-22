@@ -297,6 +297,7 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/string_merger.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/ypath_designated_consumer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/ypath_filtering_consumer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/yson_builder.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/depth_limiting_yson_consumer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/list_verb_lazy_yson_consumer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/attributes_stripper.cpp

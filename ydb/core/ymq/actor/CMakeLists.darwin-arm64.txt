@@ -67,7 +67,7 @@ target_link_libraries(core-ymq-actor PUBLIC
   library-mkql_proto-protos
   public-lib-scheme_types
   public-lib-value
-  client-ydb_types-credentials
+  client-types-credentials
   yql-essentials-minikql
   lib-deprecated-client
   tools-enum_parser-enum_serialization_runtime

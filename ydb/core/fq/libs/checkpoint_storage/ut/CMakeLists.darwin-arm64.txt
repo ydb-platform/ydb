@@ -34,7 +34,7 @@ target_link_libraries(ydb-core-fq-libs-checkpoint_storage-ut PUBLIC
   libs-checkpoint_storage-events
   core-testlib-default
   ydb-library-security
-  cpp-client-ydb_table
+  src-client-table
 )
 
 target_allocator(ydb-core-fq-libs-checkpoint_storage-ut

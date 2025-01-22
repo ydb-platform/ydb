@@ -42,13 +42,13 @@ target_link_libraries(ydb-services-ydb-table_split_ut PUBLIC
   public-lib-experimental
   public-lib-json_value
   public-lib-yson_value
-  cpp-client-draft
-  cpp-client-ydb_coordination
-  cpp-client-ydb_export
-  cpp-client-ydb_extension
-  cpp-client-ydb_operation
-  cpp-client-ydb_scheme
-  cpp-client-ydb_monitoring
+  src-client-draft
+  src-client-coordination
+  src-client-export
+  src-client-extension_common
+  src-client-operation
+  src-client-scheme
+  src-client-monitoring
 )
 
 target_allocator(ydb-services-ydb-table_split_ut

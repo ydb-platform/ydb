@@ -24,8 +24,8 @@ target_link_libraries(ut-federated_query-common PUBLIC
   yutil
   kqp-ut-common
   providers-s3-actors_factory
-  cpp-client-ydb_operation
-  cpp-client-ydb_query
+  src-client-operation
+  src-client-query
 )
 
 target_sources(ut-federated_query-common PRIVATE

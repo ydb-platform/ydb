@@ -53,9 +53,9 @@ target_link_libraries(core-kqp-proxy_service PUBLIC
   essentials-public-issue
   dq-actors-spilling
   api-protos
-  public-lib-operation_id
+  src-library-operation_id
   public-lib-scheme_types
-  cpp-client-ydb_params
+  src-client-params
 )
 
 target_sources(core-kqp-proxy_service PRIVATE

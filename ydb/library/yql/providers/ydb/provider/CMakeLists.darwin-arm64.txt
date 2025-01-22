@@ -48,8 +48,9 @@ target_link_libraries(providers-ydb-provider PUBLIC
   providers-ydb-expr_nodes
   providers-ydb-proto
   public-lib-experimental
-  cpp-client-ydb_driver
-  cpp-client-ydb_table
+  cpp-adapters-issue
+  src-client-driver
+  src-client-table
 )
 
 target_sources(providers-ydb-provider PRIVATE

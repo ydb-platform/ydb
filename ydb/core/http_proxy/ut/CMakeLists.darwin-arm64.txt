@@ -50,8 +50,8 @@ target_link_libraries(ydb-core-http_proxy-ut PUBLIC
   library-testlib-service_mocks
   udf-service-exception_policy
   essentials-sql-pg_dummy
-  cpp-client-ydb_discovery
-  cpp-client-ydb_types
+  src-client-discovery
+  src-client-types
   ydb-services-datastreams
   ydb-services-kesus
   ydb-services-persqueue_cluster_discovery

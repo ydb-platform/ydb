@@ -15,6 +15,10 @@
 add_executable(pgwire)
 
 
+target_include_directories(pgwire PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
+)
+
 target_link_libraries(pgwire PUBLIC
   contrib-libs-cxxsupp
   yutil
@@ -23,8 +27,8 @@ target_link_libraries(pgwire PUBLIC
   ydb-core-local_pgwire
   ydb-core-protos
   api-grpc
-  cpp-client-ydb_driver
-  cpp-client-draft
+  src-client-driver
+  src-client-draft
   essentials-parser-pg_wrapper
   udf-service-exception_policy
 )

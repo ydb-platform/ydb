@@ -39,10 +39,10 @@ target_link_libraries(ydb-core-tx-datashard-ut_incremental_backup PUBLIC
   ydb-core-tx
   udf-service-exception_policy
   public-lib-yson_value
-  cpp-client-ydb_datastreams
-  cpp-client-ydb_topic
-  cpp-client-ydb_persqueue_public
-  cpp-client-ydb_result
+  src-client-datastreams
+  src-client-topic
+  src-client-persqueue_public
+  src-client-result
 )
 
 target_allocator(ydb-core-tx-datashard-ut_incremental_backup

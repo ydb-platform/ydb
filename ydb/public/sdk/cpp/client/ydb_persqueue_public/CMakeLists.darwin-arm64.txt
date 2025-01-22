@@ -14,8 +14,6 @@
 
 add_subdirectory(impl)
 add_subdirectory(include)
-add_subdirectory(codecs)
-add_subdirectory(ut)
 
 add_library(cpp-client-ydb_persqueue_public INTERFACE)
 

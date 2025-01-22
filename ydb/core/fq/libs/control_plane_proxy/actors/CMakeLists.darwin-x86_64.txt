@@ -37,6 +37,7 @@ target_link_libraries(libs-control_plane_proxy-actors PUBLIC
   fq-libs-result_formatter
   core-kqp-provider
   library-db_pool-protos
+  cpp-adapters-issue
   tools-enum_parser-enum_serialization_runtime
 )
 

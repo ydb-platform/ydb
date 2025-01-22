@@ -27,6 +27,7 @@ target_link_libraries(core-external_sources-object_storage PUBLIC
   library-actors-core
   providers-common-http_gateway
   providers-s3-credentials
+  cpp-adapters-issue
 )
 
 target_sources(core-external_sources-object_storage PRIVATE

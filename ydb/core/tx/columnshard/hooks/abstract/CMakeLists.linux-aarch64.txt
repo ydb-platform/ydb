@@ -22,6 +22,7 @@ target_link_libraries(columnshard-hooks-abstract PUBLIC
   tx-tiering-tier
   columnshard-blobs_action-protos
   columnshard-data_sharing-protos
+  src-client-resources
   essentials-core-expr_nodes
 )
 

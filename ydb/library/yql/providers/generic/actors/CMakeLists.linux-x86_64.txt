@@ -32,7 +32,7 @@ target_link_libraries(providers-generic-actors PUBLIC
   providers-generic-proto
   essentials-public-types
   generic-connector-libcpp
-  client-ydb_types-credentials
+  client-types-credentials
 )
 
 target_sources(providers-generic-actors PRIVATE

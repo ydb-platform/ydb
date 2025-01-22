@@ -29,7 +29,8 @@ target_link_libraries(providers-ydb-comp_nodes PUBLIC
   providers-common-structured_token
   providers-ydb-proto
   public-lib-experimental
-  cpp-client-ydb_driver
+  cpp-adapters-issue
+  src-client-driver
 )
 
 target_sources(providers-ydb-comp_nodes PRIVATE

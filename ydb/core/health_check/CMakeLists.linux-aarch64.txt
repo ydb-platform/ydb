@@ -24,6 +24,7 @@ target_link_libraries(ydb-core-health_check PUBLIC
   library-actors-core
   ydb-core-base
   core-blobstorage-base
+  ydb-core-mon
   ydb-library-aclib
   api-protos
   api-grpc

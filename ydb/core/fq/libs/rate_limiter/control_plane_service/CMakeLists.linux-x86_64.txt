@@ -33,6 +33,7 @@ target_link_libraries(libs-rate_limiter-control_plane_service PUBLIC
   fq-libs-ydb
   ydb-core-protos
   ydb-library-security
+  cpp-adapters-issue
 )
 
 target_sources(libs-rate_limiter-control_plane_service PRIVATE

@@ -31,8 +31,8 @@ target_link_libraries(ydb-core-kqp-ut-idx_test PUBLIC
   kqp-ut-common
   public-lib-idx_test
   public-lib-yson_value
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
+  src-client-scheme
+  src-client-table
   essentials-sql-pg_dummy
 )
 

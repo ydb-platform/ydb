@@ -25,7 +25,7 @@ target_link_libraries(fq-libs-health PUBLIC
   library-actors-core
   fq-libs-shared_resources
   ydb-core-mon
-  cpp-client-ydb_discovery
+  src-client-discovery
 )
 
 target_sources(fq-libs-health PRIVATE

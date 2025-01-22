@@ -22,7 +22,7 @@ target_link_libraries(columnshard-bg_tasks-abstract PUBLIC
   ydb-library-accessor
   ydb-library-services
   columnshard-bg_tasks-protos
-  lib-operation_id-protos
+  src-library-operation_id
   api-protos
 )
 

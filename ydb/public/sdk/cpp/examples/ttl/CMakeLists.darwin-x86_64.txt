@@ -15,12 +15,16 @@
 add_executable(ttl)
 
 
+target_include_directories(ttl PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
+)
+
 target_link_libraries(ttl PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
   library-cpp-getopt
-  cpp-client-ydb_table
+  src-client-table
 )
 
 target_allocator(ttl

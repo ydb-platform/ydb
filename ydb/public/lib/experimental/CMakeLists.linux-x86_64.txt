@@ -15,14 +15,18 @@
 add_library(public-lib-experimental)
 
 
+target_include_directories(public-lib-experimental PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
+)
+
 target_link_libraries(public-lib-experimental PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   ydb-core-scheme
   api-grpc-draft
-  cpp-client-ydb_proto
-  cpp-client-ydb_table
+  src-client-proto
+  src-client-table
 )
 
 target_sources(public-lib-experimental PRIVATE

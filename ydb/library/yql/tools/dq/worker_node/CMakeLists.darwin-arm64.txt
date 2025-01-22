@@ -22,7 +22,7 @@ target_compile_options(worker_node PRIVATE
 target_link_libraries(worker_node PUBLIC
   contrib-libs-cxxsupp
   yutil
-  client-ydb_persqueue_public-codecs
+  client-persqueue_public-codecs
   library-cpp-getopt
   cpp-mapreduce-client
   dq-actors-compute

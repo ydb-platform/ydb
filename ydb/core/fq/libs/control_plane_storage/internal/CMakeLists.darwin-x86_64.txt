@@ -45,8 +45,8 @@ target_link_libraries(libs-control_plane_storage-internal PUBLIC
   essentials-public-issue
   yql-essentials-utils
   public-lib-fq
-  cpp-client-ydb_scheme
-  cpp-client-ydb_value
+  src-client-scheme
+  src-client-value
 )
 
 target_sources(libs-control_plane_storage-internal PRIVATE

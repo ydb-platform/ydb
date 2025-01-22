@@ -31,12 +31,12 @@ target_link_libraries(ydb-services-ydb-backup_ut PUBLIC
   core-testlib-default
   core-wrappers-ut_helpers
   lib-ydb_cli-dump
-  cpp-client-ydb_export
-  cpp-client-ydb_import
-  cpp-client-ydb_operation
-  cpp-client-ydb_result
-  cpp-client-ydb_table
-  cpp-client-ydb_value
+  src-client-export
+  src-client-import
+  src-client-operation
+  src-client-result
+  src-client-table
+  src-client-value
   kikimr_backup
   libs-aws-sdk-cpp-aws-cpp-sdk-core
 )

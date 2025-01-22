@@ -54,7 +54,7 @@ target_link_libraries(ydb-core-persqueue PUBLIC
   library-persqueue-topic_parser
   ydb-library-protobuf_printer
   public-lib-base
-  cpp-client-ydb_persqueue_public
+  src-client-persqueue_public
 )
 
 target_sources(ydb-core-persqueue PRIVATE

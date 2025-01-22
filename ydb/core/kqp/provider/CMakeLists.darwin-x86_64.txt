@@ -46,7 +46,7 @@ target_link_libraries(core-kqp-provider PUBLIC
   yql-essentials-minikql
   essentials-public-decimal
   public-lib-scheme_types
-  cpp-client-ydb_topic
+  src-client-topic
   essentials-core-expr_nodes
   essentials-core-peephole_opt
   parser-pg_wrapper-interface

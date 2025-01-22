@@ -25,8 +25,8 @@ target_link_libraries(ydb-services-dynamic_config PUBLIC
   ydb-core-mind
   ydb-library-aclib
   api-grpc
-  public-lib-operation_id
-  cpp-client-resources
+  src-library-operation_id
+  src-client-resources
 )
 
 target_sources(ydb-services-dynamic_config PRIVATE

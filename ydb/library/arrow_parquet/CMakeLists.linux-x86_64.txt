@@ -19,7 +19,7 @@ target_link_libraries(ydb-library-arrow_parquet PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-client-ydb_value
+  src-client-value
   libs-apache-arrow
 )
 

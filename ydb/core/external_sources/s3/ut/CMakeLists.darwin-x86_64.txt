@@ -33,7 +33,7 @@ target_link_libraries(ydb-core-external_sources-s3-ut PUBLIC
   kqp-ut-common
   ut-federated_query-common
   essentials-sql-pg_dummy
-  client-ydb_types-operation
+  client-types-operation
   library-actors-core
 )
 

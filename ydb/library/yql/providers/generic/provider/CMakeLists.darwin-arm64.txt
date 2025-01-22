@@ -53,7 +53,7 @@ target_link_libraries(providers-generic-provider PUBLIC
   generic-connector-libcpp
   providers-result-expr_nodes
   yql-utils-plan
-  client-ydb_types-credentials
+  client-types-credentials
 )
 
 target_sources(providers-generic-provider PRIVATE

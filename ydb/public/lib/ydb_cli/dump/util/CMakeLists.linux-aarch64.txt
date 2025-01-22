@@ -21,9 +21,9 @@ target_link_libraries(ydb_cli-dump-util PUBLIC
   yutil
   cpp-protobuf-util
   common
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-  client-ydb_types-status
+  src-client-scheme
+  src-client-table
+  client-types-status
   proto_ast-gen-v1
   proto_ast-gen-v1_proto_split
   essentials-sql-settings

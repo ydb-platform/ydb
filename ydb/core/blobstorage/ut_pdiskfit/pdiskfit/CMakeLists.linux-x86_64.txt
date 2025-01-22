@@ -42,6 +42,7 @@ target_link_options(pdiskfit PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 
 target_sources(pdiskfit PRIVATE

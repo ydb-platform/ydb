@@ -47,8 +47,8 @@ target_link_libraries(ydb-core-load_test PUBLIC
   library-workload-kv
   library-workload-stock
   public-lib-base
-  public-lib-operation_id
-  cpp-client-ydb_proto
+  src-library-operation_id
+  src-client-proto
   ydb-services-kesus
   ydb-services-metadata
   ydb-services-persqueue_cluster_discovery

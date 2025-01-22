@@ -31,6 +31,10 @@ target_compile_options(core-tx-tx_proxy PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
+target_include_directories(core-tx-tx_proxy PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
+)
+
 target_link_libraries(core-tx-tx_proxy PUBLIC
   contrib-libs-cxxsupp
   yutil

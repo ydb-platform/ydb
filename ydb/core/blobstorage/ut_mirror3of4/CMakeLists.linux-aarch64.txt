@@ -49,6 +49,7 @@ target_link_options(ydb-core-blobstorage-ut_mirror3of4 PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 
 target_sources(ydb-core-blobstorage-ut_mirror3of4 PRIVATE

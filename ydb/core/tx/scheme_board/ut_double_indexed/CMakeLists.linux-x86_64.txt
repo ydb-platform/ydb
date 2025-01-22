@@ -45,6 +45,7 @@ target_link_options(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 
 target_sources(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE

@@ -93,9 +93,9 @@ target_link_libraries(fq-libs-actors PUBLIC
   yql-utils-actor_log
   api-protos
   public-lib-fq
-  cpp-client-ydb_query
-  cpp-client-ydb_operation
-  cpp-client-ydb_table
+  src-client-query
+  src-client-operation
+  src-client-table
 )
 
 target_sources(fq-libs-actors PRIVATE

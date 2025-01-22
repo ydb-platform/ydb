@@ -32,7 +32,7 @@ target_link_libraries(providers-dq-provider PUBLIC
   cpp-yson-node
   library-cpp-yson
   public-lib-yson_value
-  cpp-client-ydb_driver
+  src-client-driver
   yql-essentials-ast
   yql-essentials-core
   essentials-core-issue

@@ -24,8 +24,8 @@ target_link_libraries(compute-ydb-events PUBLIC
   libs-control_plane_storage-proto
   fq-libs-protos
   api-grpc-draft
-  lib-operation_id-protos
-  cpp-client-ydb_query
+  src-library-operation_id
+  src-client-query
 )
 
 target_sources(compute-ydb-events PRIVATE

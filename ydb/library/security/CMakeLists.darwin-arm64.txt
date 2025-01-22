@@ -20,9 +20,9 @@ add_library(ydb-library-security)
 target_link_libraries(ydb-library-security PUBLIC
   contrib-libs-cxxsupp
   yutil
-  client-iam-common
+  src-client-iam
   cpp-digest-crc32c
-  client-ydb_types-credentials
+  client-types-credentials
 )
 
 target_sources(ydb-library-security PRIVATE

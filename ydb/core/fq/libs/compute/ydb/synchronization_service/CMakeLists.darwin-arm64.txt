@@ -32,7 +32,8 @@ target_link_libraries(compute-ydb-synchronization_service PUBLIC
   ydb-library-services
   api-grpc
   api-grpc-draft
-  lib-operation_id-protos
+  cpp-adapters-issue
+  src-library-operation_id
 )
 
 target_sources(compute-ydb-synchronization_service PRIVATE

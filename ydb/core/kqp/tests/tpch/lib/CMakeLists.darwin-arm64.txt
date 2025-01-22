@@ -27,8 +27,8 @@ target_link_libraries(tests-tpch-lib PUBLIC
   yutil
   library-cpp-resource
   ydb-core-protos
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
+  src-client-scheme
+  src-client-table
 )
 
 target_sources(tests-tpch-lib PRIVATE
@@ -46,8 +46,8 @@ target_link_libraries(tests-tpch-lib.global PUBLIC
   yutil
   library-cpp-resource
   ydb-core-protos
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
+  src-client-scheme
+  src-client-table
 )
 
 target_sources(tests-tpch-lib.global PRIVATE

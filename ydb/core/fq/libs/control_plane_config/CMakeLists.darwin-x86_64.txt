@@ -40,8 +40,8 @@ target_link_libraries(fq-libs-control_plane_config PUBLIC
   ydb-library-security
   ydb-library-protobuf_printer
   essentials-public-issue
-  cpp-client-ydb_scheme
-  cpp-client-ydb_value
+  src-client-scheme
+  src-client-value
 )
 
 target_sources(fq-libs-control_plane_config PRIVATE

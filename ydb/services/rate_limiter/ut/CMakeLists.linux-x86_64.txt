@@ -31,8 +31,8 @@ target_link_libraries(ydb-services-rate_limiter-ut PUBLIC
   cpp-testing-unittest_main
   ydb-services-rate_limiter
   core-testlib-default
-  cpp-client-ydb_coordination
-  cpp-client-ydb_rate_limiter
+  src-client-coordination
+  src-client-rate_limiter
 )
 
 target_allocator(ydb-services-rate_limiter-ut

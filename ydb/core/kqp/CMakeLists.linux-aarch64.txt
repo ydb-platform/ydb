@@ -94,7 +94,7 @@ target_link_libraries(ydb-core-kqp INTERFACE
   essentials-utils-log
   api-protos
   public-lib-base
-  public-lib-operation_id
+  src-library-operation_id
   library-cpp-resource
 )
 
@@ -150,7 +150,7 @@ target_link_libraries(ydb-core-kqp.global PUBLIC
   essentials-utils-log
   api-protos
   public-lib-base
-  public-lib-operation_id
+  src-library-operation_id
   library-cpp-resource
 )
 

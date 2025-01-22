@@ -12,5 +12,5 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(solomon_stats)
 add_subdirectory(discovery_mutator)
+add_subdirectory(solomon_stats)

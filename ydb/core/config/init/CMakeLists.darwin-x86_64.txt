@@ -39,8 +39,8 @@ target_link_libraries(core-config-init PUBLIC
   yql-essentials-minikql
   essentials-public-udf
   lib-deprecated-kicli
-  cpp-client-ydb_discovery
-  cpp-client-ydb_driver
+  src-client-discovery
+  src-client-driver
   tools-enum_parser-enum_serialization_runtime
 )
 

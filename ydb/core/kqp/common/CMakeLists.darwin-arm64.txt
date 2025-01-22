@@ -53,8 +53,8 @@ target_link_libraries(core-kqp-common PUBLIC
   yql-dq-common
   essentials-core-dq_integration
   parser-pg_wrapper-interface
-  public-lib-operation_id
-  lib-operation_id-protos
+  src-library-operation_id
+  library-operation_id-protos
   core-grpc_services-cancelation
   library-cpp-lwtrace
   tools-enum_parser-enum_serialization_runtime

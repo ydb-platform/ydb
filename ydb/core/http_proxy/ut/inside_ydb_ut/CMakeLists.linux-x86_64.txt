@@ -41,8 +41,8 @@ target_link_libraries(ydb-core-http_proxy-ut-inside_ydb_ut PUBLIC
   core-testlib-default
   ydb-library-aclib
   library-persqueue-tests
-  cpp-client-ydb_discovery
-  cpp-client-ydb_types
+  src-client-discovery
+  src-client-types
   ydb-services-ydb
   library-cpp-resource
 )

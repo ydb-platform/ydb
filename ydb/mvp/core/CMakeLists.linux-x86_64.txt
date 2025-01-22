@@ -39,15 +39,15 @@ target_link_libraries(ydb-mvp-core PUBLIC
   cpp-lfalloc-alloc_profiler
   core-viewer-json
   ydb-core-protos
-  cpp-client-draft
-  cpp-client-ydb_datastreams
-  cpp-client-ydb_topic
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-  cpp-client-ydb_persqueue_core
+  src-client-draft
+  src-client-datastreams
+  src-client-topic
+  src-client-scheme
+  src-client-table
+  src-client-persqueue_public
+  src-library-operation_id
   api-protos
   api-grpc
-  public-lib-operation_id
 )
 
 target_sources(ydb-mvp-core PRIVATE

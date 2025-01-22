@@ -47,7 +47,8 @@ target_link_libraries(core-cms-console PUBLIC
   ydb-library-aclib
   ydb-library-yaml_config
   api-protos
-  public-lib-operation_id
+  src-library-operation_id
+  library-operation_id-protos
 )
 
 target_sources(core-cms-console PRIVATE

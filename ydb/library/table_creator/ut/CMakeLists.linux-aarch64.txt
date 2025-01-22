@@ -33,7 +33,7 @@ target_link_libraries(ydb-library-table_creator-ut PUBLIC
   core-testlib-default
   udf-service-exception_policy
   essentials-sql-pg_dummy
-  cpp-client-ydb_driver
+  src-client-driver
 )
 
 target_allocator(ydb-library-table_creator-ut

@@ -13,6 +13,6 @@
 # changes in this file.
 
 add_subdirectory(server)
-add_subdirectory(client)
 add_subdirectory(actor_client)
+add_subdirectory(client)
 add_subdirectory(common)

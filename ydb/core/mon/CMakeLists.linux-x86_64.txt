@@ -30,7 +30,8 @@ target_link_libraries(ydb-core-mon PUBLIC
   library-actors-core
   library-actors-http
   essentials-public-issue
-  client-ydb_types-status
+  cpp-adapters-issue
+  client-types-status
 )
 
 target_sources(ydb-core-mon PRIVATE

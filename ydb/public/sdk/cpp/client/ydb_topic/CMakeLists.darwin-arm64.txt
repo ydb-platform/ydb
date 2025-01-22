@@ -16,7 +16,6 @@ add_subdirectory(common)
 add_subdirectory(include)
 add_subdirectory(impl)
 add_subdirectory(codecs)
-add_subdirectory(ut)
 
 add_library(cpp-client-ydb_topic)
 

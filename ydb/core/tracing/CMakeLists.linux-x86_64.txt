@@ -21,6 +21,7 @@ target_link_libraries(ydb-core-tracing PUBLIC
   yutil
   ydb-core-base
   ydb-core-protos
+  ydb-core-mon
 )
 
 target_sources(ydb-core-tracing PRIVATE

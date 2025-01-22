@@ -15,13 +15,17 @@
 add_library(public-lib-fq)
 
 
+target_include_directories(public-lib-fq PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
+)
+
 target_link_libraries(public-lib-fq PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-json
   api-grpc-draft
-  cpp-client-ydb_table
+  src-client-table
 )
 
 target_sources(public-lib-fq PRIVATE

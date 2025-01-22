@@ -23,8 +23,8 @@ target_link_libraries(fq-libs-db_schema PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-client-ydb_params
-  cpp-client-ydb_table
+  src-client-params
+  src-client-table
 )
 
 target_sources(fq-libs-db_schema PRIVATE

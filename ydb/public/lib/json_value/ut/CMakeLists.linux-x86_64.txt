@@ -28,8 +28,8 @@ target_link_libraries(ydb-public-lib-json_value-ut PUBLIC
   public-lib-json_value
   library-cpp-json
   cpp-testing-unittest
-  cpp-client-ydb_proto
-  cpp-client-ydb_params
+  src-client-proto
+  src-client-params
 )
 
 target_allocator(ydb-public-lib-json_value-ut

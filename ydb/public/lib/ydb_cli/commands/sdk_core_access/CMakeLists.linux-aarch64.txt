@@ -15,12 +15,16 @@
 add_library(ydb_sdk_core_access)
 
 
+target_include_directories(ydb_sdk_core_access PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
+)
+
 target_link_libraries(ydb_sdk_core_access PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  client-ydb_common_client-impl
-  cpp-client-ydb_types
+  client-common_client-impl
+  src-client-types
 )
 
 target_sources(ydb_sdk_core_access PRIVATE

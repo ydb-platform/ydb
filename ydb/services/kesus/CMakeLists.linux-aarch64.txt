@@ -27,7 +27,7 @@ target_link_libraries(ydb-services-kesus PUBLIC
   core-kesus-tablet
   api-grpc
   api-grpc-draft
-  public-lib-operation_id
+  src-library-operation_id
 )
 
 target_sources(ydb-services-kesus PRIVATE

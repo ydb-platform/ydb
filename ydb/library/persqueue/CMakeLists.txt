@@ -13,8 +13,8 @@
 # changes in this file.
 
 add_subdirectory(topic_parser)
-add_subdirectory(topic_parser_public)
-add_subdirectory(obfuscate)
 add_subdirectory(counter_time_keeper)
 add_subdirectory(deprecated)
 add_subdirectory(tests)
+add_subdirectory(obfuscate)
+add_subdirectory(topic_parser_public)

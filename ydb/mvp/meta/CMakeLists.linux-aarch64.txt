@@ -35,6 +35,7 @@ target_link_libraries(ydb-mvp-meta PUBLIC
   essentials-core-expr_nodes
   library-aclib-protos
   cpp-protobuf-json
+  library-cpp-getopt
 )
 
 target_sources(ydb-mvp-meta PRIVATE

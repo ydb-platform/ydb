@@ -21,6 +21,7 @@ target_compile_options(ydb-services-datastreams-ut PRIVATE
 
 target_include_directories(ydb-services-datastreams-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/datastreams
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
 )
 
 target_link_libraries(ydb-services-datastreams-ut PUBLIC
@@ -36,9 +37,9 @@ target_link_libraries(ydb-services-datastreams-ut PUBLIC
   core-testlib-default
   tx-schemeshard-ut_helpers
   library-grpc-client
-  cpp-client-ydb_topic
-  ydb_persqueue_public-ut-ut_utils
-  ydb_topic-ut-ut_utils
+  src-client-topic
+  persqueue_public-ut-ut_utils
+  topic-ut-ut_utils
 )
 
 target_allocator(ydb-services-datastreams-ut

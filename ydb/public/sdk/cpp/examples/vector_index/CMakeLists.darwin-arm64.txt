@@ -15,11 +15,15 @@
 add_executable(vector_index)
 
 
+target_include_directories(vector_index PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
+)
+
 target_link_libraries(vector_index PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-getopt
-  cpp-client-ydb_table
+  src-client-table
 )
 
 target_allocator(vector_index

@@ -20,8 +20,8 @@ target_link_libraries(public-lib-yson_value PUBLIC
   yutil
   library-cpp-yson
   cpp-yson-node
-  cpp-client-ydb_result
-  cpp-client-ydb_value
+  src-client-result
+  src-client-value
   essentials-types-uuid
 )
 

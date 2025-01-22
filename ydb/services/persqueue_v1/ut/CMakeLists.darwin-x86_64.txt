@@ -19,11 +19,13 @@ add_executable(ydb-services-persqueue_v1-ut)
 
 
 target_compile_options(ydb-services-persqueue_v1-ut PRIVATE
+  -DYDB_SDK_USE_STD_STRING
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
 target_include_directories(ydb-services-persqueue_v1-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
 )
 
 target_link_libraries(ydb-services-persqueue_v1-ut PUBLIC
@@ -40,11 +42,11 @@ target_link_libraries(ydb-services-persqueue_v1-ut PUBLIC
   library-persqueue-tests
   library-persqueue-topic_parser
   api-grpc
-  ydb_persqueue_core-ut-ut_utils
-  cpp-client-ydb_persqueue_public
-  cpp-client-ydb_table
-  cpp-client-ydb_topic
-  cpp-client-ydb_proto
+  persqueue_public-ut-ut_utils
+  src-client-persqueue_public
+  src-client-table
+  src-client-topic
+  src-client-proto
 )
 
 target_allocator(ydb-services-persqueue_v1-ut

@@ -38,10 +38,11 @@ target_link_libraries(fq-libs-ydb PUBLIC
   fq-libs-config
   fq-libs-events
   ydb-library-security
-  cpp-client-ydb_coordination
-  cpp-client-ydb_rate_limiter
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
+  cpp-adapters-issue
+  src-client-coordination
+  src-client-rate_limiter
+  src-client-scheme
+  src-client-table
   tools-enum_parser-enum_serialization_runtime
 )
 

@@ -19,6 +19,10 @@ target_compile_options(persqueue-ut-common PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
+target_include_directories(persqueue-ut-common PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
+)
+
 target_link_libraries(persqueue-ut-common PUBLIC
   contrib-libs-cxxsupp
   yutil

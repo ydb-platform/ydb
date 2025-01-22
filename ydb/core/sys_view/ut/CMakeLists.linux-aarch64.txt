@@ -34,7 +34,7 @@ target_link_libraries(ydb-core-sys_view-ut PUBLIC
   kqp-ut-common
   persqueue-ut-common
   core-testlib-pg
-  cpp-client-draft
+  src-client-draft
 )
 
 target_allocator(ydb-core-sys_view-ut

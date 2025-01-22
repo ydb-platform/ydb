@@ -20,7 +20,6 @@ get_built_tool_path(
 )
 
 add_subdirectory(impl)
-add_subdirectory(ut)
 
 add_library(cpp-client-ydb_federated_topic)
 

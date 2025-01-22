@@ -29,7 +29,7 @@ target_link_libraries(core-persqueue-writer PUBLIC
   ydb-library-wilson_ids
   public-lib-base
   lib-deprecated-kicli
-  cpp-client-ydb_params
+  src-client-params
 )
 
 target_sources(core-persqueue-writer PRIVATE

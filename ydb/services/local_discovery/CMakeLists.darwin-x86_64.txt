@@ -22,7 +22,7 @@ target_link_libraries(ydb-services-local_discovery PUBLIC
   ydb-core-grpc_services
   ydb-core-mind
   api-grpc
-  public-lib-operation_id
+  src-library-operation_id
 )
 
 target_sources(ydb-services-local_discovery PRIVATE

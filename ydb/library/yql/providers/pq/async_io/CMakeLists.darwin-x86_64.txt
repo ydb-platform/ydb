@@ -34,9 +34,10 @@ target_link_libraries(providers-pq-async_io PUBLIC
   providers-pq-proto
   essentials-public-types
   essentials-utils-log
-  cpp-client-ydb_driver
-  cpp-client-ydb_topic
-  client-ydb_types-credentials
+  cpp-adapters-issue
+  src-client-driver
+  src-client-topic
+  client-types-credentials
 )
 
 target_sources(providers-pq-async_io PRIVATE

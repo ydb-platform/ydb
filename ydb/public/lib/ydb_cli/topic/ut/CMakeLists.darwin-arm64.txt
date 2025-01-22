@@ -21,6 +21,7 @@ target_compile_options(ydb-public-lib-ydb_cli-topic-ut PRIVATE
 
 target_include_directories(ydb-public-lib-ydb_cli-topic-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
 )
 
 target_link_libraries(ydb-public-lib-ydb_cli-topic-ut PUBLIC
@@ -31,13 +32,13 @@ target_link_libraries(ydb-public-lib-ydb_cli-topic-ut PUBLIC
   cpp-histogram-hdr
   cpp-threading-local_executor
   fq-libs-private_client
-  cpp-client-ydb_persqueue_public
+  src-client-persqueue_public
   public-lib-experimental
   clicommands
   common
   public-lib-yson_value
-  cpp-client-ydb_proto
-  ydb_persqueue_core-ut-ut_utils
+  src-client-proto
+  persqueue_public-ut-ut_utils
 )
 
 target_allocator(ydb-public-lib-ydb_cli-topic-ut

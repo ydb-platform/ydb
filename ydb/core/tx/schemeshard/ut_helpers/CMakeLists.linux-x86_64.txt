@@ -43,8 +43,8 @@ target_link_libraries(tx-schemeshard-ut_helpers PUBLIC
   core-tx-tx_proxy
   public-lib-scheme_types
   essentials-public-issue
-  cpp-client-ydb_driver
-  cpp-client-ydb_table
+  src-client-driver
+  src-client-table
 )
 
 target_sources(tx-schemeshard-ut_helpers PRIVATE

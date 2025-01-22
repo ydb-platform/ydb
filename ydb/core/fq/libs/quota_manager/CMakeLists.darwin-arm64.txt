@@ -33,7 +33,7 @@ target_link_libraries(fq-libs-quota_manager PUBLIC
   fq-libs-shared_resources
   ydb-core-protos
   api-grpc-draft
-  cpp-client-ydb_table
+  src-client-table
 )
 
 target_sources(fq-libs-quota_manager PRIVATE

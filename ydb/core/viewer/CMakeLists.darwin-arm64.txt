@@ -68,7 +68,8 @@ target_link_libraries(ydb-core-viewer PUBLIC
   public-lib-json_value
   common
   api-grpc
-  cpp-client-ydb_types
+  cpp-adapters-issue
+  src-client-types
   contrib-libs-yaml-cpp
 )
 
@@ -215,7 +216,8 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   public-lib-json_value
   common
   api-grpc
-  cpp-client-ydb_types
+  cpp-adapters-issue
+  src-client-types
   contrib-libs-yaml-cpp
 )
 

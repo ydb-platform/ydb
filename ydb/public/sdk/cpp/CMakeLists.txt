@@ -12,5 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(src)
+add_subdirectory(include)
+add_subdirectory(adapters)
 add_subdirectory(client)
 add_subdirectory(examples)
+add_subdirectory(tests)

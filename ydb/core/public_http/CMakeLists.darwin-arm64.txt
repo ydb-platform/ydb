@@ -44,7 +44,7 @@ target_link_libraries(ydb-core-public_http PUBLIC
   core-public_http-protos
   core-viewer-json
   essentials-public-issue
-  cpp-client-ydb_types
+  src-client-types
 )
 
 target_sources(ydb-core-public_http PRIVATE
@@ -82,7 +82,7 @@ target_link_libraries(ydb-core-public_http.global PUBLIC
   core-public_http-protos
   core-viewer-json
   essentials-public-issue
-  cpp-client-ydb_types
+  src-client-types
 )
 
 target_sources(ydb-core-public_http.global PRIVATE

@@ -28,9 +28,9 @@ target_link_libraries(topic PUBLIC
   contrib-libs-cxxsupp
   yutil
   common
-  cpp-client-ydb_proto
-  cpp-client-ydb_persqueue_public
-  cpp-client-ydb_topic
+  src-client-proto
+  src-client-persqueue_public
+  src-client-topic
   tools-enum_parser-enum_serialization_runtime
 )
 

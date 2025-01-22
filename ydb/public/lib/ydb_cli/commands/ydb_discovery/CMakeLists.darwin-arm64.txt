@@ -20,7 +20,7 @@ target_link_libraries(ydb_cli_command_ydb_discovery PUBLIC
   yutil
   ydb_cli_command_base
   common
-  cpp-client-ydb_discovery
+  src-client-discovery
 )
 
 target_sources(ydb_cli_command_ydb_discovery PRIVATE

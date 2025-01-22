@@ -19,6 +19,10 @@ target_compile_options(ydb-core-local_pgwire PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
+target_include_directories(ydb-core-local_pgwire PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
+)
+
 target_link_libraries(ydb-core-local_pgwire PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
@@ -35,7 +39,8 @@ target_link_libraries(ydb-core-local_pgwire PUBLIC
   ydb-core-pgproxy
   ydb-core-ydb_convert
   api-grpc
-  lib-operation_id-protos
+  cpp-adapters-issue
+  src-library-operation_id
   services-persqueue_v1-actors
 )
 

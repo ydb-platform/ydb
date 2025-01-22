@@ -45,8 +45,9 @@ target_link_libraries(fq-libs-row_dispatcher PUBLIC
   dq-actors-compute
   yql-dq-proto
   providers-pq-provider
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
+  cpp-adapters-issue
+  src-client-scheme
+  src-client-table
 )
 
 target_sources(fq-libs-row_dispatcher PRIVATE

@@ -28,7 +28,7 @@ target_link_libraries(dq-provider-exec PUBLIC
   cpp-digest-md5
   cpp-threading-future
   public-lib-yson_value
-  cpp-client-ydb_driver
+  src-client-driver
   yql-essentials-core
   essentials-core-dq_integration
   yql-dq-runtime

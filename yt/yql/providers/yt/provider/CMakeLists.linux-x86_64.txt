@@ -99,6 +99,7 @@ target_sources(providers-yt-provider PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_datasource_type_ann.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_datasource.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_epoch.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_forwarding_gateway.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_gateway.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_horizontal_join.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_helpers.cpp

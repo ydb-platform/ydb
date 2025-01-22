@@ -20,7 +20,7 @@ target_link_libraries(arrow-csv-table PUBLIC
   contrib-libs-cxxsupp
   yutil
   arrow-csv-converter
-  cpp-client-ydb_table
+  src-client-table
 )
 
 target_sources(arrow-csv-table PRIVATE

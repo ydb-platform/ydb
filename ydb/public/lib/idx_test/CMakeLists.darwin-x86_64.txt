@@ -28,7 +28,7 @@ target_link_libraries(public-lib-idx_test PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-string_utils-base64
-  cpp-client-ydb_table
+  src-client-table
   tools-enum_parser-enum_serialization_runtime
 )
 

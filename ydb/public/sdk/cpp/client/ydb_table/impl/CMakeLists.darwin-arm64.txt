@@ -20,7 +20,7 @@ target_link_libraries(client-ydb_table-impl PUBLIC
   yutil
   cpp-threading-future
   api-protos
-  lib-operation_id-protos
+  public-lib-operation_id
   client-impl-ydb_endpoints
   impl-ydb_internal-session_pool
   client-ydb_table-query_stats

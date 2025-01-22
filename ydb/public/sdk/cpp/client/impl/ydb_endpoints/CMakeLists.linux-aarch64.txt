@@ -23,6 +23,7 @@ target_link_libraries(client-impl-ydb_endpoints PUBLIC
   yutil
   cpp-monlib-metrics
   api-grpc
+  client-impl-ydb_stats
 )
 
 target_sources(client-impl-ydb_endpoints PRIVATE

@@ -29,7 +29,7 @@ target_link_libraries(row_dispatcher-format_handler-parsers PUBLIC
   libs-actors-logging
   libs-row_dispatcher-events
   row_dispatcher-format_handler-common
-  client-ydb_topic-include
+  ydb-cpp-sdk-client-topic
   yql-essentials-minikql
   essentials-minikql-dom
   essentials-minikql-invoke_builtins

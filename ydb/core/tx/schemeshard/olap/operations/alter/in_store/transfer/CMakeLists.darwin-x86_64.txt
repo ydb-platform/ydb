@@ -25,6 +25,7 @@ target_link_libraries(alter-in_store-transfer PUBLIC
   operations-alter-abstract
   data_sharing-initiator-controller
   columnshard-data_sharing-protos
+  client-types-credentials
 )
 
 target_sources(alter-in_store-transfer PRIVATE

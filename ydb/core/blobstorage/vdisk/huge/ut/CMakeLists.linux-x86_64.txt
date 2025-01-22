@@ -48,6 +48,7 @@ target_link_options(ydb-core-blobstorage-vdisk-huge-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 
 target_sources(ydb-core-blobstorage-vdisk-huge-ut PRIVATE

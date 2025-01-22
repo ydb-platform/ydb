@@ -19,8 +19,8 @@ target_link_libraries(ydb_cli_command_base PUBLIC
   contrib-libs-cxxsupp
   yutil
   common
-  cpp-client-draft
-  cpp-client-ydb_driver
+  src-client-draft
+  src-client-driver
 )
 
 target_sources(ydb_cli_command_base PRIVATE

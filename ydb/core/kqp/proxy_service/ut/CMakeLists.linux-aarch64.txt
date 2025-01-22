@@ -33,8 +33,8 @@ target_link_libraries(ydb-core-kqp-proxy_service-ut PUBLIC
   kqp-ut-common
   workload_service-ut-common
   essentials-sql-pg_dummy
-  cpp-client-ydb_query
-  cpp-client-ydb_driver
+  src-client-query
+  src-client-driver
   ydb-services-ydb
 )
 

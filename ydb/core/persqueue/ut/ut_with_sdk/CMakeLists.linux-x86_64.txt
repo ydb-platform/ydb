@@ -21,6 +21,7 @@ target_compile_options(ydb-core-persqueue-ut-ut_with_sdk PRIVATE
 
 target_include_directories(ydb-core-persqueue-ut-ut_with_sdk PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
 )
 
 target_link_libraries(ydb-core-persqueue-ut-ut_with_sdk PUBLIC
@@ -35,9 +36,8 @@ target_link_libraries(ydb-core-persqueue-ut-ut_with_sdk PUBLIC
   library-cpp-svnversion
   persqueue-ut-common
   core-testlib-default
-  ydb_persqueue_core-ut-ut_utils
-  ydb_persqueue_public-ut-ut_utils
-  ydb_topic-ut-ut_utils
+  persqueue_public-ut-ut_utils
+  topic-ut-ut_utils
   tx-schemeshard-ut_helpers
 )
 

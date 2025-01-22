@@ -21,6 +21,7 @@ target_link_libraries(core-graph-service PUBLIC
   yutil
   ydb-core-base
   core-graph-api
+  src-client-params
 )
 
 target_sources(core-graph-service PRIVATE

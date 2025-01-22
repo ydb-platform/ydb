@@ -27,7 +27,7 @@ target_link_libraries(providers-pq-cm_client PUBLIC
   yutil
   cpp-threading-future
   essentials-public-issue
-  client-ydb_types-credentials
+  client-types-credentials
   tools-enum_parser-enum_serialization_runtime
 )
 

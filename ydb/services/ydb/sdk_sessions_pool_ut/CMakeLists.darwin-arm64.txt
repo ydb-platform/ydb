@@ -31,7 +31,7 @@ target_link_libraries(ydb-services-ydb-sdk_sessions_pool_ut PUBLIC
   library-grpc-client
   core-testlib-default
   ydb-core-testlib
-  cpp-client-ydb_table
+  src-client-table
 )
 
 target_allocator(ydb-services-ydb-sdk_sessions_pool_ut

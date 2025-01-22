@@ -31,6 +31,7 @@ target_link_libraries(services-metadata-abstract PUBLIC
   library-actors-core
   essentials-core-expr_nodes
   api-protos
+  src-client-resources
 )
 
 target_sources(services-metadata-abstract PRIVATE

@@ -30,7 +30,7 @@ target_link_libraries(ydb-core-tx-replication-service-ut_worker PUBLIC
   tx-replication-service
   tx-replication-ut_helpers
   tx-replication-ydb_proxy
-  cpp-client-ydb_topic
+  src-client-topic
   cpp-testing-unittest
 )
 

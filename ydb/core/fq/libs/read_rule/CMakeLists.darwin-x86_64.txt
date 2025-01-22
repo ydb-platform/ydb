@@ -29,8 +29,9 @@ target_link_libraries(fq-libs-read_rule PUBLIC
   dq-api-protos
   providers-pq-proto
   api-protos
-  lib-operation_id-protos
-  cpp-client-ydb_topic
+  cpp-adapters-issue
+  src-library-operation_id
+  src-client-topic
 )
 
 target_sources(fq-libs-read_rule PRIVATE

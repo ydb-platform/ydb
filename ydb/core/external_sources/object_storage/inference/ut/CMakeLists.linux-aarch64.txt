@@ -42,6 +42,7 @@ target_link_options(external_sources-object_storage-inference-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+  -lutil
 )
 
 target_sources(external_sources-object_storage-inference-ut PRIVATE

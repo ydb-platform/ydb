@@ -20,8 +20,8 @@ target_link_libraries(ydb-apps-ydb-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
-  cpp-client-ydb_topic
-  cpp-client-ydb_table
+  src-client-topic
+  src-client-table
   topic_workload
 )
 

@@ -23,6 +23,7 @@ target_link_libraries(operations-alter-common PUBLIC
   contrib-libs-cxxsupp
   yutil
   operations-alter-abstract
+  client-types-credentials
 )
 
 target_sources(operations-alter-common PRIVATE

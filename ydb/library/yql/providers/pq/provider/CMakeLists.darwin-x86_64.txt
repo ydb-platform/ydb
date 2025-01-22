@@ -51,7 +51,7 @@ target_link_libraries(providers-pq-provider PUBLIC
   providers-pq-proto
   providers-result-expr_nodes
   essentials-public-udf
-  cpp-client-ydb_driver
+  src-client-driver
 )
 
 target_sources(providers-pq-provider PRIVATE

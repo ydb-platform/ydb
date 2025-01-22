@@ -27,9 +27,9 @@ target_link_libraries(ydb-library-query_actor PUBLIC
   core-grpc_services-local_rpc
   essentials-public-issue
   api-protos
-  cpp-client-ydb_params
-  cpp-client-ydb_result
-  cpp-client-ydb_proto
+  src-client-params
+  src-client-result
+  src-client-proto
 )
 
 target_sources(ydb-library-query_actor PRIVATE

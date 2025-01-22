@@ -21,7 +21,7 @@ target_link_libraries(lib-ydb_cli-import PUBLIC
   yutil
   api-protos
   common
-  cpp-client-ydb_proto
+  src-client-proto
   public-lib-json_value
   libs-apache-arrow
   cpp-string_utils-csv

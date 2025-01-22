@@ -28,7 +28,8 @@ target_link_libraries(providers-ydb-actors PUBLIC
   essentials-public-types
   essentials-utils-log
   public-lib-experimental
-  cpp-client-ydb_driver
+  cpp-adapters-issue
+  src-client-driver
   dq-actors-compute
   providers-ydb-proto
 )

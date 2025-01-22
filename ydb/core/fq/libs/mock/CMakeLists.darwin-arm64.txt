@@ -54,7 +54,7 @@ target_link_libraries(fq-libs-mock PUBLIC
   public-issue-protos
   essentials-sql-settings
   api-protos
-  cpp-client-ydb_table
+  src-client-table
 )
 
 target_sources(fq-libs-mock PRIVATE

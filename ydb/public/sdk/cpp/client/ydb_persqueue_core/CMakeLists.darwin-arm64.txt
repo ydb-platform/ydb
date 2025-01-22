@@ -13,7 +13,6 @@
 # changes in this file.
 
 add_subdirectory(impl)
-add_subdirectory(ut)
 
 add_library(cpp-client-ydb_persqueue_core INTERFACE)
 

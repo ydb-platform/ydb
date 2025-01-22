@@ -20,7 +20,7 @@ target_link_libraries(impl-ydb_internal-kqp_session_common PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-threading-future
-  lib-operation_id-protos
+  public-lib-operation_id
   client-impl-ydb_endpoints
 )
 

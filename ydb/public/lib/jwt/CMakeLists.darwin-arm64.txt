@@ -12,19 +12,16 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(public-lib-jwt)
+add_library(public-lib-jwt INTERFACE)
 
 
-target_link_libraries(public-lib-jwt PUBLIC
+target_link_libraries(public-lib-jwt INTERFACE
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-jwt-cpp
-  library-cpp-json
-  impl-ydb_internal-common
+  src-library-jwt
 )
 
-target_sources(public-lib-jwt PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/jwt/jwt.cpp
+target_sources(public-lib-jwt INTERFACE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/jwt/jwt.h
 )
 

@@ -24,7 +24,7 @@ target_link_libraries(ydb-services-auth PUBLIC
   ydb-core-protos
   ydb-library-login
   api-grpc
-  public-lib-operation_id
+  src-library-operation_id
 )
 
 target_sources(ydb-services-auth PRIVATE

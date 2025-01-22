@@ -36,6 +36,7 @@ target_link_libraries(ydb-core-util PUBLIC
   library-cpp-random_provider
   ydb-core-base
   ydb-core-protos
+  ydb-core-mon
   cpp-deprecated-atomic
   ydb-library-yverify_stream
 )

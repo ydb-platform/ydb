@@ -31,7 +31,7 @@ target_link_libraries(ydb-core-persqueue-dread_cache_service-ut PUBLIC
   ydb-core-persqueue
   persqueue-ut-common
   core-testlib-default
-  ydb_persqueue_core-ut-ut_utils
+  persqueue_public-ut-ut_utils
 )
 
 target_allocator(ydb-core-persqueue-dread_cache_service-ut

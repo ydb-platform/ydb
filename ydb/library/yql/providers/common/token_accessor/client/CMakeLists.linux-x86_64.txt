@@ -24,7 +24,7 @@ target_link_libraries(common-token_accessor-client PUBLIC
   cpp-threading-future
   providers-common-structured_token
   common-token_accessor-grpc
-  client-ydb_types-credentials
+  client-types-credentials
 )
 
 target_sources(common-token_accessor-client PRIVATE

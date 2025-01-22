@@ -21,6 +21,7 @@ target_compile_options(ydb-core-kqp-ut-sysview PRIVATE
 
 target_include_directories(ydb-core-kqp-ut-sysview PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
 )
 
 target_link_libraries(ydb-core-kqp-ut-sysview PUBLIC

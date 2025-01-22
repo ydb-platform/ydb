@@ -24,7 +24,7 @@ target_link_libraries(public-lib-value PUBLIC
   ydb-core-protos
   library-mkql_proto-protos
   public-lib-scheme_types
-  cpp-client-ydb_value
+  src-client-value
 )
 
 target_sources(public-lib-value PRIVATE

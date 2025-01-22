@@ -31,9 +31,9 @@ target_link_libraries(fq-libs-result_formatter PUBLIC
   essentials-minikql-computation
   essentials-public-udf
   api-protos
-  cpp-client-ydb_proto
-  cpp-client-ydb_result
-  cpp-client-ydb_value
+  src-client-proto
+  src-client-result
+  src-client-value
   providers-common-codec
   common-schema-expr
   common-schema-mkql

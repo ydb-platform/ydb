@@ -248,6 +248,10 @@ namespace Tests {
             return *this;
         }
 
+        TServerSettings& SetAlterObjectEnabledForColumnTables(bool enable) {
+            AppConfig->MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
+            return *this;
+        }
 
         // Add additional grpc services
         template <typename TService>

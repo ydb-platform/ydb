@@ -64,7 +64,7 @@ public:
         Y_ABORT_UNLESS(context.SS->PathsById.contains(path->ParentPathId));
         auto parent = context.SS->PathsById.at(path->ParentPathId);
 
-        context.SS->ResolveDomainInfo(pathId)->DecPathsInside();
+        context.SS->ResolveDomainInfo(pathId)->DecPathsInside(context.SS);
         parent->DecAliveChildren();
 
         context.SS->ClearDescribePathCaches(path);

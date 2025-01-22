@@ -2332,7 +2332,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
             UNIT_ASSERT_EQUAL(indexes.size(), 1);
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
             UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
@@ -2374,7 +2374,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
             UNIT_ASSERT_EQUAL(indexes.size(), 1);
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
             UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
@@ -2416,7 +2416,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
             UNIT_ASSERT_EQUAL(indexes.size(), 1);
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
             UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
@@ -2458,7 +2458,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
             UNIT_ASSERT_EQUAL(indexes.size(), 1);
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
             UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
@@ -2500,7 +2500,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
             UNIT_ASSERT_EQUAL(indexes.size(), 1);
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
             UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
@@ -2542,7 +2542,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
             UNIT_ASSERT_EQUAL(indexes.size(), 1);
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
             UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
@@ -2584,7 +2584,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
             UNIT_ASSERT_EQUAL(indexes.size(), 1);
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
             UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
@@ -2626,7 +2626,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
             UNIT_ASSERT_EQUAL(indexes.size(), 1);
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), TVector<TString>{"emb"});
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
             UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);

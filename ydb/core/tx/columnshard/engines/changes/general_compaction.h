@@ -7,18 +7,6 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-class TPortionToMerge {
-private:
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
-
-public:
-    TPortionToMerge(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter)
-        : Batch(batch)
-        , Filter(filter) {
-    }
-};
-
 class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges,
                                           public NColumnShard::TMonitoringObjectsCounter<TGeneralCompactColumnEngineChanges> {
 private:

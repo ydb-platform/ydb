@@ -6,6 +6,7 @@ ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 TEST_SRCS(
     base.py
     ttl_delete_s3.py
+    ttl_unavailable_s3.py
 )
 
 SIZE(MEDIUM)

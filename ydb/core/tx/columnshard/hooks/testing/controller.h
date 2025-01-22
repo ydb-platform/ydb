@@ -219,6 +219,10 @@ protected:
     }
 
 public:
+    virtual bool CheckPortionsToMergeOnCompaction(const ui64 /*memoryAfterAdd*/, const ui32 currentSubsetsCount) override {
+        return currentSubsetsCount > 1;
+    }
+
     virtual NKikimrProto::EReplyStatus OverrideBlobPutResultOnWrite(const NKikimrProto::EReplyStatus originalStatus) const override {
         return OverrideBlobPutResultOnWriteValue.value_or(originalStatus);
     }

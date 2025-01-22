@@ -27,8 +27,8 @@ target_link_libraries(client-iam-common INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  client-iam-common
-  library-grpc-client
+  client-iam-common-include
+  sdk-library-grpc-client-v3
   cpp-threading-future
 )
 

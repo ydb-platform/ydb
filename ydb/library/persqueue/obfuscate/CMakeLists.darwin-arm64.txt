@@ -18,7 +18,7 @@ add_library(library-persqueue-obfuscate INTERFACE)
 target_link_libraries(library-persqueue-obfuscate INTERFACE
   contrib-libs-cxxsupp
   yutil
-  library-persqueue-obfuscate
+  sdk-library-persqueue-obfuscate-v3
 )
 
 target_sources(library-persqueue-obfuscate INTERFACE

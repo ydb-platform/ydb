@@ -24,7 +24,7 @@ target_link_libraries(base_utils PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-deprecated-enum_codegen
-  library-grpc-client
+  sdk-library-grpc-client-v3
   core-blobstorage-pdisk
   core-client-server
   core-driver_lib-cli_config_base

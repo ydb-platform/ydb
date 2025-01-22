@@ -22,7 +22,7 @@ target_link_libraries(library-persqueue-topic_parser PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
-  library-persqueue-topic_parser_public
+  sdk-library-persqueue-topic_parser_public-v3
   api-protos
 )
 

@@ -31,7 +31,7 @@ target_link_libraries(ydb-services-ydb-table_split_ut PUBLIC
   ydb-services-ydb
   libs-apache-arrow
   library-cpp-getopt
-  library-grpc-client
+  sdk-library-grpc-client-v3
   cpp-regex-pcre
   library-cpp-svnversion
   kqp-ut-common

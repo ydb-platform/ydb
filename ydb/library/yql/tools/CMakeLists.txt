@@ -13,5 +13,4 @@
 # changes in this file.
 
 add_subdirectory(dqrun)
-add_subdirectory(mrrun)
 add_subdirectory(dq)

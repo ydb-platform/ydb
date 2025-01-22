@@ -30,8 +30,8 @@ target_link_libraries(client-persqueue_public-impl PUBLIC
   cpp-monlib-metrics
   cpp-string_utils-url
   cpp-containers-disjoint_interval_tree
-  library-grpc-client
-  library-persqueue-obfuscate
+  sdk-library-grpc-client-v3
+  sdk-library-persqueue-obfuscate-v3
   api-grpc-draft
   impl-ydb_internal-make_request
   client-common_client-impl

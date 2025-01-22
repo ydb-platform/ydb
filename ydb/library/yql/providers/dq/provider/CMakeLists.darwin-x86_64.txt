@@ -25,7 +25,7 @@ target_compile_options(providers-dq-provider PRIVATE
 target_link_libraries(providers-dq-provider PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-grpc-client
+  sdk-library-grpc-client-v3
   cpp-threading-task_scheduler
   cpp-threading-future
   library-cpp-svnversion

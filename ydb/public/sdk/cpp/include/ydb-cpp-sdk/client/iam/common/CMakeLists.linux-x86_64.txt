@@ -12,18 +12,18 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(client-iam-common INTERFACE)
+add_library(client-iam-common-include INTERFACE)
 
 
-target_include_directories(client-iam-common INTERFACE
+target_include_directories(client-iam-common-include INTERFACE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
 )
 
-target_include_directories(client-iam-common INTERFACE
+target_include_directories(client-iam-common-include INTERFACE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
 )
 
-target_link_libraries(client-iam-common INTERFACE
+target_link_libraries(client-iam-common-include INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
@@ -31,7 +31,7 @@ target_link_libraries(client-iam-common INTERFACE
   client-types-credentials
 )
 
-target_sources(client-iam-common INTERFACE
+target_sources(client-iam-common-include INTERFACE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/types.h
 )
 

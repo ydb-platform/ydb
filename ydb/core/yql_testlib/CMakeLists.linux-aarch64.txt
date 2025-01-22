@@ -23,7 +23,7 @@ target_link_libraries(ydb-core-yql_testlib PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-grpc-client
+  sdk-library-grpc-client-v3
   cpp-regex-pcre
   cpp-testing-unittest
   ydb-core-base

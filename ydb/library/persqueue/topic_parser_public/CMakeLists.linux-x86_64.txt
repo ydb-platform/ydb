@@ -19,7 +19,7 @@ target_link_libraries(library-persqueue-topic_parser_public INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-persqueue-topic_parser_public
+  sdk-library-persqueue-topic_parser_public-v3
 )
 
 target_sources(library-persqueue-topic_parser_public INTERFACE

@@ -12,24 +12,24 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(library-persqueue-obfuscate)
+add_library(sdk-library-persqueue-obfuscate-v3)
 
 
-target_include_directories(library-persqueue-obfuscate PUBLIC
+target_include_directories(sdk-library-persqueue-obfuscate-v3 PUBLIC
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
 )
 
-target_include_directories(library-persqueue-obfuscate PRIVATE
+target_include_directories(sdk-library-persqueue-obfuscate-v3 PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
 )
 
-target_link_libraries(library-persqueue-obfuscate PUBLIC
+target_link_libraries(sdk-library-persqueue-obfuscate-v3 PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
 )
 
-target_sources(library-persqueue-obfuscate PRIVATE
+target_sources(sdk-library-persqueue-obfuscate-v3 PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h
 )

@@ -14,5 +14,3 @@
 
 add_subdirectory(kicli)
 add_subdirectory(client)
-add_subdirectory(json_value)
-add_subdirectory(yson_value)

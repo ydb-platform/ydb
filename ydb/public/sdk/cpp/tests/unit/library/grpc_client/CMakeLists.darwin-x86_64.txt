@@ -24,7 +24,7 @@ target_link_libraries(ydb-public-sdk-cpp-tests-unit-library-grpc_client PUBLIC
   yutil
   library-cpp-cpuid_check
   cpp-testing-unittest_main
-  library-grpc-client
+  sdk-library-grpc-client-v3
 )
 
 target_allocator(ydb-public-sdk-cpp-tests-unit-library-grpc_client

@@ -35,7 +35,7 @@ target_link_libraries(persqueue_public-ut-ut_utils PUBLIC
   cpp-testing-unittest
   cpp-threading-chunk_queue
   core-testlib-default
-  library-persqueue-topic_parser_public
+  sdk-library-persqueue-topic_parser_public-v3
   src-client-driver
   src-client-topic
   src-client-persqueue_public

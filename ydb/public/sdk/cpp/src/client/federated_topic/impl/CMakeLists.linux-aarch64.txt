@@ -27,11 +27,11 @@ target_link_libraries(client-federated_topic-impl PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-grpc-client
+  sdk-library-grpc-client-v3
   cpp-monlib-dynamic_counters
   cpp-monlib-metrics
   cpp-string_utils-url
-  library-persqueue-obfuscate
+  sdk-library-persqueue-obfuscate-v3
   api-grpc-draft
   api-grpc
   impl-ydb_internal-make_request

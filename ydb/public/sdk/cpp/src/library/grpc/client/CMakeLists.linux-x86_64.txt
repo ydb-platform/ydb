@@ -12,18 +12,18 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(library-grpc-client)
+add_library(sdk-library-grpc-client-v3)
 
 
-target_include_directories(library-grpc-client PUBLIC
+target_include_directories(sdk-library-grpc-client-v3 PUBLIC
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
 )
 
-target_include_directories(library-grpc-client PRIVATE
+target_include_directories(sdk-library-grpc-client-v3 PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
 )
 
-target_link_libraries(library-grpc-client PUBLIC
+target_link_libraries(sdk-library-grpc-client-v3 PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
@@ -31,7 +31,7 @@ target_link_libraries(library-grpc-client PUBLIC
   cpp-containers-stack_vector
 )
 
-target_sources(library-grpc-client PRIVATE
+target_sources(sdk-library-grpc-client-v3 PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.cpp
 )
 

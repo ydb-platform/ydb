@@ -30,7 +30,7 @@ The format of data files is `.csv`, where each row corresponds to a record in th
 
 {% note info %}
 
-Checksums of exported files are only available for export to S3-compatible object storage for now.
+Checksums of exported files are only available for export to S3-compatible object storage at this moment.
 
 {% endnote %}
 

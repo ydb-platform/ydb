@@ -343,6 +343,7 @@ private:
                 Self->SelfId(), exportInfo->Id, itemIdx, item.SourcePathId,
                 exportSettings, databaseRoot, metadata.Serialize()
             ));
+            Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
         }
     }
 
@@ -493,6 +494,14 @@ private:
         return path->LastTxId;
     }
 
+    void KillChildActors(TExportInfo::TItem& item) {
+        if (auto& schemeUploader = item.SchemeUploader; schemeUploader != TActorId()) {
+            Send(schemeUploader, new TEvents::TEvPoisonPill());
+            Self->RunningExportSchemeUploaders.erase(schemeUploader);
+            schemeUploader = TActorId();
+        }
+    }
+
     void Cancel(TExportInfo::TPtr exportInfo, ui32 itemIdx, TStringBuf marker) {
         Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
         const auto& item = exportInfo->Items.at(itemIdx);
@@ -504,6 +513,7 @@ private:
         exportInfo->State = EState::Cancelled;
 
         for (ui32 i : xrange(exportInfo->Items.size())) {
+            KillChildActors(exportInfo->Items[i]);
             if (i == itemIdx) {
                 continue;
             }
@@ -949,6 +959,7 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         auto& item = exportInfo->Items[itemIdx];
+        Self->RunningExportSchemeUploaders.erase(item.SchemeUploader);
         item.SchemeUploader = TActorId();
 
         if (!result.Success) {

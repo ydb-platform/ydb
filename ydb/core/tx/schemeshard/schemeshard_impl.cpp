@@ -4539,14 +4539,8 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     if (TabletMigrator) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
     }
-    for (const auto& [id, exportInfo] : Exports) {
-        if (!exportInfo->IsDone()) {
-            for (const auto& item : exportInfo->Items) {
-                if (item.SchemeUploader != TActorId()) {
-                    ctx.Send(item.SchemeUploader, new TEvents::TEvPoisonPill());
-                }
-            }
-        }
+    for (TActorId schemeUploader : RunningExportSchemeUploaders) {
+        ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());
     }
 
     IndexBuildPipes.Shutdown(ctx);

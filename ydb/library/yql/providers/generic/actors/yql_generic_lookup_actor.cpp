@@ -451,7 +451,7 @@ namespace NYql::NDq {
         }
 
         void AddClause(NConnector::NApi::TPredicate::TDisjunction &disjunction, 
-                       ui32 columnsCount, auto&& getter) {
+                       ui32 columnsCount, const NUdf::TUnboxedValue& keys) {
             NConnector::NApi::TPredicate::TConjunction& conjunction = *disjunction.mutable_operands()->Add()->mutable_conjunction();
             for (ui32 c = 0; c != columnsCount; ++c) {
                 NConnector::NApi::TPredicate::TComparison& eq = *conjunction.mutable_operands()->Add()->mutable_comparison();
@@ -459,7 +459,7 @@ namespace NYql::NDq {
                 eq.mutable_left_value()->set_column(TString(KeyType->GetMemberName(c)));
                 auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
                 ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
-                ExportValueToProto(KeyType->GetMemberType(c), getter(c), *rightTypedValue->mutable_value());
+                ExportValueToProto(KeyType->GetMemberType(c), keys.GetElement(c), *rightTypedValue->mutable_value());
             }
         }
 
@@ -480,19 +480,15 @@ namespace NYql::NDq {
             select.mutable_from()->Settable(LookupSource.table());
 
             NConnector::NApi::TPredicate::TDisjunction disjunction;
-            for (const auto& [k, _] : *Request) {
+            for (const auto& [keys, _] : *Request) {
                 // TODO consider skipping already retrieved keys
                 // ... but careful, can we end up with zero? TODO
-                AddClause(disjunction, KeyType->GetMembersCount(), [&k = k](auto c) {
-                    return k.GetElement(c);
-                });
+                AddClause(disjunction, KeyType->GetMembersCount(), keys);
             }
-            auto& k = Request->begin()->first; // Request is never empty
+            auto& keys = Request->begin()->first; // Request is never empty
             // Pad query with dummy clauses to improve caching
             for (ui32 nRequests = Request->size(); !IsPowerOf2(nRequests) && nRequests < MaxKeysInRequest; ++nRequests) {
-                AddClause(disjunction, KeyType->GetMembersCount(), [&k = k](auto c) {
-                    return k.GetElement(c);
-                });
+                AddClause(disjunction, KeyType->GetMembersCount(), keys);
             }
             *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
             return {};

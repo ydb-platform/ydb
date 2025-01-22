@@ -258,7 +258,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             Self->PersistShardMapping(db, shardIdx, id, Self->RootPathId(), InvalidTxId, type);
 
             subdomain->AddPrivateShard(shardIdx);
-            subdomain->AddInternalShard(shardIdx);
+            subdomain->AddInternalShard(shardIdx, Self);
         }
     }
 
@@ -386,7 +386,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             subdomain->AddStoragePool(x);
         }
 
-        subdomain->SetSchemeLimits(TSchemeLimits::FromProto(schemeLimits));
+        subdomain->SetSchemeLimits(TSchemeLimits::FromProto(schemeLimits), Self);
 
         if (record.HasDeclaredSchemeQuotas()) {
             subdomain->ApplyDeclaredSchemeQuotas(record.GetDeclaredSchemeQuotas(), ctx.Now());

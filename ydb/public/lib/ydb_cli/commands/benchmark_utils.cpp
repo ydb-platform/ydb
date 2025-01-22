@@ -194,8 +194,8 @@ public:
         TString currentPlanWithStatsFileNameJson;
         if (planFileName) {
             currentPlanFileNameStats = TStringBuilder() << *planFileName << ".stats";
-            currentPlanWithStatsFileName = TStringBuilder() << *planFileName << ".plan.svg";
-            currentPlanWithStatsFileNameJson = TStringBuilder() << *planFileName << ".plan.json";
+            currentPlanWithStatsFileName = TStringBuilder() << *planFileName << ".svg";
+            currentPlanWithStatsFileNameJson = TStringBuilder() << *planFileName << ".json";
         }
         for (;;) {
             auto streamPart = it.ReadNext().ExtractValueSync();

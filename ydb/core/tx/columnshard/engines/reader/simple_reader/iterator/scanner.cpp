@@ -188,4 +188,8 @@ void TScanHead::Abort() {
     Y_ABORT_UNLESS(IsFinished());
 }
 
+TScanHead::~TScanHead() {
+    AFL_VERIFY(!IntervalsInFlightCount);
+}
+
 }   // namespace NKikimr::NOlap::NReader::NSimple

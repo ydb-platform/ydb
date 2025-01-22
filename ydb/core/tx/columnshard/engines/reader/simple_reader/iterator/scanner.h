@@ -35,6 +35,7 @@ private:
     ui64 InFlightLimit = 1;
     ui64 MaxInFlight = 256;
 public:
+    ~TScanHead();
 
     void ContinueSource(const ui32 sourceIdx) const {
         auto it = FetchingSourcesByIdx.find(sourceIdx);

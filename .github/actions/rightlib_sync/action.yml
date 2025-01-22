@@ -31,5 +31,5 @@ runs:
         TOKEN: ${{ inputs.gh_personal_access_token }}
       run: |
         cd ./ydb/ci/rightlib
-        ./sync-rightlib.py "{{ inputs.command }}"
+        ./sync-rightlib.py "${{ inputs.command }}"
 

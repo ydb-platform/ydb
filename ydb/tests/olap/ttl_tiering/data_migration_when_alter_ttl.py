@@ -1,14 +1,15 @@
 import time
 import logging
 from .base import TllTieringTestBase, ColumnTableHelper
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 
 logger = logging.getLogger(__name__)
 
 
 class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
     test_name = "data_migration_when_alter_tier"
-    row_count = 10**4
-    single_upsert_row_count = 10**3
+    row_count = 10**6
+    single_upsert_row_count = 10**5
     bucket1 = "bucket1"
     bucket2 = "bucket2"
 
@@ -98,12 +99,10 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
             self.ydb_client.query(
                 """
                 $row_count = %i;
+                $prev_index = %i;
                 $from_us = CAST(Timestamp('2010-01-01T00:00:00.000000Z') as Uint64);
-                $to_us = CAST(Timestamp('2025-01-01T00:00:00.000000Z') as Uint64);
-                $dt = $to_us - $from_us;
-                $k = ((1ul << 64) - 1) / CAST($dt - 1 as Double);
                 $rows= ListMap(ListFromRange(0, $row_count), ($i)->{
-                    $us = CAST(RandomNumber($i) / $k as Uint64) + $from_us;
+                    $us = $from_us + $i + $prev_index;
                     $ts = Unwrap(CAST($us as Timestamp));
                     return <|
                         timestamp: $ts,
@@ -114,16 +113,16 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
                 upsert into `%s`
                 select * FROM AS_TABLE($rows);
             """
-                % (min(self.row_count - cur_rows, self.single_upsert_row_count), table_path)
+                % (
+                    min(self.row_count - cur_rows, self.single_upsert_row_count),
+                    cur_rows,
+                    table_path,
+                )
             )
             cur_rows = table.get_row_count()
             logger.info(
                 f"{cur_rows} rows inserted in total, portions: {table.get_portion_stat_by_tier()}, blobs: {table.get_blob_stat_by_tier()}"
             )
-
-        rows_older_than_bucket1 = self.get_row_count_by_minute(table_path, minutes_to_bucket1)
-        logger.info(f"Rows older than {minutes_to_bucket1} minutes: {rows_older_than_bucket1}")
-        assert rows_older_than_bucket1 == self.row_count
 
         rows_older_than_bucket2 = self.get_row_count_by_minute(table_path, minutes_to_bucket2)
         logger.info(f"Rows older than {minutes_to_bucket2} minutes: {rows_older_than_bucket2}")
@@ -133,11 +132,11 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
             portions = table.get_portion_stat_by_tier()
             logger.info(f"portions: {portions}, blobs: {table.get_blob_stat_by_tier()}")
             if len(portions) != 1 or "__DEFAULT" not in portions:
-                raise Exception("Data not in __DEFAULT teir")
+                return False
             return self.row_count <= portions["__DEFAULT"]["Rows"]
 
-        if not self.wait_for(lambda: portions_actualized_in_sys(), 120):
-            raise Exception(".sys reports incorrect data portions")
+        if not self.wait_for(lambda: portions_actualized_in_sys(), plain_or_under_sanitizer(120, 240)):
+            raise Exception("Data not in __DEFAULT teir")
 
         # Step 4
         t0 = time.time()
@@ -165,10 +164,10 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
 
         # Step 5
         if not self.wait_for(
-            lambda: get_rows_in_portion(bucket1_path) == self.row_count and bucket_is_not_empty(self.bucket1)
-            # and not bucket_is_not_empty(self.bucket2) // TODO: Uncomment after fix https://github.com/ydb-platform/ydb/issues/13616
-            ,
-            600,
+            lambda: get_rows_in_portion(bucket1_path) == self.row_count
+            and bucket_is_not_empty(self.bucket1)
+            and not bucket_is_not_empty(self.bucket2),
+            plain_or_under_sanitizer(600, 1200),
         ):
             raise Exception("Data eviction has not been started")
 
@@ -187,9 +186,10 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         # Step 7
         if not self.wait_for(
             lambda: get_rows_in_portion(bucket2_path) == self.row_count and bucket_is_not_empty(self.bucket2)
-            # and not bucket_is_not_empty(self.bucket1), TODO: Uncomment after fix https://github.com/ydb-platform/ydb/issues/13616
+            # TODO: Uncomment after fix https://github.com/ydb-platform/ydb/issues/13616
+            # and not bucket_is_not_empty(self.bucket1)
             ,
-            600,
+            plain_or_under_sanitizer(600, 1200),
         ):
             raise Exception("Data eviction has not been started")
 
@@ -209,9 +209,8 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         if not self.wait_for(
             lambda: get_rows_in_portion("__DEFAULT") == self.row_count
             # TODO: Uncomment after fix https://github.com/ydb-platform/ydb/issues/13616
-            # and not bucket_is_not_empty(self.bucket1)
-            # and not bucket_is_not_empty(self.bucket2),
+            # and not bucket_is_not_empty(self.bucket1) and not bucket_is_not_empty(self.bucket2)
             ,
-            600,
+            plain_or_under_sanitizer(600, 1200),
         ):
             raise Exception("Data eviction has not been started")

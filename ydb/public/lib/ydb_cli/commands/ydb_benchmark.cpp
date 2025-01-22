@@ -6,6 +6,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <util/string/printf.h>
 #include <util/folder/path.h>
+#include <optional>
 
 namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
@@ -341,6 +342,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
         ui32 failsCount = 0;
         ui32 diffsCount = 0;
         std::optional<TString> prevResult;
+        std::optional<TString> progressPlanFileName;
         if (PlanFileName) {
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
             try {
@@ -353,14 +355,21 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
                 res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
             }
             SavePlans(res, queryN, "explain");
+            progressPlanFileName = TStringBuilder() << PlanFileName << "." << queryN << ".progress";
         }
 
         for (ui32 i = 0; i < IterationsCount && Now() < GlobalDeadline; ++i) {
             auto t1 = TInstant::Now();
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
+
+            TQueryBenchmarkSettings settings;
+            settings.Deadline = GetDeadline();
+            settings.WithProgress = true;
+            settings.PlanFileName = progressPlanFileName;
+
             try {
                 if (client) {
-                    res = Execute(query, *client, GetDeadline());
+                    res = Execute(query, *client, settings);
                 } else {
                     res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "");
                 }

@@ -76,6 +76,7 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_DEFAULT_DEPRECATED(EStatsMode, StatsMode, EStatsMode::None);
     FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, ConcurrentResultSets);
     FLUENT_SETTING_DEPRECATED(TString, ResourcePool);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, WithProgress);
 };
 
 struct TBeginTxSettings : public TRequestSettings<TBeginTxSettings> {};

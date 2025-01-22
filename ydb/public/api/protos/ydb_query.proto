@@ -174,7 +174,11 @@ message ExecuteQueryRequest {
     // Allows to set size limitation (in bytes) for one result part
     int64 response_part_limit_bytes = 9 [(Ydb.value) = "[0; 33554432]"];
 
-    string pool_id = 10; // Workload manager pool id
+    // Workload manager pool id
+    string pool_id = 10;
+
+    // Period for sending progress stats
+    int64 stats_period_ms = 11; // 0 = disabled
 }
 
 message ResultSetMeta {

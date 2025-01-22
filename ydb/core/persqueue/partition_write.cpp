@@ -1495,7 +1495,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
     }
 
     //Need to clear all compacted blobs
-    TKey k = CompactedKeys.empty() ? key : CompactedKeys.front().first;
+    const TKey& k = CompactedKeys.empty() ? key : CompactedKeys.front().first;
     ClearOldHead(k.GetOffset(), k.GetPartNo(), request);
 
     if (!key.IsHead()) {

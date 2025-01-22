@@ -35,6 +35,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
     def test_data_unchanged_after_ttl_change(self):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13542 '''
         self.row_count = 100000
+        self.single_upsert_row_count = 10000
         self.test_name = 'test_data_unchanged_after_ttl_change'
         self.cold_bucket = 'cold_uc'
         self.frozen_bucket = 'frozen_uc'
@@ -136,6 +137,15 @@ class TestDeleteS3Ttl(TllTieringTestBase):
 
         logger.info(f"Rows older than {self.days_to_cool} days: {self.get_row_count_by_date(table_path, self.days_to_cool)}")
         logger.info(f"Rows older than {self.days_to_freeze} days: {self.get_row_count_by_date(table_path, self.days_to_freeze)}")
+
+        def portions_actualized_in_sys():
+            portions = table.get_portion_stat_by_tier()
+            logger.info(f"portions: {portions}, blobs: {table.get_blob_stat_by_tier()}")
+            return "__DEFAULT" in portions and self.row_count <= portions["__DEFAULT"]["Rows"]
+
+        if not self.wait_for(lambda: portions_actualized_in_sys(), 120):
+            raise Exception(".sys reports incorrect data portions")
+
         answer = self.ydb_client.query(f"SELECT * from `{table_path}` ORDER BY ts")
         data = get_all_rows(answer)
 

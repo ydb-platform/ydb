@@ -113,7 +113,7 @@ struct TEvPrivate {
 class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase {
 
     const ui64 PrintStatePeriodSec = 300;
-    const ui64 SleepPeriodSec = 2;
+    const ui64 SleepPeriodSec = 1;
 
     struct TReadyBatch {
     public:
@@ -623,7 +623,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
-    SRC_LOG_T("TEvRetry, EventQueueId " << ev->Get()->EventQueueId);
+    SRC_LOG_T("Received TEvRetry, EventQueueId " << ev->Get()->EventQueueId);
     Counters.Retry++;
 
     auto readActorIt = ReadActorByEventQueueId.find(ev->Get()->EventQueueId);
@@ -645,13 +645,13 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartb
     Counters.PrivateHeartbeat++;
     auto readActorIt = ReadActorByEventQueueId.find(ev->Get()->EventQueueId);
     if (readActorIt == ReadActorByEventQueueId.end()) {
-        SRC_LOG_D("Ignore TEvRetry, wrong EventQueueId " << ev->Get()->EventQueueId);
+        SRC_LOG_D("Ignore TEvEvHeartbeat, wrong EventQueueId " << ev->Get()->EventQueueId);
         return;
     }
 
     auto sessionIt = Sessions.find(readActorIt->second);
     if (sessionIt == Sessions.end()) {
-        SRC_LOG_D("Ignore TEvRetry, wrong read actor id " << readActorIt->second);
+        SRC_LOG_D("Ignore TEvEvHeartbeat, wrong read actor id " << readActorIt->second);
         return;
     }
     auto& sessionInfo = sessionIt->second;
@@ -769,7 +769,8 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
                 SRC_LOG_D("Erase session to " << ev->Sender.ToString());
                 Sessions.erase(ev->Sender);
                 ReadActorByEventQueueId.erase(sessionInfo.EventQueueId);
-                ReInit("Reset session state");
+                ReInit("Reset session state (by TEvUndelivered)");
+                Sleep();
             }
         }
     }
@@ -779,7 +780,6 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         Sleep();
         return;
     }
-    ProcessState();
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {

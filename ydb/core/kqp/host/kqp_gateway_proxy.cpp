@@ -2612,8 +2612,8 @@ public:
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
                 const auto parseResult = NYdb::ParseConnectionString(*connectionString);
-                params.SetEndpoint(parseResult.Endpoint);
-                params.SetDatabase(parseResult.Database);
+                params.SetEndpoint(TString{parseResult.Endpoint});
+                params.SetDatabase(TString{parseResult.Database});
                 params.SetEnableSsl(parseResult.EnableSsl);
             }
             if (const auto& endpoint = settings.Settings.Endpoint) {
@@ -2693,8 +2693,8 @@ public:
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
                     const auto parseResult = NYdb::ParseConnectionString(*connectionString);
-                    params.SetEndpoint(parseResult.Endpoint);
-                    params.SetDatabase(parseResult.Database);
+                    params.SetEndpoint(TString{parseResult.Endpoint});
+                    params.SetDatabase(TString{parseResult.Database});
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);

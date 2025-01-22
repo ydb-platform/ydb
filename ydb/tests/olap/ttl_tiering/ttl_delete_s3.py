@@ -36,6 +36,10 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13542 '''
         self.row_count = 100000
         self.test_name = 'test_data_unchanged_after_ttl_change'
+        self.cold_bucket = 'cold_uc'
+        self.frozen_bucket = 'frozen_uc'
+        self.s3_client.create_bucket(self.cold_bucket)
+        self.s3_client.create_bucket(self.frozen_bucket)
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/table"
         secret_prefix = self.test_name

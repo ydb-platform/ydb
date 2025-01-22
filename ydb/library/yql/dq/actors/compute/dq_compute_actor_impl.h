@@ -1695,8 +1695,6 @@ public:
     }
 
     void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
-
-        Cerr << "    FillStats    " << Endl;
         if (RuntimeSettings.CollectNone()) {
             return;
         }
@@ -1752,6 +1750,7 @@ public:
             ui64 ingressRows = 0;
             ui64 filteredBytes = 0;
             ui64 filteredRows = 0;
+            ui64 queueBytes = 0;
             ui64 ingressDecompressedBytes = 0;
             auto startTimeMs = protoTask->GetStartTimeMs();
 
@@ -1779,6 +1778,7 @@ public:
                         }
                         filteredBytes += ingressStats.FilteredBytes;
                         filteredRows += ingressStats.FilteredRows;
+                        queueBytes += ingressStats.QueueBytes;
                     }
                 }
             } else {
@@ -1794,6 +1794,7 @@ public:
                     ingressDecompressedBytes += ingressStats.DecompressedBytes;
                     filteredBytes += ingressStats.FilteredBytes;
                     filteredRows += ingressStats.FilteredRows;
+                    queueBytes += ingressStats.QueueBytes;
                 }
             }
 
@@ -1806,6 +1807,7 @@ public:
             protoTask->SetIngressDecompressedBytes(ingressDecompressedBytes);
             protoTask->SetFilteredBytes(filteredBytes);
             protoTask->SetFilteredRows(filteredRows);
+            protoTask->SetQueueBytes(queueBytes);
 
             ui64 egressBytes = 0;
             ui64 egressRows = 0;

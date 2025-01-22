@@ -717,7 +717,6 @@ void TDqPqRdReadActor::Sleep() {
 
 void TDqPqRdReadActor::ReInit(const TString& reason) {
     SRC_LOG_I("ReInit state, reason " << reason);
-    // TODO add timeout
     Metrics.ReInit->Inc();
 
     State = EState::WAIT_COORDINATOR_ID;

@@ -1052,6 +1052,7 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
         ui64 readBytes = 0;
         ui64 filteredBytes = 0;
         ui64 filteredRows = 0;
+        ui64 queueBytes = 0;
         for (auto& [partitionId, partition] : consumer->Partitions) {
             if (!partition.StatisticsUpdated) {
                 continue;
@@ -1062,6 +1063,7 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
             readBytes += partition.Stat.ReadBytes;
             filteredBytes += partition.Stat.FilteredBytes;
             filteredRows += partition.Stat.FilteredRows;
+            queueBytes += partition.Stat.UnreadBytes;
             partition.Stat.Clear();
             partition.StatisticsUpdated = false;
         }
@@ -1070,7 +1072,7 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
         consumer->CpuMicrosec = 0;
         event->Record.SetFilteredBytes(filteredBytes);
         event->Record.SetFilteredRows(filteredRows);
-        event->Record.SetQueueBytes(0); // TODO
+        event->Record.SetQueueBytes(queueBytes);
         LWPROBE(Statistics, consumer->ReadActorId.ToString(), consumer->QueryId, consumer->Generation, event->Record.ByteSizeLong());
         consumer->EventsQueue.Send(event.release(), consumer->Generation);
     }

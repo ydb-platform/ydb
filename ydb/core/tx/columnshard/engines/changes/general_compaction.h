@@ -7,6 +7,8 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
+class TPortionToMerge;
+
 class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges,
                                           public NColumnShard::TMonitoringObjectsCounter<TGeneralCompactColumnEngineChanges> {
 private:

@@ -5,6 +5,13 @@ from .base import TllTieringTestBase, ColumnTableHelper
 logger = logging.getLogger(__name__)
 
 
+def get_all_rows(answer):
+    result = []
+    for set in answer:
+        result += set.rows
+    return result
+
+
 class TestDeleteS3Ttl(TllTieringTestBase):
     ''' Implements https://github.com/ydb-platform/ydb/issues/13467 '''
 
@@ -125,7 +132,8 @@ class TestDeleteS3Ttl(TllTieringTestBase):
 
         logger.info(f"Rows older than {self.days_to_cool} days: {self.get_row_count_by_date(table_path, self.days_to_cool)}")
         logger.info(f"Rows older than {self.days_to_freeze} days: {self.get_row_count_by_date(table_path, self.days_to_freeze)}")
-        data = self.ydb_client.query(f"SELECT * from `{table_path}` ORDER BY ts")[0].rows
+        answer = self.ydb_client.query(f"SELECT * from `{table_path}` ORDER BY ts")
+        data = get_all_rows(answer)
 
         def change_ttl_and_check(days_to_cool, days_to_medium, days_to_freeze):
             t0 = time.time()
@@ -153,7 +161,10 @@ class TestDeleteS3Ttl(TllTieringTestBase):
 
             if not self.wait_for(lambda: data_distributes_across_tiers(), 600):
                 raise Exception("Data eviction has not been started")
-            data1 = self.ydb_client.query(f"SELECT * from `{table_path}` ORDER BY ts")[0].rows
+
+            answer1 = self.ydb_client.query(f"SELECT * from `{table_path}` ORDER BY ts")
+            data1 = get_all_rows(answer1)
+            logger.info("Old record count {} new record count {}".format(len(data), len(data1)))
             if data1 != data:
                 raise Exception("Data changed after ttl change, was {} now {}".format(data, data1))
 
@@ -182,10 +193,11 @@ class TestDeleteS3Ttl(TllTieringTestBase):
             if not self.wait_for(lambda: data_deleted_from_buckets(), 120):
                 # raise Exception("not all data deleted") TODO FIXME after https://github.com/ydb-platform/ydb/issues/13535
                 pass
-            data1 = self.ydb_client.query(f"SELECT * from `{table_path}` ORDER BY ts")[0].rows
+            answer1 = self.ydb_client.query(f"SELECT * from `{table_path}` ORDER BY ts")
+            data1 = get_all_rows(answer1)
+            logger.info("Old record count {} new record count {}".format(len(data), len(data1)))
             if data1 != data:
                 raise Exception("Data changed after ttl change, was {} now {}".format(data, data1))
-
 
         change_ttl_and_check(self.days_to_cool, self.days_to_medium, self.days_to_freeze)
         change_ttl_and_check(500, 1000, 1500)

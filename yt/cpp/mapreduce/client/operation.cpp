@@ -36,8 +36,7 @@
 #include <yt/cpp/mapreduce/io/proto_helpers.h>
 #include <yt/cpp/mapreduce/io/skiff_table_reader.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <library/cpp/yson/node/serialize.h>
 

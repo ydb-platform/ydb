@@ -27,9 +27,6 @@
                     "columns": [
                         "Key"
                     ],
-                    "lookup_by": [
-                        "Key"
-                    ],
                     "type": "Lookup"
                 }
             ]

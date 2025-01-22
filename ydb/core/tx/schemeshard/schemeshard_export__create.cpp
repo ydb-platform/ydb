@@ -462,21 +462,26 @@ private:
             return InvalidTxId;
         }
 
-        const auto& item = exportInfo->Items.at(0);
-        if (!Self->PathsById.contains(item.SourcePathId)) {
-            return InvalidTxId;
-        }
+        for (size_t i : xrange(exportInfo->Items.size())) {
+            const auto& item = exportInfo->Items[i];
 
-        auto path = Self->PathsById.at(item.SourcePathId);
-        if (path->PathState != NKikimrSchemeOp::EPathStateCopying) {
-            return InvalidTxId;
-        }
+            if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
+                // only tables can be targets of the copy tables operation
+                continue;
+            }
 
-        if (!ItemPathId(Self, exportInfo, 0)) {
-            return InvalidTxId;
-        }
+            auto path = Self->PathsById.Value(item.SourcePathId, nullptr);
+            if (!path || path->PathState != NKikimrSchemeOp::EPathStateCopying) {
+                return InvalidTxId;
+            }
 
-        return path->LastTxId;
+            if (!ItemPathId(Self, exportInfo, i)) {
+                return InvalidTxId;
+            }
+
+            return path->LastTxId;
+        }
+        return InvalidTxId;
     }
 
     TTxId GetActiveBackupTxId(TExportInfo::TPtr exportInfo, ui32 itemIdx) {

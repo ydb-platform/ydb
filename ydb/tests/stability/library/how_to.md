@@ -40,13 +40,13 @@
     ```
     to stop, use the command `stop_nemesis`
 
-7) check states of workloads and nemesis
-    1) install yq to get all node hosts
+7) check states of workloads and nemesis from your host (ad-hoc)
+    1) prepare list of cluster node hosts
 
-        ``pip install yq``
+        ``pip install yq parallel-ssh``
 
         ``yq '.hosts[].name' <path_to_cluster.yaml> > ~/hosts.txt``
-    2) get status of nemesis and workloads (ad-hoc)
+    2) check status
         ```
         parallel-ssh -h ~/hosts.txt -i '
         if systemctl is-active --quiet nemesis; then

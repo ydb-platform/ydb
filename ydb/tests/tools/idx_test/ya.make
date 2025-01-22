@@ -9,8 +9,8 @@ PEERDIR(
     library/cpp/resource
     ydb/public/lib/idx_test
     ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
 )
 
 RESOURCE(

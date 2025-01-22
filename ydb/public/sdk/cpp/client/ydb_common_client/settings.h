@@ -8,7 +8,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/ssl_credentials.h>
 #include <functional>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 using TCertificateAndPrivateKey = std::pair<TStringType, TStringType>;
 
@@ -23,17 +23,17 @@ struct TCommonClientSettings {
     //! always better to keep instance of client.
 
     //! Allows to override current database for client
-    FLUENT_SETTING_OPTIONAL(TStringType, Database);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TStringType, Database);
     //! Allows to override current discovery endpoint
-    FLUENT_SETTING_OPTIONAL(TStringType, DiscoveryEndpoint);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TStringType, DiscoveryEndpoint);
     //! Allows to override current token for client
     TSelf& AuthToken(const TMaybe<TStringType>& token);
     //! Allows to override current credentials provider
-    FLUENT_SETTING_OPTIONAL(std::shared_ptr<ICredentialsProviderFactory>, CredentialsProviderFactory);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(std::shared_ptr<ICredentialsProviderFactory>, CredentialsProviderFactory);
     //! Allows to override discovery mode
-    FLUENT_SETTING_OPTIONAL(EDiscoveryMode, DiscoveryMode);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(EDiscoveryMode, DiscoveryMode);
     //! Allows to override current Ssl credentials
-    FLUENT_SETTING_OPTIONAL(TSslCredentials, SslCredentials);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TSslCredentials, SslCredentials);
 };
 
 template<class TDerived>

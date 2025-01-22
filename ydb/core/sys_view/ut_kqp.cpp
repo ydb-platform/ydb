@@ -6,7 +6,7 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -1734,7 +1734,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             THashSet<TString> names;
             for (const auto& child : children) {
-                names.insert(child.Name);
+                names.insert(TString{child.Name});
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
@@ -1752,7 +1752,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             THashSet<TString> names;
             for (const auto& child : children) {
-                names.insert(child.Name);
+                names.insert(TString{child.Name});
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
             }
             UNIT_ASSERT(names.contains("partition_stats"));

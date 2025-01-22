@@ -1,7 +1,7 @@
-name: Rightlib sync
+name: Automerge PR
 on:
   schedule:
-    - cron: "30 0 * * *"   # At 00:30 -- for PR creation
+    - cron: "30 1-23 * * *"   # Hourly during 1-23 interval for PR completion
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}
@@ -12,6 +12,6 @@ jobs:
     steps:
       - uses: ./.github/actions/rightlib_sync
         with:
-          command: create-pr
+          command: check-pr
           repository: ${{ github.repository }}
           gh_personal_access_token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}

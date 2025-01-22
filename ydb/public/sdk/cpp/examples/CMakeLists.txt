@@ -1,8 +1,0 @@
-add_subdirectory(basic_example)
-add_subdirectory(bulk_upsert_simple)
-add_subdirectory(pagination)
-add_subdirectory(secondary_index)
-add_subdirectory(secondary_index_builtin)
-add_subdirectory(topic_reader)
-add_subdirectory(ttl)
-add_subdirectory(vector_index)

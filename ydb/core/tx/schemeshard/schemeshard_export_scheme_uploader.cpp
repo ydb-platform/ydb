@@ -55,28 +55,19 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
             << ", status: " << describeResult.GetStatus()
         );
 
-        auto reportError = [&](const TString& error) {
-            Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(
-                ExportId, ItemIdx, false, error
-            ));
-        };
-
         if (describeResult.GetStatus() != TEvSchemeShard::EStatus::StatusSuccess) {
-            reportError(describeResult.GetReason());
-            return;
+            return Finish(false, describeResult.GetReason());
         }
 
         TString error;
         if (!BuildSchemeToUpload(describeResult, error)) {
-            reportError(error);
-            return;
+            return Finish(false, error);
         }
 
         if (auto permissions = NDataShard::GenYdbPermissions(describeResult.GetPathDescription())) {
             google::protobuf::TextFormat::PrintToString(permissions.GetRef(), &Permissions);
         } else {
-            reportError("cannot infer permissions");
-            return;
+            return Finish(false, "cannot infer permissions");
         }
 
         UploadScheme();
@@ -254,24 +245,19 @@ public:
 
     void Bootstrap() {
         if (!DestinationPrefix) {
-            Finish(false, TStringBuilder() << "cannot determine destination prefix, item index: " << ItemIdx << " out of range");
-            return;
+            return Finish(false, TStringBuilder() << "cannot determine destination prefix, item index: " << ItemIdx << " out of range");
         }
         if (!Scheme || !Permissions) {
-            GetDescription();
-            return;
+            return GetDescription();
         }
         if (!SchemeUploaded) {
-            UploadScheme();
-            return;
+            return UploadScheme();
         }
         if (!PermissionsUploaded) {
-            UploadPermissions();
-            return;
+            return UploadPermissions();
         }
         if (!MetadataUploaded) {
-            UploadMetadata();
-            return;
+            return UploadMetadata();
         }
         Finish();
     }

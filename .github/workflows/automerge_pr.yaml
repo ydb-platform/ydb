@@ -10,6 +10,11 @@ jobs:
   check-pr:
     runs-on: ubuntu-latest
     steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
       - uses: ./.github/actions/rightlib_sync
         with:
           command: check-pr

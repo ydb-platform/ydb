@@ -1998,6 +1998,7 @@ namespace {
         case TRule_table_setting_value::kAltTableSettingValue5: {
             auto columnName = IdEx(from.GetAlt_table_setting_value5().GetRule_an_id3(), txc);
             auto tiersLiteral = from.GetAlt_table_setting_value5().GetRule_ttl_tier_list1();
+
             TNodePtr firstInterval;
             if (!FillTieringInterval(tiersLiteral.GetRule_expr1(), firstInterval, expr, ctx)) {
                 return false;

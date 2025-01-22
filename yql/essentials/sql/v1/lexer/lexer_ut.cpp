@@ -182,5 +182,4 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
 
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     }
-
 }

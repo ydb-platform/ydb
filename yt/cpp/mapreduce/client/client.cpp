@@ -41,9 +41,8 @@
 
 #include <yt/cpp/mapreduce/library/table_schema/protobuf.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-#include <yt/cpp/mapreduce/raw_client/rpc_parameters_serialization.h>
+#include <yt/cpp/mapreduce/http_client/raw_client.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 

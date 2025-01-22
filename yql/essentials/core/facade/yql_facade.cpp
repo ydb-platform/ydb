@@ -206,10 +206,11 @@ void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager)
 TProgramPtr TProgramFactory::Create(
         const TFile& file,
         const TString& sessionId,
-        const TQContext& qContext)
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge)
 {
     TString sourceCode = TFileInput(file).ReadAll();
-    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext);
+    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext, gatewaysForMerge);
 }
 
 TProgramPtr TProgramFactory::Create(
@@ -217,7 +218,8 @@ TProgramPtr TProgramFactory::Create(
         const TString& sourceCode,
         const TString& sessionId,
         EHiddenMode hiddenMode,
-        const TQContext& qContext)
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge)
 {
     auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom && hiddenMode == EHiddenMode::Disable ?
         CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
@@ -235,7 +237,7 @@ TProgramPtr TProgramFactory::Create(
         UserDataTable_, Credentials_, moduleResolver, urlListerManager,
         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
-        qContext);
+        qContext, gatewaysForMerge);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -264,7 +266,8 @@ TProgram::TProgram(
         bool enableRangeComputeFor,
         const IArrowResolver::TPtr& arrowResolver,
         EHiddenMode hiddenMode,
-        const TQContext& qContext
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge
     )
     : FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
@@ -294,6 +297,7 @@ TProgram::TProgram(
     , ArrowResolver_(arrowResolver)
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
+    , GatewaysForMerge_(gatewaysForMerge)
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -376,6 +380,9 @@ TProgram::TProgram(
             auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();
             if (item) {
                 YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
+                if (GatewaysForMerge_) {
+                    YQL_ENSURE(LoadedGatewaysConfig_.MergeFromString(*GatewaysForMerge_));
+                }
                 GatewaysConfig_ = &LoadedGatewaysConfig_;
             }
         } else if (QContext_.CanWrite() && GatewaysConfig_) {

@@ -20,6 +20,11 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
     using TEvExternalStorage = NWrappers::TEvExternalStorage;
     using TPutObjectResult = Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>;
 
+    void GetDescription() {
+        Send(SchemeShard, new TEvSchemeShard::TEvDescribeScheme(SourcePathId));
+        this->Become(&TThis::StateDescribe);
+    }
+
     static TString BuildViewScheme(const TString& path, const NKikimrSchemeOp::TViewDescription& viewDescription, const TString& backupRoot, TString& error) {
         NYql::TIssues issues;
         auto scheme = NYdb::NDump::BuildCreateViewQuery(viewDescription.GetName(), path, viewDescription.GetQueryText(), backupRoot, issues);
@@ -74,23 +79,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
             return;
         }
 
-        Restart();
-    }
-
-    void Restart() {
-        if (Attempt) {
-            this->Send(std::exchange(StorageOperator, TActorId()), new TEvents::TEvPoisonPill());
-        }
-
-        StorageOperator = this->RegisterWithSameMailbox(
-            NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator())
-        );
-
-        if (!SchemeUploaded) {
-            UploadScheme();
-        } else if (!PermissionsUploaded) {
-            UploadPermissions();
-        }
+        UploadScheme();
     }
 
     void UploadScheme() {
@@ -99,6 +88,12 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         if (!Scheme) {
             return Finish(false, "cannot infer scheme");
         }
+        if (Attempt == 0) {
+            StorageOperator = this->RegisterWithSameMailbox(
+                NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator())
+            );
+        }
+
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(Sprintf("%s/create_view.sql", DestinationPrefix.c_str()));
 
@@ -191,6 +186,14 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         return false;
     }
 
+    void RetryOrFinish(const Aws::S3::S3Error& error) {
+        if (Attempt < Retries && ShouldRetry(error)) {
+            Retry();
+        } else {
+            Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage());
+        }
+    }
+
     static bool ShouldRetry(const Aws::S3::S3Error& error) {
         if (error.ShouldRetry()) {
             return true;
@@ -202,14 +205,6 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         Delay = Min(Delay * ++Attempt, MaxDelay);
         const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
         this->Schedule(Delay + random, new TEvents::TEvWakeup());
-    }
-
-    void RetryOrFinish(const Aws::S3::S3Error& error) {
-        if (Attempt < Retries && ShouldRetry(error)) {
-            Retry();
-        } else {
-            Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage());
-        }
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
@@ -263,8 +258,7 @@ public:
             return;
         }
         if (!Scheme || !Permissions) {
-            Send(SchemeShard, new TEvSchemeShard::TEvDescribeScheme(SourcePathId));
-            this->Become(&TThis::StateDescribe);
+            GetDescription();
             return;
         }
         if (!SchemeUploaded) {

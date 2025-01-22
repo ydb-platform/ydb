@@ -34,6 +34,9 @@ private:
     ui64 FetchedCount = 0;
     ui64 InFlightLimit = 1;
     ui64 MaxInFlight = 256;
+
+    ui32 GetInFlightIntervalsCount() const;
+
 public:
     ~TScanHead();
 

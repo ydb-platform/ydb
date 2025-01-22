@@ -67,8 +67,8 @@ public:
 class IFetchingStep: public TNonCopyable {
 private:
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY_DEF(TAtomicCounter, SumDurationUs);
-    YDB_READONLY_DEF(TAtomicCounter, SumSize);
+    TAtomicCounter SumDuration;
+    TAtomicCounter SumSize;
     TFetchingStepSignals Signals;
 
 protected:
@@ -82,8 +82,12 @@ public:
         return TDuration::MicroSeconds(SumDuration.Val());
     }
 
+    ui64 GetSumSize() const {
+        return SumSize.Val();
+    }
+
     void AddDuration(const TDuration d) {
-        SumDurationUs.Add(d.MicroSeconds());
+        SumDuration.Add(d.MicroSeconds());
         Signals.AddDuration(d);
     }
     void AddDataSize(const ui64 size) {

@@ -80,6 +80,22 @@ def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match
     pass
 
 
+def wait_public_sensor_value(kikimr, query_id, sensor, expected_value):
+    deadline = time.time() + 60
+    cloud_id = "mock_cloud"
+    folder_id = "my_folder"
+    while True:
+        count = 0
+        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+            value = kikimr.compute_plane.get_sensors(node_index, "yq_public").find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": sensor})
+            count += value if value is not None else 0
+        if count >= expected_value:
+            break
+        assert time.time() < deadline, f"Waiting sensor {sensor} value failed, current count {count}"
+        time.sleep(1)
+    pass
+
 class TestPqRowDispatcher(TestYdsBase):
 
     def run_and_check(self, kikimr, client, sql, input, output, expected_predicate):
@@ -961,6 +977,8 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_row_dispatcher_sensor_value(kikimr, "RowsSent", 1, exact_match=False)
         wait_row_dispatcher_sensor_value(kikimr, "IncomingRequests", 1, exact_match=False)
 
+        wait_public_sensor_value(kikimr, query_id, "query.filtered_bytes", 1)
+        wait_public_sensor_value(kikimr, query_id, "query.filtered_rows", 1)
         stop_yds_query(client, query_id)
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)

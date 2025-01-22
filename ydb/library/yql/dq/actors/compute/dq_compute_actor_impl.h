@@ -1696,6 +1696,8 @@ public:
     }
 
     void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
+
+        Cerr << "    FillStats    " << Endl;
         if (RuntimeSettings.CollectNone()) {
             return;
         }
@@ -1748,6 +1750,8 @@ public:
 
             ui64 ingressBytes = 0;
             ui64 ingressRows = 0;
+            ui64 filteredBytes = 0;
+            ui64 filteredRows = 0;
             ui64 ingressDecompressedBytes = 0;
             auto startTimeMs = protoTask->GetStartTimeMs();
 
@@ -1773,6 +1777,8 @@ public:
                                 startTimeMs = firstMessageMs;
                             }
                         }
+                        filteredBytes += ingressStats.FilteredBytes;
+                        filteredRows += ingressStats.FilteredRows;
                     }
                 }
             } else {
@@ -1786,6 +1792,8 @@ public:
                     // ingress rows are usually not reported, so we count rows in task runner input
                     ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
                     ingressDecompressedBytes += ingressStats.DecompressedBytes;
+                    filteredBytes += ingressStats.FilteredBytes;
+                    filteredRows += ingressStats.FilteredRows;
                 }
             }
 
@@ -1796,6 +1804,8 @@ public:
             protoTask->SetIngressBytes(ingressBytes);
             protoTask->SetIngressRows(ingressRows);
             protoTask->SetIngressDecompressedBytes(ingressDecompressedBytes);
+            protoTask->SetFilteredBytes(filteredBytes);
+            protoTask->SetFilteredRows(filteredRows);
 
             ui64 egressBytes = 0;
             ui64 egressRows = 0;

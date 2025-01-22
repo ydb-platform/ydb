@@ -295,6 +295,12 @@ private:
                     } else if (name == "EgressRows" && taskLevelCounter) {
                         publicCounterName = "query.sink_output_records";
                         isDeriv = true;
+                    } else if (name == "FilteredBytes" && taskLevelCounter) {
+                        publicCounterName = "query.filtered_bytes";
+                        isDeriv = true;
+                    } else if (name == "FilteredRows" && taskLevelCounter) {
+                        publicCounterName = "query.filtered_rows";
+                        isDeriv = true;
                     } else if (name == "Tasks") {
                         publicCounterName = "query.running_tasks";
                         isDeriv = false;
@@ -379,6 +385,9 @@ private:
         ADD_COUNTER(OutputBytes)
         ADD_COUNTER(ResultRows)
         ADD_COUNTER(ResultBytes)
+
+        ADD_COUNTER(FilteredBytes)
+        ADD_COUNTER(FilteredRows)
 
         ADD_COUNTER(StartTimeMs)
         ADD_COUNTER(FinishTimeMs)

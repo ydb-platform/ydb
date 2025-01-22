@@ -207,6 +207,8 @@ message TDqTaskStats {
     uint64 IngressRows = 17;
     uint64 EgressBytes = 18;
     uint64 EgressRows = 19;
+    uint64 FilteredBytes = 23;
+    uint64 FilteredRows = 24;
 
     // full stats
     repeated TDqAsyncInputBufferStats Sources = 150;

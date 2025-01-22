@@ -40,15 +40,15 @@
     ```
     to stop, use the command `stop_nemesis`
 
-7) check states
-    1) yq to get all node hosts
+7) check states of workloads and nemesis
+    1) install yq to get all node hosts
 
         ``pip install yq``
-        
-        ``yq '.hosts[].name' <path_to_cluster.yaml> > hosts.txt``
-    2) Get status of nemesis and workloads (ad-hoc)
+
+        ``yq '.hosts[].name' <path_to_cluster.yaml> > ~/hosts.txt``
+    2) get status of nemesis and workloads (ad-hoc)
         ```
-        parallel-ssh -h hosts.txt -i '
+        parallel-ssh -h ~/hosts.txt -i '
         if systemctl is-active --quiet nemesis; then
             echo "nemesis: Active"
         else
@@ -78,14 +78,10 @@
         SAFETY WARDEN (total: 8)
         LIVENESS WARDEN (total: 0)
         COREDUMPS:
-            ydb-sas-testing-0000.search.yandex.net: 1
-            ydb-sas-testing-0001.search.yandex.net: 0
-            ydb-sas-testing-0002.search.yandex.net: 1
-            ydb-sas-testing-0003.search.yandex.net: 1
-            ydb-sas-testing-0004.search.yandex.net: 0
-            ydb-sas-testing-0005.search.yandex.net: 1
-            ydb-sas-testing-0006.search.yandex.net: 2
-            ydb-sas-testing-0007.search.yandex.net: 0
+            node_host_1: 1
+            node_host_2: 0
+            node_host_3: 1
+            node_host_4: 4
         ```
         to run:
         ```

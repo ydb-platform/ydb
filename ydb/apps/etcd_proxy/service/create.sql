@@ -9,6 +9,8 @@ CREATE TABLE huidig
     PRIMARY KEY (`key`)
 );
 
+alter table huidig add changefeed cf1 with (format="JSON", mode="OLD_IMAGE");
+
 CREATE TABLE verhaal
 (
     `key` Bytes NOT NULL,
@@ -20,3 +22,4 @@ CREATE TABLE verhaal
     PRIMARY KEY (`key`, `modified`)
 );
 
+--alter topic producer1/cf1 add consumer c1 ;

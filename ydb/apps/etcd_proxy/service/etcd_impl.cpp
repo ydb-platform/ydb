@@ -1,6 +1,6 @@
 #include "etcd_impl.h"
+#include "etcd_shared.h"
 #include "events.h"
-#include "appdata.h"
 
 #include <ydb/apps/etcd_proxy/proto/rpc.grpc.pb.h>
 
@@ -750,7 +750,7 @@ private:
         Cerr << Endl << sql << Endl;
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        NEtcd::AppData()->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(), params.Build()).Subscribe([my, ass](const auto& future) {
+        NEtcd::TSharedStuff::Get()->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
             if (const auto res = future.GetValueSync(); res.IsSuccess())
                 ass->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
             else
@@ -783,7 +783,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::AppData()->Revision.load();
+        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
         return Range.Parse(*GetProtoRequest());
     }
 
@@ -811,7 +811,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::AppData()->Revision.fetch_add(1L);
+        Revision = NEtcd::TSharedStuff::Get()->Revision.fetch_add(1L);
         return Put.Parse(*GetProtoRequest());
     }
 
@@ -840,7 +840,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::AppData()->Revision.fetch_add(1L);
+        Revision = NEtcd::TSharedStuff::Get()->Revision.fetch_add(1L);
         return DeleteRange.Parse(*GetProtoRequest());
     }
 
@@ -869,7 +869,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::AppData()->Revision.fetch_add(1L);
+        Revision = NEtcd::TSharedStuff::Get()->Revision.fetch_add(1L);
         return Txn.Parse(*GetProtoRequest());
     }
 
@@ -899,7 +899,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::AppData()->Revision.load();
+        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
 
         const auto &rec = *GetProtoRequest();
         KeyRevision = rec.revision();

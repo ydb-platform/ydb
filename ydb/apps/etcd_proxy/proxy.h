@@ -4,7 +4,7 @@
 #include <ydb/library/grpc/server/grpc_server.h>
 
 #include "signals.h"
-#include "service/appdata.h"
+#include "appdata.h"
 
 #include <atomic>
 

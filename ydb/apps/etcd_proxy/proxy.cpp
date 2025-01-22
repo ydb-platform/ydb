@@ -9,6 +9,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
 #include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
+#include <ydb/apps/etcd_proxy/service/etcd_shared.h>
 #include <ydb/apps/etcd_proxy/service/grpc_service.h>
 #include <ydb/core/grpc_services/base/base.h>
 
@@ -49,7 +50,7 @@ int TProxy::Discovery() {
         config.SetEndpoint(Endpoint);
         config.SetDatabase(Database);
         const auto driver = NYdb::TDriver(config);
-        AppData.Client = std::make_shared<NYdb::NQuery::TQueryClient>(driver);
+        NEtcd::TSharedStuff::Get()->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
         AppData.MetricRegistry = NMonitoring::TMetricRegistry::SharedInstance();
 
         return 0;
@@ -60,12 +61,12 @@ int TProxy::Discovery() {
 }
 
 int TProxy::StartServer() {
-    const auto res = AppData.Client->ExecuteQuery(NEtcd::GetLastRevisionSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    const auto res = NEtcd::TSharedStuff::Get()->Client->ExecuteQuery(NEtcd::GetLastRevisionSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     if (res.IsSuccess()) {
         if (auto result = res.GetResultSetParser(0); result.TryNextRow()) {
             const auto revision = NYdb::TValueParser(result.GetValue(0)).GetInt64();
             Cout << "The current revision is " << revision << '.' << Endl;
-            AppData.Revision.store(revision);
+            NEtcd::TSharedStuff::Get()->Revision.store(revision);
         } else {
             Cout << "Unexpected result of get max revision." << Endl;
             return 1;
@@ -105,9 +106,7 @@ int TProxy::Run() {
 }
 
 int TProxy::InitDatabase() {
-    const auto res = AppData.Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-
-    if (res.IsSuccess()) {
+    if (const auto res = NEtcd::TSharedStuff::Get()->Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
         Cout << "Database " << Database << " on " << Endpoint << " was initialized." << Endl;
         return 0;
     } else {

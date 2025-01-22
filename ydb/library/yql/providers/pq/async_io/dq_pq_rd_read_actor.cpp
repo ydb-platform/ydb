@@ -768,7 +768,7 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
             if (sessionInfo.Generation == ev->Cookie) {
                 SRC_LOG_D("Erase session to " << ev->Sender.ToString());
                 ReadActorByEventQueueId.erase(sessionInfo.EventQueueId);
-                Sessions.erase(ev->Sender);
+                Sessions.erase(sessionIt);
                 ReInit("Reset session state (by TEvUndelivered)");
             }
         }

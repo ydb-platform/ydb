@@ -1,2 +1,0 @@
-add_subdirectory(discovery_mutator)
-add_subdirectory(solomon_stats)

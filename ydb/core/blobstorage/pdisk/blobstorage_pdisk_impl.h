@@ -151,20 +151,13 @@ public:
     enum EShredState {
         EShredStateDefault = 0,
         EShredStateSendPreShredCompactVDisk = 1,
-        EShredStateGatherPreShredCompactVDisksResponse = 2,
-        EShredStateSendShredVDisk = 3,
-        EShredStateGatherShredVDisksResponse = 4,
-        EShredStateFinished = 5,
-        EShredStateFailed = 6,
+        EShredStateSendShredVDisk = 2,
+        EShredStateFinished = 3,
+        EShredStateFailed = 4,
     };
     EShredState ShredState = EShredStateDefault;
     ui64 ShredGeneration = 0;
     std::deque<TActorId> ShredRequesters;
-
-    i64 PreShredCompactVDiskRequestsSent = 0;
-    i64 PreShredCompactVDiskResponsesReceived = 0;
-    i64 ShredRequestsSent = 0;
-    i64 ShredResponsesReceived = 0;
 
     // Chunks that are owned by killed owner, but have operations InFlight
     TVector<TChunkIdx> QuarantineChunks;
@@ -406,8 +399,6 @@ public:
     void HandleNextWriteMetadata();
     void ProcessWriteMetadataResult(TWriteMetadataResult& request);
 
-    void SendPreShredCompactVDiskRequests();
-    void SendShredVDiskRequests();
     void ProgressShredState();
     void ProcessShredPDisk(TShredPDisk& request);
     void ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& request);

@@ -1507,6 +1507,40 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
     }
+    Y_UNIT_TEST(ReinitVDiskWhilePreShredding) {
+        ui64 shredGeneration = 1;
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        THolder<NPDisk::TEvPreShredCompactVDisk> evReq = testCtx.Recv<NPDisk::TEvPreShredCompactVDisk>();
+        UNIT_ASSERT_VALUES_UNEQUAL(evReq.Get(), nullptr);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
+        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
+        UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
+    }
+    Y_UNIT_TEST(ReinitVDiskWhileShredding) {
+        ui64 shredGeneration = 1;
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
+        THolder<NPDisk::TEvShredVDisk> evReq = testCtx.Recv<NPDisk::TEvShredVDisk>();
+        UNIT_ASSERT_VALUES_UNEQUAL(evReq.Get(), nullptr);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
+        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
+        UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
+    }
 }
 
 } // namespace NKikimr

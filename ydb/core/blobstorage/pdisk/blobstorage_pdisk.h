@@ -1727,5 +1727,12 @@ struct TPDiskCtx {
         } \
     } while (false)
 
+#define S_LOG(LEVEL, MARKER, ...) \
+    do { \
+        if (PCtx && PCtx->ActorSystem) { \
+            STLOGX(*PCtx->ActorSystem, LEVEL, BS_PDISK_SHRED, MARKER, __VA_ARGS__, (PDiskId, PCtx->PDiskId)); \
+        } \
+    } while (false)
+
 } // NPDisk
 } // NKikimr

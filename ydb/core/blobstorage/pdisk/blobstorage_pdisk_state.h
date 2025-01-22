@@ -142,6 +142,26 @@ struct TOwnerData {
         return RenderStatus(Status);
     }
 
+    const char* GetStringShredState() const {
+        return RenderShredState(ShredState);
+    }
+
+    static const char* RenderShredState(const EVDiskShredState shredState) {
+        switch(shredState) {
+        case EVDiskShredState::VDISK_SHRED_STATE_NOT_REQUESTED:
+            return "Not requested";
+        case EVDiskShredState::VDISK_SHRED_STATE_COMPACT_REQUESTED:
+            return "Compact requested";
+        case EVDiskShredState::VDISK_SHRED_STATE_COMPACT_FINISHED:
+            return "Compact finished";
+        case EVDiskShredState::VDISK_SHRED_STATE_SHRED_REQUESTED:
+            return "Shred requested";
+        case EVDiskShredState::VDISK_SHRED_STATE_SHRED_FINISHED:
+            return "Shred finished";
+        }
+        return "Unexpected enum value";
+    }
+
     static const char* RenderStatus(const EVDiskStatus status) {
         switch(status) {
         case VDISK_STATUS_DEFAULT:

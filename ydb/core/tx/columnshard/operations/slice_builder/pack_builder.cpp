@@ -13,7 +13,7 @@
 namespace NKikimr::NOlap::NWritingPortions {
 
 class TPortionWriteController: public NColumnShard::IWriteController,
-                               public NColumnShard::TMonitoringObjectsCounter<TIndexedWriteController, true> {
+                               public NColumnShard::TMonitoringObjectsCounter<TPortionWriteController, true> {
 public:
     class TInsertPortion {
     private:

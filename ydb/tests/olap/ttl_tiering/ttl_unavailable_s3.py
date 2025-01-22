@@ -68,17 +68,15 @@ class TestUnavailableS3(TllTieringTestBase):
             )
         """)
 
-        get_stat = lambda: self.s3_client.get_bucket_stat(bucket_s3_name)[0]
-
-        assert self.wait_for(lambda: get_stat() != 0, 120), "data distribution start"
-
         print("!!! simulating S3 hang up -- sending SIGSTOP", file=sys.stderr)
         os.kill(self.s3_pid, signal.SIGSTOP)
 
-        time.sleep(60)
+        time.sleep(30)
 
         print("!!! simulating S3 recovery -- sending SIGCONT", file=sys.stderr)
         os.kill(self.s3_pid, signal.SIGCONT)
+
+        get_stat = lambda: self.s3_client.get_bucket_stat(bucket_s3_name)[0]
 
         stat_old = get_stat()
 

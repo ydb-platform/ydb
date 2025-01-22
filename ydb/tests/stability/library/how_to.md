@@ -7,7 +7,7 @@
     ```
     ./ya make -r /ydb/tests/stability/library
     ```
-3) deploy ydb to test specific build version
+3) deploy ydb
     ```
     cd ydb/tests/stability/library; ./library deploy_ydb --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
     ```

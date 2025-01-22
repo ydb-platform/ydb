@@ -113,7 +113,7 @@ struct TEvPrivate {
 class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase {
 
     const ui64 PrintStatePeriodSec = 300;
-    const ui64 SleepPeriodSec = 1;
+    const ui64 ProcessStatePeriodSec = 1;
 
     struct TReadyBatch {
     public:
@@ -303,7 +303,7 @@ public:
     void NotifyCA();
     void SendStartSession(TSession& sessionInfo);
     void Init();
-    void Sleep();
+    void ScheduleProcessState();
     void ProcessGlobalState();
     void ProcessSessionsState();
     void UpdateSessions();
@@ -694,15 +694,15 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr
 
     CoordinatorActorId = ev->Get()->CoordinatorActorId;
     ReInit("Coordinator is changed");
-    Sleep();
+    ScheduleProcessState();
 }
 
-void TDqPqRdReadActor::Sleep() {
+void TDqPqRdReadActor::ScheduleProcessState() {
     if (ProcessStateScheduled) {
         return;
     }
     ProcessStateScheduled = true;
-    Schedule(TDuration::Seconds(SleepPeriodSec), new TEvPrivate::TEvProcessState());
+    Schedule(TDuration::Seconds(ProcessStatePeriodSec), new TEvPrivate::TEvProcessState());
 }
 
 void TDqPqRdReadActor::ReInit(const TString& reason) {
@@ -770,14 +770,14 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
                 Sessions.erase(ev->Sender);
                 ReadActorByEventQueueId.erase(sessionInfo.EventQueueId);
                 ReInit("Reset session state (by TEvUndelivered)");
-                Sleep();
+                ScheduleProcessState();
             }
         }
     }
 
     if (CoordinatorActorId && *CoordinatorActorId == ev->Sender) {
         ReInit("TEvUndelivered to coordinator");
-        Sleep();
+        ScheduleProcessState();
         return;
     }
 }

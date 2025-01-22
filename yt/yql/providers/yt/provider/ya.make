@@ -16,6 +16,7 @@ SRCS(
     yql_yt_datasource_type_ann.cpp
     yql_yt_datasource.cpp
     yql_yt_epoch.cpp
+    yql_yt_forwarding_gateway.cpp
     yql_yt_gateway.cpp
     yql_yt_horizontal_join.cpp
     yql_yt_helpers.cpp

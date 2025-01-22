@@ -83,7 +83,7 @@ TNodePtr BuildViewSelect(
     const TString& contextRecreationQuery
 ) {
     TIssues issues;
-    TContext context(parentContext.Settings, {}, issues);
+    TContext context(parentContext.Settings, {}, issues, parentContext.Query);
     if (!RecreateContext(context, context.Settings, contextRecreationQuery)) {
         parentContext.Issues.AddIssues(issues);
         return nullptr;
@@ -4651,13 +4651,15 @@ bool TSqlTranslation::DefineActionOrSubqueryBody(TSqlQuery& query, TBlocks& bloc
         Y_DEFER {
             Ctx.PopCurrentBlocks();
         };
-        if (!query.Statement(blocks, body.GetBlock2().GetRule_sql_stmt_core1())) {
+
+        size_t statementNumber = 0;
+        if (!query.Statement(blocks, body.GetBlock2().GetRule_sql_stmt_core1(), statementNumber++)) {
             return false;
         }
 
         for (const auto& nestedStmtItem : body.GetBlock2().GetBlock2()) {
             const auto& nestedStmt = nestedStmtItem.GetRule_sql_stmt_core2();
-            if (!query.Statement(blocks, nestedStmt)) {
+            if (!query.Statement(blocks, nestedStmt, statementNumber++)) {
                 return false;
             }
         }
@@ -5094,6 +5096,101 @@ bool TSqlTranslation::ParseViewQuery(
     features["query_ast"] = {viewSelect, Ctx};
 
     return true;
+}
+
+namespace {
+
+static std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4) {
+    if (1 == token.GetLine() && 0 == token.GetColumn()) {
+        return 0;
+    }
+
+    TPosition pos = {0, 1};
+    TTextWalker walker(pos, antlr4);
+
+    std::string::size_type position = 0;
+    for (char c : query) {
+        walker.Advance(c);
+        ++position;
+
+        if (pos.Row == token.GetLine() && pos.Column == token.GetColumn()) {
+            return position;
+        }
+    }
+
+    return std::string::npos;
+}
+
+static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
+    static const TString statementSeparator = ";\n";
+
+    TVector<TString> statements;
+    NYql::TIssues issues;
+    if (!SplitQueryToStatements(Ctx.Query, statements, issues, Ctx.Settings)) {
+        return {};
+    }
+
+    TStringBuilder result;
+    for (const auto id : Ctx.ForAllStatementsParts) {
+        result << statements[id] << "\n";
+    }
+
+    switch (lambdaOrParameter.Alt_case()) {
+        case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter1: {
+            const auto& lambda = lambdaOrParameter.GetAlt_lambda_or_parameter1().GetRule_lambda1();
+
+            auto& beginToken = lambda.GetRule_smart_parenthesis1().GetToken1();
+            const NSQLv1Generated::TToken* endToken = nullptr;
+            switch (lambda.GetBlock2().GetBlock2().GetAltCase()) {
+                case TRule_lambda_TBlock2_TBlock2::AltCase::kAlt1:
+                    endToken = &lambda.GetBlock2().GetBlock2().GetAlt1().GetToken3();
+                    break;
+                case TRule_lambda_TBlock2_TBlock2::AltCase::kAlt2:
+                    endToken = &lambda.GetBlock2().GetBlock2().GetAlt2().GetToken3();
+                    break;
+                case TRule_lambda_TBlock2_TBlock2::AltCase::ALT_NOT_SET:
+                    Y_ABORT("You should change implementation according to grammar changes");
+            }
+
+            auto begin = GetQueryPosition(Ctx.Query, beginToken, Ctx.Settings.Antlr4Parser);
+            auto end = GetQueryPosition(Ctx.Query, *endToken, Ctx.Settings.Antlr4Parser);
+            if (begin == std::string::npos || end == std::string::npos) {
+                return {};
+            }
+
+            result << "$__ydb_transfer_lambda = " << Ctx.Query.substr(begin, end - begin + endToken->value().size()) << statementSeparator;
+
+            return result;
+        }
+        case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter2: {
+            const auto& valueBlock = lambdaOrParameter.GetAlt_lambda_or_parameter2().GetRule_bind_parameter1().GetBlock2();
+            const auto id = Id(valueBlock.GetAlt1().GetRule_an_id_or_type1(), ctx);
+            result << "$__ydb_transfer_lambda = $" << id << statementSeparator;
+            return result;
+        }
+        case NSQLv1Generated::TRule_lambda_or_parameter::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
+    }
+}
+
+}
+
+bool TSqlTranslation::ParseTransferLambda(
+    TString& lambdaText,
+    const TRule_lambda_or_parameter& lambdaOrParameter) {
+
+    TSqlExpression expr(Ctx, Ctx.Settings.Mode);
+    auto result = expr.Build(lambdaOrParameter);
+    if (!result) {
+        return false;
+    }
+
+    lambdaText = GetLambdaText(*this, Ctx, lambdaOrParameter);
+    if (lambdaText.empty()) {
+        Ctx.Error() << "Cannot parse lambda correctly";
+    }
+
+    return !lambdaText.empty();
 }
 
 class TReturningListColumns : public INode {

@@ -39,7 +39,6 @@
  *******************************************************/
 
 .text
-.private_extern _make_fcontext
 .globl _make_fcontext
 .align 2
 _make_fcontext:

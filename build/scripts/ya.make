@@ -41,7 +41,6 @@ ELSEIF (PY3)
     TEST_SRCS(
         append_file.py
         autotar_gendirs.py
-        build_dll_and_java.py
         build_info_gen.py
         build_java_codenav_index.py
         build_java_with_error_prone2.py
@@ -100,7 +99,7 @@ ELSEIF (PY3)
         make_container.py
         make_container_layer.py
         make_java_classpath_file.py
-        make_java_srclists.py
+        prepare_jar_build.py
         make_manifest_from_bf.py
         merge_coverage_data.py
         merge_files.py

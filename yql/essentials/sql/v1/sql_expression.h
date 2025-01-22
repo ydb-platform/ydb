@@ -22,6 +22,7 @@ public:
     }
 
     TNodePtr Build(const TRule_expr& node);
+    TNodePtr Build(const TRule_lambda_or_parameter& node);
 
     void SetSmartParenthesisMode(ESmartParenthesis mode) {
         SmartParenthesisMode = mode;

@@ -52,7 +52,6 @@
  *******************************************************/
 
 .text
-.private_extern _make_fcontext
 .globl _make_fcontext
 .balign 16
 

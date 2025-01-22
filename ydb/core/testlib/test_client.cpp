@@ -519,14 +519,13 @@ namespace Tests {
             appData.PQClusterDiscoveryConfig.MergeFrom(Settings->PQClusterDiscoveryConfig);
             appData.NetClassifierConfig.MergeFrom(Settings->NetClassifierConfig);
             appData.StreamingConfig.MergeFrom(Settings->AppConfig->GetGRpcConfig().GetStreamingConfig());
-            auto& securityConfig = Settings->AppConfig->GetSecurityConfig();
+            auto& securityConfig = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig();
             appData.EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
             appData.AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
             TVector<TString> registerDynamicNodeAllowedSIDs(securityConfig.GetRegisterDynamicNodeAllowedSIDs().cbegin(), securityConfig.GetRegisterDynamicNodeAllowedSIDs().cend());
             appData.RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
-            appData.SecurityConfig.MergeFrom(Settings->AppConfig->GetSecurityConfig());
             appData.DomainsConfig.MergeFrom(Settings->AppConfig->GetDomainsConfig());
             appData.ColumnShardConfig.MergeFrom(Settings->AppConfig->GetColumnShardConfig());
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
@@ -2031,16 +2030,16 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
         op->SetWorkingDir(parent);
 
         auto* createUser = op->MutableAlterLogin()->MutableCreateUser();
-        createUser->SetUser(user);
-        createUser->SetPassword(password);
-
+        createUser->SetUser(options.User);
+        createUser->SetPassword(options.Password);
+        createUser->SetCanLogin(options.CanLogin);
         request->Record.SetSecurityToken(userToken);
 
         TAutoPtr<NBus::TBusMessage> reply;
@@ -2051,7 +2050,11 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+        return CreateUser(parent, {.User = user, .Password = password}, userToken);
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
@@ -2060,8 +2063,15 @@ namespace Tests {
         request->Record.SetSecurityToken(userToken);
 
         auto* modifyUser = op->MutableAlterLogin()->MutableModifyUser();
-        modifyUser->SetUser(user);
-        modifyUser->SetPassword(password);
+        modifyUser->SetUser(options.User);
+
+        if (options.Password.has_value()) {
+            modifyUser->SetPassword(options.Password.value());
+        }
+
+        if (options.CanLogin.has_value()) {
+            modifyUser->SetCanLogin(options.CanLogin.value());
+        }
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);

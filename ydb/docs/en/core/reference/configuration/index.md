@@ -162,7 +162,7 @@ The following [fault tolerance modes](../../concepts/topology.md) are available:
   - kind: <storage pool name>
     pool_config:
       box_id: 1
-      encryption: <optional, specify 1 to encrypt data on the disk>
+      encryption_mode: <optional, specify 1 to encrypt data on the disk>
       erasure_species: <fault tolerance mode name - none, block-4-2, or mirror-3-dc>
       kind: <storage pool name - specify the same value as above>
       pdisk_filter:

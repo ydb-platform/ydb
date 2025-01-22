@@ -58,6 +58,13 @@ struct TOwnerData {
         VDISK_STATUS_READING_LOG = 3,
         VDISK_STATUS_LOGGED = 4,
     };
+    enum EVDiskShredState {
+        VDISK_SHRED_STATE_NOT_REQUESTED = 0,
+        VDISK_SHRED_STATE_COMPACT_REQUESTED = 1,
+        VDISK_SHRED_STATE_COMPACT_FINISHED = 2,
+        VDISK_SHRED_STATE_SHRED_REQUESTED = 3,
+        VDISK_SHRED_STATE_SHRED_FINISHED = 4,
+    };
     struct TLogEndPosition {
         ui32 ChunkIdx;
         ui32 SectorIdx;
@@ -92,6 +99,8 @@ struct TOwnerData {
     TIntrusivePtr<TOwnerInflight> InFlight;
 
     bool OnQuarantine = false;
+    ui64 LastShredGeneration = 0;
+    EVDiskShredState ShredState = VDISK_SHRED_STATE_NOT_REQUESTED;
 
     TOperationLog<8> OperationLog;
 
@@ -131,6 +140,26 @@ struct TOwnerData {
 
     const char* GetStringStatus() const {
         return RenderStatus(Status);
+    }
+
+    const char* GetStringShredState() const {
+        return RenderShredState(ShredState);
+    }
+
+    static const char* RenderShredState(const EVDiskShredState shredState) {
+        switch(shredState) {
+        case EVDiskShredState::VDISK_SHRED_STATE_NOT_REQUESTED:
+            return "Not requested";
+        case EVDiskShredState::VDISK_SHRED_STATE_COMPACT_REQUESTED:
+            return "Compact requested";
+        case EVDiskShredState::VDISK_SHRED_STATE_COMPACT_FINISHED:
+            return "Compact finished";
+        case EVDiskShredState::VDISK_SHRED_STATE_SHRED_REQUESTED:
+            return "Shred requested";
+        case EVDiskShredState::VDISK_SHRED_STATE_SHRED_FINISHED:
+            return "Shred finished";
+        }
+        return "Unexpected enum value";
     }
 
     static const char* RenderStatus(const EVDiskStatus status) {
@@ -221,6 +250,8 @@ struct TOwnerData {
             InFlight.Reset(TIntrusivePtr<TOwnerInflight>(new TOwnerInflight));
         }
         OnQuarantine = quarantine;
+        LastShredGeneration = 0;
+        ShredState = VDISK_SHRED_STATE_NOT_REQUESTED;
     }
 };
 

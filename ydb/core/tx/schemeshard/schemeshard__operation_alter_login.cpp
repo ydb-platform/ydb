@@ -24,7 +24,7 @@ public:
         } else if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Wrong working dir");
         } else {
-            const NKikimrConfig::TSecurityConfig& securityConfig = context.SS->GetSecurityConfig();
+            const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = context.SS->GetDomainsConfig().GetSecurityConfig();
             const NKikimrSchemeOp::TAlterLogin& alterLogin = Transaction.GetAlterLogin();
 
             TParts additionalParts;
@@ -32,8 +32,13 @@ public:
             switch (alterLogin.GetAlterCase()) {
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
-                    auto response = context.SS->LoginProvider.CreateUser(
-                        {.User = createUser.GetUser(), .Password = createUser.GetPassword()});
+
+                    NLogin::TLoginProvider::TCreateUserRequest request;
+                    request.User = createUser.GetUser();
+                    request.Password = createUser.GetPassword();
+                    request.CanLogin = createUser.GetCanLogin();
+
+                    auto response = context.SS->LoginProvider.CreateUser(request);
 
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
@@ -41,7 +46,9 @@ public:
                         auto& sid = context.SS->LoginProvider.Sids[createUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                            Schema::LoginSids::SidHash,
-                                                                           Schema::LoginSids::CreatedAt>(sid.Type, sid.Hash, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                           Schema::LoginSids::CreatedAt,
+                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MilliSeconds(), sid.IsEnabled);
+
                         if (securityConfig.HasAllUsersGroup()) {
                             auto response = context.SS->LoginProvider.AddGroupMembership({
                                 .Group = securityConfig.GetAllUsersGroup(),
@@ -59,12 +66,27 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kModifyUser: {
                     const auto& modifyUser = alterLogin.GetModifyUser();
-                    auto response = context.SS->LoginProvider.ModifyUser({.User = modifyUser.GetUser(), .Password = modifyUser.GetPassword()});
+
+                    NLogin::TLoginProvider::TModifyUserRequest request;
+
+                    request.User = modifyUser.GetUser();
+
+                    if (modifyUser.HasPassword()) {
+                        request.Password = modifyUser.GetPassword();
+                    }
+
+                    if (modifyUser.HasCanLogin()) {
+                        request.CanLogin = modifyUser.GetCanLogin();
+                    }
+
+                    auto response = context.SS->LoginProvider.ModifyUser(request);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
-                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
+                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
+                                                                           Schema::LoginSids::SidHash,
+                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, sid.IsEnabled);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);
@@ -235,6 +257,12 @@ public:
                 return {.Error = TStringBuilder() <<
                     "User " << user << " owns " << pathStr << " and can't be removed"};
             }
+            NACLib::TACL acl(path->ACL);
+            if (acl.HasAccess(user)) {
+                auto pathStr = TPath::Init(pathId, context.SS).PathString();
+                return {.Error = TStringBuilder() << 
+                    "User " << user << " has an ACL record on " << pathStr << " and can't be removed"};
+            }
         }
 
         auto removeUserResponse = context.SS->LoginProvider.RemoveUser(user);
@@ -242,31 +270,6 @@ public:
             return removeUserResponse;
         }
 
-        for (auto pathId : subTree) {
-            TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-            NACLib::TACL acl(path->ACL);
-            if (acl.TryRemoveAccess(user)) {
-                ++path->ACLVersion;
-                path->ACL = acl.SerializeAsString();
-                context.SS->PersistACL(db, path);
-                if (!path->IsPQGroup()) {
-                    const auto parent = context.SS->PathsById.at(path->ParentPathId);
-                    ++parent->DirAlterVersion;
-                    context.SS->PersistPathDirAlterVersion(db, parent);
-                    context.SS->ClearDescribePathCaches(parent);
-                    context.OnComplete.PublishToSchemeBoard(OperationId, parent->PathId);
-                }
-            }
-            NACLib::TACL effectiveACL(path->CachedEffectiveACL.GetForSelf());
-            if (effectiveACL.HasAccess(user)) {
-                // publish paths from which the user's access is being removed
-                // user access could have been granted directly (ACL, handled by `acl.TryRemoveAccess(user)` above)
-                // or it might have been inherited from a parent (effective ACL)
-                context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-            }
-        }
-
-        context.OnComplete.UpdateTenants(std::move(subTree));
         db.Table<Schema::LoginSids>().Key(user).Delete();
         for (const TString& group : removeUserResponse.TouchedGroups) {
             db.Table<Schema::LoginSidMembers>().Key(group, user).Delete();

@@ -2,12 +2,12 @@ PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 TEST_SRCS(
-    test_sql.py
+    test_kv.py
     test_crud.py
     test_inserts.py
 )
 
-SIZE(MEDIUM)
+SIZE(SMALL)
 
 DEPENDS(
     ydb/apps/ydb
@@ -21,3 +21,8 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    lib
+    large
+)

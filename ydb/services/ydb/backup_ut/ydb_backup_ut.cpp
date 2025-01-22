@@ -4,11 +4,11 @@
 
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_export/export.h>
-#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/export/export.h>
+#include <ydb-cpp-sdk/client/import/import.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/library/backup/backup.h>
 

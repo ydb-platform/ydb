@@ -10,6 +10,11 @@ class TIndexationCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
     NMonitoring::THistogramPtr HistogramCompactionInputBytes;
+
+    NMonitoring::THistogramPtr HistogramCompactionCorrectRawBytes;
+    NMonitoring::THistogramPtr HistogramCompactionHugeRawBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr CompactionHugePartsCount;
+
 public:
     NMonitoring::TDynamicCounters::TCounterPtr CompactionInputBytes;
 
@@ -45,6 +50,15 @@ public:
     void CompactionInputSize(const ui64 size) const {
         HistogramCompactionInputBytes->Collect(size);
         CompactionInputBytes->Add(size);
+    }
+
+    void OnCompactionCorrectMemory(const ui64 memorySize) const {
+        HistogramCompactionCorrectRawBytes->Collect(memorySize);
+    }
+
+    void OnCompactionHugeMemory(const ui64 memorySize, const ui32 partsCount) const {
+        HistogramCompactionHugeRawBytes->Collect(memorySize);
+        CompactionHugePartsCount->Add(partsCount);
     }
 };
 

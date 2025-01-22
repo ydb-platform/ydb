@@ -13,7 +13,6 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
     TPathId SubDomainPathId;
     bool NeedPublishOnComplete = false;
     THolder<TEvSchemeShard::TEvLoginResult> Result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
-    size_t CurrentFailedAttemptCount = 0;
 
     TTxLogin(TSelf *self, TEvSchemeShard::TEvLogin::TPtr &ev)
         : TRwTxBase(self)
@@ -173,9 +172,9 @@ private:
             Result->Record.SetError(loginResponse.Error);
             break;
         }
-        case TLoginProvider::TLoginUserResponse::EStatus::INVALID_USER:
-        case TLoginProvider::TLoginUserResponse::EStatus::UNAVAILABLE_KEY:
-        case TLoginProvider::TLoginUserResponse::EStatus::UNSPECIFIED: {
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_USER:
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNAVAILABLE_KEY:
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNSPECIFIED: {
             Result->Record.SetError(loginResponse.Error);
             break;
         }

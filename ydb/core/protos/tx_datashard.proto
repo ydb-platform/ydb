@@ -1548,8 +1548,9 @@ message TEvLocalKMeansRequest {
     optional uint32 NeedsRounds = 14;
 
     // id of parent cluster
-    optional uint32 Parent = 15;
-    // [Child ... Child + K) ids reserved for this kmeans clusters
+    optional uint32 ParentFrom = 15;
+    optional uint32 ParentTo = 21;
+    // [Child ... Child + K * (ParentFrom - ParentTo + 1)) ids reserved for this kmeans clusters
     optional uint32 Child = 16;
 
     optional string LevelName = 17;

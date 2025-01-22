@@ -848,11 +848,13 @@ message TReshardColumnTable {
 message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3 [default = true];
 }
 
 message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3;
 }
 
 message TLoginRemoveUser {
@@ -1231,6 +1233,7 @@ message TBackupTask {
     }
 
     optional TPathDescription Table = 10; // for further restore
+    repeated TPathDescription ChangefeedUnderlyingTopics = 17; // for further restore
 
     message TScanSettings {
         optional uint64 RowsBatchSize = 1 [default = 0]; // no limit
@@ -1517,6 +1520,7 @@ message TReplicationDescription {
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
     optional NKikimrReplication.TReplicationState State = 6;
+    optional string TransferTransformLambda = 7;
 }
 
 message TBlobDepotDescription {

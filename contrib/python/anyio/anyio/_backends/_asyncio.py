@@ -28,8 +28,6 @@ from collections.abc import (
     Collection,
     Coroutine,
     Iterable,
-    Iterator,
-    MutableMapping,
     Sequence,
 )
 from concurrent.futures import Future
@@ -49,7 +47,7 @@ from queue import Queue
 from signal import Signals
 from socket import AddressFamily, SocketKind
 from threading import Thread
-from types import TracebackType
+from types import CodeType, TracebackType
 from typing import (
     IO,
     TYPE_CHECKING,
@@ -449,7 +447,7 @@ class CancelScope(BaseCancelScope):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> bool | None:
+    ) -> bool:
         del exc_tb
 
         if not self._active:
@@ -677,45 +675,7 @@ class TaskState:
         self.cancel_scope = cancel_scope
 
 
-class TaskStateStore(MutableMapping["Awaitable[Any] | asyncio.Task", TaskState]):
-    def __init__(self) -> None:
-        self._task_states = WeakKeyDictionary[asyncio.Task, TaskState]()
-        self._preliminary_task_states: dict[Awaitable[Any], TaskState] = {}
-
-    def __getitem__(self, key: Awaitable[Any] | asyncio.Task, /) -> TaskState:
-        assert isinstance(key, asyncio.Task)
-        try:
-            return self._task_states[key]
-        except KeyError:
-            if coro := key.get_coro():
-                if state := self._preliminary_task_states.get(coro):
-                    return state
-
-        raise KeyError(key)
-
-    def __setitem__(
-        self, key: asyncio.Task | Awaitable[Any], value: TaskState, /
-    ) -> None:
-        if isinstance(key, asyncio.Task):
-            self._task_states[key] = value
-        else:
-            self._preliminary_task_states[key] = value
-
-    def __delitem__(self, key: asyncio.Task | Awaitable[Any], /) -> None:
-        if isinstance(key, asyncio.Task):
-            del self._task_states[key]
-        else:
-            del self._preliminary_task_states[key]
-
-    def __len__(self) -> int:
-        return len(self._task_states) + len(self._preliminary_task_states)
-
-    def __iter__(self) -> Iterator[Awaitable[Any] | asyncio.Task]:
-        yield from self._task_states
-        yield from self._preliminary_task_states
-
-
-_task_states = TaskStateStore()
+_task_states: WeakKeyDictionary[asyncio.Task, TaskState] = WeakKeyDictionary()
 
 
 #
@@ -741,24 +701,10 @@ class _AsyncioTaskStatus(abc.TaskStatus):
         _task_states[task].parent_id = self._parent_id
 
 
-async def _wait(tasks: Iterable[asyncio.Task[object]]) -> None:
-    tasks = set(tasks)
-    waiter = get_running_loop().create_future()
-
-    def on_completion(task: asyncio.Task[object]) -> None:
-        tasks.discard(task)
-        if not tasks and not waiter.done():
-            waiter.set_result(None)
-
-    for task in tasks:
-        task.add_done_callback(on_completion)
-        del task
-
-    try:
-        await waiter
-    finally:
-        while tasks:
-            tasks.pop().remove_done_callback(on_completion)
+if sys.version_info >= (3, 12):
+    _eager_task_factory_code: CodeType | None = asyncio.eager_task_factory.__code__
+else:
+    _eager_task_factory_code = None
 
 
 class TaskGroup(abc.TaskGroup):
@@ -767,6 +713,7 @@ class TaskGroup(abc.TaskGroup):
         self._active = False
         self._exceptions: list[BaseException] = []
         self._tasks: set[asyncio.Task] = set()
+        self._on_completed_fut: asyncio.Future[None] | None = None
 
     async def __aenter__(self) -> TaskGroup:
         self.cancel_scope.__enter__()
@@ -785,12 +732,15 @@ class TaskGroup(abc.TaskGroup):
                 if not isinstance(exc_val, CancelledError):
                     self._exceptions.append(exc_val)
 
+            loop = get_running_loop()
             try:
                 if self._tasks:
                     with CancelScope() as wait_scope:
                         while self._tasks:
+                            self._on_completed_fut = loop.create_future()
+
                             try:
-                                await _wait(self._tasks)
+                                await self._on_completed_fut
                             except CancelledError as exc:
                                 # Shield the scope against further cancellation attempts,
                                 # as they're not productive (#695)
@@ -805,6 +755,8 @@ class TaskGroup(abc.TaskGroup):
                                     and not is_anyio_cancellation(exc)
                                 ):
                                     exc_val = exc
+
+                            self._on_completed_fut = None
                 else:
                     # If there are no child tasks to wait on, run at least one checkpoint
                     # anyway
@@ -835,12 +787,18 @@ class TaskGroup(abc.TaskGroup):
         task_status_future: asyncio.Future | None = None,
     ) -> asyncio.Task:
         def task_done(_task: asyncio.Task) -> None:
-            # task_state = _task_states[_task]
+            task_state = _task_states[_task]
             assert task_state.cancel_scope is not None
             assert _task in task_state.cancel_scope._tasks
             task_state.cancel_scope._tasks.remove(_task)
             self._tasks.remove(task)
             del _task_states[_task]
+
+            if self._on_completed_fut is not None and not self._tasks:
+                try:
+                    self._on_completed_fut.set_result(None)
+                except asyncio.InvalidStateError:
+                    pass
 
             try:
                 exc = _task.exception()
@@ -892,26 +850,25 @@ class TaskGroup(abc.TaskGroup):
                 f"the return value ({coro!r}) is not a coroutine object"
             )
 
+        name = get_callable_name(func) if name is None else str(name)
+        loop = asyncio.get_running_loop()
+        if (
+            (factory := loop.get_task_factory())
+            and getattr(factory, "__code__", None) is _eager_task_factory_code
+            and (closure := getattr(factory, "__closure__", None))
+        ):
+            custom_task_constructor = closure[0].cell_contents
+            task = custom_task_constructor(coro, loop=loop, name=name)
+        else:
+            task = create_task(coro, name=name)
+
         # Make the spawned task inherit the task group's cancel scope
-        _task_states[coro] = task_state = TaskState(
+        _task_states[task] = TaskState(
             parent_id=parent_id, cancel_scope=self.cancel_scope
         )
-        name = get_callable_name(func) if name is None else str(name)
-        try:
-            task = create_task(coro, name=name)
-        finally:
-            del _task_states[coro]
-
-        _task_states[task] = task_state
         self.cancel_scope._tasks.add(task)
         self._tasks.add(task)
-
-        if task.done():
-            # This can happen with eager task factories
-            task_done(task)
-        else:
-            task.add_done_callback(task_done)
-
+        task.add_done_callback(task_done)
         return task
 
     def start_soon(
@@ -2114,10 +2071,9 @@ class _SignalReceiver:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> bool | None:
+    ) -> None:
         for sig in self._handled_signals:
             self._loop.remove_signal_handler(sig)
-        return None
 
     def __aiter__(self) -> _SignalReceiver:
         return self
@@ -2446,7 +2402,7 @@ class AsyncIOBackend(AsyncBackend):
         return CapacityLimiter(total_tokens)
 
     @classmethod
-    async def run_sync_in_worker_thread(
+    async def run_sync_in_worker_thread(  # type: ignore[return]
         cls,
         func: Callable[[Unpack[PosArgsT]], T_Retval],
         args: tuple[Unpack[PosArgsT]],
@@ -2468,7 +2424,7 @@ class AsyncIOBackend(AsyncBackend):
 
         async with limiter or cls.current_default_thread_limiter():
             with CancelScope(shield=not abandon_on_cancel) as scope:
-                future: asyncio.Future = asyncio.Future()
+                future = asyncio.Future[T_Retval]()
                 root_task = find_root_task()
                 if not idle_workers:
                     worker = WorkerThread(root_task, workers, idle_workers)

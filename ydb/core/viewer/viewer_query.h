@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NViewer {
 
@@ -257,12 +257,12 @@ public:
             CreateSessionResponse.Set(std::move(ev));
         } else {
             CreateSessionResponse.Error("FailedToCreateSession");
-            NYql::TIssue issue;
+            NYdb::NIssue::TIssue issue;
             issue.SetMessage("Failed to create session");
-            issue.SetCode(ev->Get()->Record.GetYdbStatus(), NYql::TSeverityIds::S_ERROR);
+            issue.SetCode(ev->Get()->Record.GetYdbStatus(), NYdb::NIssue::ESeverity::Error);
             NJson::TJsonValue json;
             TString message;
-            MakeJsonErrorReply(json, message, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYql::TIssues{issue}));
+            MakeJsonErrorReply(json, message, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NIssue::TIssues{issue}));
             return ReplyWithJsonAndPassAway(json, message);
         }
 
@@ -551,7 +551,7 @@ private:
             QueryResponse.Error("QueryError");
             NYql::TIssues issues;
             NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
-            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), std::move(issues)));
+            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
         }
         ReplyWithJsonAndPassAway(jsonResponse);
     }
@@ -563,7 +563,7 @@ private:
         if (record.IssuesSize() > 0) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetIssues(), issues);
-            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(record.GetStatusCode()), std::move(issues)));
+            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(record.GetStatusCode()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
         }
         ReplyWithJsonAndPassAway(jsonResponse);
     }
@@ -685,7 +685,7 @@ private:
                 }
             }
             catch (const std::exception& ex) {
-                NYql::TIssues issues;
+                NYdb::NIssue::TIssues issues;
                 issues.AddIssue(TStringBuilder() << "Convert error: " << ex.what());
                 MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, std::move(issues)));
                 return;

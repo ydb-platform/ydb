@@ -75,6 +75,9 @@ sql_stmt_core:
   | backup_stmt
   | restore_stmt
   | alter_sequence_stmt
+  | create_transfer_stmt
+  | alter_transfer_stmt
+  | drop_transfer_stmt
 ;
 
 expr:
@@ -905,6 +908,30 @@ alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 
 drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
 
+lambda_or_parameter:
+    lambda
+  | bind_parameter
+;
+
+create_transfer_stmt: CREATE TRANSFER object_ref
+    FROM object_ref TO object_ref (USING lambda_or_parameter)?
+    WITH LPAREN transfer_settings RPAREN
+;
+
+transfer_settings: transfer_settings_entry (COMMA transfer_settings_entry)*;
+transfer_settings_entry: an_id EQUALS expr;
+
+alter_transfer_stmt: ALTER TRANSFER object_ref alter_transfer_action (COMMA alter_transfer_action)*;
+alter_transfer_action:
+    alter_transfer_set_setting
+  | alter_transfer_set_using
+;
+
+alter_transfer_set_setting: SET LPAREN transfer_settings RPAREN;
+alter_transfer_set_using: SET USING lambda_or_parameter;
+
+drop_transfer_stmt: DROP TRANSFER object_ref CASCADE?;
+
 action_or_subquery_args: opt_bind_parameter (COMMA opt_bind_parameter)*;
 
 define_action_or_subquery_stmt: DEFINE (ACTION|SUBQUERY) bind_parameter LPAREN action_or_subquery_args? RPAREN AS define_action_or_subquery_body END DEFINE;
@@ -1465,6 +1492,7 @@ keyword_as_compat:
   | TO
   | TOPIC
   | TRANSACTION
+  | TRANSFER
   | TRIGGER
   | TYPE
   | UNCONDITIONAL
@@ -1692,6 +1720,7 @@ keyword_compat: (
   | TO
   | TOPIC
   | TRANSACTION
+  | TRANSFER
   | TRIGGER
   | TYPE
   | UNCONDITIONAL
@@ -2071,6 +2100,7 @@ TIES: T I E S;
 TO: T O;
 TOPIC: T O P I C;
 TRANSACTION: T R A N S A C T I O N;
+TRANSFER: T R A N S F E R;
 TRIGGER: T R I G G E R;
 TRUE: T R U E;
 TUPLE: T U P L E;

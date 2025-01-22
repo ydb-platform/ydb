@@ -357,6 +357,29 @@ TRuntimeNode ApplyPathRangesAndSampling(TRuntimeNode inputList, TType* itemType,
     return inputList;
 }
 
+TRuntimeNode ApplyQLFilter(TRuntimeNode inputList, const TYtTransientOpBase& ytOp, NCommon::TMkqlBuildContext& ctx) {
+    if (!ytOp.Maybe<TYtMap>() && !ytOp.Maybe<TYtMapReduce>() && !ytOp.Maybe<TYtMerge>()) {
+        return inputList;
+    }
+
+    const auto qlFilterSetting = NYql::GetSetting(ytOp.Settings().Ref(), EYtSettingType::QLFilter);
+    if (!qlFilterSetting) {
+        return inputList;
+    }
+
+    const auto qlFilterNode = qlFilterSetting->Child(1);
+    YQL_ENSURE(qlFilterNode && qlFilterNode->IsCallable("YtQLFilter"));
+    const TYtQLFilter qlFilter(qlFilterNode);
+    const auto arg = qlFilter.Predicate().Args().Arg(0).Raw();
+    const auto body = qlFilter.Predicate().Body().Raw();
+    const auto lambdaId = qlFilter.Predicate().Ref().UniqueId();
+
+    return ctx.ProgramBuilder.OrderedFilter(inputList, [&] (TRuntimeNode item) -> TRuntimeNode {
+        NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, item}}, lambdaId);
+        return NCommon::MkqlBuildExpr(*body, innerCtx);
+    });
+}
+
 TRuntimeNode ToList(TRuntimeNode list, NCommon::TMkqlBuildContext& ctx) {
     const auto listType = list.GetStaticType();
     if (listType->IsOptional()) {
@@ -598,6 +621,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 ytOp.DataSink().Cluster().Value(), ytOp.Input().Ref(), ctx, THashSet<TString>{"num", "index"}, forceKeyColumns);
 
             values = ApplyPathRangesAndSampling(values, mkqlInputType, ytOp.Input().Ref(), ctx);
+            values = ApplyQLFilter(values, ytOp, ctx);
 
             if ((ytOp.Maybe<TYtMerge>() && outTableInfo.RowSpec->IsSorted() && ytOp.Input().Item(0).Paths().Size() > 1)
                 || ytOp.Maybe<TYtSort>())
@@ -627,6 +651,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
                 ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
             values = ApplyPathRangesAndSampling(values, itemType, ytMap.Input().Ref(), ctx);
+            values = ApplyQLFilter(values, ytMap, ctx);
 
             auto& lambdaInputType = GetSeqItemType(*ytMap.Mapper().Args().Arg(0).Ref().GetTypeAnn());
             auto& lambdaOutputType = GetSeqItemType(*ytMap.Mapper().Body().Ref().GetTypeAnn());
@@ -826,6 +851,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 THashSet<TString>{"num", "index"}, forceKeyColumns);
 
             values = ApplyPathRangesAndSampling(values, itemType, ytMapReduce.Input().Ref(), ctx);
+            values = ApplyQLFilter(values, ytMapReduce, ctx);
 
             const auto outputItemType = BuildOutputType(ytMapReduce.Output(), ctx);
             const size_t outputsCount = ytMapReduce.Output().Ref().ChildrenSize();

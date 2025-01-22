@@ -70,7 +70,7 @@ public:
             SUCCESS,
             INVALID_USER,
             INVALID_PASSWORD,
-            UNAVAILABLE_KEY,
+            UNAVAILABLE_KEY
         };
 
         TString Token;
@@ -94,11 +94,13 @@ public:
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
+        bool CanLogin = true;
     };
 
     struct TModifyUserRequest : TBasicRequest {
         TString User;
-        TString Password;
+        std::optional<TString> Password;
+        std::optional<bool> CanLogin;
     };
 
     struct TRemoveUserResponse : TBasicResponse {
@@ -160,10 +162,9 @@ public:
     struct TSidRecord {
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
-        TString Hash;
+        TString PasswordHash;
+        bool IsEnabled;
         std::unordered_set<TString> Members;
-        // CreatedAt, FailedLoginAttemptCount, LastFailedLogin, LastSuccessfulLogin do not need in describe result.
-        // We will not add these parameters to security state
         std::chrono::system_clock::time_point CreatedAt;
         size_t FailedLoginAttemptCount = 0;
         std::chrono::system_clock::time_point LastFailedLogin;
@@ -173,7 +174,7 @@ public:
     // our current audience (database name)
     TString Audience;
 
-    // all users and theirs hashs
+    // all users and groups
     std::unordered_map<TString, TSidRecord> Sids;
 
     // index for fast traversal

@@ -2,7 +2,7 @@
 #include "dump_impl.h"
 #include "restore_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <library/cpp/logger/log.h>
 

@@ -25,7 +25,6 @@
  ****************************************************************************************/
 
 .text
-.private_extern _make_fcontext
 .globl _make_fcontext
 .align 8
 _make_fcontext:

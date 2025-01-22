@@ -49,7 +49,7 @@ TNode THttpRawClient::TryGet(
         if (!error.IsResolveError()) {
             throw;
         }
-        return TNode();
+        return {};
     }
 }
 

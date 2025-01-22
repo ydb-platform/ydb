@@ -9,8 +9,6 @@ from yql_utils import get_param as yql_get_param
 from google.protobuf import text_format
 import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 
-# FIXME: remove usage from dq_file/hybrid_file/kqp_yt_file
-DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 try:
     SQLRUN_PATH = yatest.common.binary_path('yql/essentials/tools/sql2yql/sql2yql')
 except BaseException:
@@ -71,7 +69,7 @@ def pytest_generate_tests_by_template(template, metafunc, data_path):
     metafunc.parametrize(['suite', 'case'], argvalues)
 
 
-def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, currentPart=0, partsCount=1, data_path=None):
+def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, currentPart=0, partsCount=1, data_path=None, mode_expander=None):
     assert data_path is not None
     argvalues = []
 
@@ -95,25 +93,26 @@ def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, curren
             ]
             if os.path.exists(suite_dir + '/' + case + '.cfg'):
                 configs.append('')
+            to_append = []
             for cfg in sorted(configs):
                 if _make_hash((suite, case, cfg)) % partsCount == currentPart:
-                    argvalues.append((suite, case, cfg))
+                    to_append.append((suite, case, cfg))
             if not configs and _make_hash((suite, case, 'default.txt')) % partsCount == currentPart:
-                argvalues.append((suite, case, 'default.txt'))
+                to_append.append((suite, case, 'default.txt'))
+            if mode_expander is None:
+                argvalues += to_append
+            else:
+                argvalues += mode_expander(to_append)
 
     metafunc.parametrize(
-        ['suite', 'case', 'cfg'],
+        ['suite', 'case', 'cfg'] + (['what'] if mode_expander is not None else []),
         argvalues,
     )
 
 
-# FIXME make data_path required (dq usage)
-def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None, template='.sql'):
-    if data_path is None:
-        data_path = DATA_PATH
-
+def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None, template='.sql', mode_expander=None):
     return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount,
-                                         data_path=data_path, template=template)
+                                         data_path=data_path, template=template, mode_expander=mode_expander)
 
 
 def get_cfg_file(cfg, case):
@@ -148,10 +147,8 @@ def validate_cfg(result):
             ), "Unknown command in .cfg: %s" % (r[0])
 
 
-# FIXME make data_path required (dq usage)
-def get_config(suite, case, cfg, data_path=None):
-    if data_path is None:
-        data_path = DATA_PATH
+def get_config(suite, case, cfg, data_path):
+    assert data_path is not None
     result = []
     try:
         default_cfg = get_cfg_file('default.txt', case)
@@ -174,10 +171,8 @@ def load_json_file_strip_comments(path):
         return '\n'.join([line for line in file.readlines() if not line.startswith('#')])
 
 
-# FIXME make data_path required (dq usage)
-def get_parameters_files(suite, config, data_path=None):
-    if data_path is None:
-        data_path = DATA_PATH
+def get_parameters_files(suite, config, data_path):
+    assert data_path is not None
 
     result = []
     for line in config:

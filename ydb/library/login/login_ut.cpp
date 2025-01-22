@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(Login) {
 
         TLoginProvider::TLoginUserRequest loginUser1Request2  = {
             .User = modifyUser1Request.User,
-            .Password = modifyUser1Request.Password
+            .Password = modifyUser1Request.Password.value()
         };
         TLoginProvider::TLoginUserResponse loginUser1Response2 = provider.LoginUser(loginUser1Request2);
         UNIT_ASSERT_VALUES_EQUAL(loginUser1Response2.Error, "");

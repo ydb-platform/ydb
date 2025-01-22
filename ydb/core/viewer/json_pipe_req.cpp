@@ -47,13 +47,13 @@ void TViewerPipeClient::BuildParamsFromJson(TStringBuf data) {
 void TViewerPipeClient::SetupTracing(const TString& handlerName) {
     auto request = GetRequest();
     NWilson::TTraceId traceId;
-    TStringBuf traceparent = request.GetHeader("traceparent");
+    TString traceparent = request.GetHeader("traceparent");
     if (traceparent) {
         traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
     }
-    TStringBuf wantTrace = request.GetHeader("X-Want-Trace");
-    TStringBuf traceVerbosity = request.GetHeader("X-Trace-Verbosity");
-    TStringBuf traceTTL = request.GetHeader("X-Trace-TTL");
+    TString wantTrace = request.GetHeader("X-Want-Trace");
+    TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
+    TString traceTTL = request.GetHeader("X-Trace-TTL");
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
         ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
         if (traceVerbosity) {

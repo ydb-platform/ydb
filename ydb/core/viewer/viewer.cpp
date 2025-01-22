@@ -57,13 +57,13 @@ public:
             TVector<TString> viewerAllowedSIDs;
             TVector<TString> monitoringAllowedSIDs;
             {
-                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetSecurityConfig().GetViewerAllowedSIDs();
+                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetViewerAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
                     viewerAllowedSIDs.emplace_back(sid);
                 }
             }
             {
-                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetSecurityConfig().GetMonitoringAllowedSIDs();
+                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetMonitoringAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
                     monitoringAllowedSIDs.emplace_back(sid);
                 }
@@ -205,8 +205,8 @@ public:
 
     bool CheckAccessAdministration(const TRequestState& request) override {
         auto userTokenObject = request.GetUserTokenObject();
-        if (!KikimrRunConfig.AppConfig.GetSecurityConfig().GetEnforceUserTokenRequirement()) {
-            if (!KikimrRunConfig.AppConfig.GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
+        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
                 return true;
             }
         }
@@ -214,7 +214,7 @@ public:
             return false;
         }
         auto token = std::make_unique<NACLib::TUserToken>(userTokenObject);
-        for (const auto& allowedSID : KikimrRunConfig.AppConfig.GetSecurityConfig().GetAdministrationAllowedSIDs()) {
+        for (const auto& allowedSID : KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetAdministrationAllowedSIDs()) {
             if (token->IsExist(allowedSID)) {
                 return true;
             }

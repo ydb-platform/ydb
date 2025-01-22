@@ -69,6 +69,7 @@ def post_install(self):
                 CFLAGS(
                     -D_LIBCPP_SAFE_STATIC=
                     -D_LIBCXXABI_DTOR_FUNC=
+                    -D__USING_WASM_EXCEPTIONS__
                 )
             ENDIF()
             """,
@@ -96,6 +97,7 @@ libcxxabi = NixSourceProject(
     ],
     disable_includes=[
         "aix_state_tab_eh.inc",
+        "sys/futex.h",
     ],
     post_install=post_install,
 )

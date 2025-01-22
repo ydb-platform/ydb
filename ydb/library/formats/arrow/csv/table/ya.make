@@ -6,7 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/formats/arrow/csv/converter
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/table
 )
 
 END()

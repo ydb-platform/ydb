@@ -73,7 +73,7 @@ void CheckToken(const TString& token, const NKikimrScheme::TEvDescribeSchemeResu
 
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
-    Y_UNIT_TEST(BasicLogin) {
+    Y_UNIT_TEST(Login) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -116,111 +116,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
-        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
-        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir2");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
-        AsyncMkDir(runtime, ++txId, "/MyRoot/Dir1", "DirSub1");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
-        AsyncMkDir(runtime, ++txId, "/MyRoot/Dir1", "DirSub2");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
-
-        NACLib::TDiffACL diffACL;
-        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
-        AsyncModifyACL(runtime, ++txId, "", "MyRoot", diffACL.SerializeAsString(), "");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
-        AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
-        AsyncModifyACL(runtime, ++txId, "/MyRoot/Dir1", "DirSub2", diffACL.SerializeAsString(), "");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
-            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir2"),
-            {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
-            {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub2"),
-            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-
         CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
 
-        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1/DirSub2").DebugString() << Endl;
-        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
-
-        for (auto path : {"/MyRoot", "/MyRoot/Dir1", "/MyRoot/Dir2", "/MyRoot/Dir1/DirSub1", "/MyRoot/Dir1/DirSub2"}) {
-            TestDescribeResult(DescribePath(runtime, path),
-                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
-        }
-
-        // check login
+        // check user has been removed:
         {
             auto resultLogin = Login(runtime, "user1", "password1");
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
         }
-
-        // another still has access
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
-            {NLs::HasRight("+U:user2"), NLs::HasEffectiveRight("+U:user2")});
-    }
-
-    Y_UNIT_TEST(RemoveLogin_SubTree) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
-        auto resultLogin = Login(runtime, "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-
-        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
-        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir2");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
-        AsyncMkDir(runtime, ++txId, "/MyRoot/Dir1", "DirSub1");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
-        AsyncMkDir(runtime, ++txId, "/MyRoot/Dir1", "DirSub2");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
-
-        NACLib::TDiffACL diffACL;
-        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
-        AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-            {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
-            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir2"),
-            {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
-            {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub2"),
-            {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-
-        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
-
-        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1/DirSub2").DebugString() << Endl;
-        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
-
-        for (auto path : {"/MyRoot", "/MyRoot/Dir1", "/MyRoot/Dir2", "/MyRoot/Dir1/DirSub1", "/MyRoot/Dir1/DirSub2"}) {
-            TestDescribeResult(DescribePath(runtime, path),
-                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
-        }
-
-        // check login
-        {
-            auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
-        }
-
-        // another still has access
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
-            {NLs::HasRight("+U:user2"), NLs::HasEffectiveRight("+U:user2")});
     }
 
     Y_UNIT_TEST(RemoveLogin_NonExisting) {
@@ -246,6 +148,51 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
+    Y_UNIT_TEST(RemoveLogin_Groups) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1/DirSub1");
+
+        CreateAlterLoginCreateGroup(runtime, ++txId, "/MyRoot", "group");
+        AlterLoginAddGroupMembership(runtime, ++txId, "/MyRoot", "user1", "group");
+        AlterLoginAddGroupMembership(runtime, ++txId, "/MyRoot", "user2", "group");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasGroup("group", {"user1", "user2"})});
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "group");
+        AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),{
+            NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"),
+            NLs::HasRight("+U:group"), NLs::HasEffectiveRight("+U:group")});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),{
+            NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"),
+            NLs::HasNoRight("+U:group"), NLs::HasEffectiveRight("+U:group")});
+
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
+
+        // check user has been removed:
+        {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasGroup("group", {"user2"})});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),{
+                NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"),
+                NLs::HasRight("+U:group"), NLs::HasEffectiveRight("+U:group")});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),{
+                NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"),
+                NLs::HasNoRight("+U:group"), NLs::HasEffectiveRight("+U:group")});
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
+        }
+    }
+
     Y_UNIT_TEST(RemoveLogin_Owner) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -257,13 +204,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1/DirSub1");
 
-        NACLib::TDiffACL diffACL;
-        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-        AsyncModifyACL(runtime, ++txId, "/MyRoot/Dir1", "DirSub1", diffACL.SerializeAsString(), "user1");
+        AsyncModifyACL(runtime, ++txId, "/MyRoot/Dir1", "DirSub1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
         TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
-            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1"), NLs::HasOwner("user1")});
+            {NLs::HasOwner("user1")});
 
         // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
         // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
@@ -274,7 +219,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // check user still exists and has their rights:
         {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
-                {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1"), NLs::HasOwner("user1")});
+                {NLs::HasOwner("user1")});
             auto resultLogin = Login(runtime, "user1", "password1");
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "");
         }
@@ -286,7 +231,69 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // check user has been removed:
         {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
-                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"), NLs::HasOwner("user2")});
+                {NLs::HasOwner("user2")});
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
+        }
+    }
+
+    Y_UNIT_TEST(RemoveLogin_Acl) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1/DirSub1");
+
+        {
+            NACLib::TDiffACL diffACL;
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+            AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+                {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+                {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+        }
+
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
+        // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
+
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1",
+            TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed, "User user1 has an ACL record on /MyRoot/Dir1 and can't be removed"}});
+
+        // check user still exists and has their rights:
+        {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+                {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+                {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "");
+        }
+
+        {
+            NACLib::TDiffACL diffACL;
+            diffACL.RemoveAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+            AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
+        }
+
+        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
+
+        // check user has been removed:
+        {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+                {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
             auto resultLogin = Login(runtime, "user1", "password1");
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
         }
@@ -382,7 +389,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
-    Y_UNIT_TEST(FailedLoginWithInvalidUser) {
+    Y_UNIT_TEST(FailedLoginUserUnderNameOfGroup) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -402,6 +409,81 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
         }
+    }
+
+    Y_UNIT_TEST(FailedLoginWithInvalidUser) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            Cerr << describe.DebugString() << Endl;
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
+        }
+    }
+
+    Y_UNIT_TEST(BanUnbanUser) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            Cerr << describe.DebugString() << Endl;
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "123");
+        auto resultLogin1 = Login(runtime, "user1", "123");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin1.error(), "");
+        ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", false);
+        auto resultLogin2 = Login(runtime, "user1", "123");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin2.error(), "User user1 is not permitted to log in");
+        ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", true);
+        auto resultLogin3 = Login(runtime, "user1", "123");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin3.error(), "");
+    }
+
+    Y_UNIT_TEST(BanUserWithWaiting) {
+        TTestBasicRuntime runtime;
+
+        runtime.AddAppDataInit([] (ui32, NKikimr::TAppData& appData) {
+            appData.AuthConfig.MutableAccountLockout()->SetAttemptResetDuration("3s");
+        });
+
+        TTestEnv env(runtime);
+        auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
+        ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            Cerr << describe.DebugString() << Endl;
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "123");
+
+        for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {
+            auto resultLogin = Login(runtime, "user1", "wrongpassword");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        }
+
+        ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", false);
+
+        // User is blocked for 3 seconds
+        Sleep(TDuration::Seconds(4));
+
+        auto resultLogin = Login(runtime, "user1", "123");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "User user1 is not permitted to log in");
     }
 
     Y_UNIT_TEST(ChangeAcceptablePasswordParameters) {
@@ -645,11 +727,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         // Also do not accept correct password
         resultLogin = Login(runtime, "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -742,7 +824,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -772,8 +854,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user2", TStringBuilder() << "wrongpassword2" << newAttemptThreshold);
-        // User is locked out after 6 attempts
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is locked out");
+        // User is not permitted to log in after 6 attempts
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is not permitted to log in");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -784,7 +866,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // After 4 seconds user2 must be locked out
         Sleep(TDuration::Seconds(4));
         resultLogin = Login(runtime, "user2", "wrongpassword28");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is not permitted to log in");
 
         // After 7 seconds user2 must be unlocked
         Sleep(TDuration::Seconds(8));
@@ -817,11 +899,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         // Also do not accept correct password
         resultLogin = Login(runtime, "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
     }
 
     Y_UNIT_TEST(CheckThatLockedOutParametersIsRestoredFromLocalDb) {
@@ -858,7 +940,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -870,7 +952,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         // After reboot schemeshard user1 must be locked out
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is locked out");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
 
         // User1 must be unlocked in 1 second after reboot schemeshard
         Sleep(TDuration::Seconds(2));

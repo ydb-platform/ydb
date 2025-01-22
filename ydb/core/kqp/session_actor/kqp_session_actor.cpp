@@ -24,7 +24,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 #include <ydb/core/util/ulid.h>
@@ -72,7 +72,7 @@ std::optional<TString> TryDecodeYdbSessionId(const TString& sessionId) {
             return std::nullopt;
         }
 
-        return *ids[0];
+        return TString{*ids[0]};
     } catch (...) {
         return std::nullopt;
     }
@@ -282,7 +282,7 @@ public:
             if (!ctx->BufferActorId) {
                 Transactions.AddToBeAborted(std::move(ctx));
             } else {
-                TerminateBufferActor();
+                TerminateBufferActor(ctx);
             }
             ReplySuccess();
         } else {
@@ -1554,6 +1554,12 @@ public:
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
 
+        if (executerResults.ParticipantNodesSize()) {
+            for (auto nodeId : executerResults.GetParticipantNodes()) {
+                QueryState->ParticipantNodes.emplace(nodeId);
+            }
+        }
+
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
             const auto executionType = ev->ExecutionType;
 
@@ -1992,7 +1998,7 @@ public:
             if (!ctx->BufferActorId) {
                 Transactions.AddToBeAborted(std::move(ctx));
             } else {
-                TerminateBufferActor();
+                TerminateBufferActor(ctx);
             }
         }
 
@@ -2017,7 +2023,7 @@ public:
             if (!ctx->BufferActorId) {
                 Transactions.AddToBeAborted(std::move(ctx));
             } else {
-                TerminateBufferActor();
+                TerminateBufferActor(ctx);
             }
         }
 
@@ -2220,10 +2226,10 @@ public:
 
     void ResetTxState() {
         if (QueryState->TxCtx) {
+            TerminateBufferActor(QueryState->TxCtx);
             QueryState->TxCtx->ClearDeferredEffects();
             QueryState->TxCtx->Locks.Clear();
             QueryState->TxCtx->TxManager.reset();
-            TerminateBufferActor();
             QueryState->TxCtx->Finish();
         }
     }
@@ -2238,18 +2244,18 @@ public:
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
             if (txCtx->IsInvalidated()) {
-                if (!txCtx->TxManager) {
+                if (!txCtx->BufferActorId) {
                     Transactions.AddToBeAborted(txCtx);
                 } else {
-                    TerminateBufferActor();
+                    TerminateBufferActor(txCtx);
                 }
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }
 
-        if (isFinal)
-            TerminateBufferActor();
+        if (isFinal && QueryState)
+            TerminateBufferActor(QueryState->TxCtx);
 
         if (isFinal)
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
@@ -2300,6 +2306,13 @@ public:
             auto forwardId = MakeKqpWorkloadServiceId(SelfId().NodeId());
             Send(new IEventHandle(*QueryState->PoolHandlerActor, SelfId(), event.release(), IEventHandle::FlagForwardOnNondelivery, 0, &forwardId));
             QueryState->PoolHandlerActor = Nothing();
+        }
+
+        if (QueryState && QueryState->ParticipantNodes.size() == 1) {
+            Counters->TotalSingleNodeReqCount->Inc();
+            if (!QueryState->IsLocalExecution(SelfId().NodeId())) {
+                Counters->NonLocalSingleNodeReqCount->Inc();
+            }
         }
 
         LOG_I("Cleanup start, isFinal: " << isFinal << " CleanupCtx: " << bool{CleanupCtx}
@@ -2720,10 +2733,10 @@ private:
         QueryState->TxCtx->TopicOperations.SetWriteId(std::move(handle));
     }
 
-    void TerminateBufferActor() {
-        if (QueryState && QueryState->TxCtx && QueryState->TxCtx->BufferActorId) {
-            Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
-            QueryState->TxCtx->BufferActorId = {};
+    void TerminateBufferActor(TIntrusivePtr<TKqpTransactionContext> ctx) {
+        if (ctx && ctx->BufferActorId) {
+            Send(ctx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
+            ctx->BufferActorId = {};
         }
     }
 

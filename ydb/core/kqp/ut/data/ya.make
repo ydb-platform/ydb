@@ -14,7 +14,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/tx
     ydb/core/tx/datashard/ut_common
-    ydb/public/sdk/cpp/client/ydb_types
+    ydb/public/sdk/cpp/src/client/types
 )
 
 YQL_LAST_ABI_VERSION()

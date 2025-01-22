@@ -115,6 +115,7 @@ public:
         AddHandler({TYtDqWideWrite::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDqWrite<true>));
         AddHandler({TYtTryFirst::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleTryFirst));
         AddHandler({TYtMaterialize::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleMaterialize));
+        AddHandler({TYtQLFilter::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleQLFilter));
     }
 
 private:
@@ -1013,7 +1014,7 @@ private:
 
         auto merge = TYtMerge(input);
 
-        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
+        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq | EYtSettingType::QLFilter, ctx)) {
             return TStatus::Error;
         }
 
@@ -1097,7 +1098,8 @@ private:
             | EYtSettingType::BlockInputReady
             | EYtSettingType::BlockInputApplied
             | EYtSettingType::BlockOutputReady
-            | EYtSettingType::BlockOutputApplied;
+            | EYtSettingType::BlockOutputApplied
+            | EYtSettingType::QLFilter;
         if (!ValidateSettings(map.Settings().Ref(), accpeted, ctx)) {
             return TStatus::Error;
         }
@@ -1297,7 +1299,8 @@ private:
             | EYtSettingType::KeySwitch
             | EYtSettingType::MapOutputType
             | EYtSettingType::ReduceInputType
-            | EYtSettingType::NoDq;
+            | EYtSettingType::NoDq
+            | EYtSettingType::QLFilter;
         if (!ValidateSettings(mapReduce.Settings().Ref(), acceptedSettings, ctx)) {
             return TStatus::Error;
         }
@@ -2139,6 +2142,38 @@ private:
         }
 
         input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(&itemType));
+        return TStatus::Ok;
+    }
+
+    TStatus HandleQLFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto& type = input->Child(0);
+        if (!EnsureTypeWithStructType(*type, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& lambda = input->ChildRef(1);
+        const auto status = ConvertToLambda(lambda, ctx, 1);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {type->GetTypeAnn()->Cast<TTypeExprType>()->GetType()}, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!lambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (!EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
         return TStatus::Ok;
     }
 

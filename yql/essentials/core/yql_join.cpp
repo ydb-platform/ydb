@@ -430,6 +430,31 @@ namespace {
         CollectEquiJoinKeyColumnsFromLeaf(*joinTree.Child(4), tableKeysMap);
     }
 
+    void CollectAdditiveInputLabelsSide(const TCoEquiJoinTuple& joinTree, bool hasAny, THashMap<TStringBuf, bool>& isAdditiveByLabel,
+                                        bool isLeft, const TEquiJoinLinkSettings& settings);
+
+    void CollectAdditiveInputLabels(const TCoEquiJoinTuple& joinTree, bool hasAny, THashMap<TStringBuf, bool>& isAdditiveByLabel) {
+        auto settings = GetEquiJoinLinkSettings(joinTree.Options().Ref());
+        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, true, settings);
+        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, false, settings);
+    }
+
+    void CollectAdditiveInputLabelsSide(const TCoEquiJoinTuple& joinTree, bool hasAny, THashMap<TStringBuf, bool>& isAdditiveByLabel, bool isLeft, const TEquiJoinLinkSettings& settings) {
+        hasAny = hasAny || (isLeft ? settings.LeftHints : settings.RightHints).contains("any");
+        const auto scope = isLeft ? joinTree.LeftScope() : joinTree.RightScope();
+        TStringBuf joinKind = joinTree.Type().Value();
+        if (scope.Maybe<TCoEquiJoinTuple>()) {
+            CollectAdditiveInputLabels(scope.Cast<TCoEquiJoinTuple>(), hasAny, isAdditiveByLabel);
+        } else {
+            YQL_ENSURE(scope.Maybe<TCoAtom>());
+            bool additive = !hasAny && (joinKind == (isLeft ? "Left" : "Right") || joinKind == "Inner" || joinKind == "Cross");
+            TStringBuf label = scope.Cast<TCoAtom>().Value();
+            if (!additive || !isAdditiveByLabel.contains(label)) {
+                isAdditiveByLabel[label] = additive;
+            }
+        }
+    }
+
     bool CollectEquiJoinOnlyParents(const TExprNode& current, const TExprNode* prev, ui32 depth,
                                     TVector<TEquiJoinParent>& results, const TExprNode* extractMembersInScope,
                                     const TParentsMap& parents)
@@ -949,6 +974,12 @@ bool IsRightJoinSideOptional(const TStringBuf& joinType) {
     }
 
     return false;
+}
+
+THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const TCoEquiJoinTuple& joinTree) {
+    THashMap<TStringBuf, bool> result;
+    CollectAdditiveInputLabels(joinTree, false, result);
+    return result;
 }
 
 TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,

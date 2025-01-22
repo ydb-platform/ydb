@@ -7,6 +7,7 @@
 
 #include <yt/cpp/mapreduce/http/retry_request.h>
 
+#include <yt/cpp/mapreduce/interface/raw_batch_request.h>
 #include <yt/cpp/mapreduce/interface/config.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
@@ -14,19 +15,11 @@
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/serialize.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
-#include <yt/cpp/mapreduce/raw_client/rpc_parameters_serialization.h>
-
 #include <util/generic/guid.h>
 #include <util/string/builder.h>
 
-#include <exception>
-
 namespace NYT {
 namespace NDetail {
-
-using namespace NRawClient;
 
 using ::NThreading::TFuture;
 using ::NThreading::TPromise;

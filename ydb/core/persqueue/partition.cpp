@@ -3353,12 +3353,19 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
 void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request) {
     for (auto it = HeadKeys.rbegin(); it != HeadKeys.rend(); ++it) {
         if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
-            auto del = request->Record.AddCmdDeleteRange();
-            auto range = del->MutableRange();
-            range->SetFrom(it->Key.Data(), it->Key.Size());
-            range->SetIncludeFrom(true);
-            range->SetTo(it->Key.Data(), it->Key.Size());
-            range->SetIncludeTo(true);
+            Y_ABORT_UNLESS(it->RefCount > 0,
+                           "Key: %s, RefCount %" PRISZT,
+                           it->Key.ToString().data(), it->RefCount);
+            --it->RefCount;
+            Cerr << "=== delete key: [" << it->Key.ToString() << "]" << Endl;
+
+            //auto del = request->Record.AddCmdDeleteRange();
+            //auto range = del->MutableRange();
+            //range->SetFrom(it->Key.Data(), it->Key.Size());
+            //range->SetIncludeFrom(true);
+            //range->SetTo(it->Key.Data(), it->Key.Size());
+            //range->SetIncludeTo(true);
+            Y_UNUSED(request);
         } else {
             break;
         }

@@ -493,7 +493,7 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
         StopSession(sessionInfo);
     }
     TActor<TDqPqRdReadActor>::PassAway();
-    
+
     // TODO: RetryQueue::Unsubscribe()
 }
 
@@ -769,7 +769,7 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
                 SRC_LOG_D("Erase session to " << ev->Sender.ToString());
                 ReadActorByEventQueueId.erase(sessionInfo.EventQueueId);
                 Sessions.erase(ev->Sender);
-                ReInit("Reset session state");
+                ReInit("Reset session state (by TEvUndelivered)");
             }
         }
     }

@@ -776,7 +776,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
         // disable stats batching
         auto& appData = runtime.GetAppData();

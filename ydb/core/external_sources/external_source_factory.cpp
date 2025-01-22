@@ -23,7 +23,7 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
         if (it != Sources.end()) {
             return it->second;
         }
-        ythrow TExternalSourceException() << "External source with type " << type << " was not found";
+        throw TExternalSourceException() << "External source with type " << type << " was not found";
     }
 
 private:

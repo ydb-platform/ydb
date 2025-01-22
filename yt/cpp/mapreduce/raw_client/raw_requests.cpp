@@ -30,55 +30,6 @@ namespace NYT::NDetail::NRawClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ExecuteBatch(
-    IRequestRetryPolicyPtr retryPolicy,
-    const TClientContext& context,
-    TRawBatchRequest& batchRequest,
-    const TExecuteBatchOptions& options)
-{
-    if (batchRequest.IsExecuted()) {
-        ythrow yexception() << "Cannot execute batch request since it is already executed";
-    }
-    Y_DEFER {
-        batchRequest.MarkExecuted();
-    };
-
-    const auto concurrency = options.Concurrency_.GetOrElse(50);
-    const auto batchPartMaxSize = options.BatchPartMaxSize_.GetOrElse(concurrency * 5);
-
-    if (!retryPolicy) {
-        retryPolicy = CreateDefaultRequestRetryPolicy(context.Config);
-    }
-
-    while (batchRequest.BatchSize()) {
-        TRawBatchRequest retryBatch(context.Config);
-
-        while (batchRequest.BatchSize()) {
-            auto parameters = TNode::CreateMap();
-            TInstant nextTry;
-            batchRequest.FillParameterList(batchPartMaxSize, &parameters["requests"], &nextTry);
-            if (nextTry) {
-                SleepUntil(nextTry);
-            }
-            parameters["concurrency"] = concurrency;
-            auto body = NodeToYsonString(parameters);
-            THttpHeader header("POST", "execute_batch");
-            header.AddMutationId();
-            NDetail::TResponseInfo result;
-            try {
-                result = RetryRequestWithPolicy(retryPolicy, context, header, body);
-            } catch (const std::exception& e) {
-                batchRequest.SetErrorResult(std::current_exception());
-                retryBatch.SetErrorResult(std::current_exception());
-                throw;
-            }
-            batchRequest.ParseResponse(std::move(result), retryPolicy.Get(), &retryBatch);
-        }
-
-        batchRequest = std::move(retryBatch);
-    }
-}
-
 TOperationAttributes ParseOperationAttributes(const TNode& node)
 {
     const auto& mapNode = node.AsMap();
@@ -301,12 +252,41 @@ TCheckPermissionResponse ParseCheckPermissionResponse(const TNode& node)
     return result;
 }
 
-TNode::TListType SkyShareTable(
-    const IRequestRetryPolicyPtr& retryPolicy,
+TRichYPath CanonizeYPath(
+    const IRawClientPtr& rawClient,
+    const TRichYPath& path)
+{
+    return CanonizeYPaths(rawClient, {path}).front();
+}
+
+TVector<TRichYPath> CanonizeYPaths(
+    const IRawClientPtr& rawClient,
+    const TVector<TRichYPath>& paths)
+{
+    auto batch = rawClient->CreateRawBatchRequest();
+
+    TVector<NThreading::TFuture<TRichYPath>> futures;
+    futures.reserve(paths.size());
+    for (const auto& path : paths) {
+        futures.push_back(batch->CanonizeYPath(path));
+    }
+
+    batch->ExecuteBatch();
+
+    TVector<TRichYPath> result;
+    result.reserve(futures.size());
+    for (auto& future : futures) {
+        result.push_back(future.ExtractValueSync());
+    }
+    return result;
+}
+
+NHttpClient::IHttpResponsePtr SkyShareTable(
     const TClientContext& context,
     const std::vector<TYPath>& tablePaths,
     const TSkyShareTableOptions& options)
 {
+    TMutationId mutationId;
     THttpHeader header("POST", "api/v1/share", /*IsApi*/ false);
 
     auto proxyName = context.ServerName.substr(0,  context.ServerName.find('.'));
@@ -322,54 +302,24 @@ TNode::TListType SkyShareTable(
         patchedOptions.Pool(context.Config->Pool);
     }
 
-    header.MergeParameters(NRawClient::SerializeParamsForSkyShareTable(proxyName, context.Config->Prefix, tablePaths, patchedOptions));
-    TClientContext skyApiHost({ .ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient() });
-    TResponseInfo response = {};
+    header.MergeParameters(SerializeParamsForSkyShareTable(proxyName, context.Config->Prefix, tablePaths, patchedOptions));
+    TClientContext skyApiHost({.ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient()});
 
-    // As documented at https://wiki.yandex-team.ru/yt/userdoc/blob_tables/#shag3.sozdajomrazdachu
-    // first request returns HTTP status code 202 (Accepted). And we need retrying until we have 200 (OK).
-    while (response.HttpCode != 200) {
-        response = RetryRequestWithPolicy(retryPolicy, skyApiHost, header, "");
-        TWaitProxy::Get()->Sleep(TDuration::Seconds(5));
-    }
-
-    if (options.KeyColumns_) {
-        return NodeFromJsonString(response.Response)["torrents"].AsList();
-    } else {
-        TNode torrent;
-
-        torrent["key"] = TNode::CreateList();
-        torrent["rbtorrent"] = response.Response;
-
-        return TNode::TListType{ torrent };
-    }
+    return RequestWithoutRetry(skyApiHost, mutationId, header, "");
 }
 
-TRichYPath CanonizeYPath(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TRichYPath& path)
+TAuthorizationInfo WhoAmI(const TClientContext& context)
 {
-    return CanonizeYPaths(retryPolicy, context, {path}).front();
-}
+    TMutationId mutationId;
+    THttpHeader header("GET", "auth/whoami", /*isApi*/ false);
+    auto requestResult = RequestWithoutRetry(context, mutationId, header);
+    TAuthorizationInfo result;
 
-TVector<TRichYPath> CanonizeYPaths(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TVector<TRichYPath>& paths)
-{
-    TRawBatchRequest batch(context.Config);
-    TVector<NThreading::TFuture<TRichYPath>> futures;
-    futures.reserve(paths.size());
-    for (int i = 0; i < static_cast<int>(paths.size()); ++i) {
-        futures.push_back(batch.CanonizeYPath(paths[i]));
-    }
-    ExecuteBatch(retryPolicy, context, batch, TExecuteBatchOptions{});
-    TVector<TRichYPath> result;
-    result.reserve(futures.size());
-    for (auto& future : futures) {
-        result.push_back(future.ExtractValueSync());
-    }
+    NJson::TJsonValue jsonValue;
+    bool ok = NJson::ReadJsonTree(requestResult->GetResponse(), &jsonValue, /*throwOnError*/ true);
+    Y_ABORT_UNLESS(ok);
+    result.Login = jsonValue["login"].GetString();
+    result.Realm = jsonValue["realm"].GetString();
     return result;
 }
 

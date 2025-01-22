@@ -2522,5 +2522,17 @@ TArrayRef<TType* const> GetWideComponents(const TStreamType* type) {
     return AS_TYPE(TMultiType, type->GetItemType())->GetElements();
 }
 
+TArrayRef<TType *const> GetWideComponents(const TType* type) {
+    if (type->IsFlow()) {
+        const auto outputFlowType = AS_TYPE(TFlowType, type);
+        return GetWideComponents(outputFlowType);
+    }
+    if (type->IsStream()) {
+        const auto outputStreamType = AS_TYPE(TStreamType, type);
+        return GetWideComponents(outputStreamType);
+    }
+    MKQL_ENSURE(false, "Expect either flow or stream");
+}
+
 }
 }

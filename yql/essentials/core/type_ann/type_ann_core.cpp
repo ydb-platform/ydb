@@ -5930,6 +5930,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr); status != IGraphTransformer::TStatus::Ok)
                 return status;
 
+            if (warn) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
             const auto dictType = IsSet ?
                 ctx.Expr.MakeType<TDictExprType>(commonType, ctx.Expr.MakeType<TVoidExprType>()):
                 ctx.Expr.MakeType<TDictExprType>(commonType->Cast<TTupleExprType>()->GetItems().front(), commonType->Cast<TTupleExprType>()->GetItems().back());
@@ -5943,7 +5946,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        return warn ? IGraphTransformer::TStatus::Repeat : IGraphTransformer::TStatus::Ok;
+        return IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus DictFromKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -9148,6 +9151,36 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         return IGraphTransformer::TStatus::Repeat;
+    }
+
+    IGraphTransformer::TStatus TableSourceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool isWide = input->Content().StartsWith("Wide");
+        if (isWide) {
+            if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList) {
+                ;
+            } else {
+                if (!EnsureListType(input->Head(), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                auto inputItemType = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+                if (!EnsureStructType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus SqlProcessWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -12620,6 +12653,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SqlVisit"] = &SqlVisitWrapper;
         Functions["Visit"] = &VisitWrapper;
         Functions["Way"] = &WayWrapper;
+        Functions["TableSource"] = &TableSourceWrapper;
+        Functions["WideTableSource"] = &TableSourceWrapper;
         Functions["SqlAccess"] = &SqlAccessWrapper;
         Functions["SqlProcess"] = &SqlProcessWrapper;
         Functions["SqlReduce"] = &SqlReduceWrapper;
@@ -12846,6 +12881,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
+
+        Functions["BlockMapJoinCore"] = &BlockMapJoinCoreWrapper;
 
         ExtFunctions["AsScalar"] = &AsScalarWrapper;
         ExtFunctions["WideToBlocks"] = &WideToBlocksWrapper;

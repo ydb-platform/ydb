@@ -434,8 +434,11 @@ public:
         return TValidator::CheckNotNull(GetTxOperatorOptional(txId));
     }
     template <class TExpectedTransactionOperator>
-    std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId) const {
+    std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId, const bool optionalExists = false) const {
         auto result = GetTxOperatorOptional(txId);
+        if (optionalExists && !result) {
+            return nullptr;
+        }
         AFL_VERIFY(result);
         auto resultClass = dynamic_pointer_cast<TExpectedTransactionOperator>(result);
         AFL_VERIFY(resultClass);

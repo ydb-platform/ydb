@@ -17,9 +17,6 @@
 
 namespace NKikimr {
 
-// We will unsubscribe from idle coordinators after 5 minutes
-static constexpr TDuration MaxIdleCoordinatorSubscriptionTime = TDuration::Minutes(5);
-
 ui64 TMediatorTimecastSharedEntry::Get() const noexcept {
     return Step.load(std::memory_order_acquire);
 }
@@ -192,7 +189,7 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
         THashSet<TActorId> Subscribers;
         TMap<std::pair<ui64, TActorId>, ui64> SubscribeRequests; // (seqno, subscriber) -> Cookie
         TMap<std::pair<ui64, TActorId>, ui64> WaitRequests; // (step, subscriber) -> Cookie
-        TMonotonic IdleStart;
+        bool Unsubscribed = false;
     };
 
     THashMap<ui64, TMediator> Mediators; // mediator tablet -> info
@@ -391,6 +388,7 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
 
     void SyncCoordinator(ui64 coordinatorId, TCoordinator& coordinator, const TActorContext& ctx);
     void ResyncCoordinator(ui64 coordinatorId, const TActorId& pipeClient, const TActorContext& ctx);
+    void UnsubscribeCoordinator(ui64 coordinatorId, TCoordinator& coordinator, const TActorContext& ctx);
     void NotifyCoordinatorWaiters(ui64 coordinatorId, TCoordinator& coordinator, const TActorContext& ctx);
 
     void Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr& ev, const TActorContext& ctx);
@@ -870,8 +868,9 @@ void TMediatorTimecastProxy::SyncCoordinator(ui64 coordinatorId, TCoordinator& c
             NTabletPipe::CreateClient(ctx.SelfID, coordinatorId, retryPolicy));
     }
 
-    coordinator.LastSentSeqNo = seqNo;
     NTabletPipe::SendData(ctx, coordinator.PipeClient, new TEvTxProxy::TEvSubscribeReadStep(coordinatorId, seqNo));
+    coordinator.LastSentSeqNo = seqNo;
+    coordinator.Unsubscribed = false;
 }
 
 void TMediatorTimecastProxy::ResyncCoordinator(ui64 coordinatorId, const TActorId& pipeClient, const TActorContext& ctx) {
@@ -894,6 +893,17 @@ void TMediatorTimecastProxy::ResyncCoordinator(ui64 coordinatorId, const TActorI
 
     ++LastSeqNo;
     SyncCoordinator(coordinatorId, coordinator, ctx);
+}
+
+void TMediatorTimecastProxy::UnsubscribeCoordinator(ui64 coordinatorId, TCoordinator& coordinator, const TActorContext& ctx) {
+    if (coordinator.Unsubscribed || !coordinator.PipeClient) {
+        return;
+    }
+
+    // Note: we leave the pipe open to make new subscriptions faster
+    // The idle entry will be removed when the pipe eventually disconnects
+    NTabletPipe::SendData(ctx, coordinator.PipeClient, new TEvTxProxy::TEvUnsubscribeReadStep(coordinatorId, coordinator.LastSentSeqNo));
+    coordinator.Unsubscribed = true;
 }
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvSubscribeReadStep::TPtr& ev, const TActorContext& ctx) {
@@ -924,7 +934,7 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUnsubscribeReadStep:
             auto& coordinator = Coordinators[coordinatorId];
             coordinator.Subscribers.erase(ev->Sender);
             if (coordinator.Subscribers.empty()) {
-                coordinator.IdleStart = ctx.Monotonic();
+                UnsubscribeCoordinator(coordinatorId, coordinator, ctx);
             }
         }
         subscriber.Coordinators.clear();
@@ -933,7 +943,7 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUnsubscribeReadStep:
         auto& coordinator = Coordinators[msg->CoordinatorId];
         coordinator.Subscribers.erase(ev->Sender);
         if (coordinator.Subscribers.empty()) {
-            coordinator.IdleStart = ctx.Monotonic();
+            UnsubscribeCoordinator(msg->CoordinatorId, coordinator, ctx);
         }
         subscriber.Coordinators.erase(msg->CoordinatorId);
     }
@@ -1041,16 +1051,6 @@ void TMediatorTimecastProxy::Handle(TEvTxProxy::TEvSubscribeReadStepUpdate::TPtr
         coordinator.ReadStep->Update(nextReadStep);
 
         NotifyCoordinatorWaiters(coordinatorId, coordinator, ctx);
-    }
-
-    // Unsubscribe from idle coordinators
-    if (coordinator.Subscribers.empty() && (ctx.Monotonic() - coordinator.IdleStart) >= MaxIdleCoordinatorSubscriptionTime) {
-        if (coordinator.PipeClient) {
-            NTabletPipe::CloseClient(ctx, coordinator.PipeClient);
-            coordinator.PipeClient = TActorId();
-        }
-
-        Coordinators.erase(itCoordinator);
     }
 }
 

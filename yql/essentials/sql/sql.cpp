@@ -144,6 +144,10 @@ namespace NSQLTranslation {
     }
 
     NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings) {
+        return SqlASTToYql("", protoAst, hints, settings);
+    }
+
+    NYql::TAstParseResult SqlASTToYql(const TString& query, const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings) {
         NYql::TAstParseResult result;
         switch (settings.SyntaxVersion) {
             case 0:
@@ -161,7 +165,7 @@ namespace NSQLTranslation {
 
                 return NSQLTranslationV0::SqlASTToYql(protoAst, settings);
             case 1:
-                return NSQLTranslationV1::SqlASTToYql(protoAst, hints, settings);
+                return NSQLTranslationV1::SqlASTToYql(query, protoAst, hints, settings);
             default:
                 result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << settings.SyntaxVersion));

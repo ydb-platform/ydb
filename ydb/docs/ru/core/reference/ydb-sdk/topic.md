@@ -51,7 +51,7 @@
   TDriver driver(driverConfig);
   ```
 
-  В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
+  В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Фрагмент кода приложения для создания клиента:
 
@@ -77,7 +77,7 @@
 
   В этом примере используется вспомогательный метод `CloudAuthHelper.getAuthProviderFromEnviron()`, получающий токен из переменных окружения.
   Например, `YDB_ACCESS_TOKEN_CREDENTIALS`.
-  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
+  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) работает поверх транспорта {{ ydb-short-name }} и отвечает как за управляющие операции с топиками, так и за создание писателей и читателей.
 
@@ -838,6 +838,23 @@
   ```java
   Message message = reader.receive();
   List<MetadataItem> metadata = message.getMetadataItems();
+  ```
+
+- Python
+
+  Для использования функции передачи метаданных создайте объект `TopicWriterMessage` с аргументом `metadata_items`, как показано ниже:
+
+  ```python
+  message = ydb.TopicWriterMessage(data=f"message-data", metadata_items={"meta-key": "meta-value"})
+  writer.write(message)
+  ```
+
+  Во время чтения метаданные можно получить из поля `metadata_items` объекта `PublicMessage`:
+
+  ```python
+  message = reader.receive_message()
+  for meta_key, meta_value in message.metadata_items.items():
+      print(f"{meta_key}: {meta_value}")
   ```
 
 {% endlist %}

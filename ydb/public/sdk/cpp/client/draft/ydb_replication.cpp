@@ -13,7 +13,7 @@
 #include <google/protobuf/util/time_util.h>
 #include <google/protobuf/repeated_field.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NReplication {
 
 TConnectionParams::TConnectionParams(const Ydb::Replication::ConnectionParams& params) {
@@ -66,6 +66,15 @@ const TOAuthCredentials& TConnectionParams::GetOAuthCredentials() const {
 
 static TDuration DurationToDuration(const google::protobuf::Duration& value) {
     return TDuration::MilliSeconds(google::protobuf::util::TimeUtil::DurationToMilliseconds(value));
+}
+
+TGlobalConsistency::TGlobalConsistency(const Ydb::Replication::ConsistencyLevelGlobal& proto)
+    : CommitInterval_(DurationToDuration(proto.commit_interval()))
+{
+}
+
+const TDuration& TGlobalConsistency::GetCommitInterval() const {
+    return CommitInterval_;
 }
 
 TStats::TStats(const Ydb::Replication::DescribeReplicationResult_Stats& stats)
@@ -132,6 +141,15 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
         });
     }
 
+    switch (desc.consistency_level_case()) {
+    case Ydb::Replication::DescribeReplicationResult::kGlobalConsistency:
+        ConsistencyLevel_ = TGlobalConsistency(desc.global_consistency());
+        break;
+
+    default:
+        break;
+    }
+
     switch (desc.state_case()) {
     case Ydb::Replication::DescribeReplicationResult::kRunning:
         State_ = TRunningState(desc.running().stats());
@@ -156,6 +174,14 @@ const TConnectionParams& TReplicationDescription::GetConnectionParams() const {
 
 const TVector<TReplicationDescription::TItem> TReplicationDescription::GetItems() const {
     return Items_;
+}
+
+TReplicationDescription::EConsistencyLevel TReplicationDescription::GetConsistencyLevel() const {
+    return static_cast<EConsistencyLevel>(ConsistencyLevel_.index());
+}
+
+const TGlobalConsistency& TReplicationDescription::GetGlobalConsistency() const {
+    return std::get<TGlobalConsistency>(ConsistencyLevel_);
 }
 
 TReplicationDescription::EState TReplicationDescription::GetState() const {

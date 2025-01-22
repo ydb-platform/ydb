@@ -3,7 +3,6 @@ RECURSE(
     cfg
     query_replay
     query_replay_yt
-    olap_workload
     stress_tool
     tsserver
     tstool

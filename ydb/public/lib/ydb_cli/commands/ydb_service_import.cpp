@@ -105,6 +105,9 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("no-acl", "Prevent importing of ACL and owner")
         .RequiredArgument("BOOL").StoreTrue(&NoACL).DefaultValue("false");
 
+    config.Opts->AddLongOption("skip-checksum-validation", "Skip checksum validation during import")
+        .RequiredArgument("BOOL").StoreTrue(&SkipChecksumValidation).DefaultValue("false");
+
     AddDeprecatedJsonOption(config);
     AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
@@ -146,6 +149,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
 
     settings.NumberOfRetries(NumberOfRetries);
     settings.NoACL(NoACL);
+    settings.SkipChecksumValidation(SkipChecksumValidation);
 #if defined(_win32_)
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});
@@ -309,7 +313,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     }
 
     TImportFileClient client(CreateDriver(config), config, settings);
-    ThrowOnError(client.Import(FilePaths, Path));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }
@@ -339,7 +343,7 @@ int TCommandImportFromJson::Run(TConfig& config) {
     settings.Threads(Threads);
 
     TImportFileClient client(CreateDriver(config), config, settings);
-    ThrowOnError(client.Import(FilePaths, Path));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }
@@ -358,7 +362,7 @@ int TCommandImportFromParquet::Run(TConfig& config) {
     settings.Threads(Threads);
 
     TImportFileClient client(CreateDriver(config), config, settings);
-    ThrowOnError(client.Import(FilePaths, Path));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }

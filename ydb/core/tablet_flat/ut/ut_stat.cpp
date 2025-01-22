@@ -746,7 +746,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
 
             ui32 operator()(const TRow&) noexcept
             {
-                auto x = Random.Uniform(1 << Buckets);
+                auto x = Random.Uniform(1, 1 << Buckets);
                 return Min(ui32(log2(x)), Buckets - 1);
             }
 

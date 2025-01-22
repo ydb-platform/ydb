@@ -52,8 +52,14 @@ message TExampleMessage
         VALUE1 = 1;
     };
 
+    enum EAnotherEnum {
+        ANOTHER_VALUE0 = 0;
+        ANOTHER_VALUE1 = 1;
+        ANOTHER_VALUE2 = 2;
+    };
+
     optional EEnum enum_int = 38 [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_INT];
-    repeated EEnum enum_int_repeated = 39 [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_INT];
-    optional EEnum enum_string = 40 [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING];
+    repeated EAnotherEnum enum_int_repeated = 39 [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_INT];
+    optional EAnotherEnum enum_string = 40 [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING];
     repeated EEnum enum_string_repeated = 41 [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING];
 }

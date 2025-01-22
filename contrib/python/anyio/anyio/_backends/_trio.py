@@ -28,6 +28,7 @@ from socket import AddressFamily, SocketKind
 from types import TracebackType
 from typing import (
     IO,
+    TYPE_CHECKING,
     Any,
     Generic,
     NoReturn,
@@ -80,6 +81,9 @@ from ..abc import IPSockAddrType, UDPPacketType, UNIXDatagramPacketType
 from ..abc._eventloop import AsyncBackend, StrOrBytesPath
 from ..streams.memory import MemoryObjectSendStream
 
+if TYPE_CHECKING:
+    from _typeshed import HasFileno
+
 if sys.version_info >= (3, 10):
     from typing import ParamSpec
 else:
@@ -128,8 +132,7 @@ class CancelScope(BaseCancelScope):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> bool | None:
-        # https://github.com/python-trio/trio-typing/pull/79
+    ) -> bool:
         return self.__original.__exit__(exc_type, exc_val, exc_tb)
 
     def cancel(self) -> None:
@@ -182,9 +185,10 @@ class TaskGroup(abc.TaskGroup):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> bool | None:
+    ) -> bool:
         try:
-            return await self._nursery_manager.__aexit__(exc_type, exc_val, exc_tb)
+            # trio.Nursery.__exit__ returns bool; .open_nursery has wrong type
+            return await self._nursery_manager.__aexit__(exc_type, exc_val, exc_tb)  # type: ignore[return-value]
         except BaseExceptionGroup as exc:
             if not exc.split(trio.Cancelled)[1]:
                 raise trio.Cancelled._create() from exc
@@ -1260,18 +1264,18 @@ class TrioBackend(AsyncBackend):
         return await trio.socket.getnameinfo(sockaddr, flags)
 
     @classmethod
-    async def wait_socket_readable(cls, sock: socket.socket) -> None:
+    async def wait_readable(cls, obj: HasFileno | int) -> None:
         try:
-            await wait_readable(sock)
+            await wait_readable(obj)
         except trio.ClosedResourceError as exc:
             raise ClosedResourceError().with_traceback(exc.__traceback__) from None
         except trio.BusyResourceError:
             raise BusyResourceError("reading from") from None
 
     @classmethod
-    async def wait_socket_writable(cls, sock: socket.socket) -> None:
+    async def wait_writable(cls, obj: HasFileno | int) -> None:
         try:
-            await wait_writable(sock)
+            await wait_writable(obj)
         except trio.ClosedResourceError as exc:
             raise ClosedResourceError().with_traceback(exc.__traceback__) from None
         except trio.BusyResourceError:

@@ -73,8 +73,8 @@ public:
             return ClientId;
         }
 
-        TMaybe<ui64> GetNextMessageOffset() const override {
-            return Nothing();
+        std::optional<ui64> GetNextMessageOffset() const override {
+            return std::nullopt;
         }
 
         void OnClientError(TStatus status) override {
@@ -204,7 +204,7 @@ public:
 
 public:
     static TCallback EmptyCheck() {
-        return [&](TQueue<std::pair<TRope, TVector<ui64>>>&& data) {};
+        return [&](TQueue<std::pair<TRope, TVector<ui64>>>&& /* data */) {};
     }
 
     static TCallback OneBatchCheck(std::function<void(TRope&& messages, TVector<ui64>&& offsets)> callback) {

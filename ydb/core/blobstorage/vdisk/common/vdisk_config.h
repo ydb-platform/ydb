@@ -219,8 +219,6 @@ namespace NKikimr {
         TDuration WhiteboardUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
-        TControlWrapper DefaultHugeGarbagePerMille;
-        TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         bool UseActorSystemTimeInBSQueue = false;
 
         ///////////// BALANCING SETTINGS ////////////////////
@@ -238,9 +236,25 @@ namespace NKikimr {
         TDuration BalancingEpochTimeout;
         TDuration BalancingTimeToSleepIfNothingToDo;
 
+        ///////////////// DEFRAG SETTINGS /////////////////
+        TControlWrapper DefaultHugeGarbagePerMille = 300;
+        TControlWrapper HugeDefragFreeSpaceBorderPerMille = 260;
+        TControlWrapper MaxChunksToDefragInflight = 10;
+
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
+
+        ///////////// THROTTLING SETTINGS //////////////////
+        TControlWrapper ThrottlingDeviceSpeed;
+        TControlWrapper ThrottlingMinSstCount;
+        TControlWrapper ThrottlingMaxSstCount;
+        TControlWrapper ThrottlingMinInplacedSize;
+        TControlWrapper ThrottlingMaxInplacedSize;
+        TControlWrapper ThrottlingMinOccupancyPerMille;
+        TControlWrapper ThrottlingMaxOccupancyPerMille;
+        TControlWrapper ThrottlingMinLogChunkCount;
+        TControlWrapper ThrottlingMaxLogChunkCount;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

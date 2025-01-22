@@ -154,7 +154,7 @@ namespace {
 
             auto traits = ctx.ReplaceNodes(TExprNode::TPtr(traitsFactoryBody), factoryReplaces);
             ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-            auto status = ExpandApply(traits, traits, ctx);
+            auto status = ExpandApplyNoRepeat(traits, traits, ctx);
             if (status == IGraphTransformer::TStatus::Error) {
                 return nullptr;
             }

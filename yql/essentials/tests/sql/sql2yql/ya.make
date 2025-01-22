@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 PY3TEST()
     TEST_SRCS(
         test_sql2yql.py
@@ -41,4 +43,6 @@ ENDIF()
 NO_CHECK_IMPORTS()
 
 END()
+
+ENDIF()
 

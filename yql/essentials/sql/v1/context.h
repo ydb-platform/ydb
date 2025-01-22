@@ -92,7 +92,8 @@ namespace NSQLTranslationV1 {
     public:
         TContext(const NSQLTranslation::TTranslationSettings& settings,
                  const NSQLTranslation::TSQLHints& hints,
-                 NYql::TIssues& issues);
+                 NYql::TIssues& issues,
+                 const TString& query = {});
 
         virtual ~TContext();
 
@@ -237,6 +238,7 @@ namespace NSQLTranslationV1 {
         THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;
         THashSet<TString> WeakVariables;
         NSQLTranslation::TTranslationSettings Settings;
+        const TString Query;
         std::unique_ptr<TMemoryPool> Pool;
         NYql::TIssues& Issues;
         TMap<TString, TNodePtr> UniversalAliases;
@@ -314,6 +316,7 @@ namespace NSQLTranslationV1 {
         bool EmitStartsWith = true;
         TMaybe<bool> EmitAggApply;
         bool UseBlocks = false;
+        bool EmitTableSource = false;
         bool AnsiLike = false;
         bool FeatureR010 = false; //Row pattern recognition: FROM clause
         TMaybe<bool> CompactGroupBy;
@@ -327,6 +330,7 @@ namespace NSQLTranslationV1 {
         bool DistinctOverWindow = false;
         bool SeqMode = false;
         bool EmitUnionMerge = false;
+        TVector<size_t> ForAllStatementsParts;
     };
 
     class TColumnRefScope {

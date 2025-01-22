@@ -28,16 +28,15 @@ public:
 
     TOperationId StartOperation(
         TOperation* operation,
-        const TString& operationType,
-        const TNode& spec,
-        bool useStartOperationRequest = false);
+        EOperationType type,
+        const TNode& spec);
 
     const IClientRetryPolicyPtr& GetClientRetryPolicy() const;
 
 private:
     TClientPtr Client_;
     TTransactionId TransactionId_;
-    THolder<TPingableTransaction> FileTransaction_;
+    std::unique_ptr<TPingableTransaction> FileTransaction_;
     IClientRetryPolicyPtr ClientRetryPolicy_;
     const TString PreparationId_;
 
@@ -54,7 +53,7 @@ struct IItemToUpload
     virtual ~IItemToUpload() = default;
 
     virtual TString CalculateMD5() const = 0;
-    virtual THolder<IInputStream> CreateInputStream() const = 0;
+    virtual std::unique_ptr<IInputStream> CreateInputStream() const = 0;
     virtual TString GetDescription() const = 0;
     virtual i64 GetDataSize() const = 0;
 };

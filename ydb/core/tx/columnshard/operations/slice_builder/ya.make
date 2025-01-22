@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     builder.cpp
+    pack_builder.cpp
 )
 
 PEERDIR(

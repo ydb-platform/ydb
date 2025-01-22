@@ -27,13 +27,14 @@ bool IsIPv6(const TString& host);
 bool IsIPv4(const TString& host);
 bool CrackURL(TStringBuf url, TStringBuf& scheme, TStringBuf& host, TStringBuf& uri);
 void CrackAddress(const TString& address, TString& hostname, TIpPort& port);
-void TrimBegin(TStringBuf& target, char delim);
-void TrimEnd(TStringBuf& target, char delim);
-void Trim(TStringBuf& target, char delim);
+[[nodiscard]] TStringBuf TrimBegin(TStringBuf target, char delim);
+[[nodiscard]] TStringBuf TrimEnd(TStringBuf target, char delim);
+[[nodiscard]] TStringBuf Trim(TStringBuf target, char delim);
 void TrimEnd(TString& target, char delim);
 TString CompressDeflate(TStringBuf source);
 TString DecompressDeflate(TStringBuf source);
 TString GetObfuscatedData(TString data, const THeaders& headers);
+TString ToHex(size_t value);
 
 struct TLessNoCase {
     bool operator()(TStringBuf l, TStringBuf r) const {
@@ -279,7 +280,7 @@ public:
         }
         if (ProcessData(target, source, delim.back(), maxLen + 1)) {
             for (signed i = delim.size() - 2; i >= 0; --i) {
-                TrimEnd(target, delim[i]);
+                target = TrimEnd(target, delim[i]);
             }
             return true;
         }
@@ -304,8 +305,8 @@ public:
         if (!header.TrySplit(':', name, value)) {
             return false;
         }
-        TrimBegin(name, ' ');
-        Trim(value, ' ');
+        name = TrimBegin(name, ' ');
+        value = Trim(value, ' ');
         auto cit = HeaderType::HeadersLocation.find(name);
         if (cit != HeaderType::HeadersLocation.end()) {
             this->*cit->second = value;
@@ -560,6 +561,10 @@ public:
         }
     }
 
+    bool IsChunkedEncoding() const {
+        return TEqNoCase()(HeaderType::TransferEncoding, "chunked");
+    }
+
     void FinishHeader() {
         Append("\r\n");
         HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), TSocketBuffer::Pos() - HeaderType::Headers.data());
@@ -572,7 +577,14 @@ public:
             Set<&HeaderType::ContentLength>(ToString(body.size()));
         }
         FinishHeader();
+        bool chunkedEncoding = IsChunkedEncoding();
+        if (chunkedEncoding) {
+            Append(ToHex(body.size()) + "\r\n");
+        }
         AppendParsedValue<&HeaderType::Body>(body);
+        if (chunkedEncoding) {
+            Append("\r\n");
+        }
         Stage = ERenderStage::Done;
     }
 
@@ -700,6 +712,8 @@ class THttpDataChunk : public TSocketBuffer {
 public:
     bool EndOfData = false;
 
+    THttpDataChunk() = default;
+
     THttpDataChunk(TStringBuf data) {
         SetData(data);
     }
@@ -715,9 +729,7 @@ public:
 
     void SetData(TStringBuf data) {
         EnsureEnoughSpaceAvailable(data.size() + 4/*crlfcrlf*/ + 16);
-        std::ostringstream header;
-        header << std::hex << data.size() << "\r\n";
-        Append(header.str());
+        Append(ToHex(data.size()) + "\r\n");
         Append(TStringBuf(data));
         Append("\r\n");
     }
@@ -895,7 +907,7 @@ public:
         std::vector<TStringBuf> encodings;
         TStringBuf encoding;
         while (acceptEncoding.NextTok(',', encoding)) {
-            Trim(encoding, ' ');
+            encoding = Trim(encoding, ' ');
             if (Count(ALLOWED_CONTENT_ENCODINGS, encoding) != 0) {
                 encodings.push_back(encoding);
             }
@@ -934,6 +946,7 @@ public:
 
     THttpOutgoingResponsePtr Duplicate(THttpIncomingRequestPtr request);
     THttpOutgoingDataChunkPtr CreateDataChunk(TStringBuf data = {}); // empty chunk means end of data
+    THttpOutgoingDataChunkPtr CreateIncompleteDataChunk(); // to construct it later
 
     TSocketBuffer* GetActiveBuffer();
     void AddDataChunk(THttpOutgoingDataChunkPtr dataChunk);
@@ -950,6 +963,7 @@ class THttpOutgoingDataChunk :
         public TRefCounted<THttpOutgoingDataChunk, TAtomicCounter> {
 public:
     THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data);
+    THttpOutgoingDataChunk(THttpOutgoingResponsePtr response); // incomplete chunk
 
     THttpOutgoingResponsePtr GetResponse() const {
         return Response;

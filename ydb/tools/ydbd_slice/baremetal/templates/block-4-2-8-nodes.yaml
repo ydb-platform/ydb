@@ -3,16 +3,20 @@
 
 # Option will be removed further
 use_new_style_kikimr_cfg: true
+yaml_config_enabled: true
 
-# static erasure is the parameter that
-# describes the fault tolerance mode of the
-# cluster. See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
+log:
+  cluster_name: "default_devslice" # Change cluster name in order to have better experience with logs searching in Monium.
+  sys_log: true
+  uaclient_config:
+    uri: "[fd53::1]:16400"
+    grpc_max_message_size: 4194304
 
 host_configs: # the list of available host configurations in the cluster.
 - drive:
-  - path: /dev/disk/by-partlabel/kikimr_nvme_01   # path of the first disk in the host configration.
+  - path: &disk_path_1 /dev/disk/by-partlabel/kikimr_nvme_01   # path of the first disk in the host configration.
     type: SSD                                     # kind of the disk: available kinds are SSD, NVME or HDD
-  - path: /dev/disk/by-partlabel/kikimr_nvme_02
+  - path: &disk_path_2 /dev/disk/by-partlabel/kikimr_nvme_02
     type: SSD
     # Add more disks if required.
   host_config_id: 1 # the unique id of the host config
@@ -156,42 +160,42 @@ blob_storage_config:    # configuration of static blobstorage group.
           - node_id: *host_1
             pdisk_category: &pdisk_category CHANGE_PDISK_CATEGORY # Set this option to 1, if cluster has SSD/NVME disks
             # or to 0, if cluster has HDD.
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            path: *disk_path_1
             pdisk_guid: 1
         - vdisk_locations:
           - node_id: *host_2
             pdisk_category: *pdisk_category
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            path: *disk_path_1
             pdisk_guid: 2
         - vdisk_locations:
           - node_id: *host_3
             pdisk_category: *pdisk_category
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            path: *disk_path_1
             pdisk_guid: 3
         - vdisk_locations:
           - node_id: *host_4
             pdisk_category: *pdisk_category
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            path: *disk_path_1
             pdisk_guid: 4
         - vdisk_locations:
           - node_id: *host_5
             pdisk_category: *pdisk_category
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            path: *disk_path_1
             pdisk_guid: 5
         - vdisk_locations:
           - node_id: *host_6
             pdisk_category: *pdisk_category
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            path: *disk_path_1
             pdisk_guid: 6
         - vdisk_locations:
           - node_id: *host_7
             pdisk_category: *pdisk_category
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            path: *disk_path_1
             pdisk_guid: 7
         - vdisk_locations:
           - node_id: *host_8
             pdisk_category: *pdisk_category
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            path: *disk_path_1
             pdisk_guid: 8
 # TODO: migrate to channel_profile_config
 profiles:

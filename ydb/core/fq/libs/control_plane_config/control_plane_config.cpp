@@ -132,7 +132,7 @@ private:
                     "FROM `" MAPPINGS_TABLE_NAME "`;\n"
                 );
             },
-            [=](TTenantExecuter& executer, const TVector<NYdb::TResultSet>& resultSets) {
+            [=](TTenantExecuter& executer, const std::vector<NYdb::TResultSet>& resultSets) {
 
                 auto& info = *executer.State;
 

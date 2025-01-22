@@ -4,11 +4,12 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/property.h>
-#include <yt/yt/core/misc/range.h>
 
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <util/digest/multi.h>
 
@@ -166,7 +167,7 @@ public:
     EValueType GetWireType() const;
 
     i64 GetMemoryUsage() const;
-    i64 GetMemoryUsage(i64 limit) const;
+    i64 GetMemoryUsage(i64 threshold) const;
 
     // Check if column has plain old v1 type.
     bool IsOfV1Type() const;
@@ -398,8 +399,7 @@ public:
     void Load(TStreamLoadContext& context);
 
     i64 GetMemoryUsage() const;
-
-    i64 GetMemoryUsage(i64 limit) const;
+    i64 GetMemoryUsage(i64 threshold) const;
 
 private:
     struct TColumnInfo
@@ -469,18 +469,18 @@ class TTableSchemaTruncatedFormatter
 {
 public:
     // NB: #schema is allowed to be |nullptr|.
-    TTableSchemaTruncatedFormatter(const TTableSchemaPtr& schema, i64 memoryLimit);
+    TTableSchemaTruncatedFormatter(const TTableSchemaPtr& schema, i64 memoryThreshold);
 
     void operator()(TStringBuilderBase* builder) const;
 
 private:
     const TTableSchema* const Schema_ = nullptr;
-    const i64 Limit_ = 0;
+    const i64 Threshold_ = 0;
 };
 
 TFormatterWrapper<TTableSchemaTruncatedFormatter> MakeTableSchemaTruncatedFormatter(
     const TTableSchemaPtr& schema,
-    i64 memoryLimit);
+    i64 memoryThreshold);
 
 ////////////////////////////////////////////////////////////////////////////////
 

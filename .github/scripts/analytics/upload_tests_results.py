@@ -18,6 +18,7 @@ from codeowners import CodeOwners
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 
+max_characters_for_status_description = int(7340032/4) #workaround for error "cannot split batch in according to limits: there is row with size more then limit (7340032)"
 
 def create_tables(pool,  table_path):
     print(f"> create table if not exists:'{table_path}'")
@@ -121,7 +122,7 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
                     "test_name": name,
                     "duration": Decimal(duration),
                     "status": status,
-                    "status_description": status_description.replace("\r\n", ";;").replace("\n", ";;").replace("\"", "'"),
+                    "status_description": status_description.replace("\r\n", ";;").replace("\n", ";;").replace("\"", "'")[:max_characters_for_status_description],
                     "log": "" if testcase.find("properties/property/[@name='url:log']") is None else testcase.find("properties/property/[@name='url:log']").get('value'),
                     "logsdir": "" if testcase.find("properties/property/[@name='url:logsdir']") is None else testcase.find("properties/property/[@name='url:logsdir']").get('value'),
                     "stderr": "" if testcase.find("properties/property/[@name='url:stderr']") is None else testcase.find("properties/property/[@name='url:stderr']").get('value'),

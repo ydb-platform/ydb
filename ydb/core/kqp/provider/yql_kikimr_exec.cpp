@@ -19,7 +19,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/protos/index_builder.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
@@ -103,6 +103,7 @@ namespace {
     TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) {
         TCreateUserSettings createUserSettings;
         createUserSettings.UserName = TString(createUser.UserName());
+        createUserSettings.CanLogin = true;
 
         for (auto setting : createUser.Settings()) {
             auto name = setting.Name().Value();
@@ -112,6 +113,10 @@ namespace {
                 // Default value
             } else if (name == "passwordEncrypted") {
                 createUserSettings.PasswordEncrypted = true;
+            } else if (name == "login") {
+                createUserSettings.CanLogin = true;
+            } else if (name == "noLogin") {
+                createUserSettings.CanLogin = false;
             }
         }
         return createUserSettings;
@@ -126,9 +131,13 @@ namespace {
             if (name == "password") {
                 alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "nullPassword") {
-                // Default value
+                alterUserSettings.Password = TString();
             } else if (name == "passwordEncrypted") {
                 alterUserSettings.PasswordEncrypted = true;
+            } else if (name == "login") {
+                alterUserSettings.CanLogin = true;
+            } else if (name == "noLogin") {
+                alterUserSettings.CanLogin = false;
             }
         }
         return alterUserSettings;

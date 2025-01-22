@@ -28,6 +28,7 @@ public:
     TEvPollerReady* InactivityEvent = nullptr;
 
     TPollerToken::TPtr PollerToken;
+    TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
 
     TIncomingConnectionActor(
             std::shared_ptr<TPrivateEndpointInfo> endpoint,
@@ -67,6 +68,9 @@ public:
     }
 
     void PassAway() override {
+        if (CancelSubscriber) {
+            Send(CancelSubscriber->Sender, new TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
+        }
         Send(Endpoint->Owner, new TEvHttpProxy::TEvHttpIncomingConnectionClosed(SelfId(), std::move(RecycledRequests)));
         TSocketImpl::Shutdown();
         TBase::PassAway();
@@ -146,7 +150,7 @@ protected:
                                 if (!success) {
                                     return;
                                 }
-                                CurrentRequest = nullptr;
+                                CleanupRequest(CurrentRequest);
                             }
                         } else if (CurrentRequest->IsError()) {
                             ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -! (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
@@ -154,7 +158,7 @@ protected:
                             if (!success) {
                                 return;
                             }
-                            CurrentRequest = nullptr;
+                            CleanupRequest(CurrentRequest);
                         }
                     }
                 } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
@@ -199,10 +203,17 @@ protected:
     }
 
     void HandleConnected(TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& event) {
+        if (event->Get()->Response->IsDone()) {
+            CancelSubscriber = nullptr;
+        }
         Respond(event->Get()->Response);
     }
 
     void HandleConnected(TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& event) {
+        if (event->Get()->Error) {
+            ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - DataChunk error: " << event->Get()->Error);
+            return PassAway();
+        }
         if (CurrentResponse != nullptr && CurrentResponse == event->Get()->DataChunk->GetResponse()) {
             CurrentResponse->AddDataChunk(event->Get()->DataChunk);
         } else {
@@ -216,7 +227,14 @@ protected:
         }
         ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (data chunk "
             << event->Get()->DataChunk->Size() << (event->Get()->DataChunk->IsEndOfData() ? " bytes, final)" : " bytes)"));
+        if (event->Get()->DataChunk->IsEndOfData()) {
+            CancelSubscriber = nullptr;
+        }
         FlushOutput();
+    }
+
+    void HandleConnected(TEvHttpProxy::TEvSubscribeForCancel::TPtr& event) {
+        CancelSubscriber = std::move(event);
     }
 
     bool Respond(THttpOutgoingResponsePtr response) {
@@ -289,6 +307,7 @@ protected:
             bool read = false, write = false;
             ssize_t res = TSocketImpl::Send(buffer->Data(), size, read, write);
             if (res > 0) {
+                InactivityTimer.Reset();
                 buffer->ChopHead(res);
             } else if (-res == EINTR) {
                 continue;
@@ -325,6 +344,7 @@ protected:
             hFunc(TEvPollerReady, HandleConnected);
             hFunc(TEvHttpProxy::TEvHttpOutgoingResponse, HandleConnected);
             hFunc(TEvHttpProxy::TEvHttpOutgoingDataChunk, HandleConnected);
+            hFunc(TEvHttpProxy::TEvSubscribeForCancel, HandleConnected);
             hFunc(TEvPollerRegisterResult, HandleConnected);
         }
     }

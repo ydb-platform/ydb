@@ -3,7 +3,6 @@
 (import join_module '"joins.yql")
 
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 # Same as InputKV1
 (let list1 (AsList 

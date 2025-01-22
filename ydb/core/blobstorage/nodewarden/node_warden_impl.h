@@ -168,6 +168,18 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxSyncLogChunksInFlightSSD;
         TControlWrapper DefaultHugeGarbagePerMille;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille;
+        TControlWrapper MaxChunksToDefragInflight;
+
+        TControlWrapper ThrottlingDeviceSpeed;
+        TControlWrapper ThrottlingMinSstCount;
+        TControlWrapper ThrottlingMaxSstCount;
+        TControlWrapper ThrottlingMinInplacedSize;
+        TControlWrapper ThrottlingMaxInplacedSize;
+        TControlWrapper ThrottlingMinOccupancyPerMille;
+        TControlWrapper ThrottlingMaxOccupancyPerMille;
+        TControlWrapper ThrottlingMinLogChunkCount;
+        TControlWrapper ThrottlingMaxLogChunkCount;
+
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
 
@@ -191,7 +203,9 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxNumOfSlowDisksSSD;
 
         TControlWrapper LongRequestThresholdMs;
-        TControlWrapper LongRequestReportingDelayMs;
+        TControlWrapper ReportingControllerBucketSize;
+        TControlWrapper ReportingControllerLeakDurationMs;
+        TControlWrapper ReportingControllerLeakRate;
 
     public:
         struct TGroupRecord;
@@ -210,7 +224,7 @@ namespace NKikimr::NStorage {
 
         TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
         void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);
-        void AskBSCToRestartPDisk(ui32 pdiskId, ui64 requestCookie);
+        void AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);
         void DestroyLocalPDisk(ui32 pdiskId);
 
@@ -575,6 +589,7 @@ namespace NKikimr::NStorage {
         void ForwardToDistributedConfigKeeper(STATEFN_SIG);
 
         NKikimrBlobStorage::TStorageConfig StorageConfig;
+        bool SelfManagementEnabled = false;
         THashSet<TActorId> StorageConfigSubscribers;
 
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);

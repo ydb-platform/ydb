@@ -62,7 +62,32 @@ public:
             return SyncError();
         }
 
+        const bool isList = lambda.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List;
         auto optimized = lambda.Ptr();
+        auto source1 = ctx.Builder(lambda.Pos())
+            .Callable("Take")
+                .Callable(0, "SourceOf")
+                    .Callable(0, "StreamType")
+                        .Callable(0, "NullType")
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Callable(1, "Uint64")
+                    .Atom(0, "1")
+                .Seal()
+            .Seal()
+            .Build();
+
+        optimized = ctx.Builder(lambda.Pos())
+            .Callable(isList ? "FlatMap" : "Map")
+                .Add(0, source1)
+                .Lambda(1)
+                    .Param("x")
+                    .Set(optimized)
+                .Seal()
+            .Seal()
+            .Build();
+
         bool hasNonDeterministicFunctions;
         auto status = PeepHoleOptimizeNode(optimized, optimized, ctx, *State_->Types, nullptr, hasNonDeterministicFunctions);
         if (status.Level == IGraphTransformer::TStatus::Error) {
@@ -124,26 +149,37 @@ public:
         TStringOutput dataOut(data);
         TCountingOutput dataCountingOut(&dataOut);
         NYson::TYsonWriter dataWriter(&dataCountingOut, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, false);
-        if (type->IsList()) {
-            auto inputType = AS_TYPE(TListType, type)->GetItemType();
+        YQL_ENSURE(type->IsStream());
+        auto itemType = AS_TYPE(TStreamType, type)->GetItemType();
+        if (isList) {
             TMaybe<ui64> rowsLimit = fillSettings.RowsLimitPerWrite;
             TMaybe<ui64> bytesLimit = fillSettings.AllResultsBytesLimit;
-            TMaybe<TVector<ui32>> structPositions = NCommon::CreateStructPositions(inputType, &columns);
+            TMaybe<TVector<ui32>> structPositions = NCommon::CreateStructPositions(itemType, &columns);
             dataWriter.OnBeginList();
-            const auto it = value.GetListIterator();
             ui64 rows = 0;
-            for (NUdf::TUnboxedValue item; it.Next(item); ++rows) {
+            for (;;) {
+                NUdf::TUnboxedValue item;
+                auto status = value.Fetch(item);
+                if (status == NUdf::EFetchStatus::Finish) {
+                    break;
+                }
+
+                YQL_ENSURE(status == NUdf::EFetchStatus::Ok);
                 if ((rowsLimit && rows >= *rowsLimit) || (bytesLimit && dataCountingOut.Counter() >= *bytesLimit)) {
                     truncated = true;
                     break;
                 }
 
                 dataWriter.OnListItem();
-                NCommon::WriteYsonValue(dataWriter, item, inputType, structPositions.Get());
+                NCommon::WriteYsonValue(dataWriter, item, itemType, structPositions.Get());
+                ++rows;
             }
             dataWriter.OnEndList();
         } else {
-            NCommon::WriteYsonValue(dataWriter, value, type, nullptr);
+            NUdf::TUnboxedValue item;
+            YQL_ENSURE(value.Fetch(item) == NUdf::EFetchStatus::Ok);
+            NCommon::WriteYsonValue(dataWriter, item, itemType, nullptr);
+            YQL_ENSURE(value.Fetch(item) == NUdf::EFetchStatus::Finish);
         }
 
         writer.OnKeyedItem("Data");

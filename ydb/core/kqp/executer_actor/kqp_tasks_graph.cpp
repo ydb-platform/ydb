@@ -1138,6 +1138,9 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
                 input.Meta.StreamLookupSettings->SetLockTxId(*lockTxId);
                 input.Meta.StreamLookupSettings->SetLockNodeId(tasksGraph.GetMeta().LockNodeId);
             }
+            if (tasksGraph.GetMeta().LockMode) {
+                input.Meta.StreamLookupSettings->SetLockMode(*tasksGraph.GetMeta().LockMode);
+            }
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
         } else if (input.Meta.SequencerSettings) {
             transformProto->MutableSettings()->PackFrom(*input.Meta.SequencerSettings);
@@ -1145,7 +1148,11 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
     }
 }
 
-void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) {
+void SerializeTaskToProto(
+        const TKqpTasksGraph& tasksGraph,
+        const TTask& task,
+        NYql::NDqProto::TDqTask* result,
+        bool serializeAsyncIoSettings) {
     auto& stageInfo = tasksGraph.GetStageInfo(task.StageId);
     ActorIdToProto(task.Meta.ExecuterId, result->MutableExecuter()->MutableActorId());
     result->SetId(task.Id);
@@ -1183,6 +1190,7 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
 
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
     result->MutableProgram()->CopyFrom(stage.GetProgram());
+
     for (auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *result->MutableParameters();
         if (task.Meta.ShardId) {

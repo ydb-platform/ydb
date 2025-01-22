@@ -3883,6 +3883,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 sid.SetName(rowset.GetValue<Schema::LoginSids::SidName>());
                 sid.SetType(rowset.GetValue<Schema::LoginSids::SidType>());
                 sid.SetHash(rowset.GetValue<Schema::LoginSids::SidHash>());
+                sid.SetCreatedAt(rowset.GetValueOrDefault<Schema::LoginSids::CreatedAt>());
+                sid.SetFailedLoginAttemptCount(rowset.GetValueOrDefault<Schema::LoginSids::FailedAttemptCount>());
+                sid.SetLastFailedLogin(rowset.GetValueOrDefault<Schema::LoginSids::LastFailedAttempt>());
+                sid.SetLastSuccessfulLogin(rowset.GetValueOrDefault<Schema::LoginSids::LastSuccessfulAttempt>());
+                sid.SetIsEnabled(rowset.GetValueOrDefault<Schema::LoginSids::IsEnabled>());
                 sidIndex[sid.name()] = securityState.SidsSize() - 1;
                 if (!rowset.Next()) {
                     return false;
@@ -4112,7 +4117,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             if (!path->IsRoot()) {
                 const bool isBackupTable = Self->IsBackupTable(item.first);
-                parent->IncAliveChildren(1, isBackupTable);
+                parent->IncAliveChildrenPrivate(isBackupTable);
                 inclusiveDomainInfo->IncPathsInside(1, isBackupTable);
             }
 
@@ -4279,6 +4284,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     exportInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::StartTime>());
                     exportInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::EndTime>());
+                    exportInfo->EnableChecksums = rowset.GetValueOrDefault<Schema::Exports::EnableChecksums>(false);
 
                     Self->Exports[id] = exportInfo;
                     if (uid) {
@@ -4432,6 +4438,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         item.Permissions = permissions;
                     }
 
+                    if (rowset.HaveValue<Schema::ImportItems::Metadata>()) {
+                        item.Metadata = NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
+                    }
+
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ImportItems::WaitTxId>(InvalidTxId);
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
@@ -4480,6 +4490,55 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                          "IndexBuild "
                              << ", records: " << Self->IndexBuilds.size()
                              << ", at schemeshard: " << Self->TabletID());
+
+            // read kmeans tree state
+            {
+                auto rowset = db.Table<Schema::KMeansTreeState>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeState::Id>();
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.KMeans.Set(
+                        rowset.GetValue<Schema::KMeansTreeState::Level>(),
+                        rowset.GetValue<Schema::KMeansTreeState::Parent>(),
+                        rowset.GetValue<Schema::KMeansTreeState::State>()
+                    );
+                    buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+
+            // read kmeans tree sample
+            {
+                auto rowset = db.Table<Schema::KMeansTreeSample>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeSample::Id>();
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.Sample.Set(
+                        rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
+                        rowset.GetValue<Schema::KMeansTreeSample::Data>()
+                    );
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
 
             // read index build columns
             {

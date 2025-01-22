@@ -1291,11 +1291,9 @@ message TImmediateControlsConfig {
             MinValue: 65536,
             MaxValue: 4294967296,
             DefaultValue: 4294967296 }];
-        optional uint64 MemoryLimit = 3 [(ControlOptions) = {
-            Description: "Make a best effort attempt to prevent more than limit bytes of memory from being allocated by the system.",
-            MinValue: 0,
-            MaxValue: 9223372036854775807,
-            DefaultValue: 0 }];
+
+        reserved 3; // was MemoryLimit
+
         optional uint64 PageCacheTargetSize = 4 [(ControlOptions) = {
             Description: "Page Cache Target Size.",
             MinValue: 0,
@@ -1375,6 +1373,57 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 260 }];
+        optional uint64 MaxChunksToDefragInflight = 21 [(ControlOptions) = {
+            Description: "Max inflight defragmentation chunks per one chunk size per vdisk",
+            MinValue: 1,
+            MaxValue: 50,
+            DefaultValue: 10 }];
+
+        optional uint64 ThrottlingDeviceSpeed = 14 [(ControlOptions) = {
+            Description: "Maximum allowed speed when throttling is active",
+            MinValue: 1048576,
+            MaxValue: 10737418240,
+            DefaultValue: 52428800 }];
+        optional uint64 ThrottlingMinSstCount = 15 [(ControlOptions) = {
+            Description: "Minimum level 0 SST count - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 100 }];
+        optional uint64 ThrottlingMaxSstCount = 16 [(ControlOptions) = {
+            Description: "Maximum level 0 SST count - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 250 }];
+        optional uint64 ThrottlingMinInplacedSize = 17 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs - throttling is turned on",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 21474836480 }];
+        optional uint64 ThrottlingMaxInplacedSize = 18 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs - throttling speed is zero",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 64424509440 }];
+        optional uint64 ThrottlingMinOccupancyPerMille = 19 [(ControlOptions) = {
+            Description: "Minimum occupancy of disk per mille - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 900 }];
+        optional uint64 ThrottlingMaxOccupancyPerMille = 20 [(ControlOptions) = {
+            Description: "Maximum occupancy of disk per mille - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 950 }];
+        optional uint64 ThrottlingMinLogChunkCount = 22 [(ControlOptions) = {
+            Description: "Minimum pdisk log chunk count - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 100 }];
+        optional uint64 ThrottlingMaxLogChunkCount = 23 [(ControlOptions) = {
+            Description: "Maximum pdisk log chunk count - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 130 }];
     }
 
     message TTabletControls {
@@ -1386,6 +1435,24 @@ message TImmediateControlsConfig {
     }
 
     message TDSProxyControls {
+        message TRequestReportingSettings {
+            optional uint64 BucketSize = 1 [(ControlOptions) = {
+                Description: "Capacity for Leaky Bucket algorithm",
+                MinValue: 1,
+                MaxValue: 100000,
+                DefaultValue: 1 }];
+            optional uint64 LeakDurationMs = 2 [(ControlOptions) = {
+                Description: "Leak interval (ms) for Leaky Bucket algorithm",
+                MinValue: 1,
+                MaxValue: 3600000,
+                DefaultValue: 60000 }];
+            optional uint64 LeakRate = 3 [(ControlOptions) = {
+                Description: "Leak size for Leaky Bucket algorithm",
+                MinValue: 1,
+                MaxValue: 100000,
+                DefaultValue: 1 }];
+        }
+
         optional uint64 SlowDiskThreshold = 1 [(ControlOptions) = {
             Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille",
             MinValue: 1,
@@ -1401,11 +1468,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 50000 }];
-        optional uint64 LongRequestReportingDelayMs = 4 [(ControlOptions) = {
-            Description: "Delay (ms) between reports of long requests for one handle class",
-            MinValue: 1,
-            MaxValue: 1000000,
-            DefaultValue: 60000 }];
+        reserved 4;
         optional uint64 MaxNumOfSlowDisks = 5 [(ControlOptions) = {
             Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations",
             MinValue: 1,
@@ -1443,6 +1506,8 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 2,
             DefaultValue: 2 }];
+
+        optional TRequestReportingSettings RequestReportingSettings = 12;
     }
 
     message TPDiskControls {
@@ -1738,6 +1803,12 @@ message TColumnShardConfig {
     optional bool AllowNullableColumnsInPK = 29 [default = false];
     optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
     optional bool UseSlicesFilter = 31 [default = true];
+    optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
+    optional uint64 WritingBufferVolumeMb = 33 [default = 32];
+    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000];
+    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 128000000];
+    optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
+    optional int32 DefaultCompressionLevel = 37;
 }
 
 message TSchemeShardConfig {

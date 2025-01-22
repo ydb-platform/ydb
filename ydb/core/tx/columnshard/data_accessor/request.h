@@ -232,6 +232,12 @@ public:
         return result;
     }
 
+    bool IsAborted() const {
+        AFL_VERIFY(HasSubscriber());
+        auto flag = Subscriber->GetAbortionFlag();
+        return flag && flag->Val();
+    }
+
     const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
         AFL_VERIFY(HasSubscriber());
         return Subscriber->GetAbortionFlag();

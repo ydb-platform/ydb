@@ -3,7 +3,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Aliases for event types

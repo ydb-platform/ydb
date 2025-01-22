@@ -181,7 +181,7 @@ runs:
           git checkout $ORIGINAL_HEAD
           YA_MAKE_TARGET=.
         else
-          YA_MAKE_TARGET=${{ inputs.build_target }}
+          YA_MAKE_TARGET="${{ inputs.build_target }}"
         fi
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
@@ -212,9 +212,6 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
-              TEST_RETRY_COUNT=1
-            fi
             IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)

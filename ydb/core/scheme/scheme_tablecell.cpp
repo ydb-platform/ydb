@@ -112,8 +112,11 @@ namespace {
 
 } // namespace
 
-void TOwnedCellVec::TData::operator delete(void* mem) noexcept {
-    ::free(mem);
+void TOwnedCellVec::TData::operator delete(TData* data, std::destroying_delete_t) noexcept {
+    void* ptr = data;
+    size_t size = data->DataSize;
+    data->~TData();
+    ::operator delete(ptr, size);
 }
 
 TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
@@ -124,7 +127,6 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
         return TInit{
             TCellVec(),
             nullptr,
-            0,
         };
     }
 
@@ -136,7 +138,7 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
         }
     }
 
-    void* mem = ::malloc(size);
+    void* mem = ::operator new(size);
     if (Y_UNLIKELY(!mem)) {
         throw std::bad_alloc();
     }
@@ -165,8 +167,7 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
 
     return TInit {
         cellvec,
-        new (mem) TData(),
-        size,
+        new (mem) TData(size),
     };
 }
 
@@ -176,7 +177,6 @@ TOwnedCellVec::TInit TOwnedCellVec::AllocateFromSerialized(std::string_view data
         return TInit{
             TCellVec(),
             nullptr,
-            0,
         };
     }
 
@@ -192,7 +192,6 @@ TOwnedCellVec::TInit TOwnedCellVec::AllocateFromSerialized(std::string_view data
         return TInit{
             TCellVec(),
             nullptr,
-            0,
         };
     }
 
@@ -210,7 +209,7 @@ TOwnedCellVec::TInit TOwnedCellVec::AllocateFromSerialized(std::string_view data
         }
     }
 
-    void* mem = ::malloc(size);
+    void* mem = ::operator new(size);
     if (Y_UNLIKELY(!mem)) {
         throw std::bad_alloc();
     }
@@ -245,8 +244,7 @@ TOwnedCellVec::TInit TOwnedCellVec::AllocateFromSerialized(std::string_view data
 
     return TInit {
         cellvec,
-        new (mem) TData(),
-        size,
+        new (mem) TData(size),
     };
 }
 
@@ -398,10 +396,8 @@ namespace {
         return true;
     }
 
-    Y_FORCE_INLINE bool TryDeserializeCellVec(const TString& data, TString& resultBuffer, TVector<TCell> & resultCells) {
-        resultBuffer.clear();
+    Y_FORCE_INLINE bool TryDeserializeCellVec(const TString& data, TVector<TCell>& resultCells) {
         resultCells.clear();
-
         if (data.empty()) {
             return true;
         }
@@ -417,14 +413,11 @@ namespace {
             return false;
         }
 
-        resultBuffer = data;
         return true;
     }
 
-    Y_FORCE_INLINE bool TryDeserializeCellMatrix(const TString& data, TString& resultBuffer, TVector<TCell>& resultCells, ui32& rowCount, ui16& colCount) {
-        resultBuffer.clear();
+    Y_FORCE_INLINE bool TryDeserializeCellMatrix(const TString& data, TVector<TCell>& resultCells, ui32& rowCount, ui16& colCount) {
         resultCells.clear();
-
         if (data.empty()) {
             return true;
         }
@@ -439,7 +432,6 @@ namespace {
             return false;
         }
 
-        resultBuffer = data;
         return true;
     }
 }
@@ -468,8 +460,13 @@ size_t TSerializedCellVec::SerializedSize(TConstArrayRef<TCell> cells) {
     return size;
 }
 
-bool TSerializedCellVec::DoTryParse(const TString& data) {
-    return TryDeserializeCellVec(data, Buf, Cells);
+bool TSerializedCellVec::DoTryParse() {
+    if (!TryDeserializeCellVec(Buf, Cells)) {
+        Buf.clear();
+        Cells.clear();
+        return false;
+    }
+    return true;
 }
 
 bool TSerializedCellVec::UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec) {
@@ -556,8 +553,15 @@ TString TSerializedCellMatrix::Serialize(TConstArrayRef<TCell> cells, ui32 rowCo
     return result;
 }
 
-bool TSerializedCellMatrix::DoTryParse(const TString& data) {
-    return TryDeserializeCellMatrix(data, Buf, Cells, RowCount, ColCount);
+bool TSerializedCellMatrix::DoTryParse() {
+    if (!TryDeserializeCellMatrix(Buf, Cells, RowCount, ColCount)) {
+        Buf.clear();
+        Cells.clear();
+        RowCount = 0;
+        ColCount = 0;
+        return false;
+    }
+    return true;
 }
 
 void TCellsStorage::Reset(TArrayRef<const TCell> cells)

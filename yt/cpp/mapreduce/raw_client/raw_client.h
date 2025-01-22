@@ -136,6 +136,12 @@ public:
 
     // Operations
 
+    TOperationId StartOperation(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        EOperationType type,
+        const TNode& spec) override;
+
     TOperationAttributes GetOperation(
         const TOperationId& operationId,
         const TGetOperationOptions& options = {}) override;
@@ -188,11 +194,6 @@ public:
         const TJobId& jobId,
         const TGetJobFailContextOptions& options = {}) override;
 
-    TString GetJobStderrWithRetries(
-        const TOperationId& operationId,
-        const TJobId& jobId,
-        const TGetJobStderrOptions& options = {}) override;
-
     IFileReaderPtr GetJobStderr(
         const TOperationId& operationId,
         const TJobId& jobId,
@@ -201,6 +202,13 @@ public:
     std::vector<TJobTraceEvent> GetJobTrace(
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) override;
+
+    // Files
+
+    std::unique_ptr<IInputStream> ReadFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileReaderOptions& options = {}) override;
 
     // File cache
 
@@ -266,6 +274,18 @@ public:
         const TString& query,
         const TSelectRowsOptions& options = {}) override;
 
+    std::unique_ptr<IInputStream> ReadTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TMaybe<TFormat>& format,
+        const TTableReaderOptions& options = {}) override;
+
+    std::unique_ptr<IInputStream> ReadBlobTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TKey& key,
+        const TBlobTableReaderOptions& options = {}) override;
+
     void AlterTable(
         TMutationId& mutationId,
         const TTransactionId& transactionId,
@@ -315,7 +335,7 @@ public:
 
     ui64 GenerateTimestamp() override;
 
-    TAuthorizationInfo WhoAmI() override;
+    IRawBatchRequestPtr CreateRawBatchRequest() override;
 
 private:
     const TClientContext Context_;

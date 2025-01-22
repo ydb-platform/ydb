@@ -3,7 +3,7 @@
 #include "restore_compat.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
@@ -21,6 +21,8 @@
 
 #include <format>
 #include <re2/re2.h>
+
+#include <google/protobuf/text_format.h>
 
 namespace NYdb {
 namespace NDump {
@@ -152,7 +154,7 @@ bool IsDatabase(TSchemeClient& client, const TString& path) {
 }
 
 bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot,
-    bool restoreRootIsDatabase, NYql::TIssues& issues
+    bool restoreRootIsDatabase, NIssue::TIssues& issues
 ) {
     if (backupRoot == restoreRoot) {
         return true;
@@ -292,7 +294,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
     THashSet<TString> oldEntries;
     for (const auto& entry : oldDirectoryList.Entries) {
-        oldEntries.insert(entry.Name);
+        oldEntries.insert(TString{entry.Name});
     }
 
     // restore
@@ -350,9 +352,9 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
         switch (entry.Type) {
             case ESchemeEntryType::Directory: {
-                auto result = RemoveDirectoryRecursive(SchemeClient, TableClient, nullptr, &QueryClient, fullPath, ERecursiveRemovePrompt::Never, {}, true, false);
+                auto result = NConsoleClient::RemoveDirectoryRecursive(SchemeClient, TableClient, nullptr, &QueryClient, TString{fullPath}, ERecursiveRemovePrompt::Never, {}, true, false);
                 if (!result.IsSuccess()) {
-                    LOG_E("Error removing directory: " << fullPath.Quote() << ": " << result.GetIssues().ToOneLineString());
+                    LOG_E("Error removing directory: " << TString{fullPath}.Quote() << ": " << result.GetIssues().ToOneLineString());
                     return restoreResult;
                 }
                 break;
@@ -362,7 +364,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
                     return session.DropTable(path).GetValueSync();
                 });
                 if (!result.IsSuccess()) {
-                    LOG_E("Error removing table: " << fullPath.Quote() << ": " << result.GetIssues().ToOneLineString());
+                    LOG_E("Error removing table: " << TString{fullPath}.Quote() << ": " << result.GetIssues().ToOneLineString());
                     return restoreResult;
                 }
                 break;
@@ -374,13 +376,13 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
                     )", fullPath.c_str()), NQuery::TTxControl::NoTx()).ExtractValueSync();
                 });
                 if (!result.IsSuccess()) {
-                    LOG_E("Error removing view: " << fullPath.Quote() << ": " << result.GetIssues().ToOneLineString());
+                    LOG_E("Error removing view: " << TString{fullPath}.Quote() << ": " << result.GetIssues().ToOneLineString());
                     return restoreResult;
                 }
                 break;
             }
             default:
-                LOG_E("Error removing unexpected object: " << fullPath.Quote());
+                LOG_E("Error removing unexpected object: " << TString{fullPath}.Quote());
                 return restoreResult;
         }
     }
@@ -483,7 +485,7 @@ TRestoreResult TRestoreClient::RestoreView(
 
     const auto backupRoot = GetBackupRoot(query);
     {
-        NYql::TIssues issues;
+        NIssue::TIssues issues;
         if (!RewriteTablePathPrefix(query, backupRoot, dbRestoreRoot, IsDatabase(SchemeClient, dbRestoreRoot), issues)) {
             // hard fail since we want to avoid silent fails with wrong table path prefixes
             return Result<TRestoreResult>(dbPath, TStatus(EStatus::BAD_REQUEST, std::move(issues)));
@@ -501,7 +503,7 @@ TRestoreResult TRestoreClient::RestoreView(
 
     constexpr TStringBuf pattern = R"(CREATE VIEW IF NOT EXISTS `\S+` )";
     if (!re2::RE2::Replace(&query, pattern, std::format(R"(CREATE VIEW IF NOT EXISTS `{}` )", dbPath.c_str()))) {
-        NYql::TIssues issues;
+        NIssue::TIssues issues;
         issues.AddIssue(TStringBuilder() << "Cannot restore a view from the file: " << createViewFile.GetPath().Quote()
             << ". Pattern: \"" << pattern << "\", was not found in the create view statement: " << query.Quote()
         );
@@ -628,7 +630,7 @@ TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDe
         return Result<TRestoreResult>(dbPath, std::move(descResult));
     }
 
-    auto unorderedColumns = [](const TVector<TColumn>& orderedColumns) {
+    auto unorderedColumns = [](const std::vector<TColumn>& orderedColumns) {
         THashMap<TString, TColumn> result;
         for (const auto& column : orderedColumns) {
             result.emplace(column.Name, column);
@@ -636,7 +638,7 @@ TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDe
         return result;
     };
 
-    auto unorderedIndexes = [](const TVector<TIndexDescription>& orderedIndexes) {
+    auto unorderedIndexes = [](const std::vector<TIndexDescription>& orderedIndexes) {
         THashMap<TString, TIndexDescription> result;
         for (const auto& index : orderedIndexes) {
             result.emplace(index.GetIndexName(), index);
@@ -844,7 +846,7 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
             continue;
         }
 
-        LOG_D("Restore index " << index.GetIndexName().Quote() << " on " << dbPath.Quote());
+        LOG_D("Restore index " << TString{index.GetIndexName()}.Quote() << " on " << dbPath.Quote());
 
         TOperation::TOperationId buildIndexId;
         auto buildIndexStatus = TableClient.RetryOperationSync([&, &outId = buildIndexId](TSession session) {
@@ -857,13 +859,13 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
         });
 
         if (!IsOperationStarted(buildIndexStatus)) {
-            LOG_E("Error building index " << index.GetIndexName().Quote() << " on " << dbPath.Quote());
+            LOG_E("Error building index " << TString{index.GetIndexName()}.Quote() << " on " << dbPath.Quote());
             return Result<TRestoreResult>(dbPath, std::move(buildIndexStatus));
         }
 
         auto waitForIndexBuildStatus = WaitForIndexBuild(OperationClient, buildIndexId);
         if (!waitForIndexBuildStatus.IsSuccess()) {
-            LOG_E("Error building index " << index.GetIndexName().Quote() << " on " << dbPath.Quote());
+            LOG_E("Error building index " << TString{index.GetIndexName()}.Quote() << " on " << dbPath.Quote());
             return Result<TRestoreResult>(dbPath, std::move(waitForIndexBuildStatus));
         }
 
@@ -871,7 +873,7 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
             return OperationClient.Forget(buildIndexId).GetValueSync();
         });
         if (!forgetStatus.IsSuccess()) {
-            LOG_E("Error building index " << index.GetIndexName().Quote() << " on " << dbPath.Quote());
+            LOG_E("Error building index " << TString{index.GetIndexName()}.Quote() << " on " << dbPath.Quote());
             return Result<TRestoreResult>(dbPath, std::move(forgetStatus));
         }
     }
@@ -907,7 +909,7 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
     return RestoreConsumers(Join("/", dbPath, fsPath.GetName()), topicDesc.GetConsumers());;
 }
 
-TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const TVector<NTopic::TConsumer>& consumers) {
+TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const std::vector<NTopic::TConsumer>& consumers) {
     for (const auto& consumer : consumers) {
         auto createResult = TopicClient.AlterTopic(topicPath,
             NTopic::TAlterTopicSettings()
@@ -918,9 +920,9 @@ TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const 
                 .EndAddConsumer()
         ).GetValueSync();
         if (createResult.IsSuccess()) {
-            LOG_D("Created consumer " << consumer.GetConsumerName().Quote() << " for " << topicPath.Quote());
+            LOG_D("Created consumer " << TString{consumer.GetConsumerName()}.Quote() << " for " << topicPath.Quote());
         } else {
-            LOG_E("Failed to create " << consumer.GetConsumerName().Quote() << " for " << topicPath.Quote());
+            LOG_E("Failed to create " << TString{consumer.GetConsumerName()}.Quote() << " for " << topicPath.Quote());
             return Result<TRestoreResult>(topicPath, std::move(createResult));
         }
     }

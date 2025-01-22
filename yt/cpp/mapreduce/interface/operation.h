@@ -764,6 +764,9 @@ struct TUserJobSpec
     /// @brief Porto layers to use in the job. Layers are listed from top to bottom.
     FLUENT_VECTOR_FIELD(TYPath, Layer);
 
+    /// @brief Docker image to use in the job.
+    FLUENT_FIELD_OPTION(TString, DockerImage);
+
     ///
     /// @brief MemoryLimit specifies how much memory job process can use.
     ///

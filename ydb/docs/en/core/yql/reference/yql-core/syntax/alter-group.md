@@ -11,3 +11,5 @@ ALTER GROUP role_name DROP USER user_name [, ... ]
 
 * `role_name`: The name of the group.
 * `user_name`: The name of the user.
+
+{% include [x](_includes/builtin_groups.md) %}

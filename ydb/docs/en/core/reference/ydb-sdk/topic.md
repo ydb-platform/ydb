@@ -49,7 +49,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   TDriver driver(driverConfig);
   ```
 
-  This example uses authentication token from the `YDB_TOKEN` environment variable. For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../concepts/auth.md) pages.
+  This example uses authentication token from the `YDB_TOKEN` environment variable. For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../security/authentication.md) pages.
 
   App code snippet for creating a client:
 
@@ -75,7 +75,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   In this example `CloudAuthHelper.getAuthProviderFromEnviron()` helper method is used which retrieves auth token from environment variables.
   For example, `YDB_ACCESS_TOKEN_CREDENTIALS`.
-  For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../concepts/auth.md) pages.
+  For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../security/authentication.md) pages.
 
   Topic client ([source code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) uses {{ ydb-short-name }} transport and handles all topics topic operations, manages read and write sessions.
 
@@ -841,6 +841,23 @@ All the metadata provided when writing a message is sent to a consumer with the 
   ```java
   Message message = reader.receive();
   List<MetadataItem> metadata = message.getMetadataItems();
+  ```
+
+- Python
+
+  To write a message that includes metadata, create the `TopicWriterMessage` object with the `metadata_items` argument as shown below:
+
+  ```python
+  message = ydb.TopicWriterMessage(data=f"message-data", metadata_items={"meta-key": "meta-value"})
+  writer.write(message)
+  ```
+
+  While reading, retrieve metadata from the `metadata_items` field of the `PublicMessage` object:
+
+  ```python
+  message = reader.receive_message()
+  for meta_key, meta_value in message.metadata_items.items():
+      print(f"{meta_key}: {meta_value}")
   ```
 
 {% endlist %}

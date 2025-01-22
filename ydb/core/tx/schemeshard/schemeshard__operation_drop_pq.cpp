@@ -205,7 +205,7 @@ public:
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Sub(pqGroup->TotalPartitionCount);
 
-        parentDir->DecAliveChildren();
+        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
 
         if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
             context.SS->PersistRemovePersQueueGroup(db, pathId);

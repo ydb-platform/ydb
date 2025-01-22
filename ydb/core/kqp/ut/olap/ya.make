@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(200)
 
-IF (WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -37,7 +37,7 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/kqp/ut/olap/helpers
     ydb/core/tx/datashard/ut_common
-    ydb/public/sdk/cpp/client/ydb_operation
+    ydb/public/sdk/cpp/src/client/operation
 )
 
 YQL_LAST_ABI_VERSION()

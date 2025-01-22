@@ -1,7 +1,6 @@
 (
 #comment
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (let res_sink (DataSink 'result))
 (let ed (Dict (DictType (DataType 'Int32) (DataType 'String))))

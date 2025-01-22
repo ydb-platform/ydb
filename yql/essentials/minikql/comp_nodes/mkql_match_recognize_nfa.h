@@ -117,7 +117,7 @@ struct TNfaTransitionGraph {
                     serializer(tr.To);
                 },
                 [&](const TMatchedVarTransition& tr) {
-                    serializer(tr.To, tr.VarIndex, tr.SaveState, tr.ExcludeFromOutput);
+                    serializer(tr.VarIndex, tr.SaveState, tr.To);
                 },
                 [&](const TQuantityEnterTransition& tr) {
                     serializer(tr.To);
@@ -142,7 +142,7 @@ struct TNfaTransitionGraph {
                     serializer(tr.To);
                 },
                 [&](TMatchedVarTransition& tr) {
-                    serializer(tr.To, tr.VarIndex, tr.SaveState, tr.ExcludeFromOutput);
+                    serializer(tr.VarIndex, tr.SaveState, tr.To);
                 },
                 [&](TQuantityEnterTransition& tr) {
                     serializer(tr.To);
@@ -357,6 +357,31 @@ public:
         size_t BeginIndex;
         size_t EndIndex;
         TMatchedVars Vars;
+
+        void Save(TMrOutputSerializer& serializer) const {
+            serializer(BeginIndex, EndIndex);
+            serializer.Write(Vars.size());
+            for (const auto& vector : Vars) {
+                serializer.Write(vector.size());
+                for (const auto& range : vector) {
+                    range.Save(serializer);
+                }
+            }
+        }
+
+        void Load(TMrInputSerializer& serializer) {
+            serializer(BeginIndex, EndIndex);
+            auto varsSize = serializer.Read<size_t>();
+            Vars.clear();
+            Vars.resize(varsSize);
+            for (auto& subvec: Vars) {
+                ui64 vectorSize = serializer.Read<ui64>();
+                subvec.resize(vectorSize);
+                for (auto& item : subvec) {
+                    item.Load(serializer);
+                }
+            }
+        }
     };
 
 private:
@@ -367,15 +392,7 @@ private:
 
         void Save(TMrOutputSerializer& serializer) const {
             serializer.Write(Index);
-            serializer.Write(Match.BeginIndex);
-            serializer.Write(Match.EndIndex);
-            serializer.Write(Match.Vars.size());
-            for (const auto& vector : Match.Vars) {
-                serializer.Write(vector.size());
-                for (const auto& range : vector) {
-                    range.Save(serializer);
-                }
-            }
+            Match.Save(serializer);
             serializer.Write(Quantifiers.size());
             for (ui64 qnt : Quantifiers) {
                 serializer.Write(qnt);
@@ -384,18 +401,7 @@ private:
 
         void Load(TMrInputSerializer& serializer) {
             serializer.Read(Index);
-            serializer.Read(Match.BeginIndex);
-            serializer.Read(Match.EndIndex);
-            auto varsSize = serializer.Read<TMatchedVars::size_type>();
-            Match.Vars.clear();
-            Match.Vars.resize(varsSize);
-            for (auto& subvec: Match.Vars) {
-                ui64 vectorSize = serializer.Read<ui64>();
-                subvec.resize(vectorSize);
-                for (auto& item : subvec) {
-                    item.Load(serializer);
-                }
-            }
+            Match.Load(serializer);
             Quantifiers.clear();
             auto quantifiersSize = serializer.Read<ui64>();
             for (size_t i = 0; i < quantifiersSize; ++i) {

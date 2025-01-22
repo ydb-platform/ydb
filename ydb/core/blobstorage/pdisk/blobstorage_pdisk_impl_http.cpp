@@ -37,6 +37,7 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                         TABLED() {YELLOW_TEXT(str, briefStateStr);}
                         break;
                     case TPDiskMon::TPDisk::Error:
+                    case TPDiskMon::TPDisk::Stopped:
                         TABLED() {RED_TEXT(str, stateStr);}
                         TABLED() {RED_TEXT(str, briefStateStr);}
                         break;
@@ -110,13 +111,32 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                         }
                     }
 
+                    function toggleButtonColor() {
+                        var checkbox = document.getElementById("ignoreChecks");
+                        var okButton = document.getElementById("restartOkButton");
+                        
+                        if (checkbox.checked) {
+                            okButton.classList.remove("btn-primary");
+                            okButton.classList.add("btn-danger");
+                        } else {
+                            okButton.classList.remove("btn-danger");
+                            okButton.classList.add("btn-primary");
+                        }
+                    }
+
                     function sendRestartRequest() {
+                        let ignoreChecks = document.getElementById("ignoreChecks").checked;
+                        let requestData = "restartPDisk=";
+                        if (ignoreChecks) {
+                            requestData += "&ignoreChecks=true";
+                        }
                         $.ajax({
                             url: "",
-                            data: "restartPDisk=",
+                            data: requestData,
                             method: "POST",
                             success: reloadPage
                         });
+                        $('#restartModal').modal('hide');
                     }
 
                     function sendStopRequest() {
@@ -129,11 +149,38 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                     }
                 </script>
             )___";
-            str << "<button onclick='sendRestartRequest()' name='restartPDisk' class='btn btn-default' ";
-            str << "style='background:LightGray; margin:5px' ";
-            str << ">";
-            str << "Restart";
-            str << "</button>";
+
+            str << R"___(
+                <button type="button" class="btn btn-default" style="background: LightGray; margin: 5px" 
+                        data-toggle="modal" data-target="#restartModal">
+                    Restart
+                </button>
+
+                <div id="restartModal" class="modal fade" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                                <h4 class="modal-title">Confirm Restart</h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>Are you sure you want to restart?</p>
+                                <div class="checkbox">
+                                    <label>
+                                        <input type="checkbox" id="ignoreChecks" onchange="toggleButtonColor()"> Ignore all checks
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-primary" id="restartOkButton" onclick="sendRestartRequest()">Restart</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )___";
 
             if (Cfg->SectorMap) {
                 str << "<button onclick='sendStopRequest()' name='stopPDisk' class='btn btn-default' ";

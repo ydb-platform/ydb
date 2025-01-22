@@ -88,4 +88,5 @@ test=[
     "/src/test/java",
     "/src/test-integration",
     "/src/testFixtures",
+    "/src/intTest",
 ]

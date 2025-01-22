@@ -364,7 +364,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
 
             const TParentsMap* parents = getParents();
             if (IsOutputUsedMultipleTimes(path.Table().Cast<TYtOutput>().Ref(), *parents)) {
-                // Inner reduce output is used more than once
+                // Inner map output is used more than once
                 newPaths.push_back(path);
                 continue;
             }
@@ -452,7 +452,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
     }
 
     YQL_ENSURE(newInput.size() >= origReduceInputs);
-    YQL_ENSURE(newInput.size() - origReduceInputs <= 1);
+    // one section can be rewritten into 3:
+    // (ABA) -> (A), (C), (A)
+    YQL_ENSURE(newInput.size() - origReduceInputs <= 2);
 
     TExprNode::TPtr remapLambda = ctx.Builder(fusedMap->MapLambda.Pos())
         .Lambda()
@@ -639,7 +641,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseInnerMap(TExprBase 
     if (NYql::HasSetting(innerMap.Settings().Ref(), EYtSettingType::Flow) != NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)) {
         return node;
     }
-    if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)) {
+    if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount | EYtSettingType::QLFilter)) {
         return node;
     }
     if (!path.Ranges().Maybe<TCoVoid>()) {
@@ -777,7 +779,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
     if (NYql::HasAnySetting(inner.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::JobCount)) {
         return node;
     }
-    if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputApplied)) {
+    if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputApplied | EYtSettingType::QLFilter)) {
         return node;
     }
     if (outerMap.Input().Item(0).Settings().Size() != 0) {

@@ -467,10 +467,13 @@ public:
             resSelectivity = tmpSelectivity;
         } else if (auto notNode = input.Maybe<TKqpOlapNot>()) {
             resSelectivity = 1 - Compute(notNode.Cast().Value());
-        } else if (input.Maybe<TCoAtomList>() && input.Ptr()->ChildrenSize() >= 1) {
-            auto listPtr = input.Maybe<TCoAtomList>().Cast().Ptr()->Child(1);
+        } else if ((input.Maybe<TCoList>() || input.Maybe<TCoAtomList>()) && input.Ptr()->ChildrenSize() >= 1) {
+            TExprNode::TPtr listPtr = input.Ptr();
+            if (listPtr->ChildrenSize() >= 2 && listPtr->Child(0)->Content() == "??") {
+                listPtr = listPtr->Child(1);
+            }
+            
             size_t listSize = listPtr->ChildrenSize();
-
             if (listSize == 3) {
                 TString compSign = TString(listPtr->Child(0)->Content());
                 TString attr = TString(listPtr->Child(1)->Content());

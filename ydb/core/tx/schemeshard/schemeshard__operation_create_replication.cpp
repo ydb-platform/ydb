@@ -44,6 +44,10 @@ struct TTransferStrategy : public IStrategy {
     };
 
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
+        if (!AppData()->FeatureFlags.GetEnableTopicTransfer()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Topic transfer creation is disabled");
+            return true;
+        }
         if (!desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
             return true;
@@ -393,7 +397,7 @@ public:
         result->SetPathId(path->PathId.LocalPathId);
 
         context.SS->IncrementPathDbRefCount(path->PathId);
-        parentPath->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
         parentPath.DomainInfo()->IncPathsInside();
 
         if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {

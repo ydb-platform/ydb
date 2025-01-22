@@ -73,8 +73,13 @@ Y_UNIT_TEST(DropRole) {
 
 Y_UNIT_TEST(CreateUser) {
     TCases cases = {
-        {"use plato;create user user;","USE plato;\n\nCREATE USER user;\n"},
-        {"use plato;create user user encrypted password 'foo';","USE plato;\n\nCREATE USER user ENCRYPTED PASSWORD 'foo';\n"},
+        {"use plato;create user user;", "USE plato;\n\nCREATE USER user;\n"},
+        {"use plato;create user user encrypted password 'foo';", "USE plato;\n\nCREATE USER user ENCRYPTED PASSWORD 'foo';\n"},
+        {"use plato;CREATE USER user1;", "USE plato;\n\nCREATE USER user1;\n"},
+        {"use plato;create user user1 encrypted password '123' login;", "USE plato;\n\nCREATE USER user1 ENCRYPTED PASSWORD '123' LOGIN;\n"},
+        {"use plato;cREATE USER user1 PASSWORD '123' NOLOGIN;", "USE plato;\n\nCREATE USER user1 PASSWORD '123' NOLOGIN;\n"},
+        {"use plato;CREATE USER user1 LOGIN;", "USE plato;\n\nCREATE USER user1 LOGIN;\n"},
+        {"use plato;CREATE USER user1 NOLOGIN;", "USE plato;\n\nCREATE USER user1 NOLOGIN;\n"},
     };
 
     TSetup setup;
@@ -97,6 +102,7 @@ Y_UNIT_TEST(AlterUser) {
         {"use plato;alter user user rename to user;","USE plato;\n\nALTER USER user RENAME TO user;\n"},
         {"use plato;alter user user encrypted password 'foo';","USE plato;\n\nALTER USER user ENCRYPTED PASSWORD 'foo';\n"},
         {"use plato;alter user user with encrypted password 'foo';","USE plato;\n\nALTER USER user WITH ENCRYPTED PASSWORD 'foo';\n"},
+        {"use plato;ALTER USER user1 NOLOGIN;", "USE plato;\n\nALTER USER user1 NOLOGIN;\n"},
     };
 
     TSetup setup;
@@ -211,6 +217,8 @@ Y_UNIT_TEST(NamedNode) {
             "$a = (\n\tSELECT\n\t\t*\n\tFROM\n\t\t$t -- comment\n);\n"},
         {"-- comment\r\r\r$a=1;",
             "-- comment\r\n$a = 1;\n"},
+        {"$a=1;-- comment\n$b=2;/* comment */ /* comment */\n$c = 3;/* comment */ -- comment",
+            "$a = 1; -- comment\n$b = 2; /* comment */ /* comment */\n$c = 3; /* comment */ -- comment\n"},
     };
 
     TSetup setup;
@@ -369,6 +377,26 @@ Y_UNIT_TEST(AsyncReplication) {
             "DROP ASYNC REPLICATION user;\n"},
         {"drop async replication user cascade",
             "DROP ASYNC REPLICATION user CASCADE;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(Transfer) {
+    TCases cases = {
+        {"create transfer user from topic1 to table1 with (user='foo')",
+            "CREATE TRANSFER user FROM topic1 TO table1 WITH (user = 'foo');\n"},
+        {"alter transfer user set (user='foo')",
+            "ALTER TRANSFER user SET (user = 'foo');\n"},
+        {"drop transfer user",
+            "DROP TRANSFER user;\n"},
+        {"drop transfer user cascade",
+            "DROP TRANSFER user CASCADE;\n"},
+        {"create transfer user from topic1 to table1 using ($x) -> { $y = cast($x as String); return $y ; } with (user='foo')",
+            "CREATE TRANSFER user FROM topic1 TO table1 USING ($x) -> {\n    $y = CAST($x AS String);\n    RETURN $y;\n} WITH (user = 'foo');\n"},
+        {"create transfer user from topic1 to table1 using $xxx with (user='foo')",
+            "CREATE TRANSFER user FROM topic1 TO table1 USING $xxx WITH (user = 'foo');\n"},
     };
 
     TSetup setup;

@@ -100,7 +100,7 @@ TTableSchemaPtr MergeTableSchemas(
 
     auto getDeletedColumnsStableNames = [] (const std::vector<TDeletedColumn>& deletedColumns) {
         THashSet<TColumnStableName> stableNames;
-        for (const auto& column: deletedColumns) {
+        for (const auto& column : deletedColumns) {
             stableNames.insert(column.StableName());
         }
         return stableNames;

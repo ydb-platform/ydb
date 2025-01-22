@@ -2,12 +2,12 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/services/ydb/ydb_keys_ut.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -97,7 +97,9 @@ public:
         KikimrServer = std::make_unique<TKikimr>(std::move(appConfig));
         ui16 grpc = KikimrServer->GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig().SetEndpoint(location).SetLog(CreateLogBackend("cerr", TLOG_DEBUG));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TLOG_DEBUG).Release()));
         if (secure) {
             driverConfig.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
         } else {
@@ -1447,7 +1449,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 for (const auto& item : dataReceivedEvent->GetMessages()) {
                     Cerr << item.DebugString(true) << Endl;
                     UNIT_ASSERT_VALUES_EQUAL(item.GetData(), item.GetPartitionKey());
-                    auto hashKey = item.GetExplicitHash().empty() ? HexBytesToDecimal(MD5::Calc(item.GetPartitionKey())) : BytesToDecimal(item.GetExplicitHash());
+                    auto hashKey = item.GetExplicitHash().empty() ? HexBytesToDecimal(MD5::Calc(item.GetPartitionKey())) : BytesToDecimal(TString{item.GetExplicitHash()});
                     UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataStreams::V1::ShardFromDecimal(hashKey, 5), item.GetPartitionStream()->GetPartitionId());
                     UNIT_ASSERT(item.GetIp().empty());
                     if (item.GetData() == dataStr) {

@@ -212,6 +212,33 @@ public:
     const TOrderedItem& back() const {
         return Order_.back();
     }
+
+    TVector<TString> GetLogicalNames() const {
+        TVector<TString> res;
+        res.reserve(Order_.size());
+        for (const auto &[name, _]: Order_) {
+            res.emplace_back(name);
+        }
+        return res;
+    }
+
+    TVector<TString> GetPhysicalNames() const {
+        TVector<TString> res;
+        res.reserve(Order_.size());
+        for (const auto &[_, name]: Order_) {
+            res.emplace_back(name);
+        }
+        return res;
+    }
+
+    bool HasDuplicates() const {
+        for (const auto& e: Order_) {
+            if (e.PhysicalName != e.LogicalName) {
+                return true;
+            }
+        }
+        return false;
+    }
 private:
     THashMap<TString, TString> GeneratedToOriginal_;
     THashMap<TString, uint64_t> UseCount_;

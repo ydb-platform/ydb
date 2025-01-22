@@ -4,11 +4,13 @@
 #include "operation.h"
 #include "transaction.h"
 
+#include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/helpers.h>
+
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/fluent.h>
 
-#include <yt/cpp/mapreduce/common/retry_lib.h>
-#include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <library/cpp/yson/node/node_io.h>
 

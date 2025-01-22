@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    yt/cpp/mapreduce/raw_client
+    yt/cpp/mapreduce/http_client
 )
 
 END()

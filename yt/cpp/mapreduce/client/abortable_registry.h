@@ -1,10 +1,10 @@
 #pragma once
 
-#include <yt/cpp/mapreduce/interface/common.h>
+#include <yt/cpp/mapreduce/common/fwd.h>
 
 #include <yt/cpp/mapreduce/http/context.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
+#include <yt/cpp/mapreduce/interface/common.h>
 
 #include <util/str_stl.h>
 #include <util/system/mutex.h>

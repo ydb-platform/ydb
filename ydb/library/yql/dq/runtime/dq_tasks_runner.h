@@ -89,11 +89,12 @@ public:
     }
 
     TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats, THashMap<ui32, const IDqAsyncOutputBuffer*>&& sinks,
-        THashMap<ui32, const IDqAsyncInputBuffer*>&& inputTransforms)
+        THashMap<ui32, const IDqAsyncInputBuffer*>&& inputTransforms, ui64 actorElapsedTicks)
         : StatsPtr(stats)
         , IsDefined(true)
         , Sinks(std::move(sinks))
-        , InputTransforms(std::move(inputTransforms)) {
+        , InputTransforms(std::move(inputTransforms))
+        , ActorElapsedTicks(actorElapsedTicks) {
     }
 
     const TTaskRunnerStatsBase* Get() {
@@ -115,11 +116,16 @@ public:
         return InputTransforms.at(inputTransformId);
     }
 
+    ui64 GetActorElapsedTicks() {
+        return ActorElapsedTicks;
+    }
+
 private:
     const TDqTaskRunnerStats* StatsPtr;
     bool IsDefined;
     THashMap<ui32, const IDqAsyncOutputBuffer*> Sinks;
     THashMap<ui32, const IDqAsyncInputBuffer*> InputTransforms;
+    ui64 ActorElapsedTicks = 0;
 };
 
 struct TDqTaskRunnerContext {

@@ -70,11 +70,11 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "source_finished")("source_id", finishedSource->GetSourceId())(
                     "source_idx", finishedSource->GetSourceIdx())("limit", Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())(
                     "fetched", finishedSource->GetResultRecordsCount());
-                if (FetchedCount > (ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust()) {
+                if (FetchedCount > (ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust() && SortedSources.size()) {
                     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "limit_exhausted")(
                         "limit", Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())("fetched", FetchedCount);
                     SortedSources.clear();
-                    break;
+                    IntervalsInFlightCount = FetchingInFlightSources.size();
                 }
             }
         }

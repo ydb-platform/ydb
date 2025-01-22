@@ -2389,6 +2389,31 @@ enum class EOperationBriefState : int
     Failed        /* "failed" */,
 };
 
+
+///
+/// @brief Operation state.
+enum class EOperationState : int
+{
+    None                /* "none" */,
+    Starting            /* "starting" */,
+    Orphaned            /* "orphaned" */,
+    WaitingForAgent     /* "waiting_for_agent" */,
+    Initializing        /* "initializing" */,
+    Preparing           /* "preparing" */,
+    Materializing       /* "orphaned" */,
+    ReviveInitializing  /* "revive_initializing" */,
+    Reviving            /* "reviving" */,
+    RevivingJobs        /* "reviving_jobs" */,
+    Pending             /* "pending" */,
+    Running             /* "running" */,
+    Completing          /* "completing" */,
+    Completed           /* "completed" */,
+    Aborting            /* "aborting" */,
+    Aborted             /* "aborted" */,
+    Failing             /* "failing" */,
+    Failed              /* "failed" */,
+};
+
 ///
 /// @brief Operation type.
 enum class EOperationType : int
@@ -2600,7 +2625,7 @@ struct TListOperationsOptions
 
     ///
     /// @brief Choose operations with given @ref NYT::TOperationAttributes::State.
-    FLUENT_FIELD_OPTION(TString, State);
+    FLUENT_FIELD_OPTION(EOperationState, State);
 
     ///
     /// @brief Choose operations with given @ref NYT::TOperationAttributes::Type.
@@ -2697,7 +2722,6 @@ enum class EListJobsDataSource : int
 /// @brief Job type.
 enum class EJobType : int
 {
-    SchedulerFirst    /* "scheduler_first" */,
     Map               /* "map" */,
     PartitionMap      /* "partition_map" */,
     SortedMerge       /* "sorted_merge" */,
@@ -2715,13 +2739,10 @@ enum class EJobType : int
     JoinReduce        /* "join_reduce" */,
     Vanilla           /* "vanilla" */,
     SchedulerUnknown  /* "scheduler_unknown" */,
-    SchedulerLast     /* "scheduler_last" */,
-    ReplicatorFirst   /* "replicator_first" */,
     ReplicateChunk    /* "replicate_chunk" */,
     RemoveChunk       /* "remove_chunk" */,
     RepairChunk       /* "repair_chunk" */,
     SealChunk         /* "seal_chunk" */,
-    ReplicatorLast    /* "replicator_last" */,
 };
 
 ///

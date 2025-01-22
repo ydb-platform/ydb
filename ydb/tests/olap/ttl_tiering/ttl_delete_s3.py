@@ -163,7 +163,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
                 # So we wait until some data appears in any bucket
                 return cold_bucket_stat[0] != 0 or frozen_bucket_stat[0] != 0 or medium_bucket_stat[0] != 0
 
-            if not self.wait_for(lambda: data_distributes_across_tiers(), 600):
+            if not self.wait_for(lambda: data_distributes_across_tiers(), 120):
                 raise Exception("Data eviction has not been started")
 
             answer1 = self.ydb_client.query(f"SELECT * from `{table_path}` ORDER BY ts")

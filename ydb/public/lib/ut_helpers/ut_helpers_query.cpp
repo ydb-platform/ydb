@@ -1,8 +1,8 @@
 #include "ut_helpers_query.h"
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
-#include <ydb/library/grpc/client/grpc_common.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/string.h>

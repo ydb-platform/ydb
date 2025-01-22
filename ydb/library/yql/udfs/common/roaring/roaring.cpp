@@ -9,6 +9,7 @@
 
 #include <util/generic/array_ref.h>
 #include <util/generic/vector.h>
+#include <util/generic/singleton.h>
 #include <util/string/builder.h>
 #include <util/system/yassert.h>
 
@@ -376,11 +377,18 @@ namespace {
 
     class TRoaringModule: public IUdfModule {
     public:
+        class TMemoryHookInitializer {
+        public:
+            TMemoryHookInitializer() {
+                auto memoryHook = roaring_memory_t{
+                    RoaringMallocUdf, RoaringReallocUdf, RoaringCallocUdf,
+                    RoaringFreeUdf, RoaringAlignedMallocUdf, RoaringFreeUdf};
+                roaring_init_memory_hook(memoryHook);
+            }
+        };
+
         TRoaringModule() {
-            auto memoryHook = roaring_memory_t{
-                RoaringMallocUdf, RoaringReallocUdf, RoaringCallocUdf,
-                RoaringFreeUdf, RoaringAlignedMallocUdf, RoaringFreeUdf};
-            roaring_init_memory_hook(memoryHook);
+            Singleton<TMemoryHookInitializer>();
         }
 
         TStringRef Name() const {

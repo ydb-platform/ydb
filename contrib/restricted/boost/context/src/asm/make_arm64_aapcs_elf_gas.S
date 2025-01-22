@@ -55,7 +55,6 @@
 .text
 .align  2
 .global make_fcontext
-.hidden make_fcontext
 .type   make_fcontext, %function
 make_fcontext:
     # shift address in x0 (allocated stack) to lower 16 byte boundary

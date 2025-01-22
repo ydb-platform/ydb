@@ -874,6 +874,7 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     req->set_multiplexing_band(static_cast<NProto::EMultiplexingBand>(options.MultiplexingBand));
 
     ToProto(req->mutable_tablet_read_options(), options);
+    ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspLookupRowsPtr& rsp) {
         auto rowset = DeserializeRowset<TUnversionedRow>(
@@ -926,6 +927,10 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     if (options.RetentionConfig) {
         ToProto(req->mutable_retention_config(), *options.RetentionConfig);
     }
+    if (options.VersionedReadOptions.ReadMode != NTableClient::EVersionedIOMode::Default) {
+        THROW_ERROR_EXCEPTION("Versioned lookup does not support versioned read mode %Qlv",
+            options.VersionedReadOptions.ReadMode);
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspVersionedLookupRowsPtr& rsp) {
         auto rowset = DeserializeRowset<TVersionedRow>(
@@ -971,6 +976,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
             subrequest.Keys,
             protoSubrequest->mutable_rowset_descriptor());
         protoSubrequest->set_attachment_count(rowset.size());
+        ToProto(protoSubrequest->mutable_versioned_read_options(), subrequest.Options.VersionedReadOptions);
         req->Attachments().insert(req->Attachments().end(), rowset.begin(), rowset.end());
     }
 

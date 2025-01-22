@@ -8,7 +8,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/set.h>
 #include <util/stream/str.h>
@@ -380,7 +380,7 @@ namespace NYdb::NConsoleClient {
         }
 
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -484,14 +484,14 @@ namespace NYdb::NConsoleClient {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto describeResult = topicClient.DescribeTopic(TopicName).GetValueSync();
-        ThrowOnError(describeResult);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
 
         auto settings = PrepareAlterSettings(describeResult);
         auto result = topicClient.AlterTopic(TopicName, settings).GetValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         return EXIT_SUCCESS;
     }
 
@@ -515,11 +515,11 @@ namespace NYdb::NConsoleClient {
         NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto settings = NYdb::NTopic::TDropTopicSettings();
         TStatus status = topicClient.DropTopic(TopicName, settings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -570,7 +570,7 @@ namespace NYdb::NConsoleClient {
         NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         NYdb::NTopic::TAlterTopicSettings readRuleSettings = NYdb::NTopic::TAlterTopicSettings();
         NYdb::NTopic::TConsumerSettings<NYdb::NTopic::TAlterTopicSettings> consumerSettings(readRuleSettings);
@@ -588,7 +588,7 @@ namespace NYdb::NConsoleClient {
         readRuleSettings.AppendAddConsumers(consumerSettings);
 
         TStatus status = topicClient.AlterTopic(TopicName, readRuleSettings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -615,7 +615,7 @@ namespace NYdb::NConsoleClient {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto consumers = topicDescription.GetTopicDescription().GetConsumers();
         if (!std::any_of(consumers.begin(), consumers.end(), [&](const auto& consumer) { return consumer.GetConsumerName() == ConsumerName_; }))
@@ -628,7 +628,7 @@ namespace NYdb::NConsoleClient {
         removeReadRuleSettings.AppendDropConsumers(ConsumerName_);
 
         TStatus status = topicClient.AlterTopic(TopicName, removeReadRuleSettings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -659,7 +659,7 @@ namespace NYdb::NConsoleClient {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto consumerDescription = topicClient.DescribeConsumer(TopicName, ConsumerName_, NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(ShowPartitionStats_)).GetValueSync();
-        ThrowOnError(consumerDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(consumerDescription);
 
         return PrintDescription(this, OutputFormat, consumerDescription.GetConsumerDescription(), &TCommandTopicConsumerDescribe::PrintPrettyResult);
     }
@@ -700,7 +700,7 @@ namespace NYdb::NConsoleClient {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto consumers = topicDescription.GetTopicDescription().GetConsumers();
         if (!std::any_of(consumers.begin(), consumers.end(), [&](const auto& consumer) { return consumer.GetConsumerName() == ConsumerName_; }))
@@ -710,7 +710,7 @@ namespace NYdb::NConsoleClient {
         }
 
         TStatus status = topicClient.CommitOffset(TopicName, PartitionId_, ConsumerName_, Offset_).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -901,7 +901,7 @@ namespace NYdb::NConsoleClient {
         ValidateConfig();
 
         auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
+            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
         NTopic::TTopicClient topicClient(*driver);
 
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
@@ -1032,7 +1032,7 @@ namespace NYdb::NConsoleClient {
         SetInterruptHandlers();
 
         auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
+            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
         NTopic::TTopicClient topicClient(*driver);
 
         {

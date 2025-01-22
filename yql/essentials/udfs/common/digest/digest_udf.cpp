@@ -62,6 +62,7 @@ namespace {
             args->Done();
             builder.OptionalArgs(1);
             builder.Returns(builder.SimpleType<TResult>());
+            builder.IsStrict();
 
             if (!typesOnly) {
                 builder.Implementation(new TDigestFunctionUdf<DigestType, TResult, Generator>(GetSourcePosition(builder)));

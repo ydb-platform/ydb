@@ -77,7 +77,7 @@ namespace NActors {
         // }
         EFlag ConnectStatus;
         i64 ClockSkewUs;
-        bool ReportClockSkew;
+        bool SameScope;
         ui64 PingTimeUs;
         NActors::TScopeId ScopeId;
         double Utilization;

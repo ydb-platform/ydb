@@ -112,7 +112,7 @@ namespace NMonitoring {
     class TBusNgMonPage;
 }
 
-namespace NYdb {
+namespace NYdb::inline V3 {
     class TDriver;
 }
 

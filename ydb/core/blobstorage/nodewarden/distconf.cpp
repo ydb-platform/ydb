@@ -34,10 +34,13 @@ namespace NKikimr::NStorage {
 
         // generate initial drive set and query stored configuration
         if (IsSelfStatic) {
-            EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
-                DrivesToRead.push_back(drive.GetPath());
-            });
-            std::sort(DrivesToRead.begin(), DrivesToRead.end());
+            if (BaseConfig.GetSelfManagementConfig().GetEnabled()) {
+                // read this only if it is possibly enabled
+                EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+                    DrivesToRead.push_back(drive.GetPath());
+                });
+                std::sort(DrivesToRead.begin(), DrivesToRead.end());
+            }
             ReadConfig();
         } else {
             StorageConfigLoaded = true;
@@ -63,7 +66,8 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
-        if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration()) {
+        if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
+                (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
             StorageConfigYaml = StorageConfigFetchYaml = {};
             StorageConfigFetchYamlHash = 0;
             StorageConfigYamlVersion.reset();
@@ -90,21 +94,23 @@ namespace NKikimr::NStorage {
                 }
             }
 
+            SelfManagementEnabled = (!IsSelfStatic || BaseConfig.GetSelfManagementConfig().GetEnabled()) &&
+                config.GetSelfManagementConfig().GetEnabled() &&
+                config.GetGeneration();
+
             StorageConfig.emplace(config);
             if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
                 ProposedStorageConfig.reset();
             }
 
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenStorageConfig(*StorageConfig,
-                ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr));
+            ReportStorageConfigToNodeWarden(0);
 
             if (IsSelfStatic) {
                 PersistConfig({});
                 ApplyConfigUpdateToDynamicNodes(false);
+                ConnectToConsole();
+                SendConfigProposeRequest();
             }
-
-            ConnectToConsole();
-            SendConfigProposeRequest();
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -288,6 +294,19 @@ namespace NKikimr::NStorage {
             }
             processPendingEvents();
         }
+    }
+
+    void TDistributedConfigKeeper::ReportStorageConfigToNodeWarden(ui64 cookie) {
+        Y_ABORT_UNLESS(StorageConfig);
+        const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+        const NKikimrBlobStorage::TStorageConfig *config = SelfManagementEnabled
+            ? &StorageConfig.value()
+            : &BaseConfig;
+        const NKikimrBlobStorage::TStorageConfig *proposedConfig = ProposedStorageConfig && SelfManagementEnabled
+            ? &ProposedStorageConfig.value()
+            : nullptr;
+        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*config, proposedConfig, SelfManagementEnabled);
+        Send(wardenId, ev.release(), 0, cookie);
     }
 
     STFUNC(TDistributedConfigKeeper::StateFunc) {

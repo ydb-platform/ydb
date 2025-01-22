@@ -99,8 +99,8 @@ bool GetCacheOwnership(const TString& id, NMeta::TGetCacheOwnershipCallback cb) 
                                         auto resultSet = res.GetResultSet(0);
                                         NYdb::TResultSetParser rsParser(resultSet);
                                         if (rsParser.TryNextRow()) {
-                                            TString forward = (rsParser.ColumnParser(0).GetOptionalUtf8()).GetRef();
-                                            TInstant deadline = (rsParser.ColumnParser(1).GetOptionalTimestamp()).GetRef();
+                                            TString forward = rsParser.ColumnParser(0).GetOptionalUtf8().value();
+                                            TInstant deadline = rsParser.ColumnParser(1).GetOptionalTimestamp().value();
                                             if (forward == LocalEndpoint) {
                                                 MLOG_D("GetCacheOwnership(" << id << ") - got data (forward to myself until " << deadline << ")");
                                                 cb({.Deadline = deadline});

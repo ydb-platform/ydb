@@ -6,8 +6,8 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
-#include <ydb/public/sdk/cpp/client/extensions/discovery_mutator/discovery_mutator.h>
-#include <ydb/public/sdk/cpp/client/extensions/solomon_stats/pull_client.h>
+#include <ydb-cpp-sdk/client/extensions/discovery_mutator/discovery_mutator.h>
+#include <ydb-cpp-sdk/client/extensions/solomon_stats/pull_client.h>
 
 #include <util/generic/cast.h>
 #include <util/generic/strbuf.h>
@@ -84,7 +84,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
             cfg.SetGrpcMemoryQuota(config.GetGrpcMemoryQuota());
         }
         cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async); // We are in actor system!
-        cfg.SetLog(MakeHolder<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
+        cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         return cfg;
     }
 

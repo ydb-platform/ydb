@@ -13,14 +13,15 @@ from email import message_from_file
 from email.message import Message
 from tempfile import NamedTemporaryFile
 
-from distutils.util import rfc822_escape
+from packaging.markers import Marker
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name, canonicalize_version
+from packaging.version import Version
 
 from . import _normalization, _reqs
-from .extern.packaging.markers import Marker
-from .extern.packaging.requirements import Requirement
-from .extern.packaging.utils import canonicalize_name, canonicalize_version
-from .extern.packaging.version import Version
 from .warnings import SetuptoolsDeprecationWarning
+
+from distutils.util import rfc822_escape
 
 
 def get_metadata_version(self):
@@ -149,7 +150,7 @@ def write_pkg_file(self, file):  # noqa: C901  # is too complex (14)  # FIXME
     version = self.get_metadata_version()
 
     def write_field(key, value):
-        file.write("%s: %s\n" % (key, value))
+        file.write(f"{key}: {value}\n")
 
     write_field('Metadata-Version', str(version))
     write_field('Name', self.get_name())
@@ -177,8 +178,8 @@ def write_pkg_file(self, file):  # noqa: C901  # is too complex (14)  # FIXME
     if license:
         write_field('License', rfc822_escape(license))
 
-    for project_url in self.project_urls.items():
-        write_field('Project-URL', '%s, %s' % project_url)
+    for label, url in self.project_urls.items():
+        write_field('Project-URL', f'{label}, {url}')
 
     keywords = ','.join(self.get_keywords())
     if keywords:
@@ -208,7 +209,7 @@ def write_pkg_file(self, file):  # noqa: C901  # is too complex (14)  # FIXME
 
     long_description = self.get_long_description()
     if long_description:
-        file.write("\n%s" % long_description)
+        file.write(f"\n{long_description}")
         if not long_description.endswith("\n"):
             file.write("\n")
 

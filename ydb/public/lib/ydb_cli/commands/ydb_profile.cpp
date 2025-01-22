@@ -94,8 +94,8 @@ namespace {
 
     };
 
-    TString BlurSecret(const TString& in) {
-        TString out(in);
+    std::string BlurSecret(const std::string& in) {
+        std::string out(in);
         size_t clearSymbolsCount = Min(size_t(10), out.length() / 4);
         for (size_t i = clearSymbolsCount; i < out.length() - clearSymbolsCount; ++i) {
             out[i] = '*';
@@ -103,8 +103,8 @@ namespace {
         return out;
     }
 
-    TString ReplaceWithAsterisks(const TString& in) {
-        return TString(in.length(), '*');
+    std::string ReplaceWithAsterisks(const std::string& in) {
+        return std::string(in.length(), '*');
     }
 
     void SetupProfileName(TString& profileName, std::shared_ptr<IProfileManager> profileManager) {
@@ -197,7 +197,7 @@ namespace {
         }
     }
 
-    TString TryBlurValue(const TString& authMethod, const TString& value) {
+    std::string TryBlurValue(const TString& authMethod, const std::string& value) {
         if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file" || authMethod == "oauth2-key-file") {
             return value;
         }
@@ -297,10 +297,10 @@ void TCommandConnectionInfo::PrintInfo(TConfig& config) {
         }
     }
     if (config.UseStaticCredentials) {
-        if (config.StaticCredentials.User) {
+        if (!config.StaticCredentials.User.empty()) {
             Cout << "user: " << config.StaticCredentials.User << Endl;
         }
-        if (config.StaticCredentials.Password) {
+        if (!config.StaticCredentials.Password.empty()) {
             Cout << "password: " << TryBlurValue("password", config.StaticCredentials.Password) << Endl;
         }
     }

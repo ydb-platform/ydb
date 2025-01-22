@@ -49,27 +49,12 @@ public:
         const auto one = GetNodeValue(Dict1, ctx, block);
         const auto two = GetNodeValue(Dict2, ctx, block);
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto joinFuncType = FunctionType::get(Type::getInt128Ty(context),
-                { joinFuncArg->getType(), ctx.Ctx->getType(), one->getType(), two->getType() }, false);
-            const auto joinFuncPtr = CastInst::Create(Instruction::IntToPtr, joinFunc, PointerType::getUnqual(joinFuncType), "cast", block);
-            const auto join = CallInst::Create(joinFuncType, joinFuncPtr, { joinFuncArg, ctx.Ctx, one, two }, "join", block);
-            AddRefBoxed(join, ctx, block);
-            new StoreInst(join, pointer, block);
-        } else {
-            const auto onePtr = new AllocaInst(one->getType(), 0U, "one_ptr", block);
-            const auto twoPtr = new AllocaInst(two->getType(), 0U, "two_ptr", block);
-            new StoreInst(one, onePtr, block);
-            new StoreInst(two, twoPtr, block);
-
-            const auto joinFuncType = FunctionType::get(Type::getVoidTy(context),
-                { joinFuncArg->getType(), pointer->getType(), ctx.Ctx->getType(), onePtr->getType(), twoPtr->getType() }, false);
-
-            const auto joinFuncPtr = CastInst::Create(Instruction::IntToPtr, joinFunc, PointerType::getUnqual(joinFuncType), "cast", block);
-            CallInst::Create(joinFuncType, joinFuncPtr, { joinFuncArg, pointer, ctx.Ctx, onePtr, twoPtr }, "", block);
-            const auto join = new LoadInst(Type::getInt128Ty(context), pointer, "join", block);
-            AddRefBoxed(join, ctx, block);
-        }
+        const auto joinFuncType = FunctionType::get(Type::getInt128Ty(context),
+            { joinFuncArg->getType(), ctx.Ctx->getType(), one->getType(), two->getType() }, false);
+        const auto joinFuncPtr = CastInst::Create(Instruction::IntToPtr, joinFunc, PointerType::getUnqual(joinFuncType), "cast", block);
+        const auto join = CallInst::Create(joinFuncType, joinFuncPtr, { joinFuncArg, ctx.Ctx, one, two }, "join", block);
+        AddRefBoxed(join, ctx, block);
+        new StoreInst(join, pointer, block);
     }
 #endif
 private:

@@ -346,6 +346,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
     TProposeRequest::TPtr Request;
     THolder<TProposeResponse> Response = nullptr;
 
+    TString PeerName;
     TString UserSID;
     TString SanitizedToken;
 
@@ -378,10 +379,12 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             UserSID = userToken->GetUserSID();
             SanitizedToken = userToken->GetSanitizedToken();
         }
+        PeerName = Request->Get()->Record.GetPeerName();
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
         TOperationContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
+        context.PeerName = PeerName;
 
         //NOTE: Successful IgniteOperation will leave created operation in Self->Operations and accumulated changes in the context.
         // Unsuccessful IgniteOperation will leave no operation and context will also be clean.
@@ -444,7 +447,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                         << ", response: " << Response->Record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
-        AuditLogModifySchemeTransaction(record, Response->Record, Self, UserSID, SanitizedToken);
+        AuditLogModifySchemeTransaction(record, Response->Record, Self, PeerName, UserSID, SanitizedToken);
 
         //NOTE: Double audit output into the common log as a way to ease
         // transition to a new auditlog stream.

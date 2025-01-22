@@ -715,7 +715,7 @@ public:
         dstPath.DomainInfo()->IncPathsInside(1, isBackup);
         dstPath.DomainInfo()->AddInternalShards(txState, isBackup);
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parent.Base()->IncAliveChildren(1, isBackup);
+        IncAliveChildrenSafeWithUndo(OperationId, parent, context, isBackup);
 
         LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TCopyTable Propose creating new table"

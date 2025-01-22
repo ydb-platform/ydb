@@ -102,7 +102,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
 
         auto result = client.ExplainYqlScript(Script, settings).GetValueSync();
 
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         PrintExplainResult(result);
     } else {
         NScripting::TExecuteYqlRequestSettings settings;
@@ -124,7 +124,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
                 );
 
                 auto result = asyncResult.GetValueSync();
-                ThrowOnError(result);
+                NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
                 PrintResponseHeader(result);
                 PrintResponse(result);
             }
@@ -134,7 +134,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
                     FillSettings(settings)
             );
             auto result = asyncResult.GetValueSync();
-            ThrowOnError(result);
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
             PrintResponseHeader(result);
             PrintResponse(result);
         }
@@ -146,7 +146,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
 void TCommandExecuteYqlScript::PrintResponse(NScripting::TExecuteYqlResult& result) {
     {
         TResultSetPrinter printer(OutputFormat);
-        const TVector<TResultSet>& resultSets = result.GetResultSets();
+        const std::vector<TResultSet>& resultSets = result.GetResultSets();
         for (auto resultSetIt = resultSets.begin(); resultSetIt != resultSets.end(); ++resultSetIt) {
             if (resultSetIt != resultSets.begin()) {
                 printer.Reset();
@@ -155,8 +155,8 @@ void TCommandExecuteYqlScript::PrintResponse(NScripting::TExecuteYqlResult& resu
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
-    const TMaybe<NTable::TQueryStats>& stats = result.GetStats();
-    if (stats.Defined()) {
+    const std::optional<NTable::TQueryStats>& stats = result.GetStats();
+    if (stats.has_value()) {
         Cout << Endl << "Statistics:" << Endl << stats->ToString();
 
         auto fullStats = stats->GetPlan();
@@ -164,11 +164,11 @@ void TCommandExecuteYqlScript::PrintResponse(NScripting::TExecuteYqlResult& resu
             Cout << Endl << "Full statistics:" << Endl;
 
             TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
-            queryPlanPrinter.Print(*fullStats);
+            queryPlanPrinter.Print(TString{*fullStats});
 
             if (FlameGraphPath) {
                 try {
-                    NKikimr::NVisual::GenerateFlameGraphSvg(*FlameGraphPath, *fullStats);
+                    NKikimr::NVisual::GenerateFlameGraphSvg(*FlameGraphPath, TString{*fullStats});
                     Cout << "Resource usage flame graph is successfully saved to " << *FlameGraphPath << Endl;
                 }
                 catch (const yexception& ex) {
@@ -181,7 +181,7 @@ void TCommandExecuteYqlScript::PrintResponse(NScripting::TExecuteYqlResult& resu
 
 void TCommandExecuteYqlScript::PrintExplainResult(NScripting::TExplainYqlResult& result) {
     TQueryPlanPrinter queryPlanPrinter(OutputFormat);
-    queryPlanPrinter.Print(result.GetPlan());
+    queryPlanPrinter.Print(TString{result.GetPlan()});
 }
 
 }

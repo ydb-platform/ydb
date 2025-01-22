@@ -12,10 +12,8 @@ namespace NKikimr::NStorage {
             return; // this is not the root node
         } else if (enablingDistconf) {
             // NO RETURN HERE -> right now we are enabling distconf, so we can skip rest of the checks
-        } else if (!StorageConfig || !StorageConfig->GetSelfManagementConfig().GetEnabled()) {
-            return; // no self-management config enabled
-        } else if (!StorageConfig->HasStateStorageConfig()) {
-            return; // no way to find Console too
+        } else if (!SelfManagementEnabled || !StorageConfig->HasStateStorageConfig()) {
+            return; // no self-management config enabled or no way to find Console (no statestorage configured yet)
         }
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC66, "ConnectToConsole: creating pipe to the Console");

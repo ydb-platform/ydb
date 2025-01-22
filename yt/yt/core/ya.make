@@ -30,6 +30,7 @@ SRCS(
     GLOBAL bus/tcp/configure_dispatcher.cpp
     bus/tcp/packet.cpp
     bus/tcp/client.cpp
+    bus/tcp/local_bypass.cpp
     bus/tcp/server.cpp
     bus/tcp/ssl_context.cpp
     bus/tcp/ssl_helpers.cpp
@@ -71,7 +72,6 @@ SRCS(
     concurrency/invoker_alarm.cpp
     concurrency/invoker_queue.cpp
     concurrency/lease_manager.cpp
-    concurrency/new_fair_share_thread_pool.cpp
     concurrency/nonblocking_batcher.cpp
     concurrency/notify_manager.cpp
     concurrency/periodic_executor.cpp
@@ -269,6 +269,7 @@ SRCS(
     yson/string_merger.cpp
     yson/ypath_designated_consumer.cpp
     yson/ypath_filtering_consumer.cpp
+    yson/yson_builder.cpp
     yson/depth_limiting_yson_consumer.cpp
     yson/list_verb_lazy_yson_consumer.cpp
     yson/attributes_stripper.cpp
@@ -300,6 +301,7 @@ SRCS(
     ytree/ypath_service.cpp
     ytree/yson_struct.cpp
     ytree/yson_struct_detail.cpp
+    ytree/yson_struct_update.cpp
 
     json/config.cpp
     json/json_callbacks.cpp

@@ -79,8 +79,8 @@ TString TFetchingScript::DebugString() const {
         return "";
     }
     sb << "{branch:" << BranchName << ";";
-    if (FinishInstant && StartInstant) {
-        sb << "duration:" << *FinishInstant - *StartInstant << ";";
+    if (AtomicGet(FinishInstant) && AtomicGet(StartInstant)) {
+        sb << "duration:" << AtomicGet(FinishInstant) - AtomicGet(StartInstant) << ";";
     }
 
     sb << "steps_10Ms:[" << sbBranch << "]}";
@@ -120,7 +120,7 @@ void TFetchingScript::Allocation(const std::set<ui32>& entityIds, const EStageFe
 
 TString IFetchingStep::DebugString() const {
     TStringBuilder sb;
-    sb << "name=" << Name << ";duration=" << SumDuration << ";"
+    sb << "name=" << Name << ";duration=" << GetSumDuration() << ";"
        << "size=" << 1e-9 * SumSize << ";details={" << DoDebugString() << "};";
     return sb;
 }

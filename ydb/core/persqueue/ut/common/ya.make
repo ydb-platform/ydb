@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     pq_ut_common.cpp
     pq_ut_common.h

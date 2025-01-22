@@ -2947,8 +2947,12 @@ NNodes::TExprBase DqBuildStageWithSourceWrap(NNodes::TExprBase node, TExprContex
 
     if (supportsBlocks) {
         wideWrap = ctx.Builder(node.Pos())
-            .Callable("WideFromBlocks")
-                .Add(0, wideWrap)
+            .Callable("ToFlow")
+                .Callable(0, "WideFromBlocks")
+                    .Callable(0, "FromFlow")
+                        .Add(0, wideWrap)
+                    .Seal()
+                .Seal()
             .Seal()
             .Build();
     }

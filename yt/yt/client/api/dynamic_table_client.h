@@ -18,6 +18,8 @@ struct TLookupRequestOptions
     bool EnablePartialResult = false;
     std::optional<bool> UseLookupCache;
     TDetailedProfilingInfoPtr DetailedProfilingInfo;
+    //! Add |$timestamp:columnName| to result if readMode is latest_timestamp.
+    NTableClient::TVersionedReadOptions VersionedReadOptions;
 };
 
 struct TLookupRowsOptionsBase

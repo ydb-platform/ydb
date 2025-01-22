@@ -7,6 +7,7 @@
 
 namespace NYdb {
 
+inline namespace V3 {
 namespace NQuery {
     class TQueryClient;
     class TSession;
@@ -14,7 +15,8 @@ namespace NQuery {
 
 namespace NDebug {
     class TDebugClient;
-};
+}
+}
 
 namespace NConsoleClient {
 

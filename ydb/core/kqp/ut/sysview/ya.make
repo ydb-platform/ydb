@@ -1,5 +1,9 @@
 UNITTEST_FOR(ydb/core/kqp)
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 

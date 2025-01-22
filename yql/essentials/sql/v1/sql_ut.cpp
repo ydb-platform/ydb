@@ -4,6 +4,7 @@
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
 #include <util/generic/map.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -285,6 +286,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(ReplicationKeywordNotReservedForNames) {
         UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE REPLICATION (REPLICATION Uint32, PRIMARY KEY (REPLICATION));").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; SELECT REPLICATION FROM REPLICATION").IsOk());
+    }
+
+    Y_UNIT_TEST(TransferKeywordNotReservedForNames) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE TRANSFER (TRANSFER Uint32, PRIMARY KEY (TRANSFER));").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; SELECT TRANSFER FROM TRANSFER").IsOk());
     }
 
     Y_UNIT_TEST(SecondsKeywordNotReservedForNames) {
@@ -1214,6 +1220,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DeleteFromTableBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch delete from plato.Input;", 10, "kikimr");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'delete)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('is_batch 'true)"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(DeleteFromTableOnValues) {
         NYql::TAstParseResult res = SqlToYql("delete from plato.Input on (key) values (1);",
             10, "kikimr");
@@ -1248,6 +1271,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DeleteFromTableOnBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch delete from plato.Input on (key) values (1);",
+            10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH DELETE is unsupported with ON\n");
+    }
+
     Y_UNIT_TEST(UpdateByValues) {
         NYql::TAstParseResult res = SqlToYql("update plato.Input set key = 777, value = 'cool' where key = 200;", 10, "kikimr");
         UNIT_ASSERT(res.Root);
@@ -1272,6 +1302,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
+    }
+
+    Y_UNIT_TEST(UpdateByValuesBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch update plato.Input set key = 777, value = 'cool' where key = 200;", 10, "kikimr");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('is_batch 'true)"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
     Y_UNIT_TEST(UpdateByMultiValues) {
@@ -1382,6 +1429,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(UpdateOnBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch update plato.Input on (key, value) values (5, 'cool')", 10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH UPDATE is unsupported with ON\n");
     }
 
     Y_UNIT_TEST(UnionAllTest) {
@@ -8007,5 +8060,62 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         UNIT_ASSERT(!res.IsOk());
         UNIT_ASSERT(res.Issues.Size() == 1);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
+    }
+}
+
+Y_UNIT_TEST_SUITE(QuerySplit) {
+    Y_UNIT_TEST(Simple) {
+        TString query = R"(
+        ;
+        -- Comment 1
+        SELECT * From Input; -- Comment 2
+        -- Comment 3
+        $a = "a";
+
+        -- Comment 9
+        ;
+
+        -- Comment 10
+
+        -- Comment 8
+
+        $b = ($x) -> {
+        -- comment 4
+        return /* Comment 5 */ $x;
+        -- Comment 6
+        };
+
+        // Comment 7
+
+
+
+        )";
+
+        google::protobuf::Arena Arena;
+
+        NSQLTranslation::TTranslationSettings settings;
+        settings.AnsiLexer = false;
+        settings.Antlr4Parser = true;
+        settings.Arena = &Arena;
+
+        TVector<TString> statements;
+        NYql::TIssues issues;
+
+        UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(query, statements, issues, settings));
+
+        UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(statements[0], "-- Comment 1\n        SELECT * From Input; -- Comment 2\n");
+        UNIT_ASSERT_VALUES_EQUAL(statements[1], R"(-- Comment 3
+        $a = "a";)");
+        UNIT_ASSERT_VALUES_EQUAL(statements[2], R"(-- Comment 10
+
+        -- Comment 8
+
+        $b = ($x) -> {
+        -- comment 4
+        return /* Comment 5 */ $x;
+        -- Comment 6
+        };)");
     }
 }

@@ -265,7 +265,7 @@ struct TVDiskMock {
 
     void Init() {
         const auto evInitRes = TestCtx->TestResponse<NPDisk::TEvYardInitResult>(
-                new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID, TestCtx->TestCtx.PDiskGuid),
+                new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID, TestCtx->TestCtx.PDiskGuid, TestCtx->Sender),
                 NKikimrProto::OK);
 
         PDiskParams = evInitRes->PDiskParams;
@@ -348,6 +348,22 @@ struct TVDiskMock {
         return LastUsedLsn + 1 - FirstLsnToKeep;
     }
 
+    void RespondToPreShredCompact(ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString& errorReason) {
+        THolder<NPDisk::TEvPreShredCompactVDisk> evReq = TestCtx->Recv<NPDisk::TEvPreShredCompactVDisk>();
+        if (evReq) {
+            TestCtx->Send(new NPDisk::TEvPreShredCompactVDiskResult(PDiskParams->Owner, PDiskParams->OwnerRound,
+                shredGeneration, status, errorReason));
+        }
+    }
+
+    void RespondToShred(ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString& errorReason) {
+        THolder<NPDisk::TEvShredVDisk> evReq = TestCtx->Recv<NPDisk::TEvShredVDisk>();
+        if (evReq) {
+            TestCtx->Send(new NPDisk::TEvShredVDiskResult(PDiskParams->Owner, PDiskParams->OwnerRound,
+                shredGeneration, status, errorReason));
+        }
+    }
+
 private:
     void SendEvLogImpl(const ui64 size, TMaybe<NPDisk::TCommitRecord> commitRec) {
         auto evLog = MakeHolder<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(size)),
@@ -362,7 +378,6 @@ private:
     }
 
     void SendEvLogImpl(const ui64 size, TMaybe<ui64> firstLsnToKeep, bool isStartingPoint) {
-
         TMaybe<NPDisk::TCommitRecord> rec;
 
         if (firstLsnToKeep || isStartingPoint) {

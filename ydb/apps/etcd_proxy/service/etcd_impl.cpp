@@ -60,19 +60,41 @@ TString AddParam(const std::string_view& name, NYdb::TParamsBuilder& params, con
 }
 
 void MakeSimplePredicate(const TString& key, const TString& rangeEnd, TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) {
-    const auto keyParamName = AddParam("Key", params, key, paramsCounter);
     if (rangeEnd.empty())
-        sql << "`key` = " << keyParamName;
+        sql << "`key` = " << AddParam("Key", params, key, paramsCounter);
     else if (rangeEnd == key)
-        sql << "startswith(`key`, " << keyParamName << ')';
+        sql << "startswith(`key`, " << AddParam("Key", params, key, paramsCounter) << ')';
     else
-        sql << "`key` between " << keyParamName << " and " << AddParam("RangeEnd", params, rangeEnd, paramsCounter);
+        sql << "`key` between " << AddParam("Key", params, key, paramsCounter) << " and " << AddParam("RangeEnd", params, rangeEnd, paramsCounter);
+}
+
+void MakeGetOldKeyState(const TString& keyParamName, TStringBuilder& sql, const std::string_view& txnFilter = {}) {
+    sql << "select `key`, `created`, `modified`, `version`, `value`, `lease`" << Endl;
+    sql << '\t' << "from `verhaal` where ";
+    if (!txnFilter.empty())
+        sql << txnFilter << " and ";
+    sql << "`key` = " << keyParamName << Endl;
+    sql << '\t' << "order by `modified` desc limit 1;" << Endl;
+}
+
+void MakeGetNewKeyState(const std::string& keyParamName, const TString& valueParamName, const TString& leaseParamName, bool withDefault, TStringBuilder& sql, const std::string_view& txnFilter = {}) {
+    sql << "select `key` as `key`, if(`version` > 0L, `created`, $Revision) as `created`, $Revision as `modified`, `version` + 1L as `version`, NVL(" << valueParamName << ", `value`) as `value`, NVL(" << leaseParamName << ",`lease`) as `lease`" << Endl;
+    sql << '\t' << "from ";
+    if (withDefault) {
+        sql << '(' << Endl;
+        sql << '\t' << "select * from $Old union all select * from as_table([<|`key`:" << keyParamName << ", `created`:$Revision, `modified`: $Revision, `version`:1L, `value`:" << valueParamName << ", `lease`:" << leaseParamName << "|>])" << Endl;
+        sql << '\t' << ')';
+        sql << '\t' << "order by `modified` desc limit 1";
+    } else
+        sql << "$Old";
+    if (!txnFilter.empty())
+        sql << " where " << txnFilter;
+    sql << ';' << Endl;
 }
 
 struct TOperation {
     size_t ResultIndex = 0ULL;
 };
-
 
 struct TRange : public TOperation {
     TString Key, RangeEnd;
@@ -105,7 +127,6 @@ struct TRange : public TOperation {
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
-        Cerr << __PRETTY_FUNCTION__ << ':' << (resultsCounter ? ToString(*resultsCounter) : "NULL") << Endl;
         if (resultsCounter)
             ResultIndex = (*resultsCounter)++;
         sql << "select ";
@@ -158,7 +179,6 @@ struct TRange : public TOperation {
     }
 
     etcdserverpb::RangeResponse MakeResponse(const NYdb::TResultSets& results) const {
-        Cerr << __PRETTY_FUNCTION__ << ':' << ResultIndex << '/' << results.size() << Endl;
         etcdserverpb::RangeResponse response;
         if (!results.empty()) {
             auto parser = NYdb::TResultSetParser(results[ResultIndex]);
@@ -204,21 +224,23 @@ struct TPut : public TOperation {
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
-        Y_UNUSED(txnFilter);
-        const bool update = IgnoreValue || IgnoreLease;
-        sql << Endl << NResource::Find(update ? "update.sql" : "upsert.sql") << Endl;
-
         const auto& keyParamName = AddParam("Key", params, Key, paramsCounter);
         const auto& valueParamName = IgnoreValue ? TString("NULL") : AddParam("Value", params, Value, paramsCounter);
-        const auto& leaseParamName = IgnoreValue ? TString("NULL") : AddParam("Lease", params, Lease, paramsCounter);;
+        const auto& leaseParamName = IgnoreLease ? TString("NULL") : AddParam("Lease", params, Lease, paramsCounter);
+
+        sql << "$Old = ";
+        MakeGetOldKeyState(keyParamName, sql, txnFilter);
+        sql << "$New = ";
+        const bool update = IgnoreValue || IgnoreLease;
+        MakeGetNewKeyState(keyParamName, valueParamName, leaseParamName, !update, sql, txnFilter);
+        sql << "insert into `verhaal` select * from $New;" << Endl;
+        sql << (update ? "update `huidig` on" : "upsert into `huidig`") << " select * from $New;" << Endl;
 
         if (GetPrevious) {
             if (resultsCounter)
                 ResultIndex = (*resultsCounter)++;
-            sql << "select `value`, `created`, `modified`, `version`,`lease` from `huidig` where `key` = " << keyParamName << ';' << Endl;
+            sql << "select `value`, `created`, `modified`, `version`, `lease` from $Old where `version` > 0L;" << Endl;
         }
-
-        sql << Endl << "do $up" << (update ? "date" : "sert") << "($Revision," << keyParamName << ',' << valueParamName << ',' << leaseParamName << ");" << Endl;
     }
 
     etcdserverpb::PutResponse MakeResponse(const NYdb::TResultSets& results) const {
@@ -250,20 +272,24 @@ struct TDeleteRange : public TOperation {
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
-        TStringBuilder where;
-        where << "where ";
-        if (!txnFilter.empty()) {
-            where << txnFilter << Endl << '\t' << "and ";
-        }
-
-        MakeSimplePredicate(Key, RangeEnd, where, params, paramsCounter);
         if (resultsCounter)
             ResultIndex = (*resultsCounter)++;
-        sql << "select count(*) from `huidig` " << where << ';' << Endl;
+
+        TStringBuilder where;
+        where << "where ";
+        if (!txnFilter.empty())
+            where << txnFilter << " and ";
+        MakeSimplePredicate(Key, RangeEnd, where, params, paramsCounter);
+
+        sql << "$Old = select `key`,`value`, `created`, `modified`, `version`,`lease` from `huidig` " << where << ';' << Endl;
+        sql << "insert into `verhaal`" << Endl;
+        sql << "select `key`, `created`, $Revision as `modified`, 0L as `version`, `value`, `lease` from $Old;" << Endl;
+
+        sql << "select count(*) from $Old;" << Endl;
         if (GetPrevious) {
             if (resultsCounter)
                 ++(*resultsCounter);
-            sql << "select `key`,`value`, `created`, `modified`, `version`,`lease` from `huidig` " << where << ';' << Endl;
+            sql << "select `key`,`value`, `created`, `modified`, `version`, `lease` from $Old;" << Endl;
         }
         sql << "delete from `huidig` " << where << ';' << Endl;
     }
@@ -392,8 +418,7 @@ struct TTxn : public TOperation {
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view&  = {}) {
-        Cerr << __PRETTY_FUNCTION__ << ':' << (resultsCounter ? ToString(*resultsCounter) : "NULL") << Endl;
-            ResultIndex = (*resultsCounter)++;
+        ResultIndex = (*resultsCounter)++;
 
         std::unordered_map<std::pair<TString, TString>, std::vector<TCompare>> map(Compares.size());
         for (const auto& compare : Compares)

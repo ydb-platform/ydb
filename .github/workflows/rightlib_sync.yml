@@ -15,6 +15,7 @@ jobs:
         with:
           sparse-checkout: |
             .github
+            ydb/ci/
       - uses: ./.github/actions/rightlib_sync
         with:
           command: create-pr

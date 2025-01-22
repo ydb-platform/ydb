@@ -17,11 +17,7 @@ runs:
       shell: bash
       run: |
         pip install PyGithub==2.5.0
-    - name: checkout main
-      uses: actions/checkout@v4
-      with:
-        sparse-checkout: |
-          ydb/ci/rightlib
+
     - name: configure
       shell: bash
       run: |

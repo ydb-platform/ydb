@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     Y_UNIT_TEST_F(IgnoreUndeliveredWithWrongGeneration, TFixture) {
         StartSession(Source1);
         ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1);
-        MockUndelivered(RowDispatcher1, NActors::TEvents::TEvUndelivered::Disconnected);
+        MockUndelivered(RowDispatcher1, 999, NActors::TEvents::TEvUndelivered::Disconnected);
         ProcessSomeMessages(2, {Message3}, RowDispatcher1);
     }
 
@@ -505,6 +505,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     Y_UNIT_TEST_F(IgnoreMessageIfNoSessions, TFixture) {
         StartSession(Source1);
         MockCoordinatorChanged(Coordinator2Id);
+        MockUndelivered(RowDispatcher1, 1);
         MockSessionError();
     }
 

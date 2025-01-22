@@ -18,7 +18,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/auth.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -1721,7 +1721,8 @@ namespace NSchemeShardUT_Private {
                 kmeansTreeSettings.mutable_settings()->set_vector_dimension(42);
                 kmeansTreeSettings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
                 kmeansTreeSettings.set_clusters(4);
-                kmeansTreeSettings.set_levels(5);
+                // More than 2 is too long for reboot tests
+                kmeansTreeSettings.set_levels(2);
             }
 
             if (cfg.GlobalIndexSettings) {
@@ -1770,6 +1771,14 @@ namespace NSchemeShardUT_Private {
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobal, columns, dataColumns
+        });
+    }
+
+    void AsyncBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+                              const TString &src, const TString &name, TString column, TVector<TString> dataColumns)
+    {
+        AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {column}, std::move(dataColumns)
         });
     }
 

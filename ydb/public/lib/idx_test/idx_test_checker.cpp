@@ -23,7 +23,7 @@ public:
         if (!TableDescription_) {
             throw yexception() << "Unable to load table description";
         }
-        if (!TableDescription_.GetRef().GetIndexDescriptions()) {
+        if (TableDescription_.GetRef().GetIndexDescriptions().empty()) {
             throw yexception() << "Index metadata was not found";
         }
         CheckIndexes(tableName);
@@ -32,8 +32,8 @@ public:
 private:
     void CheckIndexData(const TString& tableName,
                         const TIndexDescription& indexDesc,
-                        const THashMap<TString, size_t>& indexedColumnsMap,
-                        const THashMap<TString, TVector<TValue>>& mainTable) {
+                        const THashMap<std::string, size_t>& indexedColumnsMap,
+                        const THashMap<std::string, std::vector<TValue>>& mainTable) {
         TMaybe<TTablePartIterator> tableIterator;
 
         auto settings = TReadTableSettings();
@@ -86,7 +86,7 @@ private:
         if (ProgressTracker_) {
             ProgressTracker_->Start("rows read", "Reading indexTable table " + indexTableName + "...");
         }
-        ThrowOnError(Client_.RetryOperationSync([indexTableName, settings, &tableIterator](TSession session) {
+        NStatusHelpers::ThrowOnError(Client_.RetryOperationSync([indexTableName, settings, &tableIterator](TSession session) {
             auto result = session.ReadTable(indexTableName, settings).GetValueSync();
 
             if (result.IsSuccess()) {
@@ -104,7 +104,7 @@ private:
                     break;
                 }
 
-                ThrowOnError(tablePart);
+                NStatusHelpers::ThrowOnError(tablePart);
             }
 
             auto rsParser = TResultSetParser(tablePart.ExtractPart());
@@ -150,9 +150,9 @@ private:
 
     void ReadMainTable(
         const TString& tableName,
-        const TVector<TString>& columns,
-        const THashMap<TString, size_t>& columnMap,
-        THashMap<TString, TVector<TValue>>& buf)
+        const std::vector<std::string>& columns,
+        const THashMap<std::string, size_t>& columnMap,
+        THashMap<std::string, std::vector<TValue>>& buf)
     {
         TMaybe<TTablePartIterator> tableIterator;
 
@@ -182,7 +182,7 @@ private:
             }
         }
 
-        ThrowOnError(Client_.RetryOperationSync([tableName, settings, &tableIterator](TSession session) {
+        NStatusHelpers::ThrowOnError(Client_.RetryOperationSync([tableName, settings, &tableIterator](TSession session) {
             auto result = session.ReadTable(tableName, settings).GetValueSync();
 
             if (result.IsSuccess()) {
@@ -200,7 +200,7 @@ private:
                     break;
                 }
 
-                ThrowOnError(tablePart);
+                NStatusHelpers::ThrowOnError(tablePart);
             }
 
             auto rsParser = TResultSetParser(tablePart.ExtractPart());
@@ -234,9 +234,9 @@ private:
         // or pk and indexes
 
         // Columns need to check index
-        TVector<TString> indexedColumns;
+        std::vector<std::string> indexedColumns;
         // Map column name -> position in result row in data table
-        THashMap<TString, size_t> indexedColumnsMap;
+        THashMap<std::string, size_t> indexedColumnsMap;
 
         size_t id = 0;
         for (const auto& index : TableDescription_.GetRef().GetIndexDescriptions()) {
@@ -258,7 +258,7 @@ private:
         }
 
         // Data table
-        THashMap<TString, TVector<TValue>> mainTable;
+        THashMap<std::string, std::vector<TValue>> mainTable;
 
         ReadMainTable(tableName, indexedColumns, indexedColumnsMap, mainTable);
         for (const auto& index : TableDescription_.GetRef().GetIndexDescriptions()) {

@@ -55,6 +55,19 @@ struct TRowDispatcherMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr NodesReconnect;
 };
 
+struct TUserPoolMetrics {
+    explicit TUserPoolMetrics(const ::NMonitoring::TDynamicCounterPtr& utilsCounters) {
+        auto execpoolGroup = utilsCounters->GetSubgroup("execpool", "User");
+        auto microsecGroup = execpoolGroup->GetSubgroup("sensor", "ElapsedMicrosecByActivity");
+        Session = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER_SESSION", true);
+        RowDispatcher = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER", true);
+        Compiler = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER_COMPILER", true);
+    }
+    ::NMonitoring::TDynamicCounters::TCounterPtr Session;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RowDispatcher;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Compiler;
+};
+
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
@@ -269,10 +282,12 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const ::NMonitoring::TDynamicCounterPtr Counters;
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     TRowDispatcherMetrics Metrics;
+    TUserPoolMetrics UserPoolMetrics;
     NYql::IPqGateway::TPtr PqGateway;
     NActors::TMon* Monitoring;
     TNodesTracker NodesTracker;
     TAggregatedStats AggrStats; 
+    ui64 LastCpuTime = 0;
 
     struct TConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -315,6 +330,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         const TString QueryId;
         TConsumerCounters Counters;
         TTopicSessionClientStatistic Stat;
+        ui64 CpuMicrosec = 0;               // Increment.
         ui64 Generation;
     };
 
@@ -392,6 +408,7 @@ public:
     bool CheckSession(TAtomicSharedPtr<TConsumerInfo>& consumer, const TEventPtr& ev);
     void SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax);
     void PrintStateToLog();
+    void UpdateCpuTime();
 
     STRICT_STFUNC(
         StateFunc, {
@@ -442,6 +459,7 @@ TRowDispatcher::TRowDispatcher(
     , Counters(counters)
     , CountersRoot(countersRoot)
     , Metrics(counters)
+    , UserPoolMetrics(countersRoot->GetSubgroup("counters", "utils"))
     , PqGateway(pqGateway)
     , Monitoring(monitoring)
 {
@@ -634,6 +652,7 @@ TString TRowDispatcher::GetInternalState() {
     str << "Consumers count: " << Consumers.size() << "\n";
     str << "TopicSessions count: " << TopicSessions.size() << "\n";
     str << "Max session buffer size: " << toHuman(MaxSessionBufferSizeBytes) << "\n";
+    str << "CpuMicrosec: " << toHuman(LastCpuTime) << "\n";
     str << "DataRate (all sessions): ";
     printDataRate(AggrStats.AllSessionsReadBytes);
     str << "\n";
@@ -1023,6 +1042,7 @@ void TRowDispatcher::PrintStateToLog() {
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
     LOG_ROW_DISPATCHER_TRACE("TEvPrivate::TEvSendStatistic");
 
+    UpdateCpuTime();
     Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatistic());
     for (auto& [actorId, consumer] : Consumers) {
         if (!NodesTracker.GetNodeConnected(actorId.NodeId())) {
@@ -1046,6 +1066,8 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
             partition.StatisticsUpdated = false;
         }
         event->Record.SetReadBytes(readBytes);
+        event->Record.SetCpuMicrosec(consumer->CpuMicrosec);
+        consumer->CpuMicrosec = 0;
         event->Record.SetFilteredBytes(filteredBytes);
         event->Record.SetFilteredRows(filteredRows);
         event->Record.SetQueueBytes(0); // TODO
@@ -1122,6 +1144,20 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetInternalStateResponse::
     auto& readActorInternalState = ReadActorsInternalState[ev->Sender];
     readActorInternalState.InternalState = ev->Get()->Record.GetInternalState();
     readActorInternalState.ResponseTime = TInstant::Now();
+}
+
+void TRowDispatcher::UpdateCpuTime() {
+    if (Consumers.empty()) {
+        return;
+    }
+    auto currentCpuTime = UserPoolMetrics.Session->Val()
+        + UserPoolMetrics.RowDispatcher->Val()
+        + UserPoolMetrics.Compiler->Val();
+    auto diff = (currentCpuTime - LastCpuTime) / Consumers.size();
+    for (auto& [actorId, consumer] : Consumers) {
+        consumer->CpuMicrosec += diff;
+    }
+    LastCpuTime = currentCpuTime;
 }
 
 } // namespace

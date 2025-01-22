@@ -6,7 +6,7 @@
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 

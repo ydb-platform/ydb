@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb-cpp-sdk/client/params/params.h>
 
 #include <library/cpp/string_utils/csv/csv.h>
 
@@ -58,10 +58,10 @@ public:
     ~TCsvParser() = default;
 
     TCsvParser(TString&& headerRow, const char delimeter, const std::optional<TString>& nullValue,
-               const std::map<TString, TType>* destinationTypes = nullptr,
+               const std::map<std::string, TType>* destinationTypes = nullptr,
                const std::map<TString, TString>* paramSources = nullptr);
     TCsvParser(TVector<TString>&& header, const char delimeter, const std::optional<TString>& nullValue,
-               const std::map<TString, TType>* destinationTypes = nullptr,
+               const std::map<std::string, TType>* destinationTypes = nullptr,
                const std::map<TString, TString>* paramSources = nullptr);
 
     void BuildParams(TString& data, TParamsBuilder& builder, const TParseMetadata& meta) const;
@@ -79,7 +79,7 @@ private:
     std::optional<TString> NullValue;
     // Types of destination table or query parameters
     // Column name -> column type
-    const std::map<TString, TType>* DestinationTypes;
+    const std::map<std::string, TType>* DestinationTypes;
     const std::map<TString, TString>* ParamSources;
     // Type of a single row in resulting TValue.
     // Column order according to the header, though can have less elements than the Header

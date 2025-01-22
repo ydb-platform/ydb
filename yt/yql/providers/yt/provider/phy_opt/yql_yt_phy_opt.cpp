@@ -81,6 +81,11 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
         AddHandler(1, &TYtReduce::Match, HNDL(FuseReduceWithTrivialMap));
     }
 
+    if (State_->Configuration->UseQLFilter.Get().GetOrElse(DEFAULT_USE_QL_FILTER)) {
+        // best to run after Fuse*Map and before MapToMerge
+        AddHandler(2, Names({TYtMap::CallableName()}), HNDL(ExtractQLFilters));
+        AddHandler(2, Names({TYtQLFilter::CallableName()}), HNDL(OptimizeQLFilterType));
+    }
     AddHandler(2, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
     AddHandler(2, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));
     AddHandler(2, &TYtMap::Match, HNDL(MapToMerge));

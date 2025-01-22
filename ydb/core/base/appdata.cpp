@@ -60,7 +60,6 @@ struct TAppData::TImpl {
     NKikimrConfig::TAuditConfig AuditConfig;
     NKikimrConfig::TCompactionConfig CompactionConfig;
     NKikimrConfig::TDomainsConfig DomainsConfig;
-    NKikimrConfig::TSecurityConfig SecurityConfig;
     NKikimrConfig::TBootstrap BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig AwsCompatibilityConfig;
     NKikimrConfig::TS3ProxyResolverConfig S3ProxyResolverConfig;
@@ -117,7 +116,6 @@ TAppData::TAppData(
     , AuditConfig(Impl->AuditConfig)
     , CompactionConfig(Impl->CompactionConfig)
     , DomainsConfig(Impl->DomainsConfig)
-    , SecurityConfig(Impl->SecurityConfig)
     , BootstrapConfig(Impl->BootstrapConfig)
     , AwsCompatibilityConfig(Impl->AwsCompatibilityConfig)
     , S3ProxyResolverConfig(Impl->S3ProxyResolverConfig)

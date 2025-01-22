@@ -5,6 +5,7 @@ import os
 import socket
 import sys
 import tempfile
+
 import six
 import yaml
 from google.protobuf.text_format import Parse
@@ -364,14 +365,14 @@ class KikimrConfigGenerator(object):
 
         if default_users is not None:
             # check for None for remove default users for empty dict
-            if "security_config" not in self.yaml_config:
-                self.yaml_config["security_config"] = dict()
+            if "security_config" not in self.yaml_config["domains_config"]:
+                self.yaml_config["domains_config"]["security_config"] = dict()
 
             # remove existed default users
-            self.yaml_config["security_config"]["default_users"] = []
+            self.yaml_config["domains_config"]["security_config"]["default_users"] = []
 
             for user, password in default_users.items():
-                self.yaml_config["security_config"]["default_users"].append({
+                self.yaml_config["domains_config"]["security_config"]["default_users"].append({
                     "name": user,
                     "password": password,
                 })
@@ -380,10 +381,10 @@ class KikimrConfigGenerator(object):
             self.yaml_config["monitoring_config"] = {"allow_origin": str(os.getenv("YDB_ALLOW_ORIGIN"))}
 
         if enforce_user_token_requirement:
-            self.yaml_config["security_config"]["enforce_user_token_requirement"] = True
+            self.yaml_config["domains_config"]["security_config"]["enforce_user_token_requirement"] = True
 
         if default_user_sid:
-            self.yaml_config["security_config"]["default_user_sids"] = [default_user_sid]
+            self.yaml_config["domains_config"]["security_config"]["default_user_sids"] = [default_user_sid]
 
         if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
             self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}

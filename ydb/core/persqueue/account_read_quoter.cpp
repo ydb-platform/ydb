@@ -157,7 +157,7 @@ void TBasicAccountQuoter::ApproveQuota(NAccountQuoterEvents::TEvRequest::TPtr& e
 }
 
 TQuoterParams TAccountReadQuoter::GetQuoterParams(const TString& user) {
-    auto consumerPath = NPersQueue::ConvertOldConsumerName(user);
+    TString consumerPath = NPersQueue::ConvertOldConsumerName(user);
     TQuoterParams ret;
     auto userParts = SplitString(consumerPath, "/"); // account/folder/topic // account is first element
 

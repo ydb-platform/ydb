@@ -265,10 +265,11 @@ TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom, bool inSubquery) {
 
 class TNodeSource: public ISource {
 public:
-    TNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList)
+    TNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList, bool wrapByTableSource)
         : ISource(pos)
         , Node(node)
         , WrapToList(wrapToList)
+        , WrapByTableSource(wrapByTableSource)
     {
         YQL_ENSURE(Node);
         FakeSource = BuildFakeSource(pos);
@@ -296,21 +297,27 @@ public:
         if (WrapToList) {
             nodeAst = Y("ToList", nodeAst);
         }
+
+        if (WrapByTableSource) {
+            nodeAst = Y("TableSource", nodeAst);
+        }
+
         return nodeAst;
     }
 
     TPtr DoClone() const final {
-        return new TNodeSource(Pos, SafeClone(Node), WrapToList);
+        return new TNodeSource(Pos, SafeClone(Node), WrapToList, WrapByTableSource);
     }
 
 private:
     TNodePtr Node;
-    bool WrapToList;
+    const bool WrapToList;
+    const bool WrapByTableSource;
     TSourcePtr FakeSource;
 };
 
-TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList) {
-    return new TNodeSource(pos, node, wrapToList);
+TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList, bool wrapByTableSource) {
+    return new TNodeSource(pos, node, wrapToList, wrapByTableSource);
 }
 
 class IProxySource: public ISource {

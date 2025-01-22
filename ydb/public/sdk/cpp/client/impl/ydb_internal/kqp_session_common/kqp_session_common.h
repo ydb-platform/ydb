@@ -9,7 +9,7 @@
 
 #include <functional>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 ////////////////////////////////////////////////////////////////////////////////
 ui64 GetNodeIdFromSession(const TStringType& sessionId);

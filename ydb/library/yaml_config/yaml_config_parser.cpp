@@ -21,7 +21,6 @@
 #include <ydb/library/yaml_json/yaml_to_json.h>
 
 #include <util/generic/string.h>
-#include <util/generic/set.h>
 
 template <>
 NKikimrBlobStorage::EPDiskType
@@ -207,13 +206,10 @@ namespace NKikimr::NYaml {
         });
         EraseMultipleByPath(json, GROUP_PATH, ERASURE_SPECIES_FIELD);
         // for security config
-        if (json.Has("disable_builtin_security")) {
-            ctx.DisableBuiltinSecurity = json["disable_builtin_security"].GetBoolean();
-            json.EraseValue("disable_builtin_security");
-        } else {
-            ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, DISABLE_BUILTIN_SECURITY_DOMAINS_PATH).value_or(false);
-            EraseByPath(json, DISABLE_BUILTIN_SECURITY_DOMAINS_PATH);
+        if (!ctx.DisableBuiltinSecurity) {
+            ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, DISABLE_BUILTIN_SECURITY_PATH).value_or(false);
         }
+        EraseByPath(json, DISABLE_BUILTIN_SECURITY_PATH);
         ctx.ExplicitEmptyDefaultGroups = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_GROUPS_PATH).value_or(false);
         ctx.ExplicitEmptyDefaultAccess = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_ACCESS_PATH).value_or(false);
     }
@@ -275,50 +271,49 @@ namespace NKikimr::NYaml {
         return species;
     }
 
-    TSet<TString> ListEphemeralFields() {
-        TSet<TString> result;
+    TVector<TString> ListEphemeralFields() {
+        TVector<TString> result;
 
         auto& inst = NKikimrConfig::TEphemeralInputFields::default_instance();
         const auto* descriptor = inst.GetDescriptor();
         for (int i = 0; i < descriptor->field_count(); ++i) {
             const auto* fieldDescriptor = descriptor->field(i);
-            auto name = fieldDescriptor->name();
-            NProtobufJson::ToSnakeCaseDense(&name);
-            result.emplace(name);
+            result.push_back(fieldDescriptor->name());
         }
         for (int i = 0; i < descriptor->reserved_name_count(); ++i) {
-            auto name = descriptor->reserved_name(i);
-            NProtobufJson::ToSnakeCaseDense(&name);
+            result.push_back(descriptor->reserved_name(i));
+        }
+
+        for (auto& str : result) {
+            NProtobufJson::ToSnakeCaseDense(&str);
         }
 
         return result;
     }
 
-    TSet<TString> ListNonEphemeralFields() {
-        TSet<TString> result;
+    TVector<TString> ListNonEphemeralFields() {
+        TVector<TString> result;
 
         auto& inst = NKikimrConfig::TAppConfig::default_instance();
         const auto* descriptor = inst.GetDescriptor();
         for (int i = 0; i < descriptor->field_count(); ++i) {
             const auto* fieldDescriptor = descriptor->field(i);
-            auto name = fieldDescriptor->name();
-            NProtobufJson::ToSnakeCaseDense(&name);
-            result.emplace(name);
+            result.push_back(fieldDescriptor->name());
         }
         for (int i = 0; i < descriptor->reserved_name_count(); ++i) {
-            auto name = descriptor->reserved_name(i);
-            NProtobufJson::ToSnakeCaseDense(&name);
+            result.push_back(descriptor->reserved_name(i));
+        }
+
+        for (auto& str : result) {
+            NProtobufJson::ToSnakeCaseDense(&str);
         }
 
         return result;
     }
 
     void ClearNonEphemeralFields(NJson::TJsonValue& json){
-        auto exclude = ListEphemeralFields();
         for (const auto& field : ListNonEphemeralFields()) {
-            if (!exclude.contains(field)) {
-                json.EraseValue(field);
-            }
+            json.EraseValue(field);
         }
     }
 
@@ -422,21 +417,20 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareSecurityConfig(const TTransformContext& ctx, NKikimrConfig::TAppConfig& config, const NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
-        if (relaxed && !config.HasDomainsConfig() && !config.HasSecurityConfig()) {
+    void PrepareSecurityConfig(const TTransformContext& ctx, NKikimrConfig::TAppConfig& config, bool relaxed) {
+        if (relaxed && !config.HasDomainsConfig()) {
             return;
         }
 
-        Y_ENSURE_BT(config.HasDomainsConfig() || config.HasSecurityConfig());
+        Y_ENSURE_BT(config.HasDomainsConfig());
 
-        bool disabledDefaultSecurity = ctx.DisableBuiltinSecurity;
+        auto* domainsConfig = config.MutableDomainsConfig();
 
-        NKikimrConfig::TSecurityConfig* securityConfig = nullptr;
-        if (ephemeralConfig.HasDomainsConfig() && ephemeralConfig.GetDomainsConfig().HasSecurityConfig()) {
-            securityConfig = config.MutableSecurityConfig();
-            securityConfig->CopyFrom(ephemeralConfig.GetDomainsConfig().GetSecurityConfig());
-        } else if (config.HasSecurityConfig()) {
-            securityConfig = config.MutableSecurityConfig();
+        bool disabledDefaultSecurity = ctx.DisableBuiltinSecurity ? *ctx.DisableBuiltinSecurity : false;
+
+        NKikimrConfig::TDomainsConfig::TSecurityConfig* securityConfig = nullptr;
+        if (domainsConfig->HasSecurityConfig()) {
+            securityConfig = domainsConfig->MutableSecurityConfig();
         }
 
         TString defaultUserName;
@@ -445,14 +439,14 @@ namespace NKikimr::NYaml {
             defaultUserName = defaultUser.GetName();
         } else if (!disabledDefaultSecurity) {
             defaultUserName = TString(DEFAULT_ROOT_USERNAME);
-            securityConfig = config.MutableSecurityConfig();
+            securityConfig = domainsConfig->MutableSecurityConfig();
             auto* user = securityConfig->AddDefaultUsers();
             user->SetName(defaultUserName);
             user->SetPassword("");
         }
 
         if (!ctx.ExplicitEmptyDefaultGroups && !(securityConfig && securityConfig->DefaultGroupsSize()) && !disabledDefaultSecurity) {
-            securityConfig = config.MutableSecurityConfig();
+            securityConfig = domainsConfig->MutableSecurityConfig();
             {
                 auto* defaultGroupAdmins = securityConfig->AddDefaultGroups();
                 defaultGroupAdmins->SetName("ADMINS");
@@ -511,12 +505,12 @@ namespace NKikimr::NYaml {
         }
 
         if (!(securityConfig && securityConfig->HasAllUsersGroup()) && !disabledDefaultSecurity) {
-            securityConfig = config.MutableSecurityConfig();
+            securityConfig = domainsConfig->MutableSecurityConfig();
             securityConfig->SetAllUsersGroup("USERS");
         }
 
         if (!ctx.ExplicitEmptyDefaultAccess && !(securityConfig && securityConfig->DefaultAccessSize()) && !disabledDefaultSecurity) {
-            securityConfig = config.MutableSecurityConfig();
+            securityConfig = domainsConfig->MutableSecurityConfig();
             securityConfig->AddDefaultAccess("+(ConnDB):USERS"); // ConnectDatabase
             securityConfig->AddDefaultAccess("+(DS|RA):METADATA-READERS"); // DescribeSchema | ReadAttributes
             securityConfig->AddDefaultAccess("+(SR):DATA-READERS"); // SelectRow
@@ -1398,11 +1392,19 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void TransformProtoConfig(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
-        if (ephemeralConfig.HasDomainsConfig()) {
-            ephemeralConfig.GetDomainsConfig().CopyToTDomainsConfig(*config.MutableDomainsConfig());
+    void MoveFields(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        if (ephemeralConfig.HasSecurityConfig()) {
+            config.MutableDomainsConfig()->MutableSecurityConfig()->CopyFrom(ephemeralConfig.GetSecurityConfig());
         }
+
+        if (ephemeralConfig.HasDisableBuiltinSecurity()) {
+            ctx.DisableBuiltinSecurity = ephemeralConfig.GetDisableBuiltinSecurity();
+        }
+    }
+
+    void TransformProtoConfig(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
         PrepareHosts(ephemeralConfig);
+        MoveFields(ctx, config, ephemeralConfig);
         ApplyDefaultConfigs(ctx, config, ephemeralConfig);
         PrepareNameserviceConfig(config, ephemeralConfig);
         PrepareStaticGroup(ctx, config, ephemeralConfig);
@@ -1412,7 +1414,7 @@ namespace NKikimr::NYaml {
         PrepareBootstrapConfig(config, ephemeralConfig, relaxed);
         PrepareIcConfig(config, ephemeralConfig);
         PrepareGrpcConfig(config, ephemeralConfig);
-        PrepareSecurityConfig(ctx, config, ephemeralConfig, relaxed);
+        PrepareSecurityConfig(ctx, config, relaxed);
         PrepareAuthConfig(config, ephemeralConfig);
         PrepareActorSystemConfig(config);
         PrepareLogConfig(config);

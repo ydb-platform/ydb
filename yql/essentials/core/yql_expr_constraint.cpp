@@ -105,6 +105,8 @@ public:
         Functions["Iterator"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ForwardList"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["LazyList"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["TableSource"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["WideTableSource"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ToFlow"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["FromFlow"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ToStream"] = &TCallableConstraintTransformer::CopyAllFrom<0>;

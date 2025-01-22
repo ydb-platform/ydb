@@ -1,8 +1,8 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
 
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
@@ -95,7 +95,7 @@ private:
         authConfig->SetUseBlackBox(false);
         authConfig->SetUseLoginProvider(true);
         authConfig->SetEnableLoginAuthentication(isLoginAuthenticationEnabled);
-        appConfig.MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 

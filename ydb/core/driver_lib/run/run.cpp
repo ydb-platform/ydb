@@ -4,6 +4,7 @@
 #include "kikimr_services_initializers.h"
 
 #include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -220,8 +221,7 @@ public:
             appData->DomainsInfo->AddCompactionPolicy(policy.GetName(), new NLocalDb::TCompactionPolicy(policy.GetPolicy()));
         }
 
-        const auto& securityConfig(Config.GetSecurityConfig());
-        appData->SecurityConfig = securityConfig;
+        const auto& securityConfig(Config.GetDomainsConfig().GetSecurityConfig());
         appData->EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
         appData->EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
         if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
@@ -465,7 +465,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
             }
         }
 
-        const auto& securityConfig(runConfig.AppConfig.GetSecurityConfig());
+        const auto& securityConfig(runConfig.AppConfig.GetDomainsConfig().GetSecurityConfig());
         if (securityConfig.MonitoringAllowedSIDsSize() > 0) {
             monConfig.AllowedSIDs.assign(securityConfig.GetMonitoringAllowedSIDs().begin(), securityConfig.GetMonitoringAllowedSIDs().end());
         }
@@ -934,9 +934,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         opts.SetMaxGlobalRequestInFlight(grpcConfig.GetMaxInFlight());
         opts.SetLogger(NYdbGrpc::CreateActorSystemLogger(*ActorSystem.Get(), NKikimrServices::GRPC_SERVER));
 
-        if (appConfig.HasSecurityConfig() &&
-            appConfig.GetSecurityConfig().HasEnforceUserTokenRequirement()) {
-            opts.SetUseAuth(appConfig.GetSecurityConfig().GetEnforceUserTokenRequirement());
+        if (appConfig.HasDomainsConfig() &&
+            appConfig.GetDomainsConfig().HasSecurityConfig() &&
+            appConfig.GetDomainsConfig().GetSecurityConfig().HasEnforceUserTokenRequirement()) {
+            opts.SetUseAuth(appConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement());
         }
 
         if (grpcConfig.GetKeepAliveEnable()) {

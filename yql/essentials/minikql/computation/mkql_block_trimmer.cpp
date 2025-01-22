@@ -2,8 +2,8 @@
 
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
-#include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
+#include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value.h>
@@ -218,6 +218,8 @@ struct TTrimmerTraits {
     template<typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateBlockTrimmer<TTzDate, Nullable>;
 
+    constexpr static bool PassType = false;
+
     static TResult::TPtr MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool* pool) {
         Y_UNUSED(pgBuilder);
         if (desc.PassByValue) {
@@ -246,7 +248,7 @@ struct TTrimmerTraits {
 };
 
 IBlockTrimmer::TPtr MakeBlockTrimmer(const NUdf::ITypeInfoHelper& typeInfoHelper, const NUdf::TType* type, arrow::MemoryPool* pool) {
-    return MakeBlockReaderImpl<TTrimmerTraits>(typeInfoHelper, type, nullptr, pool);
+    return DispatchByArrowTraits<TTrimmerTraits>(typeInfoHelper, type, nullptr, pool);
 }
 
 }

@@ -191,8 +191,8 @@ def _get_args_for_reloading() -> t.List[str]:
                 py_script += ".exe"
 
             if (
-                os.path.splitext(sys.executable)[1] == ".exe"
-                and os.path.splitext(py_script)[1] == ".exe"
+                (os.path.splitext(sys.executable)[1] == ".exe"
+                and os.path.splitext(py_script)[1] == ".exe") or getattr(sys, "is_standalone_binary", False)
             ):
                 rv.pop(0)
 
@@ -210,7 +210,7 @@ def _get_args_for_reloading() -> t.List[str]:
             # Incorrectly rewritten by pydevd debugger from "-m script" to "script".
             py_module = py_script
 
-        rv.extend(("-m", py_module.lstrip(".")))
+        #rv.extend(("-m", py_module.lstrip(".")))
 
     rv.extend(args)
     return rv

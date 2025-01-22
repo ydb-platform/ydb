@@ -15,10 +15,11 @@
 
 #include <span>
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+// TODO(mbkkt) BUILD_INDEX_DATASHARD
+#define LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
+#define LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
+#define LOG_E(stream) LOG_ERROR_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
 
 namespace NKikimr::NDataShard::NKMeans {
 
@@ -56,7 +57,7 @@ template <typename T>
 struct TMetric {
     using TCoord = T;
     // TODO(mbkkt) maybe compute floating sum in double? Needs benchmark
-    using TSum = std::conditional_t<std::is_floating_point_v<T>, T, int64_t>;
+    using TSum = std::conditional_t<std::is_floating_point_v<T>, T, i64>;
 
     ui32 Dimensions = 0;
 
@@ -218,13 +219,13 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
 void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
 {
     if (!record.HasEmbeddingColumn()) {
-        badRequest(TStringBuilder() << "Should be specified embedding column");
+        badRequest("Should be specified embedding column");
         return;
     }
 
     const auto& settings = record.GetSettings();
     if (settings.vector_dimension() < 1) {
-        badRequest(TStringBuilder() << "Dimension of vector should be at least one");
+        badRequest("Dimension of vector should be at least one");
         return;
     }
 

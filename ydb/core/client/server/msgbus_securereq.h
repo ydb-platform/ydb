@@ -19,7 +19,7 @@ public:
         TMessageBusServerRequestBase<TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>>>::HandleError(
                     MSTATUS_ERROR,
                     TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied,
-                    error.Message,
+                    TString{error.Message},
                     ctx);
     }
 
@@ -46,7 +46,7 @@ public:
     }
 
     void HandleError(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext &ctx) {
-        TAutoPtr<TBusResponse> response(new TBusResponseStatus(status, message));
+        TAutoPtr<TBusResponse> response(new TBusResponseStatus(status, TString{message}));
 
         if (proxyStatus != TEvTxUserProxy::TResultStatus::Unknown)
             response->Record.SetProxyErrorCode(proxyStatus);
@@ -99,7 +99,7 @@ public:
         HandleError(
                     MSTATUS_ERROR,
                     TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied,
-                    error.Message,
+                    TString{error.Message},
                     ctx);
     }
 

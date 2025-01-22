@@ -73,9 +73,10 @@ namespace NPQ {
 
     struct TDataKey {
         TKey Key;
-        ui32 Size;
+        ui32 Size = 0;
         TInstant Timestamp;
-        ui64 CumulativeSize;
+        ui64 CumulativeSize = 0;
+        size_t RefCount = 0;
     };
 
     struct TErrorInfo {

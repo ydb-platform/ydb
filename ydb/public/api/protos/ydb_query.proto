@@ -177,8 +177,10 @@ message ExecuteQueryRequest {
     // Workload manager pool id
     string pool_id = 10;
 
-    // Period for sending progress stats
-    int64 stats_period_ms = 11; // 0 = disabled
+    // Time interval for sending periodical query statistics.
+    // When query statistics are enabled (stats_mode != STATS_MODE_NONE), by default statistics will be sent only once after query execution is finished.
+    // In case when stats_period_ms is specified and is non-zero, query statistics will be additionally sent every stats_period_ms milliseconds beginning from the start of query execution.
+    int64 stats_period_ms = 11 [(Ydb.value) = ">= 0"];
 }
 
 message ResultSetMeta {

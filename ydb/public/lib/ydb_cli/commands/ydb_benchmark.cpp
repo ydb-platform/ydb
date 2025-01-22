@@ -342,7 +342,6 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
         ui32 failsCount = 0;
         ui32 diffsCount = 0;
         std::optional<TString> prevResult;
-        std::optional<TString> progressPlanFileName;
         if (PlanFileName) {
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
             try {
@@ -355,7 +354,6 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
                 res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
             }
             SavePlans(res, queryN, "explain");
-            progressPlanFileName = TStringBuilder() << PlanFileName << "." << queryN << ".progress";
         }
 
         for (ui32 i = 0; i < IterationsCount && Now() < GlobalDeadline; ++i) {
@@ -365,7 +363,10 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
             TQueryBenchmarkSettings settings;
             settings.Deadline = GetDeadline();
             settings.WithProgress = true;
-            settings.PlanFileName = progressPlanFileName;
+
+            if (PlanFileName) {
+                settings.PlanFileName = TStringBuilder() << PlanFileName << "." << queryN << "." << ToString(i);
+            }
 
             try {
                 if (client) {

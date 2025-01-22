@@ -243,8 +243,8 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
         request.set_response_part_limit_bytes(*settings.OutputChunkMaxSize_);
     }
 
-    if (settings.WithProgress_ && *settings.WithProgress_) {
-        request.set_stats_period_ms(3000);
+    if (settings.StatsPeriodMs_) {
+        request.set_stats_period_ms(*settings.StatsPeriodMs_);
     }
 
     if (txControl.HasTx()) {

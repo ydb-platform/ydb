@@ -66,7 +66,9 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
                 }
                 FetchedCount += finishedSource->GetResultRecordsCount();
                 FinishedSources.erase(FinishedSources.begin());
-                --IntervalsInFlightCount;
+                if (Context->IsActive()) {
+                    --IntervalsInFlightCount;
+                }
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "source_finished")("source_id", finishedSource->GetSourceId())(
                     "source_idx", finishedSource->GetSourceIdx())("limit", Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())(
                     "fetched", finishedSource->GetResultRecordsCount());
@@ -185,6 +187,7 @@ void TScanHead::Abort() {
     }
     FetchingSources.clear();
     SortedSources.clear();
+    IntervalsInFlightCount = 0;
     Y_ABORT_UNLESS(IsFinished());
 }
 

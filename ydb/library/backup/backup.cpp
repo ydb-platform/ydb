@@ -41,8 +41,6 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <format>
-
 
 namespace NYdb::NBackup {
 
@@ -575,7 +573,7 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
     NView::TViewClient client(driver);
     auto viewDescription = DescribeView(client, dbPath);
 
-    ValidateViewQuery(viewDescription.GetQueryText(), dbPath, issues);
+    NDump::ValidateViewQuery(viewDescription.GetQueryText(), dbPath, issues);
 
     const auto fsPath = fsBackupDir.Child(NDump::NFiles::CreateView().FileName);
     LOG_D("Write view creation query to " << fsPath.GetPath().Quote());

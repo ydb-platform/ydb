@@ -332,7 +332,7 @@ private:
         } else if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView) {
             Ydb::Export::ExportToS3Settings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
-            const auto databaseRoot = TStringBuilder() << '/' << JoinSeq('/', Self->RootPathElements);
+            const auto databaseRoot = CanonizePath(Self->RootPathElements);
 
             NBackup::TMetadata metadata;
             // to do: enable view checksum validation
@@ -495,10 +495,9 @@ private:
     }
 
     void KillChildActors(TExportInfo::TItem& item) {
-        if (auto& schemeUploader = item.SchemeUploader; schemeUploader != TActorId()) {
+        if (auto schemeUploader = std::exchange(item.SchemeUploader, {})) {
             Send(schemeUploader, new TEvents::TEvPoisonPill());
             Self->RunningExportSchemeUploaders.erase(schemeUploader);
-            schemeUploader = TActorId();
         }
     }
 

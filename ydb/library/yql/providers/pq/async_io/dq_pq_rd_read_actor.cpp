@@ -174,6 +174,7 @@ private:
     std::vector<std::optional<ui64>> ColumnIndexes;  // Output column index in schema passed into RowDispatcher
     const TType* InputDataType = nullptr;  // Multi type (comes from Row Dispatcher)
     std::unique_ptr<NKikimr::NMiniKQL::TValuePackerTransport<true>> DataUnpacker;
+    ui64 CpuMicrosec = 0;
 
     THashMap<ui32, TMaybe<ui64>> NextOffsetFromRD;
 
@@ -288,6 +289,7 @@ public:
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override;
     void PassAway() override;
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override;
+    TDuration GetCpuTime() override;
     std::vector<ui64> GetPartitionsToRead() const;
     void AddMessageBatch(TRope&& serializedBatch, NKikimr::NMiniKQL::TUnboxedValueBatch& buffer);
     void ProcessState();
@@ -493,7 +495,7 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
         StopSession(sessionInfo);
     }
     TActor<TDqPqRdReadActor>::PassAway();
-    
+
     // TODO: RetryQueue::Unsubscribe()
 }
 
@@ -533,6 +535,10 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         TrySendGetNextBatch(sessionInfo);
     }
     return usedSpace;
+}
+
+TDuration TDqPqRdReadActor::GetCpuTime() {
+    return TDuration::MicroSeconds(CpuMicrosec);
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
@@ -575,7 +581,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_T("Received TEvStatistics from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.Statistics++;
-
+    CpuMicrosec += ev->Get()->Record.GetCpuMicrosec();
     auto* session = FindSession(ev);
     if (!session) {
         return;
@@ -767,8 +773,8 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         if (sessionInfo.EventsQueue.HandleUndelivered(ev) == NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
             if (sessionInfo.Generation == ev->Cookie) {
                 SRC_LOG_D("Erase session to " << ev->Sender.ToString());
-                Sessions.erase(ev->Sender);
                 ReadActorByEventQueueId.erase(sessionInfo.EventQueueId);
+                Sessions.erase(sessionIt);
                 ReInit("Reset session state (by TEvUndelivered)");
                 ScheduleProcessState();
             }

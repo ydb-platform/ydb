@@ -171,9 +171,6 @@ struct TEvRowDispatcher {
 
     struct TEvNoSession : public NActors::TEventPB<TEvNoSession, NFq::NRowDispatcherProto::TEvNoSession, EEv::EvNoSession> {
         TEvNoSession() = default;
-        TEvNoSession(ui32 partitionId) {
-            Record.SetPartitionId(partitionId);
-        }
     };
 
     struct TEvGetInternalStateRequest : public NActors::TEventPB<TEvGetInternalStateRequest,

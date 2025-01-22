@@ -44,10 +44,9 @@ private:
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
         if (!result.Error.empty()) {
-            // if (IsTokenRequired() || IsTokenExists())
-            // if (!result.Error.Retryable)
-            if (IsTokenRequired())
+            if (IsTokenRequired() || GetRequireCredentialsInNewProtocol()) {
                 return static_cast<TDerived*>(this)->OnAccessDenied(result.Error, ctx);
+            }
         } else {
             if (RequireAdminAccess) {
                 if (!GetAdministrationAllowedSIDs().empty()) {
@@ -160,7 +159,7 @@ public:
 
 public:
     bool IsTokenRequired() const {
-        if (GetEnforceUserTokenRequirement() || GetRequireCredentialsInNewProtocol()) {
+        if (GetEnforceUserTokenRequirement()) {
             return true;
         }
 

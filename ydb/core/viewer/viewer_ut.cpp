@@ -2043,8 +2043,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         for (auto injectErrors : {ETicketParserErrors::NONE, ETicketParserErrors::PERMANENT, ETicketParserErrors::RETRYABLE}) {
             test(false, false, Nothing(), injectErrors);
             test(false, false, "", injectErrors);
-            test(false, false, wrongToken, injectErrors);
-            test(false, false, rootToken, injectErrors);
+            test(false, false, wrongToken, injectErrors, NYdb::EStatus::UNAUTHORIZED);
+            test(false, false, rootToken, injectErrors, injectErrors == ETicketParserErrors::PERMANENT ? NYdb::EStatus::UNAUTHORIZED : NYdb::EStatus::STATUS_UNDEFINED);
         }
 
         for (auto [enforce, require] : {std::pair<bool, bool>{false, true}, {true, false}, {true, true}}) {

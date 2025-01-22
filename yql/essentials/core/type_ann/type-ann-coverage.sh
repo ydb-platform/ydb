@@ -11,6 +11,19 @@ REPORT_ROOT=$(mktemp --tmpdir -d yql-essentials-core-type_ann-coverage-XXXXXXX)
 # given by the first parameter of this script; otherwise, save
 # the list into the temporary file.
 UNCOVERED_FILE=${1:-$(mktemp --tmpdir yql-essentials-core-type_ann-uncovered-XXXXXXX.list)}
+# File with the list of the callbacks to be ignored by coverage.
+UNCOVERED_IGNORE=$(realpath $0 | sed -e 's/\.sh/\.ignore/')
+if [ ! -r $UNCOVERED_IGNORE ]; then
+    cat <<NOIGNORE
+==================================================================
+[FATAL] Ignore file is missing: $UNCOVERED_IGNORE
+------------------------------------------------------------------
+NB: If no uncovered type annotation callbacks ought to be ignored,
+just "touch" the empty file and do not remove it in future.
+==================================================================
+NOIGNORE
+    exit 1
+fi
 
 # Run the command to collect code coverage over the sources in
 # /yql/essentials/core/type_ann by the minirun test suite.
@@ -44,6 +57,7 @@ CALLBACK_SUFFIX="(?=\(const TExprNode::TPtr&amp; input, TExprNode::TPtr&amp; out
 grep -oP "$UNCOVERED_ANCHOR$CALLBACK_PREFIX(\w+)$CALLBACK_SUFFIX" \
     -r $REPORT_ROOT/coverage.report/                              \
     --no-filename                                                 \
+    | grep -vf $UNCOVERED_IGNORE                                  \
     | tee -a $UNCOVERED_FILE
 
 rm -rf $REPORT_ROOT

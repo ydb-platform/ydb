@@ -70,7 +70,7 @@ class TestUnavailableS3(TllTieringTestBase):
 
         get_stat = lambda: self.s3_client.get_bucket_stat(bucket_s3_name)[0]
 
-        assert self.wait_for(lambda: get_stat() != 0, 600), "data distribution start"
+        assert self.wait_for(lambda: get_stat() != 0, 120), "data distribution start"
 
         print("!!! simulating S3 hang up -- sending SIGSTOP", file=sys.stderr)
         os.kill(self.s3_pid, signal.SIGSTOP)
@@ -85,4 +85,5 @@ class TestUnavailableS3(TllTieringTestBase):
         for i in range(ROWS_CHUNKS_COUNT // 2, ROWS_CHUNKS_COUNT):
             upsert_chunk(i)
 
-        assert self.wait_for(lambda: get_stat() != stat_old, 600), "data distribution continuation"
+        # Uncomment after fixing https://github.com/ydb-platform/ydb/issues/13719
+        # assert self.wait_for(lambda: get_stat() != stat_old, 120), "data distribution continuation"

@@ -38,7 +38,7 @@ Currently, only building from source is available as an installation option. The
    make install INSTALL_DIR=path_to_folder
    ```
 
-   You must replace source folder if you have created binary file manually: 
+   You must replace source folder if you have created binary file manually:
 
    ```bash
    make install INSTALL_DIR=путь_к_каталогу BUILD_DIR=.
@@ -46,4 +46,4 @@ Currently, only building from source is available as an installation option. The
 
 ## Download the binary from releases page
 
-You can download binary releases from GitHub - https://github.com/ydb-platform/ydbops/releases.
+You can download binary releases from GitHub - [YDBOps Releases](https://github.com/ydb-platform/ydbops/releases).

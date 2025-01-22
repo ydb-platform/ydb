@@ -826,10 +826,10 @@ namespace NYql::NConnector::NTest {
         static TString StatusToDebugString(const NYdbGrpc::TGrpcStatus& status) {
             TStringBuilder s;
             s << "GRpcStatusCode: " << status.GRpcStatusCode << '\n';
-            if (status.Msg) {
+            if (!status.Msg.empty()) {
                 s << status.Msg;
             }
-            if (status.Details) {
+            if (!status.Details.empty()) {
                 s << " (" << status.Details << ')';
             }
             if (status.InternalError) {

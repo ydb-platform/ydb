@@ -1023,7 +1023,7 @@ TEST(TYsonToProtobufTest, Entities)
 
 TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
 {
-    for (auto configOption: {EUtf8Check::Disable, EUtf8Check::LogOnFail, EUtf8Check::ThrowOnFail}) {
+    for (auto configOption : {EUtf8Check::Disable, EUtf8Check::LogOnFail, EUtf8Check::ThrowOnFail}) {
         for (auto option: std::vector<std::optional<EUtf8Check>>{
             std::nullopt, EUtf8Check::Disable, EUtf8Check::LogOnFail, EUtf8Check::ThrowOnFail})
         {
@@ -2675,7 +2675,7 @@ TEST(TPackedRepeatedProtobufTest, TestSerializeDeserialize)
 
 TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
 {
-    for (auto storageType: {EEnumYsonStorageType::String, EEnumYsonStorageType::Int}) {
+    for (auto storageType : {EEnumYsonStorageType::String, EEnumYsonStorageType::Int}) {
         auto config = New<TProtobufInteropConfig>();
         config->DefaultEnumYsonStorageType = storageType;
         SetProtobufInteropConfig(config);

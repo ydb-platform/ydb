@@ -75,7 +75,7 @@ namespace NYdb::NConsoleClient {
     }
 
     namespace {
-        const TString FormatBody(const TString& body, ETransformBody transform) {
+        const std::string FormatBody(const std::string& body, ETransformBody transform) {
             if (transform == ETransformBody::Base64) {
                 return Base64Encode(body);
             }
@@ -309,7 +309,7 @@ namespace NYdb::NConsoleClient {
         } else if (auto* endPartitionSessionEvent = std::get_if<NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
             return HandleEndPartitionSessionEvent(endPartitionSessionEvent);
         } else if (auto* sessionClosedEvent = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-            ThrowOnError(*sessionClosedEvent);
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(*sessionClosedEvent);
             return 1;
         }
         return 0;
@@ -329,7 +329,7 @@ namespace NYdb::NConsoleClient {
             if (future.HasValue()) {
                 // TODO(shmel1k@): throttling?
                 // TODO(shmel1k@): think about limiting size of events
-                TVector<NTopic::TReadSessionEvent::TEvent> events = ReadSession_->GetEvents(true);
+                std::vector<NTopic::TReadSessionEvent::TEvent> events = ReadSession_->GetEvents(true);
                 for (auto& event : events) {
                     if (int status = HandleEvent(event, output); status) {
                         return status;

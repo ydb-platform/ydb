@@ -1,7 +1,7 @@
 #include "ydb_latency.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_debug/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb-cpp-sdk/client/debug/client.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 
 #include <library/cpp/histogram/hdr/histogram.h>
 

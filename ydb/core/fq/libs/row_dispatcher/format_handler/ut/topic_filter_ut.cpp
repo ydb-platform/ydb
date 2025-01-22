@@ -46,8 +46,8 @@ public:
             return ColumnIds;
         }
 
-        TMaybe<ui64> GetNextMessageOffset() const override {
-            return Nothing();
+        std::optional<ui64> GetNextMessageOffset() const override {
+            return std::nullopt;
         }
 
         void OnFilterStarted() override {

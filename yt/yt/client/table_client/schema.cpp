@@ -1625,7 +1625,7 @@ void TTableSchemaTruncatedFormatter::operator()(TStringBuilderBase* builder) con
     if (!Schema_) {
         builder->AppendString(ToString(nullptr));
     } else if (Threshold_ > 0 && Schema_->GetMemoryUsage(Threshold_) < Threshold_) {
-        FormatValue(builder, *Schema_, "%v");
+        FormatValue(builder, *Schema_, "v");
     } else {
         builder->AppendString("<schema memory usage is over the logging threshold>");
     }

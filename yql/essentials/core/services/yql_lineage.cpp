@@ -543,9 +543,11 @@ private:
             if (lambda.GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
                 value = &body;
                 while(value->IsCallable({"FlatMap", "OrderedFlatMap"})) {
-                    if (value->Head().IsCallable("Member") && &value->Head().Head() == &arg) {
-                        TString field(value->Head().Tail().Content());
-                        flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), field);
+                    TNodeMap<TMaybe<TFieldsLineage>> visited;
+                    if (auto res = ScanExprLineage(value->Head(), &arg, &innerLineage, visited, {})) {
+                        for (const auto& f: res->Items) {
+                            flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), f.Field);
+                        }
                     }
                     value = &value->Tail().Tail();
                 }

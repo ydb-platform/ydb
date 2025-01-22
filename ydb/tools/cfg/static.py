@@ -10,6 +10,7 @@ import tempfile
 
 import yaml
 from ydb.core.fq.libs.config.protos.fq_config_pb2 import TConfig as TFederatedQueryConfig
+from ydb.core.protos import blobstorage_pdisk_config_pb2 as pdisk_config_pb
 from google.protobuf import json_format
 
 from ydb.core.protos import (
@@ -420,6 +421,22 @@ class StaticConfigGenerator(object):
                             drive['pdisk_config'] = {
                                 'expected_slot_count': drive.pop('expected_slot_count')
                             }
+
+                        # support type-safe `pdisk_config` directly in `host_configs`, for example:
+                        # - path: /dev/disk/by-partlabel/ydb_disk_hdd_04
+                        #   type: ROT
+                        #   pdisk_config:
+                        #     expected_slot_count: 8
+                        #     drive_model_trim_speed_bps: 0
+                        #     drive_model_TYPO_speed_bps: 0 # will fail
+                        if 'pdisk_config' in drive:
+                            pd = pdisk_config_pb.TPDiskConfig()
+                            utils.apply_config_changes(
+                                pd,
+                                drive['pdisk_config'],
+                            )
+
+                            drive['pdisk_config'] = self.normalize_dictionary(json_format.MessageToDict(pd))
 
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config

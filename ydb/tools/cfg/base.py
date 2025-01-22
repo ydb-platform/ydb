@@ -3,7 +3,6 @@
 import collections
 import copy
 import os
-import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from ydb.tools.cfg import types, validation, walle
@@ -22,8 +21,6 @@ DEFAULT_FAIL_DOMAIN_TYPE = types.FailDomainType.Rack
 DEFAULT_PDISK_TYPE = types.PDiskCategory.ROT
 
 DEFAULT_BOX_ID = 1
-
-logger = logging.getLogger()
 
 # MOVE THESE DEFAULTS TO YDB CODE
 VDISKS_DEFAULT_CONFIG = {
@@ -433,7 +430,6 @@ class ClusterDetailsProvider(object):
         if self._hosts is not None:
             return self._hosts
         futures = []
-
         for node_id, host_description in enumerate(self.__cluster_description.get("hosts"), 1):
             futures.append(self._thread_pool.submit(self.__collect_host_info, node_id, host_description))
 

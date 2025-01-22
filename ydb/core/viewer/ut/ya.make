@@ -1,5 +1,9 @@
 UNITTEST_FOR(ydb/core/viewer)
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)

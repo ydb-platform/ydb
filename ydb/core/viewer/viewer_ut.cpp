@@ -1954,7 +1954,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
                 .SetDatabase("/Root")
                 .SetAuthToken("root@builtin")
-                .SetLog(CreateLogBackend("cerr"));
+                // .SetLog(CreateLogBackend("cerr"))
+                ;
 
             auto driver = NYdb::TDriver(driverConfig);
             auto topicClient = NYdb::NTopic::TTopicClient(driver);
@@ -1997,7 +1998,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
             auto driverConfig = NYdb::TDriverConfig()
                 .SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
                 .SetDatabase("/Root")
-                .SetLog(CreateLogBackend("cerr"));
+                // .SetLog(CreateLogBackend("cerr"))
+                ;
 
             if (authToken.Defined()) {
                 driverConfig.SetAuthToken(*authToken);

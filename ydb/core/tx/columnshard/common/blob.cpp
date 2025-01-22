@@ -189,4 +189,10 @@ bool TBlobRangeLink16::CheckBlob(const TUnifiedBlobId& blobId) const {
     return Offset + Size <= blobId.BlobSize();
 }
 
+TString TBlobRangeLink16::GetBlobData(const TString& blob) const {
+    AFL_VERIFY(Offset < blob.size());
+    AFL_VERIFY(Offset + Size <= blob.size());
+    return blob.substr(Offset, Size);
+}
+
 }   // namespace NKikimr::NOlap

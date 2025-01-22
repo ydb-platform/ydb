@@ -139,7 +139,7 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
 {
     const auto isBackupTable = context.SS->IsBackupTable(srcPath->PathId);
     srcPath.Parent()->DecAliveChildren(1, isBackupTable);
-    srcPath.DomainInfo()->DecPathsInside(1, isBackupTable);
+    srcPath.DomainInfo()->DecPathsInside(context.SS, 1, isBackupTable);
 
     srcPath->SetDropped(txState.PlanStep, operationId.GetTxId());
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
@@ -234,7 +234,7 @@ public:
 
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, dstPath.Base()->PathId, step);
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
 
         dstPath.Activate();
         IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);

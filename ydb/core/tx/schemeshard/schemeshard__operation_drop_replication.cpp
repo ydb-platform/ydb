@@ -182,7 +182,7 @@ public:
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(-1);
-        context.SS->ResolveDomainInfo(pathId)->DecPathsInside();
+        context.SS->ResolveDomainInfo(pathId)->DecPathsInside(context.SS);
         parentPath->DecAliveChildren();
 
         ++parentPath->DirAlterVersion;

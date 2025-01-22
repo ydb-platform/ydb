@@ -895,7 +895,7 @@ void TProtobufFormatDescriptionBase<TProtobufWriterType>::InitEmbeddedColumn(
 {
     auto embeddingIndex = tableType->AddEmbedding(parentEmbeddingIndex, columnConfig);
 
-    for (auto& fieldConfig: columnConfig->Type->Fields) {
+    for (auto& fieldConfig : columnConfig->Type->Fields) {
         InitColumn(fieldIndex, tableSchema, typeBuilder, tableType, fieldConfig, parent, embeddingIndex);
     }
 }
@@ -924,7 +924,7 @@ void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
             std::move(child), //KMP
             fieldIndex);
 
-    for (auto& fieldConfig: columnConfig->Type->Fields) {
+    for (auto& fieldConfig : columnConfig->Type->Fields) {
         InitColumn(fieldIndex, tableSchema, typeBuilder, tableType, fieldConfig, childPtr->Type, parentEmbeddingIndex);
     }
 }
@@ -1600,7 +1600,7 @@ static int Process(
     const std::unique_ptr<TProtobufParserFieldDescription>& child)
 {
     if (child->Type->ProtoType == EProtobufType::EmbeddedMessage) {
-        for (const auto& grandChild: child->Type->Children) {
+        for (const auto& grandChild : child->Type->Children) {
             globalChildIndex = Process(ids, globalChildIndex, nameTable, child->Type, grandChild);
         }
     } else {
@@ -1620,7 +1620,7 @@ std::vector<std::pair<ui16, TProtobufParserFieldDescription*>> TProtobufParserFo
     std::vector<std::pair<ui16, TProtobufParserFieldDescription*>> ids;
     int globalChildIndex = 0;
 
-    for (const auto& child: TableType_->Children) {
+    for (const auto& child : TableType_->Children) {
         globalChildIndex = Process(ids, globalChildIndex, nameTable, TableType_, child);
     }
 

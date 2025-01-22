@@ -24,7 +24,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 #include <ydb/core/util/ulid.h>
@@ -72,7 +72,7 @@ std::optional<TString> TryDecodeYdbSessionId(const TString& sessionId) {
             return std::nullopt;
         }
 
-        return *ids[0];
+        return TString{*ids[0]};
     } catch (...) {
         return std::nullopt;
     }

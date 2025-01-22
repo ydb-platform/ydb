@@ -1,5 +1,9 @@
 UNITTEST_FOR(ydb/core/kafka_proxy)
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SIZE(medium)
 SRCS(
     ut_kafka_functions.cpp
@@ -13,7 +17,7 @@ PEERDIR(
     ydb/core/kafka_proxy
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
-    ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
 )
 YQL_LAST_ABI_VERSION()

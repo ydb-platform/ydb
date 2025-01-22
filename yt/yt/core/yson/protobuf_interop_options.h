@@ -14,6 +14,7 @@ namespace NYT::NYson {
 struct TResolveProtobufElementByYPathOptions
 {
     bool AllowUnknownYsonFields = false;
+    bool AllowAsterisks = false;
 };
 
 struct TProtobufWriterOptions

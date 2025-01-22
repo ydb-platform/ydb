@@ -1,6 +1,6 @@
 #include "ydb_service_export.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
@@ -28,7 +28,7 @@ namespace {
         dstPath.ChopSuffix(slash);
 
         const auto ret = RecursiveList(client, TString{srcPath}, TRecursiveListSettings().Filter(&FilterTables));
-        ThrowOnError(ret.Status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(ret.Status);
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
             return {{TString{srcPath}, TString{dstPath}}};

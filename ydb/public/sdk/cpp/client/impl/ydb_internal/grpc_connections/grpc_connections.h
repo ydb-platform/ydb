@@ -17,7 +17,7 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 constexpr TDuration GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY = TDuration::Seconds(10);
 constexpr TDuration INITIAL_DEFERRED_CALL_DELAY = TDuration::MilliSeconds(10); // The delay before first deferred service call

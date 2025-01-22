@@ -2,7 +2,7 @@
 #include "cli_cmds.h"
 
 #include <ydb/core/protos/base.pb.h>
-#include <ydb/library/grpc/client/grpc_common.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
 #include <ydb/public/api/grpc/draft/ydb_tablet_v1.grpc.pb.h>
 
 namespace NKikimr {

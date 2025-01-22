@@ -20,8 +20,6 @@ sed -e 's|.*#include.*zircon/features.h.*||' -i cpu_model/aarch64/lse_atomics/fu
 
 {% block ya_make %}
 SUBSCRIBER(
-    pg
-    somov
     g:contrib
     g:cpp-contrib
 )

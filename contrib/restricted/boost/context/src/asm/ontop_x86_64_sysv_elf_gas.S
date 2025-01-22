@@ -40,7 +40,6 @@
 .file "ontop_x86_64_sysv_elf_gas.S"
 .text
 .globl ontop_fcontext
-.hidden ontop_fcontext
 .type ontop_fcontext,@function
 .align 16
 ontop_fcontext:

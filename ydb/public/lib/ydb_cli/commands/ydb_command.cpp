@@ -26,7 +26,7 @@ TDriver TYdbCommand::CreateDriver(const TConfig& config) {
     return TDriver(CreateDriverConfig(config));
 }
 
-TDriver TYdbCommand::CreateDriver(const TConfig& config, THolder<TLogBackend>&& loggingBackend) {
+TDriver TYdbCommand::CreateDriver(const TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend) {
     auto driverConfig = CreateDriverConfig(config);
     driverConfig.SetLog(std::move(loggingBackend));
 

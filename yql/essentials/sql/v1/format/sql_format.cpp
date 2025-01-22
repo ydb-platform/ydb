@@ -165,144 +165,6 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
     return in == inEnd && out == outEnd && parenthesesBalance == 0;
 }
 
-enum EParenType {
-    Open,
-    Close,
-    None
-};
-
-using TAdvanceCallback = std::function<EParenType(TTokenIterator& curr, TTokenIterator end)>;
-
-TTokenIterator SkipToNextBalanced(TTokenIterator begin, TTokenIterator end, const TAdvanceCallback& advance) {
-    i64 level = 0;
-    TTokenIterator curr = begin;
-    while (curr != end) {
-        switch (advance(curr, end)) {
-            case EParenType::Open: {
-                ++level;
-                break;
-            }
-            case EParenType::Close: {
-                --level;
-                if (level < 0) {
-                    return end;
-                } else if (level == 0) {
-                    return curr;
-                }
-                break;
-            }
-            case EParenType::None:
-                break;
-        }
-    }
-    return curr;
-}
-
-TTokenIterator GetNextStatementBegin(TTokenIterator begin, TTokenIterator end) {
-    TAdvanceCallback advanceLambdaBody = [](TTokenIterator& curr, TTokenIterator end) -> EParenType {
-        Y_UNUSED(end);
-        if (curr->Name == "LBRACE_CURLY") {
-            ++curr;
-            return EParenType::Open;
-        } else if (curr->Name == "RBRACE_CURLY") {
-            ++curr;
-            return EParenType::Close;
-        } else {
-            ++curr;
-            return EParenType::None;
-        }
-    };
-
-    TAdvanceCallback advanceAction = [](TTokenIterator& curr, TTokenIterator end) -> EParenType {
-        auto tmp = curr;
-        if (curr->Name == "DEFINE") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && (curr->Name == "ACTION" || curr->Name == "SUBQUERY")) {
-                ++curr;
-                return EParenType::Open;
-            }
-        } else if (curr->Name == "END") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && curr->Name == "DEFINE") {
-                ++curr;
-                return EParenType::Close;
-            }
-        }
-
-        curr = tmp;
-        ++curr;
-        return EParenType::None;
-    };
-
-    TAdvanceCallback advanceInlineAction = [](TTokenIterator& curr, TTokenIterator end) -> EParenType {
-        auto tmp = curr;
-        if (curr->Name == "DO") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && curr->Name == "BEGIN") {
-                ++curr;
-                return EParenType::Open;
-            }
-        } else if (curr->Name == "END") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && curr->Name == "DO") {
-                ++curr;
-                return EParenType::Close;
-            }
-        }
-
-        curr = tmp;
-        ++curr;
-        return EParenType::None;
-    };
-
-    TTokenIterator curr = begin;
-    while (curr != end) {
-        bool matched = false;
-        for (auto cb : {advanceLambdaBody, advanceAction, advanceInlineAction}) {
-            TTokenIterator tmp = curr;
-            if (cb(tmp, end) == EParenType::Open) {
-                curr = SkipToNextBalanced(curr, end, cb);
-                matched = true;
-                if (curr == end) {
-                    return curr;
-                }
-            }
-        }
-        if (matched) {
-            continue;
-        }
-        if (curr->Name == "SEMICOLON") {
-            auto next = SkipWS(curr + 1, end);
-            while (next != end && next->Name == "COMMENT" && curr->Line == next->Line) {
-                curr = next;
-                next = SkipWS(next + 1, end);
-            }
-            ++curr;
-            break;
-        }
-        ++curr;
-    }
-
-    return curr;
-}
-
-void SplitByStatements(TTokenIterator begin, TTokenIterator end, TVector<TTokenIterator>& output) {
-    output.clear();
-    if (begin == end) {
-        return;
-    }
-    output.push_back(begin);
-    auto curr = begin;
-    while (curr != end) {
-        curr = GetNextStatementBegin(curr, end);
-        output.push_back(curr);
-    }
-}
-
 enum class EScope {
     Default,
     TypeName,
@@ -833,6 +695,7 @@ private:
             case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
             case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop external data source
             case TRule_sql_stmt_core::kAltSqlStmtCore34: // drop replication
+            case TRule_sql_stmt_core::kAltSqlStmtCore60: // drop transfer
                 return true;
             case TRule_sql_stmt_core::kAltSqlStmtCore3: { // named nodes
                 const auto& stmt = msg.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1();
@@ -1539,6 +1402,21 @@ private:
     void VisitDropAsyncReplication(const TRule_drop_replication_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_drop_replication_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitCreateTransfer(const TRule_create_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_create_transfer_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterTransfer(const TRule_alter_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_alter_transfer_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropTransfer(const TRule_drop_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_drop_transfer_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateResourcePool(const TRule_create_resource_pool_stmt& msg) {
@@ -3107,6 +2985,9 @@ TStaticData::TStaticData()
         {TRule_create_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateAsyncReplication)},
         {TRule_alter_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterAsyncReplication)},
         {TRule_drop_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropAsyncReplication)},
+        {TRule_create_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTransfer)},
+        {TRule_alter_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTransfer)},
+        {TRule_drop_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTransfer)},
         {TRule_create_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTopic)},
         {TRule_alter_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTopic)},
         {TRule_drop_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTopic)},
@@ -3188,42 +3069,15 @@ public:
         }
 
         auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
-        TParsedTokenList allTokens;
-        auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
-            if (token.Name != "EOF") {
-                allTokens.push_back(token);
-            }
-        };
-
-        if (!lexer->Tokenize(query, "Query", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+        TVector<TString> statements;
+        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues)) {
             return false;
         }
 
-        TVector<TTokenIterator> statements;
-        SplitByStatements(allTokens.begin(), allTokens.end(), statements);
         TStringBuilder finalFormattedQuery;
         bool prevAddLine = false;
         TMaybe<ui32> prevStmtCoreAltCase;
-        for (size_t i = 1; i < statements.size(); ++i) {
-            TStringBuilder currentQueryBuilder;
-            for (auto it = statements[i - 1]; it != statements[i]; ++it) {
-                currentQueryBuilder << it->Content;
-            }
-
-            TString currentQuery = currentQueryBuilder;
-            currentQuery = StripStringLeft(currentQuery);
-            bool isBlank = true;
-            for (auto c : currentQuery) {
-                if (c != ';') {
-                    isBlank = false;
-                    break;
-                }
-            };
-
-            if (isBlank) {
-                continue;
-            }
-
+        for (const TString& currentQuery : statements) {
             TVector<NSQLTranslation::TParsedToken> comments;
             TParsedTokenList parsedTokens, stmtTokens;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {

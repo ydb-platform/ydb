@@ -39,7 +39,6 @@
  *******************************************************/
 
 .text
-.private_extern _jump_fcontext
 .globl _jump_fcontext
 .align 2
 _jump_fcontext:

@@ -14,7 +14,7 @@ constexpr inline TStringBuf DEFAULT_ROOT_USERNAME = "root";
 
 constexpr inline TStringBuf COMBINED_DISK_INFO_PATH = "/blob_storage_config/service_set/groups/*/rings/*/fail_domains/*/vdisk_locations/*";
 constexpr inline TStringBuf GROUP_PATH = "/blob_storage_config/service_set/groups/*";
-constexpr inline TStringBuf DISABLE_BUILTIN_SECURITY_DOMAINS_PATH = "/domains_config/disable_builtin_security";
+constexpr inline TStringBuf DISABLE_BUILTIN_SECURITY_PATH = "/domains_config/disable_builtin_security";
 constexpr inline TStringBuf DEFAULT_GROUPS_PATH = "/domains_config/default_groups";
 constexpr inline TStringBuf DEFAULT_ACCESS_PATH = "/domains_config/default_access";
 constexpr inline TStringBuf POOL_CONFIG_PATH = "/domains_config/domains/*/storage_pool_types/*/pool_config";

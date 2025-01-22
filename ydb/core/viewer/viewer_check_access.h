@@ -64,7 +64,7 @@ public:
 
     bool CheckAccessPermission(const NACLib::TSecurityObject* object, const NACLib::TUserToken* token, const TString& permission) {
         const auto& kikimrRunConfig = Viewer->GetKikimrRunConfig();
-        const auto& securityConfig = kikimrRunConfig.AppConfig.GetSecurityConfig();
+        const auto& securityConfig = kikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig();
         if (!securityConfig.GetEnforceUserTokenRequirement()) {
             if (!securityConfig.GetEnforceUserTokenCheckRequirement() || token == nullptr) {
                 return true;

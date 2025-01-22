@@ -112,4 +112,7 @@ constexpr bool DEFAULT_DISABLE_FUSE_OPERATIONS = false;
 
 constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 
+constexpr bool DEFAULT_USE_QL_FILTER = false;
+constexpr bool DEFAULT_PRUNE_QL_FILTER_LAMBDA = true;
+
 } // NYql

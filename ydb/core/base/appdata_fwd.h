@@ -64,7 +64,6 @@ namespace NKikimrConfig {
     class TAuditConfig;
     class TCompactionConfig;
     class TDomainsConfig;
-    class TSecurityConfig;
     class TBootstrap;
     class TAwsCompatibilityConfig;
     class TS3ProxyResolverConfig;
@@ -113,7 +112,7 @@ namespace NMonitoring {
     class TBusNgMonPage;
 }
 
-namespace NYdb {
+namespace NYdb::inline V3 {
     class TDriver;
 }
 
@@ -221,7 +220,6 @@ struct TAppData {
     NKikimrConfig::TAuditConfig& AuditConfig;
     NKikimrConfig::TCompactionConfig& CompactionConfig;
     NKikimrConfig::TDomainsConfig& DomainsConfig;
-    NKikimrConfig::TSecurityConfig& SecurityConfig;
     NKikimrConfig::TBootstrap& BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig& AwsCompatibilityConfig;
     NKikimrConfig::TS3ProxyResolverConfig& S3ProxyResolverConfig;

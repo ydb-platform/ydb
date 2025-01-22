@@ -206,7 +206,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& queryText, cons
         return result;
     }
 
-    TContext ctx(settings, hints, issues, queryText);
+    TContext ctx(settings, hints, issues);
     NSQLTranslation::TErrorCollectorOverIssues collector(issues, settings.MaxErrors, settings.File);
 
     google::protobuf::Message* astProto(SqlAST(queryText, queryName, collector, settings.AnsiLexer, settings.Antlr4Parser, settings.TestAntlr4, settings.Arena));

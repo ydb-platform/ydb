@@ -418,6 +418,27 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
     if (specials.CompressionLevel) {
         schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
     }
+
+    {
+        auto* compactionPlanner = schema->MutableOptions()->MutableCompactionPlannerConstructor();
+        compactionPlanner->SetClassName("lc-buckets");
+        {
+            auto* level = compactionPlanner->MutableLCBuckets()->AddLevels();
+            level->SetClassName("Zero");
+            level->MutableZeroLevel()->SetPortionsLiveDurationSeconds(1);
+            level->MutableZeroLevel()->SetPortionsCountAvailable(1);
+        }
+        {
+            auto* level = compactionPlanner->MutableLCBuckets()->AddLevels();
+            level->SetClassName("Zero");
+            level->MutableZeroLevel()->SetExpectedBlobsSize(2 * 1 << 20);
+            level->MutableZeroLevel()->SetPortionsCountAvailable(1);
+        }
+        {
+            auto* level = compactionPlanner->MutableLCBuckets()->AddLevels();
+            level->SetClassName("Zero");
+        }
+    }
 }
 
 }

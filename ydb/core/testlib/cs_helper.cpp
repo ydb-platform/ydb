@@ -196,6 +196,25 @@ TString THelper::GetTestTableSchema() const {
         KeyColumnNames: "timestamp"
         KeyColumnNames: "uid"
     )";
+    sb << R"(
+        Options {
+            CompactionPlannerConstructor {
+                ClassName: "lc-buckets"
+                LCBuckets {
+                    Levels {
+                        ClassName: "Zero"
+                        ZeroLevel {
+                            PortionsLiveDurationSeconds: 1
+                            PortionsCountAvailable: 1
+                        }
+                    }
+                    Levels {
+                        ClassName: "Zero"
+                    }
+                }
+            }
+        }
+    )";
     return sb;
 }
 

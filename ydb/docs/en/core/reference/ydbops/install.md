@@ -15,6 +15,7 @@ Currently, only building from source is available as an installation option. The
     ```
 
 3. There two way to build `ydbops`:
+
 - Manual build. Invoke `go build` in the repository root folder:
 
     ```bash
@@ -22,6 +23,7 @@ Currently, only building from source is available as an installation option. The
     ```
 
     The `ydbops` executable will be available in the repository root folder.
+
 - Automated build. Invoke this command in the the repository root folder:
 
   ```bash
@@ -31,11 +33,14 @@ Currently, only building from source is available as an installation option. The
   The `ydbops` executables will be available in the `bin` folder. There will be several binary files for Linux, MacOS (arm64, amd64).
 
 4. To install binary file to the specific folder (folder `~/ydb/bin` is defined by default) execute this command
+
    ```bash
    make install INSTALL_DIR=path_to_folder
    ```
+
    You must replace source folder if you have created binary file manually: 
-   ```
+
+   ```bash
    make install INSTALL_DIR=путь_к_каталогу BUILD_DIR=.
    ```
 

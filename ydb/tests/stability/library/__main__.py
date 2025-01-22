@@ -119,12 +119,21 @@ class StabilityCluster:
         return traces
 
     def get_all_errors(self):
+        logging.getLogger().setLevel(logging.WARNING)
         all_results = []
         for node in self.kikimr_cluster.nodes.values():
-            result = node.ssh_command("""ls -ltr /Berkanavt/kikimr_31003/logs/kikimr.star* |
-                                       awk '{print $NF}' |
-                                       while read file; do   case \"$file\" in     *.txt) cat \"$file\" ;;     *.gz) zcat \"$file\" ;;   esac; done |
-                                       grep -E 'VERIFY|FAIL|signal 11|signal 6|signal 15|uncaught exception' -A 20""", raise_on_error=False)
+            result = node.ssh_command("""
+                    ls -ltr /Berkanavt/kikimr*/logs/kikimr* |
+                    awk '{print $NF}' |
+                    while read file; do
+                    case "$file" in
+                        *.txt) cat "$file" ;;
+                        *.gz) zcat "$file" ;;
+                        *) cat "$file" ;;
+                    esac
+                    done |
+                    grep -E 'VERIFY|FAIL|signal 11|signal 6|signal 15|uncaught exception' -A 20
+                                    """, raise_on_error=False)
             if result:
                 all_results.append(result.decode('utf-8'))
         all_results = self.process_lines(all_results)

@@ -153,6 +153,8 @@ public:
         YQL_ENSURE(TransformCtx->QueryCtx->Type == EKikimrQueryType::Dml);
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
 
+        YQL_CLOG(DEBUG, CoreDq) << "Before any rewrites: " << KqpExprToPrettyString(*query, ctx);
+
         return PrepareQueryInternal(cluster, TKiDataQueryBlocks(query), ctx, settings);
     }
 
@@ -191,6 +193,8 @@ public:
     {
         YQL_ENSURE(IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, TransformCtx->QueryCtx->Type));
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
+
+        YQL_CLOG(DEBUG, CoreDq) << "Before any rewrites: " << KqpExprToPrettyString(*query, ctx);
 
         const auto dataQueryBlocks = TKiDataQueryBlocks(query);
 
@@ -267,6 +271,8 @@ private:
 
         TExprNode::TPtr query = kqlQueryBlocks->Ptr();
         YQL_CLOG(DEBUG, ProviderKqp) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
+        YQL_CLOG(DEBUG, CoreDq) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
+
 
         TransformCtx->Reset();
         BuildQueryCtx->Reset();
@@ -274,7 +280,15 @@ private:
 
         TransformCtx->DataQueryBlocks = dataQueryBlocks;
 
-        return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);
+        if (Config->EnableNewRBO) {
+            YQL_CLOG(INFO, CoreDq) << "Taking the new RBO branch";
+            //return MakeIntrusive<TPrepareQueryAsyncResult>(query, *NewRBOTransformer, ctx, *TransformCtx);
+            return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);
+        }
+        else {
+            YQL_CLOG(INFO, CoreDq) << "Taking the old RBO branch";
+            return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);
+        }
     }
 
     void CreateGraphTransformer(const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
@@ -311,6 +325,18 @@ private:
             .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
             .Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
             .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
+            .Build(false));
+
+        auto newRBOOptimizeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
+            .AddServiceTransformers()
+            .Add(Log("PhysicalOptimize"), "LogPhysicalOptimize")
+            .AddPreTypeAnnotation()
+            .AddExpressionEvaluation(funcRegistry)
+            .AddIOAnnotation()
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(),
+                *typesCtx, Config))
+            .Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
+            .AddPostTypeAnnotation(/* forSubgraph */ true)
             .Build(false));
 
         auto physicalBuildTxsTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
@@ -375,6 +401,23 @@ private:
             },
             false
         );
+
+        NewRBOTransformer = CreateCompositeGraphTransformer(
+            {
+                TTransformStage{ newRBOOptimizeTransformer, "NewRBOOptimize", TIssuesIds::DEFAULT_ERROR },
+                LogStage("NewRBOOptimize"),
+                TTransformStage{ physicalBuildTxsTransformer, "PhysicalBuildTxs", TIssuesIds::DEFAULT_ERROR },
+                LogStage("PhysicalBuildTxs"),
+                TTransformStage{ physicalBuildQueryTransformer, "PhysicalBuildQuery", TIssuesIds::DEFAULT_ERROR },
+                LogStage("PhysicalBuildQuery"),
+                TTransformStage{ CreateSaveExplainTransformerInput(*TransformCtx), "SaveExplainTransformerInput", TIssuesIds::DEFAULT_ERROR },
+                TTransformStage{ physicalPeepholeTransformer, "PhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
+                LogStage("PhysicalPeephole"),
+                TTransformStage{ compilePhysicalQuery, "CompilePhysicalQuery", TIssuesIds::DEFAULT_ERROR },
+                TTransformStage{ preparedExplainTransformer, "ExplainQuery", TIssuesIds::DEFAULT_ERROR }, // TODO(sk): only on stats mode or if explain-only
+            },
+            false
+        );
     }
 
     static bool MergeFlagValue(const TMaybe<bool>& configFlag, const TMaybe<bool>& flag) {
@@ -404,6 +447,7 @@ private:
     TKqpProviderContext Pctx;
 
     TAutoPtr<IGraphTransformer> Transformer;
+    TAutoPtr<IGraphTransformer> NewRBOTransformer;
 
     TActorSystem* ActorSystem;
 };

@@ -385,4 +385,6 @@ message TTableServiceConfig {
     optional bool EnableFoldUdfs = 82 [ default = true ];
 
     optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true ];
+
+    optional bool EnableNewRBO = 84 [default = false];
 };

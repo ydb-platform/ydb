@@ -360,7 +360,7 @@ void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TOperat
         context.DbChanges.PersistShard(shardIdx);
 
         // Path
-        path.DomainInfo()->AddInternalShard(shardIdx);
+        path.DomainInfo()->AddInternalShard(shardIdx, context.SS);
         path.Base()->IncShardsInside(1);
 
         // Extsubdomain data
@@ -497,7 +497,7 @@ public:
         {
             auto subdomain = context.SS->SubDomains.at(txState->TargetPathId);
             subdomain->AddPrivateShard(shardIdx);
-            subdomain->AddInternalShard(shardIdx);
+            subdomain->AddInternalShard(shardIdx, context.SS);
 
             subdomain->SetTenantHiveIDPrivate(createdTabletId);
 

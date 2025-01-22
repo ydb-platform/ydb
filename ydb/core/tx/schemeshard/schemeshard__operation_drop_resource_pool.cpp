@@ -33,7 +33,7 @@ public:
         context.SS->PersistRemoveResourcePool(db, pathId);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
+        domainInfo->DecPathsInside(context.SS);
         DecAliveChildrenDirect(OperationId, parentDirPtr, context); // for correct discard of ChildrenExist prop
         context.SS->TabletCounters->Simple()[COUNTER_RESOURCE_POOL_COUNT].Sub(1);
 

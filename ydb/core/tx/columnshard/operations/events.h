@@ -45,6 +45,10 @@ public:
         return *WriteMeta;
     }
 
+    NEvWrite::TWriteMeta& MutableWriteMeta() const {
+        return *WriteMeta;
+    }
+
     const std::shared_ptr<NEvWrite::TWriteMeta>& GetWriteMetaPtr() const {
         return WriteMeta;
     }

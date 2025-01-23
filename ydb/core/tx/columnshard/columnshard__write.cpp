@@ -99,6 +99,7 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
         for (auto&& i : writtenData.GetWriteResults()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_finished")(
                 "writing_id", i.GetWriteMeta().GetId());
+            i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
             Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
         }
@@ -111,6 +112,7 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_error")(
                 "writing_id", i.GetWriteMeta().GetId());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
+            i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
         }
 
         Execute(new TTxBlobsWritingFailed(this, ev->Get()->GetWriteStatus(), std::move(writtenData)), ctx);
@@ -129,6 +131,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
 
     for (auto&& aggr : baseAggregations) {
         const auto& writeMeta = aggr->GetWriteMeta();
+        aggr->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "blobs_write_finished")("writing_size", aggr->GetSize())(
             "writing_id", writeMeta.GetId())("status", putResult.GetPutStatus());
         Counters.GetWritesMonitor()->OnFinishWrite(aggr->GetSize(), 1);

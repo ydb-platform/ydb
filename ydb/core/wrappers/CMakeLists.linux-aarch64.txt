@@ -38,5 +38,6 @@ target_sources(ydb-core-wrappers PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/abstract.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/fake_storage.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/fake_storage_config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/unavailable_storage.cpp
 )
 

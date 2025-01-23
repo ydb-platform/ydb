@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Manager = std::make_shared<TTiersManager>(0, SelfId(), [](const TActorContext&) {
             });
             Manager->Start(Manager);
-            Manager->EnablePathId(0, ExpectedTiers);
+            Manager->ActivateTiers(ExpectedTiers);
         }
 
         TTestCSEmulator(THashSet<NTiers::TExternalStorageId> expectedTiers)

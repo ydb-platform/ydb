@@ -50,10 +50,20 @@ def cfg_generate(args):
         cluster_template = yaml.safe_load(yaml_template)
 
     host_info_provider = NopHostsInformationProvider()
+
+    use_k8s_enabled = cluster_template.get("use_k8s", {}).get("enabled", False)
     if args.hosts_provider_url:
+        if not cluster_template.get("use_walle", False):
+            raise RuntimeError("you specified --hosts-provider-url, but `use_walle` is false in template.\nSpecify `use_walle: True` to continue")
         host_info_provider = WalleHostsInformationProvider(args.hosts_provider_url)
-    elif args.hosts_provider_k8s:
+    elif use_k8s_enabled:
         host_info_provider = K8sApiHostsInformationProvider(args.kubeconfig)
+
+    if cluster_template.get("use_walle", False) and not isinstance(host_info_provider, WalleHostsInformationProvider):
+        raise RuntimeError("you specified 'use_walle: True', but didn't specify --hosts-provider-url to initialize walle")
+
+    if cluster_template.get("use_walle", False) and cluster_template.get("use_k8s", {}).get("enabled", False):
+        raise RuntimeError("you specified 'use_walle: True' and 'use_k8s.enabled: True', please select a single host info provider")
 
     generator = cfg_cls(cluster_template, args.binary_path, args.output_dir, host_info_provider=host_info_provider, **kwargs)
 

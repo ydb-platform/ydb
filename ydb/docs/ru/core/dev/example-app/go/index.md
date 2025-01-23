@@ -127,9 +127,9 @@ if err != nil {
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Для выполнения YQL-запросов и чтения результатов используется методы `query.Session.Query`, `query.Session.QueryResultSet` и `query.Session.QueryRow`.
+Для выполнения YQL-запросов и чтения результатов используются методы `query.Session.Query`, `query.Session.QueryResultSet` и `query.Session.QueryRow`.
 
-SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью структуры `query.TxControl`.
+SDK позволяет явно контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью структуры `query.TxControl`.
 
 ```go
 readTx := query.TxControl(

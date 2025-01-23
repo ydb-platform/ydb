@@ -1,6 +1,7 @@
 #include "auth_scan_base.h"
 #include "users.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
@@ -159,18 +160,8 @@ protected:
 
 private:
     bool CanAccessUser(const TString& user) {
-        if (AppData()->AdministrationAllowedSIDs.empty()) {
+        if (IsAdministrator(AppData(), UserToken.Get())) {
             return true;
-        }
-
-        if (!UserToken) {
-            return false;
-        }
-
-        for (const auto& sid : AppData()->AdministrationAllowedSIDs) {
-            if (UserToken->IsExist(sid)) {
-                return true;
-            }
         }
 
         return UserToken->IsExist(user);

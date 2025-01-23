@@ -6,6 +6,8 @@ namespace NKikimr::NEvWrite {
 
 TWriteFlowCounters::TWriteFlowCounters()
     : TBase("CSWriteFlow") {
+    DurationToAbort = TBase::GetDeriviative("Aborted/SumDuration");
+    DurationToFinish = TBase::GetDeriviative("Finished/SumDuration");
     for (auto&& i : GetEnumAllValues<EWriteStage>()) {
         auto sub = CreateSubGroup("stage", ::ToString(i));
         CountByWriteStage.emplace_back(sub.GetValue("Count"));

@@ -253,9 +253,52 @@ An **external table** is a piece of metadata that describes a particular dataset
 
 A **secret** is a sensitive piece of metadata that requires special handling. For example, secrets can be used in [external data source](#external-data-source) definitions and represent things like passwords and tokens.
 
+### Scheme object {#scheme-object}
+
+A database schema consists of **scheme objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [folders](#folder), and so on.
+
+For organizational convenience, scheme objects form a hierarchy using [folders](#folder).
+
 ### Folder {#folder}
 
-Like in filesystems, a **folder** or **directory** is a container for other entities. In the case of {{ ydb-short-name }}, these entities can be [tables](#table) (including [external tables](#external-table)), [topics](#topic), other folders, etc.
+As in file systems, a **folder** or **directory** is a container for [scheme objects](#scheme-object).
+
+Folders can contain subfolders, and this nesting can have arbitrary depth.
+
+### Access object {#access-object}
+
+An **access object** in the context of [authorization](../security/authorization.md) is an entity for which access rights and restrictions are configured. In {{ ydb-short-name }}, access objects are [scheme objects](#scheme-object).
+Each access object has an [owner](#access-owner) and an [access control list](#access-control-list).
+
+### Access subject {#access-subject}
+
+An **access subject** is an entity that can interact with [access objects](#access-object) or perform specific actions within the system. Access to these interactions and actions depends on configured [access control lists](#access-control-list).
+
+An access subject can be a [user](#access-user) or a [group](#access-group).
+
+### Access right {#access-right}
+
+An **[access right](../security/authorization.md#right)** is an entity that represents permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
+
+### Access control list {#access-control-list}
+
+An **access control list** or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) for a specific [access object](#access-object).
+
+### Owner {#access-owner}
+
+An **[owner](../security/authorization.md#owner)** is an [access subject](#access-subject) ([user](#access-user) or [group](#access-group)) having full rights over a specific [access object](#access-object).
+
+### User {#access-user}
+
+A **[user](../security/authorization.md#user)** is an individual utilizing {{ ydb-short-name }} to perform a specific function.
+
+### Group {#access-group}
+
+A **[group](../security/authorization.md#group)** or **access group** is a named collection of [users](#access-user) with identical [access rights](#access-right) to certain [access objects](#access-object).
+
+### SID {#access-sid}
+
+**SID** (**Security Identifier**) is a string in the format `<login>[@<subsystem>]`, identifying an [access subject](../concepts/glossary.md#access-subject) in [access control lists](#access-control-list).
 
 ### Query optimizer {#optimizer}
 

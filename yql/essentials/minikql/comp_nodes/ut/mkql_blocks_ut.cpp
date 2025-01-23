@@ -196,10 +196,10 @@ void TestChunked(bool withBlockExpand) {
         node = pb.BlockExpandChunked(node);
         // WideTakeBlocks won't work on chunked blocks
         node = pb.WideTakeBlocks(node, pb.NewDataLiteral<ui64>(19));
-        node = pb.WideFromBlocks(node);
+        node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));
     } else {
         // WideFromBlocks should support chunked blocks
-        node = pb.WideFromBlocks(node);
+        node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));
         node = pb.Take(node, pb.NewDataLiteral<ui64>(19));
     }
     node = pb.NarrowMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode {
@@ -541,7 +541,7 @@ Y_UNIT_TEST_LLVM(TestWideFromBlocks) {
 
     const auto blocksFlow = pb.ToBlocks(flow);
     const auto wideFlow = pb.ExpandMap(blocksFlow, [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item, pb.AsScalar(pb.NewDataLiteral<ui64>(3ULL))}; });
-    const auto wideFlow2 = pb.WideFromBlocks(wideFlow);
+    const auto wideFlow2 = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(wideFlow)));
     const auto narrowFlow = pb.NarrowMap(wideFlow2, [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); });
 
     const auto pgmReturn = pb.Collect(narrowFlow);
@@ -581,7 +581,7 @@ Y_UNIT_TEST_LLVM(TestWideToAndFromBlocks) {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
     const auto wideBlocksFlow = pb.WideToBlocks(wideFlow);
-    const auto wideFlow2 = pb.WideFromBlocks(wideBlocksFlow);
+    const auto wideFlow2 = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(wideBlocksFlow)));
     const auto narrowFlow = pb.NarrowMap(wideFlow2, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[1];
     });

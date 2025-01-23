@@ -42,44 +42,42 @@ protected:
         opts
             .AddLongOption(
                 Format("%v-schema", argumentName),
-                Format("Prints %v schema and exit", argumentName))
+                Format("Prints %v schema", argumentName))
             .OptionalValue(YsonSchemaFormat_, "FORMAT")
             .Handler0([&] { ConfigSchemaFlag_ = true; })
             .StoreResult(&ConfigSchema_);
         opts
             .AddLongOption(
                 Format("%v-template", argumentName),
-                Format("Prints %v template and exit", argumentName))
+                Format("Prints %v template", argumentName))
             .OptionalArgument()
             .SetFlag(&ConfigTemplateFlag_);
         opts
             .AddLongOption(
                 Format("%v-actual", argumentName),
-                Format("Prints actual %v and exit", argumentName))
+                Format("Prints actual %v", argumentName))
             .OptionalArgument()
             .SetFlag(&ConfigActualFlag_);
         opts
             .AddLongOption(
                 Format("%v-unrecognized", argumentName),
-                Format("Prints unrecognized %v and exit", argumentName))
+                Format("Prints unrecognized %v", argumentName))
             .OptionalArgument()
             .SetFlag(&ConfigUnrecognizedFlag_);
 
-        TStringBuilder unrecognizedStrategies;
-        for (const auto& strategy: TEnumTraits<NYTree::EUnrecognizedStrategy>::GetDomainNames()) {
-            if (unrecognizedStrategies.GetLength()) {
-                unrecognizedStrategies.AppendString(", ");
-            }
-            unrecognizedStrategies.AppendString(CamelCaseToUnderscoreCase(strategy));
-        }
         opts
             .AddLongOption(
                 Format("%v-unrecognized-strategy", argumentName),
                 Format("Configures strategy for unrecognized attributes in %v, variants: %v",
                     argumentName,
-                    unrecognizedStrategies.Flush()))
+                    JoinToString(
+                        TEnumTraits<NYTree::EUnrecognizedStrategy>::GetDomainValues(),
+                        [] (TStringBuilderBase* builder, NYTree::EUnrecognizedStrategy strategy) {
+                            builder->AppendFormat(FormatEnum(strategy));
+                        },
+                        TStringBuf(", "))))
             .DefaultValue(FormatEnum(UnrecognizedStrategy_))
-            .Handler1T<TStringBuf>([&] (TStringBuf value) {
+            .template Handler1T<TStringBuf>([&] (TStringBuf value) {
                 UnrecognizedStrategy_ = ParseEnum<NYTree::EUnrecognizedStrategy>(value);
             });
 

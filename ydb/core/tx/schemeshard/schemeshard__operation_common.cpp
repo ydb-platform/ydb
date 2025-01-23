@@ -883,7 +883,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
             dstTableInfo->PerShardPartitionConfig.erase(shard.Idx);
             context.SS->PersistShardDeleted(db, shard.Idx, context.SS->ShardInfos[shard.Idx].BindedChannels);
             context.SS->ShardInfos.erase(shard.Idx);
-            domainInfo->RemoveInternalShard(shard.Idx);
+            domainInfo->RemoveInternalShard(shard.Idx, context.SS);
             context.SS->DecrementPathDbRefCount(pathId, "remove shard from txState");
             context.SS->OnShardRemoved(shard.Idx);
         }
@@ -934,7 +934,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     ui32 newShardCout = dstTableInfo->GetPartitions().size();
 
     dstPath->SetShardsInside(newShardCout);
-    domainInfo->AddInternalShards(txState);
+    domainInfo->AddInternalShards(txState, context.SS);
 
     context.SS->PersistTable(db, txState.TargetPathId);
     context.SS->PersistTxState(db, operationId);
@@ -1167,6 +1167,54 @@ void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath
     if (parent.Base()->IsDirectory() || parent.Base()->IsDomainRoot()) {
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistPathDirAlterVersion(db, parent.Base());
+    }
+}
+
+void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup) {
+    parentPath.Base()->IncAliveChildrenPrivate(isBackup);
+    if (parentPath.Base()->GetAliveChildren() == 1 && !parentPath.Base()->IsDomainRoot()) {
+        auto grandParent = parentPath.Parent();
+        if (grandParent.Base()->IsLikeDirectory()) {
+            ++grandParent.Base()->DirAlterVersion;
+            context.MemChanges.GrabPath(context.SS, grandParent.Base()->PathId);
+            context.DbChanges.PersistPath(grandParent.Base()->PathId);
+        }
+
+        if (grandParent.IsActive()) {
+            context.SS->ClearDescribePathCaches(grandParent.Base());
+            context.OnComplete.PublishToSchemeBoard(opId, grandParent->PathId);
+        }
+    }
+}
+
+void IncAliveChildrenDirect(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup) {
+    parentPath.Base()->IncAliveChildrenPrivate(isBackup);
+    if (parentPath.Base()->GetAliveChildren() == 1 && !parentPath.Base()->IsDomainRoot()) {
+        auto grandParent = parentPath.Parent();
+        if (grandParent.Base()->IsLikeDirectory()) {
+            ++grandParent.Base()->DirAlterVersion;
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->PersistPathDirAlterVersion(db, grandParent.Base());
+        }
+
+        if (grandParent.IsActive()) {
+            context.SS->ClearDescribePathCaches(grandParent.Base());
+            context.OnComplete.PublishToSchemeBoard(opId, grandParent->PathId);
+        }
+    }
+}
+
+void DecAliveChildrenDirect(const TOperationId& opId, TPathElement::TPtr parentPath, TOperationContext& context, bool isBackup) {
+    parentPath->DecAliveChildrenPrivate(isBackup);
+    if (parentPath->GetAliveChildren() == 0 && !parentPath->IsDomainRoot()) {
+        auto grandParentDir = context.SS->PathsById.at(parentPath->ParentPathId);
+        if (grandParentDir->IsLikeDirectory()) {
+            ++grandParentDir->DirAlterVersion;
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->PersistPathDirAlterVersion(db, grandParentDir);
+            context.SS->ClearDescribePathCaches(grandParentDir);
+            context.OnComplete.PublishToSchemeBoard(opId, grandParentDir->PathId);
+        }
     }
 }
 

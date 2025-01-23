@@ -308,7 +308,7 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release());
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -316,7 +316,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release());
             MakeResponseAndPassAway();
             return;
         } else if (Request.UseImmediateEffects) {
@@ -325,7 +325,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release());
             return;
         } else {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -1312,6 +1312,8 @@ private:
         const ui64 shardId = res->GetOrigin();
         LastShard = shardId;
 
+        ParticipantNodes.emplace(ev->Sender.NodeId());
+
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState);
 
@@ -2105,7 +2107,8 @@ private:
         if (i64 msc = (i64) Request.MaxShardCount; msc > 0) {
             shardsLimit = std::min(shardsLimit, (ui32) msc);
         }
-        size_t shards = datashardTasks.size() + sourceScanPartitionsCount;
+        const size_t shards = datashardTasks.size() + sourceScanPartitionsCount;
+
         if (shardsLimit > 0 && shards > shardsLimit) {
             LOG_W("Too many affected shards: datashardTasks=" << shards << ", limit: " << shardsLimit);
             Counters->TxProxyMon->TxResultError->Inc();
@@ -2187,6 +2190,14 @@ private:
 
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
+
+        if (TxManager) {
+            for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+                if (stageInfo.Meta.ShardKey) {
+                    TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+                }
+            }
+        }
 
         if (StreamResult || EnableReadsMerge || AllowOlapDataQuery) {
             TSet<ui64> shardIds;

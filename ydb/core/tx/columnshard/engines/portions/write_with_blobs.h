@@ -149,7 +149,35 @@ private:
     std::optional<TPortionDataAccessor> PortionResult;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 
+    TString GetBlobByAddressVerified(const ui32 entityId, const ui32 chunkIdx) const {
+        for (auto&& i : Blobs) {
+            for (auto&& b: i.GetChunks()) {
+                if (b.GetEntityId() == entityId && b.GetChunkIdx() == chunkIdx) {
+                    auto* recordInfo = GetPortionResult().GetRecordPointer(TChunkAddress(entityId, chunkIdx));
+                    AFL_VERIFY(recordInfo);
+                    return recordInfo->GetBlobRange().GetBlobData(i.GetResultBlob());
+                }
+            }
+        }
+        AFL_VERIFY(false);
+        return "";
+    }
+
 public:
+    TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> RestoreBatch(
+        const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns, const bool restoreAbsent) const {
+        THashMap<TChunkAddress, TString> blobs;
+        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)(
+            "portion_id", GetPortionResult().GetPortionInfo().GetPortionId());
+        for (auto&& i : GetPortionResult().GetRecordsVerified()) {
+            blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
+            Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
+        }
+        return GetPortionResult()
+            .PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent)
+            .AssembleToGeneralContainer(seqColumns);
+    }
+
     std::vector<TBlobInfo>& MutableBlobs() {
         return Blobs;
     }
@@ -165,6 +193,14 @@ public:
 
     TString DebugString() const {
         return TStringBuilder() << "blobs_count=" << Blobs.size() << ";";
+    }
+
+    void RegisterFakeBlobIds() {
+        ui32 idx = 0;
+        for (auto&& i : Blobs) {
+            i.RegisterBlobId(*this, TUnifiedBlobId(1, 1, 1, ++idx, 1, 1, i.GetSize()));
+        }
+
     }
 
     void FinalizePortionConstructor() {

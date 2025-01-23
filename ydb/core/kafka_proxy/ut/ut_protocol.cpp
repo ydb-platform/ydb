@@ -9,12 +9,12 @@
 
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -121,6 +121,7 @@ public:
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(512);
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(1_KB);
 
+        appConfig.MutableGRpcConfig()->SetHost("::1");
         auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
         limit->SetMinPeriodSeconds(0);
         limit->SetMaxPeriodSeconds(TDuration::Days(1).Seconds());
@@ -153,7 +154,9 @@ public:
 
         ui16 grpc = KikimrServer->GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig().SetEndpoint(location).SetLog(CreateLogBackend("cerr", TLOG_DEBUG));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TLOG_DEBUG).Release()));
         if (secure) {
             driverConfig.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
             driverConfig.SetAuthToken("root@builtin");
@@ -835,10 +838,10 @@ private:
 };
 
 Y_UNIT_TEST_SUITE(KafkaProtocol) {
-    // this test imitates kafka producer behaviour: 
-    // 1. get api version, 
-    // 2. authenticate via sasl, 
-    // 3. acquire producer id, 
+    // this test imitates kafka producer behaviour:
+    // 1. get api version,
+    // 2. authenticate via sasl,
+    // 3. acquire producer id,
     // 4. produce to topic several messages, read them and assert correct contents and metadata
     Y_UNIT_TEST(ProduceScenario) {
         TInsecureTestServer testServer("2");
@@ -1234,7 +1237,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
             }
         }
-            
+
         // create table and init cdc for it
         {
             NYdb::NTable::TTableClient tableClient(*testServer.Driver);
@@ -1805,7 +1808,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto result993 = pqClient.DescribeTopic("/Root/topic-993-test", describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result993.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
-            UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / 1_MB);
+            UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionStorageMb().value(), retentionBytes / 1_MB);
         }
 
         {
@@ -2111,12 +2114,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto result0 = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result0.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
-            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / (1024 * 1024));
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionStorageMb().value(), retentionBytes / (1024 * 1024));
 
             auto result1 = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result1.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(result1.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
-            UNIT_ASSERT_VALUES_EQUAL(result1.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / (1024 * 1024));
+            UNIT_ASSERT_VALUES_EQUAL(result1.GetTopicDescription().GetRetentionStorageMb().value(), retentionBytes / (1024 * 1024));
         }
 
         {
@@ -2139,9 +2142,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                     initialTopicDescription.GetRetentionPeriod().MilliSeconds(),
                     resultingTopicDescription.GetRetentionPeriod().MilliSeconds()
             );
-            UNIT_ASSERT_VALUES_EQUAL(
-                    initialTopicDescription.GetRetentionStorageMb(),
-                    resultingTopicDescription.GetRetentionStorageMb()
+            UNIT_ASSERT(
+                initialTopicDescription.GetRetentionStorageMb() == resultingTopicDescription.GetRetentionStorageMb()
             );
         }
 

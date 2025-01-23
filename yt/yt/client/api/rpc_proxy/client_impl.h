@@ -457,6 +457,10 @@ public:
         const std::string& nodeAddress,
         const TRequestRestartOptions& options) override;
 
+    TFuture<TCollectCoverageResult> CollectCoverage(
+        const std::string& address,
+        const NApi::TCollectCoverageOptions& options) override;
+
     // Query tracker
 
     TFuture<NQueryTrackerClient::TQueryId> StartQuery(

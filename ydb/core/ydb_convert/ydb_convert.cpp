@@ -6,7 +6,7 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
@@ -478,28 +478,28 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             res.SetInt64(value.int64_value());
             break;
         case NUdf::TDataType<NUdf::TDate32>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Date");
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Date32");
             if (value.int32_value() >= NUdf::MAX_DATE32) {
                 throw yexception() << "Invalid Date32 value";
             }
             res.SetInt32(value.int32_value());
             break;
         case NUdf::TDataType<NUdf::TDatetime64>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Datetime");
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Datetime64");
             if (value.int64_value() >= NUdf::MAX_DATETIME64) {
                 throw yexception() << "Invalid Datetime64 value";
             }
             res.SetInt64(value.int64_value());
             break;
         case NUdf::TDataType<NUdf::TTimestamp64>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Timestamp");
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Timestamp64");
             if (value.int64_value() >= NUdf::MAX_TIMESTAMP64) {
                 throw yexception() << "Invalid Timestamp64 value";
             }
             res.SetInt64(value.int64_value());
             break;
         case NUdf::TDataType<NUdf::TInterval64>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval");
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval64");
             if (std::abs(value.int64_value()) >= NUdf::MAX_INTERVAL64) {
                 throw yexception() << "Invalid Interval64 value";
             }
@@ -1149,7 +1149,7 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
 
     case NScheme::NTypeIds::Interval64:
         ok = std::abs(cell.AsValue<i64>()) < NUdf::MAX_INTERVAL64;
-        break;        
+        break;
 
     case NScheme::NTypeIds::Utf8:
         ok = NYql::IsUtf8(cell.AsBuf());
@@ -1421,7 +1421,7 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
         break;
     case EPrimitiveType::Interval64:
         vb.Interval64(cell.AsValue<i64>());
-        break;        
+        break;
     case EPrimitiveType::TzDate:
         vb.TzDate(getString());
         break;

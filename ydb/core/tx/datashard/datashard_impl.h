@@ -233,6 +233,7 @@ class TDataShard
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
+    class TTxCleanupUncommitted;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -1422,6 +1423,9 @@ class TDataShard
     void Cleanup(const TActorContext &ctx);
     void SwitchToWork(const TActorContext &ctx);
     void SyncConfig();
+
+    // Cleanup for bug https://github.com/ydb-platform/ydb/issues/13387
+    void CleanupUncommitted(const TActorContext &ctx);
 
     TMaybe<TInstant> GetTxPlanStartTimeAndCleanup(ui64 step);
 
@@ -2751,7 +2755,6 @@ private:
 
     struct TCoordinatorSubscription {
         ui64 CoordinatorId;
-        TMediatorTimecastReadStep::TCPtr ReadStep;
     };
 
     TVector<TCoordinatorSubscription> CoordinatorSubscriptions;

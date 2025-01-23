@@ -15,7 +15,8 @@ PEERDIR(
     ydb/library/services
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
-    ydb/public/lib/operation_id/protos
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/library/operation_id
 )
 
 YQL_LAST_ABI_VERSION()

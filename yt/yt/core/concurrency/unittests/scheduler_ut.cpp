@@ -13,7 +13,6 @@
 #include <yt/yt/core/concurrency/thread_affinity.h>
 #include <yt/yt/core/concurrency/fair_share_thread_pool.h>
 #include <yt/yt/core/concurrency/two_level_fair_share_thread_pool.h>
-#include <yt/yt/core/concurrency/new_fair_share_thread_pool.h>
 
 #include <yt/yt/core/logging/log.h>
 
@@ -1268,7 +1267,7 @@ TEST_P(TFairShareSchedulerTest, TwoLevelFairness)
     YT_VERIFY(numWorkers > numPools);
     YT_VERIFY(numThreads <= numWorkers);
 
-    auto threadPool = CreateNewTwoLevelFairShareThreadPool(
+    auto threadPool = CreateTwoLevelFairShareThreadPool(
         numThreads,
         "MyFairSharePool",
         {

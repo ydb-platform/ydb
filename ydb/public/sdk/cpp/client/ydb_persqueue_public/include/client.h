@@ -7,19 +7,19 @@
 #include <ydb/public/sdk/cpp/client/ydb_common_client/settings.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 struct TPersQueueClientSettings : public TCommonClientSettingsBase<TPersQueueClientSettings> {
     using TSelf = TPersQueueClientSettings;
 
     //! Default executor for compression tasks.
-    FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultCompressionExecutor, CreateThreadPoolExecutor(2));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(IExecutor::TPtr, DefaultCompressionExecutor, CreateThreadPoolExecutor(2));
 
     //! Default executor for callbacks.
-    FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultHandlersExecutor, CreateThreadPoolExecutor(1));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(IExecutor::TPtr, DefaultHandlersExecutor, CreateThreadPoolExecutor(1));
 
     //! Manages cluster discovery mode.
-    FLUENT_SETTING_DEFAULT(EClusterDiscoveryMode, ClusterDiscoveryMode, EClusterDiscoveryMode::Auto);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EClusterDiscoveryMode, ClusterDiscoveryMode, EClusterDiscoveryMode::Auto);
 };
 
 // PersQueue client.

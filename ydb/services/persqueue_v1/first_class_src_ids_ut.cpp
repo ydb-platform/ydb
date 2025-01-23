@@ -1,7 +1,7 @@
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
 #include <ydb/services/persqueue_v1/actors/helpers.h>
 
 namespace NKikimr::NPersQueueTests {
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TFstClassSrcIdPQTest) {
         writer->Close();
 
         NYdb::NPersQueue::TReadSessionSettings readerSettings;
-        readerSettings.ConsumerName("debug").AppendTopics(topic);
+        readerSettings.ConsumerName("debug").AppendTopics(std::string{topic});
         auto reader = CreateReader(*driver, readerSettings);
         auto mbEv = GetNextMessageSkipAssignment(reader);
         UNIT_ASSERT(mbEv.Defined());

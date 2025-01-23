@@ -1581,12 +1581,17 @@ EValueRepresentation GetValueRepresentation(NUdf::TDataTypeId typeId);
 
 TArrayRef<TType* const> GetWideComponents(const TFlowType* type);
 TArrayRef<TType* const> GetWideComponents(const TStreamType* type);
+TArrayRef<TType *const> GetWideComponents(const TType* type);
 
 inline ui32 GetWideComponentsCount(const TFlowType* type) {
     return (ui32)GetWideComponents(type).size();
 }
 
 inline ui32 GetWideComponentsCount(const TStreamType* type) {
+    return (ui32)GetWideComponents(type).size();
+}
+
+inline ui32 GetWideComponentsCount(const TType* type) {
     return (ui32)GetWideComponents(type).size();
 }
 

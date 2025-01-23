@@ -293,6 +293,8 @@ private:
             RegisterSystemView<Schema::AuthGroups>(NAuth::GroupsName);
             RegisterSystemView<Schema::AuthGroupMembers>(GroupMembersName);
             RegisterSystemView<Schema::AuthOwners>(OwnersName);
+            RegisterSystemView<Schema::AuthPermissions>(PermissionsName);
+            RegisterSystemView<Schema::AuthPermissions>(EffectivePermissionsName);
         }
     }
 

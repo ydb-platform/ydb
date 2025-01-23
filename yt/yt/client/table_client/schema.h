@@ -4,11 +4,12 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/property.h>
-#include <yt/yt/core/misc/range.h>
 
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <util/digest/multi.h>
 

@@ -30,20 +30,10 @@ public:
         const auto factory = ctx.GetFactory();
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateIteratorOverList));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto signature = FunctionType::get(value->getType(), {factory->getType(), value->getType()}, false);
-            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            const auto output = CallInst::Create(signature, creator, {factory, value}, "output", block);
-            return output;
-        } else {
-            const auto place = new AllocaInst(value->getType(), 0U, "place", block);
-            new StoreInst(value, place, block);
-            const auto signature = FunctionType::get(Type::getVoidTy(context), {factory->getType(), place->getType(), place->getType()}, false);
-            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            CallInst::Create(signature, creator, {factory, place, place}, "", block);
-            const auto output = new LoadInst(value->getType(), place, "output", block);
-            return output;
-        }
+        const auto signature = FunctionType::get(value->getType(), {factory->getType(), value->getType()}, false);
+        const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
+        const auto output = CallInst::Create(signature, creator, {factory, value}, "output", block);
+        return output;
     }
 #endif
 private:
@@ -76,20 +66,10 @@ public:
         const auto factory = ctx.GetFactory();
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateForwardList));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto signature = FunctionType::get(value->getType(), {factory->getType(), value->getType()}, false);
-            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            const auto output = CallInst::Create(signature, creator, {factory, value}, "output", block);
-            return output;
-        } else {
-            const auto place = new AllocaInst(value->getType(), 0U, "place", block);
-            new StoreInst(value, place, block);
-            const auto signature = FunctionType::get(Type::getVoidTy(context), {factory->getType(), place->getType(), place->getType()}, false);
-            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            CallInst::Create(signature, creator, {factory, place, place}, "", block);
-            const auto output = new LoadInst(value->getType(), place, "output", block);
-            return output;
-        }
+        const auto signature = FunctionType::get(value->getType(), {factory->getType(), value->getType()}, false);
+        const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
+        const auto output = CallInst::Create(signature, creator, {factory, value}, "output", block);
+        return output;
     }
 #endif
 private:

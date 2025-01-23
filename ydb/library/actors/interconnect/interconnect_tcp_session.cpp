@@ -1028,10 +1028,6 @@ namespace NActors {
                 } while (false);
             }
 
-            // we need track clockskew only if it's one tenant nodes connection
-            // they have one scope in this case
-            bool reportClockSkew = Proxy->Common->LocalScopeId.first != 0 && Proxy->Common->LocalScopeId == Params.PeerScopeId;
-
             callback({
                 .ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem,
                 .PeerNodeId = Proxy->PeerNodeId,
@@ -1042,7 +1038,7 @@ namespace NActors {
                 .SessionConnected = connected && Socket,
                 .ConnectStatus = flagState,
                 .ClockSkewUs = ReceiveContext->ClockSkew_us,
-                .ReportClockSkew = reportClockSkew,
+                .SameScope = Proxy->Common->LocalScopeId == Params.PeerScopeId,
                 .PingTimeUs = ReceiveContext->PingRTT_us,
                 .ScopeId = Params.PeerScopeId,
                 .Utilization = Utilized,

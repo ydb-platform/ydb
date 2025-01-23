@@ -53,6 +53,7 @@ RECURSE_FOR_TESTS(
     ut_ttl
     ut_user_attributes
     ut_user_attributes_reboots
+    ut_vector_index_build_reboots
     ut_view
 )
 
@@ -76,6 +77,7 @@ SRCS(
     schemeshard__init_populator.cpp
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
+    schemeshard__list_users.cpp
     schemeshard__login.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp

@@ -24,7 +24,7 @@ struct IBusClient
     //! Typically used for logging.
     virtual const std::string& GetEndpointDescription() const = 0;
 
-    //! Returns the bus' endpoint attributes.
+    //! Returns the bus endpoint attributes.
     //! Typically used for constructing errors.
     virtual const NYTree::IAttributeDictionary& GetEndpointAttributes() const = 0;
 

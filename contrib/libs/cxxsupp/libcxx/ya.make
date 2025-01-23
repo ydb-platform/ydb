@@ -14,9 +14,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2023-12-18)
+VERSION(2024-03-05)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/9783f28cbb155e4a8d49c12e1c60ce14dcfaf0c7.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/80f9458cf30d13eef21b09042ea590945c5e64db.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -204,6 +204,7 @@ SRCS(
     src/filesystem/filesystem_error.cpp
     src/filesystem/operations.cpp
     src/filesystem/path.cpp
+    src/fstream.cpp
     src/functional.cpp
     src/future.cpp
     src/hash.cpp
@@ -217,6 +218,7 @@ SRCS(
     src/mutex.cpp
     src/mutex_destructor.cpp
     src/optional.cpp
+    src/ostream.cpp
     src/print.cpp
     src/random.cpp
     src/random_shuffle.cpp
@@ -247,7 +249,8 @@ ENDIF()
 
 IF (OS_LINUX)
     SRCS(
-        src/tz.cpp
+        src/time_zone.cpp
+        src/tzdb.cpp
         src/tzdb_list.cpp
     )
 ENDIF()

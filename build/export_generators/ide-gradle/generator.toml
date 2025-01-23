@@ -69,6 +69,13 @@ runs-out="list"
 runs-out_dir="list"
 runs-tool="list"
 
+custom_runs="list"
+custom_runs-depends="list"
+custom_runs-env="list"
+custom_runs-command="list"
+custom_runs-outputs="list"
+custom_runs-cwd="str"
+
 javac-flags="list"
 
 [attrs.root]

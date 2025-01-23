@@ -1182,7 +1182,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const NHttp::THeaders impersonatePageHeaders(outgoingResponseEv->Response->Headers);
         UNIT_ASSERT(impersonatePageHeaders.Has("Set-Cookie"));
         TStringBuf impersonatedCookie = impersonatePageHeaders.Get("Set-Cookie");
-        TString expectedCookie = CreateSecureCookie(CreateNameImpersonatedCookie(settings.ClientId), Base64Encode("impersonation_token"));
+        TString expectedCookie = CreateSecureCookie(CreateNameImpersonatedCookie(settings.ClientId), Base64Encode("impersonation_token"), 43200);
         UNIT_ASSERT_STRINGS_EQUAL(impersonatedCookie, expectedCookie);
     }
 

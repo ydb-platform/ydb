@@ -33,14 +33,24 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code) {
     Become(&THandlerSessionCreateNebius::StateWork);
 }
 
-void THandlerSessionCreateNebius::ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ) {
+void THandlerSessionCreateNebius::ProcessSessionToken(const NJson::TJsonValue& jsonValue) {
+    const NJson::TJsonValue* jsonAccessToken;
+    const NJson::TJsonValue* jsonExpiresIn;
+    if (!jsonValue.GetValuePointer("access_token", &jsonAccessToken)) {
+        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: access_token not found");
+    }
+    if (!jsonValue.GetValuePointer("expires_in", &jsonExpiresIn)) {
+        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: expires_in not found");
+    }
+    TString sessionToken = jsonAccessToken->GetStringRobust();
+    long long expiresIn = jsonAccessToken->GetIntegerRobust();
     TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
     TString sessionCookieValue = Base64Encode(sessionToken);
     BLOG_D("Set session cookie: (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
 
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(Request, &responseHeaders);
-    responseHeaders.Set("Set-Cookie", CreateSecureCookie(sessionCookieName, sessionCookieValue));
+    responseHeaders.Set("Set-Cookie", CreateSecureCookie(sessionCookieName, sessionCookieValue, expiresIn));
     responseHeaders.Set("Location", Context.GetRequestedAddress());
     ReplyAndPassAway(Request->CreateResponse("302", "Cookie set", responseHeaders));
 }

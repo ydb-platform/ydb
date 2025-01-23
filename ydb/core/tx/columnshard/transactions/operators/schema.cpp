@@ -71,7 +71,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             if (validationStatus.IsFail()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
             }
-            WaitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetEnsureTables().GetTables(), false);
+            WaitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetEnsureTables().GetTables());
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:

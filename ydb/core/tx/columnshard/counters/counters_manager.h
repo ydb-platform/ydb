@@ -16,7 +16,6 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/data_events/common/signals_flow.h>
 
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -37,7 +36,6 @@ private:
     YDB_READONLY(TScanCounters, ScanCounters, TScanCounters("Scan"));
     YDB_READONLY_DEF(std::shared_ptr<TRequestsTracerCounters>, RequestsTracingCounters);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>, SubscribeCounters);
-    YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteFlowCounters>, WriteFlowCounters);
 
 public:
     TCountersManager(TTabletCountersBase& tabletCounters)
@@ -46,8 +44,7 @@ public:
         , BackgroundControllerCounters(std::make_shared<TBackgroundControllerCounters>())
         , ColumnTablesCounters(std::make_shared<TColumnTablesCounters>())
         , RequestsTracingCounters(std::make_shared<TRequestsTracerCounters>())
-        , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>())
-        , WriteFlowCounters(std::make_shared<NEvWrite::TWriteFlowCounters>()) {
+        , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>()) {
     }
 
     void OnWriteOverloadDisk() const {

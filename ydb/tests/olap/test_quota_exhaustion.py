@@ -22,15 +22,14 @@ class TestYdbWorkload(object):
     def teardown_class(cls):
         cls.cluster.stop()
 
-    def test(self):
-        """As per https://github.com/ydb-platform/ydb/issues/13529"""
-
+    def make_session(self):
         driver = ydb.Driver(endpoint=f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', database='/Root')
         session = ydb.QuerySessionPool(driver)
         driver.wait(5, fail_fast=True)
+        return session
 
-        def create_table(table):
-            return session.execute_with_retries(f"""
+    def create_test_table(self, session, table):
+        return session.execute_with_retries(f"""
                 CREATE TABLE {table} (
                     k Int32 NOT NULL,
                     v Uint64,
@@ -38,8 +37,8 @@ class TestYdbWorkload(object):
                 ) WITH (STORE = COLUMN)
             """)
 
-        def upsert_chunk(table, chunk_id, retries=10):
-            return session.execute_with_retries(f"""
+    def upsert_test_chunk(self, session, table, chunk_id, retries=10):
+        return session.execute_with_retries(f"""
                 $n = {ROWS_CHUNK_SIZE};
                 $values_list = ListReplicate(42ul, $n);
                 $rows_list = ListFoldMap($values_list, {chunk_id * ROWS_CHUNK_SIZE}, ($val, $i) ->  ((<|k:$i, v:$val|>, $i + 1)));
@@ -48,17 +47,54 @@ class TestYdbWorkload(object):
                 SELECT * FROM AS_TABLE($rows_list);
             """, None, ydb.retries.RetrySettings(max_retries=retries))
 
-        create_table('huge')
-
+    def upsert_until_overload(self, session, table):
         try:
             for i in range(ROWS_CHUNKS_COUNT):
-                res = upsert_chunk('huge', i, retries=0)
-                print(f"query #{i} ok, result:", res, file=sys.stderr)
+                res = self.upsert_test_chunk(session, table, i, retries=0)
+                print(f"upsert #{i} ok, result:", res, file=sys.stderr)
         except ydb.issues.Overloaded:
-            print('got overload issue', file=sys.stderr)
+            print('upsert: got overload issue', file=sys.stderr)
 
+    def test(self):
+        """As per https://github.com/ydb-platform/ydb/issues/13529"""
+        session = self.make_session()
+
+        # Overflow the database
+        self.create_test_table(session, 'huge')
+        self.upsert_until_overload(session, 'huge')
+
+        # Cleanup
         session.execute_with_retries("""DROP TABLE huge""")
 
         # Check database health after cleanup
-        create_table('small')
-        upsert_chunk('small', 0)
+        self.create_test_table(session, 'small')
+        self.upsert_test_chunk(session, 'small', 0)
+
+    def delete_test_chunk(self, session, table, chunk_id, retries=10):
+        session.execute_with_retries(f"""
+            DELETE FROM {table}
+            WHERE {chunk_id * ROWS_CHUNK_SIZE} <= k AND k <= {chunk_id * ROWS_CHUNK_SIZE + ROWS_CHUNK_SIZE}
+        """, None, ydb.retries.RetrySettings(max_retries=retries))
+
+    def delete_until_overload(self, session, table):
+        for i in range(ROWS_CHUNKS_COUNT):
+            try:
+                self.delete_test_chunk(session, table, i, retries=0)
+                print(f"delete #{i} ok", file=sys.stderr)
+            except ydb.issues.Overloaded:
+                print('delete: got overload issue', file=sys.stderr)
+                return i
+
+    def test_delete(self):
+        """As per https://github.com/ydb-platform/ydb/issues/13653"""
+        session = self.make_session()
+
+        # Overflow the database
+        self.create_test_table(session, 'huge')
+        self.upsert_until_overload(session, 'huge')
+
+        # Check that deletions will lead to overflow, too
+        i = self.delete_until_overload(session, 'huge')
+
+        # Try to wait until deletion works again (after compaction)
+        self.delete_test_chunk(session, 'huge', i)

@@ -301,8 +301,10 @@ private:
                     } else if (name == "FilteredRows" && taskLevelCounter) {
                         publicCounterName = "query.filtered_rows";
                         isDeriv = true;
-                    } else if (name == "QueueBytes" && taskLevelCounter) {
-                        publicCounterName = "query.queue_bytes";
+                    } else if (name == "QueuedBytes" && taskLevelCounter) {
+                        publicCounterName = "query.queued_bytes";
+                    } else if (name == "QueuedRows" && taskLevelCounter) {
+                        publicCounterName = "query.queued_rows";
                     } else if (name == "Tasks") {
                         publicCounterName = "query.running_tasks";
                         isDeriv = false;
@@ -390,7 +392,8 @@ private:
 
         ADD_COUNTER(FilteredBytes)
         ADD_COUNTER(FilteredRows)
-        ADD_COUNTER(QueueBytes)
+        ADD_COUNTER(QueuedBytes)
+        ADD_COUNTER(QueuedRows)
 
         ADD_COUNTER(StartTimeMs)
         ADD_COUNTER(FinishTimeMs)

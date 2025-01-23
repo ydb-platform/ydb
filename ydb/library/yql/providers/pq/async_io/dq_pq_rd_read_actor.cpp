@@ -589,7 +589,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     IngressStats.Bytes += ev->Get()->Record.GetReadBytes();
     IngressStats.FilteredBytes += ev->Get()->Record.GetFilteredBytes();
     IngressStats.FilteredRows += ev->Get()->Record.GetFilteredRows();
-    IngressStats.QueueBytes = ev->Get()->Record.GetQueueBytes();
+    IngressStats.QueuedBytes = ev->Get()->Record.GetQueuedBytes();
+    IngressStats.QueuedRows = ev->Get()->Record.GetQueuedRows();
 
     for (auto partition : ev->Get()->Record.GetPartition()) {
         ui64 partitionId = partition.GetPartitionId();

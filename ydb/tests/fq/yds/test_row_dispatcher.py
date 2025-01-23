@@ -96,6 +96,7 @@ def wait_public_sensor_value(kikimr, query_id, sensor, expected_value):
         time.sleep(1)
     pass
 
+
 class TestPqRowDispatcher(TestYdsBase):
 
     def run_and_check(self, kikimr, client, sql, input, output, expected_predicate):
@@ -979,6 +980,8 @@ class TestPqRowDispatcher(TestYdsBase):
 
         wait_public_sensor_value(kikimr, query_id, "query.filtered_bytes", 1)
         wait_public_sensor_value(kikimr, query_id, "query.filtered_rows", 1)
+        wait_public_sensor_value(kikimr, query_id, "query.queued_bytes", 0)
+        wait_public_sensor_value(kikimr, query_id, "query.queued_rows", 0)
         stop_yds_query(client, query_id)
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)

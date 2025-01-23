@@ -1750,7 +1750,8 @@ public:
             ui64 ingressRows = 0;
             ui64 filteredBytes = 0;
             ui64 filteredRows = 0;
-            ui64 queueBytes = 0;
+            ui64 queuedBytes = 0;
+            ui64 queuedRows = 0;
             ui64 ingressDecompressedBytes = 0;
             auto startTimeMs = protoTask->GetStartTimeMs();
 
@@ -1778,7 +1779,8 @@ public:
                         }
                         filteredBytes += ingressStats.FilteredBytes;
                         filteredRows += ingressStats.FilteredRows;
-                        queueBytes += ingressStats.QueueBytes;
+                        queuedBytes += ingressStats.QueuedBytes;
+                        queuedRows += ingressStats.QueuedRows;
                     }
                 }
             } else {
@@ -1794,7 +1796,8 @@ public:
                     ingressDecompressedBytes += ingressStats.DecompressedBytes;
                     filteredBytes += ingressStats.FilteredBytes;
                     filteredRows += ingressStats.FilteredRows;
-                    queueBytes += ingressStats.QueueBytes;
+                    queuedBytes += ingressStats.QueuedBytes;
+                    queuedRows += ingressStats.QueuedRows;
                 }
             }
 
@@ -1807,7 +1810,8 @@ public:
             protoTask->SetIngressDecompressedBytes(ingressDecompressedBytes);
             protoTask->SetFilteredBytes(filteredBytes);
             protoTask->SetFilteredRows(filteredRows);
-            protoTask->SetQueueBytes(queueBytes);
+            protoTask->SetQueuedBytes(queuedBytes);
+            protoTask->SetQueuedRows(queuedRows);
 
             ui64 egressBytes = 0;
             ui64 egressRows = 0;

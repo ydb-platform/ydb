@@ -70,7 +70,8 @@ struct TDqAsyncStats {
 
     ui64 FilteredBytes = 0;
     ui64 FilteredRows = 0;
-    ui64 QueueBytes = 0;
+    ui64 QueuedBytes = 0;
+    ui64 QueuedRows = 0;
 
     void MergeData(const TDqAsyncStats& other) {
         Bytes += other.Bytes;
@@ -80,7 +81,8 @@ struct TDqAsyncStats {
         Splits += other.Splits;
         FilteredBytes += other.FilteredBytes;
         FilteredRows += other.FilteredRows;
-        QueueBytes += other.QueueBytes;
+        QueuedBytes += other.QueuedBytes;
+        QueuedRows += other.QueuedRows;
     }
 
     void MergeTime(const TDqAsyncStats& other) {

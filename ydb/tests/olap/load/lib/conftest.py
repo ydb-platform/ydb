@@ -169,31 +169,27 @@ class LoadSuiteBase:
 
         test = cls._test_name(query_num)
         stats = result.stats.get(test)
-        if stats is not None:
-            allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
-        else:
+        if stats is None:
             stats = {}
         if result.query_out is not None:
             allure.attach(result.query_out, 'Query output', attachment_type=allure.attachment_type.TEXT)
 
-        if result.explain_plan is not None:
+        if result.explain.plan is not None:
             with allure.step('Explain'):
-                _attach_plans(result.explain_plan)
+                _attach_plans(result.explain.plan)
 
-        if result.plans is not None:
-            for i in range(iterations):
-                s = allure.step(f'Iteration {i}')
-                if i in result.time_by_iter:
-                    s.params['duration'] = _duration_text(result.time_by_iter[i])
-                try:
-                    with s:
-                        _attach_plans(result.plans[i])
-                        if i in result.time_by_iter:
-                            allure.dynamic.parameter('duration', _duration_text(result.time_by_iter[i]))
-                        if i in result.errors_by_iter:
-                            pytest.fail(result.errors_by_iter[i])
-                except BaseException:
-                    pass
+        for iter_num in sorted(result.iterations.keys()):
+            iter_res = result.iterations[iter_num]
+            s = allure.step(f'Iteration {iter_num}')
+            if iter_res.time:
+                s.params['duration'] = _duration_text(iter_res.time)
+            try:
+                with s:
+                    _attach_plans(iter_res.plan)
+                    if iter_res.error_message:
+                        pytest.fail(iter_res.error_message)
+            except BaseException:
+                pass
 
         if result.stdout is not None:
             allure.attach(result.stdout, 'Stdout', attachment_type=allure.attachment_type.TEXT)
@@ -222,9 +218,11 @@ class LoadSuiteBase:
             error_message = 'There are fail attemps'
         if os.getenv('NO_KUBER_LOGS') is None and not success:
             cls._attach_logs(start_time=result.start_time, attach_name='kikimr')
+        stats['with_warrnings'] = bool(result.warning_message)
+        stats['with_errors'] = bool(error_message)
+        stats['errors'] = result.get_error_stats()
+        allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
         if upload:
-            stats['with_warrnings'] = bool(result.warning_message)
-            stats['with_errors'] = bool(error_message)
             ResultsProcessor.upload_results(
                 kind='Load',
                 suite=cls.suite(),

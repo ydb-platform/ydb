@@ -10,9 +10,14 @@ namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 class TGarbageCollectionActor: public TSharedBlobsCollectionActor<TGarbageCollectionActor> {
 private:
     using TBase = TSharedBlobsCollectionActor<TGarbageCollectionActor>;
+
     const NActors::TActorId TabletActorId;
     std::shared_ptr<TGCTask> GCTask;
+    size_t PendingGroupReplies = 0;
+
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);
+    void HandleOnDying(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);
+    void CheckReadyToDie();
     void CheckFinished();
 
     virtual void DoOnSharedRemovingFinished() override {
@@ -37,15 +42,25 @@ public:
         }
     }
 
+    STFUNC(StateDying) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvBlobStorage::TEvCollectGarbageResult, HandleOnDying);
+            default:
+                return TBase::StateWork(ev);
+        }
+    }
+
     void Bootstrap(const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("actor", "TGarbageCollectionActor")("event", "starting")("action_id", GCTask->GetActionGuid());
         for (auto&& i : GCTask->GetListsByGroupId()) {
             auto request = GCTask->BuildRequest(i.first);
             if (!request) {
-                Send(TabletActorId, new TEvents::TEvPoison);
+                Become(&TGarbageCollectionActor::StateDying);
+                CheckReadyToDie();
                 return;
             }
             SendToBSProxy(ctx, i.first.GetGroupId(), request.release(), i.first.GetGroupId());
+            PendingGroupReplies++;
         }
         TBase::Bootstrap(ctx);
         Become(&TGarbageCollectionActor::StateWork);

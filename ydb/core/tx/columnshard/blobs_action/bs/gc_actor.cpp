@@ -4,11 +4,11 @@
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
 void TGarbageCollectionActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev) {
+    PendingGroupReplies--;
     ACFL_DEBUG("actor", "TEvCollectGarbageResult");
     if (ev->Get()->Status == NKikimrProto::BLOCKED) {
         auto g = PassAwayGuard();
         ACFL_WARN("event", "blocked_gc_event");
-        return;
     } else if (ev->Get()->Status == NKikimrProto::OK) {
         GCTask->OnGCResult(ev);
         CheckFinished();
@@ -17,10 +17,16 @@ void TGarbageCollectionActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TP
         if (auto gc_ev = GCTask->BuildRequest(TBlobAddress(ev->Cookie, ev->Get()->Channel))) {
             SendToBSProxy(NActors::TActivationContext::AsActorContext(), ev->Cookie, gc_ev.release(), ev->Cookie);
         } else {
-            Send(TabletActorId, new TEvents::TEvPoison);
+            Become(&TGarbageCollectionActor::StateDying);
         }
     }
 }
+
+void TGarbageCollectionActor::HandleOnDying(TEvBlobStorage::TEvCollectGarbageResult::TPtr& /*ev*/) {
+    PendingGroupReplies--;
+    CheckReadyToDie();
+}
+
 
 void TGarbageCollectionActor::CheckFinished() {
     if (SharedRemovingFinished && GCTask->IsFinished()) {
@@ -29,5 +35,12 @@ void TGarbageCollectionActor::CheckFinished() {
         TActorContext::AsActorContext().Send(TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask));
     }
 }
+
+void TGarbageCollectionActor::CheckReadyToDie() {
+    if (PendingGroupReplies == 0) {
+        Send(TabletActorId, new TEvents::TEvPoison);
+    }
+}
+
 
 }

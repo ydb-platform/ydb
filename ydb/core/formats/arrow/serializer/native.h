@@ -25,6 +25,11 @@ private:
 
     TConclusion<std::shared_ptr<arrow::util::Codec>> BuildCodec(const arrow::Compression::type& cType, const std::optional<ui32> level) const;
     static const inline TFactory::TRegistrator<TNativeSerializer> Registrator = TFactory::TRegistrator<TNativeSerializer>(GetClassNameStatic());
+
+    static std::shared_ptr<arrow::util::Codec> GetDefaultCodec() {
+        return *arrow::util::Codec::Create(arrow::Compression::LZ4_FRAME);
+    }
+
 protected:
     virtual bool IsCompatibleForExchangeWithSameClass(const ISerializer& /*item*/) const override {
         return true;
@@ -53,30 +58,24 @@ protected:
 
     virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) override;
 
-    static arrow::Compression::type GetDefaultCompressionType() {
-        if (!HasAppData() && !AppData()->ColumnShardConfig.HasDefaultCompression()) {
-            return arrow::Compression::ZSTD;
-        }
-        return CompressionFromProto(AppData()->ColumnShardConfig.GetDefaultCompression()).value();
-    }
-
-    static std::shared_ptr<arrow::util::Codec> GetDefaultCodec() {
-        if (!HasAppData() ||
-            (!AppData()->ColumnShardConfig.HasDefaultCompression() && !AppData()->ColumnShardConfig.HasDefaultCompressionLevel())) {
-            return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(arrow::Compression::type::ZSTD, 1));
-        }
-        arrow::Compression::type codec = GetDefaultCompressionType();
-        if (AppData()->ColumnShardConfig.HasDefaultCompressionLevel()) {
-            return NArrow::TStatusValidator::GetValid(
-                arrow::util::Codec::Create(codec, AppData()->ColumnShardConfig.GetDefaultCompressionLevel()));
-        }
-        return NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec));
-    }
-
     static arrow::ipc::IpcOptions BuildDefaultOptions() {
         arrow::ipc::IpcWriteOptions options;
         options.use_threads = false;
-        options.codec = GetDefaultCodec();
+        if (HasAppData()) {
+            if (AppData()->ColumnShardConfig.HasDefaultCompression()) {
+                arrow::Compression::type codec = CompressionFromProto(AppData()->ColumnShardConfig.GetDefaultCompression()).value();
+                if (AppData()->ColumnShardConfig.HasDefaultCompressionLevel()) {
+                    options.codec = NArrow::TStatusValidator::GetValid(
+                        arrow::util::Codec::Create(codec, AppData()->ColumnShardConfig.GetDefaultCompressionLevel()));
+                } else {
+                    options.codec = NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec));
+                }
+            } else {
+                options.codec = GetDefaultCodec();
+            }
+        } else {
+            options.codec = GetDefaultCodec();
+        }
         return options;
     }
 

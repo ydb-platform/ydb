@@ -32,7 +32,7 @@ void TWriteOperation::Start(
     Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
     auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>((ui64)WriteId, GetPathId(), source, GranuleShardingVersionId, GetIdentifier(),
-        context.WritingCounters->GetWriteFlowCounters());
+        context.GetWritingCounters()->GetWriteFlowCounters());
     writeMeta->SetLockId(LockId);
     writeMeta->SetModificationType(ModificationType);
     NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),

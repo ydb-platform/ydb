@@ -72,8 +72,6 @@ public:
         }
         GrpcRequestBaseCtx_->RaiseIssue(NYql::TIssue{error.Message});
         ReplyBackAndDie();
-            // ReplyUnavailableAndDie(NYql::TIssue{error.Message});
-            // ReplyUnauthorizedAndDie(NYql::TIssue{error.Message});
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

@@ -21,7 +21,7 @@ from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 YDS_CONNECTION = "yds"
-COMPUTE_NODE_COUNT=3
+COMPUTE_NODE_COUNT = 3
 
 
 @pytest.fixture

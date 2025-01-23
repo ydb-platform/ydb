@@ -325,6 +325,10 @@ public:
 
         }
 
+        if (IsOutOfMemory) {
+            States = std::make_unique<TStates>(Hash, Equal, CountRowsOnPage);
+        }
+
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
@@ -332,8 +336,6 @@ public:
         IsOutOfMemory = false;
         Rows = 0;
 
-
-        States = std::make_unique<TStates>(Hash, Equal, CountRowsOnPage);
         CleanupCurrentContext();
         return true;
     }

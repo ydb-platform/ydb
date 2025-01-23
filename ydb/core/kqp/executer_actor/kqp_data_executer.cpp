@@ -308,7 +308,7 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            Send<ESendingType::Tail>(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -316,7 +316,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
-            Send<ESendingType::Tail>(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
             MakeResponseAndPassAway();
             return;
         } else if (Request.UseImmediateEffects) {
@@ -325,7 +325,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
-            Send<ESendingType::Tail>(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
             return;
         } else {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -335,12 +335,18 @@ public:
     }
 
     STATEFN(FinalizeState) {
-        switch(ev->GetTypeRewrite()) {
-            hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-            hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
-            default:
-                LOG_W("Unexpected event: " << ev->GetTypeName() << ", at state: FinalizeState");
+        try {
+            switch(ev->GetTypeRewrite()) {
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
+                hFunc(TEvents::TEvUndelivered, HandleFinalize);
+                default:
+                    UnexpectedEvent("WaitSnapshotState", ev->GetTypeRewrite());
+            }
+        } catch (const yexception& e) {
+            InternalError(e.what());
         }
+        ReportEventElapsedTime();
     }
 
     void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
@@ -350,6 +356,11 @@ public:
             }
         }
         MakeResponseAndPassAway();
+    }
+
+    void HandleFinalize(TEvents::TEvUndelivered::TPtr&) {
+        auto issue = YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN, "Buffer actor isn't available. Operation state unknown.");
+        ReplyErrorAndDie(Ydb::StatusIds::UNDETERMINED, issue);
     }
 
     void MakeResponseAndPassAway() {
@@ -1123,7 +1134,6 @@ private:
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleExecute);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleExecute);
-                hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvPrivate::TEvRetry, HandleRetry);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);

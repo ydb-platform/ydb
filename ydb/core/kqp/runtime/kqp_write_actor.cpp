@@ -230,21 +230,14 @@ public:
         , TableWriteActorSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(traceId), "TKqpTableWriteActor")
     {
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
-        try {
-            ShardedWriteController = CreateShardedWriteController(
-                TShardedWriteControllerSettings {
-                    .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
-                    .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
-                    .MaxBatchesPerMessage = MessageSettings.MaxBatchesPerMessage,
-                },
-                TypeEnv,
-                Alloc);
-        } catch (...) {
-            RuntimeError(
-                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                CurrentExceptionMessage());
-        }
+        ShardedWriteController = CreateShardedWriteController(
+            TShardedWriteControllerSettings {
+                .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
+                .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
+                .MaxBatchesPerMessage = MessageSettings.MaxBatchesPerMessage,
+            },
+            TypeEnv,
+            Alloc);
 
         Counters->WriteActorsCount->Inc();
     }
@@ -978,12 +971,21 @@ public:
             RetryShard(ev->Get()->TabletId, std::nullopt);
         } else {
             TxManager->SetError(ev->Get()->TabletId);
-            RuntimeError(
-                NYql::NDqProto::StatusIds::UNAVAILABLE,
-                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                TStringBuilder()
-                    << "Error writing to table `" << TableId.PathId.ToString() << "`"
-                    << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
+            if (Mode == EMode::IMMEDIATE_COMMIT) {
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
+                    TStringBuilder()
+                        << "Error writing to table `" << TableId.PathId.ToString() << "`"
+                        << ". Transaction state unknown for shard " << ev->Get()->TabletId << ".");
+            } else {
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                    TStringBuilder()
+                        << "Error writing to table `" << TableId.PathId.ToString() << "`"
+                        << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
+            }
         }
     }
 
@@ -1172,51 +1174,59 @@ public:
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
 
-        TVector<NScheme::TTypeInfo> keyColumnTypes;
-        keyColumnTypes.reserve(Settings.GetKeyColumns().size());
-        for (const auto& column : Settings.GetKeyColumns()) {
-            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
-                column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-            keyColumnTypes.push_back(typeInfoMod.TypeInfo);
+        try {
+            TVector<NScheme::TTypeInfo> keyColumnTypes;
+            keyColumnTypes.reserve(Settings.GetKeyColumns().size());
+            for (const auto& column : Settings.GetKeyColumns()) {
+                auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+                    column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+                keyColumnTypes.push_back(typeInfoMod.TypeInfo);
+            }
+
+            WriteTableActor = new TKqpTableWriteActor(
+                this,
+                TableId,
+                Settings.GetTable().GetPath(),
+                Settings.GetLockTxId(),
+                Settings.GetLockNodeId(),
+                Settings.GetInconsistentTx(),
+                Settings.GetIsOlap(),
+                std::move(keyColumnTypes),
+                TypeEnv,
+                Alloc,
+                Settings.GetMvccSnapshot(),
+                Settings.GetLockMode(),
+                nullptr,
+                TActorId{},
+                Counters,
+                DirectWriteActorSpan.GetTraceId());
+
+            WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
+
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
+                Settings.GetKeyColumns().begin(),
+                Settings.GetKeyColumns().end());
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
+                Settings.GetColumns().begin(),
+                Settings.GetColumns().end());
+            std::vector<ui32> writeIndex(
+                Settings.GetWriteIndexes().begin(),
+                Settings.GetWriteIndexes().end());
+            YQL_ENSURE(Settings.GetPriority() == 0);
+            WriteToken = WriteTableActor->Open(
+                GetOperation(Settings.GetType()),
+                std::move(keyColumnsMetadata),
+                std::move(columnsMetadata),
+                std::move(writeIndex),
+                Settings.GetPriority());
+            WaitingForTableActor = true;
+        } catch (...) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                CurrentExceptionMessage(),
+                {});
         }
-
-        WriteTableActor = new TKqpTableWriteActor(
-            this,
-            TableId,
-            Settings.GetTable().GetPath(),
-            Settings.GetLockTxId(),
-            Settings.GetLockNodeId(),
-            Settings.GetInconsistentTx(),
-            Settings.GetIsOlap(),
-            std::move(keyColumnTypes),
-            TypeEnv,
-            Alloc,
-            Settings.GetMvccSnapshot(),
-            Settings.GetLockMode(),
-            nullptr,
-            TActorId{},
-            Counters,
-            DirectWriteActorSpan.GetTraceId());
-
-        WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
-
-        TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
-            Settings.GetKeyColumns().begin(),
-            Settings.GetKeyColumns().end());
-        TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
-            Settings.GetColumns().begin(),
-            Settings.GetColumns().end());
-        std::vector<ui32> writeIndex(
-            Settings.GetWriteIndexes().begin(),
-            Settings.GetWriteIndexes().end());
-        YQL_ENSURE(Settings.GetPriority() == 0);
-        WriteToken = WriteTableActor->Open(
-            GetOperation(Settings.GetType()),
-            std::move(keyColumnsMetadata),
-            std::move(columnsMetadata),
-            std::move(writeIndex),
-            Settings.GetPriority());
-        WaitingForTableActor = true;
     }
 
     static constexpr char ActorName[] = "KQP_DIRECT_WRITE_ACTOR";
@@ -2586,7 +2596,6 @@ public:
             Settings.GetTable().GetVersion())
         , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "TKqpForwardWriteActor")
     {
-        Counters->ForwardActorsCount->Inc();
         EgressStats.Level = args.StatsLevel;
 
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
@@ -2600,6 +2609,8 @@ public:
         } else {
             Batcher = CreateRowDataBatcher(columnsMetadata, std::move(writeIndex));
         }
+
+        Counters->ForwardActorsCount->Inc();
     }
 
     void Bootstrap() {
@@ -2630,11 +2641,6 @@ private:
         WriteToken = result->Get()->Token;
         DataSize = 0;
 
-        if (Closed) {
-            CA_LOG_D("Finished");
-            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
-            return;
-        }
         CA_LOG_D("Resume with freeSpace=" << GetFreeSpace());
         Callbacks->ResumeExecution();
     }
@@ -2693,8 +2699,6 @@ private:
         if (Closed) {
             CA_LOG_D("Finished");
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
-        } else {
-            YQL_ENSURE(false);
         }
     }
 

@@ -524,8 +524,6 @@ void InitFq(const NFq::NConfig::TConfig& fqConfig, IPqGateway::TPtr pqGateway, T
     }
 }
 
-
-
 int RunMain(int argc, const char* argv[])
 {
     TString gatewaysCfgFile;

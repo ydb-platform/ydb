@@ -4,6 +4,7 @@
 #include <google/protobuf/port_def.inc>
 
 #include <util/string/printf.h>
+#include <util/stream/format.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -53,40 +54,12 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
 
 TString PrettySize(ui64 size) {
     double sizeFormat = size;
-    TString mod = "B";
-    const char* mods[] = { "KB", "MB", "GB", "TB", "PB", "EB" };
-    TString numFormat = "%.0f";
-
-    for (const char* nextMod : mods) {
-        if (sizeFormat > 1024) {
-            sizeFormat /= 1024;
-            mod = nextMod;
-            numFormat = "%.02f";
-        } else {
-            break;
-        }
-    }
-
-    return Sprintf((numFormat + "%s").data(), sizeFormat, mod.data());
+    return ToString(HumanReadableSize(sizeFormat, ESizeFormat::SF_BYTES));
 }
 
-TString PrettyNumber(ui64 size) {
-    double sizeFormat = size;
-    TString mod = "";
-    const char* mods[] = { "K", "M", "G", "T", "P", "E", "Z", "Y" };
-    TString numFormat = "%.0f";
-
-    for (const char* nextMod : mods) {
-        if (sizeFormat > 1000) {
-            sizeFormat /= 1000;
-            mod = nextMod;
-            numFormat = "%.02f";
-        } else {
-            break;
-        }
-    }
-
-    return Sprintf((numFormat + "%s").data(), sizeFormat, mod.data());
+TString PrettyNumber(ui64 number) {
+    double numberFormat = number;
+    return ToString(HumanReadableSize(numberFormat, ESizeFormat::SF_QUANTITY));
 }
 
 TString FormatTime(TInstant time) {

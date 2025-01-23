@@ -99,6 +99,11 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
     if (!useCBO) {
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
+    } else {
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        setting.SetName("CostBasedOptimizationLevel");
+        setting.SetValue("4");
+        settings.push_back(setting);
     }
 
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);

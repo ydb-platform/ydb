@@ -189,7 +189,9 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         granuleShardingVersion = record.GetGranuleShardingVersion();
     }
 
-    NEvWrite::TWriteMeta writeMeta(writeId, pathId, source, granuleShardingVersion, TGUID::CreateTimebased().AsGuidString(), Counters.GetWriteFlowCounters());
+    auto writeMetaPtr = std::make_shared<NEvWrite::TWriteMeta>(
+        writeId, pathId, source, granuleShardingVersion, TGUID::CreateTimebased().AsGuidString(), Counters.GetWriteFlowCounters());
+    auto& writeMeta = *writeMetaPtr;
     if (record.HasModificationType()) {
         writeMeta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(record.GetModificationType()));
     }
@@ -237,7 +239,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::IncorrectSchema);
     }
 
-    NEvWrite::TWriteData writeData(writeMeta, arrowData, snapshotSchema->GetIndexInfo().GetReplaceKey(),
+    NEvWrite::TWriteData writeData(writeMetaPtr, arrowData, snapshotSchema->GetIndexInfo().GetReplaceKey(),
         StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING), false);
     auto overloadStatus = CheckOverloadedImmediate(pathId);
     if (overloadStatus == EOverloadStatus::None) {

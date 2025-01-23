@@ -25,7 +25,7 @@ public:
 
 class TWriteResult {
 private:
-    NEvWrite::TWriteMeta WriteMeta;
+    std::shared_ptr<NEvWrite::TWriteMeta> WriteMeta;
     YDB_READONLY(ui64, DataSize, 0);
     YDB_READONLY(bool, NoDataToWrite, false);
     std::shared_ptr<arrow::RecordBatch> PKBatch;
@@ -42,10 +42,14 @@ public:
     }
 
     const NEvWrite::TWriteMeta& GetWriteMeta() const {
+        return *WriteMeta;
+    }
+
+    const std::shared_ptr<NEvWrite::TWriteMeta>& GetWriteMetaPtr() const {
         return WriteMeta;
     }
 
-    TWriteResult(const NEvWrite::TWriteMeta& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch,
+    TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch,
         const bool noDataToWrite, const ui32 recordsCount);
 };
 

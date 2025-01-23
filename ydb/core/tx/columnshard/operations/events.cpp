@@ -15,14 +15,16 @@ void TInsertedPortion::Finalize(TColumnShard* shard, NTabletFlatExecutor::TTrans
     PortionInfoConstructor = nullptr;
 }
 
-TWriteResult::TWriteResult(const NEvWrite::TWriteMeta& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch,
+TWriteResult::TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMeta, const ui64 dataSize,
+    const std::shared_ptr<arrow::RecordBatch>& pkBatch,
     const bool noDataToWrite, const ui32 recordsCount)
     : WriteMeta(writeMeta)
     , DataSize(dataSize)
     , NoDataToWrite(noDataToWrite)
     , PKBatch(pkBatch)
     , RecordsCount(recordsCount) {
-    WriteMeta.OnStage(NEvWrite::EWriteStage::Result);
+    AFL_VERIFY(WriteMeta);
+    WriteMeta->OnStage(NEvWrite::EWriteStage::Result);
 }
 
 }   // namespace NKikimr::NColumnShard

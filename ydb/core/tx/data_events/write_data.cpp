@@ -7,7 +7,7 @@
 
 namespace NKikimr::NEvWrite {
 
-TWriteData::TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow::Schema>& primaryKeySchema,
+TWriteData::TWriteData(const std::shared_ptr<TWriteMeta>& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow::Schema>& primaryKeySchema,
     const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction, const bool writePortions)
     : WriteMeta(writeMeta)
     , Data(data)
@@ -27,9 +27,9 @@ void TWriteMeta::OnStage(const EWriteStage stage) const {
     Counters->OnStageMove(CurrentStage, stage, nextStageInstant - LastStageInstant);
     LastStageInstant = nextStageInstant;
     if (stage == EWriteStage::Finished) {
-        Counters->OnWriteFinished(CurrentStage, stage, nextStageInstant - WriteStartInstant);
-    } else if (EWriteStage::Aborted) {
-        Counters->OnWriteAborted(CurrentStage, stage, nextStageInstant - WriteStartInstant);
+        Counters->OnWriteFinished(nextStageInstant - WriteStartInstant);
+    } else if (stage == EWriteStage::Aborted) {
+        Counters->OnWriteAborted(nextStageInstant - WriteStartInstant);
     }
 }
 

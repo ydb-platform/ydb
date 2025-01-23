@@ -361,6 +361,11 @@ public:
         const TRemoveMaintenanceOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TCollectCoverageResult>, CollectCoverage, (
+        const std::string& address,
+        const TCollectCoverageOptions& options),
+        (override));
+
     MOCK_METHOD(void, Terminate, (),
         (override));
     MOCK_METHOD(const NChaosClient::IReplicationCardCachePtr&, GetReplicationCardCache, (),

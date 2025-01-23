@@ -61,7 +61,7 @@ PEERDIR(
     ydb/library/actors/core
     library/cpp/containers/intrusive_rb_tree
     library/cpp/digest/md5
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/ycloud/impl
     library/cpp/logger
     library/cpp/lwtrace/mon
@@ -91,7 +91,7 @@ PEERDIR(
     ydb/library/mkql_proto/protos
     ydb/public/lib/scheme_types
     ydb/public/lib/value
-    ydb/public/sdk/cpp/client/ydb_types/credentials
+    ydb/public/sdk/cpp/src/client/types/credentials
     yql/essentials/minikql
     ydb/public/lib/deprecated/client
 )

@@ -891,10 +891,6 @@ namespace NKikimr::NYaml::NDeprecated {
         if (needsTransforming) {
             TransformConfig(jsonNode);
         }
-        if (jsonNode.Has("domains_config")) {
-            jsonNode["security_config"] = jsonNode["domains_config"]["security_config"];
-            jsonNode["domains_config"].EraseValue("security_config");
-        }
         NProtobufJson::MergeJson2Proto(jsonNode, config, GetJsonToProtoConfig());
     }
 }

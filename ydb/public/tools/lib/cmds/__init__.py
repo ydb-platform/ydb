@@ -66,19 +66,9 @@ def parse_erasure(args):
 
 
 def driver_path_packages(package_path):
-    return yatest.common.build_path(
-        "{}/Berkanavt/kikimr/bin/kikimr".format(
-            package_path
-        )
-    )
-
-
-def udfs_path_packages(package_path):
-    return yatest.common.build_path(
-        "{}/Berkanavt/kikimr/libs".format(
-            package_path
-        )
-    )
+    if os.getenv('YDB_DRIVER_BINARY') is not None:
+        return os.getenv('YDB_DRIVER_BINARY')
+    return yatest.common.build_path("{}/ydbd".format(package_path))
 
 
 def wrap_path(path):

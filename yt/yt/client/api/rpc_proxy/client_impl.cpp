@@ -1709,7 +1709,7 @@ TFuture<std::vector<TColumnarStatistics>> TClient::GetColumnarStatistics(
     auto req = proxy.GetColumnarStatistics();
     SetTimeoutOptions(*req, options);
 
-    for (const auto& subPath: path) {
+    for (const auto& subPath : path) {
         req->add_paths(ConvertToYsonString(subPath).ToString());
     }
 
@@ -2232,6 +2232,13 @@ TFuture<TRequestRestartResult> TClient::RequestRestart(
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspRequestRestartPtr& /*rsp*/) {
         return TRequestRestartResult();
     }));
+}
+
+TFuture<TCollectCoverageResult> TClient::CollectCoverage(
+    const std::string& /*address*/,
+    const NApi::TCollectCoverageOptions& /*options*/)
+{
+    ThrowUnimplemented("CollectCoverage");
 }
 
 TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(

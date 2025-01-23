@@ -10,7 +10,7 @@
 #include <library/cpp/threading/future/future.h>
 #include <util/generic/guid.h>
 
-namespace NYdb::NFederatedTopic {
+namespace NYdb::inline V2::NFederatedTopic {
 
 NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings);
 

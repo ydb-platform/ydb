@@ -444,6 +444,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, UseNewPredicateExtraction);
     REGISTER_SETTING(*this, PruneKeyFilterLambda);
     REGISTER_SETTING(*this, DqPruneKeyFilterLambda);
+    REGISTER_SETTING(*this, UseQLFilter);
+    REGISTER_SETTING(*this, PruneQLFilterLambda);
     REGISTER_SETTING(*this, MergeAdjacentPointRanges);
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
     REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);

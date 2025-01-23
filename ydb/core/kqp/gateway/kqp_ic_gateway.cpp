@@ -26,7 +26,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/lib/base/msgbus_status.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb-cpp-sdk/client/params/params.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
 
@@ -1091,6 +1091,18 @@ public:
     }
 
     TFuture<TGenericResult> DropReplication(const TString&, const NYql::TDropReplicationSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> CreateTransfer(const TString&, const NYql::TCreateTransferSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> AlterTransfer(const TString&, const NYql::TAlterTransferSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> DropTransfer(const TString&, const NYql::TDropTransferSettings&) override {
         return NotImplemented<TGenericResult>();
     }
 

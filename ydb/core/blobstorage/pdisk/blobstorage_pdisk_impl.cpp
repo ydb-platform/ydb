@@ -1803,6 +1803,8 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ownerData.HasReadTheWholeLog = false;
     ownerData.LogStartPosition = TLogPosition{0, 0};
     ownerData.Status = TOwnerData::VDISK_STATUS_SENT_INIT;
+    ownerData.LastShredGeneration = 0;
+    ownerData.ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
 
     AddCbsSet(owner);
 
@@ -1814,6 +1816,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     PCtx->ActorSystem->Send(evYardInit.Sender, result.Release());
     Mon.YardInit.CountResponse();
     AskVDisksToCutLogs(owner, false);
+    ProgressShredState();
     return true;
 }
 
@@ -2140,6 +2143,12 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
             ++it;
         }
 
+        bool isProgressShredStateNeeded = false;
+        if (OwnerData[owner].ShredState == TOwnerData::VDISK_SHRED_STATE_COMPACT_REQUESTED ||
+                OwnerData[owner].ShredState == TOwnerData::VDISK_SHRED_STATE_SHRED_REQUESTED) {
+            isProgressShredStateNeeded = true;
+        }
+
         ReleaseUnusedLogChunks(completionAction);
 
         TVDiskID vDiskId = SysLogRecord.OwnerVDisks[owner];
@@ -2154,6 +2163,10 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
         OwnerData[owner].Reset(pushedOwnerIntoQuarantine);
         OwnerData[owner].OwnerRound = ownerRound;
         VDiskOwners.erase(vDiskId);
+
+        if (isProgressShredStateNeeded) {
+            ProgressShredState();
+        }
 
         P_LOG(PRI_NOTICE, BPD12, "KillOwner", (ownerId, owner), (ownerRound, ownerRound),
             (VDiskId, vDiskId.ToStringWOGeneration()), (lastSeenLsn, lastSeenLsn));
@@ -2551,6 +2564,18 @@ void TPDisk::ProcessFastOperationsQueue() {
                 break;
             case ERequestType::RequestContinueReadMetadata:
                 static_cast<TContinueReadMetadata&>(*req).Execute(PCtx->ActorSystem);
+                break;
+            case ERequestType::RequestShredPDisk:
+                ProcessShredPDisk(static_cast<TShredPDisk&>(*req));
+                break;
+            case ERequestType::RequestPreShredCompactVDiskResult:
+                ProcessPreShredCompactVDiskResult(static_cast<TPreShredCompactVDiskResult&>(*req));
+                break;
+            case ERequestType::RequestShredVDiskResult:
+                ProcessShredVDiskResult(static_cast<TShredVDiskResult&>(*req));
+                break;
+            case ERequestType::RequestMarkDirty:
+                ProcessMarkDirty(static_cast<TMarkDirty&>(*req));
                 break;
             default:
                 Y_FAIL_S("Unexpected request type# " << TypeName(*req));
@@ -3158,6 +3183,10 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestReadMetadata:
         case ERequestType::RequestWriteMetadata:
         case ERequestType::RequestContinueReadMetadata:
+        case ERequestType::RequestShredPDisk:
+        case ERequestType::RequestPreShredCompactVDiskResult:
+        case ERequestType::RequestShredVDiskResult:
+        case ERequestType::RequestMarkDirty:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();
@@ -3850,6 +3879,10 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestAskForCutLog:
         case ERequestType::RequestCommitLogChunks:
         case ERequestType::RequestLogCommitDone:
+        case ERequestType::RequestShredPDisk:
+        case ERequestType::RequestPreShredCompactVDiskResult:
+        case ERequestType::RequestShredVDiskResult:
+        case ERequestType::RequestMarkDirty:
             // These requests don't require response.
             return true;
     }
@@ -3878,6 +3911,269 @@ void TPDisk::AddCbsSet(ui32 ownerId) {
 
     TConfigureScheduler conf(ownerId, 0);
     SchedulerConfigure(conf);
+}
+
+void TPDisk::ProgressShredState() {
+    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+        "ProgressShredState at PDisk# " << PCtx->PDiskId
+        << " ShredGeneration# " << ShredGeneration
+        << " ShredState# " << (ui32)ShredState);
+    TGuard<TMutex> guard(StateMutex);
+    if (ShredState == EShredStateSendPreShredCompactVDisk) {
+        ui32 finishedCount = 0;
+        for (ui32 ownerId = 0; ownerId < OwnerData.size(); ++ownerId) {
+            TOwnerData &data = OwnerData[ownerId];
+            if (data.VDiskId != TVDiskID::InvalidId) {
+                if (data.Status == TOwnerData::VDISK_STATUS_DEFAULT || data.Status == TOwnerData::VDISK_STATUS_HASNT_COME) {
+                    data.ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
+                } else {
+                    if (data.LastShredGeneration < ShredGeneration) {
+                        std::vector<TChunkIdx> chunksToShred;
+                        THolder<TEvPreShredCompactVDisk> compactRequest(new TEvPreShredCompactVDisk(ShredGeneration));
+                        LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                            "PDisk# " << PCtx->PDiskId
+                            << " sends compact request to VDisk# " << data.VDiskId
+                            << " ownerId# " << ownerId
+                            << " request# " << compactRequest->ToString());
+                        PCtx->ActorSystem->Send(data.CutLogId, compactRequest.Release());
+                        data.LastShredGeneration = ShredGeneration;
+                        data.ShredState = TOwnerData::VDISK_SHRED_STATE_COMPACT_REQUESTED;
+                    }
+                }
+                if (data.ShredState != TOwnerData::VDISK_SHRED_STATE_COMPACT_FINISHED) {
+                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "PDisk# " << PCtx->PDiskId
+                        << " ShredGeneration# " << ShredGeneration
+                        << " is waiting for ownerId# " << ownerId
+                        << " before finishing pre-shred compact"
+                        << " VDiskId# " << data.VDiskId
+                        << " VDiskStatus# " << data.GetStringStatus()
+                        << " ShredState# " << data.GetStringShredState());
+                    return;
+                }
+                ++finishedCount;
+            }
+        }
+        LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "PDisk# " << PCtx->PDiskId
+            << " has finished all pre-shred compact VDisk requests"
+            << " ShredGeneration# " << ShredGeneration
+            << " finishedCount# " << finishedCount);
+        ShredState = EShredStateSendShredVDisk;
+    }
+    if (ShredState == EShredStateSendShredVDisk) {
+        ui32 finishedCount = 0;
+        for (ui32 ownerId = 0; ownerId < OwnerData.size(); ++ownerId) {
+            TOwnerData &data = OwnerData[ownerId];
+            if (data.VDiskId != TVDiskID::InvalidId) {
+                if (data.Status == TOwnerData::VDISK_STATUS_DEFAULT || data.Status == TOwnerData::VDISK_STATUS_HASNT_COME) {
+                    data.ShredState = TOwnerData::VDISK_SHRED_STATE_COMPACT_FINISHED;
+                } else if (data.ShredState != TOwnerData::VDISK_SHRED_STATE_SHRED_REQUESTED
+                        && data.ShredState != TOwnerData::VDISK_SHRED_STATE_SHRED_FINISHED) {
+                    std::vector<TChunkIdx> chunksToShred;
+                    chunksToShred.reserve(ChunkState.size());
+                    for (TChunkIdx chunkIdx = 0; chunkIdx < ChunkState.size(); ++chunkIdx) {
+                        if (ChunkState[chunkIdx].OwnerId == ownerId) {
+                            // TODO(cthulhu): check if chunk is dirty
+                            chunksToShred.push_back(chunkIdx);
+                        }
+                    }
+                    THolder<TEvShredVDisk> shredRequest(new TEvShredVDisk(ShredGeneration, chunksToShred));
+                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "PDisk# " << PCtx->PDiskId
+                        << " sends shred request to VDisk# " << data.VDiskId
+                        << " ownerId# " << ownerId
+                        << " request# " << shredRequest->ToString());
+                    PCtx->ActorSystem->Send(data.CutLogId, shredRequest.Release());
+                    data.ShredState = TOwnerData::VDISK_SHRED_STATE_SHRED_REQUESTED;
+                    data.LastShredGeneration = ShredGeneration;
+                }
+                if (data.ShredState != TOwnerData::VDISK_SHRED_STATE_SHRED_FINISHED) {
+                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "PDisk# " << PCtx->PDiskId
+                        << " ShredGeneration# " << ShredGeneration
+                        << " is waiting for ownerId# " << ownerId
+                        << " VDiskId# " << data.VDiskId
+                        << " ShredState# " << data.GetStringShredState()
+                        << " before finishing shred");
+                    return;
+                }
+                ++finishedCount;
+            }
+        }
+        LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "PDisk# " << PCtx->PDiskId
+            << " has finished all shred requests"
+            << " ShredGeneration# " << ShredGeneration
+            << " finishedCount# " << finishedCount);
+        ShredState = EShredStateFinished;
+        // TODO: send result to the requester after actual shred is done
+        LOG_NOTICE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "Shred request is finished at PDisk# " << PCtx->PDiskId
+            << " ShredGeneration# " << ShredGeneration);
+        for (TActorId &requester : ShredRequesters) {
+            PCtx->ActorSystem->Send(requester, new TEvShredPDiskResult(NKikimrProto::OK, ShredGeneration, ""));
+        }
+        ShredRequesters.clear();
+    }
+}
+
+void TPDisk::ProcessShredPDisk(TShredPDisk& request) {
+    LOG_NOTICE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+        "ProcessShredPDisk at PDisk# " << PCtx->PDiskId
+        << " ShredGeneration# " << ShredGeneration
+        << " request# " << request.ToString());
+    if (!PCtx->ActorSystem) {
+        return;
+    }
+    TGuard<TMutex> guard(StateMutex);
+    if (request.ShredGeneration < ShredGeneration) {
+        guard.Release();
+        PCtx->ActorSystem->Send(request.Sender,
+            new TEvShredPDiskResult(NKikimrProto::RACE, request.ShredGeneration,
+                "A shred request with a higher generation is already in progress"));
+        return;
+    }
+    if (request.ShredGeneration == ShredGeneration) {
+        // Do nothing, since we already have a shred request with the same generation.
+        // Just add the sender to the list of requesters.
+        ShredRequesters.push_back(request.Sender);
+        return;
+    }
+    // ShredGeneration > request.ShredGeneration
+    if (ShredRequesters.size() > 0) {
+        for (TActorId &requester : ShredRequesters) {
+            PCtx->ActorSystem->Send(requester, new TEvShredPDiskResult(NKikimrProto::RACE, request.ShredGeneration,
+                "A shred request with a higher generation is received"));
+        }
+        ShredRequesters.clear();
+    }
+    ShredGeneration = request.ShredGeneration;
+    ShredRequesters.push_back(request.Sender);
+    ShredState = EShredStateSendPreShredCompactVDisk;
+    ProgressShredState();
+}
+
+void TPDisk::ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& request) {
+    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+        "ProcessPreShredCompactVDiskResult at PDisk# " << PCtx->PDiskId
+        << " ShredGeneration# " << ShredGeneration
+        << " request# " << request.ToString());
+    TGuard<TMutex> guard(StateMutex);
+    if (request.ShredGeneration != ShredGeneration) {
+        // Ignore old results
+        LOG_WARN_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "Old PreShredCompactVDiskResult is ignored at PDisk# " << PCtx->PDiskId
+            << " ShredGeneration# " << ShredGeneration
+            << " for PreShredCompactVDiskResult generation# " << request.ShredGeneration
+            << " owner# " << request.Owner
+            << " ownerRound# " << request.OwnerRound);
+        return;
+    }
+    TStringStream err;
+    NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(&request, err);
+    if (errStatus != NKikimrProto::OK) {
+        LOG_ERROR_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "Incorrect PreShredCompactVDiskResult is received at PDisk# " << PCtx->PDiskId
+            << " ShredGeneration# " << ShredGeneration
+            << " owner# " << request.Owner
+            << " ownerRound# " << request.OwnerRound
+            << " " << err.Str());
+        return;
+    }
+    if (OwnerData[request.Owner].ShredState != TOwnerData::VDISK_SHRED_STATE_COMPACT_REQUESTED) {
+        // Ignore incorrect state results
+        LOG_ERROR_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "Unexpected PreShredCompactVDiskResult is received at PDisk# " << PCtx->PDiskId
+            << " ShredGeneration# " << ShredGeneration
+            << " for PreShredCompactVDiskResult generation# " << request.ShredGeneration
+            << " owner# " << request.Owner
+            << " ownerRound# " << request.OwnerRound
+            << " ownerShredState# " << OwnerData[request.Owner].ShredState);
+        return;
+    }
+    if (request.Status != NKikimrProto::OK) {
+        ShredState = EShredStateFailed;
+        for (TActorId &requester : ShredRequesters) {
+            TStringStream str;
+            str << "Shred request failed at PDisk# " << PCtx->PDiskId
+                << " for shredGeneration# " << request.ShredGeneration
+                << " because owner# " << request.Owner
+                << " ownerRound# " << request.OwnerRound
+                << " replied with PreShredCompactVDiskResult status# " << request.Status
+                << " and ErrorReason# " << request.ErrorReason;
+            LOG_ERROR_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, str.Str());
+            PCtx->ActorSystem->Send(requester, new TEvShredPDiskResult(NKikimrProto::ERROR, request.ShredGeneration,
+                str.Str()));
+        }
+        ShredRequesters.clear();
+        return;
+    }
+    OwnerData[request.Owner].ShredState = TOwnerData::VDISK_SHRED_STATE_COMPACT_FINISHED;
+    ProgressShredState();
+}
+
+void TPDisk::ProcessShredVDiskResult(TShredVDiskResult& request) {
+    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+        "ProcessShredPDisk at PDisk# " << PCtx->PDiskId
+        << " ShredGeneration# " << ShredGeneration
+        << " request# " << request.ToString());
+    TGuard<TMutex> guard(StateMutex);
+    if (request.ShredGeneration != ShredGeneration) {
+        // Ignore old results
+        LOG_WARN_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "Old ShredVDiskResult is ignored at PDisk# " << PCtx->PDiskId
+            << " ShredGeneration# " << ShredGeneration
+            << " for shredGeneration# " << request.ShredGeneration
+            << " owner# " << request.Owner
+            << " ownerRound# " << request.OwnerRound);
+        return;
+    }
+    TStringStream err;
+    NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(&request, err);
+    if (errStatus != NKikimrProto::OK) {
+        LOG_ERROR_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "Incorrect ShredVDiskResult is received at PDisk# " << PCtx->PDiskId
+            << " ShredGeneration# " << ShredGeneration
+            << " owner# " << request.Owner
+            << " ownerRound# " << request.OwnerRound
+            << " " << err.Str());
+        return;
+    }
+    if (OwnerData[request.Owner].ShredState != TOwnerData::VDISK_SHRED_STATE_SHRED_REQUESTED) {
+        // Ignore incorrect state results
+        LOG_ERROR_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "Unexpected ShredVDiskResult is received at PDisk# " << PCtx->PDiskId
+            << " ShredGeneration# " << ShredGeneration
+            << " for ShredVDiskResult generation# " << request.ShredGeneration
+            << " owner# " << request.Owner
+            << " ownerRound# " << request.OwnerRound
+            << " ownerShredState# " << OwnerData[request.Owner].ShredState);
+        return;
+    }
+    if (request.Status != NKikimrProto::OK) {
+        ShredState = EShredStateFailed;
+        for (TActorId &requester : ShredRequesters) {
+            TStringStream str;
+            str << "Shred request failed at PDisk# " << PCtx->PDiskId
+                << " for shredGeneration# " << request.ShredGeneration
+                << " because owner# " << request.Owner
+                << " ownerRound# " << request.OwnerRound
+                << " replied with status# " << request.Status
+                << " and ErrorReason# " << request.ErrorReason;
+            LOG_ERROR_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, str.Str());
+            PCtx->ActorSystem->Send(requester, new TEvShredPDiskResult(NKikimrProto::ERROR, request.ShredGeneration,
+                str.Str()));
+        }
+        ShredRequesters.clear();
+        return;
+    }
+    OwnerData[request.Owner].ShredState = TOwnerData::VDISK_SHRED_STATE_SHRED_FINISHED;
+    ProgressShredState();
+}
+
+void TPDisk::ProcessMarkDirty(TMarkDirty& request) {
+    Y_UNUSED(request);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

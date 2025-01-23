@@ -42,7 +42,7 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
 inline const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev) {
     if (ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer")) {
         if (AppData()->AuthConfig.GetUseAccessService()
-            && (AppData()->SecurityConfig.ViewerAllowedSIDsSize() > 0 || AppData()->SecurityConfig.MonitoringAllowedSIDsSize() > 0)) {
+            && (AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 || AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0)) {
             static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
                 {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
             };

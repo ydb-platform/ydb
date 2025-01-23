@@ -121,7 +121,7 @@ void TFetchingScript::Allocation(const std::set<ui32>& entityIds, const EStageFe
 TString IFetchingStep::DebugString() const {
     TStringBuilder sb;
     sb << "name=" << Name << ";duration=" << GetSumDuration() << ";"
-       << "size=" << 1e-9 * SumSize << ";details={" << DoDebugString() << "};";
+       << "size=" << 1e-9 * GetSumSize() << ";details={" << DoDebugString() << "};";
     return sb;
 }
 

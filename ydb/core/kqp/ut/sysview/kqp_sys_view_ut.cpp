@@ -4,7 +4,7 @@
 
 #include <util/system/getpid.h>
 #include <ydb/core/sys_view/service/query_history.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
 
 namespace NKikimr {
 namespace NKqp {

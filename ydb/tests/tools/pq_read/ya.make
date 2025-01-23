@@ -8,7 +8,7 @@ PEERDIR(
     library/cpp/colorizer
     library/cpp/getopt
     library/cpp/threading/future
-    ydb/public/sdk/cpp/client/ydb_persqueue_public
+    ydb/public/sdk/cpp/src/client/persqueue_public
 )
 
 END()

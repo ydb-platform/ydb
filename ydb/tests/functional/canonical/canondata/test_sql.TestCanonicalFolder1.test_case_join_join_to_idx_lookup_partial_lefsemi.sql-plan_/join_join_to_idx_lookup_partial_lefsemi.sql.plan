@@ -27,10 +27,7 @@
                     "columns": [
                         "Key1"
                     ],
-                    "lookup_by": [
-                        "Key1"
-                    ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

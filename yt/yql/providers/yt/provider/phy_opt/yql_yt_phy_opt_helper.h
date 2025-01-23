@@ -109,6 +109,8 @@ NNodes::TYtOutTable ConvertSingleOutTableWithSortAware(TExprNode::TPtr& lambda, 
 TVector<NNodes::TYtOutTable> ConvertOutTablesWithSortAware(TExprNode::TPtr& lambda, bool& ordered, TPositionHandle pos,
     const TTypeAnnotationNode* outItemType, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
 
+bool EnsurePersistableYsonTypes(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, const TYtState::TPtr& state);
+
 NNodes::TExprBase WrapOp(NNodes::TYtOutputOpBase op, TExprContext& ctx);
 
 NNodes::TCoLambda MapEmbedInputFieldsFilter(NNodes::TCoLambda lambda, bool ordered, NNodes::TCoAtomList fields, TExprContext& ctx);

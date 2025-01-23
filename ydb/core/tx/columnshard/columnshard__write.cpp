@@ -102,9 +102,7 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
             Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
         }
-        Execute(new TTxBlobsWritingFinished(
-                    this, ev->Get()->GetWriteStatus(), ev->Get()->GetWriteAction(), std::move(writtenData)),
-            ctx);
+        Execute(new TTxBlobsWritingFinished(this, ev->Get()->GetWriteStatus(), ev->Get()->GetWriteAction(), std::move(writtenData)), ctx);
     } else {
         const TMonotonic now = TMonotonic::Now();
         for (auto&& i : writtenData.GetWriteResults()) {

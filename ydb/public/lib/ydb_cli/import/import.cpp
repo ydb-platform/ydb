@@ -1,12 +1,12 @@
 #include "import.h"
 
 #include <util/stream/format.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -56,9 +56,9 @@ constexpr ui64 rowsToAnalyze = 100000;
 
 inline
 TStatus MakeStatus(EStatus code = EStatus::SUCCESS, const TString& error = {}) {
-    NYql::TIssues issues;
+    NYdb::NIssue::TIssues issues;
     if (error) {
-        issues.AddIssue(NYql::TIssue(error));
+        issues.AddIssue(NYdb::NIssue::TIssue(error));
     }
     return TStatus(code, std::move(issues));
 }
@@ -94,7 +94,7 @@ void InitCsvParser(TCsvParser& parser,
                    NCsvFormat::TLinesSplitter& csvSource,
                    const TImportFileSettings& settings,
                    const TString& headerRow,
-                   const std::map<TString, TType>* columnTypes = nullptr,
+                   const std::map<std::string, TType>* columnTypes = nullptr,
                    const NTable::TTableDescription* dbTableInfo = nullptr) {
     if (settings.Header_ || headerRow) {
         TString newHeaderRow;
@@ -121,7 +121,7 @@ void InitCsvParser(TCsvParser& parser,
             throw yexception() << "Need to specify column names";
         }
         for (const auto& column : dbTableInfo->GetColumns()) {
-            columns.push_back(column.Name);
+            columns.push_back(TString{column.Name});
         }
         parser = TCsvParser(std::move(columns), settings.Delimiter_[0], settings.NullValue_, columnTypes);
     }
@@ -508,7 +508,7 @@ private:
     TStatus UpsertParquet(const TString& filename, const TString& dbPath, ProgressCallbackFunc & progressCallback);
     TAsyncStatus UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema);
     TType GetTableType();
-    std::map<TString, TType> GetColumnTypes();
+    std::map<std::string, TType> GetColumnTypes();
     void ValidateTValueUpsertTable();
     std::shared_ptr<TProgressFile> LoadOrStartImportProgress(const TString& filePath);
     TStatus GenerateCreateTableFromCsv(IInputStream& input,
@@ -1603,8 +1603,8 @@ TType TImportFileClient::TImpl::GetTableType() {
     return typeBuilder.Build();
 }
 
-std::map<TString, TType> TImportFileClient::TImpl::GetColumnTypes() {
-    std::map<TString, TType> columnTypes;
+std::map<std::string, TType> TImportFileClient::TImpl::GetColumnTypes() {
+    std::map<std::string, TType> columnTypes;
     Y_ENSURE_BT(DbTableInfo);
     const auto& columns = DbTableInfo->GetTableColumns();
     for (auto it = columns.begin(); it != columns.end(); it++) {

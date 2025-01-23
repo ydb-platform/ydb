@@ -2416,8 +2416,30 @@ TExprNode::TPtr FuseNarrowMap(const TExprNode& node, TExprContext& ctx) {
         .Seal().Build();
 }
 
+TExprNode::TPtr TryExpandFlatMapOverTableSource(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (node->Head().IsCallable("TableSource")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " over " << node->Head().Content();
+        return ctx.Builder(node->Pos())
+            .Callable("Collect")
+                .Callable(0, node->Content())
+                    .Callable(0, "ToFlow")
+                        .Add(0, node->HeadPtr())
+                    .Seal()
+                    .Add(1, node->TailPtr())
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    return {};
+}
+
 template <bool Ordered>
 TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (auto res = TryExpandFlatMapOverTableSource(node, ctx)) {
+        return res;
+    }
+
     const auto& lambda = node->Tail();
     const auto& body = lambda.Tail();
     constexpr auto map = Ordered ? "OrderedMap" : "Map";
@@ -3243,6 +3265,7 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
             return ctx.ChangeChildren(Ordered ? node->Head() : *node, {node->Head().HeadPtr(), std::move(lambda)});
         }
     }
+
     return node;
 }
 
@@ -6115,11 +6138,10 @@ bool CanRewriteToBlocksWithInput(const TExprNode& input, const TTypeAnnotationCo
 }
 
 TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
-    Y_ENSURE(node->IsCallable("WideMap"));
     const auto lambda = node->TailPtr();
     // Swap trivial WideMap and WideFromBlocks.
     const auto& input = node->Head();
-    if (input.IsCallable("ToFlow") && input.Head().IsCallable("WideFromBlocks")) {
+    if (node->IsCallable("WideMap") && input.IsCallable("ToFlow") && input.Head().IsCallable("WideFromBlocks")) {
         if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx, types)) {
             const auto& wideFromBlocks = input.Head();
             // Technically, the code below rewrites the following sequence
@@ -8298,11 +8320,30 @@ TExprNode::TPtr DropToFlowDeps(const TExprNode::TPtr& node, TExprContext& ctx) {
     return ctx.ChangeChildren(*node, std::move(children));
 }
 
-TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext&) {
+TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->ChildrenSize() == 1 && node->Head().IsCallable("FromFlow")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop ToFlow over FromFlow";
         return node->Head().HeadPtr();
     }
+
+
+    if (node->Head().IsCallable("TableSource")) {
+        if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
+            // TODO check wide limit
+            YQL_CLOG(DEBUG, CorePeepHole) << "Generate WideTableSource";
+            auto structType = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            TVector<TString> columns;
+            for (const auto& item : structType->GetItems()) {
+                columns.push_back(TString(item->GetName()));
+            }
+
+            auto innerFlow = ctx.NewCallable(node->Pos(), "ToFlow", { node->Head().HeadPtr() });
+            auto expandMap = MakeExpandMap(node->Pos(), columns, innerFlow, ctx);
+            auto source = ctx.NewCallable(node->Pos(), "WideTableSource", { expandMap });
+            return MakeNarrowMap(node->Pos(), columns, source, ctx);
+        }
+    }
+
     return node;
 }
 
@@ -8616,6 +8657,7 @@ struct TPeepHoleRules {
 
     const TExtPeepHoleOptimizerMap BlockStageExtRules = {
         {"WideMap", &OptimizeWideMapBlocks},
+        {"NarrowMap", &OptimizeWideMapBlocks},
         {"WideFilter", &OptimizeWideFilterBlocks},
         {"WideToBlocks", &OptimizeWideToBlocks},
         {"WideFromBlocks", &OptimizeWideFromBlocks},

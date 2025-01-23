@@ -1,6 +1,7 @@
 import concurrent.futures
 import random
-from ydb.tests.sql.lib.test_base import TpchTestBaseH1, TestBase
+from ydb.tests.sql.lib.test_base import TpchTestBaseH1
+from ydb.tests.sql.lib.helpers import split_data_into_fixed_size_chunks
 
 
 class TestConcurrentInsertAndCount(TpchTestBaseH1):
@@ -45,7 +46,7 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
 
                 data.append(lineitem)
 
-            for chunk in TestBase.split_data_into_fixed_size_chunks(data, 1000):
+            for chunk in split_data_into_fixed_size_chunks(data, 1000):
                 if not count_future.done():
                     self.bulk_upsert_operation(lineitem_table, chunk)
 
@@ -132,7 +133,7 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
                     raise
 
             # Split all data to chunks and UPSERT them
-            for chunk in TestBase.split_data_into_fixed_size_chunks(data, 1000):
+            for chunk in split_data_into_fixed_size_chunks(data, 1000):
                 if not count_future.done():
                     self.transactional(lambda session: upsert_data(session, chunk))
 
@@ -205,7 +206,7 @@ class TestConcurrentInsertAndCount(TpchTestBaseH1):
                 data.append(lineitem)
 
             # Split all data to chunks and UPSERT them
-            for chunk in TestBase.split_data_into_fixed_size_chunks(data, 100):
+            for chunk in split_data_into_fixed_size_chunks(data, 100):
                 query_texts = []
                 for lineitem in chunk:
                     query_texts.append(self.build_lineitem_upsert_query(lineitem_table, lineitem))

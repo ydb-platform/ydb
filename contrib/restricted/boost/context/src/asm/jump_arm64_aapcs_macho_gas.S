@@ -52,7 +52,6 @@
  *******************************************************/
 
 .text
-.private_extern _jump_fcontext
 .globl _jump_fcontext
 .balign 16
 _jump_fcontext:

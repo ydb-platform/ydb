@@ -27,16 +27,6 @@ static_assert(MaxMidSize == 64 * 1024 * 1024, "Upper memory block 64 Mb");
 
 namespace {
 
-size_t GetMemoryMapsCount() {
-    size_t lineCount = 0;
-    TString line;
-#if defined(_unix_)
-    TFileInput file("/proc/self/maps");
-    while (file.ReadLine(line)) ++lineCount;
-#endif
-    return lineCount;
-}
-
 ui64 GetMaxMemoryMaps() {
     ui64 maxMapCount = 0;
 #if defined(_unix_)
@@ -746,5 +736,15 @@ template void* GetAlignedPage<TFakeUnalignedMmap>(ui64);
 template void ReleaseAlignedPage<>(void*,ui64);
 template void ReleaseAlignedPage<TFakeAlignedMmap>(void*,ui64);
 template void ReleaseAlignedPage<TFakeUnalignedMmap>(void*,ui64);
+
+size_t GetMemoryMapsCount() {
+    size_t lineCount = 0;
+    TString line;
+#if defined(_unix_)
+    TFileInput file("/proc/self/maps");
+    while (file.ReadLine(line)) ++lineCount;
+#endif
+    return lineCount;
+}
 
 } // NKikimr

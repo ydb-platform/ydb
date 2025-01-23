@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 import concurrent.futures
 from ydb.tests.sql.lib.test_base import TpchTestBaseH1
-from ydb.tests.sql.lib.test_wm import WorkloadManager
+from ydb.tests.library.common import workload_manager
 import ydb
 import time
 import pytest
 
 
-class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
+class TestWorkloadManager(TpchTestBaseH1):
+    def get_pool(self, user, query):
+        return workload_manager.get_pool(self, self.ydb_cli_path, self.get_endpoint(), self.get_database(), user, query)
 
     def test_crud(self):
         """
@@ -92,7 +94,7 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
         # Wait until resource pool fetches resource classifiers list
         time.sleep(12)
 
-        self.verify_pool("testuser", resource_pool, f'select count(*) from `{table_name}`')
+        assert self.get_pool("testuser", f'select count(*) from `{table_name}`') == resource_pool
 
     def test_pool_classifier_without_init_timeout(self):
         """
@@ -130,7 +132,7 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
             )"""
         self.query(pool_classifier_definition)
 
-        self.verify_pool("testuser", resource_pool, f'select count(*) from `{table_name}`')
+        assert self.get_pool("testuser", f'select count(*) from `{table_name}`') == resource_pool
 
     def test_resource_pool_queue_size_limit(self):
         """
@@ -170,7 +172,7 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
         # Wait until resource pool fetches resource classifiers list
         time.sleep(12)
 
-        self.verify_pool(testuser_username, resource_pool, f'select count(*) from `{table_name}`')
+        assert self.get_pool(testuser_username, f'select count(*) from `{table_name}`') == resource_pool
 
         test_user_connection = self.create_connection(testuser_username)
 
@@ -263,8 +265,8 @@ class TestWorkloadManager(TpchTestBaseH1, WorkloadManager):
             # Wait until resource pool fetches resource classifiers list
             time.sleep(12)
 
-            self.verify_pool(high_priority_user, high_resource_pool, f'select count(*) from `{table_name}`')
-            self.verify_pool(low_priority_user, low_resource_pool, f'select count(*) from `{table_name}`')
+            assert self.get_pool(high_priority_user, f'select count(*) from `{table_name}`') == high_resource_pool
+            assert self.get_pool(low_priority_user, f'select count(*) from `{table_name}`') == low_resource_pool
 
         highpriority_user_connection = self.create_connection(high_priority_user)
         lowpriority_user_connection = self.create_connection(low_priority_user)

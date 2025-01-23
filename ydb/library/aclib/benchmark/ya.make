@@ -1,4 +1,4 @@
-G_BENCHMARK()
+G_BENCHMARK(library_aclib_benchmark)
 
 TAG(ya:fat)
 SIZE(LARGE)

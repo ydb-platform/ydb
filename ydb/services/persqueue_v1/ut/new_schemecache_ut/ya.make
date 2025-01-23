@@ -1,5 +1,9 @@
 UNITTEST_FOR(ydb/services/persqueue_v1)
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 FORK_SUBTESTS()
 
 IF (WITH_VALGRIND)
@@ -26,9 +30,9 @@ PEERDIR(
     ydb/library/persqueue/tests
     ydb/core/testlib/default
     ydb/public/api/grpc
-    ydb/public/sdk/cpp/client/resources
-    ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/resources
+    ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/table
     ydb/services/persqueue_v1
 )
 

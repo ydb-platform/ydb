@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(75.6.0)
+VERSION(75.7.0)
 
 LICENSE(MIT)
 
@@ -64,7 +64,6 @@ PY_SRCS(
     setuptools/_distutils/command/install_scripts.py
     setuptools/_distutils/command/sdist.py
     setuptools/_distutils/compat/__init__.py
-    setuptools/_distutils/compat/py38.py
     setuptools/_distutils/compat/py39.py
     setuptools/_distutils/core.py
     setuptools/_distutils/cygwinccompiler.py

@@ -3,7 +3,7 @@ import signal
 import sys
 import time
 
-from .base import TllTieringTestBase, ColumnTableHelper
+from .base import TllTieringTestBase
 
 ROWS_CHUNK_SIZE = 1000000
 ROWS_CHUNKS_COUNT = 10
@@ -12,10 +12,10 @@ ROWS_CHUNKS_COUNT = 10
 class TestUnavailableS3(TllTieringTestBase):
     def test(self):
         """As per https://github.com/ydb-platform/ydb/issues/13545"""
-        bucket_s3_name = f"cold"
+        bucket_s3_name = "cold"
         bucket_db_path = f"{self.ydb_client.database}/buckets/{bucket_s3_name}"
 
-        self.ydb_client.query(f"""
+        self.ydb_client.query("""
             CREATE TABLE table (
                 ts Timestamp NOT NULL,
                 v String,
@@ -40,7 +40,7 @@ class TestUnavailableS3(TllTieringTestBase):
             )
         """)
 
-        table = ColumnTableHelper(self.ydb_client, 'table')
+        # table = ColumnTableHelper(self.ydb_client, 'table')
 
         def upsert_chunk(i):
             return self.ydb_client.query(f"""
@@ -53,7 +53,7 @@ class TestUnavailableS3(TllTieringTestBase):
                     ts: UNWRAP(CAST($beg_ul + $step_ul * {i}ul + CAST(Random($j) * $int_ul AS Uint64) AS Timestamp)),
                     v: "Entry #" || CAST($j AS String)
                 |>));
-                
+
                 UPSERT INTO table
                 SELECT * FROM AS_TABLE($rows_list);
             """)
@@ -76,9 +76,10 @@ class TestUnavailableS3(TllTieringTestBase):
         print("!!! simulating S3 recovery -- sending SIGCONT", file=sys.stderr)
         os.kill(self.s3_pid, signal.SIGCONT)
 
-        get_stat = lambda: self.s3_client.get_bucket_stat(bucket_s3_name)[0]
+        def get_stat():
+            return self.s3_client.get_bucket_stat(bucket_s3_name)[0]
 
-        stat_old = get_stat()
+        # stat_old = get_stat()
 
         for i in range(ROWS_CHUNKS_COUNT // 2, ROWS_CHUNKS_COUNT):
             upsert_chunk(i)

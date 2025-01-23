@@ -14,7 +14,11 @@ void TGarbageCollectionActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TP
         CheckFinished();
     } else {
         ACFL_ERROR()("event", "GC_ERROR")("details", ev->Get()->Print(true));
-        SendToBSProxy(NActors::TActivationContext::AsActorContext(), ev->Cookie, GCTask->BuildRequest(TBlobAddress(ev->Cookie, ev->Get()->Channel)).release(), ev->Cookie);
+        if (auto gc_ev = GCTask->BuildRequest(TBlobAddress(ev->Cookie, ev->Get()->Channel))) {
+            SendToBSProxy(NActors::TActivationContext::AsActorContext(), ev->Cookie, gc_ev.release(), ev->Cookie);
+        } else {
+            Send(TabletActorId, new TEvents::TEvPoison);
+        }
     }
 }
 

@@ -41,7 +41,10 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("actor", "TGarbageCollectionActor")("event", "starting")("action_id", GCTask->GetActionGuid());
         for (auto&& i : GCTask->GetListsByGroupId()) {
             auto request = GCTask->BuildRequest(i.first);
-            AFL_VERIFY(request);
+            if (!request) {
+                Send(TabletActorId, new TEvents::TEvPoison);
+                return;
+            }
             SendToBSProxy(ctx, i.first.GetGroupId(), request.release(), i.first.GetGroupId());
         }
         TBase::Bootstrap(ctx);

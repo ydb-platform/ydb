@@ -59,8 +59,14 @@ static TAtomicCounter PerGenerationCounter = 1;
 std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const TBlobAddress& address) const {
     auto it = ListsByGroupId.find(address);
     AFL_VERIFY(it != ListsByGroupId.end());
-    AFL_VERIFY(++it->second.RequestsCount < 10)("event", "build_gc_request")("address", address.DebugString())("current_gen", CurrentGen)("gen", CollectGenStepInFlight)
-        ("count", it->second.RequestsCount);
+    if (++it->second.RequestsCount >= TGCLists::RequestsLimit) {
+        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)
+            ("event", "build_gc_request")
+            ("address", address.DebugString())("current_gen", CurrentGen)
+            ("gen", CollectGenStepInFlight)
+            ("count", it->second.RequestsCount);
+        return nullptr;
+    }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "build_gc_request")("address", address.DebugString())("current_gen", CurrentGen)("gen", CollectGenStepInFlight)
         ("count", it->second.RequestsCount);
     auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(

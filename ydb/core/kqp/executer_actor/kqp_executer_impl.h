@@ -1897,6 +1897,8 @@ protected:
     void PassAway() override {
         YQL_ENSURE(AlreadyReplied && ResponseEv);
 
+        ResponseEv->ParticipantNodes = std::move(ParticipantNodes);
+
         // Fill response stats
         {
             auto& response = *ResponseEv->Record.MutableResponse();
@@ -1922,10 +1924,6 @@ protected:
                 if (!txPlansWithStats.empty()) {
                     LOG_I("Full stats: " << response.GetResult().GetStats());
                 }
-            }
-
-            for (const auto nodeId : ParticipantNodes) {
-                response.MutableResult()->AddParticipantNodes(nodeId);
             }
         }
 

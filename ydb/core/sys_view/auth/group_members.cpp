@@ -22,7 +22,7 @@ public:
     TGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken))
+        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), true)
     {
     }
 
@@ -33,16 +33,14 @@ protected:
         
         TVector<TCell> cells(::Reserve(Columns.size()));
 
-        // TODO: add rows according to request's sender user rights
-
         for (const auto& group : entry.DomainInfo->Groups) {
             for (const auto& member : group.Members) {
                 for (auto& column : Columns) {
                     switch (column.Tag) {
-                    case Schema::AuthGroupMembers::GroupSid::ColumnId:
+                    case Schema::AuthMembers::GroupSid::ColumnId:
                         cells.push_back(TCell(group.Sid.data(), group.Sid.size()));
                         break;
-                    case Schema::AuthGroupMembers::MemberSid::ColumnId:
+                    case Schema::AuthMembers::MemberSid::ColumnId:
                         cells.push_back(TCell(member.data(), member.size()));
                         break;
                     default:

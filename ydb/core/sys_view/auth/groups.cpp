@@ -22,7 +22,7 @@ public:
     TGroupsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken))
+        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), true)
     {
     }
 
@@ -32,8 +32,6 @@ protected:
         Y_ABORT_UNLESS(CanonizePath(entry.Path) == TBase::TenantName);
         
         TVector<TCell> cells(::Reserve(Columns.size()));
-
-        // TODO: add rows according to request's sender user rights
 
         for (const auto& group : entry.DomainInfo->Groups) {
             for (auto& column : Columns) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
@@ -32,9 +33,11 @@ public:
 
     TAuthScanBase(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+        bool requireUserAdministratorAccess)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
         , UserToken(std::move(userToken))
+        , RequireUserAdministratorAccess(requireUserAdministratorAccess)
     {
     }
 
@@ -55,6 +58,11 @@ public:
 protected:
     void ProceedToScan() override {
         TBase::Become(&TAuthScanBase::StateScan);
+
+        if (RequireUserAdministratorAccess && !IsAdministrator(AppData(), UserToken.Get())) {
+            TBase::ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "User isn't administrator");
+            return;
+        }
 
         // TODO: support TableRange filter
         if (auto cellsFrom = TBase::TableRange.From.GetCells(); cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
@@ -165,6 +173,7 @@ protected:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 
 private:
+    bool RequireUserAdministratorAccess;
     TVector<TTraversingChildren> DeepFirstSearchStack;
 };
 

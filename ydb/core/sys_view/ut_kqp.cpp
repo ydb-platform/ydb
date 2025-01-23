@@ -114,6 +114,33 @@ void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = fa
     }
 }
 
+void SetupAuthEnvironment(TTestEnv& env) {
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
+    CreateTenantsAndTables(env, true);
+}
+
+void SetupAuthAccessEnvironment(TTestEnv& env) {
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
+    env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+    env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user1");
+    env.GetClient().SetSecurityToken("root@builtin");
+    CreateTenantsAndTables(env, true);
+
+    env.GetClient().CreateUser("/Root", "user1", "password1");
+    env.GetClient().CreateUser("/Root", "user2", "password2");
+    env.GetClient().CreateUser("/Root/Tenant1", "user3", "password3");
+    env.GetClient().CreateUser("/Root/Tenant1", "user4", "password4");
+
+    {
+        NACLib::TDiffACL acl;
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
+        env.GetClient().ModifyACL("", "Root", acl.SerializeAsString());
+    }
+}
+
 class TYsonFieldChecker {
     NYT::TNode Root;
     NYT::TNode::TListType::const_iterator RowIterator;
@@ -2137,9 +2164,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(AuthUsers) {
         TTestEnv env;
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
-        CreateTenantsAndTables(env, true);
+        SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
         env.GetClient().CreateUser("/Root", "user1", "password1");
@@ -2209,26 +2234,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(AuthUsers_Access) {
         TTestEnv env;
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
-        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
-        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user1");
-        env.GetClient().SetSecurityToken("root@builtin");
-        CreateTenantsAndTables(env, true);
-        
+        SetupAuthAccessEnvironment(env);
         TTableClient client(env.GetDriver());
-
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant1", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant1", "user4", "password4");
-
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
-            env.GetClient().ModifyACL("", "Root", acl.SerializeAsString());
-        }
 
         { // anonymous
             auto driverConfig = TDriverConfig()
@@ -2247,7 +2254,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
         
-        { // user1
+        { // user1 is /Root admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
                 .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
@@ -2284,7 +2291,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        { // user2
+        { // user2 isn't /Root admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
                 .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
@@ -2325,9 +2332,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(AuthGroups) {
         TTestEnv env;
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
-        CreateTenantsAndTables(env, true);
+        SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
         env.GetClient().CreateUser("/Root", "user1", "password1");
@@ -2382,11 +2387,103 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    Y_UNIT_TEST(AuthGroupMembers) {
+    Y_UNIT_TEST(AuthGroups_Access) {
         TTestEnv env;
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
-        CreateTenantsAndTables(env, true);
+        SetupAuthAccessEnvironment(env);
+        TTableClient client(env.GetDriver());
+
+        env.GetClient().CreateGroup("/Root", "group1");
+        env.GetClient().CreateGroup("/Root", "group2");
+        env.GetClient().CreateGroup("/Root/Tenant1", "group3");
+        env.GetClient().CreateGroup("/Root/Tenant1", "group4");
+
+        { // anonymous
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint());
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT Sid
+                FROM `Root/.sys/auth_groups`
+            )").GetValueSync();
+
+            NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+        }
+
+        { // user1 is /Root admin
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "password1",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_groups`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group2"]];
+                    [["group1"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_groups`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group4"]];
+                    [["group3"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+        }
+
+        { // user2 isn't /Root admin
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user2",
+                    .Password = "password2",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_groups`
+                )").GetValueSync();
+
+                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_groups`
+                )").GetValueSync();
+
+                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+            }
+        }
+
+        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
+        // and test tenant user and tenant admin
+    }
+
+    Y_UNIT_TEST(AuthMembers) {
+        TTestEnv env;
+        SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
         env.GetClient().CreateUser("/Root", "user1", "password1");
@@ -2413,7 +2510,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `Root/.sys/auth_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -2426,7 +2523,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant1/.sys/auth_group_members`
+                FROM `Root/Tenant1/.sys/auth_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -2439,7 +2536,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant2/.sys/auth_group_members`
+                FROM `Root/Tenant2/.sys/auth_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -2454,11 +2551,108 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
+    Y_UNIT_TEST(AuthMembers_Access) {
+        TTestEnv env;
+        SetupAuthAccessEnvironment(env);
+        TTableClient client(env.GetDriver());
+
+        env.GetClient().CreateGroup("/Root", "group1");
+        env.GetClient().CreateGroup("/Root", "group2");
+        env.GetClient().CreateGroup("/Root/Tenant1", "group3");
+        env.GetClient().CreateGroup("/Root/Tenant1", "group4");
+
+        env.GetClient().AddGroupMembership("/Root", "group1", "user1");
+        env.GetClient().AddGroupMembership("/Root", "group2", "user2");
+        env.GetClient().AddGroupMembership("/Root/Tenant1", "group3", "user3");
+        env.GetClient().AddGroupMembership("/Root/Tenant1", "group4", "user4");
+
+        { // anonymous
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint());
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_members`
+            )").GetValueSync();
+
+            NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+        }
+
+        { // user1 is /Root admin
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "password1",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/.sys/auth_members`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group2"];["user2"]];
+                    [["group1"];["user1"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant1/.sys/auth_members`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group4"];["user4"]];
+                    [["group3"];["user3"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+        }
+
+        { // user2 isn't /Root admin
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user2",
+                    .Password = "password2",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/.sys/auth_members`
+                )").GetValueSync();
+
+                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant1/.sys/auth_members`
+                )").GetValueSync();
+
+                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+            }
+        }
+
+        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
+        // and test tenant user and tenant admin
+    }
+
     Y_UNIT_TEST(AuthOwners) {
         TTestEnv env;
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
-        CreateTenantsAndTables(env, true);
+        SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
         env.GetClient().CreateUser("/Root", "user1", "password1");
@@ -2546,9 +2740,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(AuthPermissions) {
         TTestEnv env;
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
-        CreateTenantsAndTables(env, true);
+        SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
         env.GetClient().CreateUser("/Root", "user1", "password1");
@@ -2657,9 +2849,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(AuthEffectivePermissions) {
         TTestEnv env;
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
-        CreateTenantsAndTables(env, true);
+        SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
         env.GetClient().CreateUser("/Root", "user1", "password1");
@@ -2723,9 +2913,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(AuthPermissions_Selects) {
         TTestEnv env;
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
-        CreateTenantsAndTables(env, true);
+        SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
 
         env.GetClient().CreateUser("/Root", "user1", "password1");

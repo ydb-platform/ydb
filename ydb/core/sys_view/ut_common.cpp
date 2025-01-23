@@ -34,6 +34,8 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     NKikimrProto::TAuthConfig authConfig;
     authConfig.SetUseBuiltinDomain(true);
+    authConfig.MergeFrom(settings.AuthConfig);
+
     Settings = new Tests::TServerSettings(mbusPort, authConfig);
     Settings->SetDomainName("Root");
     Settings->SetNodeCount(staticNodes);

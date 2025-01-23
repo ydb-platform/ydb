@@ -22,7 +22,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
 
     void GetDescription() {
         Send(SchemeShard, new TEvSchemeShard::TEvDescribeScheme(SourcePathId));
-        this->Become(&TThis::StateDescribe);
+        Become(&TThis::StateDescribe);
     }
 
     static TString BuildViewScheme(const TString& path, const NKikimrSchemeOp::TViewDescription& viewDescription, const TString& backupRoot, TString& error) {
@@ -51,7 +51,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         const auto& describeResult = ev->Get()->GetRecord();
 
         LOG_D("HandleSchemeDescription"
-            << ", self: " << this->SelfId()
+            << ", self: " << SelfId()
             << ", status: " << describeResult.GetStatus()
         );
 
@@ -80,7 +80,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
             return Finish(false, "cannot infer scheme");
         }
         if (Attempt == 0) {
-            StorageOperator = this->RegisterWithSameMailbox(
+            StorageOperator = RegisterWithSameMailbox(
                 NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator())
             );
         }
@@ -88,15 +88,15 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(Sprintf("%s/create_view.sql", DestinationPrefix.c_str()));
 
-        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Scheme)));
-        this->Become(&TThis::StateUploadScheme);
+        Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Scheme)));
+        Become(&TThis::StateUploadScheme);
     }
 
     void HandleSchemePutResponse(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
         LOG_D("HandleSchemePutResponse"
-            << ", self: " << this->SelfId()
+            << ", self: " << SelfId()
             << ", result: " << result
         );
 
@@ -116,15 +116,15 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(Sprintf("%s/permissions.pb", DestinationPrefix.c_str()));
 
-        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Permissions)));
-        this->Become(&TThis::StateUploadPermissions);
+        Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Permissions)));
+        Become(&TThis::StateUploadPermissions);
     }
 
     void HandlePermissionsPutResponse(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
         LOG_D("HandlePermissionsPutResponse"
-            << ", self: " << this->SelfId()
+            << ", self: " << SelfId()
             << ", result: " << result
         );
 
@@ -144,15 +144,15 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(Sprintf("%s/metadata.json", DestinationPrefix.c_str()));
 
-        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Metadata)));
-        this->Become(&TThis::StateUploadMetadata);
+        Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Metadata)));
+        Become(&TThis::StateUploadMetadata);
     }
 
     void HandleMetadataPutResponse(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
         LOG_D("HandleMetadataPutResponse"
-            << ", self: " << this->SelfId()
+            << ", self: " << SelfId()
             << ", result: " << result
         );
 
@@ -169,7 +169,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         }
 
         LOG_E("Error at '" << marker << "'"
-            << ", self: " << this->SelfId()
+            << ", self: " << SelfId()
             << ", error: " << result
         );
 
@@ -195,12 +195,12 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
     void Retry() {
         Delay = Min(Delay * ++Attempt, MaxDelay);
         const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
-        this->Schedule(Delay + random, new TEvents::TEvWakeup());
+        Schedule(Delay + random, new TEvents::TEvWakeup());
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
         LOG_I("Finish"
-            << ", self: " << this->SelfId()
+            << ", self: " << SelfId()
             << ", success: " << success
             << ", error: " << error
         );
@@ -210,7 +210,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
     }
 
     void PassAway() override {
-        this->Send(StorageOperator, new TEvents::TEvPoisonPill());
+        Send(StorageOperator, new TEvents::TEvPoisonPill());
         IActor::PassAway();
     }
 

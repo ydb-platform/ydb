@@ -1554,10 +1554,8 @@ public:
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
 
-        if (executerResults.ParticipantNodesSize()) {
-            for (auto nodeId : executerResults.GetParticipantNodes()) {
-                QueryState->ParticipantNodes.emplace(nodeId);
-            }
+        for (auto nodeId : ev->ParticipantNodes) {
+            QueryState->ParticipantNodes.emplace(nodeId);
         }
 
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {

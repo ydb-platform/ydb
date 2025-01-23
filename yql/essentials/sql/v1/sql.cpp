@@ -75,13 +75,6 @@ void SqlASTsToYqlsImpl(NYql::TAstParseResult& res, const std::vector<::NSQLv1Gen
     }
 }
 
-NYql::TAstParseResult SqlASTToYql(
-    const google::protobuf::Message& protoAst,
-    const NSQLTranslation::TSQLHints& hints,
-    const NSQLTranslation::TTranslationSettings& settings) {
-    return SqlASTToYql("", protoAst, hints, settings);
-}
-
 NYql::TAstParseResult SqlASTToYql(const TString& query,
     const google::protobuf::Message& protoAst,
     const NSQLTranslation::TSQLHints& hints,

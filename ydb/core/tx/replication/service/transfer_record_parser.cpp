@@ -5,7 +5,20 @@
 #include <ydb/core/change_exchange/resolve_partition.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+
 namespace NKikimr::NReplication::NService {
+
+namespace {
+
+class TTransformerActor : public TActorBootstrapped<TTransformerActor> {
+
+private:
+
+
+};
+
+}
 
 class TTransferParser: public IChangeRecordParser {
     TLightweightSchema::TCPtr Schema;

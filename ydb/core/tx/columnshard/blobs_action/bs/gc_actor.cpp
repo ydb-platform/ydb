@@ -38,6 +38,7 @@ void TGarbageCollectionActor::CheckFinished() {
 
 void TGarbageCollectionActor::CheckReadyToDie() {
     if (PendingGroupReplies == 0) {
+        auto guard = PassAwayGuard();
         Send(TabletActorId, new TEvents::TEvPoison);
     }
 }

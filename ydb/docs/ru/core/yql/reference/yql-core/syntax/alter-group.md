@@ -14,10 +14,4 @@ ALTER GROUP role_name DROP USER user_name [, ... ]
 
 ## Встроенные группы
 
-Обычно кластер {{ ydb-short-name }} уже с момента старта имеет набор групп, предоставляющий заранее определенные роли.
-
-Например, в случае использования ["встроенных" настроек безопасности](../../../security/builtin-security.md) на кластере будут существовать группы `USERS`, `DATA-READERS`, `DATA-WRITERS`, `ADMINS` и так далее.
-
-В общем случае, набор групп и пользователей, создающихся на кластере {{ ydb-short-name }} в момент первого старта, определяется [конфигурацией кластера](../../../reference/configuration/index.md#security-bootstrap).
-
-
+{% include [!](_includes/initial_groups_and_users.md) %}

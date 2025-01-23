@@ -2289,7 +2289,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             if (write && !write->Value.empty()) {
                 AddCmdWrite(write, PersistRequest.Get(), ctx);
                 CompactedKeys.emplace_back(write->Key, write->Value.size());
-                ClearOldHead(write->Key.GetOffset(), write->Key.GetPartNo(), PersistRequest.Get());
             }
             Parameters->CurOffset += k.Key.GetCount();
         }
@@ -3357,7 +3356,6 @@ void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue:
                            "Key: %s, RefCount %" PRISZT,
                            it->Key.ToString().data(), it->RefCount);
             --it->RefCount;
-            Cerr << "=== delete key: [" << it->Key.ToString() << "]" << Endl;
 
             //auto del = request->Record.AddCmdDeleteRange();
             //auto range = del->MutableRange();

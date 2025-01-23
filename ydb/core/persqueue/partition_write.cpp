@@ -390,9 +390,10 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 
     if (NewHeadKey.Size > 0) {
         while (!HeadKeys.empty() &&
-            (HeadKeys.back().Key.GetOffset() > NewHeadKey.Key.GetOffset() || HeadKeys.back().Key.GetOffset() == NewHeadKey.Key.GetOffset()
-                                                                       && HeadKeys.back().Key.GetPartNo() >= NewHeadKey.Key.GetPartNo())) {
-                HeadKeys.pop_back();
+               (HeadKeys.back().Key.GetOffset() > NewHeadKey.Key.GetOffset() ||
+                (HeadKeys.back().Key.GetOffset() == NewHeadKey.Key.GetOffset() && HeadKeys.back().Key.GetPartNo() >= NewHeadKey.Key.GetPartNo()))) {
+            Y_ABORT_UNLESS(HeadKeys.back().RefCount == 0);
+            HeadKeys.pop_back();
         }
         HeadKeys.push_back(NewHeadKey);
         NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};

@@ -74,6 +74,7 @@ public:
     public:
         TString BuildQuery() const;
         TString BuildAlterCompressionQuery(const TString& columnName, const TCompression& compression) const;
+        TString BuildAlterCompactionPlannerQuery(const TString& features) const;
         std::shared_ptr<arrow::Schema> GetArrowSchema(const TVector<TColumnSchema>& columns);
 
         TColumnTableBase& SetTTL(const TString& columnName, const TString& ttlConf) {
@@ -108,6 +109,7 @@ public:
     TTestActorRuntime& GetRuntime();
     NYdb::NTable::TSession& GetSession();
     void CreateTable(const TColumnTableBase& table, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
+    void SetTestCompactionPlanner(const TColumnTableBase& table, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
     void DropTable(const TString& tableName);
     void EnsureSecret(const TString& name, const TString& value);
     void CreateTier(const TString& tierName);

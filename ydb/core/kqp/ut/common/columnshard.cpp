@@ -46,6 +46,18 @@ namespace NKqp {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
     }
 
+    void TTestHelper::SetTestCompactionPlanner(const TColumnTableBase& table, const EStatus expectedStatus) {
+        const TString features = R"(
+            {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "1s", "portions_count_available": 1},
+                         {"class_name" : "Zero"}]}
+        )";
+        std::cerr << (table.BuildAlterCompactionPlannerQuery(features)) << std::endl;
+        auto result = GetSession().ExecuteSchemeQuery(table.BuildAlterCompactionPlannerQuery(features)).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
+
+        RebootTablets(table.GetName());
+    }
+
     void TTestHelper::CreateTier(const TString& tierName) {
         auto result = GetSession().ExecuteSchemeQuery(R"(
             UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);
@@ -297,6 +309,14 @@ namespace NKqp {
             str << "`COMPRESSION.LEVEL`=" << compression.GetCompressionLevel().value();
         }
         str << ");";
+        return str;
+    }
+
+    TString TTestHelper::TColumnTableBase::BuildAlterCompactionPlannerQuery(const TString& features) const {
+        auto str = TStringBuilder() << "ALTER OBJECT `" << Name << "` (TYPE " << GetObjectType() << ") SET";
+        str << R"((ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`)";
+        str << features;
+        str << "`);";
         return str;
     }
 

@@ -194,7 +194,7 @@ private:
 
 public:
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto result = TFactory::MakeHolder("l-buckets");
+        auto result = TFactory::MakeHolder("lc-buckets");
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }
@@ -238,10 +238,15 @@ class TOptimizerPlannerConstructorContainer: public NBackgroundTasks::TInterface
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IOptimizerPlannerConstructor>;
 
+    inline static const THashSet<TString> DeprecatedClasses = {"s-buckets", "l-buckets"};
+
 public:
     using TBase::TBase;
 
     static TConclusion<TOptimizerPlannerConstructorContainer> BuildFromProto(const IOptimizerPlannerConstructor::TProto& data) {
+        if (DeprecatedClasses.contains(data.GetClassName())) {
+            return IOptimizerPlannerConstructor::BuildDefault();
+        }
         TOptimizerPlannerConstructorContainer result;
         if (!result.DeserializeFromProto(data)) {
             return TConclusionStatus::Fail("cannot parse interface from proto: " + data.DebugString());

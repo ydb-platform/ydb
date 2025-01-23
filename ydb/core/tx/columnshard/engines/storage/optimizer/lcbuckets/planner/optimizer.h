@@ -103,7 +103,7 @@ protected:
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
 
     virtual void DoActualize(const TInstant currentInstant) override {
-        if (currentInstant - LastActualization > TDuration::Seconds(180)) {
+        if (currentInstant - LastActualization > NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag()) {
             LastActualization = currentInstant;
         } else {
             return;

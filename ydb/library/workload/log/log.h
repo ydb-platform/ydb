@@ -3,8 +3,6 @@
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 
 #include <cctype>
-#include <random>
-#include <sstream>
 
 namespace NYdbWorkload {
 
@@ -102,9 +100,6 @@ private:
     TVector<TRow> GenerateRandomRows();
 
     const ui64 TotalColumnsCnt;
-
-    std::random_device RandomDevice;
-    std::mt19937 Mt19937;
 };
 
 } // namespace NLog

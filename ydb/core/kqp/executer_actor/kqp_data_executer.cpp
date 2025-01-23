@@ -1134,6 +1134,7 @@ private:
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleExecute);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleExecute);
+                hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvPrivate::TEvRetry, HandleRetry);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);

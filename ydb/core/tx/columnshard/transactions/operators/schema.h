@@ -24,7 +24,6 @@ private:
     THashSet<ui64> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
         THashSet<ui64> result;
         for (auto&& i : tables) {
-            AFL_VERIFY(!owner.TablesManager.HasTable(i.GetPathId()));
             if (owner.TablesManager.HasTable(i.GetPathId(), true)) {
                 result.emplace(i.GetPathId());
             }

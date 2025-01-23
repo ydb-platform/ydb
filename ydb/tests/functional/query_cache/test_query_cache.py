@@ -13,8 +13,8 @@ def execute_some_queries(pool):
     for i in range(QUERY_COUNT):
         with pool.checkout() as session:
             query_result = session.transaction().execute(
-                ydb.DataQuery("declare $param as Uint64;\nselect %d + $param as result;" % i, {"$param": ydb.PrimitiveType.Uint64}),
-                {"$param": i},
+                f"declare $param as Uint64;\nselect {i} + $param as result;"
+                {"$param": ydb.TypedValue(value=i, value_type=ydb.PrimitiveType.Uint64)},
                 commit_tx=True,
             )
 
@@ -31,7 +31,7 @@ class TestQueryCache(object):
         cls.discovery_endpoint = "%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].grpc_port)
         cls.driver = ydb.Driver(endpoint=cls.discovery_endpoint, database="/Root", credentials=ydb.AnonymousCredentials())
         cls.driver.wait(timeout=5)
-        cls.pool = ydb.SessionPool(cls.driver)
+        cls.pool = ydb.QuerySessionPool(cls.driver)
 
     def test(self):
         execute_some_queries(self.pool)

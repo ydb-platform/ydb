@@ -9,7 +9,7 @@
 namespace NSchemeShardUT_Private {
 namespace NExportReboots {
 
-void Run(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
+void Run(const TVector<TString>& tables, const TString& request, const TVector<TString>& changefeeds, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         {
             TInactiveZone inactive(activeZone);
@@ -17,6 +17,11 @@ void Run(const TVector<TString>& tables, const TString& request, TTestWithReboot
             TSet<ui64> toWait;
             for (const auto& table : tables) {
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", table);
+                toWait.insert(t.TxId);
+            }
+            t.TestEnv->TestWaitNotification(runtime, toWait);
+            for (const auto& changefeed : changefeeds) {
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", changefeed);
                 toWait.insert(t.TxId);
             }
             t.TestEnv->TestWaitNotification(runtime, toWait);
@@ -47,7 +52,8 @@ void Run(const TVector<TString>& tables, const TString& request, TTestWithReboot
     });
 }
 
-void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
+void Cancel(const TVector<TString>& tables, const TString& request, const TVector<TString>& changefeeds, TTestWithReboots& t) {
+    Y_UNUSED(changefeeds);
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         {
             TInactiveZone inactive(activeZone);
@@ -55,6 +61,11 @@ void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReb
             TSet<ui64> toWait;
             for (const auto& table : tables) {
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", table);
+                toWait.insert(t.TxId);
+            }
+            t.TestEnv->TestWaitNotification(runtime, toWait);
+            for (const auto& changefeed : changefeeds) {
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", changefeed);
                 toWait.insert(t.TxId);
             }
             t.TestEnv->TestWaitNotification(runtime, toWait);
@@ -90,7 +101,8 @@ void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReb
     });
 }
 
-void Forget(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
+void Forget(const TVector<TString>& tables, const TString& request, const TVector<TString>& changefeeds, TTestWithReboots& t) {
+    Y_UNUSED(changefeeds);
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         {
             TInactiveZone inactive(activeZone);
@@ -98,6 +110,12 @@ void Forget(const TVector<TString>& tables, const TString& request, TTestWithReb
             TSet<ui64> toWait;
             for (const auto& table : tables) {
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", table);
+                toWait.insert(t.TxId);
+            }
+            t.TestEnv->TestWaitNotification(runtime, toWait);            
+            
+            for (const auto& changefeed : changefeeds) {
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", changefeed);
                 toWait.insert(t.TxId);
             }
             t.TestEnv->TestWaitNotification(runtime, toWait);

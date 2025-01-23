@@ -9,9 +9,9 @@ class TTestWithReboots;
 
 namespace NExportReboots {
 
-void Run(const TVector<TString>& tables, const TString& request, TTestWithReboots& t);
-void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReboots& t);
-void Forget(const TVector<TString>& tables, const TString& request, TTestWithReboots& t);
+void Run(const TVector<TString>& tables, const TString& request, const TVector<TString>& changefeeds, TTestWithReboots& t);
+void Cancel(const TVector<TString>& tables, const TString& request, const TVector<TString>& changefeeds, TTestWithReboots& t);
+void Forget(const TVector<TString>& tables, const TString& request, const TVector<TString>& changefeeds, TTestWithReboots& t);
 
 } // NExportReboots
 } // NSchemeShardUT_Private

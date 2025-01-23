@@ -27,9 +27,9 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 }
 
 Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
-    using TUnderlying = std::function<void(const TVector<TString>&, const TString&, TTestWithReboots&)>;
+    using TUnderlying = std::function<void(const TVector<TString>&, const TString&, const TVector<TString>&, TTestWithReboots&)>;
 
-    void Decorate(const TVector<TString>& tables, const TString& request, TUnderlying func) {
+    void Decorate(const TVector<TString>& tables, const TString& request, const TVector<TString>& changefeeds, TUnderlying func) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -37,19 +37,19 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        func(tables, Sprintf(request.c_str(), port), t);
+        func(tables, Sprintf(request.c_str(), port), changefeeds, t);
     }
 
-    void RunS3(const TVector<TString>& tables, const TString& request) {
-        Decorate(tables, request, &Run);
+    void RunS3(const TVector<TString>& tables, const TString& request, const TVector<TString>& changefeeds = {}) {
+        Decorate(tables, request, changefeeds, &Run);
     }
 
-    void CancelS3(const TVector<TString>& tables, const TString& request) {
-        Decorate(tables, request, &Cancel);
+    void CancelS3(const TVector<TString>& tables, const TString& request, const TVector<TString>& changefeeds = {}) {
+        Decorate(tables, request, changefeeds, &Cancel);
     }
 
-    void ForgetS3(const TVector<TString>& tables, const TString& request) {
-        Decorate(tables, request, &Forget);
+    void ForgetS3(const TVector<TString>& tables, const TString& request, const TVector<TString>& changefeeds = {}) {
+        Decorate(tables, request, changefeeds, &Forget);
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {

@@ -117,6 +117,7 @@ class TSharingSessionsInitializer;
 class TInFlightReadsInitializer;
 class TSpecialValuesInitializer;
 class TTablesManagerInitializer;
+class TTiersManagerInitializer;
 }   // namespace NLoading
 
 extern bool gAllowLogBatchingDefaultValue;
@@ -233,6 +234,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NLoading::TInFlightReadsInitializer;
     friend class NLoading::TSpecialValuesInitializer;
     friend class NLoading::TTablesManagerInitializer;
+    friend class NLoading::TTiersManagerInitializer;
     friend class TWriteTasksQueue;
     friend class TWriteTask;
 
@@ -330,7 +332,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
         putStatus.OnYellowChannels(Executor());
     }
 
-    void ActivateTiering(const ui64 pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers);
+    void ActivateTiering(const ui64 pathId, const THashSet<NTiers::TExternalStorageId>& tiers);
     void OnTieringModified(const std::optional<ui64> pathId = {});
 
     std::shared_ptr<TAtomicCounter> TabletActivityImpl = std::make_shared<TAtomicCounter>(0);

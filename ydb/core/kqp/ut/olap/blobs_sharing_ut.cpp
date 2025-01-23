@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAlterShardingInColumnShard(true);
         return TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false)
             .SetFeatureFlags(featureFlags);
     }

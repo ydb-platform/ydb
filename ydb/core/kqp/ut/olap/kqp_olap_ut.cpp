@@ -218,8 +218,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
     }
 
-    Y_UNIT_TEST(AlterObjectDisable) {
-        
+    Y_UNIT_TEST(AlterObjectDisabled) {
+        auto settings = TKikimrSettings()
+             .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);        
+        TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto alterResult = session.ExecuteSchemeQuery(
+            "ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`)"
+        ).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(alterResult.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS_C(alterResult.GetIssues().ToString(), "Error: ALTER OBJECT is disabled for column tables", alterResult.GetIssues().ToString());
+
     }
 
     Y_UNIT_TEST(SimpleQueryOlap) {
@@ -2645,7 +2657,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(CompactionPlanner) {
         auto settings = TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -2731,7 +2743,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(MetadataMemoryManager) {
         auto settings = TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -2790,7 +2802,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(NormalizeAbsentColumn) {
         auto settings = TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         TLocalHelper testHelper(kikimr);

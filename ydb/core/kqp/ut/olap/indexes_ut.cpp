@@ -16,7 +16,7 @@ namespace NKikimr::NKqp {
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     Y_UNIT_TEST(IndexesActualization) {
         auto settings = TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     Y_UNIT_TEST(CountMinSketchIndex) {
         auto settings = TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     Y_UNIT_TEST(SchemeActualizationOnceOnStart) {
         auto settings = TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     public:
         TTestIndexesScenario& Initialize() {
             Settings = TKikimrSettings()
-                .SetAlterObjectEnabledForColumnTables(true)
+                .SetColumnShardAlterObjectEnabled(true)
                 .SetWithSampleTables(false);
             Settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
             Kikimr = std::make_unique<TKikimrRunner>(Settings);
@@ -561,7 +561,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     Y_UNIT_TEST(IndexesModificationError) {
         auto settings = TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 

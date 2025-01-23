@@ -9,7 +9,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {
             auto settings = TKikimrSettings()
-                .SetAlterObjectEnabledForColumnTables(true)
+                .SetColumnShardAlterObjectEnabled(true)
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {
             auto settings = TKikimrSettings()
-                .SetAlterObjectEnabledForColumnTables(true)
+                .SetColumnShardAlterObjectEnabled(true)
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {
             auto settings = TKikimrSettings()
-                .SetAlterObjectEnabledForColumnTables(true)
+                .SetColumnShardAlterObjectEnabled(true)
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();

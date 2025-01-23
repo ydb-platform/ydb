@@ -28,7 +28,7 @@ public:
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         csController->SetSkipSpecialCheckForEvict(true);
         auto settings = TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TestHelper.emplace(settings);
         TLocalHelper localHelper(TestHelper->GetKikimr());

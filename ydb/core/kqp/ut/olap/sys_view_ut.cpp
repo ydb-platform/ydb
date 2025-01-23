@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
             auto settings = TKikimrSettings()
-                .SetAlterObjectEnabledForColumnTables(true)
+                .SetColumnShardAlterObjectEnabled(true)
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         const ui32 groupsCount = 512;
         {
             auto settings = TKikimrSettings()
-                .SetAlterObjectEnabledForColumnTables(true)
+                .SetColumnShardAlterObjectEnabled(true)
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto settings = TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

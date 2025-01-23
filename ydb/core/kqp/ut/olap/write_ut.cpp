@@ -172,8 +172,8 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     }
 
     Y_UNIT_TEST(DefaultValues) {
-        auto settings = TKikimrSettings{}
-            .SetAlterObjectEnabledForColumnTables(true)
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

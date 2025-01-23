@@ -248,7 +248,7 @@ namespace Tests {
             return *this;
         }
 
-        TServerSettings& SetAlterObjectEnabledForColumnTables(bool enable) {
+        TServerSettings& SetColumnShardAlterObjectEnabled(bool enable) {
             AppConfig->MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
             return *this;
         }

@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
     class TSparsedDataTest {
     private:
         const TKikimrSettings Settings = TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner Kikimr;
         NKikimr::NYDBTest::TControllers::TGuard<NKikimr::NYDBTest::NColumnShard::TController> CSController;
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
     Y_UNIT_TEST(AccessorActualization) {
         auto settings = TKikimrSettings()
-            .SetAlterObjectEnabledForColumnTables(true)
+            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 

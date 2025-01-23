@@ -85,7 +85,7 @@ private:
             }
             Owner->UpdateTierConfig(tier, tierId);
         } else {
-            AFL_WARN(false)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", tierId.GetConfigPath());
+            AFL_WARN(NKikimrServices::TX_TIERING)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", tierId.GetConfigPath());
             Owner->UpdateTierConfig(std::nullopt, tierId);
         }
     }

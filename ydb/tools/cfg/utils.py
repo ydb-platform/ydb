@@ -153,3 +153,20 @@ def apply_config_changes(target, changes, fix_names=None):
 def random_int(low, high, *seed):
     random.seed(''.join(map(str, seed)))
     return random.randint(low, high)
+
+
+def get_camel_case_string(snake_str):
+    abbreviations = {
+        'uuid': 'UUID',
+    }
+    components = snake_str.split('_')
+    return ''.join(abbreviations.get(x.lower(), x.capitalize()) for x in components)
+
+
+def convert_keys(data):
+    if isinstance(data, dict):
+        return {get_camel_case_string(k): convert_keys(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [convert_keys(item) for item in data]
+    else:
+        return data

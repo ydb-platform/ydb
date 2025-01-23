@@ -690,6 +690,10 @@ class ClusterDetailsProvider(object):
         return merge_with_default(DYNAMIC_NAME_SERVICE, self.__cluster_description.get("dynamicnameservice", {}))
 
     @property
+    def nameservice_config(self):
+        return self.__cluster_description.get("nameservice_config")
+
+    @property
     def grpc_port(self):
         return self.grpc_config.get("port")
 

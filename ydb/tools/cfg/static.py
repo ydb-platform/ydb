@@ -284,7 +284,6 @@ class StaticConfigGenerator(object):
     @property
     def host_configs(self):
         return self.__cluster_details.get_service("host_configs")
-
     @property
     def table_service_config(self):
         return self.__cluster_details.get_service("table_service_config")
@@ -1225,6 +1224,7 @@ class StaticConfigGenerator(object):
 
     def __generate_names_txt(self):
         self.__proto_configs["names.txt"] = config_pb2.TStaticNameserviceConfig()
+        json_format.ParseDict(utils.convert_keys(self.__cluster_details.nameservice_config), self.names_txt)
 
         for host in self.__cluster_details.hosts:
             node = self.names_txt.Node.add(
@@ -1250,7 +1250,13 @@ class StaticConfigGenerator(object):
 
         if self.__cluster_details.use_cluster_uuid:
             accepted_uuids = self.__cluster_details.accepted_cluster_uuids
-            cluster_uuid = self.__cluster_details.cluster_uuid
+
+            # cluster_uuid can be initialized from `nameservice_config` proto, same as `config.yaml`,
+            # OR in the old manner, through `cluster_uuid: ...` key in `template.yaml`
+            cluster_uuid = self.names_txt.ClusterUUID # already read from proto
+            if cluster_uuid is None:
+                cluster_uuid = self.__cluster_details.cluster_uuid # fall back to `cluster_uuid: ...`
+
             cluster_uuid = "ydb:{}".format(utils.uuid()) if cluster_uuid is None else cluster_uuid
             self.names_txt.ClusterUUID = cluster_uuid
             self.names_txt.AcceptUUID.append(cluster_uuid)
@@ -1280,22 +1286,10 @@ class StaticConfigGenerator(object):
             self.__generate_sys_txt_advanced()
 
     def __generate_tracing_txt(self):
-        def get_camel_case_string(snake_str):
-            components = snake_str.split('_')
-            return ''.join(x.capitalize() for x in components)
-
-        def convert_keys(data):
-            if isinstance(data, dict):
-                return {get_camel_case_string(k): convert_keys(v) for k, v in data.items()}
-            elif isinstance(data, list):
-                return [convert_keys(item) for item in data]
-            else:
-                return data
-
         pb = config_pb2.TAppConfig()
         if self.__tracing:
             tracing_pb = pb.TracingConfig
-            json_format.ParseDict(convert_keys(self.__tracing), tracing_pb)
+            json_format.ParseDict(utils.convert_keys(self.__tracing), tracing_pb)
         self.__proto_configs["tracing.txt"] = pb
 
     def __generate_sys_txt_advanced(self):

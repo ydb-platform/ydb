@@ -71,8 +71,6 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
         AFL_VERIFY(extStorageConfig);
         extStorageOperator = extStorageConfig->ConstructStorageOperator(false);
     } else {
-        TGuard<TSpinLock> changeLock(ChangeOperatorLock);
-        CurrentS3Settings.reset();
         extStorageOperator = std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
             NWrappers::NExternalStorage::TUnavailableExternalStorageOperator(
                 "tier_unavailable", TStringBuilder() << "Tier is not configured: " << GetStorageId()));

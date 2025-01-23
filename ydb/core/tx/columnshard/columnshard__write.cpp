@@ -190,7 +190,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     }
 
     auto writeMetaPtr = std::make_shared<NEvWrite::TWriteMeta>(writeId, pathId, source, granuleShardingVersion,
-        TGUID::CreateTimebased().AsGuidString(), Counters.GetCSCounters().GetWritingCounters()->GetWriteFlowCounters());
+        TGUID::CreateTimebased().AsGuidString(), Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters());
     auto& writeMeta = *writeMetaPtr;
     if (record.HasModificationType()) {
         writeMeta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(record.GetModificationType()));
@@ -567,7 +567,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
         OverloadWriteFail(overloadStatus,
             NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
-                Counters.GetCSCounters().GetWritingCounters()->GetWriteFlowCounters()),
+                Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()),
             arrowData->GetSize(), cookie, std::move(result), ctx);
         return;
     }

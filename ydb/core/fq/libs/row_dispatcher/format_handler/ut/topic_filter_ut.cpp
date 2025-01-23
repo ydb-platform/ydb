@@ -1,6 +1,6 @@
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/filters_set.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
-#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
+#include <ydb/library/purecalc/compilation/compile_service.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
 

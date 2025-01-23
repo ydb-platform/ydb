@@ -9,7 +9,8 @@ PEERDIR(
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/row_dispatcher/format_handler/common
-    ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper
+
+    ydb/library/purecalc/no_pg_wrapper
 
     ydb/library/actors/core
 )

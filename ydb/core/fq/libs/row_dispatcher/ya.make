@@ -16,12 +16,12 @@ PEERDIR(
     ydb/core/fq/libs/metrics
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/row_dispatcher/format_handler
-    ydb/core/fq/libs/row_dispatcher/purecalc_compilation
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
     ydb/core/mon
 
     ydb/library/actors/core
+    ydb/library/purecalc/compilation
     ydb/library/security
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/common
@@ -39,7 +39,6 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE(
-    purecalc_no_pg_wrapper
     format_handler
 )
 

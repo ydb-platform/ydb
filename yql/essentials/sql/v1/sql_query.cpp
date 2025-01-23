@@ -648,7 +648,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore22: {
-            // create_user_stmt: CREATE USER role_name (create_user_option)*;
+            // create_user_stmt: CREATE USER role_name (user_option)*;
             Ctx.BodyPart();
             auto& node = core.GetAlt_sql_stmt_core22().GetRule_create_user_stmt1();
 
@@ -668,27 +668,26 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            TMaybe<TRoleParameters> roleParams;
+            TMaybe<TUserParameters> createUserParams;
             const auto& options = node.GetBlock4();
 
-            {
-                roleParams.ConstructInPlace();
-                std::vector<TRule_create_user_option> opts;
-                opts.reserve(options.size());
-                for (const auto& opt : options) {
-                    opts.push_back(opt.GetRule_create_user_option1());
-                }
-
-                if (!RoleParameters(opts, *roleParams)) {
-                    return false;
-                }
+            createUserParams.ConstructInPlace();
+            std::vector<TRule_user_option> opts;
+            opts.reserve(options.size());
+            for (const auto& opt : options) {
+                opts.push_back(opt.GetRule_user_option1());
             }
 
-            AddStatementToBlocks(blocks, BuildCreateUser(pos, service, cluster, roleName, roleParams, Ctx.Scoped));
+            bool isCreateUser = true;
+            if (!UserParameters(opts, *createUserParams, isCreateUser)) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildControlUser(pos, service, cluster, roleName, createUserParams, Ctx.Scoped, isCreateUser));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore23: {
-            // alter_user_stmt: ALTER USER role_name (WITH? create_user_option+ | RENAME TO role_name);
+            // alter_user_stmt: ALTER USER role_name (WITH? user_option+ | RENAME TO role_name);
             Ctx.BodyPart();
             auto& node = core.GetAlt_sql_stmt_core23().GetRule_alter_user_stmt1();
 
@@ -713,19 +712,20 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             TNodePtr stmt;
             switch (node.GetBlock4().Alt_case()) {
                 case TRule_alter_user_stmt_TBlock4::kAlt1: {
-                    TRoleParameters roleParams;
+                    TUserParameters alterUserParams;
 
                     auto options = node.GetBlock4().GetAlt1().GetBlock2();
-                    std::vector<TRule_create_user_option> opts;
+                    std::vector<TRule_user_option> opts;
                     opts.reserve(options.size());
                     for (const auto& opt : options) {
-                        opts.push_back(opt.GetRule_create_user_option1());
+                        opts.push_back(opt.GetRule_user_option1());
                     }
 
-                    if (!RoleParameters(opts, roleParams)) {
+                    bool isCreateUser = false;
+                    if (!UserParameters(opts, alterUserParams, isCreateUser)) {
                         return false;
                     }
-                    stmt = BuildAlterUser(pos, service, cluster, roleName, roleParams, Ctx.Scoped);
+                    stmt = BuildControlUser(pos, service, cluster, roleName, alterUserParams, Ctx.Scoped, isCreateUser);
                     break;
                 }
                 case TRule_alter_user_stmt_TBlock4::kAlt2: {
@@ -734,7 +734,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     if (!RoleNameClause(node.GetBlock4().GetAlt2().GetRule_role_name3(), tgtRoleName, allowSystemRoles)) {
                         return false;
                     }
-                    stmt = BuildRenameUser(pos, service, cluster, roleName, tgtRoleName,Ctx.Scoped);
+                    stmt = BuildRenameUser(pos, service, cluster, roleName, tgtRoleName, Ctx.Scoped);
                     break;
                 }
                 case TRule_alter_user_stmt_TBlock4::ALT_NOT_SET:
@@ -765,25 +765,25 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            TRoleParameters roleParams;
+            TCreateGroupParameters createGroupParams;
             if (node.HasBlock4()) {
                 auto& addDropNode = node.GetBlock4();
                 TVector<TDeferredAtom> roles;
                 bool allowSystemRoles = false;
-                roleParams.Roles.emplace_back();
-                if (!RoleNameClause(addDropNode.GetRule_role_name3(), roleParams.Roles.back(), allowSystemRoles)) {
+                createGroupParams.Roles.emplace_back();
+                if (!RoleNameClause(addDropNode.GetRule_role_name3(), createGroupParams.Roles.back(), allowSystemRoles)) {
                     return false;
                 }
 
                 for (auto& item : addDropNode.GetBlock4()) {
-                    roleParams.Roles.emplace_back();
-                    if (!RoleNameClause(item.GetRule_role_name2(), roleParams.Roles.back(), allowSystemRoles)) {
+                    createGroupParams.Roles.emplace_back();
+                    if (!RoleNameClause(item.GetRule_role_name2(), createGroupParams.Roles.back(), allowSystemRoles)) {
                         return false;
                     }
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildCreateGroup(pos, service, cluster, roleName, roleParams, Ctx.Scoped));
+            AddStatementToBlocks(blocks, BuildCreateGroup(pos, service, cluster, roleName, createGroupParams, Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore25: {

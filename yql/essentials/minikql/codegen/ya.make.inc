@@ -38,7 +38,7 @@ COPY_FILE(
 )
 
 
-COPY_FILE(
+COPY_FILE_WITH_CONTEXT(
     AUTO
     ../codegen.cpp codegen.cpp
     OUTPUT_INCLUDES

@@ -357,7 +357,7 @@ TNode SerializeParamsForListOperations(
         result["user"] = *options.User_;
     }
     if (options.State_) {
-        result["state"] = *options.State_;
+        result["state"] = ToString(options.State_);
     }
     if (options.Type_) {
         result["type"] = ToString(*options.Type_);

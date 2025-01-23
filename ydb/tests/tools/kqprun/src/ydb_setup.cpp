@@ -362,7 +362,7 @@ private:
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
-    NFq::NConfig::TConfig GetFqProxyConfig(ui32 grpcPort, ui32 httpPort, ui32 nodeIdx) {
+    NFq::NConfig::TConfig GetFqProxyConfig(ui32 grpcPort, ui32 httpPort) {
         auto fqConfig = Settings_.AppConfig.GetFederatedQueryConfig();
 
         fqConfig.MutableControlPlaneStorage()->AddSuperUsers(BUILTIN_ACL_ROOT);
@@ -399,12 +399,11 @@ private:
         }
 
         const ui32 httpPort = PortManager_.GetPort();
+        const auto fqConfig = GetFqProxyConfig(grpcPort, httpPort);
+        const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         for (ui32 nodeIdx = 0; nodeIdx < GetRuntime()->GetNodeCount(); ++nodeIdx) {
-            const auto fqConfig = GetFqProxyConfig(grpcPort, httpPort, nodeIdx);
-
-            const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
             const auto counters = GetRuntime()->GetAppData(nodeIdx).Counters;
-            YqSharedResources_ = NFq::CreateYqSharedResources(fqConfig, ydbCredFactory, counters->GetSubgroup("counters", "yq"));
+            const auto sharedResources = YqSharedResources_.emplace_back(NFq::CreateYqSharedResources(fqConfig, ydbCredFactory, counters->GetSubgroup("counters", "yq")));
 
             const auto actorRegistrator = [runtime = GetRuntime(), nodeIdx](NActors::TActorId serviceActorId, NActors::IActor* actor) {
                 auto actorId = runtime->Register(actor, nodeIdx, runtime->GetAppData(nodeIdx).UserPoolId);
@@ -412,12 +411,12 @@ private:
             };
 
             NFq::Init(fqConfig, GetRuntime()->GetNodeId(nodeIdx), actorRegistrator, &GetRuntime()->GetAppData(nodeIdx),
-                Settings_.DomainName, nullptr, YqSharedResources_,
+                Settings_.DomainName, nullptr, sharedResources,
                 [](auto& config) { return NKikimr::NFolderService::CreateMockFolderServiceAdapterActor(config, ""); },
                 0, {}
             );
 
-            NFq::InitTest(GetRuntime(), httpPort, grpcPort, YqSharedResources_);
+            NFq::InitTest(GetRuntime(), httpPort, grpcPort, sharedResources);
         }
     }
 
@@ -457,8 +456,8 @@ public:
     }
 
     ~TImpl() {
-        if (YqSharedResources_) {
-            YqSharedResources_->Stop();
+        for (auto sharedResources : YqSharedResources_) {
+            sharedResources->Stop();
         }
     }
 
@@ -668,7 +667,7 @@ private:
     NKikimr::Tests::TServer::TPtr Server_;
     THolder<NKikimr::Tests::TClient> Client_;
     THolder<NKikimr::Tests::TTenants> Tenants_;
-    NFq::IYqSharedResources::TPtr YqSharedResources_;
+    std::vector<NFq::IYqSharedResources::TPtr> YqSharedResources_;
     TPortManager PortManager_;
 
     std::unordered_map<TString, TString> ServerlessToShared_;

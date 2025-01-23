@@ -83,9 +83,7 @@ void THandlerImpersonateStart::ProcessImpersonatedToken(const NJson::TJsonValue&
     if (!jsonExpiresIn->GetUInteger(&expiresIn)) {
         return ReplyBadRequestAndPassAway("Wrong OIDC provider response: failed to extract `expires_in`");
     }
-    if (expiresIn > std::numeric_limits<i32>::max()) {
-        expiresIn = std::numeric_limits<i32>::max();
-    }
+    expiresIn = std::min(expiresIn, 604800ULL); // clean cookies no less than once a week.
     TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
     TString impersonatedCookieValue = Base64Encode(impersonatedToken);
     BLOG_D("Set impersonated cookie: (" << impersonatedCookieName << ": " << NKikimr::MaskTicket(impersonatedCookieValue) << ")");

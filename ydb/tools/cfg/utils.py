@@ -6,7 +6,7 @@ import random
 import string
 
 import six
-from google.protobuf import text_format
+from google.protobuf import text_format, json_format
 from google.protobuf.pyext._message import FieldDescriptor
 
 from library.python import resource
@@ -155,18 +155,27 @@ def random_int(low, high, *seed):
     return random.randint(low, high)
 
 
-def get_camel_case_string(snake_str):
-    abbreviations = {
-        'uuid': 'UUID',
-    }
-    components = snake_str.split('_')
-    return ''.join(abbreviations.get(x.lower(), x.capitalize()) for x in components)
+def wrap_parse_dict(dictionary, proto):
+    def get_camel_case_string(snake_str):
+        components = snake_str.split('_')
+        camelCased = ''.join(x.capitalize() for x in components)
+        abbreviations = {
+            'Uuid': 'UUID',
+            'Pdisk': 'PDisk',
+            'Vdisk': 'VDisk',
+            'NtoSelect': 'NToSelect',
+            'Ssid': 'SSId',
+        }
+        for k, v in abbreviations.items():
+            camelCased = camelCased.replace(k, v)
+        return camelCased
 
+    def convert_keys(data):
+        if isinstance(data, dict):
+            return {get_camel_case_string(k): convert_keys(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [convert_keys(item) for item in data]
+        else:
+            return data
 
-def convert_keys(data):
-    if isinstance(data, dict):
-        return {get_camel_case_string(k): convert_keys(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [convert_keys(item) for item in data]
-    else:
-        return data
+    json_format.ParseDict(convert_keys(dictionary), proto)

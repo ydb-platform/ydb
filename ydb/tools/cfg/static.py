@@ -1224,7 +1224,8 @@ class StaticConfigGenerator(object):
 
     def __generate_names_txt(self):
         self.__proto_configs["names.txt"] = config_pb2.TStaticNameserviceConfig()
-        json_format.ParseDict(utils.convert_keys(self.__cluster_details.nameservice_config), self.names_txt)
+        if self.__cluster_details.nameservice_config is not None:
+            utils.wrap_parse_dict(self.__cluster_details.nameservice_config, self.names_txt)
 
         for host in self.__cluster_details.hosts:
             node = self.names_txt.Node.add(
@@ -1254,7 +1255,7 @@ class StaticConfigGenerator(object):
             # cluster_uuid can be initialized from `nameservice_config` proto, same as `config.yaml`,
             # OR in the old manner, through `cluster_uuid: ...` key in `template.yaml`
             cluster_uuid = self.names_txt.ClusterUUID # already read from proto
-            if cluster_uuid is None:
+            if len(cluster_uuid) == 0:
                 cluster_uuid = self.__cluster_details.cluster_uuid # fall back to `cluster_uuid: ...`
 
             cluster_uuid = "ydb:{}".format(utils.uuid()) if cluster_uuid is None else cluster_uuid
@@ -1289,7 +1290,7 @@ class StaticConfigGenerator(object):
         pb = config_pb2.TAppConfig()
         if self.__tracing:
             tracing_pb = pb.TracingConfig
-            json_format.ParseDict(utils.convert_keys(self.__tracing), tracing_pb)
+            utils.wrap_parse_dict(self.__tracing, tracing_pb)
         self.__proto_configs["tracing.txt"] = pb
 
     def __generate_sys_txt_advanced(self):

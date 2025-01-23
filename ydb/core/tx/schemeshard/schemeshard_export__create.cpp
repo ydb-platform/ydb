@@ -272,7 +272,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         LOG_D("TExport::TTxProgress: DoExecute");
 
         if (AllocateResult) {
-            OnAllocateResult(txc, ctx);
+            OnAllocateResult();
         } else if (ModifyResult) {
             OnModifyResult(txc, ctx);
         } else if (SchemeUploadResult) {
@@ -300,36 +300,44 @@ private:
         Send(Self->SelfId(), MkDirPropose(Self, txId, exportInfo));
     }
 
-    bool CopyTables(TExportInfo::TPtr exportInfo, TTxId txId) {
+    void CopyTables(TExportInfo::TPtr exportInfo, TTxId txId) {
         LOG_I("TExport::TTxProgress: CopyTables propose"
             << ": info# " << exportInfo->ToString()
             << ", txId# " << txId);
 
         Y_ABORT_UNLESS(exportInfo->WaitTxId == InvalidTxId);
-        if (AnyOf(exportInfo->Items, [](const TExportInfo::TItem& item) {
-            return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
-        })) {
-            Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
-            return true;
-        }
-        return false;
+        Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
     }
 
-    void TransferData(TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId, const TActorContext& ctx) {
+    void TransferData(TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId) {
         Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
-        auto& item = exportInfo->Items.at(itemIdx);
+        auto& item = exportInfo->Items[itemIdx];
 
         item.SubState = ESubState::Proposed;
 
         LOG_I("TExport::TTxProgress: Backup propose"
             << ": info# " << exportInfo->ToString()
             << ", item# " << item.ToString(itemIdx)
-            << ", txId# " << txId);
+            << ", txId# " << txId
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
-            Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
-        } else if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView) {
+        Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
+    }
+
+    void UploadScheme(TExportInfo::TPtr exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
+        auto& item = exportInfo->Items[itemIdx];
+
+        item.SubState = ESubState::Proposed;
+
+        LOG_I("TExport::TTxProgress: UploadScheme"
+            << ": info# " << exportInfo->ToString()
+            << ", item# " << item.ToString(itemIdx)
+        );
+
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
+        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView) {
             Ydb::Export::ExportToS3Settings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
             const auto databaseRoot = CanonizePath(Self->RootPathElements);
@@ -568,7 +576,7 @@ private:
         return output;
     }
 
-    void Resume(TTransactionContext& txc, const TActorContext&) {
+    void Resume(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(Self->Exports.contains(Id));
         TExportInfo::TPtr exportInfo = Self->Exports.at(Id);
 
@@ -587,17 +595,27 @@ private:
             }
             break;
 
-        case EState::Transferring:
+        case EState::Transferring: {
+            TDeque<ui32> pendingTables;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 const auto& item = exportInfo->Items.at(itemIdx);
 
                 if (item.WaitTxId == InvalidTxId) {
-                    AllocateTxId(exportInfo, itemIdx);
+                    if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+                        pendingTables.emplace_back(itemIdx);
+                    } else {
+                        UploadScheme(exportInfo, itemIdx, ctx);
+                    }
                 } else {
                     SubscribeTx(exportInfo, itemIdx);
                 }
             }
+            exportInfo->PendingItems = std::move(pendingTables);
+            for (ui32 itemIdx : exportInfo->PendingItems) {
+                AllocateTxId(exportInfo, itemIdx);
+            }
             break;
+        }
 
         case EState::Cancellation:
             exportInfo->State = EState::Cancelled;
@@ -661,7 +679,13 @@ private:
         }
     }
 
-    void OnAllocateResult(TTransactionContext& txc, const TActorContext& ctx) {
+    ui32 PopFront(TDeque<ui32>& pendingItems) {
+        const ui32 itemIdx = pendingItems.front();
+        pendingItems.pop_front();
+        return itemIdx;
+    }
+
+    void OnAllocateResult() {
         Y_ABORT_UNLESS(AllocateResult);
 
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
@@ -680,47 +704,35 @@ private:
         TExportInfo::TPtr exportInfo = Self->Exports.at(id);
         ui32 itemIdx = Max<ui32>();
 
-        auto popPendingItemIdx = [](TDeque<ui32>& pendingItems) {
-            const ui32 itemIdx = pendingItems.front();
-            pendingItems.pop_front();
-            return itemIdx;
-        };
-
         switch (exportInfo->State) {
         case EState::CreateExportDir:
             MkDir(exportInfo, txId);
             break;
 
         case EState::CopyTables:
-            if (!CopyTables(exportInfo, txId)) {
-                // none of the items is a table
-                NIceDb::TNiceDb db(txc.DB);
-
-                for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
-                    exportInfo->Items[itemIdx].State = EState::Transferring;
-                    Self->PersistExportItemState(db, exportInfo, itemIdx);
-
-                    AllocateTxId(exportInfo, itemIdx);
-                }
-
-                exportInfo->State = EState::Transferring;
-                Self->PersistExportState(db, exportInfo);
-                return;
-            }
+            CopyTables(exportInfo, txId);
             break;
 
         case EState::Transferring:
-            if (exportInfo->PendingItems) {
-                itemIdx = popPendingItemIdx(exportInfo->PendingItems);
-                TransferData(exportInfo, itemIdx, txId, ctx);
+            if (exportInfo->PendingItems.empty()) {
+                return;
+            }
+            itemIdx = PopFront(exportInfo->PendingItems);
+            if (const auto type = exportInfo->Items.at(itemIdx).SourcePathType; type == NKikimrSchemeOp::EPathTypeTable) {
+                TransferData(exportInfo, itemIdx, txId);
             } else {
+                LOG_W("TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring"
+                    << ": id# " << id
+                    << ", itemIdx# " << itemIdx
+                    << ", type# " << type
+                );
                 return;
             }
             break;
 
         case EState::Dropping:
             if (exportInfo->PendingDropItems) {
-                itemIdx = popPendingItemIdx(exportInfo->PendingDropItems);
+                itemIdx = PopFront(exportInfo->PendingDropItems);
                 DropTable(exportInfo, itemIdx, txId);
             } else {
                 DropDir(exportInfo, txId);
@@ -991,7 +1003,7 @@ private:
         }
     }
 
-    void OnNotifyResult(TTransactionContext& txc, const TActorContext&) {
+    void OnNotifyResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(CompletedTxId);
         LOG_D("TExport::TTxProgress: OnNotifyResult"
             << ": txId# " << CompletedTxId);
@@ -1008,20 +1020,20 @@ private:
             ui32 itemIdx;
             std::tie(id, itemIdx) = Self->TxIdToExport.at(txId);
 
-            OnNotifyResult(txId, id, itemIdx, txc);
+            OnNotifyResult(txId, id, itemIdx, txc, ctx);
             Self->TxIdToExport.erase(txId);
         }
 
         if (Self->TxIdToDependentExport.contains(txId)) {
             for (const auto id : Self->TxIdToDependentExport.at(txId)) {
-                OnNotifyResult(txId, id, Max<ui32>(), txc);
+                OnNotifyResult(txId, id, Max<ui32>(), txc, ctx);
             }
 
             Self->TxIdToDependentExport.erase(txId);
         }
     }
 
-    void OnNotifyResult(TTxId txId, ui64 id, ui32 itemIdx, TTransactionContext& txc) {
+    void OnNotifyResult(TTxId txId, ui64 id, ui32 itemIdx, TTransactionContext& txc, const TActorContext& ctx) {
         LOG_D("TExport::TTxProgress: OnNotifyResult"
             << ": txId# " << txId
             << ", id# " << id
@@ -1038,12 +1050,28 @@ private:
 
         switch (exportInfo->State) {
         case EState::CreateExportDir:
-            exportInfo->State = EState::CopyTables;
             exportInfo->WaitTxId = InvalidTxId;
-            AllocateTxId(exportInfo);
+
+            if (AnyOf(exportInfo->Items, [](const TExportInfo::TItem& item) {
+                return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
+            })) {
+                exportInfo->State = EState::CopyTables;
+                AllocateTxId(exportInfo);
+            } else {
+                // None of the items is a table.
+                for (ui32 i : xrange(exportInfo->Items.size())) {
+                    exportInfo->Items[i].State = EState::Transferring;
+                    Self->PersistExportItemState(db, exportInfo, i);
+
+                    UploadScheme(exportInfo, i, ctx);
+                }
+
+                exportInfo->State = EState::Transferring;
+                exportInfo->PendingItems.clear();
+            }
             break;
 
-        case EState::CopyTables:
+        case EState::CopyTables: {
             if (exportInfo->DependencyTxIds.contains(txId)) {
                 exportInfo->DependencyTxIds.erase(txId);
                 if (exportInfo->DependencyTxIds.empty()) {
@@ -1054,13 +1082,24 @@ private:
 
             exportInfo->State = EState::Transferring;
             exportInfo->WaitTxId = InvalidTxId;
+            TDeque<ui32> tables;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
-                exportInfo->Items.at(itemIdx).State = EState::Transferring;
+                auto& item = exportInfo->Items[itemIdx];
+                item.State = EState::Transferring;
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
 
+                if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+                    tables.emplace_back(itemIdx);
+                } else {
+                    UploadScheme(exportInfo, itemIdx, ctx);
+                }
+            }
+            exportInfo->PendingItems = std::move(tables);
+            for (ui32 itemIdx : exportInfo->PendingItems) {
                 AllocateTxId(exportInfo, itemIdx);
             }
             break;
+        }
 
         case EState::Transferring: {
             Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());

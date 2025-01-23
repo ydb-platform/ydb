@@ -14,8 +14,8 @@ void TGarbageCollectionActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TP
         CheckFinished();
     } else {
         ACFL_ERROR()("event", "GC_ERROR")("details", ev->Get()->Print(true));
-        if (auto gc_ev = GCTask->BuildRequest(TBlobAddress(ev->Cookie, ev->Get()->Channel))) {
-            SendToBSProxy(NActors::TActivationContext::AsActorContext(), ev->Cookie, gc_ev.release(), ev->Cookie);
+        if (auto gcEvent = GCTask->BuildRequest(TBlobAddress(ev->Cookie, ev->Get()->Channel))) {
+            SendToBSProxy(NActors::TActivationContext::AsActorContext(), ev->Cookie, gcEvent.release(), ev->Cookie);
         } else {
             Become(&TGarbageCollectionActor::StateDying);
         }

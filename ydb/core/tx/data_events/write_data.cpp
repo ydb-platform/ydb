@@ -14,6 +14,7 @@ TWriteData::TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data, c
     , PrimaryKeySchema(primaryKeySchema)
     , BlobsAction(blobsAction)
     , WritePortions(writePortions) {
+    AFL_VERIFY(WriteMeta);
     Y_ABORT_UNLESS(Data);
     Y_ABORT_UNLESS(PrimaryKeySchema);
     Y_ABORT_UNLESS(BlobsAction);

@@ -42,8 +42,8 @@ public:
 
     TWriteCounters(TCommonCountersOwner& owner)
         : TBase(owner, "activity", "writing")
-        , QueueWaitSize(TBase::GetValue("Write/Queue/Size"))
-        , WriteFlowCounters(std::make_shared<NEvWrite::TWriteFlowCounters>()) {
+        , WriteFlowCounters(std::make_shared<NEvWrite::TWriteFlowCounters>())
+        , QueueWaitSize(TBase::GetValue("Write/Queue/Size")) {
         VolumeWriteData = TBase::GetDeriviative("Write/Incoming/Bytes");
         HistogramBytesWriteDataCount = TBase::GetHistogram("Write/Incoming/ByBytes/Count", NMonitoring::ExponentialHistogram(18, 2, 100));
         HistogramBytesWriteDataBytes = TBase::GetHistogram("Write/Incoming/ByBytes/Bytes", NMonitoring::ExponentialHistogram(18, 2, 100));

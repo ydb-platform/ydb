@@ -35,6 +35,7 @@ message TWorkloadManagerConfig {
         int32 ConcurrentQueryLimit = 2;
         int32 QueueSize = 3;
         double DatabaseLoadCpuThreshold = 4;
+        double TotalCpuLimitPercentPerNode = 5;
     }
 
     bool Enable = 1;

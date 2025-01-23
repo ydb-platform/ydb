@@ -143,7 +143,7 @@ NKikimr::TConclusionStatus TNativeSerializer::DoDeserializeFromRequest(NYql::TFe
             level = levelLocal;
         }
     }
-    auto codecPtrStatus = BuildCodec(codec.value_or(GetDefaultCompressionType()), level);
+    auto codecPtrStatus = BuildCodec(codec.value_or(Options.codec->compression_type()), level);
     if (!codecPtrStatus) {
         return codecPtrStatus.GetError();
     }

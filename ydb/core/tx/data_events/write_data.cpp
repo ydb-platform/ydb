@@ -19,4 +19,17 @@ TWriteData::TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data, c
     Y_ABORT_UNLESS(BlobsAction);
 }
 
+void TWriteMeta::OnStage(const EWriteStage stage) const {
+    AFL_VERIFY(CurrentStage != EWriteStage::Finished && CurrentStage != EWriteStage::Aborted);
+    AFL_VERIFY((ui32)stage > (ui32)CurrentStage)("from", CurrentStage)("to", stage);
+    const TMonotonic nextStageInstant = TMonotonic::Now();
+    Counters->OnStageMove(CurrentStage, stage, nextStageInstant - LastStageInstant);
+    LastStageInstant = nextStageInstant;
+    if (stage == EWriteStage::Finished) {
+        Counters->OnWriteFinished(CurrentStage, stage, nextStageInstant - WriteStartInstant);
+    } else if (EWriteStage::Aborted) {
+        Counters->OnWriteAborted(CurrentStage, stage, nextStageInstant - WriteStartInstant);
+    }
+}
+
 }   // namespace NKikimr::NEvWrite

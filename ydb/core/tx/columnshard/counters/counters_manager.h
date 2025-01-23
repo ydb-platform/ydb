@@ -36,6 +36,7 @@ private:
     YDB_READONLY(TScanCounters, ScanCounters, TScanCounters("Scan"));
     YDB_READONLY_DEF(std::shared_ptr<TRequestsTracerCounters>, RequestsTracingCounters);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>, SubscribeCounters);
+    YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteFlowCounters>, WriteFlowCounters);
 
 public:
     TCountersManager(TTabletCountersBase& tabletCounters)
@@ -44,7 +45,9 @@ public:
         , BackgroundControllerCounters(std::make_shared<TBackgroundControllerCounters>())
         , ColumnTablesCounters(std::make_shared<TColumnTablesCounters>())
         , RequestsTracingCounters(std::make_shared<TRequestsTracerCounters>())
-        , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>()) {
+        , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>())
+        , WriteFlowCounters(std::make_shared<NEvWrite::TWriteFlowCounters>())
+    {
     }
 
     void OnWriteOverloadDisk() const {

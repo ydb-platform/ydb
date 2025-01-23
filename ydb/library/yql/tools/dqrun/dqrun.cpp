@@ -1199,6 +1199,10 @@ int RunMain(int argc, const char* argv[])
 
     TMaybe<TString> gatewaysPatch;
     if (res.Has("gateways-patch")) {
+        if (!res.Has("replay")) {
+            YQL_LOG(ERROR) << "gateways-patch only can be used with replay option";
+            return 1;
+        }
         gatewaysPatch = TFileInput(gwPatch).ReadAll();
     }
 

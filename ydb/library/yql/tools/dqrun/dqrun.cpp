@@ -524,6 +524,8 @@ void InitFq(const NFq::NConfig::TConfig& fqConfig, IPqGateway::TPtr pqGateway, T
     }
 }
 
+
+
 int RunMain(int argc, const char* argv[])
 {
     TString gatewaysCfgFile;
@@ -559,6 +561,7 @@ int RunMain(int argc, const char* argv[])
     clusterMapping["information_schema"] = PgProviderName;
 
     TString pgExtConfig;
+    TString gwPatch;
     TString mountConfig;
     TString mestricsPusherConfig;
     TString udfResolver;
@@ -765,6 +768,7 @@ int RunMain(int argc, const char* argv[])
         .StoreResult(&tokenAccessorEndpoint);
     opts.AddLongOption("yson-attrs", "Provide operation yson attribues").StoreResult(&ysonAttrs);
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
+    opts.AddLongOption("gateways-patch", "patch for gateways conf").StoreResult(&gwPatch);
     opts.AddLongOption("with-final-issues").NoArgument();
     opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument();
     opts.AddHelpOption('h');
@@ -1193,10 +1197,15 @@ int RunMain(int argc, const char* argv[])
         return 1;
     }
 
+    TMaybe<TString> gatewaysPatch;
+    if (res.Has("gateways-patch")) {
+        gatewaysPatch = TFileInput(gwPatch).ReadAll();
+    }
+
     if (res.Has("replay")) {
-        program = progFactory.Create("-replay-", "", opId, EHiddenMode::Disable, qContext);
+        program = progFactory.Create("-replay-", "", opId, EHiddenMode::Disable, qContext, gatewaysPatch);
     } else if (progFile == TStringBuf("-")) {
-        program = progFactory.Create("-stdin-", Cin.ReadAll(), opId, EHiddenMode::Disable, qContext);
+        program = progFactory.Create("-stdin-", Cin.ReadAll(), opId, EHiddenMode::Disable, qContext, gatewaysPatch);
     } else {
         program = progFactory.Create(TFile(progFile, RdOnly), opId, qContext);
         program->SetQueryName(progFile);

@@ -246,7 +246,8 @@ protected:
     void SendInfoRangeResponse(ui32 partition,
                                const TVector<TCreateConsumerParams>& consumers);
     void WaitDataRangeRequest();
-    void SendDataRangeResponse(ui64 begin, ui64 end, bool isHead);
+    void SendDataRangeResponse(ui32 partitionId,
+                               ui64 begin, ui64 end, bool isHead);
     void WaitDataReadRequest();
     void SendDataReadResponse();
 
@@ -423,7 +424,7 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         SendInfoRangeResponse(params.Partition.InternalPartitionId, params.Config.Consumers);
 
         WaitDataRangeRequest();
-        SendDataRangeResponse(params.Begin, params.End, params.FillHead);
+        SendDataRangeResponse(params.Partition.InternalPartitionId, params.Begin, params.End, params.FillHead);
 
         if (params.FillHead) {
             WaitBlobReadRequest();
@@ -922,7 +923,8 @@ void TPartitionFixture::WaitDataRangeRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadRangeSize(), 1);
 }
 
-void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end, bool isHead)
+void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
+                                              ui64 begin, ui64 end, bool isHead)
 {
     Y_ABORT_UNLESS(begin <= end);
 
@@ -932,7 +934,7 @@ void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end, bool isHead)
     auto read = event->Record.AddReadRangeResult();
     read->SetStatus(NKikimrProto::OK);
     auto pair = read->AddPair();
-    NPQ::TKey key(NPQ::TKeyPrefix::TypeData, TPartitionId(1), begin, 0, end - begin, 0, isHead);
+    NPQ::TKey key(NPQ::TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0, isHead);
     pair->SetStatus(NKikimrProto::OK);
     pair->SetKey(key.ToString());
     pair->SetValueSize(684);

@@ -218,6 +218,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
     }
 
+    Y_UNIT_TEST(AlterObjectDisable) {
+        
+    }
+
     Y_UNIT_TEST(SimpleQueryOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -2640,9 +2644,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(CompactionPlanner) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings()
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -2726,9 +2730,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(MetadataMemoryManager) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings()
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -2785,9 +2789,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(NormalizeAbsentColumn) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings()
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         TLocalHelper testHelper(kikimr);
 

@@ -8,9 +8,9 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
     Y_UNIT_TEST(StatsUsage) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
-            auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+            auto settings = TKikimrSettings()
+                .SetAlterObjectEnabledForColumnTables(true)
+                .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
             TTypedLocalHelper helper("Utf8", kikimr);
@@ -51,9 +51,9 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
     Y_UNIT_TEST(StatsUsageNotPK) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
-            auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+            auto settings = TKikimrSettings()
+                .SetAlterObjectEnabledForColumnTables(true)
+                .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
             TTypedLocalHelper helper("Utf8", kikimr);
@@ -91,9 +91,9 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
     Y_UNIT_TEST(StatsUsageWithTTL) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
-            auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+            auto settings = TKikimrSettings()
+                .SetAlterObjectEnabledForColumnTables(true)
+                .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
             TTypedLocalHelper helper("Utf8", kikimr);

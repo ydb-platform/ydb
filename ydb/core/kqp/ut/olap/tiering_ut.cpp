@@ -27,10 +27,9 @@ public:
     void RunTest() {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         csController->SetSkipSpecialCheckForEvict(true);
-
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings()
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TestHelper.emplace(settings);
         TLocalHelper localHelper(TestHelper->GetKikimr());
         // TestHelper->GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);

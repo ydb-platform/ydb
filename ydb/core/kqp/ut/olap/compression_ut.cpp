@@ -43,14 +43,6 @@ std::pair<ui64, ui64> GetVolumes(
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapCompression) {
-    TKikimrSettings GetSettings(bool enableCompression, bool enableAlterObject) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enableAlterObject);
-        return TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableOlapCompression(enableCompression)
-            .SetAlterObjectEnabledForColumnTables(enableAlterObject);
-    }
     Y_UNIT_TEST(DisabledAlterCompression) {
         auto settings = TKikimrSettings()
             .SetEnableOlapCompression(false)
@@ -100,8 +92,10 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
     }
 
     Y_UNIT_TEST(TestAlterCompressionTableInTableStore) {
-        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
-        TTestHelper testHelper(GetSettings(false, true));
+        TKikimrSettings settings = TKikimrSettings()
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("pk_int").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
         };

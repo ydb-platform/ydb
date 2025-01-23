@@ -13,9 +13,8 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     Y_UNIT_TEST(Aggregation) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig)
+        auto settings = TKikimrSettings()
+            .SetAlterObjectEnabledForColumnTables(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 

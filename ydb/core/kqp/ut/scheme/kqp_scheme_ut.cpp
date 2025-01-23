@@ -9223,11 +9223,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(AddColumnWithTtl) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
-
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
+        auto settings = TKikimrSettings{}
+            .SetAlterObjectEnabledForColumnTables(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(settings);
 

@@ -172,9 +172,9 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     }
 
     Y_UNIT_TEST(DefaultValues) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings{}
+            .SetAlterObjectEnabledForColumnTables(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);

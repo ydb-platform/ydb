@@ -4180,11 +4180,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(PlayWithTenant) {
-        TTestEnv env;
+        TTestEnvSettings envSettings;
+        envSettings.AuthConfig.SetDomainLoginOnly(false);
+        TTestEnv env(1, 4, envSettings);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::DISCOVERY, NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::BOARD_LOOKUP, NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
-        env.GetServer().GetRuntime()->GetAppData().AuthConfig.SetDomainLoginOnly(false);
         env.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetCheckDatabaseAccessPermission(false);
         env.GetClient().SetSecurityToken("root@builtin");
         CreateTenantsAndTables(env, true);

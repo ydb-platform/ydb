@@ -324,7 +324,7 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& cl
     settings.StatsMode(NQuery::EStatsMode::Full);
     settings.ExecMode(explainOnly ? NQuery::EExecMode::Explain : NQuery::EExecMode::Execute);
     if (benchmarkSettings.WithProgress) {
-        settings.StatsPeriodMs(3000);
+        settings.StatsCollectPeriod(std::chrono::milliseconds(3000));
     }
     if (auto error = SetTimeoutSettings(settings, benchmarkSettings.Deadline)) {
         return *error;

@@ -1967,7 +1967,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TString wrongToken = "wrong";
 
         auto test = [&](bool enforceToken, bool require, TMaybe<TString> authToken, ETicketParserErrors injectErrors, NYdb::EStatus expectedStatus = NYdb::EStatus::STATUS_UNDEFINED) {
-            Cerr << ">>> Run with EnforceUserTokenCheckRequirement=" << enforceToken
+            Cerr << ">>> Run with EnforceUserTokenRequirement=" << enforceToken
                  << ", RequireCredentialsInNewProtocol=" << require
                  << ", AuthToken='" << authToken.GetOrElse("<EMPTY>") << "'"
                  << ", injectErrors=" << ToString(injectErrors)
@@ -2052,12 +2052,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
         for (auto [enforce, require] : {std::pair<bool, bool>{false, true}, {true, false}, {true, true}}) {
             test(enforce, require, Nothing(), ETicketParserErrors::NONE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
             test(enforce, require, "", ETicketParserErrors::NONE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
-            test(enforce, require, wrongToken, ETicketParserErrors::NONE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
+            test(enforce, require, wrongToken, ETicketParserErrors::NONE, enforce ? NYdb::EStatus::CLIENT_UNAUTHENTICATED : NYdb::EStatus::UNAUTHORIZED);
             test(enforce, require, rootToken, ETicketParserErrors::NONE);
 
             test(enforce, require, Nothing(), ETicketParserErrors::RETRYABLE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
             test(enforce, require, "", ETicketParserErrors::RETRYABLE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
-            test(enforce, require, wrongToken, ETicketParserErrors::RETRYABLE, NYdb::EStatus::CLIENT_UNAUTHENTICATED);
+            test(enforce, require, wrongToken, ETicketParserErrors::RETRYABLE, enforce ? NYdb::EStatus::CLIENT_UNAUTHENTICATED : NYdb::EStatus::UNAUTHORIZED);
             test(enforce, require, rootToken, ETicketParserErrors::RETRYABLE);
         }
     }

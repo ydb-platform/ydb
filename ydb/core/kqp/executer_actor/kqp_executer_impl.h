@@ -1756,6 +1756,7 @@ protected:
     }
 
     void InternalError(const NYql::TIssues& issues) {
+        LOG_E(issues.ToOneLineString());
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         for (const NYql::TIssue& i : issues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));

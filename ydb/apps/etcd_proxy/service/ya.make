@@ -8,6 +8,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/query
     ydb/apps/etcd_proxy/proto
     ydb/library/grpc/server
     ydb/core/grpc_services

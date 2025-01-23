@@ -6,8 +6,8 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
 #include <ydb/apps/etcd_proxy/service/etcd_shared.h>
 #include <ydb/apps/etcd_proxy/service/grpc_service.h>

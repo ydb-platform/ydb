@@ -2,9 +2,7 @@
 
 #include <ydb/core/base/events.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 namespace NEtcd {
 
@@ -22,9 +20,9 @@ struct TEvQueryResult : public NActors::TEventLocal<TEvQueryResult, EvQueryResul
 };
 
 struct TEvQueryError : public NActors::TEventLocal<TEvQueryError, EvQueryError> {
-    TEvQueryError(const NYql::TIssues& issues): Issues(issues) {}
+    TEvQueryError(const NYdb::NIssue::TIssues& issues): Issues(issues) {}
 
-    const NYql::TIssues Issues;
+    const NYdb::NIssue::TIssues Issues;
 };
 
 } // namespace NEtcd

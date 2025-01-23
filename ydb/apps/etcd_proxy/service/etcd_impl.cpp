@@ -11,7 +11,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/mind/local.h>
 #include <ydb/core/protos/local.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/tx.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
 
 namespace NKikimr::NGRpcService {

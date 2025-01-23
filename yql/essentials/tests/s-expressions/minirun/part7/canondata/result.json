@@ -27,6 +27,20 @@
             "uri": "https://{canondata_backend}/1031349/354aaf38eb0ee3061edf99404ec5c19d8889315f/resource.tar.gz#test.test_Builtins-Nvl-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Builtins-SqlColumnOrderFromYson-default.txt-Debug]": [
+        {
+            "checksum": "b0333bdd28d68c266fec9d14f0a8069d",
+            "size": 136,
+            "uri": "https://{canondata_backend}/1920236/c7452f067ae0d1b502652ad92f7f9e54a00609fe/resource.tar.gz#test.test_Builtins-SqlColumnOrderFromYson-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Builtins-SqlColumnOrderFromYson-default.txt-Results]": [
+        {
+            "checksum": "f1e7d247c6ca7cb58ce878f5de7b9c17",
+            "size": 212,
+            "uri": "https://{canondata_backend}/1920236/c7452f067ae0d1b502652ad92f7f9e54a00609fe/resource.tar.gz#test.test_Builtins-SqlColumnOrderFromYson-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Casts-AlterToOverDataFloatTypes-default.txt-Debug]": [
         {
             "checksum": "9b4d469cf19d56e5c7fba1fcb759a8b0",

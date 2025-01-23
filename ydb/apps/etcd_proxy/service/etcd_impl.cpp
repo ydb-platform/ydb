@@ -39,6 +39,13 @@ TString DecrementKey(TString key) {
     return TString();
 }
 
+TString GetNameWithIndex(const std::string_view& name, const size_t* counter) {
+    auto param = TString('$') += name;
+    if (counter)
+        param += ToString(*counter);
+    return param;
+}
+
 TString GetParamName(const std::string_view& name, size_t* counter = nullptr) {
     auto param = TString('$') += name;
     if (counter)
@@ -66,30 +73,6 @@ void MakeSimplePredicate(const TString& key, const TString& rangeEnd, TStringBui
         sql << "startswith(`key`, " << AddParam("Key", params, key, paramsCounter) << ')';
     else
         sql << "`key` between " << AddParam("Key", params, key, paramsCounter) << " and " << AddParam("RangeEnd", params, rangeEnd, paramsCounter);
-}
-
-void MakeGetOldKeyState(const TString& keyParamName, TStringBuilder& sql, const std::string_view& txnFilter = {}) {
-    sql << "select `key`, `created`, `modified`, `version`, `value`, `lease`" << Endl;
-    sql << '\t' << "from `verhaal` where ";
-    if (!txnFilter.empty())
-        sql << txnFilter << " and ";
-    sql << "`key` = " << keyParamName << Endl;
-    sql << '\t' << "order by `modified` desc limit 1;" << Endl;
-}
-
-void MakeGetNewKeyState(const std::string& keyParamName, const TString& valueParamName, const TString& leaseParamName, bool withDefault, TStringBuilder& sql, const std::string_view& txnFilter = {}) {
-    sql << "select `key` as `key`, if(`version` > 0L, `created`, $Revision) as `created`, $Revision as `modified`, `version` + 1L as `version`, NVL(" << valueParamName << ", `value`) as `value`, NVL(" << leaseParamName << ",`lease`) as `lease`" << Endl;
-    sql << '\t' << "from ";
-    if (withDefault) {
-        sql << '(' << Endl;
-        sql << '\t' << "select * from $Old union all select * from as_table([<|`key`:" << keyParamName << ", `created`:$Revision, `modified`: $Revision, `version`:1L, `value`:" << valueParamName << ", `lease`:" << leaseParamName << "|>])" << Endl;
-        sql << '\t' << ')';
-        sql << '\t' << "order by `modified` desc limit 1";
-    } else
-        sql << "$Old";
-    if (!txnFilter.empty())
-        sql << " where " << txnFilter;
-    sql << ';' << Endl;
 }
 
 struct TOperation {
@@ -141,9 +124,8 @@ struct TRange : public TOperation {
         sql << '`' << (fromHistory ? "verhaal" : "huidig") << '`' << Endl;
         sql << "where ";
 
-        if (!txnFilter.empty()) {
-            sql << txnFilter << Endl << '\t' << "and ";
-        }
+        if (!txnFilter.empty())
+            sql << txnFilter << " and ";
 
         MakeSimplePredicate(Key, RangeEnd, sql, params, paramsCounter);
         if (KeyRevision) {
@@ -228,18 +210,32 @@ struct TPut : public TOperation {
         const auto& valueParamName = IgnoreValue ? TString("NULL") : AddParam("Value", params, Value, paramsCounter);
         const auto& leaseParamName = IgnoreLease ? TString("NULL") : AddParam("Lease", params, Lease, paramsCounter);
 
-        sql << "$Old = ";
-        MakeGetOldKeyState(keyParamName, sql, txnFilter);
-        sql << "$New = ";
+        const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
+        const auto& newResultSetName = GetNameWithIndex("New", resultsCounter);
+
+        sql  << oldResultSetName << " = select `key`, `created`, `modified`, `version`, `value`, `lease` from `verhaal` where ";
+        if (!txnFilter.empty())
+            sql << txnFilter << " and ";
+        sql << "`key` = " << keyParamName << " order by `modified` desc limit 1;" << Endl;
+
         const bool update = IgnoreValue || IgnoreLease;
-        MakeGetNewKeyState(keyParamName, valueParamName, leaseParamName, !update, sql, txnFilter);
-        sql << "insert into `verhaal` select * from $New;" << Endl;
-        sql << (update ? "update `huidig` on" : "upsert into `huidig`") << " select * from $New;" << Endl;
+        sql << newResultSetName << " = select `key` as `key`, if(`version` > 0L, `created`, $Revision) as `created`, $Revision as `modified`, `version` + 1L as `version`, nvl(" << valueParamName << ", `value`) as `value`, nvl(" << leaseParamName << ",`lease`) as `lease`" << Endl;
+        sql << '\t' << "from ";
+        if (update)
+            sql << oldResultSetName;
+        else
+            sql << "(select * from " << oldResultSetName <<" union all select * from as_table([<|`key`:" << keyParamName << ", `created`:$Revision, `modified`: $Revision, `version`:1L, `value`:" << valueParamName << ", `lease`:" << leaseParamName << "|>]) order by `modified` desc limit 1)";
+        if (!txnFilter.empty())
+            sql << " where " << txnFilter;
+        sql << ';' << Endl;
+
+        sql << "insert into `verhaal` select * from " << newResultSetName << ';' << Endl;
+        sql << (update ? "update `huidig` on" : "upsert into `huidig`") << " select * from " << newResultSetName << ';' << Endl;
 
         if (GetPrevious) {
             if (resultsCounter)
                 ResultIndex = (*resultsCounter)++;
-            sql << "select `value`, `created`, `modified`, `version`, `lease` from $Old where `version` > 0L;" << Endl;
+            sql << "select `value`, `created`, `modified`, `version`, `lease` from " << oldResultSetName << " where `version` > 0L;" << Endl;
         }
     }
 
@@ -281,15 +277,17 @@ struct TDeleteRange : public TOperation {
             where << txnFilter << " and ";
         MakeSimplePredicate(Key, RangeEnd, where, params, paramsCounter);
 
-        sql << "$Old = select `key`,`value`, `created`, `modified`, `version`,`lease` from `huidig` " << where << ';' << Endl;
+        const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
+
+        sql << oldResultSetName << " = select `key`,`value`, `created`, `modified`, `version`,`lease` from `huidig` " << where << ';' << Endl;
         sql << "insert into `verhaal`" << Endl;
         sql << "select `key`, `created`, $Revision as `modified`, 0L as `version`, `value`, `lease` from $Old;" << Endl;
 
-        sql << "select count(*) from $Old;" << Endl;
+        sql << "select count(*) from " << oldResultSetName << ';' << Endl;
         if (GetPrevious) {
             if (resultsCounter)
                 ++(*resultsCounter);
-            sql << "select `key`,`value`, `created`, `modified`, `version`, `lease` from $Old;" << Endl;
+            sql << "select `key`,`value`, `created`, `modified`, `version`, `lease` from " << oldResultSetName << ';' << Endl;
         }
         sql << "delete from `huidig` " << where << ';' << Endl;
     }
@@ -417,7 +415,7 @@ struct TTxn : public TOperation {
         return !Compares.empty() && fill(Success, rec.success()) && fill(Failure, rec.failure());
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view&  = {}) {
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         ResultIndex = (*resultsCounter)++;
 
         std::unordered_map<std::pair<TString, TString>, std::vector<TCompare>> map(Compares.size());
@@ -425,7 +423,8 @@ struct TTxn : public TOperation {
             map[std::make_pair(compare.Key, compare.RangeEnd)].emplace_back(compare);
         const bool manyRanges = map.size() > 1U;
 
-        sql << "$Compare = ";
+        const auto& cmpResultSetName = GetNameWithIndex("Cmp", resultsCounter);
+        sql << cmpResultSetName << " = ";
 
         if (manyRanges)
             sql << "select bool_and(`cmp`) ?? false as `cmp` from (" << Endl;
@@ -449,9 +448,21 @@ struct TTxn : public TOperation {
             sql << Endl << ')';
         sql << ';' << Endl;
 
-        sql << "select * from $Compare;" << Endl;
+        sql << "select * from " << cmpResultSetName << ';' << Endl;
 
-        const auto make = [&sql, &params](std::vector<TRequestOp>& operations, size_t* paramsCounter, size_t* resultsCounter, const TString& txnFilter) {
+
+        const auto& scalarBoolOneName = GetNameWithIndex("One", resultsCounter);
+        const auto& scalarBoolTwoName = GetNameWithIndex("Two", resultsCounter);
+
+        if (txnFilter.empty()) {
+            sql << scalarBoolOneName << " = select " << cmpResultSetName << ';' << Endl;
+            sql << scalarBoolTwoName << " = select not " << cmpResultSetName << ';' << Endl;
+        } else {
+            sql << scalarBoolOneName << " = select " << txnFilter << " and " << cmpResultSetName << ';' << Endl;
+            sql << scalarBoolTwoName << " = select " << txnFilter << " and not " << cmpResultSetName << ';' << Endl;
+        }
+
+        const auto make = [&sql, &params](std::vector<TRequestOp>& operations, size_t* paramsCounter, size_t* resultsCounter, const std::string_view& txnFilter) {
             for (auto& operation : operations) {
                 if (const auto oper = std::get_if<TRange>(&operation))
                     oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter, txnFilter);
@@ -463,13 +474,12 @@ struct TTxn : public TOperation {
                     oper->MakeQueryWithParams(sql, params, paramsCounter, resultsCounter, txnFilter);
             }
         };
-        TString filter;
-        make(Success, paramsCounter, resultsCounter, filter);
-        make(Failure, paramsCounter, resultsCounter, filter);
+
+        make(Success, paramsCounter, resultsCounter, scalarBoolOneName);
+        make(Failure, paramsCounter, resultsCounter, scalarBoolTwoName);
     }
 
     etcdserverpb::TxnResponse MakeResponse(const NYdb::TResultSets& results) const {
-        Cerr << __PRETTY_FUNCTION__ << ':' << ResultIndex << '/' << results.size() << Endl;
         etcdserverpb::TxnResponse response;
         if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
             const bool succeeded = NYdb::TValueParser(parser.GetValue(0)).GetBool();

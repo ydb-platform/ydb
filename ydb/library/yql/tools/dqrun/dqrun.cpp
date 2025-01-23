@@ -1205,7 +1205,7 @@ int RunMain(int argc, const char* argv[])
     if (res.Has("replay")) {
         program = progFactory.Create("-replay-", "", opId, EHiddenMode::Disable, qContext, gatewaysPatch);
     } else if (progFile == TStringBuf("-")) {
-        program = progFactory.Create("-stdin-", Cin.ReadAll(), opId, EHiddenMode::Disable, qContext, gatewaysPatch);
+        program = progFactory.Create("-stdin-", Cin.ReadAll(), opId, EHiddenMode::Disable, qContext);
     } else {
         program = progFactory.Create(TFile(progFile, RdOnly), opId, qContext);
         program->SetQueryName(progFile);

@@ -59,13 +59,13 @@ using TAsyncActorChainPingResult = NThreading::TFuture<TActorChainPingResult>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TPlainGrpcPingSettings : public TOperationRequestSettings<TPlainGrpcPingSettings> {};
-struct TGrpcProxyPingSettings : public TOperationRequestSettings<TGrpcProxyPingSettings> {};
-struct TKqpProxyPingSettings : public TOperationRequestSettings<TKqpProxyPingSettings> {};
-struct TSchemeCachePingSettings : public TOperationRequestSettings<TSchemeCachePingSettings> {};
-struct TTxProxyPingSettings : public TOperationRequestSettings<TTxProxyPingSettings> {};
+struct TPlainGrpcPingSettings : public TSimpleRequestSettings<TPlainGrpcPingSettings> {};
+struct TGrpcProxyPingSettings : public TSimpleRequestSettings<TGrpcProxyPingSettings> {};
+struct TKqpProxyPingSettings : public TSimpleRequestSettings<TKqpProxyPingSettings> {};
+struct TSchemeCachePingSettings : public TSimpleRequestSettings<TSchemeCachePingSettings> {};
+struct TTxProxyPingSettings : public TSimpleRequestSettings<TTxProxyPingSettings> {};
 
-struct TActorChainPingSettings : public TOperationRequestSettings<TActorChainPingSettings> {
+struct TActorChainPingSettings : public TSimpleRequestSettings<TActorChainPingSettings> {
     FLUENT_SETTING_DEFAULT(size_t, ChainLength, 10);
     FLUENT_SETTING_DEFAULT(size_t, WorkUsec, 5);
     FLUENT_SETTING_DEFAULT(bool, NoTailChain, false);

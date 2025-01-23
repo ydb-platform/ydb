@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; rec {
-  version = "1.6.44";
+  version = "1.6.45";
 
   src = fetchFromGitHub {
     owner = "pnggroup";
     repo = "libpng";
     rev = "v${version}";
-    hash = "sha256-gBfHgGaqVYdmhWXoNKZzPyGzyw2rr3zp+DjWmfC41jk=";
+    hash = "sha256-kO0f65oHhnwrdhCIe2XbyihODxKKKWsJsh+QJS2uBtc=";
   };
 
   # nixpkgs applies apng patch from sourceforge.net, which changes for every libpng version.

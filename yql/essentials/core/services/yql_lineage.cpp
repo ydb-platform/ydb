@@ -299,7 +299,7 @@ private:
 
     TMaybe<TFieldsLineage> ScanExprLineage(const TExprNode& node, const TExprNode* arg, const TLineage* src,
         TNodeMap<TMaybe<TFieldsLineage>>& visited,
-        const THashMap<const TExprNode*, TString>& flattenColumns) {
+        const THashMap<const TExprNode*, TMaybe<TFieldsLineage>>& flattenColumns) {
         if (&node == arg) {
             return Nothing();
         }
@@ -310,7 +310,7 @@ private:
         }
 
         if (auto itFlatten = flattenColumns.find(&node); itFlatten != flattenColumns.end()) {
-            return it->second = (*src->Fields).at(itFlatten->second);
+            return it->second = itFlatten->second;
         }
 
         if (node.IsCallable("Member")) {
@@ -397,7 +397,7 @@ private:
     }
 
     void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src,
-        TFieldLineageSet& dst, const THashMap<const TExprNode*, TString>& flattenColumns,
+        TFieldLineageSet& dst, const THashMap<const TExprNode*, TMaybe<TFieldsLineage>>& flattenColumns,
         const TString& newTransforms = "") {
 
         TNodeMap<TMaybe<TFieldsLineage>> visited;
@@ -416,7 +416,7 @@ private:
     }
 
     void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src,
-        TFieldsLineage& dst, bool produceStruct, const THashMap<const TExprNode*, TString>& flattenColumns,
+        TFieldsLineage& dst, bool produceStruct, const THashMap<const TExprNode*, TMaybe<TFieldsLineage>>& flattenColumns,
         const TString& newTransforms = "") {
         if (produceStruct) {
             auto root = &expr;
@@ -447,7 +447,7 @@ private:
     }
 
     void FillStructLineage(TLineage& lineage, const TExprNode* value, const TExprNode& arg, const TLineage& innerLineage,
-        const TTypeAnnotationNode* extType, const THashMap<const TExprNode*, TString>& flattenColumns) {
+        const TTypeAnnotationNode* extType, const THashMap<const TExprNode*, TMaybe<TFieldsLineage>>& flattenColumns) {
         TMaybe<TString> oneField;
         if (value && value->IsCallable("Member") && &value->Head() == &arg) {
             TString field(value->Tail().Content());
@@ -533,7 +533,7 @@ private:
         const auto& lambda = node.Tail();
         const auto& arg = lambda.Head().Head();
         const auto& body = lambda.Tail();
-        THashMap<const TExprNode*, TString> flattenColumns;
+        THashMap<const TExprNode*, TMaybe<TFieldsLineage>> flattenColumns;
         const TExprNode* value = &body.Tail();
         if (body.IsCallable({"OptionalIf", "FlatListIf"})) {
             value = &body.Tail();
@@ -545,9 +545,7 @@ private:
                 while(value->IsCallable({"FlatMap", "OrderedFlatMap"})) {
                     TNodeMap<TMaybe<TFieldsLineage>> visited;
                     if (auto res = ScanExprLineage(value->Head(), &arg, &innerLineage, visited, {})) {
-                        for (const auto& f: res->Items) {
-                            flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), f.Field);
-                        }
+                        flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), res);
                     }
                     value = &value->Tail().Tail();
                 }

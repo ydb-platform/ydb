@@ -11,6 +11,7 @@ enum class EWriteStage {
     WaitFlush,
     BuildSlices,
     BuildSlicesPack,
+    Result,
     Finished,
     Aborted
 };

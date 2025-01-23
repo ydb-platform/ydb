@@ -13,7 +13,7 @@ def execute_some_queries(pool):
     for i in range(QUERY_COUNT):
         with pool.checkout() as session:
             query_result = session.transaction().execute(
-                f"declare $param as Uint64;\nselect {i} + $param as result;"
+                f"declare $param as Uint64;select {i} + $param as result;",
                 {"$param": ydb.TypedValue(value=i, value_type=ydb.PrimitiveType.Uint64)},
                 commit_tx=True,
             )

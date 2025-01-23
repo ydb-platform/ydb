@@ -36,14 +36,23 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code) {
 void THandlerSessionCreateNebius::ProcessSessionToken(const NJson::TJsonValue& jsonValue) {
     const NJson::TJsonValue* jsonAccessToken;
     const NJson::TJsonValue* jsonExpiresIn;
+    TString sessionToken;
+    unsigned long long expiresIn;
     if (!jsonValue.GetValuePointer("access_token", &jsonAccessToken)) {
-        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: access_token not found");
+        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: `access_token` not found");
+    }
+    if (!jsonAccessToken->GetString(&sessionToken)) {
+        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: failed to extract `access_token`");
     }
     if (!jsonValue.GetValuePointer("expires_in", &jsonExpiresIn)) {
-        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: expires_in not found");
+        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: `expires_in` not found");
     }
-    TString sessionToken = jsonAccessToken->GetStringRobust();
-    long long expiresIn = jsonExpiresIn->GetIntegerRobust();
+    if (!jsonExpiresIn->GetUInteger(&expiresIn)) {
+        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: failed to extract `expires_in`");
+    }
+    if (expiresIn > std::numeric_limits<i32>::max()) {
+        expiresIn = std::numeric_limits<i32>::max();
+    }
     TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
     TString sessionCookieValue = Base64Encode(sessionToken);
     BLOG_D("Set session cookie: (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");

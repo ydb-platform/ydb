@@ -52,7 +52,7 @@ void THandlerSessionCreateYandex::ProcessSessionToken(const NJson::TJsonValue& j
     SetHeader(meta, "authorization", token);
     meta.Timeout = TDuration::Seconds(10);
 
-    NActors::TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
+    NActors::TActorSystem* actorSystem = TActivationContext::ActorSystem();
     NActors::TActorId actorId = SelfId();
     NYdbGrpc::TResponseCallback<yandex::cloud::priv::oauth::v1::CreateSessionResponse> responseCb =
         [actorId, actorSystem](NYdbGrpc::TGrpcStatus&& status, yandex::cloud::priv::oauth::v1::CreateSessionResponse&& response) -> void {

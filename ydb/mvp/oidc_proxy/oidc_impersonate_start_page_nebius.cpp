@@ -69,14 +69,23 @@ void THandlerImpersonateStart::RequestImpersonatedToken(TString& sessionToken, T
 void THandlerImpersonateStart::ProcessImpersonatedToken(const NJson::TJsonValue& jsonValue) {
     const NJson::TJsonValue* jsonImpersonatedToken;
     const NJson::TJsonValue* jsonExpiresIn;
+    TString impersonatedToken;
+    unsigned long long expiresIn;
     if (!jsonValue.GetValuePointer("impersonation", &jsonImpersonatedToken)) {
-        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: impersonation not found");
+        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: `impersonation` not found");
+    }
+    if (!jsonImpersonatedToken->GetString(&impersonatedToken)) {
+        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: failed to extract `impersonation`");
     }
     if (!jsonValue.GetValuePointer("expires_in", &jsonExpiresIn)) {
-        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: expires_in not found");
+        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: `expires_in` not found");
     }
-    TString impersonatedToken = jsonImpersonatedToken->GetStringRobust();
-    long long expiresIn = jsonExpiresIn->GetIntegerRobust();
+    if (!jsonExpiresIn->GetUInteger(&expiresIn)) {
+        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: failed to extract `expires_in`");
+    }
+    if (expiresIn > std::numeric_limits<i32>::max()) {
+        expiresIn = std::numeric_limits<i32>::max();
+    }
     TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
     TString impersonatedCookieValue = Base64Encode(impersonatedToken);
     BLOG_D("Set impersonated cookie: (" << impersonatedCookieName << ": " << NKikimr::MaskTicket(impersonatedCookieValue) << ")");

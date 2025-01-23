@@ -74,10 +74,14 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
             Self->Exports.erase(exportInfo->Id);
             Self->PersistRemoveExport(db, exportInfo);
         } else {
+            LOG_D("TExport::TTxForget, dropping export tables"
+                << ", info: " << exportInfo->ToString()
+            );
             exportInfo->WaitTxId = InvalidTxId;
             exportInfo->State = TExportInfo::EState::Dropping;
             Self->PersistExportState(db, exportInfo);
 
+            TVector<ui32> itemsToDrop;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 auto& item = exportInfo->Items.at(itemIdx);
 
@@ -87,10 +91,14 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
                 const TPath itemPath = TPath::Resolve(ExportItemPathName(Self, exportInfo, itemIdx), Self);
                 if (itemPath.IsResolved() && !itemPath.IsDeleted()) {
                     item.State = TExportInfo::EState::Dropping;
+                    itemsToDrop.emplace_back(itemIdx);
                 }
 
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
             }
+            LOG_T("TExport::TTxForget, items to drop"
+                << ", items: " << JoinSeq(", ", itemsToDrop)
+            );
 
             Progress = true;
         }

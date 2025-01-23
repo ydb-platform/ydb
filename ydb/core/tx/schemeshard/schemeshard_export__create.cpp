@@ -659,7 +659,7 @@ private:
                 for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                     const auto& item = exportInfo->Items.at(itemIdx);
 
-                    if (item.State != EState::Dropping) {
+                    if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable || item.State != EState::Dropping) {
                         continue;
                     }
 
@@ -688,6 +688,15 @@ private:
         const ui32 itemIdx = pendingItems.front();
         pendingItems.pop_front();
         return itemIdx;
+    }
+
+    void EndExport(TExportInfo::TPtr exportInfo, EState finalState, NIceDb::TNiceDb& db) {
+        exportInfo->State = finalState;
+        exportInfo->EndTime = TAppData::TimeProvider->Now();
+
+        Self->PersistExportState(db, exportInfo);
+        SendNotificationsIfFinished(exportInfo);
+        AuditLogExportEnd(*exportInfo.Get(), Self);
     }
 
     void OnAllocateResult() {
@@ -998,12 +1007,17 @@ private:
             Self->PersistExportItemState(db, exportInfo, itemIdx);
 
             if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                exportInfo->State = EState::Done;
-                exportInfo->EndTime = TAppData::TimeProvider->Now();
+                EndExport(exportInfo, EState::Done, db);
+            }
+        } else if (exportInfo->State == EState::Cancellation) {
+            item.State = EState::Cancelled;
+            Self->PersistExportItemState(db, exportInfo, itemIdx);
 
-                Self->PersistExportState(db, exportInfo);
-                SendNotificationsIfFinished(exportInfo);
-                AuditLogExportEnd(*exportInfo.Get(), Self);
+            if (AllOf(exportInfo->Items, [](const TExportInfo::TItem& item) {
+                // on cancellation we wait only for transferring items
+                return item.State != EState::Transferring;
+            })) {
+                EndExport(exportInfo, EState::Cancelled, db);
             }
         }
     }

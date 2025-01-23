@@ -77,12 +77,12 @@ struct TLeaderElectionMetrics {
     explicit TLeaderElectionMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
         : Counters(counters) {
         Errors = Counters->GetCounter("LeaderElectionErrors", true);
-        LeaderChangedCount = Counters->GetCounter("LeaderElectionChangedCount");
+        LeaderChanged = Counters->GetCounter("LeaderChanged", true);
     }
 
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChangedCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChanged;
 };
 
 class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
@@ -458,7 +458,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     if (!LeaderActorId || (*LeaderActorId != id)) {
         LOG_ROW_DISPATCHER_INFO("Send TEvCoordinatorChanged to " << ParentId);
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(id, generation));
-        Metrics.LeaderChangedCount->Inc();
+        Metrics.LeaderChanged->Inc();
     }
     LeaderActorId = id;
 }

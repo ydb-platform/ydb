@@ -50,7 +50,7 @@ void THandlerSessionCreateNebius::ProcessSessionToken(const NJson::TJsonValue& j
     if (!jsonExpiresIn->GetUInteger(&expiresIn)) {
         return ReplyBadRequestAndPassAway("Wrong OIDC provider response: failed to extract `expires_in`");
     }
-    expiresIn = std::min(expiresIn, 604800ULL); // clean cookies no less than once a week.
+    expiresIn = std::min(expiresIn, static_cast<unsigned long long>(TDuration::Days(7).Seconds())); // clean cookies no less than once a week.
     TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
     TString sessionCookieValue = Base64Encode(sessionToken);
     BLOG_D("Set session cookie: (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");

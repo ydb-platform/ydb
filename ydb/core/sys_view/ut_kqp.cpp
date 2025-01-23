@@ -2318,6 +2318,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
         }
+
+        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
+        // and test tenant user and tenant admin
     }
 
     Y_UNIT_TEST(AuthGroups) {

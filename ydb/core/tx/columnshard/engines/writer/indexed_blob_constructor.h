@@ -142,7 +142,7 @@ public:
     }
 
     TWriteAggregation(const NEvWrite::TWriteData& writeData)
-        : WriteMeta(writeData.GetWriteMeta())
+        : WriteMeta(writeData.GetWriteMetaPtr())
         , SchemaVersion(writeData.GetData()->GetSchemaVersion())
         , Size(writeData.GetSize())
         , BlobsAction(writeData.GetBlobsAction()) {

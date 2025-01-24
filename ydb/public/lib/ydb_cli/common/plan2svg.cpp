@@ -1056,6 +1056,11 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
 
     stage->OffsetY = offsetY;
     ui32 height = std::max<ui32>(stage->Connections.size() + (stage->IngressName ? 1 : 0) + 3, 4) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y;
+
+    if (!stage->Operators.empty()) {
+        height = std::max<ui32>(height, stage->Operators.size() * (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y) * 2 - INTERNAL_GAP_Y + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT));
+    }
+
     stage->Height = height;
     stage->IndentY = stage->OffsetY + height;
     offsetY += (height + GAP_Y);
@@ -1356,7 +1361,18 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
         {
             ui32 y0 = s->OffsetY + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 + offsetY;
             if (!s->Operators.empty()) {
+                bool first = true;
                 for (auto op : s->Operators) {
+                    if (first) {
+                        first = false;
+                    } else {
+                    canvas
+                        << "<line x1='" << Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2
+                        << "' y1='" << y0 - INTERNAL_TEXT_HEIGHT
+                        << "' x2='" << Config.HeaderLeft + Config.HeaderWidth
+                        << "' y2='" << y0 - INTERNAL_TEXT_HEIGHT
+                        << "' stroke-width='1' stroke='" << Config.Palette.StageGrid << "' stroke-dasharray='1,2'/>" << Endl;
+                    }
                     canvas
                         << "<g><title>" << op.Name << ": " << op.Info << "</title>"
                         << "  <text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT

@@ -466,10 +466,10 @@ Unexpected error in join group response: This most likely occurs because of a re
 
 Для того, чтобы проверить работу с аутентификацией в локальной базе:
 
-1. Создайте пользователя. [Как это сделать в YQL](https://ydb.tech/docs/ru/yql/reference/syntax/create-user). [Как выполнить YQL из CLI](https://ydb.tech/docs/ru/reference/ydb-cli/yql).
+1. Создайте пользователя. [Как это сделать в YQL](../../yql/reference/yql-core/syntax/create-user.md). [Как выполнить YQL из CLI](../ydb-cli/yql.md).
 2. Подключитесь к Kafka API, как в примерах ниже. Во всех примерах предполагается, что:
 
-  - YDB запущен локально с переменной окружения YDB_KAFKA_PROXY_PORT=9092 - то есть Kafka API доступен по адресу localhost:9092. Например можно поднять YDB в докере, как указано [здесь](https://ydb.tech/docs/ru/quickstart#install)
+  - YDB запущен локально с переменной окружения YDB_KAFKA_PROXY_PORT=9092 - то есть Kafka API доступен по адресу localhost:9092. Например можно поднять YDB в докере, как указано [здесь](../../quickstart.md#install)
   - <username> - это имя пользователя, которое вы указали при создании пользователя
   - <password> - это пароль пользователя, которsq вы указали при создании пользователя
 

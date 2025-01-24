@@ -463,10 +463,10 @@ Note: in path_to_database the username is not specified, only @ is indicated, fo
 
 To test working with authentication in a on-prem database:
 
-1. Create a user. [How to do this in YQL](https://ydb.tech/docs/ru/yql/reference/syntax/create-user). [How to execute YQL from CLI](https://ydb.tech/docs/ru/reference/ydb-cli/yql).
+1. Create a user. [How to do this in YQL](../../yql/reference/yql-core/syntax/create-user.md). [How to execute YQL from CLI](../ydb-cli/yql.md).
 2. Connect to the Kafka API as shown in the examples below. In all examples, it is assumed that:
 
-   - YDB is running locally with the environment variable YDB_KAFKA_PROXY_PORT=9092, meaning that the Kafka API is available at localhost:9092. You can run YDB in Docker for instance as described [here](https://ydb.tech/docs/ru/quickstart#install).
+   - YDB is running locally with the environment variable YDB_KAFKA_PROXY_PORT=9092, meaning that the Kafka API is available at localhost:9092. You can run YDB in Docker for instance as described [here](../../quickstart.md#install).
    - <username> is the username you specified when creating the user.
    - <password> is the user's password you specified when creating the user.
 

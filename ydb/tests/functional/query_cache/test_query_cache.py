@@ -12,13 +12,13 @@ QUERY_COUNT = 20
 def execute_some_queries(pool):
     for i in range(QUERY_COUNT):
         with pool.checkout() as session:
-            query_result = session.transaction().execute(
+            with session.transaction().execute(
                 f"declare $param as Uint64;select {i} + $param as result;",
                 {"$param": ydb.TypedValue(value=i, value_type=ydb.PrimitiveType.Uint64)},
                 commit_tx=True,
-            )
-
-            assert query_result[0].rows[0].result == i + i
+            ) as query_result:
+            
+                assert query_result[0].rows[0].result == i + i
 
 
 class TestQueryCache(object):

@@ -279,7 +279,7 @@ class ClusterDetailsProvider(object):
         if database is not None:
             self.__cluster_description = self.get_subjective_description(self.__cluster_description, database, self.__validator)
 
-        self._use_walle = self.__cluster_description.get("use_walle", True)
+        self._use_walle = self.__cluster_description.get("use_walle", False)
         self._k8s_settings = self.__cluster_description.get("k8s_settings", {"use": False})
 
         if host_info_provider is not None:
@@ -385,7 +385,13 @@ class ClusterDetailsProvider(object):
         rack = host_description.get("location", {}).get("rack", None)
         if rack:
             return str(rack)
-        return str(self._host_info_provider.get_rack(host_description.get("name", host_description.get("host"))))
+
+        hostname = host_description.get("name", host_description.get("host"))
+
+        if isinstance(self._host_info_provider, NopHostsInformationProvider):
+            raise RuntimeError(f"there is no 'rack' specified for host {hostname} in template, and no host info provider has been specified")
+
+        return str(self._host_info_provider.get_rack(hostname))
 
     def _get_body(self, host_description):
         if host_description.get("body") is not None:

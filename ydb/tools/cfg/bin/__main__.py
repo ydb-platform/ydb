@@ -51,19 +51,24 @@ def cfg_generate(args):
 
     host_info_provider = NopHostsInformationProvider()
 
-    use_k8s_enabled = cluster_template.get("use_k8s", {}).get("enabled", False)
+    k8s_enabled = cluster_template.get("k8s_settings", {}).get("use", False)
+    walle_enabled = cluster_template.get("use_walle", False)
+
     if args.hosts_provider_url:
-        if not cluster_template.get("use_walle", False):
+        if not walle_enabled:
             raise RuntimeError("you specified --hosts-provider-url, but `use_walle` is false in template.\nSpecify `use_walle: True` to continue")
         host_info_provider = WalleHostsInformationProvider(args.hosts_provider_url)
-    elif use_k8s_enabled:
+    elif k8s_enabled:
         host_info_provider = K8sApiHostsInformationProvider(args.kubeconfig)
 
-    if cluster_template.get("use_walle", False) and not isinstance(host_info_provider, WalleHostsInformationProvider):
+    if walle_enabled and not isinstance(host_info_provider, WalleHostsInformationProvider):
         raise RuntimeError("you specified 'use_walle: True', but didn't specify --hosts-provider-url to initialize walle")
 
-    if cluster_template.get("use_walle", False) and cluster_template.get("use_k8s", {}).get("enabled", False):
-        raise RuntimeError("you specified 'use_walle: True' and 'use_k8s.enabled: True', please select a single host info provider")
+    if walle_enabled and k8s_enabled:
+        raise RuntimeError("you specified 'use_walle: True' and 'k8s_settings.use: True', please select a single host info provider")
+
+    if not walle_enabled and not k8s_enabled:
+        logger.warning("you didn't specify any host info provider (neither walle nor k8s). Make sure you know what you are doing")
 
     generator = cfg_cls(cluster_template, args.binary_path, args.output_dir, host_info_provider=host_info_provider, **kwargs)
 

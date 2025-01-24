@@ -45,7 +45,6 @@ class YdbCliHelper:
             self.ast = ast
             self.svg = svg
 
-
     class Iteration:
         def __init__(self):
             self.plan: Optional[YdbCliHelper.QueryPlan] = None
@@ -65,7 +64,6 @@ class YdbCliHelper:
             if self.error_message:
                 return 'other'
             return ''
-
 
     class WorkloadRunResult:
         def __init__(self):
@@ -96,7 +94,6 @@ class YdbCliHelper:
             if self.warning_message:
                 result['warning'] = True
             return result
-
 
     class WorkloadProcessor:
         def __init__(self,

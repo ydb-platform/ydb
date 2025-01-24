@@ -1,11 +1,12 @@
 # Аутентификация Kafka API
 
-## Когда аутентификация включена и когда выключена?
+## Включение аутентификации
 
 Аутентификация всегда включена при использовании [Kafka API в Yandex Cloud](https://yandex.cloud/ru/docs/data-streams/kafkaapi/auth)
 
-Аутентификация по умолчанию выключена при использовании локальной базы (например из Docker образа).
-Чтобы включить ее, укажите опцию [`enforce_user_token_requirement` в конфиге](../configuration/index.md#auth).
+При самостоятельном развертывании YDB по умолчанию используется [анонимная аутентификация](../../security/authentication.md#anonymous)
+, не требующая логина-пароля.
+Чтобы включить обязательную аутентификацию, укажите опцию [`enforce_user_token_requirement` в конфиге](../configuration/index.md#auth).
 
 ## Как работает аутентификация в Kafka API?
 

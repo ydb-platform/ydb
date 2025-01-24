@@ -76,6 +76,7 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
     FLUENT_SETTING_OPTIONAL(bool, ConcurrentResultSets);
     FLUENT_SETTING(std::string, ResourcePool);
+    FLUENT_SETTING_OPTIONAL(std::chrono::milliseconds, StatsCollectPeriod);
 };
 
 struct TBeginTxSettings : public TRequestSettings<TBeginTxSettings> {};

@@ -1,3 +1,4 @@
+* Added statistics output on the current progress of the query in `ydb workload` command
 * Fixed a bug where arm64 YDB CLI binary was downloading amd64 binary to replace itself during `ydb update`. To update already installed binaries to the latest arm64 version, YDB CLI should be re-installed
 * Fixed a bug where `ydb workload tpch import generator` and `ydb workload tpcds import generator` commands were failing due to not all tables were created
 * Fixed a bug with backslashes in `ydb workload` benchmark paths on Windows

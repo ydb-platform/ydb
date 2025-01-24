@@ -8,7 +8,7 @@
 , не требующая логина-пароля.
 Чтобы включить обязательную аутентификацию, укажите опцию [`enforce_user_token_requirement` в конфиге](../configuration/index.md#auth).
 
-## Как работает аутентификация в Kafka API?
+## Механизм аутентификации
 
 В Kafka API аутентификация выполняется через механизмы `SASL_PLAINTEXT/PLAIN` или `SASL_SSL/PLAIN`.
 

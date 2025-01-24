@@ -7,11 +7,13 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/core/fq/libs/events/event_subspace.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
 #include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
+
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 namespace NFq {
 
@@ -62,11 +64,11 @@ struct TEvInternalService {
                 Result = wrappedResult.GetResult();
             }
         }
-        explicit TInternalServiceResponseEvent(const TString& errorMessage) : Status(NYdb::EStatus::INTERNAL_ERROR, {NYql::TIssue(errorMessage).SetCode(NYql::UNEXPECTED_ERROR, NYql::TSeverityIds::S_ERROR)}) {
+        explicit TInternalServiceResponseEvent(const TString& errorMessage) : Status(NYdb::EStatus::INTERNAL_ERROR, {NYdb::NIssue::TIssue(errorMessage).SetCode(NYdb::NIssue::UNEXPECTED_ERROR, NYdb::NIssue::ESeverity::Error)}) {
         }
-        explicit TInternalServiceResponseEvent(const TProtoResult& result) : Status(NYdb::EStatus::SUCCESS, NYql::TIssues()), Result(result) {
+        explicit TInternalServiceResponseEvent(const TProtoResult& result) : Status(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()), Result(result) {
         }
-        TInternalServiceResponseEvent(NYdb::EStatus statusCode, NYql::TIssues&& issues) : Status(statusCode, std::move(issues)) {
+        TInternalServiceResponseEvent(NYdb::EStatus statusCode, NYql::TIssues&& issues) : Status(statusCode, NYdb::NAdapters::ToSdkIssues(std::move(issues))) {
         }
     };
 

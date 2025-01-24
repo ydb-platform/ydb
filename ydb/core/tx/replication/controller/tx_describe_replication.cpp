@@ -256,7 +256,7 @@ public:
             break;
         case TReplication::EState::Error:
             if (auto issue = state.MutableError()->AddIssues()) {
-                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                issue->set_severity(static_cast<uint32_t>(NYdb::NIssue::ESeverity::Error));
                 issue->set_message(replication->GetIssue());
             }
             break;

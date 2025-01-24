@@ -1022,6 +1022,8 @@ public:
 
     struct TTxLogin;
     NTabletFlatExecutor::ITransaction* CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev);
+    struct TTxListUsers;
+    NTabletFlatExecutor::ITransaction* CreateTxListUsers(TEvSchemeShard::TEvListUsers::TPtr &ev);
 
     template <EventBasePtr TEvPtr>
     NTabletFlatExecutor::ITransaction* CreateTxOperationReply(TOperationId id, TEvPtr& ev);
@@ -1176,6 +1178,7 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvListUsers::TPtr& ev, const TActorContext& ctx);
 
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
 
@@ -1348,6 +1351,7 @@ public:
     void PersistBuildIndexProcessed(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexBilled(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
+    void PersistBuildIndexSampleForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     struct TIndexBuilder {
@@ -1465,17 +1469,12 @@ public:
     void ChangeDiskSpaceHardQuotaBytes(i64 delta) override;
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
+    void ChangePathCount(i64 delta) override;
+    void SetPathsQuota(ui64 value) override;
+    void ChangeShardCount(i64 delta) override;
+    void SetShardsQuota(ui64 value) override;
 
     NLogin::TLoginProvider LoginProvider;
-
-    struct TAccountLockout {
-        size_t AttemptThreshold = 4;
-        TDuration AttemptResetDuration = TDuration::Hours(1);
-
-        TAccountLockout(const ::NKikimrProto::TAccountLockout& accountLockout);
-    };
-
-    TAccountLockout AccountLockout;
 
 private:
     void OnDetach(const TActorContext &ctx) override;

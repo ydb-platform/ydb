@@ -98,6 +98,7 @@ DEFINE_ENUM(EAccessControlObject,
     (DiscombobulateNonvotingPeers)
     (SwitchLeader)
     (RequestRestart)
+    (CollectCoverage)
 );
 
 ////////////////////////////////////////////////////////////////////////////////

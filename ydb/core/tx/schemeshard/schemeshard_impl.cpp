@@ -21,6 +21,7 @@
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/library/login/password_checker/password_checker.h>
+#include <ydb/library/login/account_lockout/account_lockout.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <util/random/random.h>
@@ -4438,20 +4439,6 @@ TActorId TSchemeShard::TPipeClientFactory::CreateClient(const TActorContext& ctx
     return clientId;
 }
 
-TSchemeShard::TAccountLockout::TAccountLockout(const ::NKikimrProto::TAccountLockout& accountLockout)
-    : AttemptThreshold(accountLockout.GetAttemptThreshold())
-{
-    AttemptResetDuration = TDuration::Zero();
-    if (accountLockout.GetAttemptResetDuration().empty()) {
-        return;
-    }
-    if (TDuration::TryParse(accountLockout.GetAttemptResetDuration(), AttemptResetDuration)) {
-        if (AttemptResetDuration.Seconds() == 0) {
-            AttemptResetDuration = TDuration::Zero();
-        }
-    }
-}
-
 TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -4489,8 +4476,9 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
         .MinSpecialCharsCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinSpecialCharsCount(),
         .SpecialChars = AppData()->AuthConfig.GetPasswordComplexity().GetSpecialChars(),
         .CanContainUsername = AppData()->AuthConfig.GetPasswordComplexity().GetCanContainUsername()
-    }))
-    , AccountLockout(AppData()->AuthConfig.GetAccountLockout())
+    }), {.AttemptThreshold = AppData()->AuthConfig.GetAccountLockout().GetAttemptThreshold(),
+         .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
+    })
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -4905,6 +4893,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
+        HFuncTraced(TEvSchemeShard::TEvListUsers, Handle);
 
         HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, Handle);
 
@@ -5141,9 +5130,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     const auto isBackupTable = IsBackupTable(node->PathId);
 
     if (node->IsDomainRoot()) {
-        ResolveDomainInfo(node->ParentPathId)->DecPathsInside(1, isBackupTable);
+        ResolveDomainInfo(node->ParentPathId)->DecPathsInside(this, 1, isBackupTable);
     } else {
-        ResolveDomainInfo(node)->DecPathsInside(1, isBackupTable);
+        ResolveDomainInfo(node)->DecPathsInside(this, 1, isBackupTable);
     }
     PathsById.at(node->ParentPathId)->DecAliveChildrenPrivate(isBackupTable);
 
@@ -7403,11 +7392,16 @@ void TSchemeShard::ConfigureAccountLockout(
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx)
 {
-    AccountLockout = TAccountLockout(config.GetAccountLockout());
+    NLogin::TAccountLockout::TInitializer accountLockoutInitializer {
+        .AttemptThreshold = config.GetAccountLockout().GetAttemptThreshold(),
+        .AttemptResetDuration = config.GetAccountLockout().GetAttemptResetDuration()
+    };
+
+    LoginProvider.UpdateAccountLockout(accountLockoutInitializer);
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "AccountLockout configured: AttemptThreshold# " << AccountLockout.AttemptThreshold
-                 << ", AttemptResetDuration# " << AccountLockout.AttemptResetDuration.ToString());
+                 "AccountLockout configured: AttemptThreshold# " << accountLockoutInitializer.AttemptThreshold
+                 << ", AttemptResetDuration# " << accountLockoutInitializer.AttemptResetDuration);
 }
 
 void TSchemeShard::StartStopCompactionQueues() {
@@ -7515,8 +7509,28 @@ void TSchemeShard::AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType
     }
 }
 
+void TSchemeShard::ChangePathCount(i64 delta) {
+    TabletCounters->Simple()[COUNTER_PATHS].Add(delta);
+}
+
+void TSchemeShard::SetPathsQuota(ui64 value) {
+    TabletCounters->Simple()[COUNTER_PATHS_QUOTA].Set(value);
+}
+
+void TSchemeShard::ChangeShardCount(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SHARDS].Add(delta);
+}
+
+void TSchemeShard::SetShardsQuota(ui64 value) {
+    TabletCounters->Simple()[COUNTER_SHARDS_QUOTA].Set(value);
+}
+
 void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContext &ctx) {
     Execute(CreateTxLogin(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvSchemeShard::TEvListUsers::TPtr &ev, const TActorContext &ctx) {
+    Execute(CreateTxListUsers(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext&) {

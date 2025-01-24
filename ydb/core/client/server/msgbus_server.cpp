@@ -499,8 +499,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     const ui32 msgType = msg.GetMessage()->GetHeader()->Type;
 
     switch (msgType) {
-    case MTYPE_CLIENT_REQUEST:
-        return ClientProxyRequest<TEvBusProxy::TEvRequest>(msg);
     case MTYPE_CLIENT_SCHEME_INITROOT:
         return ClientProxyRequest<TEvBusProxy::TEvInitRoot>(msg);
     case MTYPE_CLIENT_SCHEME_NAVIGATE:

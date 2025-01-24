@@ -29,10 +29,6 @@
 #include <util/system/thread.h>
 #include <util/system/sigset.h>
 
-#include <util/string/subst.h>
-
-#include <thread>
-
 #include <stdlib.h>
 
 #ifdef _unix_
@@ -44,11 +40,6 @@
 #ifdef _linux_
 #include <grp.h>
 #include <sys/prctl.h>
-#endif
-
-#if defined(_linux_) && defined(CLANG_COVERAGE)
-extern "C" int __llvm_profile_write_file(void);
-extern "C" void __llvm_profile_set_filename(const char* name);
 #endif
 
 namespace NYT {
@@ -83,21 +74,19 @@ private:
 TProgram::TProgram()
 {
     Opts_.AddHelpOption();
-    Opts_.AddLongOption("yt-version", "print YT version and exit")
+    Opts_.AddLongOption("yt-version", "Prints YT version")
         .NoArgument()
         .StoreValue(&PrintYTVersion_, true);
-    Opts_.AddLongOption("version", "print version and exit")
+    Opts_.AddLongOption("version", "Print version")
         .NoArgument()
         .StoreValue(&PrintVersion_, true);
-    Opts_.AddLongOption("yson", "print build information in YSON")
+    Opts_.AddLongOption("yson", "Prints build information in YSON")
         .NoArgument()
         .StoreValue(&UseYson_, true);
-    Opts_.AddLongOption("build", "print build information and exit")
+    Opts_.AddLongOption("build", "Prints build information")
         .NoArgument()
         .StoreValue(&PrintBuild_, true);
     Opts_.SetFreeArgsNum(0);
-
-    ConfigureCoverageOutput();
 }
 
 TProgram::~TProgram() = default;
@@ -239,15 +228,6 @@ TString CheckPathExistsArgMapper(const TString& arg)
     return arg;
 }
 
-TGuid CheckGuidArgMapper(const TString& arg)
-{
-    TGuid result;
-    if (!TGuid::FromString(arg, &result)) {
-        throw TProgramException(Format("Error parsing guid %Qv", arg));
-    }
-    return result;
-}
-
 NYson::TYsonString CheckYsonArgMapper(const TString& arg)
 {
     ParseYsonStringBuffer(arg, EYsonType::Node, GetNullYsonConsumer());
@@ -282,19 +262,6 @@ void ConfigureUids()
 #endif
     }
     umask(0000);
-#endif
-}
-
-void ConfigureCoverageOutput()
-{
-#if defined(_linux_) && defined(CLANG_COVERAGE)
-    // YT tests use pid namespaces. We can't use process id as unique identifier for output file.
-    if (auto profileFile = getenv("LLVM_PROFILE_FILE")) {
-        TString fixedProfile{profileFile};
-        SubstGlobal(fixedProfile, "%e", "ytserver-all");
-        SubstGlobal(fixedProfile, "%p", ToString(TInstant::Now().NanoSeconds()));
-        __llvm_profile_set_filename(fixedProfile.c_str());
-    }
 #endif
 }
 

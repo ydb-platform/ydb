@@ -54,6 +54,8 @@ namespace NAuth {
     constexpr TStringBuf GroupsName = "auth_groups";
     constexpr TStringBuf GroupMembersName = "auth_group_members";
     constexpr TStringBuf OwnersName = "auth_owners";
+    constexpr TStringBuf PermissionsName = "auth_permissions";
+    constexpr TStringBuf EffectivePermissionsName = "auth_effective_permissions";
 }
 
 
@@ -620,10 +622,24 @@ struct Schema : NIceDb::Schema {
 
     struct AuthUsers : Table<15> {
         struct Sid: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct IsEnabled: Column<2, NScheme::NTypeIds::Bool> {};
+        struct IsLockedOut: Column<3, NScheme::NTypeIds::Bool> {};
+        struct CreatedAt: Column<4, NScheme::NTypeIds::Timestamp> {};
+        struct LastSuccessfulAttemptAt: Column<5, NScheme::NTypeIds::Timestamp> {};
+        struct LastFailedAttemptAt: Column<6, NScheme::NTypeIds::Timestamp> {};
+        struct FailedAttemptCount: Column<7, NScheme::NTypeIds::Uint32> {};
+        struct PasswordHash: Column<8, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Sid>;
         using TColumns = TableColumns<
-            Sid
+            Sid,
+            IsEnabled,
+            IsLockedOut,
+            CreatedAt,
+            LastSuccessfulAttemptAt,
+            LastFailedAttemptAt,
+            FailedAttemptCount,
+            PasswordHash
         >;
     };
 
@@ -655,6 +671,19 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<
             Path,
             Sid
+        >;
+    };
+
+    struct AuthPermissions : Table<19> {
+        struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Sid: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Permission: Column<3, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Path, Sid, Permission>;
+        using TColumns = TableColumns<
+            Path,
+            Sid,
+            Permission
         >;
     };
 

@@ -106,6 +106,8 @@ struct TYqlRowSpecInfo: public TThrRefBase {
         return 0 != GetNativeYtTypeFlags(mapper) ? MakeMaybe(GetTypeNode(mapper)) : Nothing();
     }
 
+    bool HasPersistableYson() const;
+
     TVector<std::pair<TString, bool>> GetForeignSort() const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> FromNode;

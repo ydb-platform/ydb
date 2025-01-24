@@ -66,7 +66,7 @@ struct TDriverRequest
     std::optional<TString> ServiceTicket;
 
     //! Additional logging tags.
-    std::optional<TString> LoggingTags;
+    std::optional<std::string> LoggingTags;
 
     //! Provides means to return arbitrary structured data from any command.
     //! Must be filled before writing data to output stream.

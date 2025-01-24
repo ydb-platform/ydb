@@ -76,6 +76,9 @@ sql_stmt_core:
   | backup_stmt
   | restore_stmt
   | alter_sequence_stmt
+  | create_transfer_stmt
+  | alter_transfer_stmt
+  | drop_transfer_stmt
 ;
 
 expr:
@@ -825,8 +828,8 @@ alter_table_alter_index_action:
 
 drop_table_stmt: DROP (TABLE | TABLESTORE | EXTERNAL TABLE) (IF EXISTS)? simple_table_ref;
 
-create_user_stmt: CREATE USER role_name create_user_option*;
-alter_user_stmt: ALTER USER role_name (WITH? create_user_option+ | RENAME TO role_name);
+create_user_stmt: CREATE USER role_name user_option*;
+alter_user_stmt: ALTER USER role_name (WITH? user_option+ | RENAME TO role_name);
 
 create_group_stmt: CREATE GROUP role_name (WITH USER role_name (COMMA role_name)* COMMA?)?;
 alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_name)* COMMA? | RENAME TO role_name);
@@ -834,8 +837,12 @@ alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_n
 drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?;
 
 role_name: an_id_or_type | bind_parameter;
-create_user_option: password_option | login_option;
+
+user_option: authentication_option | login_option;
+
+authentication_option: password_option | hash_option;
 password_option: ENCRYPTED? PASSWORD expr;
+hash_option: HASH expr;
 login_option: LOGIN | NOLOGIN;
 
 grant_permissions_stmt: GRANT permission_name_target ON an_id_schema (COMMA an_id_schema)* TO role_name (COMMA role_name)* COMMA? (WITH GRANT OPTION)?;
@@ -905,6 +912,29 @@ alter_replication_action:
 alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 
 drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
+
+create_transfer_stmt: CREATE TRANSFER object_ref
+    FROM object_ref TO object_ref (USING lambda_or_parameter)?
+    WITH LPAREN transfer_settings RPAREN
+;
+
+lambda_or_parameter:
+    lambda
+  | bind_parameter
+;
+transfer_settings: transfer_settings_entry (COMMA transfer_settings_entry)*;
+transfer_settings_entry: an_id EQUALS expr;
+
+alter_transfer_stmt: ALTER TRANSFER object_ref alter_transfer_action (COMMA alter_transfer_action)*;
+alter_transfer_action:
+    alter_transfer_set_setting
+  | alter_transfer_set_using
+;
+
+alter_transfer_set_setting: SET LPAREN transfer_settings RPAREN;
+alter_transfer_set_using: SET USING lambda_or_parameter;
+
+drop_transfer_stmt: DROP TRANSFER object_ref CASCADE?;
 
 action_or_subquery_args: opt_bind_parameter (COMMA opt_bind_parameter)*;
 
@@ -1466,6 +1496,7 @@ keyword_as_compat:
   | TO
   | TOPIC
   | TRANSACTION
+  | TRANSFER
   | TRIGGER
   | TYPE
   | UNCONDITIONAL
@@ -1693,6 +1724,7 @@ keyword_compat: (
   | TO
   | TOPIC
   | TRANSACTION
+  | TRANSFER
   | TRIGGER
   | TYPE
   | UNCONDITIONAL
@@ -2072,6 +2104,7 @@ TIES: T I E S;
 TO: T O;
 TOPIC: T O P I C;
 TRANSACTION: T R A N S A C T I O N;
+TRANSFER: T R A N S F E R;
 TRIGGER: T R I G G E R;
 TRUE: T R U E;
 TUPLE: T U P L E;

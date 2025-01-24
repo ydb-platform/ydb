@@ -35,7 +35,7 @@ private:
     YDB_READONLY_DEF(NScheme::TTypeInfo, Type);
     YDB_READONLY_DEF(TString, StorageId);
     YDB_FLAG_ACCESSOR(NotNull, false);
-    YDB_ACCESSOR_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
+    YDB_ACCESSOR_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
     YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);

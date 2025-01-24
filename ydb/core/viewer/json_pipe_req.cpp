@@ -47,13 +47,13 @@ void TViewerPipeClient::BuildParamsFromJson(TStringBuf data) {
 void TViewerPipeClient::SetupTracing(const TString& handlerName) {
     auto request = GetRequest();
     NWilson::TTraceId traceId;
-    TStringBuf traceparent = request.GetHeader("traceparent");
+    TString traceparent = request.GetHeader("traceparent");
     if (traceparent) {
         traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
     }
-    TStringBuf wantTrace = request.GetHeader("X-Want-Trace");
-    TStringBuf traceVerbosity = request.GetHeader("X-Trace-Verbosity");
-    TStringBuf traceTTL = request.GetHeader("X-Trace-TTL");
+    TString wantTrace = request.GetHeader("X-Want-Trace");
+    TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
+    TString traceTTL = request.GetHeader("X-Trace-TTL");
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
         ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
         if (traceVerbosity) {
@@ -748,7 +748,18 @@ TString TViewerPipeClient::GetHTTPOKJSON(TString response, TInstant lastModified
 }
 
 TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TInstant lastModified) {
-    return GetHTTPOKJSON(NJson::WriteJson(response, false), lastModified);
+    constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
+    constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
+    constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
+    TStringStream content;
+    NJson::WriteJson(&content, &response, {
+        .DoubleNDigits = doubleNDigits,
+        .FloatNDigits = floatNDigits,
+        .FloatToStringMode = floatMode,
+        .ValidateUtf8 = false,
+        .WriteNanAsString = true,
+    });
+    return GetHTTPOKJSON(content.Str(), lastModified);
 }
 
 TString TViewerPipeClient::GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified) {

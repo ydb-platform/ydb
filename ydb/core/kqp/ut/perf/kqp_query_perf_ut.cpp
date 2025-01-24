@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr::NKqp {
 
@@ -639,7 +639,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin()) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
         } else if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
         }

@@ -1637,6 +1637,7 @@ struct Schema : NIceDb::Schema {
         struct LastFailedAttempt : Column<5, NScheme::NTypeIds::Timestamp> {};
         struct FailedAttemptCount : Column<6, NScheme::NTypeIds::Uint32> {using Type = ui32; static constexpr Type Default = 0;};
         struct CreatedAt : Column<7, NScheme::NTypeIds::Timestamp> {};
+        struct IsEnabled : Column<8, NScheme::NTypeIds::Bool> { using Type = bool; static constexpr Type Default = true; };
 
         using TKey = TableKey<SidName>;
         using TColumns = TableColumns<
@@ -1646,7 +1647,8 @@ struct Schema : NIceDb::Schema {
             LastSuccessfulAttempt,
             LastFailedAttempt,
             FailedAttemptCount,
-            CreatedAt
+            CreatedAt,
+            IsEnabled
         >;
     };
 
@@ -1878,6 +1880,36 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Description>;
     };
 
+    struct KMeansTreeState : Table<112> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct Level : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Parent : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct State : Column<4, NScheme::NTypeIds::Uint32> {};
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<
+            Id,
+            Level,
+            Parent,
+            State
+        >;
+    };
+
+    struct KMeansTreeSample : Table<113> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct Row : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Probability : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Data : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Id, Row>;
+        using TColumns = TableColumns<
+            Id,
+            Row,
+            Probability,
+            Data
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1988,7 +2020,9 @@ struct Schema : NIceDb::Schema {
         View,
         BackgroundSessions,
         ResourcePool,
-        BackupCollection
+        BackupCollection,
+        KMeansTreeState,
+        KMeansTreeSample
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

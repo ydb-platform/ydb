@@ -21,6 +21,8 @@ items:
       href: commands/scheme-ls.md
     - name: Information about the object
       href: commands/scheme-describe.md
+    - name: Permissions
+      href: commands/scheme-permissions.md
     - name: Directories
       href: commands/dir.md
     - name: Secondary indexes

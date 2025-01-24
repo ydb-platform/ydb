@@ -147,8 +147,6 @@ TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,
     return response.Release();
 }
 
-//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_request.cpp
-
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatTxRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp
 

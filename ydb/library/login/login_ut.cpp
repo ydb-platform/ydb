@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
 #include <ydb/library/login/password_checker/password_checker.h>
+#include <ydb/library/login/account_lockout/account_lockout.h>
 #include "login.h"
 
 using namespace NLogin;
@@ -133,7 +134,7 @@ Y_UNIT_TEST_SUITE(Login) {
 
         TLoginProvider::TLoginUserRequest loginUser1Request2  = {
             .User = modifyUser1Request.User,
-            .Password = modifyUser1Request.Password
+            .Password = modifyUser1Request.Password.value()
         };
         TLoginProvider::TLoginUserResponse loginUser1Response2 = provider.LoginUser(loginUser1Request2);
         UNIT_ASSERT_VALUES_EQUAL(loginUser1Response2.Error, "");
@@ -391,6 +392,135 @@ Y_UNIT_TEST_SUITE(Login) {
             const auto& sid1 = provider.Sids["user1"];
             const auto& sid2 = provider.Sids["user2"];
             UNIT_ASSERT(sid1.CreatedAt < sid2.CreatedAt);
+        }
+    }
+
+    Y_UNIT_TEST(CannotCheckLockoutNonExistentUser) {
+        TLoginProvider provider;
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+
+        {
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = "nonExistentUser"});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::INVALID_USER);
+            UNIT_ASSERT_VALUES_EQUAL(checkLockoutResponse.Error, "Cannot find user: nonExistentUser");
+        }
+
+        {
+            auto createGroupResponse = provider.CreateGroup({.Group = "group1"});
+            UNIT_ASSERT(!createGroupResponse.Error);
+
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = "group1"});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::INVALID_USER);
+            UNIT_ASSERT_VALUES_EQUAL(checkLockoutResponse.Error, "group1 is a group");
+        }
+    }
+
+    Y_UNIT_TEST(AccountLockoutAndAutomaticallyUnlock) {
+        TAccountLockout::TInitializer accountLockoutInitializer {.AttemptThreshold = 4, .AttemptResetDuration = "3s"};
+        TLoginProvider provider(accountLockoutInitializer);
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+
+        TLoginProvider::TCreateUserRequest createUserRequest {
+            .User = "user1",
+            .Password = "password1"
+        };
+        auto createUserResponse = provider.CreateUser(createUserRequest);
+        UNIT_ASSERT(!createUserResponse.Error);
+
+        {
+            for (size_t attempt = 0; attempt < accountLockoutInitializer.AttemptThreshold; attempt++) {
+                auto checkLockoutResponse = provider.CheckLockOutUser({.User = createUserRequest.User});
+                UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::UNLOCKED);
+                auto loginUserResponse = provider.LoginUser({.User = createUserRequest.User, .Password = TStringBuilder() << "wrongpassword" << attempt});
+                UNIT_ASSERT_EQUAL(loginUserResponse.Status, TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD);
+                UNIT_ASSERT_VALUES_EQUAL(loginUserResponse.Error, "Invalid password");
+            }
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = createUserRequest.User});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::SUCCESS);
+        }
+
+        Sleep(TDuration::Seconds(4));
+
+        {
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = createUserRequest.User});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::RESET);
+            auto loginUserResponse = provider.LoginUser({.User = createUserRequest.User, .Password = TStringBuilder() << "wrongpassword" << accountLockoutInitializer.AttemptThreshold});
+            UNIT_ASSERT_EQUAL(loginUserResponse.Status, TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD);
+            UNIT_ASSERT_VALUES_EQUAL(loginUserResponse.Error, "Invalid password");
+        }
+
+        {
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = createUserRequest.User});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::UNLOCKED);
+            auto loginUserResponse = provider.LoginUser({.User = createUserRequest.User, .Password = createUserRequest.Password});
+            UNIT_ASSERT_EQUAL(loginUserResponse.Status, TLoginProvider::TLoginUserResponse::EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(loginUserResponse.Error, "");
+
+            auto validateTokenResponse = provider.ValidateToken({.Token = loginUserResponse.Token});
+            UNIT_ASSERT_VALUES_EQUAL(validateTokenResponse.Error, "");
+            UNIT_ASSERT(validateTokenResponse.User == createUserRequest.User);
+        }
+    }
+
+    Y_UNIT_TEST(ResetFailedAttemptCount) {
+        TAccountLockout::TInitializer accountLockoutInitializer {.AttemptThreshold = 4, .AttemptResetDuration = "3s"};
+        TLoginProvider provider(accountLockoutInitializer);
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+
+        TLoginProvider::TCreateUserRequest createUserRequest {
+            .User = "user1",
+            .Password = "password1"
+        };
+        auto createUserResponse = provider.CreateUser(createUserRequest);
+        UNIT_ASSERT(!createUserResponse.Error);
+
+        {
+            for (size_t attempt = 0; attempt < accountLockoutInitializer.AttemptThreshold - 1; attempt++) {
+                auto checkLockoutResponse = provider.CheckLockOutUser({.User = createUserRequest.User});
+                UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::UNLOCKED);
+                auto loginUserResponse = provider.LoginUser({.User = createUserRequest.User, .Password = TStringBuilder() << "wrongpassword" << attempt});
+                UNIT_ASSERT_EQUAL(loginUserResponse.Status, TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD);
+                UNIT_ASSERT_VALUES_EQUAL(loginUserResponse.Error, "Invalid password");
+            }
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = createUserRequest.User});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::UNLOCKED);
+        }
+
+        Sleep(TDuration::Seconds(4));
+
+        {
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = createUserRequest.User});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::RESET);
+            auto loginUserResponse = provider.LoginUser({.User = createUserRequest.User, .Password = "wrongpassword1"});
+            UNIT_ASSERT_EQUAL(loginUserResponse.Status, TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD);
+            UNIT_ASSERT_VALUES_EQUAL(loginUserResponse.Error, "Invalid password");
+        }
+
+        {
+            for (size_t attempt = 0; attempt < accountLockoutInitializer.AttemptThreshold - 2; attempt++) {
+                auto checkLockoutResponse = provider.CheckLockOutUser({.User = createUserRequest.User});
+                UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::UNLOCKED);
+                auto loginUserResponse = provider.LoginUser({.User = createUserRequest.User, .Password = TStringBuilder() << "wrongpassword1" << attempt});
+                UNIT_ASSERT_EQUAL(loginUserResponse.Status, TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD);
+                UNIT_ASSERT_VALUES_EQUAL(loginUserResponse.Error, "Invalid password");
+            }
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = createUserRequest.User});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::UNLOCKED);
+        }
+
+        {
+            auto checkLockoutResponse = provider.CheckLockOutUser({.User = createUserRequest.User});
+            UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::UNLOCKED);
+            auto loginUserResponse = provider.LoginUser({.User = createUserRequest.User, .Password = createUserRequest.Password});
+            UNIT_ASSERT_EQUAL(loginUserResponse.Status, TLoginProvider::TLoginUserResponse::EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(loginUserResponse.Error, "");
+
+            auto validateTokenResponse = provider.ValidateToken({.Token = loginUserResponse.Token});
+            UNIT_ASSERT_VALUES_EQUAL(validateTokenResponse.Error, "");
+            UNIT_ASSERT(validateTokenResponse.User == createUserRequest.User);
         }
     }
 }

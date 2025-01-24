@@ -666,11 +666,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     } else if (data.SessionConnected) {
                         record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::CONNECTED);
                     }
+                    record.SetSameScope(data.SameScope);
                     data.ActorSystem->Send(whiteboardId, update.release());
-                    if (data.ReportClockSkew) {
-                        data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
-                            data.PeerNodeId, data.ClockSkewUs));
-                    }
                 };
             }
 
@@ -859,6 +856,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         mon->RegisterActorPage(actorsMonPage, "wilson_uploader", "Wilson Trace Uploader", false, actorSystem, actorId);
                     };
                 }
+                uploaderParams.Counters = GetServiceCounters(counters, "utils");
 
                 wilsonUploader.reset(std::move(uploaderParams).CreateUploader());
                 break;

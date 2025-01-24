@@ -107,7 +107,7 @@ blob_storage_config:    # configuration of static blobstorage group.
                         # YDB uses this group to store system tablets' data, like SchemeShard
   service_set:
     groups:
-    - erasure_species: block-4-2  # fault tolerance mode name for the static group
+    - erasure_species: none  # fault tolerance mode name for the static group
       rings:           # in block-4-2 must have exactly 1 ring or availability zone.
       - fail_domains:
         - vdisk_locations:    # fail domains of the static group describe where each vdisk of the static group should be located.

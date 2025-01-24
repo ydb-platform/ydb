@@ -409,7 +409,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     UpdateInterconnectSessions(ev->InterconnectSession);
 
     TStringStream str;
-    LOG_ROW_DISPATCHER_INFO("TEvCoordinatorRequest from " << ev->Sender.ToString() << ", " << source.GetTopicPath() << ", partIds: " << JoinSeq(", ", ev->Get()->Record.GetPartitionId()));
+    LOG_ROW_DISPATCHER_INFO("TEvCoordinatorRequest from " << ev->Sender.ToString() << ", " << source.GetTopicPath() << ", partIds: " << JoinSeq(", ", ev->Get()->Record.GetPartitionIds()));
     Metrics.IncomingRequests->Inc();
 
     TCoordinatorRequest request = {.Cookie = ev->Cookie, .Record = ev->Get()->Record};
@@ -430,7 +430,7 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
 
     bool hasPendingPartitions = false;
     TMap<NActors::TActorId, TSet<ui64>> tmpResult;
-    for (auto& partitionId : request.Record.GetPartitionId()) {
+    for (auto& partitionId : request.Record.GetPartitionIds()) {
         TTopicKey topicKey{source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath()};
         TPartitionKey key {topicKey, partitionId};
         auto locationIt = PartitionLocations.find(key);
@@ -457,7 +457,7 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
         auto* partitionsProto = response->Record.AddPartitions();
         ActorIdToProto(actorId, partitionsProto->MutableActorId());
         for (auto partitionId : partitions) {
-            partitionsProto->AddPartitionId(partitionId);
+            partitionsProto->AddPartitionIds(partitionId);
         }
     }
 

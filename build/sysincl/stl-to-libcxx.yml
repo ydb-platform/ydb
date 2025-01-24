@@ -57,11 +57,8 @@
     - ext/hash_map:                                          DO_NOT_INCLUDE_NON_STANDARD_EXT_HASH_MAP
     - ext/hash_set:                                          DO_NOT_INCLUDE_NON_STANDARD_EXT_HASH_SET
     - experimental/__config:                                 DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL___CONFIG
-    - experimental/__memory:                                 DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL___MEMORY
-    - experimental/__simd/abi_tag.h:                         DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL___SIMD_ABI_TAG_H
     - experimental/__simd/aligned_tag.h:                     DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL___SIMD_ALIGNED_TAG_H
     - experimental/__simd/declaration.h:                     DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL___SIMD_DECLARATION_H
-    - experimental/__simd/internal_declaration.h:            DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL___SIMD_INTERNAL_DECLARATION_H
     - experimental/__simd/reference.h:                       DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL___SIMD_REFERENCE_H
     - experimental/__simd/scalar.h:                          DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL___SIMD_SCALAR_H
     - experimental/__simd/simd.h:                            DO_NOT_INCLUDE_NON_STANDARD_EXPERIMENTAL___SIMD_SIMD_H
@@ -186,6 +183,7 @@
   - vector:                                                contrib/libs/cxxsupp/libcxx/include/vector
   - version:                                               contrib/libs/cxxsupp/libcxx/include/version
   - __assert:                                              contrib/libs/cxxsupp/libcxx/include/__assert
+  - __assertion_handler:                                   contrib/libs/cxxsupp/libcxx/include/__assertion_handler
   - __availability:                                        contrib/libs/cxxsupp/libcxx/include/__availability
   - __bit_reference:                                       contrib/libs/cxxsupp/libcxx/include/__bit_reference
   - __config:                                              contrib/libs/cxxsupp/libcxx/include/__config
@@ -199,7 +197,6 @@
   - __split_buffer:                                        contrib/libs/cxxsupp/libcxx/include/__split_buffer
   - __std_clang_module:                                    contrib/libs/cxxsupp/libcxx/include/__std_clang_module
   - __std_mbstate_t.h:                                     contrib/libs/cxxsupp/libcxx/include/__std_mbstate_t.h
-  - __threading_support:                                   contrib/libs/cxxsupp/libcxx/include/__threading_support
   - __tree:                                                contrib/libs/cxxsupp/libcxx/include/__tree
   - __undef_macros:                                        contrib/libs/cxxsupp/libcxx/include/__undef_macros
   - __verbose_abort:                                       contrib/libs/cxxsupp/libcxx/include/__verbose_abort
@@ -227,6 +224,7 @@
   - __algorithm/find_if.h:                                 contrib/libs/cxxsupp/libcxx/include/__algorithm/find_if.h
   - __algorithm/find_if_not.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/find_if_not.h
   - __algorithm/find_segment_if.h:                         contrib/libs/cxxsupp/libcxx/include/__algorithm/find_segment_if.h
+  - __algorithm/fold.h:                                    contrib/libs/cxxsupp/libcxx/include/__algorithm/fold.h
   - __algorithm/for_each.h:                                contrib/libs/cxxsupp/libcxx/include/__algorithm/for_each.h
   - __algorithm/for_each_n.h:                              contrib/libs/cxxsupp/libcxx/include/__algorithm/for_each_n.h
   - __algorithm/for_each_segment.h:                        contrib/libs/cxxsupp/libcxx/include/__algorithm/for_each_segment.h
@@ -312,6 +310,8 @@
   - __algorithm/ranges_any_of.h:                           contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_any_of.h
   - __algorithm/ranges_binary_search.h:                    contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_binary_search.h
   - __algorithm/ranges_clamp.h:                            contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_clamp.h
+  - __algorithm/ranges_contains.h:                         contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_contains.h
+  - __algorithm/ranges_contains_subrange.h:                contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_contains_subrange.h
   - __algorithm/ranges_copy.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_copy.h
   - __algorithm/ranges_copy_backward.h:                    contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_copy_backward.h
   - __algorithm/ranges_copy_if.h:                          contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_copy_if.h
@@ -489,6 +489,8 @@
   - __chrono/steady_clock.h:                               contrib/libs/cxxsupp/libcxx/include/__chrono/steady_clock.h
   - __chrono/system_clock.h:                               contrib/libs/cxxsupp/libcxx/include/__chrono/system_clock.h
   - __chrono/time_point.h:                                 contrib/libs/cxxsupp/libcxx/include/__chrono/time_point.h
+  - __chrono/time_zone.h:                                  contrib/libs/cxxsupp/libcxx/include/__chrono/time_zone.h
+  - __chrono/time_zone_link.h:                             contrib/libs/cxxsupp/libcxx/include/__chrono/time_zone_link.h
   - __chrono/tzdb.h:                                       contrib/libs/cxxsupp/libcxx/include/__chrono/tzdb.h
   - __chrono/tzdb_list.h:                                  contrib/libs/cxxsupp/libcxx/include/__chrono/tzdb_list.h
   - __chrono/weekday.h:                                    contrib/libs/cxxsupp/libcxx/include/__chrono/weekday.h
@@ -624,9 +626,9 @@
   - __functional/weak_result_type.h:                       contrib/libs/cxxsupp/libcxx/include/__functional/weak_result_type.h
   - __fwd/array.h:                                         contrib/libs/cxxsupp/libcxx/include/__fwd/array.h
   - __fwd/bit_reference.h:                                 contrib/libs/cxxsupp/libcxx/include/__fwd/bit_reference.h
+  - __fwd/complex.h:                                       contrib/libs/cxxsupp/libcxx/include/__fwd/complex.h
   - __fwd/fstream.h:                                       contrib/libs/cxxsupp/libcxx/include/__fwd/fstream.h
-  - __fwd/get.h:                                           contrib/libs/cxxsupp/libcxx/include/__fwd/get.h
-  - __fwd/hash.h:                                          contrib/libs/cxxsupp/libcxx/include/__fwd/hash.h
+  - __fwd/functional.h:                                    contrib/libs/cxxsupp/libcxx/include/__fwd/functional.h
   - __fwd/ios.h:                                           contrib/libs/cxxsupp/libcxx/include/__fwd/ios.h
   - __fwd/istream.h:                                       contrib/libs/cxxsupp/libcxx/include/__fwd/istream.h
   - __fwd/mdspan.h:                                        contrib/libs/cxxsupp/libcxx/include/__fwd/mdspan.h
@@ -683,9 +685,17 @@
   - __iterator/sortable.h:                                 contrib/libs/cxxsupp/libcxx/include/__iterator/sortable.h
   - __iterator/unreachable_sentinel.h:                     contrib/libs/cxxsupp/libcxx/include/__iterator/unreachable_sentinel.h
   - __iterator/wrap_iter.h:                                contrib/libs/cxxsupp/libcxx/include/__iterator/wrap_iter.h
+  - __locale_dir/locale_base_api.h:                        contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api.h
+  - __locale_dir/locale_base_api/android.h:                contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/android.h
   - __locale_dir/locale_base_api/bsd_locale_defaults.h:    contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/bsd_locale_defaults.h
   - __locale_dir/locale_base_api/bsd_locale_fallbacks.h:   contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/bsd_locale_fallbacks.h
+  - __locale_dir/locale_base_api/fuchsia.h:                contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/fuchsia.h
+  - __locale_dir/locale_base_api/ibm.h:                    contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/ibm.h
   - __locale_dir/locale_base_api/locale_guard.h:           contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/locale_guard.h
+  - __locale_dir/locale_base_api/musl.h:                   contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/musl.h
+  - __locale_dir/locale_base_api/newlib.h:                 contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/newlib.h
+  - __locale_dir/locale_base_api/openbsd.h:                contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/openbsd.h
+  - __locale_dir/locale_base_api/win32.h:                  contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/win32.h
   - __math/abs.h:                                          contrib/libs/cxxsupp/libcxx/include/__math/abs.h
   - __math/copysign.h:                                     contrib/libs/cxxsupp/libcxx/include/__math/copysign.h
   - __math/error_functions.h:                              contrib/libs/cxxsupp/libcxx/include/__math/error_functions.h
@@ -764,6 +774,7 @@
   - __numeric/pstl_reduce.h:                               contrib/libs/cxxsupp/libcxx/include/__numeric/pstl_reduce.h
   - __numeric/pstl_transform_reduce.h:                     contrib/libs/cxxsupp/libcxx/include/__numeric/pstl_transform_reduce.h
   - __numeric/reduce.h:                                    contrib/libs/cxxsupp/libcxx/include/__numeric/reduce.h
+  - __numeric/saturation_arithmetic.h:                     contrib/libs/cxxsupp/libcxx/include/__numeric/saturation_arithmetic.h
   - __numeric/transform_exclusive_scan.h:                  contrib/libs/cxxsupp/libcxx/include/__numeric/transform_exclusive_scan.h
   - __numeric/transform_inclusive_scan.h:                  contrib/libs/cxxsupp/libcxx/include/__numeric/transform_inclusive_scan.h
   - __numeric/transform_reduce.h:                          contrib/libs/cxxsupp/libcxx/include/__numeric/transform_reduce.h
@@ -857,17 +868,10 @@
   - __string/char_traits.h:                                contrib/libs/cxxsupp/libcxx/include/__string/char_traits.h
   - __string/constexpr_c_functions.h:                      contrib/libs/cxxsupp/libcxx/include/__string/constexpr_c_functions.h
   - __string/extern_template_lists.h:                      contrib/libs/cxxsupp/libcxx/include/__string/extern_template_lists.h
-  - __support/android/locale_bionic.h:                     contrib/libs/cxxsupp/libcxx/include/__support/android/locale_bionic.h
-  - __support/fuchsia/xlocale.h:                           contrib/libs/cxxsupp/libcxx/include/__support/fuchsia/xlocale.h
   - __support/ibm/gettod_zos.h:                            contrib/libs/cxxsupp/libcxx/include/__support/ibm/gettod_zos.h
   - __support/ibm/locale_mgmt_zos.h:                       contrib/libs/cxxsupp/libcxx/include/__support/ibm/locale_mgmt_zos.h
   - __support/ibm/nanosleep.h:                             contrib/libs/cxxsupp/libcxx/include/__support/ibm/nanosleep.h
-  - __support/ibm/xlocale.h:                               contrib/libs/cxxsupp/libcxx/include/__support/ibm/xlocale.h
-  - __support/musl/xlocale.h:                              contrib/libs/cxxsupp/libcxx/include/__support/musl/xlocale.h
-  - __support/newlib/xlocale.h:                            contrib/libs/cxxsupp/libcxx/include/__support/newlib/xlocale.h
-  - __support/openbsd/xlocale.h:                           contrib/libs/cxxsupp/libcxx/include/__support/openbsd/xlocale.h
   - __support/win32/atomic_win32.h:                        contrib/libs/cxxsupp/libcxx/include/__support/win32/atomic_win32.h
-  - __support/win32/locale_win32.h:                        contrib/libs/cxxsupp/libcxx/include/__support/win32/locale_win32.h
   - __support/xlocale/__nop_locale_mgmt.h:                 contrib/libs/cxxsupp/libcxx/include/__support/xlocale/__nop_locale_mgmt.h
   - __support/xlocale/__posix_l_fallback.h:                contrib/libs/cxxsupp/libcxx/include/__support/xlocale/__posix_l_fallback.h
   - __support/xlocale/__strtonum_fallback.h:               contrib/libs/cxxsupp/libcxx/include/__support/xlocale/__strtonum_fallback.h
@@ -880,6 +884,11 @@
   - __thread/id.h:                                         contrib/libs/cxxsupp/libcxx/include/__thread/id.h
   - __thread/jthread.h:                                    contrib/libs/cxxsupp/libcxx/include/__thread/jthread.h
   - __thread/poll_with_backoff.h:                          contrib/libs/cxxsupp/libcxx/include/__thread/poll_with_backoff.h
+  - __thread/support.h:                                    contrib/libs/cxxsupp/libcxx/include/__thread/support.h
+  - __thread/support/c11.h:                                contrib/libs/cxxsupp/libcxx/include/__thread/support/c11.h
+  - __thread/support/external.h:                           contrib/libs/cxxsupp/libcxx/include/__thread/support/external.h
+  - __thread/support/pthread.h:                            contrib/libs/cxxsupp/libcxx/include/__thread/support/pthread.h
+  - __thread/support/windows.h:                            contrib/libs/cxxsupp/libcxx/include/__thread/support/windows.h
   - __thread/this_thread.h:                                contrib/libs/cxxsupp/libcxx/include/__thread/this_thread.h
   - __thread/thread.h:                                     contrib/libs/cxxsupp/libcxx/include/__thread/thread.h
   - __thread/timed_backoff_policy.h:                       contrib/libs/cxxsupp/libcxx/include/__thread/timed_backoff_policy.h
@@ -994,6 +1003,7 @@
   - __type_traits/is_trivially_lexicographically_comparable.h: contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_lexicographically_comparable.h
   - __type_traits/is_trivially_move_assignable.h:          contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_move_assignable.h
   - __type_traits/is_trivially_move_constructible.h:       contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_move_constructible.h
+  - __type_traits/is_trivially_relocatable.h:              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_relocatable.h
   - __type_traits/is_unbounded_array.h:                    contrib/libs/cxxsupp/libcxx/include/__type_traits/is_unbounded_array.h
   - __type_traits/is_union.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_union.h
   - __type_traits/is_unsigned.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_unsigned.h

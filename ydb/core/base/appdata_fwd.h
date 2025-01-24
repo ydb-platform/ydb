@@ -112,7 +112,7 @@ namespace NMonitoring {
     class TBusNgMonPage;
 }
 
-namespace NYdb {
+namespace NYdb::inline V3 {
     class TDriver;
 }
 
@@ -297,15 +297,16 @@ inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
 }
 
 inline bool HasAppData() {
-    return !!NActors::TlsActivationContext;
+    return !!NActors::TlsActivationContext
+        && NActors::TlsActivationContext->ExecutorThread.ActorSystem
+        && NActors::TlsActivationContext->ExecutorThread.ActorSystem->AppData<TAppData>();
 }
 
 inline TAppData& AppDataVerified() {
     Y_ABORT_UNLESS(HasAppData());
     auto& actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-    Y_ABORT_UNLESS(actorSystem);
     TAppData* const x = actorSystem->AppData<TAppData>();
-    Y_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
+    Y_ABORT_UNLESS(x->Magic == TAppData::MagicTag);
     return *x;
 }
 

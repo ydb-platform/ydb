@@ -1,5 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
@@ -876,7 +876,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         auto strPlan = res.GetPlan();
-        UNIT_ASSERT(strPlan);
+        UNIT_ASSERT(!strPlan.empty());
 
         Cerr << strPlan << Endl;
 

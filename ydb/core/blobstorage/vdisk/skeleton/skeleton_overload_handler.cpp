@@ -262,10 +262,12 @@ namespace NKikimr {
             ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
             ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
             ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
+            ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
 
             return CurrentSstCount > minSstCount ||
                 CurrentInplacedSize > minInplacedSize ||
-                CurrentOccupancy > minOccupancy;
+                CurrentOccupancy > minOccupancy ||
+                CurrentLogChunkCount > minLogChunkCount;
         }
 
         TDuration BytesToDuration(ui64 bytes) const {

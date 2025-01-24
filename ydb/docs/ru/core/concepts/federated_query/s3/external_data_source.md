@@ -33,8 +33,8 @@ FROM
   <object_storage_connection_name>.`<file_path>`
 WITH(
   FORMAT = "<file_format>",
-  SCHEMA = (<schema_definition>),
-  COMPRESSION = "<compression>")
+  COMPRESSION = "<compression>",
+  SCHEMA = (<schema_definition>))
 WHERE
   <filter>;
 ```
@@ -44,8 +44,8 @@ WHERE
 * `object_storage_connection_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
 * `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [в разделе](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах.
-* `schema_definition` — [описание схемы хранимых данных](#schema) в файлах.
 * `compression` — [формат сжатия](formats.md#compression_formats) файлов.
+* `schema_definition` — [описание схемы хранимых данных](#schema) в файлах.
 
 ### Описание схемы данных {#schema}
 
@@ -61,7 +61,33 @@ WHERE
 Year Int32 NOT NULL
 ```
 
-Если поле данных помечено, как обязательное, `NOT NULL`, но это поле отсутствует в обрабатываемом файле, то работа с таким файлом будет завершена с ошибкой. Если поле помечено как необязательное, `NULL`, то при отсутствии поля в обрабатываемом файле не будет возникать ошибки, но поле при этом примет значение `NULL`.
+Если поле данных помечено как обязательное, `NOT NULL`, но это поле отсутствует в обрабатываемом файле, то работа с таким файлом будет завершена с ошибкой. Если поле помечено как необязательное, `NULL`, то при отсутствии поля в обрабатываемом файле не будет возникать ошибки, но поле при этом примет значение `NULL`. Ключевое слово `NULL` в необязательных полях опционально.
+
+### Автоматический вывод схемы данных {#inferring}
+
+Автоматический вывод схемы доступен для всех [форматов данных](formats.md#formats), кроме `raw` и `json_as_string`. Он удобен в том случае, когда схема содержит большое количество полей. Для того, чтобы не вводить эти поля вручную, используйте параметр `WITH_INFER`:
+
+```yql
+SELECT
+  <expression>
+FROM
+  <object_storage_connection_name>.`<file_path>`
+WITH(
+  FORMAT = "<file_format>",
+  COMPRESSION = "<compression>",
+  WITH_INFER = "true")
+WHERE
+  <filter>;
+```
+
+Где:
+
+* `object_storage_connection_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
+* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [в разделе](#path_format).
+* `file_format` — [формат данных](formats.md#formats) в файлах.
+* `compression` — [формат сжатия](formats.md#compression_formats) файлов.
+
+В результате выполнения такого запроса будут автоматически выведены названия и типы полей.
 
 ### Форматы путей к данным {#path_format}
 

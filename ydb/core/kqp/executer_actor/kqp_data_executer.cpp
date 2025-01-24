@@ -1613,11 +1613,11 @@ private:
 
         for (auto& op : stage.GetTableOps()) {
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
-            auto columns = BuildKqpColumns(op, tableInfo);
             switch (op.GetTypeCase()) {
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
+                    auto columns = BuildKqpColumns(op, tableInfo);
                     bool isFullScan = false;
                     auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
                     auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());

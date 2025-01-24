@@ -3447,6 +3447,25 @@ TRuntimeNode TProgramBuilder::VariantItem(TRuntimeNode variant) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::DynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType) {
+    if constexpr (RuntimeVersion < 56U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    auto type = AS_TYPE(TVariantType, variantType);
+    auto expectedIndexSlot = type->GetUnderlyingType()->IsTuple() ? NUdf::EDataSlot::Uint32 : NUdf::EDataSlot::Utf8;
+    auto indexType = AS_TYPE(TDataType, index.GetStaticType());
+    MKQL_ENSURE(indexType->GetDataSlot() == expectedIndexSlot, "Mismatch type of index");
+
+    auto resType = TOptionalType::Create(type, Env);
+
+    TCallableBuilder callableBuilder(Env, __func__, resType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(index);
+    callableBuilder.Add(TRuntimeNode(variantType, true));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::VisitAll(TRuntimeNode variant, std::function<TRuntimeNode(ui32, TRuntimeNode)> handler) {
     const auto type = AS_TYPE(TVariantType, variant);
     std::vector<TRuntimeNode> items;

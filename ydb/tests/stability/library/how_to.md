@@ -43,42 +43,11 @@
     ```
     to stop, use the command `stop_nemesis`
 
-7) check states of workloads and nemesis from your host (ad-hoc)
-    1) prepare list of cluster node hosts
-
-        ``pip install yq parallel-ssh``
-
-        ``yq '.hosts[].name' <path_to_cluster.yaml> > ~/hosts.txt``
-    2) check status
-        ```
-        parallel-ssh -h ~/hosts.txt -i -x "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" '
-        if systemctl is-active --quiet nemesis; then
-            echo "nemesis: Active"
-        else
-            echo "nemesis: Down"
-        fi
-        if ps aux | grep "/Berkanavt/nemesis/bin/olap_workload" | grep -v grep > /dev/null; then
-            echo "olap_workload: Running"
-        else
-            echo "olap_workload: Stopped"
-        fi
-        if ps aux | grep "/Berkanavt/nemesis/bin/simple" | grep column | grep -v grep > /dev/null; then
-            echo "simple_queue_column: Running"
-        else
-            echo "simple_queue_column: Stopped"
-        fi
-        if ps aux | grep "/Berkanavt/nemesis/bin/simple" | grep row | grep -v grep > /dev/null; then
-            echo "simple_queue_column: Running"
-        else
-            echo "simple_queue_column: Stopped"
-        fi
-        if ps aux | grep "/Berkanavt/nemesis/bin/ydb_cli" | grep -v grep > /dev/null; then
-            echo "log workload: Running"
-        else
-            echo "log workload: Stopped"
-        fi
-        '
-        ```
+7) check states of workloads and nemesis
+    ```
+    ./library get_state --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+    ```
+    
 8) check cluster stability
     1) ``perform_checks`` - return summary of errors and coredumps for cluster:
 

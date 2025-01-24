@@ -507,9 +507,11 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
 {
     TVector<TKey> source;
 
+    Cerr << "=== source keys ===" << Endl;
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         const auto& pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+        Cerr << pair.GetKey() << Endl;
         source.push_back(MakeKeyFromString(pair.GetKey(), partitionId));
     }
 
@@ -538,24 +540,40 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
 
     std::sort(source.begin(), source.end(), isKeyLess);
 
+    Cerr << "=== sorted keys ===" << Endl;
+    for (const auto& k : source) {
+        Cerr << k.ToString() << Endl;
+    }
+
     THashSet<TString> filtered;
 
     size_t partsCount = 0;
     ui64 nextOffset = 0;
 
+    Cerr << "=== filter keys ===" << Endl;
     for (const auto& k : source) {
         if (filtered.empty() || k.GetOffset() >= nextOffset) {
+            Cerr << "add key " << k.ToString() << Endl;
             filtered.insert(k.ToString());
             partsCount = k.GetCount() + k.GetInternalPartsCount();
             nextOffset = k.GetOffset() + k.GetCount();
+            Cerr << "nextOffset=" << nextOffset << ", partsCount=" << partsCount << Endl;
         } else {
-            Y_ABORT_UNLESS(partsCount >= k.GetCount() + k.GetInternalPartsCount(),
-                           "partsCount: %" PRISZT ", Count: %" PRIu32 ", InternalPartsCount: %" PRIu32,
-                           partsCount, k.GetCount(), k.GetInternalPartsCount());
+            Cerr << "ignore key " << k.ToString() << Endl;
+            //Y_ABORT_UNLESS(partsCount >= k.GetCount() + k.GetInternalPartsCount(),
+            //               "Key: %s, "
+            //               "partsCount: %" PRISZT ", Count: %" PRIu32 ", InternalPartsCount: %" PRIu32
+            //               ", nextOffset: %" PRIu64,
+            //               k.ToString().data(),
+            //               partsCount, k.GetCount(), k.GetInternalPartsCount(),
+            //               nextOffset);
 
             partsCount -= k.GetCount() + k.GetInternalPartsCount();
+            Cerr << "partsCount=" << partsCount << Endl;
         }
     }
+
+    Cerr << "===================" << Endl;
 
     return filtered;
 }

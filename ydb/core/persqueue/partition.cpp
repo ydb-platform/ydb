@@ -2045,6 +2045,8 @@ void TPartition::RunPersist() {
         WriteInfosApplied.clear();
         //Done with counters.
 
+        DumpKeyValueRequest(PersistRequest->Record);
+
         PersistRequestSpan.Attribute("bytes", static_cast<i64>(PersistRequest->Record.ByteSizeLong()));
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
         CurrentPersistRequestSpan = std::move(PersistRequestSpan);
@@ -2059,6 +2061,29 @@ void TPartition::RunPersist() {
     PersistRequest = nullptr;
 }
 
+void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
+{
+    PQ_LOG_D("=== DumpKeyValueRequest ===");
+    PQ_LOG_D("--- delete ----------------");
+    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
+        const auto& cmd = request.GetCmdDeleteRange(i);
+        const auto& range = cmd.GetRange();
+        PQ_LOG_D((range.GetIncludeFrom() ? '[' : '(') << range.GetFrom() <<
+                 ", " <<
+                 range.GetTo() << (range.GetIncludeTo() ? ']' : ')'));
+    }
+    PQ_LOG_D("--- write -----------------");
+    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
+        const auto& cmd = request.GetCmdWrite(i);
+        PQ_LOG_D(cmd.GetKey());
+    }
+    PQ_LOG_D("--- rename ----------------");
+    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
+        const auto& cmd = request.GetCmdRename(i);
+        PQ_LOG_D(cmd.GetOldKey() << ", " << cmd.GetNewKey());
+    }
+    PQ_LOG_D("===========================");
+}
 
 void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
 {
@@ -3350,12 +3375,21 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
 }
 
 void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request) {
+    PQ_LOG_D("=== ClearOldHead ===");
+    PQ_LOG_D("offset=" << offset << ", partNo=" << partNo);
+    for (const auto& v : HeadKeys) {
+        PQ_LOG_D("key=" << v.Key.ToString() << ", refs=" << v.RefCount);
+    }
+    PQ_LOG_D("====================");
+
     for (auto it = HeadKeys.rbegin(); it != HeadKeys.rend(); ++it) {
         if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
             Y_ABORT_UNLESS(it->RefCount > 0,
                            "Key: %s, RefCount %" PRISZT,
                            it->Key.ToString().data(), it->RefCount);
             --it->RefCount;
+
+            PQ_LOG_D("delete blob " << it->Key.ToString());
 
             //auto del = request->Record.AddCmdDeleteRange();
             //auto range = del->MutableRange();

@@ -385,6 +385,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
     if (!CompactedKeys.empty()) {
+        PQ_LOG_D("clear head keys");
         HeadKeys.clear();
     }
 
@@ -393,8 +394,10 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
                (HeadKeys.back().Key.GetOffset() > NewHeadKey.Key.GetOffset() ||
                 (HeadKeys.back().Key.GetOffset() == NewHeadKey.Key.GetOffset() && HeadKeys.back().Key.GetPartNo() >= NewHeadKey.Key.GetPartNo()))) {
             Y_ABORT_UNLESS(HeadKeys.back().RefCount == 0);
+            PQ_LOG_D("delete head key " << HeadKeys.back().Key.ToString());
             HeadKeys.pop_back();
         }
+        PQ_LOG_D("add new head key " << NewHeadKey.Key.ToString());
         HeadKeys.push_back(NewHeadKey);
         NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};
     }

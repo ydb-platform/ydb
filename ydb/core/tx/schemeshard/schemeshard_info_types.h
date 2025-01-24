@@ -2651,17 +2651,20 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
         TString SourcePathName;
         TPathId SourcePathId;
+        NKikimrSchemeOp::EPathType SourcePathType;
 
         EState State = EState::Waiting;
         ESubState SubState = ESubState::AllocateTxId;
         TTxId WaitTxId = InvalidTxId;
+        TActorId SchemeUploader;
         TString Issue;
 
         TItem() = default;
 
-        explicit TItem(const TString& sourcePathName, const TPathId sourcePathId)
+        explicit TItem(const TString& sourcePathName, const TPathId sourcePathId, NKikimrSchemeOp::EPathType sourcePathType)
             : SourcePathName(sourcePathName)
             , SourcePathId(sourcePathId)
+            , SourcePathType(sourcePathType)
         {
         }
 

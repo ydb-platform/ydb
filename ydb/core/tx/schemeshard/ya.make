@@ -287,6 +287,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/library/yql/minikql
     ydb/library/yql/providers/common/proto
+    ydb/public/lib/ydb_cli/dump/util
     ydb/services/bg_tasks
     ydb/core/tx/columnshard/bg_tasks/manager
 )
@@ -295,10 +296,12 @@ YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     SRCS(
+        schemeshard_export_scheme_uploader_fallback.cpp
         schemeshard_import_scheme_getter_fallback.cpp
     )
 ELSE()
     SRCS(
+        schemeshard_export_scheme_uploader.cpp
         schemeshard_import_scheme_getter.cpp
     )
 ENDIF()

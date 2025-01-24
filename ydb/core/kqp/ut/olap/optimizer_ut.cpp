@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         csController->SetOverrideMemoryLimitForPortionReading(1e+10);
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
         auto tableClient = kikimr.GetTableClient();
 
         const TDuration portionsLiveDuration = TDuration::Seconds(20);
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto alterQuery =
                 TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "20s", "expected_blobs_size" : 1073741824, "portions_count_available" : 1},
+                {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "20s", "expected_blobs_size" : 1073741824, "portions_count_available" : 2},
                              {"class_name" : "Zero"}]}`);
             )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -41,6 +41,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
 
         TInstant beforeWrite = TInstant::Now();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000, 1000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 2000, 1000);
         TInstant afterWrite = TInstant::Now();
 
         csController->WaitCompactions(TDuration::Seconds(5));

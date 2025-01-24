@@ -143,7 +143,7 @@ private:
         auto path = ::NKikimr::SplitPath(table);
         TMaybe<ui64> tabletId = TryParseLocalDbPath(path);
         if (tabletId) {
-            if (!IsAdministrator(AppData(ctx), Request->GetSerializedToken())) {
+            if (!IsAdministrator(AppData(ctx), Request->GetInternalToken().Get())) {
                 return ReplyWithError(Ydb::StatusIds::NOT_FOUND, "Invalid table path specified", ctx);
             }
 

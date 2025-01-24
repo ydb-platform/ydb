@@ -25,7 +25,12 @@ bool IsAdministrator(const TAppData* appData, const TString& userToken) {
         return false;
     }
 
-    return HasToken(appData, NACLib::TUserToken(userToken));
+    NACLibProto::TUserToken tokenPb;
+    if (!tokenPb.ParseFromString(userToken)) {
+        return false;
+    }
+
+    return HasToken(appData, NACLib::TUserToken(tokenPb));
 }
 
 bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToken) {
@@ -33,7 +38,7 @@ bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToke
         return true;
     }
 
-    if (!userToken) {
+    if (!userToken || userToken->GetSerializedToken().empty()) {
         return false;
     }
 

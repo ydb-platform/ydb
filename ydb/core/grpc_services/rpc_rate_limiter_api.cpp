@@ -68,7 +68,7 @@ public:
         if (resource.has_metering_config()) {
             auto self = static_cast<TDerived*>(this);
 
-            if (!IsAdministrator(AppData(), self->Request_->GetSerializedToken())) {
+            if (!IsAdministrator(AppData(), self->Request_->GetInternalToken().Get())) {
                 status = StatusIds::UNAUTHORIZED;
                 issues.AddIssue("Setting metering is allowed only for administrators");
                 return false;

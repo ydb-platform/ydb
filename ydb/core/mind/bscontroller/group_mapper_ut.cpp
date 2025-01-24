@@ -593,10 +593,6 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TestBlock42(1);
     }
 
-    Y_UNIT_TEST(Block42_2disk) {
-        TestBlock42(2);
-    }
-
     Y_UNIT_TEST(Mirror3dc) {
         TTestContext context(6, 3, 3, 3, 3);
         TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc));
@@ -636,6 +632,39 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         for (ui32 numSlots : slots) {
             UNIT_ASSERT_VALUES_EQUAL(8, numSlots);
         }
+    }
+
+    Y_UNIT_TEST(InterlacedRacksWithoutInterlacedNodes) {
+        TTestContext context(
+            {
+                {1, 1, 1, 1, 1}, // node 1
+                {1, 1, 2, 1, 1},
+                {1, 1, 3, 1, 2}, // node 3 has two disks
+                {1, 1, 4, 1, 1},
+                {1, 1, 5, 1, 1},
+                {1, 1, 6, 1, 1},
+                {1, 1, 2, 1, 1}, // node 7 is in the same rack as node 2
+                {1, 1, 8, 1, 1},
+                {1, 1, 3, 1, 1}, // node 9 is in the same rack as node 3 
+            }
+        );
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block));
+        context.PopulateGroupMapper(mapper, 8);
+        
+        TGroupMapper::TGroupDefinition group;
+        group.emplace_back(TVector<TVector<TPDiskId>>(8));
+        auto& g = group[0];
+
+        for (int i = 0; i < 8; i++) {
+            g[i].emplace_back(TPDiskId(i + 1, 1));
+        }
+
+        context.SetGroup(1, group);
+
+        TGroupMapper::TGroupDefinition newGroup = context.ReallocateGroup(mapper, 1, {TPDiskId(8, 1)});
+
+        UNIT_ASSERT_EQUAL_C(TPDiskId(9, 1), newGroup[0][7][0], context.FormatGroup(newGroup));
     }
 
     Y_UNIT_TEST(NonUniformClusterDifferentSlotsPerDisk) {

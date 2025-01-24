@@ -12,6 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+
 add_library(tx-data_events-common)
 
 
@@ -22,10 +29,18 @@ target_link_libraries(tx-data_events-common PUBLIC
   ydb-library-conclusion
   core-issue-protos
   api-protos
+  tools-enum_parser-enum_serialization_runtime
 )
 
 target_sources(tx-data_events-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/data_events/common/modification_type.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/data_events/common/error_codes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/data_events/common/signals_flow.cpp
 )
 
+
+generate_enum_serilization(tx-data_events-common
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/data_events/common/signals_flow.h
+  INCLUDE_HEADERS
+  ydb/core/tx/data_events/common/signals_flow.h
+)

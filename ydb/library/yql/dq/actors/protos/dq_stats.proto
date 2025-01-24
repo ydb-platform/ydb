@@ -30,6 +30,11 @@ message TDqAsyncBufferStats {
     uint64 LastMessageMs   = 8;  // last message processed
     uint64 WaitTimeUs      = 9;  // SUM(Resume_i - Pause_i) in us
     uint64 WaitPeriods     = 10; // COUNT(Resume_i - Pause_i)
+
+    uint64 FilteredBytes = 12;
+    uint64 FilteredRows = 13;
+    uint64 QueuedBytes = 14;
+    uint64 QueuedRows = 15;
 }
 
 message TDqAsyncInputBufferStats {

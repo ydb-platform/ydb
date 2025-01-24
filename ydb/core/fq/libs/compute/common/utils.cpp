@@ -80,6 +80,10 @@ struct TTotalStatistics {
     TAggregate EgressRows;
     TAggregate Tasks;
     TAggregates Aggregates;
+    TAggregate FilteredBytes;
+    TAggregate FilteredRows;
+    TAggregate QueuedBytes;
+    TAggregate QueuedRows;
 };
 
 TString FormatDurationMs(ui64 durationMs) {
@@ -309,6 +313,14 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                         totals.SourceCpuTimeUs.Add(*sum);
                     } else if (name == "Tasks") {
                         totals.Tasks.Add(*sum);
+                    } else if (name == "FilteredBytes") {
+                        totals.FilteredBytes.Add(*sum);
+                    } else if (name == "FilteredRows") {
+                        totals.FilteredRows.Add(*sum);
+                    } else if (name == "QueuedBytes") {
+                        totals.QueuedBytes.Add(*sum);
+                    } else if (name == "QueuedRows") {
+                        totals.QueuedRows.Add(*sum);
                     }
                 }
             }
@@ -468,6 +480,10 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
                         totals.IngressRows.Write(writer, "IngressRows");
                         totals.EgressBytes.Write(writer, "EgressBytes");
                         totals.EgressRows.Write(writer, "EgressRows");
+                        totals.FilteredBytes.Write(writer, "FilteredBytes");
+                        totals.FilteredRows.Write(writer, "FilteredRows");
+                        totals.QueuedBytes.Write(writer, "QueuedBytes");
+                        totals.QueuedRows.Write(writer, "QueuedRows");
                         totals.Tasks.Write(writer, "Tasks");
                         writer.OnEndMap();
                     }
@@ -543,7 +559,11 @@ struct TStatsAggregator {
         {"EgressRows", 0},
         {"InputBytes", 0},
         {"OutputBytes", 0},
-        {"CpuTimeUs", 0}
+        {"CpuTimeUs", 0},
+        {"FilteredBytes", 0},
+        {"FilteredRows", 0},
+        {"QueuedBytes", 0},
+        {"QueuedRows", 0}
     };
 };
 
@@ -989,6 +1009,10 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.MkqlMaxMemoryUsage", "MaxMemoryUsage");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.FilteredBytes", "FilteredBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.FilteredRows", "FilteredRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.QueuedBytes", "QueuedBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.QueuedRows", "QueuedRows");
                 writer.OnEndMap();
             }
             // YQv2
@@ -1010,6 +1034,10 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
                     RemapNode(writer, p.second, "EgressRows", "EgressRows");
                     RemapNode(writer, p.second, "MaxMemoryUsage", "MaxMemoryUsage");
+                    RemapNode(writer, p.second, "FilteredBytes", "FilteredBytes");
+                    RemapNode(writer, p.second, "FilteredRows", "FilteredRows");
+                    RemapNode(writer, p.second, "QueuedBytes", "QueuedBytes");
+                    RemapNode(writer, p.second, "QueuedRows", "QueuedRows");
                 writer.OnEndMap();
             }
         }

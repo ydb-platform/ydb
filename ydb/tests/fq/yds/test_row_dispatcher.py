@@ -5,6 +5,7 @@ import os
 import pytest
 import logging
 import time
+import json
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -987,3 +988,8 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
         wait_row_dispatcher_sensor_value(kikimr, "ClientsCount", 0)
+
+        stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
+        filtered_bytes = stat['Graph=0']['FilteredBytes']['sum']
+        logging.debug("stat {}".format(stat))
+        assert filtered_bytes > 1

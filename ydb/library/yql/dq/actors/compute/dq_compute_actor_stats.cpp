@@ -21,6 +21,10 @@ void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats) {
             proto.SetWaitTimeUs(stats.WaitTime.MicroSeconds());
             proto.SetWaitPeriods(stats.WaitPeriods);
         }
+        proto.SetFilteredBytes(stats.FilteredBytes);
+        proto.SetFilteredRows(stats.FilteredRows);
+        proto.SetQueuedBytes(stats.QueuedBytes);
+        proto.SetQueuedRows(stats.QueuedRows);
     }
 }
 

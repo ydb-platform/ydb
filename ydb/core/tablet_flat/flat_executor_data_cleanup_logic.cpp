@@ -31,13 +31,13 @@ bool TDataCleanupLogic::TryStartCleanup(const THashMap<ui32, TGCTime>& commitedG
 }
 
 void TDataCleanupLogic::OnNoTables(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(State == EDataCleanupState::PendingCompaction && Tables.empty());
+    Y_ABORT_UNLESS(State == EDataCleanupState::PendingCompaction && CompactingTables.empty());
     CompleteDataCleanup(ctx);
 }
 
 void TDataCleanupLogic::OnCompactionPrepared(ui32 tableId, ui64 compactionId) {
     Y_ABORT_UNLESS(State == EDataCleanupState::PendingCompaction);
-    Tables[tableId] = {tableId, compactionId};
+    CompactingTables[tableId] = {tableId, compactionId};
 }
 
 void TDataCleanupLogic::OnCompleteCompaction(
@@ -51,15 +51,14 @@ void TDataCleanupLogic::OnCompleteCompaction(
         return;
     }
 
-    if (auto* table = Tables.FindPtr(tableId)) {
-        if (finishedCompactionInfo.Edge >= table->CompactionId) {
-            table->CompactionCompleted = true;
+    if (auto it = CompactingTables.find(tableId); it != CompactingTables.end()) {
+        if (finishedCompactionInfo.Edge >= it->second.CompactionId) {
             UpdateWriteEdges(TGCTime(generation, step), gcDelta);
+            CompactingTables.erase(it);
         }
     }
-    if (AllOf(Tables, [](const auto& t) { return t.second.CompactionCompleted; })) {
+    if (CompactingTables.empty()) {
         State = EDataCleanupState::PendingFirstSnapshot;
-        Tables.clear();
     }
 }
 

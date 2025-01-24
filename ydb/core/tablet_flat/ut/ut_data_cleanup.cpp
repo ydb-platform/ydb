@@ -135,6 +135,17 @@ private:
     int& ReadRows;
 };
 
+bool ContainsInBlobStorage(TMyEnvBase& env, const TVector<TString>& values) {
+    for (auto group : xrange(env.StorageGroupCount)) {
+        env.SendEvToBSProxy(group, new NFake::TEvBlobStorageContainsRequest(values));
+        auto ev = env.GrabEdgeEvent<NFake::TEvBlobStorageContainsResponse>();
+        if (AnyOf(ev->Get()->Contains, [](bool v) { return v; }) ) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Y_UNIT_TEST_SUITE(DataCleanup) {
     Y_UNIT_TEST(CleanupDataNoTables) {
         TMyEnvBase env;
@@ -165,6 +176,8 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         } });
 
         env.WaitFor<NFake::TEvDataCleaned>();
+
+        UNIT_ASSERT(!ContainsInBlobStorage(env, {"Some_value"}));
     }
 
     Y_UNIT_TEST(CleanupDataMultipleTables) {
@@ -192,6 +205,8 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         } });
 
         env.WaitFor<NFake::TEvDataCleaned>();
+
+        UNIT_ASSERT(!ContainsInBlobStorage(env, {"Some_value", "Some_other_value", "Some_another_value"}));
     }
 
     Y_UNIT_TEST(CleanupDataWithFollowers) {
@@ -220,6 +235,8 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         } });
 
         env.WaitFor<NFake::TEvDataCleaned>();
+
+        UNIT_ASSERT(!ContainsInBlobStorage(env, {"Some_value_1", "Some_value_2", "Some_value_3"}));
     }
 
     Y_UNIT_TEST(CleanupDataMultipleTimes) {
@@ -257,6 +274,8 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         } });
 
         env.WaitFor<NFake::TEvDataCleaned>(2);
+
+        UNIT_ASSERT(!ContainsInBlobStorage(env, {"Some_value_1", "Some_value_2"}));
     }
 
     Y_UNIT_TEST(CleanupDataEmptyTable) {

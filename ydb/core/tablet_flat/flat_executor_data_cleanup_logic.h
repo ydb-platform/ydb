@@ -6,26 +6,25 @@
 
 namespace NKikimr::NTabletFlatExecutor {
 
-enum class EDataCleanupState {
-    Idle,
-    PendingCompaction,
-    PendingFirstSnapshot,
-    PendingSecondSnapshot,
-    PendingGCs,
-};
-
-struct TCleanupTableInfo {
-    ui32 TableId = Max<ui32>();
-    ui64 CompactionId = 0;
-    bool CompactionCompleted = false;
-};
-
-struct TCleanupChannesInfo {
-    TGCTime WriteEdge;
-    TGCTime CommitedGcBarrier;
-};
-
 class TDataCleanupLogic {
+    enum class EDataCleanupState {
+        Idle,
+        PendingCompaction,
+        PendingFirstSnapshot,
+        PendingSecondSnapshot,
+        PendingGCs,
+    };
+
+    struct TCleanupTableInfo {
+        ui32 TableId = Max<ui32>();
+        ui64 CompactionId = 0;
+    };
+
+    struct TCleanupChannesInfo {
+        TGCTime WriteEdge;
+        TGCTime CommitedGcBarrier;
+    };
+
 public:
     using IOps = NActors::IActorOps;
     using IExecutor = NFlatExecutorSetup::IExecutor;
@@ -63,7 +62,7 @@ private:
 
     EDataCleanupState State = EDataCleanupState::Idle;
     bool StartNextCleanup = false;
-    THashMap<ui32, TCleanupTableInfo> Tables; // tracks statuses of compaction
+    THashMap<ui32, TCleanupTableInfo> CompactingTables; // tracks statuses of compaction
 
     // tracks commited GC barriers and writes of upcoming compactions and snapshots per channel
     THashMap<ui32, TCleanupChannesInfo> ChannelsGCInfo;

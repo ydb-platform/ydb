@@ -32,6 +32,7 @@ namespace NFake {
             , Names(MakeComponentsNames())
             , Sink(new TSink(false ? Time->Now() : TInstant::Now(), Names))
             , Logger(new TLogEnv(Time, ELnLev::Info, Sink))
+            , StorageGroupCount(4)
         {
             if (auto logl = Logger->Log(ELnLev::Info)) {
                 logl << "Born at "<< TInstant::Now();
@@ -169,7 +170,7 @@ namespace NFake {
         void SetupModelServices()
         {
             { /*_ Blob storage proxies mock factory */
-                auto *actor = new NFake::TWarden(4);
+                auto *actor = new NFake::TWarden(StorageGroupCount);
 
                 RunOn(2, MakeBlobStorageNodeWardenID(NodeId), actor, EMail::Simple);
             }
@@ -212,6 +213,7 @@ namespace NFake {
         const TVector<TString> Names;   /* { Component -> Name } */
         const TIntrusivePtr<TSink> Sink;
         const TAutoPtr<TLogEnv> Logger;
+        const ui32 StorageGroupCount;
 
     private:
         TActorId Leader;

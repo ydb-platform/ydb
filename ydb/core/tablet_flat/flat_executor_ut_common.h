@@ -116,6 +116,11 @@ namespace NTabletFlatExecutor {
             Env.Send(new IEventHandle(to, Edge, ev));
         }
 
+        void SendEvToBSProxy(ui32 groupId, IEventBase *ev)
+        {
+            Env.Send(CreateEventForBSProxy(Edge, groupId, ev, 0));
+        }
+
         static NTabletPipe::TClientConfig PipeCfgRetries()
         {
             NTabletPipe::TClientConfig pipeConfig;

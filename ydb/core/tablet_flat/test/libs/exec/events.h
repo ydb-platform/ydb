@@ -22,6 +22,8 @@ namespace NFake {
         EvCompact   = Base_ + 15,
         EvCall      = Base_ + 16,
         EvDataCleaned = Base_ + 17,
+        EvBlobStorageContainsRequest = Base_ + 18,
+        EvBlobStorageContainsResponse = Base_ + 19,
     };
 
     struct TEvTerm : public TEventLocal<TEvTerm, EvTerm> { };
@@ -96,6 +98,22 @@ namespace NFake {
         TEvCall(TCallback callback) : Callback(std::move(callback)) { }
 
         TCallback Callback;
+    };
+
+    struct TEvBlobStorageContainsRequest :  public TEventLocal<TEvBlobStorageContainsRequest, EvBlobStorageContainsRequest> {
+        TEvBlobStorageContainsRequest(TVector<TString> values)
+            : Values(std::move(values))
+        { }
+
+        const TVector<TString> Values;
+    };
+
+    struct TEvBlobStorageContainsResponse :  public TEventLocal<TEvBlobStorageContainsResponse, EvBlobStorageContainsResponse> {
+        TEvBlobStorageContainsResponse(TVector<bool> contains)
+            : Contains(std::move(contains))
+        { }
+
+        const TVector<bool> Contains;
     };
 
 }

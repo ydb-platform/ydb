@@ -32,6 +32,7 @@ void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const 
 
 void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
@@ -65,6 +66,7 @@ void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTe
 
 void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
@@ -103,6 +105,7 @@ void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, 
 
 void Forget(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);

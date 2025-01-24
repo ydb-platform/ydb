@@ -58,6 +58,8 @@ public:
     virtual void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) = 0;
     virtual const NTopic::TTopicOperations& GetTopicOperations() const = 0;
 
+    virtual void SetAllowVolatile(bool allowVolatile) = 0;
+
     virtual void BuildTopicTxs(NTopic::TTopicOperationTransactions& txs) = 0;
 
     virtual bool HasTopics() const = 0;

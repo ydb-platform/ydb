@@ -1380,6 +1380,7 @@ public:
 
         if (Settings.TableService.GetEnableOltpSink() && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
+            txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
         }
 
         if (Settings.TableService.GetEnableOltpSink()

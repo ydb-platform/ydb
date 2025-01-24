@@ -273,7 +273,6 @@ public:
 
     bool TasteIt() {
         Y_ABORT_UNLESS(!ExtractIt);
-        ++Rows;
         bool isNew = false;
         auto itInsert = States->Insert(Tongue, isNew);
         if (isNew) {
@@ -288,7 +287,7 @@ public:
         if (isNew) {
             GrowStates();
         }
-        IsOutOfMemory = IsOutOfMemory || (!HasMemoryForProcessing() && Rows > 1000);
+        IsOutOfMemory = IsOutOfMemory || (!HasMemoryForProcessing() && States->GetSize() > 1000);
         return isNew;
     }
 
@@ -303,10 +302,6 @@ public:
                 IsOutOfMemory = true;
             }
         }
-    }
-
-    bool CheckIsOutOfMemory() const {
-        return IsOutOfMemory;
     }
 
     template<bool SkipYields>
@@ -334,7 +329,6 @@ public:
         Tongue = CurrentPage->data();
         StoredDataSize = 0;
         IsOutOfMemory = false;
-        Rows = 0;
 
         CleanupCurrentContext();
         return true;
@@ -369,7 +363,6 @@ public:
     i64 StoredDataSize = 0;
     bool IsOutOfMemory = false;
     NYql::NUdf::TCounter CounterOutputRows_;
-    ui64 Rows = 0;
 
 private:
     std::optional<TStorageIterator> ExtractIt;
@@ -502,7 +495,7 @@ public:
     ETasteResult TasteIt() {
         if (GetMode() == EOperatingMode::InMemory) {
             bool isNew = InMemoryProcessingState.TasteIt();
-            if (InMemoryProcessingState.CheckIsOutOfMemory()) {
+            if (InMemoryProcessingState.IsOutOfMemory) {
                 StateWantsToSpill = true;
             }
             Throat = InMemoryProcessingState.Throat;

@@ -1,4 +1,4 @@
 RECURSE(
-    compiliation
+    compilation
     no_pg_wrapper
 )

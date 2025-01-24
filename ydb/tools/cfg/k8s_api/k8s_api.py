@@ -1,13 +1,13 @@
 import logging
 import threading
 import hashlib
-import logging
 
 from kubernetes import client, config
 
 from ydb.tools.cfg.walle import HostsInformationProvider
 
 logger = logging.getLogger()
+
 
 class K8sApiHostsInformationProvider(HostsInformationProvider):
     def __init__(self, kubeconfig):

@@ -76,9 +76,9 @@ def get_parser(generate_func, extra_cfg_arguments=[]):
         )
 
     parser_cfg.add_argument(
-        "--hosts-provider-url", 
-        type=str, 
-        help="""URL from which information about hosts can be obtained. 
+        "--hosts-provider-url",
+        type=str,
+        help="""URL from which information about hosts can be obtained.
         Mutually exclusive with --hosts-provider-k8s""")
 
     home_directory = str(Path.home())

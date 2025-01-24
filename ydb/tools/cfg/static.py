@@ -284,6 +284,7 @@ class StaticConfigGenerator(object):
     @property
     def host_configs(self):
         return self.__cluster_details.get_service("host_configs")
+
     @property
     def table_service_config(self):
         return self.__cluster_details.get_service("table_service_config")
@@ -1254,9 +1255,9 @@ class StaticConfigGenerator(object):
 
             # cluster_uuid can be initialized from `nameservice_config` proto, same as `config.yaml`,
             # OR in the old manner, through `cluster_uuid: ...` key in `template.yaml`
-            cluster_uuid = self.names_txt.ClusterUUID # already read from proto
+            cluster_uuid = self.names_txt.ClusterUUID  # already read from proto
             if len(cluster_uuid) == 0:
-                cluster_uuid = self.__cluster_details.cluster_uuid # fall back to `cluster_uuid: ...`
+                cluster_uuid = self.__cluster_details.cluster_uuid  # fall back to `cluster_uuid: ...`
 
             cluster_uuid = "ydb:{}".format(utils.uuid()) if cluster_uuid is None else cluster_uuid
             self.names_txt.ClusterUUID = cluster_uuid

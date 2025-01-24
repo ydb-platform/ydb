@@ -2702,7 +2702,6 @@ private:
 
     struct TCoordinatorSubscription {
         ui64 CoordinatorId;
-        TMediatorTimecastReadStep::TCPtr ReadStep;
     };
 
     TVector<TCoordinatorSubscription> CoordinatorSubscriptions;

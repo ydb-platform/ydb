@@ -16,6 +16,16 @@
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
 
+namespace {
+
+ui32 PopFront(TDeque<ui32>& pendingItems) {
+    const ui32 itemIdx = pendingItems.front();
+    pendingItems.pop_front();
+    return itemIdx;
+}
+
+}
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -682,12 +692,6 @@ private:
         default:
             break;
         }
-    }
-
-    ui32 PopFront(TDeque<ui32>& pendingItems) {
-        const ui32 itemIdx = pendingItems.front();
-        pendingItems.pop_front();
-        return itemIdx;
     }
 
     void EndExport(TExportInfo::TPtr exportInfo, EState finalState, NIceDb::TNiceDb& db) {

@@ -393,7 +393,7 @@ public:
 
         ++path->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, path);
-        context.SS->ClearDescribePathCaches(path);
+        //context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);

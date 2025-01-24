@@ -51,6 +51,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build() ("tx_id", txId)("scan_id", scanId)("gen", scanGen)(
         "table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
 
+    const auto pathId = request.GetLocalPathId();
+    if(Self->TablesManager.IsNewDataTxLocked(pathId)) {
+        return SendError("cannot read table", "locked", ctx);
+    }
+
     TReadMetadataPtr readMetadataRange;
     {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
@@ -61,7 +66,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
             read.LockId = request.GetLockTxId();
         }
         read.PathId = request.GetLocalPathId();
-        read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
+        read.PathId = pathId;
+        read.ReadNothing = !Self->TablesManager.HasTable(pathId);
         read.TableName = table;
 
         const TString defaultReader =

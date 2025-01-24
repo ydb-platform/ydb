@@ -4,9 +4,13 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/subscriber/abstract/manager/manager.h>
+#include <ydb/core/tx/columnshard/subscriber/events/indexation_completed/event.h>
+
 
 namespace NKikimr::NOlap {
 
+    //
 bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     if (auto* dataPtr = Summary.AddInserted(std::move(data))) {
         AddBlobLink(dataPtr->GetBlobRange().BlobId);
@@ -103,6 +107,10 @@ void TInsertTable::EraseCommittedOnExecute(
 void TInsertTable::EraseCommittedOnComplete(const TCommittedData& data) {
     if (Summary.EraseCommitted(data)) {
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
+    }
+    //TODO improve me
+    if (!HasCommittedByPathId(data.PathId)) {
+        Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventIndexationCompleted>(data.PathId));
     }
 }
 

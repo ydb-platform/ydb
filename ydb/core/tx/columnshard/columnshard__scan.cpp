@@ -14,6 +14,15 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
     ui64 txId = record.GetTxId();
     const auto& scanId = record.GetScanId();
     const auto& snapshot = record.GetSnapshot();
+    const auto pathId = record.GetLocalPathId();
+    using namespace NOlap::NDataLocks;
+    if (TablesManager.IsNewDataTxLocked(pathId)) {
+        LOG_S_ERROR("EvScan for locked table txId: " << txId
+            << " scanId: " << scanId
+            << " pathid: " << pathId
+            << " at tablet " << TabletID());
+        return;
+    }
 
     NOlap::TSnapshot readVersion(snapshot.GetStep(), snapshot.GetTxId());
     NOlap::TSnapshot maxReadVersion = GetMaxReadVersion();

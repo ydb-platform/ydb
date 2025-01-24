@@ -40,6 +40,7 @@ bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionConte
     json.InsertValue("tables_count", Tables.size());
     json.InsertValue("presets_count", SchemaPresetsIds.size());
     json.InsertValue("to_drop_count", PathsToDrop.size());
+    json.InsertValue("to_move_count", PathToMove ? 1 : 0);
     return true;
 }
 
@@ -60,7 +61,11 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 return false;
             }
             if (table.IsDropped()) {
-                AFL_VERIFY(PathsToDrop[table.GetDropVersionVerified()].emplace(table.GetPathId()).second);
+                if (const auto& movedTo = table.GetOptionalMovedToPathId()) {
+                    PathToMove = std::pair{table.GetPathId(), *movedTo};
+                } else {
+                    PathsToDrop.insert(table.GetPathId());
+                }
             }
 
             AFL_VERIFY(Tables.emplace(table.GetPathId(), std::move(table)).second);
@@ -144,6 +149,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 }
             }
             table.AddVersion(version);
+            table.UpdateVersion(version, versionInfo);
+            versionsInfo.AddVersion(version, versionInfo);
             if (!rowset.Next()) {
                 timer.AddLoadingFail();
                 return false;
@@ -230,7 +237,11 @@ const TTableInfo& TTablesManager::GetTable(const ui64 pathId) const {
 }
 
 ui64 TTablesManager::GetMemoryUsage() const {
-    ui64 memory = Tables.size() * sizeof(TTableInfo) + PathsToDrop.size() * sizeof(ui64) + Ttl.size() * sizeof(NOlap::TTiering);
+    ui64 memory =
+        Tables.size() * sizeof(TTableInfo) +
+        PathsToDrop.size() * sizeof(ui64) +
+        (PathToMove ?  2 * sizeof(ui64) : 0) +
+        Ttl.size() * sizeof(NOlap::TTiering);
     if (PrimaryIndex) {
         memory += PrimaryIndex->MemoryUsage();
     }
@@ -251,6 +262,32 @@ void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& ver
     SchemaPresetsIds.erase(presetId);
     Schema::SaveSchemaPresetDropVersion(db, presetId, version);
 }
+
+void TTablesManager::CloneTable(const ui64 srcPathId, const ui64 dstPathId, const NOlap::TSnapshot& snapshot, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager> tiers) {
+    AFL_VERIFY(!Tables.contains(dstPathId));
+    const auto srcTable = Tables.FindPtr(srcPathId);
+    AFL_VERIFY(srcTable);
+    AFL_VERIFY(srcTable->GetTieringUsage().Empty());
+    AFL_VERIFY(!srcTable->IsDropped());
+    AFL_VERIFY(!srcTable->GetVersions().empty());
+
+
+    srcTable->SetMoveVersion(snapshot, dstPathId); //current snaphot is the last for src table
+    TTableInfo dstTable(dstPathId, {}, srcTable->GetVersionInfo()); //and the initial for dst table
+
+    RegisterTable(std::move(dstTable), db);
+    AddTableVersion(dstPathId, snapshot, srcTable->GetVersionInfo(), db, tiers);
+
+    // Schema::SaveTableInfo(db, srcTable->GetPathId(), srcTable->GetTieringUsage());
+    // AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("path_id", dstPathId);
+    // const auto [_, inserted] = Tables.emplace(dstPathId, std::move(dstTable));
+    // AFL_VERIFY(inserted)("path_id", pathId)("size", Tables.size());
+    // if (PrimaryIndex) {
+    //     PrimaryIndex->MoveTable(srcPathId, dstPathId, db);
+    // }
+
+}
+
 
 void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
     Y_ABORT_UNLESS(!HasTable(table.GetPathId()));

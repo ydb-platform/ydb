@@ -9,6 +9,10 @@
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
+namespace NKikimr::NColumnShard::NSubscriber {
+    class TManager;
+}
+
 namespace NKikimr::NOlap {
 class TPKRangesFilter;
 class IDbWrapper;
@@ -80,6 +84,9 @@ public:
     const TInsertedContainer& GetInserted() const {
         return Summary.GetInserted();
     }
+    bool HasCommittedByPathId(const ui64 pathId) {
+        return !Summary.GetPathInfo(pathId).GetCommitted().empty();
+    }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {
         return Summary.GetCountersPrepared();
     }
@@ -93,10 +100,14 @@ public:
 
 class TInsertTable: public TInsertTableAccessor {
 private:
+    std::shared_ptr<NColumnShard::NSubscriber::TManager> Subscribers;;
     bool Loaded = false;
     TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
 
 public:
+    TInsertTable(std::shared_ptr<NColumnShard::NSubscriber::TManager> subscribers)
+        : Subscribers(subscribers)
+    {}
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 

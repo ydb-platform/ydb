@@ -6011,11 +6011,19 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
     if constexpr (RuntimeVersion < 53U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
+    if (RuntimeVersion < 57U && joinKind == EJoinKind::Cross) {
+        THROW yexception() << __func__ << " does not support cross join in runtime version (" << RuntimeVersion << ")";
+    }
+
     MKQL_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
-                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
+                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly || joinKind == EJoinKind::Cross,
                 "Unsupported join kind");
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
+    if (joinKind == EJoinKind::Cross) {
+        MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
+    } else {
+        MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    }
 
     ValidateBlockStreamType(leftStream.GetStaticType());
     ValidateBlockStreamType(rightStream.GetStaticType());

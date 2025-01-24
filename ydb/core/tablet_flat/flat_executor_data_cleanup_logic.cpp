@@ -30,14 +30,18 @@ bool TDataCleanupLogic::TryStartCleanup(const THashMap<ui32, TGCTime>& commitedG
     }
 }
 
-void TDataCleanupLogic::OnNoTables(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(State == EDataCleanupState::PendingCompaction && CompactingTables.empty());
-    CompleteDataCleanup(ctx);
-}
-
 void TDataCleanupLogic::OnCompactionPrepared(ui32 tableId, ui64 compactionId) {
     Y_ABORT_UNLESS(State == EDataCleanupState::PendingCompaction);
     CompactingTables[tableId] = {tableId, compactionId};
+}
+
+void TDataCleanupLogic::WaitCompaction() {
+    Y_ABORT_UNLESS(State == EDataCleanupState::PendingCompaction);
+    if (CompactingTables.empty()) {
+        State = EDataCleanupState::PendingFirstSnapshot;
+    } else {
+        State = EDataCleanupState::WaitCompaction;
+    }
 }
 
 void TDataCleanupLogic::OnCompleteCompaction(
@@ -47,7 +51,7 @@ void TDataCleanupLogic::OnCompleteCompaction(
     const TFinishedCompactionInfo& finishedCompactionInfo,
     const TGCBlobDelta& gcDelta)
 {
-    if (State != EDataCleanupState::PendingCompaction) {
+    if (State != EDataCleanupState::WaitCompaction) {
         return;
     }
 
@@ -63,64 +67,121 @@ void TDataCleanupLogic::OnCompleteCompaction(
 }
 
 bool TDataCleanupLogic::NeedLogSnaphot() {
-    return State == EDataCleanupState::PendingFirstSnapshot && !FirstLogSnaphotStep
-        || State == EDataCleanupState::PendingSecondSnapshot && !SecondLogSnaphotStep;
+    switch (State) {
+        case EDataCleanupState::PendingFirstSnapshot:
+        case EDataCleanupState::PendingSecondSnapshot:
+            return true;
+        default:
+            return false;
+    }
 }
 
 void TDataCleanupLogic::OnMakeLogSnapshot(ui32 generation, ui32 step, const TGCBlobDelta& gcDelta) {
-    if (State == EDataCleanupState::PendingFirstSnapshot && !FirstLogSnaphotStep) {
-        FirstLogSnaphotStep = step;
-        UpdateWriteEdges(TGCTime(generation, step), gcDelta);
-        if (!GcForStepAckRequested) {
-            Ops->Send(Owner->Tablet(), new TEvTablet::TEvGcForStepAckRequest(generation, *FirstLogSnaphotStep));
-            GcForStepAckRequested = true;
+    switch (State) {
+        case EDataCleanupState::PendingFirstSnapshot: {
+            FirstLogSnaphotStep = step;
+            UpdateWriteEdges(TGCTime(generation, step), gcDelta);
+            State = EDataCleanupState::WaitFirstSnapshot;
+            break;
         }
-    } else if (State == EDataCleanupState::PendingSecondSnapshot && !SecondLogSnaphotStep) {
-        SecondLogSnaphotStep = step;
+        case EDataCleanupState::PendingSecondSnapshot: {
+            SecondLogSnaphotStep = step;
+            State = EDataCleanupState::WaitSecondSnapshot;
+            break;
+        }
+        default: {
+            break;
+        }
     }
 }
 
-void TDataCleanupLogic::OnSnapshotCommited(ui32 step, const TActorContext& ctx) {
-    if (State == EDataCleanupState::PendingFirstSnapshot && FirstLogSnaphotStep && *FirstLogSnaphotStep <= step) {
-        State = EDataCleanupState::PendingSecondSnapshot;
-    }
-    if (State == EDataCleanupState::PendingSecondSnapshot && SecondLogSnaphotStep && *SecondLogSnaphotStep <= step) {
-        State = EDataCleanupState::PendingGCs;
-    }
-    if (State == EDataCleanupState::PendingGCs && CheckGCsSteps()) {
-        CompleteDataCleanup(ctx);
+void TDataCleanupLogic::OnSnapshotCommited(ui32 generation, ui32 step) {
+    switch (State) {
+        case EDataCleanupState::WaitFirstSnapshot: {
+            if (FirstLogSnaphotStep <= step) {
+                State = EDataCleanupState::PendingSecondSnapshot;
+            }
+            break;
+        }
+        case EDataCleanupState::WaitSecondSnapshot: {
+            if (SecondLogSnaphotStep <= step) {
+                Ops->Send(Owner->Tablet(), new TEvTablet::TEvGcForStepAckRequest(generation, FirstLogSnaphotStep));
+                if (TabletGCCompleted()) {
+                    State = EDataCleanupState::WaitLogGC;
+                } else {
+                    State = EDataCleanupState::WaitAllGCs;
+                }
+            }
+            break;
+        }
+        default: {
+            break;
+        }
     }
 }
 
 void TDataCleanupLogic::OnCollectedGarbage(ui32 channel, TGCTime commitedGcBarrier, const TActorContext& ctx) {
-    if (auto* info = ChannelsGCInfo.FindPtr(channel)) {
-        info->CommitedGcBarrier = commitedGcBarrier;
-    }
-    if (State == EDataCleanupState::PendingGCs && CheckGCsSteps()) {
-        CompleteDataCleanup(ctx);
+    switch (State) {
+        case EDataCleanupState::WaitAllGCs: {
+            UpdateTabletGC(channel, commitedGcBarrier);
+            if (TabletGCCompleted()) {
+                State = EDataCleanupState::WaitLogGC;
+            }
+            break;
+        }
+        case EDataCleanupState::WaitTabletGC: {
+            UpdateTabletGC(channel, commitedGcBarrier);
+            if (TabletGCCompleted()) {
+                CompleteDataCleanup(ctx);
+            }
+            break;
+        }
+        default: {
+            break;
+        }
     }
 }
 
 void TDataCleanupLogic::OnGcForStepAckResponse(ui32 step, const TActorContext& ctx) {
-    GcLogSnaphotStep = step;
-    if (State == EDataCleanupState::PendingGCs && CheckGCsSteps()) {
-        CompleteDataCleanup(ctx);
+    switch (State) {
+        case EDataCleanupState::WaitAllGCs: {
+            if (FirstLogSnaphotStep <= step) {
+                State = EDataCleanupState::WaitTabletGC;
+            }
+            break;
+        }
+        case EDataCleanupState::WaitLogGC: {
+            if (FirstLogSnaphotStep <= step) {
+                CompleteDataCleanup(ctx);
+            }
+            break;
+        }
+        default: {
+            break;
+        }
     }
 }
 
 bool TDataCleanupLogic::NeedGC(TGCTime releasedBarrier, TGCTime activeBarrier) {
-    if (State == EDataCleanupState::PendingSecondSnapshot || State == EDataCleanupState::PendingGCs) {
-        bool needGC = false;
-        for (const auto& [_, info] : ChannelsGCInfo) {
-            needGC = needGC || (
-                info.CommitedGcBarrier < info.WriteEdge &&
-                releasedBarrier <= info.WriteEdge &&
-                info.WriteEdge <= activeBarrier
-            );
+    switch (State) {
+        case EDataCleanupState::PendingSecondSnapshot:
+        case EDataCleanupState::WaitSecondSnapshot:
+        case EDataCleanupState::WaitAllGCs:
+        case EDataCleanupState::WaitTabletGC: {
+            bool needGC = false;
+            for (const auto& [_, info] : ChannelsGCInfo) {
+                needGC = needGC || (
+                    info.CommitedGcBarrier < info.WriteEdge &&
+                    releasedBarrier <= info.WriteEdge &&
+                    info.WriteEdge <= activeBarrier
+                );
+            }
+            return needGC;
         }
-        return needGC;
+        default: {
+            return false;
+        }
     }
-    return false;
 }
 
 void TDataCleanupLogic::CompleteDataCleanup(const TActorContext& ctx) {
@@ -129,23 +190,26 @@ void TDataCleanupLogic::CompleteDataCleanup(const TActorContext& ctx) {
         logl << "TDataCleanupLogic: DataCleanup finished for tablet with id " << Owner->TabletID();
     }
     State = EDataCleanupState::Idle;
-    FirstLogSnaphotStep = Nothing();
-    SecondLogSnaphotStep = Nothing();
     ChannelsGCInfo.clear();
-    GcLogSnaphotStep = Nothing();
-    GcForStepAckRequested = false;
     if (StartNextCleanup) {
         StartNextCleanup = false;
         Executor->CleanupData();
     }
 }
 
-bool TDataCleanupLogic::CheckGCsSteps() {
-    bool completed = FirstLogSnaphotStep && GcLogSnaphotStep && *FirstLogSnaphotStep <= *GcLogSnaphotStep;
+bool TDataCleanupLogic::TabletGCCompleted() {
     for (const auto& [_, info] : ChannelsGCInfo) {
-        completed = completed && info.WriteEdge <= info.CommitedGcBarrier;
+        if (info.CommitedGcBarrier < info.WriteEdge) {
+            return false;
+        }
     }
-    return completed;
+    return true;
+}
+
+void TDataCleanupLogic::UpdateTabletGC(ui32 channel, TGCTime commitedGcBarrier) {
+    if (auto* info = ChannelsGCInfo.FindPtr(channel)) {
+        info->CommitedGcBarrier = commitedGcBarrier;
+    }
 }
 
 void TDataCleanupLogic::UpdateWriteEdges(TGCTime commitTime, const TGCBlobDelta& gcDelta) {

@@ -2955,7 +2955,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     case ECommit::Snap:
         LogicSnap->Confirm(msg->Step);
 
-        DataCleanupLogic->OnSnapshotCommited(step, ctx);
+        DataCleanupLogic->OnSnapshotCommited(Generation(), step);
         if (NeedFollowerSnapshot || DataCleanupLogic->NeedLogSnaphot())
             MakeLogSnapshot();
 
@@ -3907,13 +3907,13 @@ bool TExecutor::CompactTables() {
 
 void TExecutor::CleanupData() {
     if (DataCleanupLogic->TryStartCleanup(GcLogic->GetCommitedGcBarriers())) {
-        if (Scheme().Tables.empty()) {
-            DataCleanupLogic->OnNoTables(OwnerCtx());
-            return;
-        }
         for (const auto& [tableId, _] : Scheme().Tables) {
             auto compactionId = CompactionLogic->PrepareForceCompaction(tableId);
             DataCleanupLogic->OnCompactionPrepared(tableId, compactionId);
+        }
+        DataCleanupLogic->WaitCompaction();
+        if (DataCleanupLogic->NeedLogSnaphot()) {
+            MakeLogSnapshot();
         }
     }
 }

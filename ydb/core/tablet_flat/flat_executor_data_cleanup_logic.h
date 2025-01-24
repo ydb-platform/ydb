@@ -10,9 +10,14 @@ class TDataCleanupLogic {
     enum class EDataCleanupState {
         Idle,
         PendingCompaction,
+        WaitCompaction,
         PendingFirstSnapshot,
+        WaitFirstSnapshot,
         PendingSecondSnapshot,
-        PendingGCs,
+        WaitSecondSnapshot,
+        WaitAllGCs,
+        WaitTabletGC,
+        WaitLogGC,
     };
 
     struct TCleanupTableInfo {
@@ -34,8 +39,8 @@ public:
     TDataCleanupLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* Logger);
 
     bool TryStartCleanup(const THashMap<ui32, TGCTime>& commitedGcBarriers);
-    void OnNoTables(const TActorContext& ctx);
     void OnCompactionPrepared(ui32 tableId, ui64 compactionId);
+    void WaitCompaction();
     void OnCompleteCompaction(
         ui32 generation,
         ui32 step,
@@ -44,14 +49,15 @@ public:
         const TGCBlobDelta& gcDelta);
     bool NeedLogSnaphot();
     void OnMakeLogSnapshot(ui32 generation, ui32 step, const TGCBlobDelta& gcDelta);
-    void OnSnapshotCommited(ui32 step, const TActorContext& ctx);
+    void OnSnapshotCommited(ui32 generation, ui32 step);
     void OnCollectedGarbage(ui32 channel, TGCTime commitedGcBarrier, const TActorContext& ctx);
     void OnGcForStepAckResponse(ui32 step, const TActorContext& ctx);
     bool NeedGC(TGCTime releasedBarrier, TGCTime activeBarrier);
 
 private:
     void CompleteDataCleanup(const TActorContext& ctx);
-    bool CheckGCsSteps();
+    bool TabletGCCompleted();
+    void UpdateTabletGC(ui32 channel, TGCTime commitedGcBarrier);
     void UpdateWriteEdges(TGCTime commitTime, const TGCBlobDelta& gcDelta);
 
 private:
@@ -68,10 +74,8 @@ private:
     THashMap<ui32, TCleanupChannesInfo> ChannelsGCInfo;
 
     // two subsequent are snapshots required to force GC
-    TMaybe<ui32> FirstLogSnaphotStep = Nothing(); // snapshot requested if not empty
-    TMaybe<ui32> SecondLogSnaphotStep = Nothing(); // snapshot requested if not empty
-    bool GcForStepAckRequested = false;
-    TMaybe<ui32> GcLogSnaphotStep = Nothing();
+    ui32 FirstLogSnaphotStep = 0;
+    ui32 SecondLogSnaphotStep = 0;
 };
 
 } // NKikimr::NTabletFlatExecutor

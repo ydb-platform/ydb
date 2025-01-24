@@ -31,9 +31,10 @@ void TWriteOperation::Start(
     TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
-    NEvWrite::TWriteMeta writeMeta((ui64)WriteId, GetPathId(), source, GranuleShardingVersionId, GetIdentifier());
-    writeMeta.SetLockId(LockId);
-    writeMeta.SetModificationType(ModificationType);
+    auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>((ui64)WriteId, GetPathId(), source, GranuleShardingVersionId, GetIdentifier(),
+        context.GetWritingCounters()->GetWriteFlowCounters());
+    writeMeta->SetLockId(LockId);
+    writeMeta->SetModificationType(ModificationType);
     NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
         owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR), WritePortions);
     std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);

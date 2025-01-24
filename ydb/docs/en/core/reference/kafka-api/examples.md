@@ -7,7 +7,7 @@ Before proceeding with the examples:
 
 1. [Create a topic](../ydb-cli/topic-create.md).
 2. [Add a consumer](../ydb-cli/topic-consumer-add.md).
-3. If authentication is enabled, [create a user](../../security/access-management.md#users).
+3. If authentication is enabled, [create a user](../../security/authorization.md#user).
 
 ## How to Try the Kafka API {#how-to-try-kafka-api}
 

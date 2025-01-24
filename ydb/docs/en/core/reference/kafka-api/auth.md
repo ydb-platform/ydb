@@ -14,8 +14,8 @@ In the Kafka API, authentication is conducted through the SASL_PLAINTEXT/PLAIN o
 
 The following variables are required for authentication:
 
-* `<user-name>` — the username. For information about user management, refer to the section [Access Management](../../security/access-management.md).
-* `<password>` — the user's password. For information about user management, refer to the section [Access Management](../../security/access-management.md).
+* `<user-name>` — the username. For information about user management, refer to the section [Authorization](../../security/authorization.md#user).
+* `<password>` — the user's password. For information about user management, refer to the section [Authorization](../../security/authorization.md#user).
 * `<database>` — [the database path](../../concepts/connect#database).
 
 These parameters form the following:

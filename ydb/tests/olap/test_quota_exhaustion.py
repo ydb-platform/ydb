@@ -1,4 +1,7 @@
+import os
+import subprocess
 import sys
+import time
 
 import ydb
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -85,15 +88,57 @@ class TestYdbWorkload(object):
                 print('delete: got overload issue', file=sys.stderr)
                 return i
 
+    def ydbcli_db_schema_exec(self, node, operation_proto):
+        endpoint = f"{node.host}:{node.port}"
+        args = [
+            node.binary_path,
+            f"--server=grpc://{endpoint}",
+            "db",
+            "schema",
+            "exec",
+            operation_proto,
+        ]
+        command = subprocess.run(args, capture_output=True)
+        assert command.returncode == 0, command.stderr.decode("utf-8")
+
+
+    def alter_database_quotas(self, node, database_path, database_quotas):
+        alter_proto = """ModifyScheme {
+            OperationType: ESchemeOpAlterSubDomain
+            WorkingDir: "%s"
+            SubDomain {
+                Name: "%s"
+                DatabaseQuotas {
+                    %s
+                }
+            }
+        }""" % (
+            os.path.dirname(database_path),
+            os.path.basename(database_path),
+            database_quotas,
+        )
+
+        self.ydbcli_db_schema_exec(node, alter_proto)
+
     def test_delete(self):
         """As per https://github.com/ydb-platform/ydb/issues/13653"""
         session = self.make_session()
+
+        # Set soft and hard quotas to 6GB
+        self.alter_database_quotas(self.cluster.nodes[1], '/Root', """
+            data_size_hard_quota: 6000000000
+            data_size_soft_quota: 6000000000
+        """)
 
         # Overflow the database
         self.create_test_table(session, 'huge')
         self.upsert_until_overload(session, 'huge')
 
-        # Check that deletions will lead to overflow, too
+        # Check that deletion works at least first time
+        # self.delete_test_chunk(session, 'huge', 0)
+        # ^ uncomment after fixing https://github.com/ydb-platform/ydb/issues/13808
+
+        # Check that deletions will lead to overflow at some moment
         i = self.delete_until_overload(session, 'huge')
 
         # Try to wait until deletion works again (after compaction)

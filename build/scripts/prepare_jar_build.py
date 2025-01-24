@@ -112,8 +112,11 @@ class SourcesConsumer:
             self.coverage.append(rel)
 
 
-def prepare_build_dirs(bindir):
-    for dir in [os.path.join(bindir, dirname) for dirname in ['cls', 'misc']]:
+def prepare_build_dirs(bindir, with_sources_jar):
+    dirs = ['cls', 'misc']
+    if with_sources_jar:
+        dirs.append('src')
+    for dir in [os.path.join(bindir, dirname) for dirname in dirs]:
         if not os.path.exists(dir):
             os.makedirs(dir)
 
@@ -121,6 +124,7 @@ def prepare_build_dirs(bindir):
 def main():
     args = pcf.get_args(sys.argv[1:])
     parser = argparse.ArgumentParser()
+    parser.add_argument('--with-sources-jar', action='store_true')
     parser.add_argument('--moddir')
     parser.add_argument('--bindir')
     parser.add_argument('--java')
@@ -129,7 +133,7 @@ def main():
     parser.add_argument('--source-root')
     args, remaining_args = parser.parse_known_args(args)
 
-    prepare_build_dirs(args.bindir)
+    prepare_build_dirs(args.bindir, args.with_sources_jar)
 
     src_sorter = SourcesSorter(args.moddir)
     src_consumer = SourcesConsumer(

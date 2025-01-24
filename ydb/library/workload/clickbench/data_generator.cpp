@@ -1,8 +1,10 @@
 #include "data_generator.h"
 #include <ydb/library/yaml_json/yaml_to_json.h>
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/streams/factory/open_by_signature/factory.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/node/parse.h>
 #include <util/stream/file.h>
+
 #include <thread>
 
 namespace NYdbWorkload {

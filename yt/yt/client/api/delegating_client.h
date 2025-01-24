@@ -716,6 +716,11 @@ public:
         const TRequestRestartOptions& options),
         (nodeAddress, options))
 
+    DELEGATE_METHOD(TFuture<TCollectCoverageResult>, CollectCoverage, (
+        const std::string& address,
+        const TCollectCoverageOptions& options),
+        (address, options))
+
     DELEGATE_METHOD(TFuture<void>, SetUserPassword, (
         const std::string& user,
         const TString& currentPasswordSha256,

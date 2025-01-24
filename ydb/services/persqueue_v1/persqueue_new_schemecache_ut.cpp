@@ -9,7 +9,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
-#include <ydb/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -23,7 +23,7 @@
 #include <grpcpp/client_context.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
 
 namespace {
     const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1";
@@ -77,7 +77,9 @@ namespace NKikimr::NPersQueueTests {
 
             NYdb::TDriverConfig driverCfg;
 
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
+                     .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                     .SetDatabase("/Root");
 
             auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
 
@@ -100,7 +102,9 @@ namespace NKikimr::NPersQueueTests {
             PrepareForGrpcNoDC(*server.AnnoyingClient);
             NYdb::TDriverConfig driverCfg;
 
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
+                     .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                     .SetDatabase("/Root");
 
             server.AnnoyingClient->GrantConnect("user1@" BUILTIN_ACL_DOMAIN);
 
@@ -128,7 +132,7 @@ namespace NKikimr::NPersQueueTests {
 
             auto testReadFromTopic = [&](const TString& topicPath) {
                 NYdb::NPersQueue::TReadSessionSettings settings;
-                settings.ConsumerName("user1").AppendTopics(topicPath);
+                settings.ConsumerName("user1").AppendTopics(std::string{topicPath});
                 auto reader = CreateReader(*ydbDriver, settings);
 
                 for (int i = 0; i < 4; ++i) {
@@ -155,8 +159,8 @@ namespace NKikimr::NPersQueueTests {
             Cerr << ">>>>> Create PersQueue client" << Endl;
             NYdb::TDriverConfig driverCfg;
             driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
-                .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG))
-                .SetDatabase("/Root");
+                     .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                     .SetDatabase("/Root");
 
             auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
             auto persqueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
@@ -250,7 +254,7 @@ namespace NKikimr::NPersQueueTests {
 
                 std::shared_ptr<NYdb::NPersQueue::IReadSession> reader;
                 auto settings = NYdb::NPersQueue::TReadSessionSettings()
-                        .AppendTopics(topic)
+                        .AppendTopics(std::string{topic})
                         .ConsumerName(consumerName)
                         .StartingMessageTimestamp(curTs)
                         .ReadOnlyOriginal(true);
@@ -264,7 +268,7 @@ namespace NKikimr::NPersQueueTests {
                             Cerr << ">>>>> Iteration: " << i << " Got message: " << msg.GetData().substr(0, 16)
                                                         << " :: " << msg.DebugString(false) << Endl << Flush;
 
-                            auto count = ++map[msg.GetData()];
+                            auto count = ++map[TString{msg.GetData()}];
                             UNIT_ASSERT_C(count == 1, "Each message must be received once");
                             if (i == 0) {
                                 // First iteration. Filling ts and firstOffset vectors from received messages
@@ -366,7 +370,9 @@ namespace NKikimr::NPersQueueTests {
 
                 NYdb::TDriverConfig driverCfg;
 
-                driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+                driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
+                         .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                         .SetDatabase("/Root");
 
                 const auto monPort = TPortManager().GetPort();
                 auto Counters = server.CleverServer->GetGRpcServerRootCounters();
@@ -458,7 +464,7 @@ namespace NKikimr::NPersQueueTests {
                     }
 
                     NYdb::NPersQueue::TReadSessionSettings settings;
-                    settings.ConsumerName(consumerName).AppendTopics(topicName);
+                    settings.ConsumerName(consumerName).AppendTopics(std::string{topicName});
                     settings.Header({{NYdb::YDB_APPLICATION_NAME, userAgent}});
                     auto reader = CreateReader(*ydbDriver, settings);
 
@@ -575,7 +581,7 @@ namespace NKikimr::NPersQueueTests {
 
                 auto driverCfg = NYdb::TDriverConfig()
                     .SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
-                    .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG))
+                    .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
                     .SetDatabase("/Root");
 
                 auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
@@ -668,7 +674,7 @@ namespace NKikimr::NPersQueueTests {
                     }
 
                     NYdb::NTopic::TReadSessionSettings settings;
-                    settings.ConsumerName(consumerName).AppendTopics(topicName);
+                    settings.ConsumerName(consumerName).AppendTopics(std::string{topicName});
 
                     auto reader = CreateReader(*ydbDriver, settings, nullptr, userAgent);
 
@@ -778,7 +784,7 @@ namespace NKikimr::NPersQueueTests {
             }
             {
                 auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName("non_existing")
-                                                                        .AppendTopics(topic).DisableClusterDiscovery(true)
+                                                                        .AppendTopics(std::string{topic}).DisableClusterDiscovery(true)
                                                                         .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy()));
 
 
@@ -786,8 +792,8 @@ namespace NKikimr::NPersQueueTests {
                 future.Wait(TDuration::Seconds(10));
                 UNIT_ASSERT(future.HasValue());
 
-                TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false);
-                UNIT_ASSERT(event.Defined());
+                std::optional<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false);
+                UNIT_ASSERT(event.has_value());
 
                 Cerr << "Got new read session event: " << DebugString(*event) << Endl;
 
@@ -795,7 +801,7 @@ namespace NKikimr::NPersQueueTests {
             }
             {
                 auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName(consumer)
-                                                                        .AppendTopics(topic).DisableClusterDiscovery(true)
+                                                                        .AppendTopics(std::string{topic}).DisableClusterDiscovery(true)
                                                                         .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy()));
 
 
@@ -803,8 +809,8 @@ namespace NKikimr::NPersQueueTests {
                 future.Wait(TDuration::Seconds(10));
                 UNIT_ASSERT(future.HasValue());
 
-                TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false);
-                UNIT_ASSERT(event.Defined());
+                std::optional<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false);
+                UNIT_ASSERT(event.has_value());
 
                 Cerr << "Got new read session event: " << DebugString(*event) << Endl;
 

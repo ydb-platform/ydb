@@ -1833,7 +1833,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         NNodes::TCoCombineCore core(&node);
 
         const auto stream = MkqlBuildExpr(core.Input().Ref(), ctx);
-        const auto memLimit = FromString<ui64>(core.MemLimit().Cast().Value());
+        const auto memLimit = NNodes::TCoCombineCore::idx_MemLimit < node.ChildrenSize() ?
+                FromString<ui64>(core.MemLimit().Cast().Value()) : 0;
 
         const auto keyExtractor = [&](TRuntimeNode item) {
             return MkqlBuildLambda(core.KeyExtractor().Ref(), ctx, {item});
@@ -2406,6 +2407,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto input = MkqlBuildExpr(node.Head(), ctx);
         auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.Nop(input, returnType);
+    });
+
+    AddCallable({"TableSource", "WideTableSource"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return MkqlBuildExpr(node.Head(), ctx);
     });
 
     AddCallable({"WithWorld"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {

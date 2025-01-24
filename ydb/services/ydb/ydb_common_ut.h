@@ -6,7 +6,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/services/ydb/ydb_dummy.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 #include <util/system/tempfile.h>
 
@@ -151,7 +151,7 @@ public:
 
         NYdbGrpc::TServerOptions grpcOption;
         if (TestSettings::AUTH) {
-            grpcOption.SetUseAuth(appConfig.GetSecurityConfig().GetEnforceUserTokenRequirement()); // In real life UseAuth is initialized with EnforceUserTokenRequirement. To avoid incorrect tests we must do the same.
+            grpcOption.SetUseAuth(appConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()); // In real life UseAuth is initialized with EnforceUserTokenRequirement. To avoid incorrect tests we must do the same.
         }
         grpcOption.SetPort(grpc);
         if (TestSettings::SSL) {
@@ -166,7 +166,7 @@ public:
         Server_->EnableGRpc(grpcOption);
 
         TClient annoyingClient(*ServerSettings);
-        if (ServerSettings->AppConfig->GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+        if (ServerSettings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             annoyingClient.SetSecurityToken("root@builtin");
         }
         annoyingClient.InitRootScheme("Root");

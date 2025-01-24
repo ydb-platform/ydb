@@ -29,10 +29,6 @@
 #include <util/system/thread.h>
 #include <util/system/sigset.h>
 
-#include <util/string/subst.h>
-
-#include <thread>
-
 #include <stdlib.h>
 
 #ifdef _unix_
@@ -44,11 +40,6 @@
 #ifdef _linux_
 #include <grp.h>
 #include <sys/prctl.h>
-#endif
-
-#if defined(_linux_) && defined(CLANG_COVERAGE)
-extern "C" int __llvm_profile_write_file(void);
-extern "C" void __llvm_profile_set_filename(const char* name);
 #endif
 
 namespace NYT {
@@ -96,8 +87,6 @@ TProgram::TProgram()
         .NoArgument()
         .StoreValue(&PrintBuild_, true);
     Opts_.SetFreeArgsNum(0);
-
-    ConfigureCoverageOutput();
 }
 
 TProgram::~TProgram() = default;
@@ -273,19 +262,6 @@ void ConfigureUids()
 #endif
     }
     umask(0000);
-#endif
-}
-
-void ConfigureCoverageOutput()
-{
-#if defined(_linux_) && defined(CLANG_COVERAGE)
-    // YT tests use pid namespaces. We can't use process id as unique identifier for output file.
-    if (auto profileFile = getenv("LLVM_PROFILE_FILE")) {
-        TString fixedProfile{profileFile};
-        SubstGlobal(fixedProfile, "%e", "ytserver-all");
-        SubstGlobal(fixedProfile, "%p", ToString(TInstant::Now().NanoSeconds()));
-        __llvm_profile_set_filename(fixedProfile.c_str());
-    }
 #endif
 }
 

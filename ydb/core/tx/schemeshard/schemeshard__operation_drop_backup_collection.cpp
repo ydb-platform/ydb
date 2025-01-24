@@ -46,7 +46,7 @@ public:
         context.SS->PersistRemoveBackupCollection(db, pathId);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
+        domainInfo->DecPathsInside(context.SS);
         DecAliveChildrenDirect(OperationId, parentDirPtr, context); // for correct discard of ChildrenExist prop
         context.SS->TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Sub(1);
 

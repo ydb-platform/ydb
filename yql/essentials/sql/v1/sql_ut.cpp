@@ -4,6 +4,7 @@
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
 #include <util/generic/map.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -285,6 +286,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(ReplicationKeywordNotReservedForNames) {
         UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE REPLICATION (REPLICATION Uint32, PRIMARY KEY (REPLICATION));").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; SELECT REPLICATION FROM REPLICATION").IsOk());
+    }
+
+    Y_UNIT_TEST(TransferKeywordNotReservedForNames) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE TRANSFER (TRANSFER Uint32, PRIMARY KEY (TRANSFER));").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; SELECT TRANSFER FROM TRANSFER").IsOk());
     }
 
     Y_UNIT_TEST(SecondsKeywordNotReservedForNames) {
@@ -5011,7 +5017,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqCreateUser.IsOk());
-        UNIT_ASSERT(reqCreateUser.Root);
 
         auto reqAlterUser = SqlToYql(R"(
             USE plato;
@@ -5027,7 +5032,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqPasswordAndLogin.IsOk());
-        UNIT_ASSERT(reqPasswordAndLogin.Root);
 
         auto reqPasswordAndNoLogin = SqlToYql(R"(
             USE plato;
@@ -5035,7 +5039,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqPasswordAndNoLogin.IsOk());
-        UNIT_ASSERT(reqPasswordAndNoLogin.Root);
 
         auto reqLogin = SqlToYql(R"(
             USE plato;
@@ -5043,7 +5046,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqLogin.IsOk());
-        UNIT_ASSERT(reqLogin.Root);
 
         auto reqNoLogin = SqlToYql(R"(
             USE plato;
@@ -5051,7 +5053,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqNoLogin.IsOk());
-        UNIT_ASSERT(reqNoLogin.Root);
 
         auto reqLoginNoLogin = SqlToYql(R"(
             USE plato;
@@ -5068,7 +5069,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqAlterLoginNoLogin.IsOk());
-        UNIT_ASSERT(reqAlterLoginNoLogin.Root);
 
         auto reqAlterLoginNoLoginWithPassword = SqlToYql(R"(
             USE plato;
@@ -5077,7 +5077,56 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.IsOk());
-        UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.Root);
+    }
+
+    Y_UNIT_TEST(CreateUserWithHash) {
+        auto reqCreateUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }';
+        )");
+
+        UNIT_ASSERT(reqCreateUser.IsOk());
+
+        auto reqCreateUserWithNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }'
+            NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqCreateUserWithNoLogin.IsOk());
+
+        auto reqCreateUserWithPassword = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }'
+            PASSWORD '123';
+        )");
+
+        UNIT_ASSERT(!reqCreateUserWithPassword.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqCreateUserWithPassword.Issues.ToString(), "Error: Conflicting or redundant options");
+
+        auto reqAlterUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1;
+            ALTER USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }';
+        )");
+
+        UNIT_ASSERT(reqAlterUser.IsOk());
     }
 
     Y_UNIT_TEST(CreateAlterUserWithoutCluster) {
@@ -8054,5 +8103,62 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         UNIT_ASSERT(!res.IsOk());
         UNIT_ASSERT(res.Issues.Size() == 1);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
+    }
+}
+
+Y_UNIT_TEST_SUITE(QuerySplit) {
+    Y_UNIT_TEST(Simple) {
+        TString query = R"(
+        ;
+        -- Comment 1
+        SELECT * From Input; -- Comment 2
+        -- Comment 3
+        $a = "a";
+
+        -- Comment 9
+        ;
+
+        -- Comment 10
+
+        -- Comment 8
+
+        $b = ($x) -> {
+        -- comment 4
+        return /* Comment 5 */ $x;
+        -- Comment 6
+        };
+
+        // Comment 7
+
+
+
+        )";
+
+        google::protobuf::Arena Arena;
+
+        NSQLTranslation::TTranslationSettings settings;
+        settings.AnsiLexer = false;
+        settings.Antlr4Parser = true;
+        settings.Arena = &Arena;
+
+        TVector<TString> statements;
+        NYql::TIssues issues;
+
+        UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(query, statements, issues, settings));
+
+        UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(statements[0], "-- Comment 1\n        SELECT * From Input; -- Comment 2\n");
+        UNIT_ASSERT_VALUES_EQUAL(statements[1], R"(-- Comment 3
+        $a = "a";)");
+        UNIT_ASSERT_VALUES_EQUAL(statements[2], R"(-- Comment 10
+
+        -- Comment 8
+
+        $b = ($x) -> {
+        -- comment 4
+        return /* Comment 5 */ $x;
+        -- Comment 6
+        };)");
     }
 }

@@ -269,6 +269,7 @@ SRCS(
     yson/string_merger.cpp
     yson/ypath_designated_consumer.cpp
     yson/ypath_filtering_consumer.cpp
+    yson/yson_builder.cpp
     yson/depth_limiting_yson_consumer.cpp
     yson/list_verb_lazy_yson_consumer.cpp
     yson/attributes_stripper.cpp

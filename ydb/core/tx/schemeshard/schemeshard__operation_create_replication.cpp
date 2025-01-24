@@ -398,7 +398,7 @@ public:
 
         context.SS->IncrementPathDbRefCount(path->PathId);
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
-        parentPath.DomainInfo()->IncPathsInside();
+        parentPath.DomainInfo()->IncPathsInside(context.SS);
 
         if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
             desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
@@ -425,7 +425,7 @@ public:
         txState.State = TTxState::CreateParts;
 
         path->IncShardsInside();
-        parentPath.DomainInfo()->AddInternalShards(txState);
+        parentPath.DomainInfo()->AddInternalShards(txState, context.SS);
 
         if (parentPath->HasActiveChanges()) {
             const auto parentTxId = parentPath->PlannedToCreate() ? parentPath->CreateTxId : parentPath->LastTxId;

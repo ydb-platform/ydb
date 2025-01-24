@@ -97,7 +97,7 @@ constexpr TIn InitialStateValue() {
         }
     } else if constexpr (std::is_same_v<TIn, NYql::NDecimal::TInt128>) {
         if constexpr (IsMin) {
-            return NYql::NDecimal::Nan(); 
+            return NYql::NDecimal::Nan();
         } else {
             return -NYql::NDecimal::Inf();
         }
@@ -131,7 +131,7 @@ class TColumnBuilder : public IAggColumnBuilder {
     using TStateType = TState<IsNullable, TIn, IsMin>;
 public:
     TColumnBuilder(ui64 size, TType* type, TComputationContext& ctx)
-        : Builder_(TTypeInfoHelper(), type, ctx.ArrowMemoryPool, size)
+        : Builder_(type, TTypeInfoHelper(), ctx.ArrowMemoryPool, size)
         , Ctx_(ctx)
     {
     }

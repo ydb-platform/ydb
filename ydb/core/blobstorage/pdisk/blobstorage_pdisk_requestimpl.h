@@ -1141,5 +1141,114 @@ public:
     }
 };
 
+class TShredPDisk : public TRequestBase {
+public:
+    ui64 ShredGeneration;
+
+    TShredPDisk(NPDisk::TEvShredPDisk& ev, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ShredPDisk, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , ShredGeneration(ev.ShredGeneration)
+    {}
+    
+    ERequestType GetType() const override {
+        return ERequestType::RequestShredPDisk;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TShredPDisk {";
+        str << " Owner# " << Owner;
+        str << " OwnerRound# " << OwnerRound;
+        str << " ShredGeneration# " << ShredGeneration;
+        str << "}";
+        return str.Str();
+    }
+};
+
+class TPreShredCompactVDiskResult : public TRequestBase {
+public:
+    NKikimrProto::EReplyStatus Status;
+    ui64 ShredGeneration;
+    TString ErrorReason;
+
+    TPreShredCompactVDiskResult(NPDisk::TEvPreShredCompactVDiskResult& ev, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::PreShredCompactVDiskResult, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , Status(ev.Status)
+        , ShredGeneration(ev.ShredGeneration)
+        , ErrorReason(ev.ErrorReason)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestPreShredCompactVDiskResult;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TPreShredCompactVDiskResult {";
+        str << " Owner# " << Owner;
+        str << " OwnerRound# " << OwnerRound;
+        str << " Status# " << Status;
+        str << " ShredGeneration# " << ShredGeneration;
+        str << " ErrorReason# " << ErrorReason;
+        str << "}";
+        return str.Str();
+    }
+};
+
+class TShredVDiskResult : public TRequestBase {
+public:
+    NKikimrProto::EReplyStatus Status;
+    ui64 ShredGeneration;
+    TString ErrorReason;
+
+    TShredVDiskResult(NPDisk::TEvShredVDiskResult& ev, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ShredVDiskResult, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , Status(ev.Status)
+        , ShredGeneration(ev.ShredGeneration)
+        , ErrorReason(ev.ErrorReason)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestShredVDiskResult;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TShredVDiskResult {";
+        str << " Owner# " << Owner;
+        str << " OwnerRound# " << OwnerRound;
+        str << " Status# " << Status;
+        str << " ShredGeneration# " << ShredGeneration;
+        str << " ErrorReason# " << ErrorReason;
+        str << "}";
+        return str.Str();
+    }
+};
+
+class TMarkDirty : public TRequestBase {
+public:
+    TStackVec<TChunkIdx, 1> ChunksToMarkDirty;
+
+    TMarkDirty(NPDisk::TEvMarkDirty& ev, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::MarkDirty, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , ChunksToMarkDirty(ev.ChunksToMarkDirty)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestMarkDirty;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TMarkDirty {";
+        str << " Owner# " << Owner;
+        str << " OwnerRound# " << OwnerRound;
+        str << " ChunksToMarkDirty# ";
+        FormatList(str, ChunksToMarkDirty);
+        str << "}";
+        return str.Str();
+    }
+};
+
 } // NPDisk
 } // NKikimr

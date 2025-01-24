@@ -53,6 +53,7 @@ RECURSE_FOR_TESTS(
     ut_ttl
     ut_user_attributes
     ut_user_attributes_reboots
+    ut_vector_index_build_reboots
     ut_view
 )
 
@@ -307,6 +308,7 @@ PEERDIR(
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer
+    ydb/public/lib/ydb_cli/dump/util
     yql/essentials/minikql
     yql/essentials/providers/common/proto
     ydb/services/bg_tasks
@@ -318,10 +320,12 @@ YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     SRCS(
+        schemeshard_export_scheme_uploader_fallback.cpp
         schemeshard_import_scheme_getter_fallback.cpp
     )
 ELSE()
     SRCS(
+        schemeshard_export_scheme_uploader.cpp
         schemeshard_import_scheme_getter.cpp
     )
 ENDIF()

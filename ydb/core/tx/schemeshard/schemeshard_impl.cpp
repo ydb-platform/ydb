@@ -4501,11 +4501,6 @@ const NKikimrConfig::TDomainsConfig& TSchemeShard::GetDomainsConfig() {
     return AppData()->DomainsConfig;
 }
 
-const NKikimrConfig::TSecurityConfig& TSchemeShard::GetSecurityConfig() {
-    Y_ABORT_UNLESS(AppData());
-    return AppData()->SecurityConfig;
-}
-
 NKikimrSubDomains::TProcessingParams TSchemeShard::CreateRootProcessingParams(const TActorContext &ctx) {
     const auto& domain = GetDomainDescription(ctx);
 
@@ -4543,6 +4538,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
 
     if (TabletMigrator) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
+    }
+    for (TActorId schemeUploader : RunningExportSchemeUploaders) {
+        ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());
     }
 
     IndexBuildPipes.Shutdown(ctx);
@@ -4832,6 +4830,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvExport::TEvListExportsRequest, Handle);
         // } // NExport
         HFuncTraced(NBackground::TEvListRequest, Handle);
+        HFuncTraced(TEvPrivate::TEvExportSchemeUploadResult, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);
@@ -5135,9 +5134,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     const auto isBackupTable = IsBackupTable(node->PathId);
 
     if (node->IsDomainRoot()) {
-        ResolveDomainInfo(node->ParentPathId)->DecPathsInside(1, isBackupTable);
+        ResolveDomainInfo(node->ParentPathId)->DecPathsInside(this, 1, isBackupTable);
     } else {
-        ResolveDomainInfo(node)->DecPathsInside(1, isBackupTable);
+        ResolveDomainInfo(node)->DecPathsInside(this, 1, isBackupTable);
     }
     PathsById.at(node->ParentPathId)->DecAliveChildrenPrivate(isBackupTable);
 
@@ -7512,6 +7511,22 @@ void TSchemeShard::AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType
     } else if (storageType == EUserFacingStorageType::Hdd) {
         TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_HDD].Add(addend);
     }
+}
+
+void TSchemeShard::ChangePathCount(i64 delta) {
+    TabletCounters->Simple()[COUNTER_PATHS].Add(delta);
+}
+
+void TSchemeShard::SetPathsQuota(ui64 value) {
+    TabletCounters->Simple()[COUNTER_PATHS_QUOTA].Set(value);
+}
+
+void TSchemeShard::ChangeShardCount(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SHARDS].Add(delta);
+}
+
+void TSchemeShard::SetShardsQuota(ui64 value) {
+    TabletCounters->Simple()[COUNTER_SHARDS_QUOTA].Set(value);
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContext &ctx) {

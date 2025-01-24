@@ -72,13 +72,15 @@ namespace NKikimr::NBsController {
             TEntityId RealmGroup;
             TEntityId Realm;
             TEntityId Domain;
+            TEntityId Node;
 
             TPDiskLayoutPosition() = default;
 
-            TPDiskLayoutPosition(TEntityId realmGroup, TEntityId realm, TEntityId domain)
+            TPDiskLayoutPosition(TEntityId realmGroup, TEntityId realm, TEntityId domain, TEntityId node)
                 : RealmGroup(realmGroup)
                 , Realm(realm)
                 , Domain(domain)
+                , Node(node)
             {}
 
             TPDiskLayoutPosition(TDomainMapper& mapper, const TNodeLocation& location, TPDiskId pdiskId, const TGroupGeometryInfo& geom) {
@@ -102,6 +104,7 @@ namespace NKikimr::NBsController {
                 RealmGroup = mapper(realmGroup.Str());
                 Realm = mapper(realm.Str());
                 Domain = mapper(domain.Str());
+                Node.Value = pdiskId.NodeId;
             }
 
             TString ToString() const {
@@ -124,12 +127,13 @@ namespace NKikimr::NBsController {
         struct TScore {
             ui32 RealmInterlace = 0;
             ui32 DomainInterlace = 0;
+            ui32 NodeInterlace = 0;
             ui32 RealmGroupScatter = 0;
             ui32 RealmScatter = 0;
             ui32 DomainScatter = 0;
 
             auto AsTuple() const {
-                return std::make_tuple(RealmInterlace, DomainInterlace, RealmGroupScatter, RealmScatter, DomainScatter);
+                return std::make_tuple(RealmInterlace, DomainInterlace, NodeInterlace, RealmGroupScatter, RealmScatter, DomainScatter);
             }
 
             bool BetterThan(const TScore& other) const {
@@ -141,12 +145,13 @@ namespace NKikimr::NBsController {
             }
 
             static TScore Max() {
-                return {::Max<ui32>(), ::Max<ui32>(), ::Max<ui32>(), ::Max<ui32>(), ::Max<ui32>()};
+                return {::Max<ui32>(), ::Max<ui32>(), ::Max<ui32>(), ::Max<ui32>(), ::Max<ui32>(), ::Max<ui32>()};
             }
 
             TString ToString() const {
                 return TStringBuilder() << "{RealmInterlace# " << RealmInterlace
                     << " DomainInterlace# " << DomainInterlace
+                    << " NodeInterlace# " << NodeInterlace
                     << " RealmGroupScatter# " << RealmGroupScatter
                     << " RealmScatter# " << RealmScatter
                     << " DomainScatter# " << DomainScatter
@@ -168,6 +173,8 @@ namespace NKikimr::NBsController {
             TStackVec<THashMap<TEntityId, ui32>, 32> NumDisksPerDomain;
             THashMap<TEntityId, ui32> NumDisksPerDomainTotal;
 
+            THashMap<TEntityId, ui32> NumDisksPerNode;
+
             TGroupLayout(const TBlobStorageGroupInfo::TTopology& topology)
                 : Topology(topology)
                 , NumDisksInRealm(Topology.GetTotalFailRealmsNum())
@@ -187,6 +194,8 @@ namespace NKikimr::NBsController {
                 NumDisksInDomain[domainIdx] += value;
                 NumDisksPerDomain[domainIdx][pos.Domain] += value;
                 NumDisksPerDomainTotal[pos.Domain] += value;
+
+                NumDisksPerNode[pos.Node] += value;
             }
 
             void AddDisk(const TPDiskLayoutPosition& pos, ui32 orderNumber) {
@@ -204,9 +213,12 @@ namespace NKikimr::NBsController {
                 const auto& disksPerRealm = NumDisksPerRealm[vdisk.FailRealm][pos.Realm];
                 const auto& disksPerDomain = NumDisksPerDomain[domainIdx][pos.Domain];
 
+                const ui32 disksOnNode = NumDisksPerNode[pos.Node];
+
                 return {
                     .RealmInterlace = NumDisksPerRealmTotal[pos.Realm] - disksPerRealm,
                     .DomainInterlace = NumDisksPerDomainTotal[pos.Domain] - disksPerDomain,
+                    .NodeInterlace = disksOnNode,
                     .RealmGroupScatter = NumDisks - NumDisksPerRealmGroup[pos.RealmGroup],
                     .RealmScatter = NumDisksInRealm[vdisk.FailRealm] - disksPerRealm,
                     .DomainScatter = NumDisksInDomain[domainIdx] - disksPerDomain,

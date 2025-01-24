@@ -67,10 +67,15 @@ private:
 
         switch (record.GetStatus()) {
             case NKikimrScheme::StatusSuccess:
-                if (desc.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeReplication) {
-                    auto issue = NYql::TIssue("Is not a replication");
-                    Request_->RaiseIssue(issue);
-                    return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                switch (desc.GetSelf().GetPathType()) {
+                    case NKikimrSchemeOp::EPathTypeReplication:
+                    case NKikimrSchemeOp::EPathTypeTransfer:
+                        break;
+                    default: {
+                        auto issue = NYql::TIssue("Is not a replication");
+                        Request_->RaiseIssue(issue);
+                        return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                    }
                 }
 
                 ConvertDirectoryEntry(desc.GetSelf(), Result.mutable_self(), true);

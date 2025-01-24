@@ -19,6 +19,7 @@ from packaging.version import Version
 from . import (
     _entry_points,
     _reqs,
+    _static,
     command as _,  # noqa: F401 # imported for side-effects
 )
 from ._importlib import metadata
@@ -85,7 +86,7 @@ def check_importable(dist, attr, value):
         assert not ep.extras
     except (TypeError, ValueError, AttributeError, AssertionError) as e:
         raise DistutilsSetupError(
-            "%r must be importable 'module:attrs' string (got %r)" % (attr, value)
+            f"{attr!r} must be importable 'module:attrs' string (got {value!r})"
         ) from e
 
 
@@ -110,8 +111,7 @@ def check_nsp(dist, attr, value):
     for nsp in ns_packages:
         if not dist.has_contents_for(nsp):
             raise DistutilsSetupError(
-                "Distribution contains no modules or packages for "
-                + "namespace package %r" % nsp
+                f"Distribution contains no modules or packages for namespace package {nsp!r}"
             )
         parent, _sep, _child = nsp.rpartition('.')
         if parent and parent not in ns_packages:
@@ -210,15 +210,15 @@ def check_package_data(dist, attr, value):
     """Verify that value is a dictionary of package names to glob lists"""
     if not isinstance(value, dict):
         raise DistutilsSetupError(
-            "{!r} must be a dictionary mapping package names to lists of "
-            "string wildcard patterns".format(attr)
+            f"{attr!r} must be a dictionary mapping package names to lists of "
+            "string wildcard patterns"
         )
     for k, v in value.items():
         if not isinstance(k, str):
             raise DistutilsSetupError(
-                "keys of {!r} dict must be strings (got {!r})".format(attr, k)
+                f"keys of {attr!r} dict must be strings (got {k!r})"
             )
-        assert_string_list(dist, 'values of {!r} dict'.format(attr), v)
+        assert_string_list(dist, f'values of {attr!r} dict', v)
 
 
 def check_packages(dist, attr, value):
@@ -321,7 +321,7 @@ class Distribution(_Distribution):
         # Private API (setuptools-use only, not restricted to Distribution)
         # Stores files that are referenced by the configuration and need to be in the
         # sdist (e.g. `version = file: VERSION.txt`)
-        self._referenced_files: set[str] = set()
+        self._referenced_files = set[str]()
 
         self.set_defaults = ConfigDiscovery(self)
 
@@ -392,15 +392,20 @@ class Distribution(_Distribution):
         """Make sure requirement-related attributes exist and are normalized"""
         install_requires = getattr(self, "install_requires", None) or []
         extras_require = getattr(self, "extras_require", None) or {}
-        self.install_requires = list(map(str, _reqs.parse(install_requires)))
-        self.extras_require = {
-            k: list(map(str, _reqs.parse(v or []))) for k, v in extras_require.items()
-        }
+
+        # Preserve the "static"-ness of values parsed from config files
+        list_ = _static.List if _static.is_static(install_requires) else list
+        self.install_requires = list_(map(str, _reqs.parse(install_requires)))
+
+        dict_ = _static.Dict if _static.is_static(extras_require) else dict
+        self.extras_require = dict_(
+            (k, list(map(str, _reqs.parse(v or [])))) for k, v in extras_require.items()
+        )
 
     def _finalize_license_files(self) -> None:
         """Compute names of all license files which should be included."""
         license_files: list[str] | None = self.metadata.license_files
-        patterns: list[str] = license_files if license_files else []
+        patterns = license_files or []
 
         license_file: str | None = self.metadata.license_file
         if license_file and license_file not in patterns:
@@ -588,10 +593,10 @@ class Distribution(_Distribution):
             option_dict = self.get_option_dict(command_name)
 
         if DEBUG:
-            self.announce("  setting options for '%s' command:" % command_name)
+            self.announce(f"  setting options for '{command_name}' command:")
         for option, (source, value) in option_dict.items():
             if DEBUG:
-                self.announce("    %s = %s (from %s)" % (option, value, source))
+                self.announce(f"    {option} = {value} (from {source})")
             try:
                 bool_opts = [translate_longopt(o) for o in command_obj.boolean_options]
             except AttributeError:
@@ -611,8 +616,7 @@ class Distribution(_Distribution):
                     setattr(command_obj, option, value)
                 else:
                     raise DistutilsOptionError(
-                        "error in %s: command '%s' has no such option '%s'"
-                        % (source, command_name, option)
+                        f"error in {source}: command '{command_name}' has no such option '{option}'"
                     )
             except ValueError as e:
                 raise DistutilsOptionError(e) from e
@@ -818,7 +822,7 @@ class Distribution(_Distribution):
         try:
             old = getattr(self, name)
         except AttributeError as e:
-            raise DistutilsSetupError("%s: No such distribution setting" % name) from e
+            raise DistutilsSetupError(f"{name}: No such distribution setting") from e
         if old is not None and not isinstance(old, _sequence):
             raise DistutilsSetupError(
                 name + ": this setting cannot be changed via include/exclude"
@@ -836,7 +840,7 @@ class Distribution(_Distribution):
         try:
             old = getattr(self, name)
         except AttributeError as e:
-            raise DistutilsSetupError("%s: No such distribution setting" % name) from e
+            raise DistutilsSetupError(f"{name}: No such distribution setting") from e
         if old is None:
             setattr(self, name, value)
         elif not isinstance(old, _sequence):

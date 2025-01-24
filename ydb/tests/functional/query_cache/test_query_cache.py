@@ -16,9 +16,10 @@ def execute_some_queries(pool):
                 f"declare $param as Uint64;select {i} + $param as result;",
                 {"$param": ydb.TypedValue(value=i, value_type=ydb.PrimitiveType.Uint64)},
                 commit_tx=True,
-            ) as query_result:
-            
-                assert query_result[0].rows[0].result == i + i
+            ) as result_sets:
+                for result_set in result_sets:
+                    for row in result_set.rows:
+                        assert row.result == i + i
 
 
 class TestQueryCache(object):

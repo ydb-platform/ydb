@@ -4539,6 +4539,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     if (TabletMigrator) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
     }
+    for (TActorId schemeUploader : RunningExportSchemeUploaders) {
+        ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());
+    }
 
     IndexBuildPipes.Shutdown(ctx);
     CdcStreamScanPipes.Shutdown(ctx);
@@ -4827,6 +4830,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvExport::TEvListExportsRequest, Handle);
         // } // NExport
         HFuncTraced(NBackground::TEvListRequest, Handle);
+        HFuncTraced(TEvPrivate::TEvExportSchemeUploadResult, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);

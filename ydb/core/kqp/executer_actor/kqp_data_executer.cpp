@@ -340,8 +340,23 @@ public:
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
                 hFunc(TEvents::TEvUndelivered, HandleFinalize);
+
+                IgnoreFunc(TEvColumnShard::TEvProposeTransactionResult);
+                IgnoreFunc(TEvDataShard::TEvProposeTransactionResult);
+                IgnoreFunc(TEvDataShard::TEvProposeTransactionRestart);
+                IgnoreFunc(TEvDataShard::TEvProposeTransactionAttachResult);
+                IgnoreFunc(TEvPersQueue::TEvProposeTransactionResult);
+                IgnoreFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult);
+                IgnoreFunc(TEvPrivate::TEvReattachToShard);
+                IgnoreFunc(TEvDqCompute::TEvState);
+                IgnoreFunc(TEvDqCompute::TEvChannelData);
+                IgnoreFunc(TEvKqpExecuter::TEvStreamDataAck);
+                IgnoreFunc(TEvPipeCache::TEvDeliveryProblem);
+                IgnoreFunc(TEvInterconnect::TEvNodeDisconnected);
+                IgnoreFunc(TEvKqpNode::TEvStartKqpTasksResponse);
+                IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
-                    UnexpectedEvent("WaitSnapshotState", ev->GetTypeRewrite());
+                    UnexpectedEvent("FinalizeState", ev->GetTypeRewrite());
             }
         } catch (const yexception& e) {
             InternalError(e.what());

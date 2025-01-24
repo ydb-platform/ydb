@@ -54,6 +54,10 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
         {
+            if (owner.InitShardCounter.Add(1) != 1) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "repeated_initialization")("tx_id", GetTxId())(
+                    "counter", owner.InitShardCounter.Val());
+            }
             auto validationStatus = ValidateTables(SchemaTxBody.GetInitShard().GetTables());
             if (validationStatus.IsFail()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());

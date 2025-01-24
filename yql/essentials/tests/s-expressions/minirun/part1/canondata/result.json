@@ -636,5 +636,22 @@
             "size": 587,
             "uri": "https://{canondata_backend}/1942415/054c1d7fd20b3e982e839abb8377408e17c953e1/resource.tar.gz#test.test_Result-Resource-default.txt-Results_/results.txt"
         }
+    ],
+    "test.test[Stream-Squeeze1-default.txt-Debug]": [
+        {
+            "checksum": "b3dd6f07aebb2a11aee21a0c2c920ab3",
+            "size": 246,
+            "uri": "https://{canondata_backend}/1937492/b0aad9e1a4dfe51745d834402a36af079c7698cd/resource.tar.gz#test.test_Stream-Squeeze1-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Stream-Squeeze1-default.txt-Results]": [
+        {
+            "checksum": "20a63d050eca6011f2d055aa1222d184",
+            "size": 332,
+            "uri": "https://{canondata_backend}/1937492/b0aad9e1a4dfe51745d834402a36af079c7698cd/resource.tar.gz#test.test_Stream-Squeeze1-default.txt-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_Stream-Squeeze1-default.txt-Results_/extracted"
+        }
     ]
 }

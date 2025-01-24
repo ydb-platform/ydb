@@ -427,7 +427,7 @@ class WriterAsyncIOReconnector:
 
         for message in messages:
             encoded_data_futures = eventloop.run_in_executor(
-                self._encode_executor, encoder_function, message.get_bytes()
+                self._encode_executor, encoder_function, message.get_data_bytes()
             )
             encode_waiters.append(encoded_data_futures)
 
@@ -493,7 +493,7 @@ class WriterAsyncIOReconnector:
             f = self._codec_functions[codec]
 
             for m in test_messages:
-                encoded = f(m.get_bytes())
+                encoded = f(m.get_data_bytes())
                 s += len(encoded)
 
             return s

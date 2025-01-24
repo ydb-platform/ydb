@@ -255,6 +255,67 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_EQUAL(GetInt32(rows[0].at("level")), maxLevelValue);
         }
     }
+
+    Y_UNIT_TEST(TtlBorders) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        TLocalHelper localHelper(testHelper.GetKikimr());
+        testHelper.GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+
+        localHelper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        {
+            const TDuration tsInterval = TDuration::Days(3650);
+            const ui64 rows = 10000;
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, (TInstant::Now() - tsInterval).MicroSeconds(), rows,
+                false, tsInterval.MicroSeconds() / rows);
+        }
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT MAX(timestamp) AS timestamp FROM `/Root/olapStore/olapTable`
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_GT(GetTimestamp(rows[0].at("timestamp")), TInstant::Now() - TDuration::Days(100));
+        }
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT COUNT(*) AS count FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 1);
+        }
+
+        {
+            const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P300D") ON timestamp)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT COUNT(*) AS count FROM `/Root/olapStore/olapTable`
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_GT(GetUint64(rows[0].at("count")), 0);
+        }
+    }
 }
 
 }   // namespace NKikimr::NKqp

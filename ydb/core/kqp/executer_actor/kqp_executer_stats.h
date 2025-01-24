@@ -44,6 +44,11 @@ struct TAsyncStats {
     std::vector<ui64> WaitPeriods;
     std::vector<ui64> ActiveTimeUs;
 
+    std::vector<ui64> FilteredBytes;
+    std::vector<ui64> FilteredRows;
+    std::vector<ui64> QueuedBytes;
+    std::vector<ui64> QueuedRows;
+
     void Resize(ui32 taskCount);
     void SetHistorySampleCount(ui32 historySampleCount);
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqAsyncStatsAggr& stats);
@@ -119,6 +124,10 @@ struct TStageExecutionStats {
     std::vector<ui64> IngressRows;
     std::vector<ui64> IngressBytes;
     std::vector<ui64> IngressDecompressedBytes;
+    std::vector<ui64> IngressFilteredBytes;
+    std::vector<ui64> IngressFilteredRows;
+    std::vector<ui64> IngressQueuedBytes;
+    std::vector<ui64> IngressQueuedRows;
     std::vector<ui64> EgressRows;
     std::vector<ui64> EgressBytes;
 

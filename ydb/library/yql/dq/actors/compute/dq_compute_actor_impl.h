@@ -1808,10 +1808,10 @@ public:
             protoTask->SetIngressBytes(ingressBytes);
             protoTask->SetIngressRows(ingressRows);
             protoTask->SetIngressDecompressedBytes(ingressDecompressedBytes);
-            protoTask->SetFilteredBytes(filteredBytes);
-            protoTask->SetFilteredRows(filteredRows);
-            protoTask->SetQueuedBytes(queuedBytes);
-            protoTask->SetQueuedRows(queuedRows);
+            protoTask->SetIngressFilteredBytes(filteredBytes);
+            protoTask->SetIngressFilteredRows(filteredRows);
+            protoTask->SetIngressQueuedBytes(queuedBytes);
+            protoTask->SetIngressQueuedRows(queuedRows);
 
             ui64 egressBytes = 0;
             ui64 egressRows = 0;

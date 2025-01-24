@@ -110,6 +110,10 @@ void TAsyncStats::Resize(ui32 taskCount) {
     WaitTimeUs.Resize(taskCount);
     WaitPeriods.resize(taskCount);
     ActiveTimeUs.resize(taskCount);
+    FilteredBytes.resize(taskCount);
+    FilteredRows.resize(taskCount);
+    QueuedBytes.resize(taskCount);
+    QueuedRows.resize(taskCount);
 }
 
 void TAsyncStats::SetHistorySampleCount(ui32 historySampleCount) {
@@ -183,6 +187,10 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     IngressRows.resize(taskCount);
     IngressBytes.resize(taskCount);
     IngressDecompressedBytes.resize(taskCount);
+    IngressFilteredBytes.resize(taskCount);
+    IngressFilteredRows.resize(taskCount);
+    IngressQueuedBytes.resize(taskCount);
+    IngressQueuedRows.resize(taskCount);
     EgressRows.resize(taskCount);
     EgressBytes.resize(taskCount);
 
@@ -278,6 +286,10 @@ ui64 TStageExecutionStats::UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncSt
     SetNonZero(aggrAsyncStats.Rows[index], asyncStats.GetRows());
     SetNonZero(aggrAsyncStats.Chunks[index], asyncStats.GetChunks());
     SetNonZero(aggrAsyncStats.Splits[index], asyncStats.GetSplits());
+    SetNonZero(aggrAsyncStats.FilteredBytes[index], asyncStats.GetFilteredBytes());
+    SetNonZero(aggrAsyncStats.FilteredRows[index], asyncStats.GetFilteredRows());
+    SetNonZero(aggrAsyncStats.QueuedBytes[index], asyncStats.GetQueuedBytes());
+    SetNonZero(aggrAsyncStats.QueuedRows[index], asyncStats.GetQueuedRows());
 
     auto firstMessageMs = asyncStats.GetFirstMessageMs();
     SetNonZero(aggrAsyncStats.FirstMessageMs[index], firstMessageMs);
@@ -332,6 +344,10 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     SetNonZero(IngressRows[index], taskStats.GetIngressRows());
     SetNonZero(IngressBytes[index], taskStats.GetIngressBytes());
     SetNonZero(IngressDecompressedBytes[index], taskStats.GetIngressDecompressedBytes());
+    SetNonZero(IngressFilteredBytes[index], taskStats.GetIngressFilteredBytes());
+    SetNonZero(IngressFilteredRows[index], taskStats.GetIngressFilteredRows());
+    SetNonZero(IngressQueuedBytes[index], taskStats.GetIngressQueuedBytes());
+    SetNonZero(IngressQueuedRows[index], taskStats.GetIngressQueuedRows());
     SetNonZero(EgressRows[index], taskStats.GetEgressRows());
     SetNonZero(EgressBytes[index], taskStats.GetEgressBytes());
 
@@ -485,6 +501,10 @@ ui64 UpdateAsyncAggr(NDqProto::TDqAsyncStatsAggr& asyncAggr, const NDqProto::TDq
     UpdateAggr(asyncAggr.MutableRows(), asyncStat.GetRows());
     UpdateAggr(asyncAggr.MutableChunks(), asyncStat.GetChunks());
     UpdateAggr(asyncAggr.MutableSplits(), asyncStat.GetSplits());
+    UpdateAggr(asyncAggr.MutableFilteredBytes(), asyncStat.GetFilteredBytes());
+    UpdateAggr(asyncAggr.MutableFilteredRows(), asyncStat.GetFilteredRows());
+    UpdateAggr(asyncAggr.MutableQueuedBytes(), asyncStat.GetQueuedBytes());
+    UpdateAggr(asyncAggr.MutableQueuedRows(), asyncStat.GetQueuedRows());
 
     auto firstMessageMs = asyncStat.GetFirstMessageMs();
     if (firstMessageMs) {
@@ -627,6 +647,10 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
     UpdateAggr(stageStats->MutableIngressRows(), task.GetIngressRows());
     UpdateAggr(stageStats->MutableIngressBytes(), task.GetIngressBytes());
     UpdateAggr(stageStats->MutableIngressDecompressedBytes(), task.GetIngressDecompressedBytes());
+    UpdateAggr(stageStats->MutableIngressFilteredBytes(), task.GetIngressFilteredBytes());
+    UpdateAggr(stageStats->MutableIngressFilteredRows(), task.GetIngressFilteredRows());
+    UpdateAggr(stageStats->MutableIngressQueuedBytes(), task.GetIngressQueuedBytes());
+    UpdateAggr(stageStats->MutableIngressQueuedRows(), task.GetIngressQueuedRows());
     UpdateAggr(stageStats->MutableEgressRows(), task.GetEgressRows());
     UpdateAggr(stageStats->MutableEgressBytes(), task.GetEgressBytes());
 
@@ -1086,6 +1110,10 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         ExportAggStats(stageStat.IngressRows, *stageStats.MutableIngressRows());
         ExportAggStats(stageStat.IngressBytes, *stageStats.MutableIngressBytes());
         ExportAggStats(stageStat.IngressDecompressedBytes, *stageStats.MutableIngressDecompressedBytes());
+        ExportAggStats(stageStat.IngressFilteredBytes, *stageStats.MutableIngressFilteredBytes());
+        ExportAggStats(stageStat.IngressFilteredRows, *stageStats.MutableIngressFilteredRows());
+        ExportAggStats(stageStat.IngressQueuedBytes, *stageStats.MutableIngressQueuedBytes());
+        ExportAggStats(stageStat.IngressQueuedRows, *stageStats.MutableIngressQueuedRows());
         ExportAggStats(stageStat.EgressRows, *stageStats.MutableEgressRows());
         ExportAggStats(stageStat.EgressBytes, *stageStats.MutableEgressBytes());
 

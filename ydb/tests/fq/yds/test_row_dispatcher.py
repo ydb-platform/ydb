@@ -990,6 +990,6 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_row_dispatcher_sensor_value(kikimr, "ClientsCount", 0)
 
         stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
-        filtered_bytes = stat['Graph=0']['FilteredBytes']['sum']
-        logging.debug("stat {}".format(stat))
-        assert filtered_bytes > 1
+        filtered_bytes = stat['Graph=0']['IngressFilteredBytes']['sum']
+        filtered_rows = stat['Graph=0']['IngressFilteredRows']['sum']
+        assert filtered_bytes > 1 and filtered_rows > 0

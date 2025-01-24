@@ -295,15 +295,15 @@ private:
                     } else if (name == "EgressRows" && taskLevelCounter) {
                         publicCounterName = "query.sink_output_records";
                         isDeriv = true;
-                    } else if (name == "FilteredBytes" && taskLevelCounter) {
+                    } else if (name == "IngressFilteredBytes" && taskLevelCounter) {
                         publicCounterName = "query.filtered_bytes";
                         isDeriv = true;
-                    } else if (name == "FilteredRows" && taskLevelCounter) {
+                    } else if (name == "IngressFilteredRows" && taskLevelCounter) {
                         publicCounterName = "query.filtered_rows";
                         isDeriv = true;
-                    } else if (name == "QueuedBytes" && taskLevelCounter) {
+                    } else if (name == "IngressQueuedBytes" && taskLevelCounter) {
                         publicCounterName = "query.queued_bytes";
-                    } else if (name == "QueuedRows" && taskLevelCounter) {
+                    } else if (name == "IngressQueuedRows" && taskLevelCounter) {
                         publicCounterName = "query.queued_rows";
                     } else if (name == "Tasks") {
                         publicCounterName = "query.running_tasks";
@@ -390,10 +390,10 @@ private:
         ADD_COUNTER(ResultRows)
         ADD_COUNTER(ResultBytes)
 
-        ADD_COUNTER(FilteredBytes)
-        ADD_COUNTER(FilteredRows)
-        ADD_COUNTER(QueuedBytes)
-        ADD_COUNTER(QueuedRows)
+        ADD_COUNTER(IngressFilteredBytes)
+        ADD_COUNTER(IngressFilteredRows)
+        ADD_COUNTER(IngressQueuedBytes)
+        ADD_COUNTER(IngressQueuedRows)
 
         ADD_COUNTER(StartTimeMs)
         ADD_COUNTER(FinishTimeMs)

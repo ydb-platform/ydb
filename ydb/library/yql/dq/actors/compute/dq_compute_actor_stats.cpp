@@ -13,6 +13,10 @@ void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats) {
         proto.SetRows(stats.Rows);
         proto.SetChunks(stats.Chunks);
         proto.SetSplits(stats.Splits);
+        proto.SetFilteredBytes(stats.FilteredBytes);
+        proto.SetFilteredRows(stats.FilteredRows);
+        proto.SetQueuedBytes(stats.QueuedBytes);
+        proto.SetQueuedRows(stats.QueuedRows);
         if (stats.CollectFull()) {
             proto.SetFirstMessageMs(stats.FirstMessageTs.MilliSeconds());
             proto.SetPauseMessageMs(stats.PauseMessageTs.MilliSeconds());
@@ -21,10 +25,6 @@ void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats) {
             proto.SetWaitTimeUs(stats.WaitTime.MicroSeconds());
             proto.SetWaitPeriods(stats.WaitPeriods);
         }
-        proto.SetFilteredBytes(stats.FilteredBytes);
-        proto.SetFilteredRows(stats.FilteredRows);
-        proto.SetQueuedBytes(stats.QueuedBytes);
-        proto.SetQueuedRows(stats.QueuedRows);
     }
 }
 

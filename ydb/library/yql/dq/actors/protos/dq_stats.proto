@@ -212,10 +212,10 @@ message TDqTaskStats {
     uint64 IngressRows = 17;
     uint64 EgressBytes = 18;
     uint64 EgressRows = 19;
-    uint64 FilteredBytes = 23;
-    uint64 FilteredRows = 24;
-    uint64 QueuedBytes = 25;
-    uint64 QueuedRows = 26;
+    uint64 IngressFilteredBytes = 23;
+    uint64 IngressFilteredRows = 24;
+    uint64 IngressQueuedBytes = 25;
+    uint64 IngressQueuedRows = 26;
 
     // full stats
     repeated TDqAsyncInputBufferStats Sources = 150;
@@ -317,6 +317,11 @@ message TDqAsyncStatsAggr {
     TDqStatsAggr WaitTimeUs      = 9;
     TDqStatsAggr WaitPeriods     = 10;
     TDqStatsAggr ActiveTimeUs    = 11;
+
+    TDqStatsAggr FilteredBytes = 13;
+    TDqStatsAggr FilteredRows = 14;
+    TDqStatsAggr QueuedBytes = 15;
+    TDqStatsAggr QueuedRows = 16;
 }
 
 message TDqAsyncBufferStatsAggr {
@@ -382,6 +387,10 @@ message TDqStageStats {
 
     TDqStatsAggr IngressBytes = 28;
     TDqStatsAggr IngressDecompressedBytes = 37;
+    TDqStatsAggr IngressFilteredBytes = 46;
+    TDqStatsAggr IngressFilteredRows = 47;
+    TDqStatsAggr IngressQueuedBytes = 48;
+    TDqStatsAggr IngressQueuedRows = 49;
     TDqStatsAggr IngressRows = 29;
     TDqStatsAggr EgressBytes = 30;
     TDqStatsAggr EgressRows = 31;

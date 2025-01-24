@@ -113,14 +113,14 @@ struct TQueryStatKeyHash {
 };
 
 struct TAggQueryStat {
-    NYql::TCounters::TEntry FilteredReadBytes;
+    NYql::TCounters::TEntry FilteredBytes;
     NYql::TCounters::TEntry QueuedBytes;
     NYql::TCounters::TEntry QueuedRows;
     NYql::TCounters::TEntry ReadLagMessages;
     bool IsWaiting = false;
 
     void Add(const TTopicSessionClientStatistic& stat) {
-        FilteredReadBytes.Add(NYql::TCounters::TEntry(stat.FilteredBytes));
+        FilteredBytes.Add(NYql::TCounters::TEntry(stat.FilteredBytes));
         QueuedBytes.Add(NYql::TCounters::TEntry(stat.QueuedBytes));
         QueuedRows.Add(NYql::TCounters::TEntry(stat.QueuedRows));
         ReadLagMessages.Add(NYql::TCounters::TEntry(stat.ReadLagMessages));
@@ -684,7 +684,7 @@ TString TRowDispatcher::GetInternalState() {
         auto used = sessionsBufferSumSize ? (stat.QueuedBytes.Sum * 100.0 / sessionsBufferSumSize) : 0.0;
         str << "  " << queryId << " / " << readGroup << ": buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.QueuedBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.QueuedBytes.Max) << " data rate";
         if (aggStat) {
-            printDataRate(aggStat->FilteredReadBytes);
+            printDataRate(aggStat->FilteredBytes);
         }
         str << " waiting " << stat.IsWaiting << " max read lag " << stat.ReadLagMessages.Max;
         str << "\n";

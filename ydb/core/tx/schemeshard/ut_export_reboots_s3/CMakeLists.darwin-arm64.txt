@@ -61,7 +61,7 @@ set_property(
   ydb-core-tx-schemeshard-ut_export_reboots_s3
   PROPERTY
   SPLIT_FACTOR
-  12
+  18
 )
 
 add_yunittest(

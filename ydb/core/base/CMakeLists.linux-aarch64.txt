@@ -36,6 +36,7 @@ target_link_libraries(ydb-core-base PUBLIC
   library-actors-interconnect
   library-actors-protos
   library-actors-wilson
+  ydb-library-aclib
   cpp-deprecated-enum_codegen
   library-cpp-logger
   library-cpp-lwtrace
@@ -50,7 +51,6 @@ target_link_libraries(ydb-core-base PUBLIC
   ydb-core-jaeger_tracing
   ydb-core-protos
   core-protos-out
-  ydb-library-aclib
   ydb-library-login
   ydb-library-pdisk_io
   library-pretty_types_print-protobuf
@@ -63,6 +63,7 @@ target_link_libraries(ydb-core-base PUBLIC
 )
 
 target_sources(ydb-core-base PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/auth.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/actor_activity_names.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/appdata.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/backtrace.cpp
@@ -97,6 +98,7 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/traceid.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/tx_processing.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/wilson_tracing_control.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/auth.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/appdata.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/backtrace.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/blobstorage.h

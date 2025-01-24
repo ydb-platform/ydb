@@ -13,8 +13,8 @@
 # changes in this file.
 
 add_subdirectory(runtime)
-add_subdirectory(json)
 add_subdirectory(util)
+add_subdirectory(json)
 add_subdirectory(interop)
 add_subdirectory(yql)
 add_subdirectory(dynamic_prototype)

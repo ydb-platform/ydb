@@ -8,7 +8,7 @@
 1. [Добавьте читателя](../ydb-cli/topic-consumer-add.md).
 1. Если у вас включена аутентификация, [создайте пользователя](../../yql/reference/syntax/create-user.md).
 
-## Как попробовать Kafka API {#how-to-try-kafka-api}
+## Начало работы {#how-to-try-kafka-api}
 
 ### В Docker {#how-to-try-kafka-api-in-docker}
 
@@ -16,7 +16,7 @@
 
 ### В Yandex Cloud {#how-to-try-kafka-api-in-cloud}
 
-Попробовать работу с топиками YDB по Kafka API можно бесплатно ([в небольших объемах](https://yandex.cloud/ru/docs/data-streams/pricing?from=int-console-help-center-or-nav#prices)) в Yandex Cloud.
+Попробовать работу с топиками YDB по Kafka API можно без тарификации ([в небольших месячных объемах](https://yandex.cloud/ru/docs/data-streams/pricing?from=int-console-help-center-or-nav#prices)) в Yandex Cloud.
 Для этого в своей [консоли Yandex Cloud](https://console.yandex.cloud):
 
 1. Создайте [базу данных YDB](https://yandex.cloud/ru/docs/ydb/quickstart), если у вас ее еще нет
@@ -38,7 +38,7 @@
 - только одна стратегия назначения партиция - roundrobin;
 - отсутствие возможности читать без предварительно созданной консьюмер группы
 
-Поэтому в конфигурации консьюмера всегда нужно указывать **имя консьюмер группы** и параметры:
+Поэтому в конфигурации читателя всегда нужно указывать **имя консьюмер группы** и параметры:
 
 - `check.crc=false`
 - `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
@@ -110,8 +110,8 @@
 
 - Spark
 
-  Apache Spark при работе с Kafka не использует ничего из существующих ограничений Kafka API в YDB Topics. Благодаря этому
-  работа с Kafka API из Spark должна работать в полном объеме.
+  Apache Spark при работе с Kafka не использует ничего из [существующих ограничений](./constraints.md) Kafka API в YDB Topics.
+  Благодаря этому использование Spark с Ydb topics возможно в полном объеме.
 
   ```java
   public class ExampleReadApp {
@@ -153,8 +153,7 @@
 
     - Exactly once работа по Kafka API сейчас не поддержана, так как поддержка транзакций в Kafka API сейчас в разработке;
     - Подписка на топики через паттерн сейчас недоступна;
-    - Использование CreateTime сообщения в качестве watermark сейчас недоступно, так как вместо CreateTime используется текущее время вычитки
-      (баг будет пофикшен в следующих версиях).
+    - Использование CreateTime сообщения в качестве watermark сейчас недоступно, так как вместо CreateTime используется текущее время вычитки.
 
   {% endnote %}
 
@@ -201,9 +200,9 @@
 Unexpected error in join group response: This most likely occurs because of a request being malformed by the client library or the message was sent to an incompatible broker. See the broker logs for more details.
 ```
 
-Скорее всего проблема в том, что не указана консьюмер группа или указанная консьмер группа не существует в кластере YDB.
+Скорее всего проблема в том, что не указано имя читателя или указанное имя читателя не существует в кластере YDB.
 
-Решение: создайте консьюмер группу с помощью [CLI](../ydb-cli/topic-consumer-add) или [SDK](../ydb-sdk/topic#alter-topic)
+Решение: создайте читателя с помощью [CLI](../ydb-cli/topic-consumer-add) или [SDK](../ydb-sdk/topic#alter-topic)
 
 ### Запись
 
@@ -268,8 +267,8 @@ Unexpected error in join group response: This most likely occurs because of a re
 
 - Spark
 
-  Apache Spark при работе с Kafka не использует ничего из существующих ограничений Kafka API в YDB Topics. Благодаря этому
-  работа с Kafka API из Spark должна работать в полном объеме.
+  Apache Spark при работе с Kafka не использует ничего из [существующих ограничений](./constraints.md) Kafka API в YDB Topics.
+  Благодаря этому использование Spark с Ydb topics возможно в полном объеме.
 
   ```java
   public class ExampleWriteApp {
@@ -463,7 +462,7 @@ Unexpected error in join group response: This most likely occurs because of a re
 
 {% endlist %}
 
-#### Примеры с аутентификацией в локальной базе
+#### примеры аутентификации в самостоятельно развернутом YDB
 
 Для того, чтобы проверить работу с аутентификацией в локальной базе:
 

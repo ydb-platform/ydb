@@ -111,7 +111,7 @@ For examples of how to set up authentication, see the section [Authentication Ex
 
 - Spark
 
-   Apache Spark when working with Kafka does not use any of the existing limitations of the Kafka API in YDB Topics. Due to this,
+   Apache Spark when working with Kafka does not use any of the [existing limitations](./constraints.md) of the Kafka API in YDB Topics. Due to this,
    all features of Spark-Kafka integrations should work through YDB Topics Kafka API.
 
   ```java
@@ -266,7 +266,7 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
 
 - Spark
 
-  Apache Spark when working with Kafka does not use any of the existing limitations of the Kafka API in YDB Topics. Due to this,
+  Apache Spark when working with Kafka does not use any of the [existing limitations](./constraints.md) of the Kafka API in YDB Topics. Due to this,
   all features of Spark-Kafka integrations should work through YDB Topics Kafka API.
 
   ```java
@@ -459,9 +459,9 @@ Note: in path_to_database the username is not specified, only @ is indicated, fo
 
 {% endlist %}
 
-#### Examples with Authentication in a local database
+#### Examples with Authentication in on-prem YDB
 
-To test working with authentication in a local database:
+To test working with authentication in a on-prem database:
 
 1. Create a user. [How to do this in YQL](https://ydb.tech/docs/ru/yql/reference/syntax/create-user). [How to execute YQL from CLI](https://ydb.tech/docs/ru/reference/ydb-cli/yql).
 2. Connect to the Kafka API as shown in the examples below. In all examples, it is assumed that:

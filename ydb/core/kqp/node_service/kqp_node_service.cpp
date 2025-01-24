@@ -282,7 +282,7 @@ private:
                 .SchedulingOptions = std::move(schedulingTaskOptions),
                 // TODO: block tracking mode is not set!
             };
-            if (msg.HasUserToken()) {
+            if (msg.HasUserToken() && msg.GetUserToken()) {
                 createArgs.UserToken.Reset(MakeIntrusive<NACLib::TUserToken>(msg.GetUserToken()));
             }
 

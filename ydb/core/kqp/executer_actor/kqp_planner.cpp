@@ -244,7 +244,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         rlPath->SetCoordinationNode(RlPath->GetCoordinationNode());
         rlPath->SetResourcePath(RlPath->GetResourcePath());
         rlPath->SetDatabase(Database);
-        if (UserToken) // TODO: use request.UserToken
+        if (UserToken)
             rlPath->SetToken(UserToken->GetSerializedToken());
     }
 

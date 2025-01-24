@@ -21,7 +21,7 @@ bool IsAdministrator(const TAppData* appData, const TString& userToken) {
         return true;
     }
 
-    if (!userToken) {
+    if (!userToken || userToken->GetSerializedToken().empty()) {
         return false;
     }
 

@@ -256,7 +256,7 @@ THolder<NActors::IActor> CreateSystemViewScan(
         if (tableId.SysViewInfo == NAuth::GroupsName) {
             return NAuth::CreateGroupsScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
         }
-        if (tableId.SysViewInfo == MembersName) {
+        if (tableId.SysViewInfo == GroupMembersName) {
             return NAuth::CreateGroupMembersScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
         }
         if (tableId.SysViewInfo == OwnersName) {

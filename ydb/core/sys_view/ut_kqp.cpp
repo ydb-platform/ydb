@@ -2510,7 +2510,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_members`
+                FROM `Root/.sys/auth_group_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -2523,7 +2523,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant1/.sys/auth_members`
+                FROM `Root/Tenant1/.sys/auth_group_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -2536,7 +2536,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant2/.sys/auth_members`
+                FROM `Root/Tenant2/.sys/auth_group_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -2574,7 +2574,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_members`
+                FROM `Root/.sys/auth_group_members`
             )").GetValueSync();
 
             NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
@@ -2593,7 +2593,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             {
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/.sys/auth_members`
+                    FROM `Root/.sys/auth_group_members`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -2606,7 +2606,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             {
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/Tenant1/.sys/auth_members`
+                    FROM `Root/Tenant1/.sys/auth_group_members`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -2630,7 +2630,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             {
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/.sys/auth_members`
+                    FROM `Root/.sys/auth_group_members`
                 )").GetValueSync();
 
                 NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
@@ -2639,7 +2639,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             {
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/Tenant1/.sys/auth_members`
+                    FROM `Root/Tenant1/.sys/auth_group_members`
                 )").GetValueSync();
 
                 NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
@@ -2736,6 +2736,122 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
+    }
+
+    Y_UNIT_TEST(AuthOwners_Access) {
+        TTestEnv env;
+        SetupAuthAccessEnvironment(env);
+        TTableClient client(env.GetDriver());
+
+        env.GetClient().MkDir("/Root", "Dir1");
+        env.GetClient().MkDir("/Root", "Dir2");
+        env.GetClient().MkDir("/Root/Tenant1", "Dir3");
+        env.GetClient().MkDir("/Root/Tenant1", "Dir4");
+        env.GetClient().ModifyOwner("/Root", "Dir1", "user1");
+        env.GetClient().ModifyOwner("/Root/Tenant1", "Dir3", "user3");
+
+        { // anonymous
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint());
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_owners`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["/Root"];["root@builtin"]];
+                [["/Root/.metadata"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                [["/Root/Dir1"];["user1"]];
+                [["/Root/Dir2"];["root@builtin"]];
+                [["/Root/Table0"];["root@builtin"]]
+            ])";
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        { // user1 has /Root GenericUse access
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "password1",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/.sys/auth_owners`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["/Root"];["root@builtin"]];
+                    [["/Root/.metadata"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                    [["/Root/Dir1"];["user1"]];
+                    [["/Root/Dir2"];["root@builtin"]];
+                    [["/Root/Table0"];["root@builtin"]]
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant1/.sys/auth_owners`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["/Root/Tenant1"];["root@builtin"]];
+                    [["/Root/Tenant1/Dir3"];["user3"]];
+                    [["/Root/Tenant1/Dir4"];["root@builtin"]];
+                    [["/Root/Tenant1/Table1"];["root@builtin"]]
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+        }
+
+        { // revoke user1 /Root/Dir2 GenericUse access
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "user1");
+            env.GetClient().ModifyACL("/Root", "Dir2", acl.SerializeAsString());
+
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "password1",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_owners`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["/Root"];["root@builtin"]];
+                [["/Root/.metadata"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                [["/Root/Dir1"];["user1"]];
+                [["/Root/Table0"];["root@builtin"]]
+            ])";
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
+        // and test tenant user and tenant admin
     }
 
     Y_UNIT_TEST(AuthPermissions) {

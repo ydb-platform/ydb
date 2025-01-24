@@ -135,6 +135,12 @@ protected:
 
         FillBatch(*batch, entry);
 
+        if (!RequireUserAdministratorAccess && entry.SecurityObject 
+            && UserToken && !UserToken->GetSerializedToken().empty()
+            && !entry.SecurityObject->CheckAccess(NACLib::DescribeSchema, *UserToken)) {
+            batch->Rows.clear();
+        }
+
         if (!batch->Finished && entry.ListNodeEntry) {
             DeepFirstSearchStack.emplace_back(std::move(entry));
         }

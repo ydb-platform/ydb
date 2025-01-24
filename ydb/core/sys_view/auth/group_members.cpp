@@ -37,10 +37,10 @@ protected:
             for (const auto& member : group.Members) {
                 for (auto& column : Columns) {
                     switch (column.Tag) {
-                    case Schema::AuthMembers::GroupSid::ColumnId:
+                    case Schema::AuthGroupMembers::GroupSid::ColumnId:
                         cells.push_back(TCell(group.Sid.data(), group.Sid.size()));
                         break;
-                    case Schema::AuthMembers::MemberSid::ColumnId:
+                    case Schema::AuthGroupMembers::MemberSid::ColumnId:
                         cells.push_back(TCell(member.data(), member.size()));
                         break;
                     default:

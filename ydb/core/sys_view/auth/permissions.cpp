@@ -31,6 +31,11 @@ public:
 protected:
     void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) override {
         Y_ABORT_UNLESS(entry.Status == TNavigate::EStatus::Ok);
+
+        if (!entry.SecurityObject) {
+            batch.Finished = false;
+            return;
+        }
         
         TVector<TCell> cells(::Reserve(Columns.size()));
 

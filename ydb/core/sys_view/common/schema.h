@@ -52,7 +52,7 @@ constexpr TStringBuf PgClassName = "pg_class";
 namespace NAuth {
     constexpr TStringBuf UsersName = "auth_users";
     constexpr TStringBuf GroupsName = "auth_groups";
-    constexpr TStringBuf MembersName = "auth_members";
+    constexpr TStringBuf GroupMembersName = "auth_group_members";
     constexpr TStringBuf OwnersName = "auth_owners";
     constexpr TStringBuf PermissionsName = "auth_permissions";
     constexpr TStringBuf EffectivePermissionsName = "auth_effective_permissions";
@@ -652,7 +652,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct AuthMembers : Table<17> {
+    struct AuthGroupMembers : Table<17> {
         struct GroupSid: Column<1, NScheme::NTypeIds::Utf8> {};
         struct MemberSid: Column<2, NScheme::NTypeIds::Utf8> {};
 

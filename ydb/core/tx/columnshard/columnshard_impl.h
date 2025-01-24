@@ -39,6 +39,7 @@
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/service.h>

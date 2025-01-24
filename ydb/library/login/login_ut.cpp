@@ -533,4 +533,31 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(validateTokenResponse.User == createUserRequest.User);
         }
     }
+
+    Y_UNIT_TEST(CreateUserWithHash) {
+        TLoginProvider provider;
+        provider.RotateKeys();
+
+        TString user = "user1";
+        TString password = "password1";
+        TString hash = provider.GenerateHash(password);
+
+        {
+            TLoginProvider::TCreateUserRequest createRequest;
+            createRequest.User = user;
+            createRequest.Password = hash;
+            createRequest.IsPasswordHashedAlready = true;
+            auto createResponse = provider.CreateUser(createRequest);
+            std::cerr << createResponse.Error << std::endl;
+            UNIT_ASSERT(!createResponse.Error);
+        }
+
+        {
+            TLoginProvider::TLoginUserRequest loginRequest;
+            loginRequest.User = user;
+            loginRequest.Password = password;
+            auto loginResponse = provider.LoginUser(loginRequest);
+            UNIT_ASSERT(!loginResponse.Error);
+        }
+    }
 }

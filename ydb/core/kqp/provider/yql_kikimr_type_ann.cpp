@@ -1894,6 +1894,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     virtual TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
         const THashSet<TString> supportedSettings = {
             "password",
+            "hash",
             "passwordEncrypted",
             "nullPassword",
             "login",
@@ -1909,7 +1910,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 return TStatus::Error;
             }
 
-            if (name == "password") {
+            if (name == "password" || name == "hash") {
                 if (!EnsureAtom(setting.Value().Ref(), ctx)) {
                     return TStatus::Error;
                 }
@@ -1933,6 +1934,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     virtual TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
         const THashSet<TString> supportedSettings = {
             "password",
+            "hash",
             "passwordEncrypted",
             "nullPassword",
             "login",
@@ -1948,7 +1950,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 return TStatus::Error;
             }
 
-            if (name == "password") {
+            if (name == "password" || name == "hash") {
                 if (!EnsureAtom(setting.Value().Ref(), ctx)) {
                     return TStatus::Error;
                 }

@@ -71,6 +71,7 @@ private:
 public:
     TPasswordChecker(const TPasswordComplexity& passwordComplexity);
     TResult Check(const TString& username, const TString& password) const;
+    TResult CheckSyntaxOfHash(const TString& hash) const;
     void Update(const TPasswordComplexity& passwordComplexity);
 };
 

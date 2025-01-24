@@ -94,12 +94,14 @@ public:
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
+        bool IsPasswordHashedAlready = false;
         bool CanLogin = true;
     };
 
     struct TModifyUserRequest : TBasicRequest {
         TString User;
         std::optional<TString> Password;
+        bool IsPasswordHashedAlready = false;
         std::optional<bool> CanLogin;
     };
 
@@ -212,6 +214,8 @@ public:
     static TString GetTokenAudience(const TString& token);
     static std::chrono::system_clock::time_point GetTokenExpiresAt(const TString& token);
     static TString SanitizeJwtToken(const TString& token);
+
+    TString GenerateHash(const TString& password);
 
 private:
     std::deque<TKeyRecord>::iterator FindKeyIterator(ui64 keyId);

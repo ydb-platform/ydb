@@ -2,6 +2,9 @@
 #include <util/string/builder.h>
 #include "password_checker.h"
 
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_reader.h>
+
 namespace NLogin {
 
 TPasswordComplexity::TPasswordComplexity()
@@ -69,6 +72,33 @@ bool TPasswordChecker::TComplexityState::CheckSpecialCharsCount() const {
 TPasswordChecker::TPasswordChecker(const TPasswordComplexity& passwordComplexity)
     : PasswordComplexity(passwordComplexity)
 {}
+
+TPasswordChecker::TResult TPasswordChecker::CheckSyntaxOfHash(const TString& hash) const {
+    NJson::TJsonValue json;
+    if (!NJson::ReadJsonTree(hash, &json)) {
+        return {.Success = false};
+    }
+
+    if (json.GetType() != NJson::JSON_MAP
+        || json.GetMap().size() != 3
+        || !json.Has("type")
+        || !json.Has("salt")
+        || !json.Has("hash")
+        || json["type"].GetType() != NJson::JSON_STRING
+        || json["salt"].GetType() != NJson::JSON_STRING
+        || json["hash"].GetType() != NJson::JSON_STRING
+    ) {
+        return {.Success = false,
+                .Error = "There should be three fields here: salt, hash and type."};
+    }
+
+    if (json["type"].GetStringRobust() != "argon2id") {
+        return {.Success = false,
+                .Error = "Field \'type\' must be equal \'argon2id\'"};
+    }
+
+    return {.Success = true};
+};
 
 TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const TString& password) const {
     if (password.empty() && PasswordComplexity.MinLength == 0) {

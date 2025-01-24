@@ -661,7 +661,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
 struct TCreateUserSettings {
     TString UserName;
     TString Password;
-    bool PasswordEncrypted = false;
+    bool IsPasswordHashedAlready = false;
     bool CanLogin;
 };
 
@@ -681,7 +681,7 @@ struct TModifyPermissionsSettings {
 struct TAlterUserSettings {
     TString UserName;
     std::optional<TString> Password;
-    bool PasswordEncrypted = false;
+    bool IsPasswordHashedAlready = false;
     std::optional<bool> CanLogin;
 };
 

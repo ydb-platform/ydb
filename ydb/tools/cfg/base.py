@@ -388,7 +388,7 @@ class ClusterDetailsProvider(object):
 
         hostname = host_description.get("name", host_description.get("host"))
 
-        if isinstance(self._host_info_provider, NopHostsInformationProvider):
+        if isinstance(self._host_info_provider, walle.NopHostsInformationProvider):
             raise RuntimeError(f"there is no 'rack' specified for host {hostname} in template, and no host info provider has been specified")
 
         return str(self._host_info_provider.get_rack(hostname))

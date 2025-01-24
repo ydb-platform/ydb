@@ -39,6 +39,7 @@ class StabilityCluster:
             self._unpack_resource('simple_queue'),
             self._unpack_resource('olap_workload'),
             self._unpack_resource('statistics_workload'),
+            self._unpack_resource('ydb_cli'),
         )
 
         self.kikimr_cluster = ExternalKiKiMRCluster(
@@ -193,7 +194,7 @@ class StabilityCluster:
             if mode in ['all', 'dumps']:
                 node.ssh_command('sudo rm -rf /coredumps/*', raise_on_error=False)
             if mode in ['all', 'logs']:
-                node.ssh_command('sudo rm -rf /Berkanavt/kikimr_31003/logs/*', raise_on_error=False)
+                node.ssh_command('sudo rm -rf /Berkanavt/kikimr_31*/logs/*', raise_on_error=False)
                 node.ssh_command('sudo rm -rf /Berkanavt/kikimr/logs/*', raise_on_error=False)
                 node.ssh_command('sudo rm -rf /Berkanavt/nemesis/log/*', raise_on_error=False)
             if mode == 'all':
@@ -291,6 +292,7 @@ def parse_args():
             "start_workload_simple_queue_row",
             "start_workload_simple_queue_column",
             "start_workload_olap_workload",
+            "start_workload_log",
             "stop_workloads",
             "perform_checks",
         ],
@@ -339,6 +341,49 @@ def main():
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(
                     'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
+                    raise_on_error=True
+                )
+        if action == "start_workload_log":
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                if node_id == 1:
+                    node.ssh_command([
+                        '/Berkanavt/nemesis/bin/ydb_cli',
+                        '--endpoint', f'grpc://localhost:{node.grpc_port}',
+                        '--database', '/Root/db1',
+                        'workload', 'log', 'clean'
+                        ],
+                        raise_on_error=True
+                    )
+                    node.ssh_command([
+                        '/Berkanavt/nemesis/bin/ydb_cli',
+                        '--endpoint', f'grpc://localhost:{node.grpc_port}',
+                        '--database', '/Root/db1',
+                        'workload', 'log', 'init',
+                        '--len', '1000',
+                        '--int-cols', '20',
+                        '--key-cols', '20',
+                        '--min-partitions', '100',
+                        '--partition-size', '10',
+                        '--auto-partition', '0',
+                        '--ttl', '3600'
+                        ],
+                        raise_on_error=True
+                    )
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                node.ssh_command([
+                    'screen -s workload_log -d -m bash -c "while true; do',
+                    '/Berkanavt/nemesis/bin/ydb_cli',
+                    '--endpoint', f'grpc://localhost:{node.grpc_port}',
+                    '--database', '/Root/db1',
+                    'workload', 'log', 'run', 'bulk_upsert',
+                    '--len', '1000',
+                    '--int-cols', '20',
+                    '--key-cols', '20',
+                    '--threads', '2000',
+                    '--timestamp_deviation', '180',
+                    '--seconds', '86400',
+                    '; done"'
+                    ],
                     raise_on_error=True
                 )
         if action == "start_workload_simple_queue_column":

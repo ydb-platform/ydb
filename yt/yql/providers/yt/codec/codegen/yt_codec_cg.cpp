@@ -10,7 +10,7 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/codegen/codegen.h>
 
 #include <yql/essentials/types/binary_json/read.h>
@@ -18,8 +18,8 @@
 
 #include <library/cpp/resource/resource.h>
 
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Instructions.h>
+#include <llvm/IR/Module.h> // Y_IGNORE
+#include <llvm/IR/Instructions.h> // Y_IGNORE
 
 #endif
 

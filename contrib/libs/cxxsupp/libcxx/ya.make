@@ -74,10 +74,6 @@ ELSE()
     CXXFLAGS(-nostdinc++)
 ENDIF()
 
-IF (OS_LINUX)
-    EXTRALIBS(-lpthread)
-ENDIF()
-
 IF (CLANG)
     CXXFLAGS(GLOBAL -nostdinc++)
 ENDIF()

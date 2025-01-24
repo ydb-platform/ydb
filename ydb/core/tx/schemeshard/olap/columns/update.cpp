@@ -180,7 +180,7 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
         columnSchema.SetColumnFamilyId(ColumnFamilyId.value());
     }
     if (Serializer) {
-        Serializer->SerializeToProto(*columnSchema.MutableSerializer());
+        Serializer.SerializeToProto(*columnSchema.MutableSerializer());
     }
     if (AccessorConstructor) {
         *columnSchema.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
@@ -198,7 +198,7 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
 
 bool TOlapColumnBase::ApplySerializerFromColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
     if (GetColumnFamilyId().has_value()) {
-        SetSerializer(columnFamilies.GetByIdVerified(GetColumnFamilyId().value())->GetSerializerContainerOptional());
+        SetSerializer(columnFamilies.GetByIdVerified(GetColumnFamilyId().value())->GetSerializerContainer());
     } else {
         TString familyName = "default";
         const TOlapColumnFamily* columnFamily = columnFamilies.GetByName(familyName);
@@ -210,7 +210,7 @@ bool TOlapColumnBase::ApplySerializerFromColumnFamily(const TOlapColumnFamiliesD
         }
 
         ColumnFamilyId = columnFamily->GetId();
-        SetSerializer(columnFamilies.GetByIdVerified(columnFamily->GetId())->GetSerializerContainerOptional());
+        SetSerializer(columnFamilies.GetByIdVerified(columnFamily->GetId())->GetSerializerContainer());
     }
     return true;
 }

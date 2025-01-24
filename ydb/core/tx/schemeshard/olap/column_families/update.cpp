@@ -44,6 +44,9 @@ NKikimr::TConclusion<NKikimrSchemeOp::TOlapColumn::TSerializer> ConvertFamilyDes
 
 NKikimr::TConclusion<NKikimrSchemeOp::TFamilyDescription> ConvertSerializerContainerToFamilyDescription(
     const NArrow::NSerialization::TSerializerContainer& serializer) {
+    if (!serializer.HasObject()) {
+        return NKikimr::TConclusionStatus::Fail("convert TSerializerContainer to TFamilyDescription: container doesn't have object");
+    }
     NKikimrSchemeOp::TFamilyDescription result;
     if (serializer->GetClassName().empty()) {
         return NKikimr::TConclusionStatus::Fail("convert TSerializerContainer to TFamilyDescription: field `ClassName` is empty");
@@ -107,14 +110,14 @@ void TOlapColumnFamlilyAdd::ParseFromLocalDB(const NKikimrSchemeOp::TFamilyDescr
         auto serializer = ConvertFamilyDescriptionToProtoSerializer(columnFamily);
         Y_VERIFY_S(serializer.IsSuccess(), serializer.GetErrorMessage());
         SerializerContainer = NArrow::NSerialization::TSerializerContainer();
-        Y_VERIFY(SerializerContainer->DeserializeFromProto(serializer.GetResult()));
+        Y_VERIFY(SerializerContainer.DeserializeFromProto(serializer.GetResult()));
     }
 }
 
 void TOlapColumnFamlilyAdd::Serialize(NKikimrSchemeOp::TFamilyDescription& columnFamily) const {
     columnFamily.SetName(Name);
-    if (SerializerContainer.has_value()) {
-        auto result = ConvertSerializerContainerToFamilyDescription(SerializerContainer.value());
+    if (SerializerContainer.HasObject()) {
+        auto result = ConvertSerializerContainerToFamilyDescription(SerializerContainer);
         Y_VERIFY_S(result.IsSuccess(), result.GetErrorMessage());
         columnFamily.SetColumnCodec(result->GetColumnCodec());
         if (result->HasColumnCodecLevel()) {
@@ -126,8 +129,8 @@ void TOlapColumnFamlilyAdd::Serialize(NKikimrSchemeOp::TFamilyDescription& colum
 bool TOlapColumnFamlilyAdd::ApplyDiff(const TOlapColumnFamlilyDiff& diffColumnFamily, IErrorCollector& errors) {
     Y_ABORT_UNLESS(GetName() == diffColumnFamily.GetName());
     NKikimrSchemeOp::TFamilyDescription newColumnFamily;
-    if (SerializerContainer.has_value()) {
-        auto resultConvert = ConvertSerializerContainerToFamilyDescription(SerializerContainer.value());
+    if (SerializerContainer.HasObject()) {
+        auto resultConvert = ConvertSerializerContainerToFamilyDescription(SerializerContainer);
         if (resultConvert.IsFail()) {
             errors.AddError(resultConvert.GetErrorMessage());
             return false;

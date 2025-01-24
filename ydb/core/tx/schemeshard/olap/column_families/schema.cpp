@@ -119,7 +119,7 @@ bool TOlapColumnFamiliesDescription::Validate(const NKikimrSchemeOp::TColumnTabl
         }
         lastColumnFamilyId = familyProto.GetId();
 
-        if (familyProto.HasColumnCodec() && family->HasSerializerContainer()) {
+        if (familyProto.HasColumnCodec() && family->GetSerializerContainer().HasObject()) {
             auto serializerProto = ConvertFamilyDescriptionToProtoSerializer(familyProto);
             if (serializerProto.IsFail()) {
                 errors.AddError(serializerProto.GetErrorMessage());
@@ -130,12 +130,12 @@ bool TOlapColumnFamiliesDescription::Validate(const NKikimrSchemeOp::TColumnTabl
                 errors.AddError(TStringBuilder() << "can't deserialize column family `" << columnFamilyName << "`  from proto ");
                 return false;
             }
-            if (!family->GetSerializerContainerOptional()->IsEqualTo(serializer)) {
+            if (!family->GetSerializerContainer().IsEqualTo(serializer)) {
                 errors.AddError(TStringBuilder() << "compression from column family '" << columnFamilyName << "` is not matching schema preset");
                 return false;
             }
-        } else if ((!familyProto.HasColumnCodec() && family->HasSerializerContainer()) ||
-                   (familyProto.HasColumnCodec() && !family->HasSerializerContainer())) {
+        } else if ((!familyProto.HasColumnCodec() && family->GetSerializerContainer().HasObject()) ||
+                   (familyProto.HasColumnCodec() && !family->GetSerializerContainer().HasObject())) {
             errors.AddError(TStringBuilder() << "compression is not matching schema preset in column family `" << columnFamilyName << "`");
             return false;
         }

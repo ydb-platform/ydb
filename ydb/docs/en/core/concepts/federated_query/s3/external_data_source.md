@@ -33,8 +33,8 @@ FROM
   <object_storage_connection_name>.`<file_path>`
 WITH(
  FORMAT = "<file_format>",
-  SCHEMA = (<schema_definition>),
-  COMPRESSION = "<compression>")
+  COMPRESSION = "<compression>",
+  SCHEMA = (<schema_definition>))
 WHERE
   <filter>;
 ```
@@ -44,8 +44,8 @@ Where:
 * `object_storage_connection_name` — the name of the external data source leading to the S3 bucket ({{ objstorage-full-name }}).
 * `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported; more details [in the section](#path_format).
 * `file_format` — the [data format](formats.md#formats) in the files.
-* `schema_definition` — the [schema definition](#schema) of the data stored in the files.
 * `compression` — the [compression format](formats.md#compression_formats) of the files.
+* `schema_definition` — the [schema definition](#schema) of the data stored in the files.
 
 ### Data schema description {#schema}
 
@@ -61,7 +61,33 @@ For example, the data schema below describes a schema field named `Year` of type
 Year Int32 NOT NULL
 ```
 
-If a data field is marked as required (`NOT NULL`) but this field is missing in the processed file, the processing of such a file will result in an error. If a field is marked as optional (`NULL`), no error will occur in the absence of the field in the processed file, but the field will take the value `NULL`.
+If a data field is marked as required (`NOT NULL`) but this field is missing in the processed file, the processing of such a file will result in an error. If a field is marked as optional (`NULL`), no error will occur in the absence of the field in the processed file, but the field will take the value `NULL`. Keyword `NULL` is optional in this context.
+
+### Schema inference {#inferring}
+
+Schema inference is available for all [data formats](formats.md#formats) except `raw` and `json_as_string`. It can be useful when the schema contains a large number of fields. In order not to enter those fields manually, use the `WITH_INFER` parameter.:
+
+```yql
+SELECT
+  <expression>
+FROM
+  <object_storage_connection_name>.`<file_path>`
+WITH(
+ FORMAT = "<file_format>",
+  COMPRESSION = "<compression>",
+  WITH_INFER = "true")
+WHERE
+  <filter>;
+```
+
+Where:
+
+* `object_storage_connection_name` — the name of the external data source leading to the S3 bucket ({{ objstorage-full-name }}).
+* `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported; more details [in the section](#path_format).
+* `file_format` — the [data format](formats.md#formats) in the files.
+* `compression` — the [compression format](formats.md#compression_formats) of the files.
+
+As a result of executing such a query, the names and types of fields will be inferred.
 
 ### Data path formats {#path_format}
 

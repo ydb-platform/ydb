@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 STRESS_BINARIES_DEPLOY_PATH = '/Berkanavt/nemesis/bin/'
 
 DICT_OF_SERVICES = {
-    'nemesis' : { 
+    'nemesis' : {
         'status': """
             if systemctl is-active --quiet nemesis; then
                 echo "Running"
@@ -276,7 +276,7 @@ class StabilityCluster:
             for state_object in state_objects_dic:
                 result = node.ssh_command(
                     state_objects_dic[state_object]['status'],
-                    raise_on_error = True
+                    raise_on_error=True
                 )
                 status = result.decode('utf-8').replace('\n', '')
                 if status == 'Running' :

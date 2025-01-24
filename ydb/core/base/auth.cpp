@@ -30,7 +30,7 @@ bool IsAdministrator(const TAppData* appData, const TString& userToken) {
         return false;
     }
 
-    return HasToken(appData, NACLib::TUserToken(tokenPb));
+    return HasToken(appData, NACLib::TUserToken(std::move(tokenPb)));
 }
 
 bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToken) {

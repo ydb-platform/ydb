@@ -83,7 +83,6 @@ void TStageFeatures::Free(const ui64 volume, const bool allocated) {
 }
 
 void TStageFeatures::UpdateVolume(const ui64 from, const ui64 to, const bool allocated) {
-    AFL_VERIFY(false);
     if (Counters) {
         Counters->Sub(from, allocated);
         Counters->Add(to, allocated);

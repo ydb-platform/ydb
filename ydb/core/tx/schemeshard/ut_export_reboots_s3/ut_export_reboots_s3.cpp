@@ -69,7 +69,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )", {
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "%s"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                }
+            )"
+        });
     }
 
     Y_UNIT_TEST(ShouldSucceedOnMultiShardTable) {
@@ -90,7 +100,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )", {
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "%s"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                }
+            )"
+        });
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleTable) {
@@ -124,7 +144,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: "table2"
               }
             }
-        )");
+        )", {
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "%s"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                }
+            )"
+        });
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnSingleShardTable) {
@@ -144,7 +174,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )", {
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "%s"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                }
+            )"
+        });
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnMultiShardTable) {
@@ -165,7 +205,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )", {
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "%s"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                }
+            )"
+        });
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnSingleTable) {
@@ -199,7 +249,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: "table2"
               }
             }
-        )");
+        )", {
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "%s"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                }
+            )"
+        });
     }
 
     Y_UNIT_TEST(ForgetShouldSucceedOnSingleShardTable) {
@@ -219,7 +279,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )", {
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "%s"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                }
+            )"
+        });
     }
 
     Y_UNIT_TEST(ForgetShouldSucceedOnMultiShardTable) {
@@ -240,7 +310,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )", {
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "%s"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                }
+            )"
+        });
     }
 
     Y_UNIT_TEST(ForgetShouldSucceedOnSingleTable) {
@@ -274,6 +354,16 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: "table2"
               }
             }
-        )");
+        )", {
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "%s"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                }
+            )"
+        });
     }
 }

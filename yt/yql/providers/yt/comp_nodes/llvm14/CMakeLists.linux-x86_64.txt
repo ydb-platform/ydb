@@ -37,12 +37,7 @@ target_link_libraries(yt-comp_nodes-llvm14 PUBLIC
   yutil
   minikql-codegen-llvm14
   minikql-invoke_builtins-llvm14
-  llvm14-lib-IR
-  lib-ExecutionEngine-MCJIT
-  llvm14-lib-Linker
-  lib-Target-X86
-  Target-X86-AsmParser
-  lib-Transforms-IPO
+  codec-codegen-llvm14
   cpp-streams-brotli
   yql-essentials-minikql
   essentials-public-udf

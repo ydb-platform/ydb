@@ -1,6 +1,8 @@
 import os
 import subprocess
 import sys
+import datetime
+import logging
 
 import ydb
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -9,6 +11,8 @@ from ydb.tests.library.test_meta import link_test_case
 
 ROWS_CHUNK_SIZE = 1000000
 ROWS_CHUNKS_COUNT = 50
+
+logger = logging.getLogger(__name__)
 
 
 class TestYdbWorkload(object):
@@ -20,6 +24,10 @@ class TestYdbWorkload(object):
             dynamic_pdisk_size=5 * 1024 * 1024
         ))
         cls.cluster.start()
+
+        cls.driver = ydb.Driver(endpoint=f'grpc://localhost:{cls.cluster.nodes[1].grpc_port}', database='/Root')
+        cls.session = ydb.QuerySessionPool(cls.driver)
+        cls.driver.wait(5, fail_fast=True)
 
     @classmethod
     def teardown_class(cls):
@@ -50,13 +58,23 @@ class TestYdbWorkload(object):
                 SELECT * FROM AS_TABLE($rows_list);
             """, None, ydb.retries.RetrySettings(max_retries=retries))
 
-    def upsert_until_overload(self, session, table):
+    def try_upsert_test_chunk(self, session, table, chunk_id) -> bool:
+        try:
+            self.upsert_test_chunk(session, table, chunk_id, retries=0)
+            return True
+        except ydb.issues.Overloaded:
+            return False
+        except ydb.issues.Unavailable:
+            return False
+
+    def upsert_until_overload(self, do_upsert):
         try:
             for i in range(ROWS_CHUNKS_COUNT):
-                res = self.upsert_test_chunk(session, table, i, retries=0)
+                res = do_upsert(i)
                 print(f"upsert #{i} ok, result:", res, file=sys.stderr)
                 described = self.cluster.client.describe('/Root', '')
                 print('Quota exceeded {}'.format(described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded), file=sys.stderr)
+            assert False, "overload not reached"
         except ydb.issues.Overloaded:
             print('upsert: got overload issue', file=sys.stderr)
         except ydb.issues.Unavailable:
@@ -70,7 +88,7 @@ class TestYdbWorkload(object):
 
         # Overflow the database
         self.create_test_table(session, 'huge')
-        self.upsert_until_overload(session, 'huge')
+        self.upsert_until_overload(session, lambda i: self.upsert_test_chunk(session, 'huge', i, retries=0))
 
         # Cleanup
         session.execute_with_retries("""DROP TABLE huge""")
@@ -153,7 +171,7 @@ class TestYdbWorkload(object):
         # Overflow the database
         table_path = os.path.join(self.database_name, 'huge')
         self.create_test_table(session, table_path)
-        self.upsert_until_overload(session, table_path)
+        self.upsert_until_overload(session, lambda i: self.upsert_test_chunk(session, 'huge', i, retries=0))
 
         # Check that deletion works at least first time
         self.delete_test_chunk(session, table_path, 0)
@@ -165,3 +183,76 @@ class TestYdbWorkload(object):
         assert i == ROWS_CHUNKS_COUNT
 
         # Writes enabling after data deletion will be checked in separate PR
+    
+    def wait_for(self, condition_func, timeout_seconds) -> bool:
+        t0 = time.time()
+        while time.time() - t0 < timeout_seconds:
+            if condition_func():
+                return True
+            time.sleep(1)
+        return False
+
+    @link_test_case("#13652")
+    def test_duplicates(self):
+        self.create_test_table('table')
+
+        duration_limit = datetime.timedelta(seconds=30)
+        deadline = datetime.datetime.now() + duration_limit
+        last_stats_report = datetime.datetime.now()
+        while True:
+            try:
+                res = self.upsert_chunk('table', 0, retries=0)
+                logger.debug(f"query ok, result: {res}")
+            except ydb.issues.Overloaded:
+                break
+
+            # Report stats
+            if datetime.datetime.now() - last_stats_report > datetime.timedelta(seconds=5):
+                last_stats_report = datetime.datetime.now()
+                res = self.session.execute_with_retries('SELECT SUM(ColumnBlobBytes) AS bytes FROM `table/.sys/primary_index_portion_stats`')[0].rows[0]['bytes']
+                logger.info(f"stats: blobBytes={res}")
+
+            # Check timeout
+            assert datetime.datetime.now() <= deadline, f"couldn't reach storage limit in {duration_limit}"
+
+        duration_limit = datetime.timedelta(seconds=10)
+        deadline = datetime.datetime.now() + duration_limit
+        while True:
+            try:
+                res = self.upsert_chunk('table', 1, retries=0)
+                logger.debug(f"query ok, result: {res}")
+                break
+            except ydb.issues.Overloaded:
+                logger.debug(f"query overloaded")
+
+            # Check timeout
+            assert datetime.datetime.now() <= deadline, f"database is still overloaded after {duration_limit}"
+        
+        ########
+
+        """As per https://github.com/ydb-platform/ydb/issues/13653"""
+        self.database_name = os.path.join('/Root', 'test')
+        print('Database name {}'.format(self.database_name), file=sys.stderr)
+        self.cluster.create_database(
+            self.database_name,
+            storage_pool_units_count={
+                'hdd': 1
+            },
+        )
+        self.cluster.register_and_start_slots(self.database_name, count=1)
+        self.cluster.wait_tenant_up(self.database_name)
+
+        # Set soft and hard quotas to 40 Mb
+        self.alter_database_quotas(self.cluster.nodes[1], self.database_name, """
+            data_size_hard_quota: 40000000
+            data_size_soft_quota: 40000000
+        """)
+
+        session = self.make_session()
+
+        # Overflow the database
+        table_path = os.path.join(self.database_name, 'huge')
+        self.create_test_table(session, table_path)
+        self.upsert_until_overload(session, lambda i: self.upsert_test_chunk(session, table_path, 0, retries=0))
+
+        assert self.wait_for(lambda: self.try_upsert_test_chunk(session, table_path, 1), 30), f"can't write after overload by duplicates"

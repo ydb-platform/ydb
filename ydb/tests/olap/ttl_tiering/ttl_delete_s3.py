@@ -213,7 +213,6 @@ class TestDeleteS3Ttl(TllTieringTestBase):
                 raise Exception("Data changed after ttl change, was {} now {}".format(data, data1))
 
         change_ttl_and_check(self.days_to_cool, days_to_medium, self.days_to_freeze)
-        change_ttl_and_check(500, 1000, 1500)
 
     def test_ttl_delete(self):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13467 '''

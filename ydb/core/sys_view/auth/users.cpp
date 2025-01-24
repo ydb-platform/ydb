@@ -96,8 +96,6 @@ protected:
     void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const NKikimrScheme::TEvListUsersResult& result) {
         TVector<TCell> cells(::Reserve(Columns.size()));
 
-        // TODO: add rows according to request's sender user rights
-
         for (const auto& user : result.GetUsers()) {
             if (!user.HasName() || !CanAccessUser(user.GetName())) {
                 continue;
@@ -164,7 +162,7 @@ private:
             return true;
         }
 
-        return UserToken->IsExist(user);
+        return UserToken && UserToken->IsExist(user);
     }
 
 private:

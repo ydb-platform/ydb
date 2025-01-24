@@ -2963,6 +2963,141 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
+    Y_UNIT_TEST(AuthPermissions_Access) {
+        TTestEnv env;
+        SetupAuthAccessEnvironment(env);
+        TTableClient client(env.GetDriver());
+
+        env.GetClient().MkDir("/Root", "Dir1");
+        env.GetClient().MkDir("/Root", "Dir2");
+        env.GetClient().MkDir("/Root/Tenant1", "Dir3");
+        env.GetClient().MkDir("/Root/Tenant1", "Dir4");
+        
+        {
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1");
+            env.GetClient().ModifyACL("/Root", "Dir1", acl.SerializeAsString());
+        }
+        {
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user2");
+            env.GetClient().ModifyACL("/Root", "Dir2", acl.SerializeAsString());
+        }
+        {
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user3");
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user4");
+            env.GetClient().ModifyACL("/Root/Tenant1", "Dir3", acl.SerializeAsString());
+        }
+
+        { // anonymous
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint());
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_permissions`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["/Root"];["ydb.generic.use"];["user1"]];
+                [["/Root"];["ydb.generic.use"];["user2"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                [["/Root/Dir1"];["ydb.granular.select_row"];["user1"]];
+                [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]]
+            ])";
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        { // user1 has /Root GenericUse access
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "password1",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/.sys/auth_permissions`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["/Root"];["ydb.generic.use"];["user1"]];
+                    [["/Root"];["ydb.generic.use"];["user2"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                    [["/Root/Dir1"];["ydb.granular.select_row"];["user1"]];
+                    [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]]
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant1/.sys/auth_permissions`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["/Root/Tenant1/Dir3"];["ydb.granular.select_row"];["user3"]];
+                    [["/Root/Tenant1/Dir3"];["ydb.granular.erase_row"];["user4"]]
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+        }
+
+        { // revoke user1 /Root/Dir2 GenericUse access
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "user1");
+            env.GetClient().ModifyACL("/Root", "Dir2", acl.SerializeAsString());
+
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user1",
+                    .Password = "password1",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_permissions`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["/Root"];["ydb.generic.use"];["user1"]];
+                [["/Root"];["ydb.generic.use"];["user2"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                [["/Root/Dir1"];["ydb.granular.select_row"];["user1"]];
+            ])";
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
+        // and test tenant user and tenant admin
+    }
+
     Y_UNIT_TEST(AuthEffectivePermissions) {
         TTestEnv env;
         SetupAuthEnvironment(env);

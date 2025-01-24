@@ -39,8 +39,6 @@ protected:
         
         TVector<TCell> cells(::Reserve(Columns.size()));
 
-        // TODO: add rows according to request's sender user rights
-
         auto entryPath = CanonizePath(entry.Path);
 
         for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {

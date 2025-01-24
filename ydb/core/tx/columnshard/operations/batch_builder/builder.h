@@ -28,6 +28,7 @@ public:
         : WriteData(std::move(writeData))
         , ActualSnapshot(context.GetApplyToSnapshot())
         , Context(context) {
+        WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildBatch);
     }
 };
 }   // namespace NKikimr::NOlap

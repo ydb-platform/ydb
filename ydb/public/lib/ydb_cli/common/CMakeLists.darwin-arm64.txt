@@ -68,6 +68,7 @@ target_sources(common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/print_utils.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/profile_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/progress_bar.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/progress_indication.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/query_stats.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/recursive_list.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/recursive_remove.cpp

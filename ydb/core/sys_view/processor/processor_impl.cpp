@@ -283,7 +283,10 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
 
     auto clearPartitionTop = [&] (NKikimrSysView::EStatsType type, TPartitionTop& top) {
         for (const auto& partition : top) {
-            db.Table<Schema::IntervalPartitionTops>().Key((ui32)type, partition->GetTabletId()).Delete();
+            if (partition->GetFollowerId() == 0)
+                db.Table<Schema::IntervalPartitionTops>().Key((ui32)type, partition->GetTabletId()).Delete();
+            else
+                db.Table<Schema::IntervalPartitionFollowerTops>().Key((ui32)type, partition->GetTabletId(), partition->GetFollowerId()).Delete();
         }
         top.clear();
     };

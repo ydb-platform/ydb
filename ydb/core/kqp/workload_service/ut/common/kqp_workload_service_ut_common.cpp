@@ -86,8 +86,7 @@ public:
             SendNotification<TEvQueryRunner::TEvExecutionStarted>();
         }
 
-        auto response = std::make_unique<TEvKqpExecuter::TEvStreamDataAck>();
-        response->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto response = std::make_unique<TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(std::numeric_limits<i64>::max());
 
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
@@ -110,7 +109,7 @@ public:
     void Handle(TEvKqp::TEvQueryResponse::TPtr& ev) {
         SendNotification<TEvQueryRunner::TEvExecutionFinished>();
 
-        Result_.Response = ev->Get()->Record.GetRef();
+        Result_.Response = ev->Get()->Record;
         Promise_.SetValue(Result_);
         PassAway();
     }
@@ -223,6 +222,28 @@ private:
     std::unordered_set<TActorId> RunningRequests;
 };
 
+// The only purpose is to allow BUILTIN_SYSTEM_DOMAIN users
+struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
+    TFakeTicketParserActor()
+        : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StateFunc)
+    {}
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+    )
+
+    void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+        Y_ABORT_UNLESS(ev->Get()->Ticket.EndsWith(BUILTIN_SYSTEM_DOMAIN));
+        NACLib::TUserToken::TUserTokenInitFields args;
+        args.UserSID = ev->Get()->Ticket;
+        TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
+        Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
+    }
+};
+
+IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
+    return new TFakeTicketParserActor();
+}
 // Ydb setup
 
 class TWorkloadServiceYdbSetup : public IYdbSetup {
@@ -231,6 +252,9 @@ private:
         TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableResourcePools(Settings_.EnableResourcePools_);
         appConfig.MutableFeatureFlags()->SetEnableResourcePoolsOnServerless(Settings_.EnableResourcePoolsOnServerless_);
+        appConfig.MutableFeatureFlags()->SetEnableMetadataObjectsOnServerless(Settings_.EnableMetadataObjectsOnServerless_);
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
         appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
 
         return appConfig;
@@ -264,6 +288,8 @@ private:
         }
 
         SetLoggerSettings(serverSettings);
+
+        serverSettings.CreateTicketParser = CreateFakeTicketParser;
 
         return serverSettings;
     }
@@ -356,7 +382,7 @@ public:
                 new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest(), nodeIndex
             );
             auto response = GetRuntime()->GrabEdgeEvent<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
-            
+
             if (!response->Get()->Record.SystemStateInfoSize()) {
                 errorString = "empty system state info";
                 return false;
@@ -429,6 +455,14 @@ public:
         return {.AsyncResult = promise.GetFuture(), .QueryRunnerActor = runerActor, .EdgeActor = edgeActor};
     }
 
+    void ExecuteQueryRetry(const TString& retryMessage, const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings(), TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
+        WaitFor(timeout, retryMessage, [this, query, settings](TString& errorString) {
+            auto result = ExecuteQuery(query, settings);
+            errorString = result.GetIssues().ToOneLineString();
+            return result.GetStatus() == EStatus::SUCCESS;
+        });
+    }
+
     // Async query execution actions
     void WaitQueryExecution(const TQueryRunnerResultAsync& query, TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
         auto event = GetRuntime()->GrabEdgeEvent<TEvQueryRunner::TEvExecutionStarted>(query.EdgeActor, timeout);
@@ -449,7 +483,7 @@ public:
     TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const override {
         const auto& edgeActor = GetRuntime()->AllocateEdgeActor();
 
-        GetRuntime()->Register(CreateRefreshPoolStateActor(edgeActor, Settings_.DomainName_, poolId ? poolId : Settings_.PoolId_, leaseDuration, GetRuntime()->GetAppData().Counters));
+        GetRuntime()->Register(CreateRefreshPoolStateActor(edgeActor, CanonizePath(Settings_.DomainName_), poolId ? poolId : Settings_.PoolId_, leaseDuration, GetRuntime()->GetAppData().Counters));
         auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvRefreshPoolStateResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
 
@@ -495,6 +529,15 @@ public:
         }
     }
 
+    TEvFetchDatabaseResponse::TPtr FetchDatabase(const TString& database) const override {
+        const TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
+        GetRuntime()->Register(CreateDatabaseFetcherActor(edgeActor, database));
+        const auto response = GetRuntime()->GrabEdgeEvent<TEvFetchDatabaseResponse>(edgeActor);
+        UNIT_ASSERT_C(response, "Got empty response from DatabaseFetcherActor");
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
+        return response;
+    }
+
     // Coomon helpers
     TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();
@@ -517,7 +560,7 @@ private:
         UNIT_ASSERT_C(settings.PoolId_, "Query pool id is not specified");
 
         auto event = std::make_unique<TEvKqp::TEvQueryRequest>();
-        event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, {}).SerializeAsString());
+        event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, settings.GroupSIDs_).SerializeAsString());
 
         auto request = event->Record.MutableRequest();
         request->SetQuery(query);

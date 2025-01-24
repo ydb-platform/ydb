@@ -11,7 +11,7 @@ namespace NYT::NTabletClient {
 struct TWatermarkRuntimeDataConfig
     : public NYTree::TYsonStructLite
 {
-    TString ColumnName;
+    std::string ColumnName;
     ui64 Watermark;
 
     REGISTER_YSON_STRUCT_LITE(TWatermarkRuntimeDataConfig);

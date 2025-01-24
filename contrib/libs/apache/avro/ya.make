@@ -4,28 +4,29 @@ LIBRARY()
 
 LICENSE(
     Apache-2.0 AND
-    BSL-1.0 AND
-    FSFAP
+    BSL-1.0
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.11.3)
+VERSION(1.12.0)
 
-ORIGINAL_SOURCE(https://github.com/apache/avro/archive/release-1.11.3.tar.gz)
+ORIGINAL_SOURCE(https://github.com/apache/avro/archive/release-1.12.0.tar.gz)
 
 PEERDIR(
+    contrib/libs/fmt
     contrib/libs/snappy
     contrib/restricted/boost/any
     contrib/restricted/boost/asio
     contrib/restricted/boost/crc
-    contrib/restricted/boost/format
     contrib/restricted/boost/iostreams
     contrib/restricted/boost/math
 )
 
 ADDINCL(
-    contrib/libs/apache/avro/api
+    contrib/libs/apache/avro
+    contrib/libs/apache/avro/include
+    contrib/libs/apache/avro/include/avro
 )
 
 NO_COMPILER_WARNINGS()
@@ -34,7 +35,7 @@ NO_UTIL()
 
 CFLAGS(
     -DAVRO_SOURCE
-    -DAVRO_VERSION=\"1.11.3\"
+    -DAVRO_VERSION=\"1.12.0\"
     -DSNAPPY_CODEC_AVAILABLE
 )
 

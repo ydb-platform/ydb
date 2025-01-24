@@ -32,7 +32,13 @@ namespace NKikimr {
                     "Db# LogoBlobs action# add_data mode# %s id# %s lsn# %" PRIu64 " bufSize# %" PRIu32,
                     OpMode2Str(mode), id.ToString().data(), lsn, ui32(buffer.GetSize())));
 
-        HullDs->LogoBlobs->PutToFresh(lsn, TKeyLogoBlob(id), partId, ingress, std::move(buffer));
+        if (buffer) {
+            HullDs->LogoBlobs->PutToFresh(lsn, TKeyLogoBlob(id), partId, ingress, std::move(buffer));
+        } else {
+            const TBlobStorageGroupType gtype = HullDs->HullCtx->VCtx->Top->GType;
+            Y_DEBUG_ABORT_UNLESS(!gtype.PartSize(TLogoBlobID(id, partId)));
+            HullDs->LogoBlobs->PutToFresh(lsn, TKeyLogoBlob(id), TMemRecLogoBlob(ingress));
+        }
     }
 
     void THullDbRecovery::ReplayAddLogoBlobCmd(

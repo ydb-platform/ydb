@@ -10,16 +10,16 @@
 
 #include <ydb/core/fq/libs/protos/fq_private.pb.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb-cpp-sdk/client/params/params.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/core/fq/libs/common/debug_info.h>
 #include <ydb/core/fq/libs/control_plane_config/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/fq/libs/events/event_subspace.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NFq {
 
@@ -34,7 +34,7 @@ struct TAuditDetails {
         return sizeof(*this)
                 + (Before.Empty() ? 0 : Before->ByteSizeLong())
                 + (After.Empty() ? 0 : After->ByteSizeLong())
-                + CloudId.Size();
+                + CloudId.size();
     }
 };
 
@@ -202,11 +202,11 @@ struct TEvControlPlaneStorage {
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + Scope.Size()
+                    + Scope.size()
                     + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
+                    + User.size()
+                    + Token.size()
+                    + CloudId.size();
         }
 
         TString Scope;
@@ -489,12 +489,12 @@ struct TEvControlPlaneStorage {
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + DatabaseId.Size()
-                    + Database.Size()
-                    + TopicPath.Size()
-                    + ConsumerName.Size()
-                    + ClusterEndpoint.Size()
-                    + TokenName.Size();
+                    + DatabaseId.size()
+                    + Database.size()
+                    + TopicPath.size()
+                    + ConsumerName.size()
+                    + ClusterEndpoint.size()
+                    + TokenName.size();
         }
     };
 
@@ -678,8 +678,8 @@ struct TEvControlPlaneStorage {
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + CloudId.Size()
-                    + Scope.Size()
+                    + CloudId.size()
+                    + Scope.size()
                     + Record.ByteSizeLong();
         }
 
@@ -720,8 +720,8 @@ struct TEvControlPlaneStorage {
         size_t GetByteSize() const {
             return sizeof(*this)
                     + Request.ByteSizeLong()
-                    + CloudId.Size()
-                    + Scope.Size();
+                    + CloudId.size()
+                    + Scope.size();
         }
 
         google::protobuf::Empty Request;
@@ -764,8 +764,8 @@ struct TEvControlPlaneStorage {
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + CloudId.Size()
-                    + Scope.Size();
+                    + CloudId.size()
+                    + Scope.size();
         }
 
         TString CloudId;

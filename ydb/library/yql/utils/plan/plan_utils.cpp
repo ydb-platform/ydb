@@ -1,7 +1,8 @@
 #include "plan_utils.h"
 
-#include <ydb/library/yql/ast/yql_ast_escaping.h>
+#include <yql/essentials/ast/yql_ast_escaping.h>
 
+#include <util/charset/utf8.h>
 #include <util/string/vector.h>
 
 #include <regex>
@@ -35,7 +36,17 @@ TString ToStr(const TCoPgConst& data) {
 
 
 TString ToStr(const TCoLambda& lambda) {
-    return PrettyExprStr(lambda.Body());
+    if (lambda.Raw()->ChildrenSize() == 2) {
+        return PrettyExprStr(lambda.Body());
+    } else {
+        TVector<TString> bodies;
+        for (size_t i = 1; i < lambda.Raw()->ChildrenSize(); i++) {
+            if (auto str = PrettyExprStr(TExprBase(lambda.Raw()->ChildPtr(i)))) {
+                bodies.push_back(std::move(str));
+            }
+        }
+        return TStringBuilder() << "(" << JoinStrings(std::move(bodies), ",") << ")";
+    }
 }
 
 TString ToStr(const TCoAsStruct& asStruct) {
@@ -45,7 +56,8 @@ TString ToStr(const TCoAsStruct& asStruct) {
         auto value = PrettyExprStr(TExprBase(kv->Child(1)));
 
         if (!key.empty() && !value.empty()) {
-            args.push_back(TStringBuilder() << key << ": " << value);
+            if (key.StartsWith("_yql_agg_")) args.push_back(value);
+            else args.push_back(TStringBuilder() << key << ": " << value);
         }
     }
 
@@ -63,6 +75,17 @@ TString ToStr(const TCoAsList& asList) {
     return TStringBuilder() << "[" << JoinStrings(std::move(args), ",") << "]";
 }
 
+TString ToStr(const TCoList& list) {
+    TVector<TString> args;
+    for (const auto& arg : list.Args()) {
+        if (auto str = PrettyExprStr(TExprBase(arg))) {
+            args.push_back(std::move(str));
+        }
+    }
+
+    return TStringBuilder() << "[" << JoinStrings(std::move(args), ",") << "]";
+}
+
 TString ToStr(const TCoMember& member) {
     auto structName = PrettyExprStr(member.Struct());
     auto memberName = PrettyExprStr(member.Name());
@@ -72,6 +95,10 @@ TString ToStr(const TCoMember& member) {
     }
 
     return {};
+}
+
+TString ToStr(const TCoNth& nth) {
+    return TStringBuilder() << '#' << PrettyExprStr(nth.Index());
 }
 
 TString ToStr(const TCoIfPresent& ifPresent) {
@@ -186,11 +213,11 @@ TString LogicOpToStr(const TExprBase& op) {
         }
     }
 
-    return JoinStrings(std::move(args), TStringBuilder() << " " << op.Ref().Content() << " ");
+    return JoinStrings(std::move(args), TStringBuilder() << " " << ToUpperUTF8(op.Ref().Content()) << " ");
 }
 
 TString NotToStr(const TCoNot& notOp) {
-    return TStringBuilder() << "Not " << PrettyExprStr(notOp.Value());
+    return TStringBuilder() << "NOT " << PrettyExprStr(notOp.Value());
 }
 
 TString PrettyExprStr(const TExprBase& expr) {
@@ -213,6 +240,8 @@ TString PrettyExprStr(const TExprBase& expr) {
         return ToStr(asStruct.Cast());
     } else if (auto asList = expr.Maybe<TCoAsList>()) {
         return ToStr(asList.Cast());
+    } else if (auto list = expr.Maybe<TCoList>()) {
+        return ToStr(list.Cast());
     } else if (auto member = expr.Maybe<TCoMember>()) {
         return ToStr(member.Cast());
     } else if (auto ifPresent = expr.Maybe<TCoIfPresent>()) {
@@ -222,8 +251,14 @@ TString PrettyExprStr(const TExprBase& expr) {
     } else if (expr.Maybe<TCoMin>() || expr.Maybe<TCoMax>() || expr.Maybe<TCoInc>()) {
         return AggrOpToStr(expr);
     } else if (aggregations.contains(expr.Ref().Content())) {
-        return TStringBuilder() << aggregations.at(expr.Ref().Content()) << "("
-            << PrettyExprStr(TExprBase(expr.Ref().Child(0))) << ',' << PrettyExprStr(TExprBase(expr.Ref().Child(1))) << ")";
+        TVector<TString> children;
+        for (auto i = 0; i <= 1; i++) {
+            auto str = PrettyExprStr(TExprBase(expr.Ref().Child(i)));
+            if (str && !str.StartsWith("state._yql_agg_")) {
+                children.push_back(std::move(str));
+            }
+        }
+        return TStringBuilder() << aggregations.at(expr.Ref().Content()) << "(" << JoinStrings(std::move(children), ",") << ")";
     } else if (expr.Maybe<TCoBinaryArithmetic>() || expr.Maybe<TCoCompare>()) {
         return BinaryOpToStr(expr);
     } else if (expr.Maybe<TCoAnd>() || expr.Maybe<TCoOr>() || expr.Maybe<TCoXor>()) {
@@ -233,8 +268,26 @@ TString PrettyExprStr(const TExprBase& expr) {
     } else if (expr.Maybe<TCoParameter>() || expr.Maybe<TCoJust>() || expr.Maybe<TCoSafeCast>()
             || expr.Maybe<TCoCoalesce>() || expr.Maybe<TCoConvert>()) {
         return PrettyExprStr(TExprBase(expr.Ref().Child(0)));
+    } else if (auto nth = expr.Maybe<TCoNth>()) {
+        // return ToStr(nth.Cast());
+        return "";
+    // } else if (auto arg = expr.Maybe<TCoArgument>()) {
+    //     return ""; // not argument deduction yet, so just skip them
+    } else if (expr.Raw()->IsList()) {
+        TVector<TString> items;
+        for (const auto& item : expr.Raw()->ChildrenList()) {
+            if (auto str = PrettyExprStr(TExprBase(item))) {
+                if (!str.StartsWith("_yql_agg_")) {
+                    items.push_back(std::move(str));
+                }
+            }
+        }
+
+        return TStringBuilder() << "[" << JoinStrings(std::move(items), ",") << "]";
     } else {
-        return TString(expr.Ref().Content());
+        auto raw = TString(expr.Ref().Content());
+        // return raw.StartsWith("_yql_agg_") ? "" : raw;
+        return raw;
     }
 
     return {};

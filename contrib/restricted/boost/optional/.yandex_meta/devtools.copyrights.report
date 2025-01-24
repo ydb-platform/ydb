@@ -1,0 +1,219 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 15d50536bcbda2f7a36d5d623fb19036
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2014, Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/bad_optional_access.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 29c2f268f49f1dca1203b60b9452f3b9
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, 2008 Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2016 Andrzej Krzemienski
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/detail/optional_aligned_storage.hpp [1:2]
+        include/boost/optional/detail/optional_factory_support.hpp [1:2]
+        include/boost/optional/optional_fwd.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2f10b4a340b310e0d17224ef1c7f517e
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, 2008 Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2015 - 2017 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/detail/optional_config.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 346c67fb4a777a0d04af25c1d1bd52dc
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2014, 2015 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/none.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49502cfd99d9b7c0c64b960a8260c6e9
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2024 Ryan Malcolm Underwood.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/detail/optional_utility.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 75f254658639d6099b8a2607570e97af
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, 2008 Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2014 - 2021 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/detail/optional_aligned_storage.hpp [1:2]
+        include/boost/optional/detail/optional_config.hpp [1:2]
+        include/boost/optional/detail/optional_factory_support.hpp [1:2]
+        include/boost/optional/detail/optional_relops.hpp [1:2]
+        include/boost/optional/detail/optional_swap.hpp [1:2]
+        include/boost/optional/optional.hpp [1:2]
+        include/boost/optional/optional_fwd.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9011a14a0693638672595b3219eab47e
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, 2008 Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2015, 2024 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/detail/optional_relops.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 97a90988e6e57fde8f8f24870992405e
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2022 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/detail/optional_hash.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9a76da02cc5d44aea9b67b645c93e835
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2017 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/detail/experimental_traits.hpp [1:1]
+        include/boost/optional/detail/optional_trivially_copyable_base.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a103bfee1637c9cc67288e4038d76892
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2014, 2015 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/none.hpp [1:2]
+        include/boost/none_t.hpp [1:2]
+        include/boost/optional.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8d4e667a2b45ad481c6365ab8ff146a
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, 2008 Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2015 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/detail/optional_swap.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL db3e30044d1f01643d8ed0bc550521ef
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2014, 2024 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/none_t.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL db7c109214a40b15282917536ab96515
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, 2008 Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2014 - 2021 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/optional.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e1162d87fffbacf38e42e78ebd71eed4
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2005, Fernando Luis Cacciola Carballal.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/optional_io.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fe0444c22ecc3ff736a4eefe9c896df5
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2015-2024 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/detail/optional_reference_spec.hpp [1:1]

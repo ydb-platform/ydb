@@ -4,6 +4,8 @@
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/set.h>
+
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 
 namespace NKikimr::NKqp::NTopic {
@@ -166,6 +168,11 @@ void TTopicPartitionOperations::SetTabletId(ui64 value)
     Y_ABORT_UNLESS(TabletId_.Empty());
 
     TabletId_ = value;
+}
+
+TMaybe<TString> TTopicPartitionOperations::GetTopicName() const
+{
+    return Topic_;
 }
 
 bool TTopicPartitionOperations::HasReadOperations() const
@@ -389,6 +396,17 @@ TSet<ui64> TTopicOperations::GetSendingTabletIds() const
         ids.insert(operations.GetTabletId());
     }
     return ids;
+}
+
+TMaybe<TString> TTopicOperations::GetTabletName(ui64 tabletId) const {
+    TMaybe<TString> topic;
+    for (auto& [_, operations] : Operations_) {
+        if (operations.GetTabletId() == tabletId) {
+            topic = operations.GetTopicName();
+            break;
+        }
+    }
+    return topic;
 }
 
 size_t TTopicOperations::GetSize() const

@@ -1,6 +1,6 @@
 # Аутентификация при помощи сервиса метаданных
 
-{% include [work in progress message](_includes/addition.md) %}
+<!-- markdownlint-disable blanks-around-fences -->
 
 Ниже приведены примеры кода аутентификации при помощи переменных окружения в разных {{ ydb-short-name }} SDK.
 

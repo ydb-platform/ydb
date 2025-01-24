@@ -1,0 +1,11 @@
+--- a/cdipgoto.cpp
++++ b/cdipgoto.cpp
+@@ -293,7 +293,7 @@ std::ostream &IpGotoCodeGen::EXIT_STATES()
+ 		if ( st->outNeeded ) {
+ 			testEofUsed = true;
+ 			out << "	_test_eof" << st->id << ": " << vCS() << " = " << 
+-					st->id << "; goto _test_eof; \n";
++					st->id << "; goto _test_eof;\n";
+ 		}
+ 	}
+ 	return out;

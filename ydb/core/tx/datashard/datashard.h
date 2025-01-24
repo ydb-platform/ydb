@@ -192,7 +192,7 @@ namespace NTxDataShard {
     using NDataShard::TTxFlags;
 }
 
-struct TEvDataShard {
+namespace TEvDataShard {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_DATASHARD),
         EvCancelTransactionProposal,
@@ -331,6 +331,23 @@ struct TEvDataShard {
 
         EvSampleKRequest,
         EvSampleKResponse,
+
+        EvLocalKMeansRequest,
+        EvLocalKMeansResponse,
+
+        EvReshuffleKMeansRequest,
+        EvReshuffleKMeansResponse,
+
+        // Sent by the scan actor when EvRead uses a scan
+        EvReadScanStarted,
+        EvReadScanFinished,
+
+        // Used to transfer in-memory state between generations
+        EvInMemoryStateRequest,
+        EvInMemoryStateResponse,
+
+        EvForceDataCleanup,
+        EvForceDataCleanupResult,
 
         EvEnd
     };
@@ -918,6 +935,9 @@ struct TEvDataShard {
                                NKikimrTxDataShard::TEvRead,
                                TEvDataShard::EvRead>;
 
+        static constexpr ui32 HINT_BATCH = NKikimrTxDataShard::TEvRead::HINT_BATCH;
+        static constexpr ui32 HINT_LOW_PRIORITY = NKikimrTxDataShard::TEvRead::HINT_LOW_PRIORITY;
+
         TEvRead() = default;
 
         TString ToString() const override;
@@ -1036,12 +1056,10 @@ struct TEvDataShard {
     };
 
     struct TEvReadContinue : public TEventLocal<TEvReadContinue, TEvDataShard::EvReadContinue> {
-        TActorId Reader;
-        ui64 ReadId;
+        const ui64 LocalReadId;
 
-        TEvReadContinue(TActorId reader, ui64 readId)
-            : Reader(reader)
-            , ReadId(readId)
+        explicit TEvReadContinue(ui64 localReadId)
+            : LocalReadId(localReadId)
         {}
     };
 
@@ -1055,6 +1073,24 @@ struct TEvDataShard {
                                            NKikimrTxDataShard::TEvReadCancel,
                                            TEvDataShard::EvReadCancel> {
         TEvReadCancel() = default;
+    };
+
+    struct TEvReadScanStarted : public TEventLocal<TEvReadScanStarted, EvReadScanStarted> {
+        const ui64 LocalReadId;
+
+        // Event sender is the scan actor
+        explicit TEvReadScanStarted(ui64 localReadId)
+            : LocalReadId(localReadId)
+        {}
+    };
+
+    struct TEvReadScanFinished : public TEventLocal<TEvReadScanFinished, EvReadScanFinished> {
+        const ui64 LocalReadId;
+
+        // Event sender is the scan actor
+        explicit TEvReadScanFinished(ui64 localReadId)
+            : LocalReadId(localReadId)
+        {}
     };
 
     struct TEvReadColumnsRequest : public TEventPB<TEvReadColumnsRequest,
@@ -1454,6 +1490,30 @@ struct TEvDataShard {
                           TEvDataShard::EvSampleKResponse> {
     };
 
+    struct TEvReshuffleKMeansRequest
+        : public TEventPB<TEvReshuffleKMeansRequest,
+                          NKikimrTxDataShard::TEvReshuffleKMeansRequest,
+                          TEvDataShard::EvReshuffleKMeansRequest> {
+    };
+
+    struct TEvReshuffleKMeansResponse
+        : public TEventPB<TEvReshuffleKMeansResponse,
+                          NKikimrTxDataShard::TEvReshuffleKMeansResponse,
+                          TEvDataShard::EvReshuffleKMeansResponse> {
+    };
+
+    struct TEvLocalKMeansRequest
+        : public TEventPB<TEvLocalKMeansRequest,
+                          NKikimrTxDataShard::TEvLocalKMeansRequest,
+                          TEvDataShard::EvLocalKMeansRequest> {
+    };
+
+    struct TEvLocalKMeansResponse
+        : public TEventPB<TEvLocalKMeansResponse,
+                          NKikimrTxDataShard::TEvLocalKMeansResponse,
+                          TEvDataShard::EvLocalKMeansResponse> {
+    };
+
     struct TEvKqpScan
         : public TEventPB<TEvKqpScan,
                           NKikimrTxDataShard::TEvKqpScan,
@@ -1502,6 +1562,24 @@ struct TEvDataShard {
             Record.MutablePathId()->SetOwnerId(ownerId);
             Record.MutablePathId()->SetLocalId(localId);
             Record.SetStatus(status);
+        }
+    };
+
+    struct TEvForceDataCleanup : TEventPB<TEvForceDataCleanup, NKikimrTxDataShard::TEvForceDataCleanup,
+                                          TEvDataShard::EvForceDataCleanup> {
+        TEvForceDataCleanup() = default;
+
+        TEvForceDataCleanup(ui64 dataCleanupGeneration) {
+            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+        }
+    };
+
+    struct TEvForceDataCleanupResult : TEventPB<TEvForceDataCleanupResult, NKikimrTxDataShard::TEvForceDataCleanupResult,
+                                                TEvDataShard::EvForceDataCleanupResult> {
+        TEvForceDataCleanupResult() = default;
+
+        TEvForceDataCleanupResult(ui64 dataCleanupGeneration) {
+            Record.SetDataCleanupGeneration(dataCleanupGeneration);
         }
     };
 
@@ -1715,6 +1793,29 @@ struct TEvDataShard {
             Record.SetStatus(status);
             Record.SetErrorDescription(error);
         }
+    };
+
+    struct TEvInMemoryStateRequest
+        : public TEventPB<TEvInMemoryStateRequest,
+                          NKikimrTxDataShard::TEvInMemoryStateRequest,
+                          EvInMemoryStateRequest>
+    {
+        TEvInMemoryStateRequest() = default;
+
+        explicit TEvInMemoryStateRequest(ui32 generation, const TString& continuationToken = {}) {
+            Record.SetGeneration(generation);
+            if (!continuationToken.empty()) {
+                Record.SetContinuationToken(continuationToken);
+            }
+        }
+    };
+
+    struct TEvInMemoryStateResponse
+        : public TEventPB<TEvInMemoryStateResponse,
+                          NKikimrTxDataShard::TEvInMemoryStateResponse,
+                          EvInMemoryStateResponse>
+    {
+        TEvInMemoryStateResponse() = default;
     };
 };
 

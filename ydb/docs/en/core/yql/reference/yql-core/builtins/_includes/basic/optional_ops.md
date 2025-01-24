@@ -1,15 +1,17 @@
-## Just, Unwrap, Nothing {#optional-ops}
+## Just {#optional-ops}
 
 `Just()`: Change the value's data type to [optional](../../../types/optional.md) from the current data type (i.e.,`T` is converted to `T?`).
 
 The reverse operation is [Unwrap](#optional-ops).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT
   Just("my_string"); --  String?
 ```
+
+## Unwrap {#unwrap}
 
 `Unwrap()`: Converting the [optional](../../../types/optional.md) value of the data type to the relevant non-optional type, raising a runtime error if the data is `NULL`. This means that `T?` becomes `T`.
 
@@ -22,7 +24,7 @@ Arguments:
 
 Reverse operation is [Just](#optional-ops).
 
-**Examples**
+### Examples
 
 ```yql
 $value = Just("value");
@@ -30,9 +32,11 @@ $value = Just("value");
 SELECT Unwrap($value, "Unexpected NULL for $value");
 ```
 
+## Nothing {#nothing}
+
 `Nothing()`: Create an empty value for the specified [Optional](../../../types/optional.md) data type.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

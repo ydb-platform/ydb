@@ -35,11 +35,20 @@ build {
   provisioner "file" {
     content     = <<EOF
 set -xe
+
+cat <<LLVM > /etc/apt/sources.list.d/llvm.list
+deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-16 main
+deb-src http://apt.llvm.org/jammy/ llvm-toolchain-jammy-16 main
+LLVM
+
+curl --no-progress-meter -o /etc/apt/trusted.gpg.d/apt.llvm.org.asc https://apt.llvm.org/llvm-snapshot.gpg.key
+
 apt-get update
 # wait for unattended-upgrade is finished
 apt-get -o DPkg::Lock::Timeout=600 -y --no-install-recommends dist-upgrade
 apt-get -y install --no-install-recommends \
-  antlr3 clang-12 clang-14 cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
+  antlr3 clang-12 clang-14 clang-16 llvm-16 lld-16 \
+  cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
   liblttng-ust1 lld-14 llvm-14 m4 make ninja-build parallel postgresql-client postgresql-client \
   python-is-python3 python3-pip s3cmd s3cmd zlib1g linux-tools-common linux-tools-generic
 
@@ -60,6 +69,28 @@ apt-get install -y nodejs
 npm install -g @testmo/testmo-cli
 EOF
     destination = "/tmp/install-packages.sh"
+  }
+
+  provisioner "file" {
+    content     = <<EOF
+#!/bin/env/sh
+set -xe
+ANTLR_VERSION=4.13.2
+
+apt-get -y install --no-install-recommends default-jre-headless
+
+mkdir /usr/local/share/java && cd /usr/local/share/java
+curl --no-progress-meter -O https://www.antlr.org/download/antlr-$${ANTLR_VERSION}-complete.jar
+
+cat <<ANTLR4 > /usr/local/bin/antlr4
+#! /bin/sh
+exec java -cp /usr/local/share/java/antlr-$${ANTLR_VERSION}-complete.jar org.antlr.v4.Tool "\$@"
+ANTLR4
+
+chmod +x /usr/local/bin/antlr4
+
+EOF
+    destination = "/tmp/install-antlr4.sh"
   }
 
   provisioner "file" {
@@ -101,6 +132,7 @@ EOF
   provisioner "shell" {
     inline = [
       "sudo bash /tmp/install-packages.sh",
+      "sudo bash /tmp/install-antlr4.sh",
       "sudo bash /tmp/install-agent.sh",
       "sudo bash /tmp/install-unified-agent.sh",
       "sudo rm /tmp/install-packages.sh /tmp/install-agent.sh /tmp/install-unified-agent.sh",

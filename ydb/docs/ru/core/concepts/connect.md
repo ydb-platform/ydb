@@ -11,7 +11,7 @@
 Примеры:
 
 * `grpc://localhost:7135` — протокол обмена данными без шифрования (gRPC), сервер запущен на том же хосте что и клиент, принимает соединения на порту 7135.
-* `grpcs://ydb.example.com` — протокол обмена данными с шифрованием (gRPCs), сервер запущен на хосте ydb.example.com в изолированной корпоративной интрасети, принимает соединения на порту YDB по умолчанию 2135.
+* `grpcs://ydb.example.com` — протокол обмена данными с шифрованием (gRPCs), сервер запущен на хосте ydb.example.com в изолированной корпоративной интрасети, принимает соединения на порту {{ ydb-short-name }} по умолчанию 2135.
 
 ## Путь базы данных {#database}
 
@@ -41,6 +41,7 @@
 `<endpoint>?database=<database>`
 
 Примеры:
+
 - `grpc://localhost:7135?database=/local`
 - `grpcs://ydb.serverless.yandexcloud.net:2135?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr`
 

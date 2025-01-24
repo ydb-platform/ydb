@@ -1,0 +1,770 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b88ae20a0460ad8c5f318ec6b565479
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999 Tom Tromey
+         * Copyright (C) 2000 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nfkc.c [133:134]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0bc2cd020aab7ac79c6e87326685364c
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 1999-2002, 2006-2007, 2009-2024 Free Software Foundation, Inc.
+           Written by Bruno Haible <bruno@clisp.org>, 2001.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/unistr/u8-mbtoucr.c [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 13e3cbe09bb21f79657df354c3e3892b
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2001-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/intprops-internal.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 18d2d2d32fc582c55e806b1a933e02d0
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2001-2004, 2006-2007, 2009-2024 Free Software Foundation, Inc.
+           Written by Bruno Haible and Simon Josefsson.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/striconv.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1fa5b424925025620da721a506c59553
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999 Tom Tromey
+         * Copyright (C) 2000 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nfkc.c [133:134]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 21f12ce70aae7ba0ee1fc385ceb5e2f2
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright © 1994–1996, 1999–2002, 2004–2017, 2020–2023 Free Software
+        Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        INSTALL [359:360]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 27ce5b20ad9e78f7531aaba48cf9f5ae
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         *  Copyright (C) 1999, 2000 Tom Tromey
+         *  Copyright 2000, 2005 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nfkc.c [95:96]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3b574f7f1416828680097b27dbab6535
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/filename.h [61:70]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 47685e9c5088f737ec59c7b005049d80
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        Copyright (C) 2002-2021 Simon Josefsson
+        See the end for copying conditions.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4a2e0c65dd2f0a262200c488c5aa6547
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2003, 2006-2007, 2009-2024 Free Software Foundation, Inc.
+           Written by Bruno Haible <bruno@clisp.org>, 2003, 2018.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/malloca.c [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4ed3e2903bebb94cc76a8cea62412f72
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 1998-1999, 2005-2006, 2009-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/c-strcasecmp.c [2:2]
+        lib/gl/c-strncasecmp.c [2:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5bc6ff3a47980c0e7bb641f4467616f8
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2002, 2006-2007, 2009-2024 Free Software Foundation, Inc.
+           Written by Bruno Haible <bruno@clisp.org>, 2002.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/unistr/u8-check.c [2:3]
+        lib/gl/unistr/u8-uctomb-aux.c [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c60b37c3ddbb9131f33799523ad696d
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 1990, 1998-2001, 2003-2006, 2009-2024 Free Software
+           Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/basename-lgpl.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5d16e84e8d9a8803540d0da7e2280959
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2001-2002, 2005-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/unistr.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6554b40cc1dc6bdd49454832fe1561d2
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2016-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/getprogname.c [2:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 837f6206c57076a8fae116a8b36723fa
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 1992-2024 Free Software Foundation, Inc.
+           Copyright The GNU Toolchain Authors.
+           This file is part of the GNU C Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/cdefs.h [1:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8732e2b48e8c15bd3e88a0651e28717c
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 1995, 1999, 2001-2004, 2006-2024 Free Software Foundation,
+           Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/alloca.h [4:5]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8ad6cf07b34f0659597c2dd40c1cd690
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        Copyright (c) 2009-2024 Simon Josefsson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        CONTRIBUTING.md [108:111]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8cf91579d8cb4087b6bd775cd2b2bbed
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
+         51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYINGv2 [4:6]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9072d03cf2b7d6940951885b917a658f
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2004, 2009-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/cloexec.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 926f44e06a2484d8bcb0eb8e98d43f37
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2004-2024 Simon Josefsson.
+           Copyright (C) 2003-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/c-ctype.c [3:3]
+        lib/tld.c [2:3]
+        lib/tld.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d441f897facb23890579094470bd947
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2012-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/stat-time.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9e2e1fc986748168e399d3ed96f6d81a
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2007-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/iconv.h [4:4]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a0d3949dde60514d7d331a1fb06cdafc
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright 2022-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/stdckdint.h [4:4]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a2ed5ae8572d72b4018ca851b48fb3fa
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2010-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/iconv.h [39:39]
+        lib/gl/iconv.h [406:406]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a4e6ae4ce3dce0ea647010b527196815
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 1995-1996, 2001, 2003, 2005, 2009-2024 Free Software
+           Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/c-strcase.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a9abf184b32c772193e72135f92d83fb
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2002, 2005-2006, 2009-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/unistr/u8-uctomb.c [2:3]
+        lib/gl/unitypes.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ad44b14fef16a56a9c260c221f7c6bdc
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2000-2003, 2006, 2008-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/c-ctype.h [8:8]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ae1c92b56a8eb03860113a107890e8fb
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 1998, 2001, 2003-2006, 2009-2024 Free Software Foundation,
+           Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/basename-lgpl.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL bb4caca4ca8eb1e4ee4eb1d457b7d60d
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2001-2023 Free Software Foundation, Inc.
+           This file is part of the GNU C Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/filename.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL beb5513cd46feff37817387cc860302e
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2003-2007, 2009-2024 Free Software Foundation, Inc.
+           Written by Bruno Haible <bruno@clisp.org>, 2003.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/malloca.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING.LESSERv2 [428:433]
+        COPYINGv2 [251:256]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c6aca106009b8ff0ae3ecc2100252950
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1995-1997  Peter Mattis, Spencer Kimball and Josh MacDonald
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nfkc.c [61:61]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL cc19ac3a131ec75b13c1e9c02b9c6c74
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright 2020-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/attribute.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL cc5dd31c1484abddecff8fc275f5c9cc
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2020-2024 Free Software Foundation, Inc.
+           This file is part of the GNU C Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/idx.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ccc843c875085e62f88980e0f07ae876
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 1997-2024 Free Software Foundation, Inc.
+           This file is part of the GNU C Library.
+           Contributed by Jean-François Bignolles <bignolle@ecoledoc.ibp.fr>, 1997.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/strverscmp.c [2:4]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL cea1b82351539a871d540971f218116e
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+         51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING.LESSERv2 [4:6]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4e4e5740b88a0e413df36a9c06d6b8d
+BELONGS dynamic/ya.make static/ya.make
+FILE_INCLUDE AUTHORS found in files: AUTHORS at line 1, FAQ at line 2, NEWS at line 1732, README at line 2, THANKS at line 2, lib/idna.c at line 2, lib/idna.h at line 2, lib/nfkc.c at line 2, lib/profiles.c at line 2, lib/punycode.c at line 2, lib/punycode.h at line 2, lib/stringprep.c at line 2, lib/stringprep.h at line 2, lib/toutf8.c at line 2, lib/version.c at line 2
+    License text:
+        Libidn AUTHORS -- Information about the authors.
+        Copyright (C) 2002-2024 Simon Josefsson
+        See the end for copying conditions.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        AUTHORS [1:3]
+        FAQ [2:3]
+        README [2:3]
+        THANKS [2:3]
+        lib/idna.c [2:2]
+        lib/idna.h [2:2]
+        lib/nfkc.c [2:2]
+        lib/profiles.c [2:2]
+        lib/punycode.c [2:2]
+        lib/punycode.h [2:2]
+        lib/stringprep.c [2:2]
+        lib/stringprep.h [2:2]
+        lib/toutf8.c [2:2]
+        lib/version.c [2:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d61d7e8ba71212039421594f04c29c0f
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2009-2024 Free Software Foundation, Inc.
+           Written by Bruno Haible <bruno@clisp.org>, 2009.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/fd-hook.c [2:3]
+        gl/fd-hook.h [2:2]
+        lib/gl/iconv.h [378:378]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL db5fb9296367b90aabe560f4cea86b99
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 1990-2000, 2003-2004, 2006-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/xalloc-oversized.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL df1d4dcd0d180c8bdc86cbfd89454cec
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 1995-1998, 2000-2002, 2004-2006, 2009-2024 Free Software
+           Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/gettext.h [2:3]
+        lib/gl/gettext.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e2cd1cb8a88ffafc649fe9fe0ce646fa
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         *  Copyright (C) 1999, 2000 Tom Tromey
+         *  Copyright 2000, 2005 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nfkc.c [95:96]
+        lib/nfkc.c [508:509]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e5001efc79cfcb4b22e70c41fe1590ce
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2005, 2007, 2009-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gl/stat-time.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec215c39e1084ca847e8f877edf4cf8e
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         *  Copyright (C) 1999, 2000 Tom Tromey
+         *  Copyright 2000 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nfkc.c [508:509]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL eec606dd47904ce0630d9a93fbe3baa5
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2004-2024 Simon Josefsson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/idn-free.c [2:2]
+        lib/idn-free.h [2:2]
+        lib/pr29.c [2:2]
+        lib/pr29.h [2:2]
+        lib/strerror-idna.c [2:2]
+        lib/strerror-pr29.c [2:2]
+        lib/strerror-punycode.c [2:2]
+        lib/strerror-stringprep.c [2:2]
+        lib/strerror-tld.c [2:2]
+        lib/tld.c [2:3]
+        lib/tld.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f349531fc58e3bb88897fab5ec46517c
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2001-2007, 2010-2024 Free Software Foundation, Inc.
+           Written by Bruno Haible and Simon Josefsson.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/striconv.c [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f362df9ec855f157df9a6a194a403614
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright 2017-2024 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/gl/libc-config.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL fe6f4a2cadd39168e946fc1f97e42e56
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
+         Everyone is permitted to copy and distribute verbatim copies
+         of this license document, but changing it is not allowed.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING.LESSERv3 [4:6]
+        COPYINGv3 [4:6]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make

@@ -12,11 +12,12 @@ namespace NPrivate {
     };
 }
 
-template <typename K, typename V, size_t BucketCount = 64, typename L = TAdaptiveLock>
+template <typename K, typename V, size_t BucketCount = 64, typename L = TAdaptiveLock, class TLockOps = TCommonLockOps<L>>
 class TConcurrentHashMap {
 public:
     using TActualMap = THashMap<K, V>;
     using TLock = L;
+    using TBucketGuard = TGuard<TLock, TLockOps>;
 
     struct TBucket {
         friend class TConcurrentHashMap;
@@ -88,13 +89,13 @@ public:
 
     void Insert(const K& key, const V& value) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         bucket.Map[key] = value;
     }
 
     void InsertUnique(const K& key, const V& value) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         if (!bucket.Map.insert(std::make_pair(key, value)).second) {
             Y_ABORT("non-unique key");
         }
@@ -102,14 +103,14 @@ public:
 
     V& InsertIfAbsent(const K& key, const V& value) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         return bucket.Map.insert(std::make_pair(key, value)).first->second;
     }
 
     template <typename TKey, typename... Args>
     V& EmplaceIfAbsent(TKey&& key, Args&&... args) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         if (V* value = bucket.TryGetUnsafe(key)) {
             return *value;
         }
@@ -123,7 +124,7 @@ public:
     template <typename Callable>
     V& InsertIfAbsentWithInit(const K& key, Callable initFunc) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         if (V* value = bucket.TryGetUnsafe(key)) {
             return *value;
         }
@@ -133,13 +134,13 @@ public:
 
     V Get(const K& key) const {
         const TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         return bucket.GetUnsafe(key);
     }
 
     bool Get(const K& key, V& result) const {
         const TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         if (const V* value = bucket.TryGetUnsafe(key)) {
             result = *value;
             return true;
@@ -149,13 +150,13 @@ public:
 
     V Remove(const K& key) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         return bucket.RemoveUnsafe(key);
     }
 
     bool Has(const K& key) const {
         const TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         return bucket.HasUnsafe(key);
     }
 };

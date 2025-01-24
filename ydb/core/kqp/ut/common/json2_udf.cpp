@@ -1,4 +1,4 @@
-#include <ydb/library/yql/udfs/common/json2/json2_udf.cpp>
+#include <yql/essentials/udfs/common/json2/json2_udf.cpp>
 
 namespace NKikimr::NKqp {
 

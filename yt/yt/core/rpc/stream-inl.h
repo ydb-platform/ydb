@@ -43,11 +43,28 @@ TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream
 {
     auto invokeResult = request->Invoke().template As<void>();
     auto metaHandlerResult = request->GetResponseAttachmentsStream()->Read()
-        .Apply(metaHandler);
-    return metaHandlerResult.Apply(BIND ([=] () {
+        .Apply(std::move(metaHandler));
+    return metaHandlerResult.Apply(BIND ([req = std::move(request), res = std::move(invokeResult)] () mutable {
         return NDetail::CreateRpcClientOutputStreamFromInvokedRequest(
-            std::move(request),
-            std::move(invokeResult));
+            std::move(req),
+            std::move(res));
+    }));
+}
+
+template <class TRequestMessage, class TResponse>
+TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream(
+    TIntrusivePtr<TTypedClientRequest<TRequestMessage, TResponse>> request,
+    TCallback<void(TSharedRef)> metaHandler,
+    TCallback<void(TIntrusivePtr<TResponse>&&)> rspHandler)
+{
+    auto invokeResult = request->Invoke()
+        .ApplyUnique(std::move(rspHandler));
+    auto metaHandlerResult = request->GetResponseAttachmentsStream()->Read()
+        .Apply(std::move(metaHandler));
+    return metaHandlerResult.Apply(BIND ([req = std::move(request), res = std::move(invokeResult)] () mutable {
+        return NDetail::CreateRpcClientOutputStreamFromInvokedRequest(
+            std::move(req),
+            std::move(res));
     }));
 }
 

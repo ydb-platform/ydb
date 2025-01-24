@@ -1,15 +1,12 @@
 #include "table_consumer.h"
 
-#include <yt/yt/client/table_client/logical_type.h>
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/schema.h>
+#include "logical_type.h"
+#include "name_table.h"
+#include "schema.h"
 
 #include <yt/yt/core/concurrency/scheduler.h>
 
 #include <util/string/cast.h>
-
-#include <cmath>
-#include <variant>
 
 namespace NYT::NTableClient {
 

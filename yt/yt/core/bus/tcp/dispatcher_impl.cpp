@@ -64,7 +64,7 @@ const TIntrusivePtr<TTcpDispatcher::TImpl>& TTcpDispatcher::TImpl::Get()
     return TTcpDispatcher::Get()->Impl_;
 }
 
-const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const TString& networkName, bool encrypted)
+const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const std::string& networkName, bool encrypted)
 {
     auto [statistics, ok] = NetworkStatistics_.FindOrInsert(networkName, [] {
         return std::array<TNetworkStatistics, 2>{};
@@ -79,7 +79,7 @@ IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
     const TString& threadNamePrefix)
 {
     {
-        auto guard = ReaderGuard(PollerLock_);
+        auto guard = ReaderGuard(PollersLock_);
         if (*pollerPtr) {
             return *pollerPtr;
         }
@@ -87,13 +87,14 @@ IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
 
     IPollerPtr poller;
     {
-        auto guard = WriterGuard(PollerLock_);
+        auto guard = WriterGuard(PollersLock_);
+        auto config = Config_.Acquire();
         if (!*pollerPtr) {
             if (isXfer) {
                 *pollerPtr = CreateThreadPoolPoller(
-                    Config_->ThreadPoolSize,
+                    config->ThreadPoolSize,
                     threadNamePrefix,
-                    Config_->ThreadPoolPollingPeriod);
+                    config->ThreadPoolPollingPeriod);
             } else {
                 *pollerPtr = CreateThreadPoolPoller(/*threadCount*/ 1, threadNamePrefix);
             }
@@ -118,7 +119,7 @@ bool TTcpDispatcher::TImpl::IsNetworkingDisabled()
     return NetworkingDisabled_.load();
 }
 
-const TString& TTcpDispatcher::TImpl::GetNetworkNameForAddress(const TNetworkAddress& address)
+const std::string& TTcpDispatcher::TImpl::GetNetworkNameForAddress(const TNetworkAddress& address)
 {
     if (address.IsUnix()) {
         return LocalNetworkName;
@@ -151,6 +152,21 @@ TTosLevel TTcpDispatcher::TImpl::GetTosLevelForBand(EMultiplexingBand band)
     return bandDescriptor.TosLevel.load(std::memory_order::relaxed);
 }
 
+int TTcpDispatcher::TImpl::GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism)
+{
+    if (band < TEnumTraits<EMultiplexingBand>::GetMinValue() || band > TEnumTraits<EMultiplexingBand>::GetMaxValue()) {
+        return std::clamp<int>(
+            multiplexingParallelism,
+            DefaultMinMultiplexingParallelism,
+            DefaultMaxMultiplexingParallelism);
+    }
+    const auto& bandDescriptor = BandToDescriptor_[band];
+    return std::clamp<int>(
+        multiplexingParallelism,
+        bandDescriptor.MinMultiplexingParallelism.load(std::memory_order::relaxed),
+        bandDescriptor.MaxMultiplexingParallelism.load(std::memory_order::relaxed));
+}
+
 IPollerPtr TTcpDispatcher::TImpl::GetAcceptorPoller()
 {
     static const TString ThreadNamePrefix("BusAcpt");
@@ -166,13 +182,13 @@ IPollerPtr TTcpDispatcher::TImpl::GetXferPoller()
 void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
 {
     {
-        auto guard = WriterGuard(PollerLock_);
+        auto guard = WriterGuard(PollersLock_);
 
-        Config_ = config;
+        Config_.Store(config);
 
         if (XferPoller_) {
-            XferPoller_->Reconfigure(Config_->ThreadPoolSize);
-            XferPoller_->Reconfigure(Config_->ThreadPoolPollingPeriod);
+            XferPoller_->SetThreadCount(config->ThreadPoolSize);
+            XferPoller_->SetPollingPeriod(config->ThreadPoolPollingPeriod);
         }
     }
 
@@ -197,6 +213,8 @@ void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
         const auto& bandConfig = config->MultiplexingBands[band];
         auto& bandDescriptor = BandToDescriptor_[band];
         bandDescriptor.TosLevel.store(bandConfig ? bandConfig->TosLevel : DefaultTosLevel);
+        bandDescriptor.MinMultiplexingParallelism.store(bandConfig ? bandConfig->MinMultiplexingParallelism : DefaultMinMultiplexingParallelism);
+        bandDescriptor.MaxMultiplexingParallelism.store(bandConfig ? bandConfig->MaxMultiplexingParallelism : DefaultMaxMultiplexingParallelism);
     }
 }
 
@@ -242,12 +260,7 @@ void TTcpDispatcher::TImpl::CollectSensors(ISensorWriter* writer)
         }
     });
 
-    TTcpDispatcherConfigPtr config;
-    {
-        auto guard = ReaderGuard(PollerLock_);
-        config = Config_;
-    }
-
+    auto config = Config_.Acquire();
     if (config->NetworkBandwidth) {
         writer->AddGauge("/network_bandwidth_limit", *config->NetworkBandwidth);
     }
@@ -331,8 +344,47 @@ void TTcpDispatcher::TImpl::OnPeriodicCheck()
 
 std::optional<TString> TTcpDispatcher::TImpl::GetBusCertsDirectoryPath() const
 {
-    auto guard = ReaderGuard(PollerLock_);
-    return Config_->BusCertsDirectoryPath;
+    return Config_.Acquire()->BusCertsDirectoryPath;
+}
+
+void TTcpDispatcher::TImpl::RegisterLocalMessageHandler(int port, const ILocalMessageHandlerPtr& handler)
+{
+    {
+        auto guard = WriterGuard(LocalMessageHandlersLock_);
+        if (!LocalMessageHandlers_.emplace(port, handler).second) {
+            THROW_ERROR_EXCEPTION("Local message handler is already registered for port %v",
+                port);
+        }
+    }
+
+    YT_LOG_INFO("Local message handler registered (Port: %v)",
+        port);
+}
+
+void TTcpDispatcher::TImpl::UnregisterLocalMessageHandler(int port)
+{
+    {
+        auto guard = WriterGuard(LocalMessageHandlersLock_);
+        LocalMessageHandlers_.erase(port);
+    }
+
+    YT_LOG_INFO("Local message handler unregistered (Port: %v)",
+        port);
+}
+
+ILocalMessageHandlerPtr TTcpDispatcher::TImpl::FindLocalBypassMessageHandler(const TNetworkAddress& address)
+{
+    if (!TAddressResolver::Get()->IsLocalAddress(address)) {
+        return nullptr;
+    }
+
+    if (!Config_.Acquire()->EnableLocalBypass) {
+        YT_LOG_INFO("XXX disabled %v", address);
+        return nullptr;
+    }
+
+    auto guard = ReaderGuard(LocalMessageHandlersLock_);
+    return GetOrDefault(LocalMessageHandlers_, address.GetPort());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

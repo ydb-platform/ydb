@@ -1,0 +1,2 @@
+exclude:
+  - '*_pb2.pyi'

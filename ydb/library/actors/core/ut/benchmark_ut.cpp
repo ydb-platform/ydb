@@ -102,15 +102,17 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
             auto [leftParams, rightParams] = SplitParameters(params, newRight, newLeft);
 
             bool ranAsync = false;
+            bool wantSplit = newLeft < params.Right && params.Left < newRight;
 
             if (newLeft < params.Right) {
-                ranAsync = TryRunAsync(rightParams);
-                if (ranAsync) {
+                ranAsync = wantSplit && TryRunAsync(rightParams);
+                if (!ranAsync) {
                     Sort(rightParams);
                 }
             }
             if (params.Left < newRight) {
-                if (!ranAsync && !TryRunAsync(leftParams)) {
+                ranAsync = wantSplit && !ranAsync && TryRunAsync(leftParams);
+                if (!ranAsync) {
                     Sort(leftParams);
                 }
             }
@@ -145,7 +147,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
         using TParameters = TQuickSortEngine::TParameters;
         struct TThreadPoolParameters {
             const ui32 ThreadsLimit = 0;
-            std::atomic<ui32> ThreadsUsed = 0;
+            std::atomic<ui32> ThreadsUsed;
             TThreadPool& ThreadPool;
 
             TThreadPoolParameters(ui32 threadsLimit, ui32 threadsUsed, TThreadPool &threadPool)

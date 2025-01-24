@@ -63,7 +63,7 @@ TString TAwsSignature::GetAuthorization() const {
 }
 
 TString TAwsSignature::GetXAmzContentSha256() const {
-    return HashSHA256(TStringBuilder{} << "\"" << Payload << "\"");
+    return HashSHA256(TStringBuilder{} << Payload);
 }
 
 TString TAwsSignature::GetAmzDate() const {
@@ -158,7 +158,8 @@ TString TAwsSignature::UriEncode(const TStringBuf input, bool encodeSlash) {
 }
 
 void TAwsSignature::PrepareCgiParameters() {
-    TCgiParameters cgi(Cgi);
+    TCgiParameters cgi;
+    cgi.ScanAddAll(Cgi);
     TMap<TString, TVector<TString>> sortedCgi;
 
     for (const auto& [key, value] : cgi) {

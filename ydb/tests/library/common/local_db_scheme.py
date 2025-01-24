@@ -112,7 +112,7 @@ class TableScheme(object):
         raise RuntimeError("Unknown delta type")
 
     def set_room(self, delta):
-        self.data['Rooms'][delta['room_id']] = {"Main": delta['main'], "Outer": delta['outer'], "Blobs": delta['blobs']}
+        self.data['Rooms'][delta['room_id']] = {"Main": delta['main'], "Outer": delta['outer'], "Blobs": delta['blobs'], "ExternalBlobs": delta['external_blobs']}
         return self
 
     def set_compaction_policy(self, delta):

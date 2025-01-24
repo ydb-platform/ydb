@@ -105,9 +105,8 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
                     TStringBuilder() << "Can't get statistics aggregator ID.", {}
                 )
             );
+            this->Die(ctx);
         }
-
-        this->Die(ctx);
         return;
     }
     
@@ -192,9 +191,8 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeC
     auto& record = Request.Record;
     record.SetOperationId(OperationId);
     auto table = record.AddTables();
-    
-    PathIdFromPathId(PathId, table->MutablePathId());
 
+    PathId.ToProto(table->MutablePathId());
 
     THashMap<TString, ui32> tagByColumnName;
     for (const auto& [_, tableInfo]: entry.Columns) {

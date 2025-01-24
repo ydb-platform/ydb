@@ -23,6 +23,7 @@
 #    include "boost/locale/win32/lcid.hpp"
 #    include <windows.h>
 #endif
+#include "boost/locale/shared/message.hpp"
 #include "boost/locale/std/all_generator.hpp"
 #include "boost/locale/util/encoding.hpp"
 #include "boost/locale/util/gregorian.hpp"
@@ -177,33 +178,7 @@ namespace boost { namespace locale { namespace impl_std {
                 case category_t::parsing: return create_parsing(base, name_, type, utf_mode_);
                 case category_t::codepage: return create_codecvt(base, name_, type, utf_mode_);
                 case category_t::calendar: return util::install_gregorian_calendar(base, data_.country());
-                case category_t::message: {
-                    gnu_gettext::messages_info minf;
-                    minf.language = data_.language();
-                    minf.country = data_.country();
-                    minf.variant = data_.variant();
-                    minf.encoding = data_.encoding();
-                    std::copy(domains_.begin(),
-                              domains_.end(),
-                              std::back_inserter<gnu_gettext::messages_info::domains_type>(minf.domains));
-                    minf.paths = paths_;
-                    switch(type) {
-                        case char_facet_t::nochar: break;
-                        case char_facet_t::char_f:
-                            return std::locale(base, gnu_gettext::create_messages_facet<char>(minf));
-                        case char_facet_t::wchar_f:
-                            return std::locale(base, gnu_gettext::create_messages_facet<wchar_t>(minf));
-#ifdef BOOST_LOCALE_ENABLE_CHAR16_T
-                        case char_facet_t::char16_f:
-                            return std::locale(base, gnu_gettext::create_messages_facet<char16_t>(minf));
-#endif
-#ifdef BOOST_LOCALE_ENABLE_CHAR32_T
-                        case char_facet_t::char32_f:
-                            return std::locale(base, gnu_gettext::create_messages_facet<char32_t>(minf));
-#endif
-                    }
-                    return base;
-                }
+                case category_t::message: return detail::install_message_facet(base, type, data_, domains_, paths_);
                 case category_t::information: return util::create_info(base, in_use_id_);
                 case category_t::boundary: break; // Not implemented
             }

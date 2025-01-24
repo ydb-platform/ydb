@@ -6,7 +6,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/services/ydb/ydb_dummy.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 #include <util/system/tempfile.h>
 
@@ -114,6 +114,7 @@ public:
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableDataColumnForIndexTable(true);
         ServerSettings->SetEnableNotNullColumns(true);
+        ServerSettings->SetEnableParameterizedDecimal(true);
         ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
@@ -270,7 +271,6 @@ struct TTestOlap {
                     Columns { Name: "request_id" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     KeyColumnNames: "uid"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )", storeName.c_str());

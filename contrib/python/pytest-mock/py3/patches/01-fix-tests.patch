@@ -1,0 +1,76 @@
+--- contrib/python/pytest-mock/py3/tests/test_pytest_mock.py	(index)
++++ contrib/python/pytest-mock/py3/tests/test_pytest_mock.py	(working tree)
+@@ -469,2 +469,3 @@ def test_static_method_subclass_spy(mocker: MockerFixture) -> None:
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_callable_like_spy(testdir: Any, mocker: MockerFixture) -> None:
+@@ -583,4 +585,5 @@ def test_assert_called_wrapper(mocker: MockerFixture) -> None:
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.usefixtures("needs_assert_rewrite")
+ def test_assert_called_args_with_introspection(mocker: MockerFixture) -> None:
+@@ -599,4 +602,5 @@ def test_assert_called_args_with_introspection(mocker: MockerFixture) -> None:
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.usefixtures("needs_assert_rewrite")
+ def test_assert_called_kwargs_with_introspection(mocker: MockerFixture) -> None:
+@@ -633,2 +637,3 @@ def test_assert_has_calls(mocker: MockerFixture) -> None:
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_monkeypatch_ini(testdir: Any, mocker: MockerFixture) -> None:
+@@ -680,2 +685,3 @@ def test_patched_method_parameter_name(mocker: MockerFixture) -> None:
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_monkeypatch_native(testdir: Any) -> None:
+@@ -704,2 +710,3 @@ def test_monkeypatch_native(testdir: Any) -> None:
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_monkeypatch_no_terminal(testdir: Any) -> None:
+@@ -719,2 +725,3 @@ def test_monkeypatch_no_terminal(testdir: Any) -> None:
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_standalone_mock(testdir: Any) -> None:
+@@ -740,4 +748,5 @@ def test_standalone_mock(testdir: Any) -> None:
+ 
+ 
++@pytest.mark.skip("Skip testdir")
+ @pytest.mark.usefixtures("needs_assert_rewrite")
+ def test_detailed_introspection(testdir: Any) -> None:
+@@ -783,6 +791,7 @@ def test_detailed_introspection(testdir: Any) -> None:
+     result.stdout.fnmatch_lines(expected_lines)
+ 
+ 
++@pytest.mark.skip("Skip testdir")
+ @pytest.mark.usefixtures("needs_assert_rewrite")
+ def test_detailed_introspection_async(testdir: Any) -> None:
+     """Check that the "mock_use_standalone" is being used."""
+@@ -826,2 +836,3 @@ def test_detailed_introspection_async(testdir: Any) -> None:
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_missing_introspection(testdir: Any) -> None:
+@@ -847,2 +859,3 @@ def test_assert_called_with_unicode_arguments(mocker: MockerFixture) -> None:
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_plain_stopall(testdir: Any) -> None:
+@@ -953,2 +964,3 @@ def test_patch_context_manager_with_context_manager(mocker: MockerFixture) -> No
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_abort_patch_context_manager_with_stale_pyc(testdir: Any) -> None:
+@@ -957,2 +970,3 @@ def test_abort_patch_context_manager_with_stale_pyc(testdir: Any) -> None:
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_used_with_class_scope(testdir: Any) -> None:
+@@ -981,2 +995,3 @@ def test_used_with_class_scope(testdir: Any) -> None:
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_used_with_module_scope(testdir: Any) -> None:
+@@ -1003,2 +1018,3 @@ def test_used_with_module_scope(testdir: Any) -> None:
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_used_with_package_scope(testdir: Any) -> None:
+@@ -1026,2 +1042,3 @@ def test_used_with_package_scope(testdir: Any) -> None:
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_used_with_session_scope(testdir: Any) -> None:

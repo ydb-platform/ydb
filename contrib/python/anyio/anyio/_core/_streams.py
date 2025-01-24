@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Tuple, TypeVar
+from typing import TypeVar
 from warnings import warn
 
 from ..streams.memory import (
@@ -14,7 +14,7 @@ T_Item = TypeVar("T_Item")
 
 
 class create_memory_object_stream(
-    Tuple[MemoryObjectSendStream[T_Item], MemoryObjectReceiveStream[T_Item]],
+    tuple[MemoryObjectSendStream[T_Item], MemoryObjectReceiveStream[T_Item]],
 ):
     """
     Create a memory object stream.

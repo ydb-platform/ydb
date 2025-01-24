@@ -2,8 +2,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 #include <thread>
 
@@ -19,7 +19,8 @@ Y_UNIT_TEST_SUITE(KqpAnalyze) {
 using namespace NStat;
 
 Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
-    TTestEnv env(1, 1, 1, true);
+    TTestEnv env(1, 1, true);
+
     CreateDatabase(env, "Database");
 
     TTableClient client(env.GetDriver());
@@ -98,7 +99,7 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     
     auto countMin = ExtractCountMin(runtime, pathId, 2);
     TString value = "Hello,world!";
-    auto stat = countMin->Probe(value.Data(), value.Size());
+    auto stat = countMin->Probe(value.data(), value.size());
     UNIT_ASSERT_C(stat >= 1500, ToString(stat));
 }
 

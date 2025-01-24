@@ -106,12 +106,12 @@ TBuffer CreateBlob(ui32 size, char symbol) {
     return blob;
 }
 
-TRope CreateRope(ui32 size, char symbol, ui32 chunkSize = 7) {
-    TRope result;
+TChunkedBuffer CreateRope(ui32 size, char symbol, ui32 chunkSize = 7) {
+    TChunkedBuffer result;
     while (size) {
         size_t count = std::min(size, chunkSize);
-        TString str(count, symbol);
-        result.Insert(result.End(), TRope{str});
+        auto str = std::make_shared<TString>(count, symbol);
+        result.Append(*str, str);
         size -= count;
     }
     return result;
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester);
-            UNIT_ASSERT_STRINGS_EQUAL("Total size limit exceeded", resp->Get()->Message);
+            UNIT_ASSERT_STRINGS_EQUAL("Total size limit exceeded: 0/0Mb", resp->Get()->Message);
         }
     }
 
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester);
-            UNIT_ASSERT_STRINGS_EQUAL("File size limit exceeded", resp->Get()->Message);
+            UNIT_ASSERT_STRINGS_EQUAL("File size limit exceeded: 0/0Mb", resp->Get()->Message);
         }
     }
 

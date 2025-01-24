@@ -7,7 +7,7 @@ Arguments:
 1. Type.
 2. Lambda function.
 
-**Examples:**
+### Examples
 
 ```yql
 $lambda = ($x) -> {

@@ -2,11 +2,7 @@
 
 All VDisks hosted on a certain PDisk log data about their own performance to the common PDisk log. VDisks gradually delete their obsolete data at the beginning of the log to free up disk space. Sometimes, after one VDisk completes logging data and before another one starts logging it, a section with useless obsolete data may appear. In this case, such data is deleted automatically, and the PDiskLogLoad actor will perform a test to check whether such an operation is running correctly.
 
-<center>
-
 ![load-actors](../_assets/pdisklogload.svg)
-
-</center>
 
 {% note info %}
 

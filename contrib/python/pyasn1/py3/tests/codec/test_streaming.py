@@ -6,12 +6,7 @@
 #
 import io
 import sys
-
-try:
-    import unittest2 as unittest
-
-except ImportError:
-    import unittest
+import unittest
 
 from __tests__.base import BaseTestCase
 

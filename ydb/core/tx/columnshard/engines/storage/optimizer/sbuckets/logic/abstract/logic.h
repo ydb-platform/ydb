@@ -2,7 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/common/optimizer.h>
 
-#include <ydb/core/formats/arrow/replace_key.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
@@ -21,10 +21,10 @@ public:
 
 class TCompactionTaskResult {
 private:
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<TPortionInfo>>, Portions);
+    YDB_READONLY_DEF(std::vector<TPortionInfo::TConstPtr>, Portions);
     YDB_READONLY_DEF(std::vector<NArrow::TReplaceKey>, SplitRightOpenIntervalPoints); // [-inf, p1), [p1, p2), ...
 public:
-    TCompactionTaskResult(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::vector<NArrow::TReplaceKey>&& points)
+    TCompactionTaskResult(std::vector<TPortionInfo::TConstPtr>&& portions, std::vector<NArrow::TReplaceKey>&& points)
         : Portions(std::move(portions))
         , SplitRightOpenIntervalPoints(std::move(points)) {
 

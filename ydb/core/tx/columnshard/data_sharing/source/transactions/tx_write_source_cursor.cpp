@@ -6,8 +6,7 @@ namespace NKikimr::NOlap::NDataSharing {
 bool TTxWriteSourceCursor::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::SourceSessions>().Key(Session->GetSessionId())
-        .Update(NIceDb::TUpdate<Schema::SourceSessions::CursorDynamic>(Session->GetCursorVerified()->SerializeDynamicToProto().SerializeAsString()));
+    Session->SaveCursorToDatabase(db);
     return true;
 }
 

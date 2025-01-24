@@ -20,6 +20,9 @@ public:
     int TosLevel;
     THashMap<std::string, int> NetworkToTosLevel;
 
+    int MinMultiplexingParallelism;
+    int MaxMultiplexingParallelism;
+
     REGISTER_YSON_STRUCT(TMultiplexingBandConfig);
 
     static void Register(TRegistrar registrar);
@@ -44,10 +47,12 @@ public:
 
     TEnumIndexedArray<EMultiplexingBand, TMultiplexingBandConfigPtr> MultiplexingBands;
 
-    TTcpDispatcherConfigPtr ApplyDynamic(const TTcpDispatcherDynamicConfigPtr& dynamicConfig) const;
-
     //! Used to store TLS/SSL certificate files.
     std::optional<TString> BusCertsDirectoryPath;
+
+    bool EnableLocalBypass;
+
+    TTcpDispatcherConfigPtr ApplyDynamic(const TTcpDispatcherDynamicConfigPtr& dynamicConfig) const;
 
     REGISTER_YSON_STRUCT(TTcpDispatcherConfig);
 
@@ -75,6 +80,8 @@ public:
     //! Used to store TLS/SSL certificate files.
     std::optional<TString> BusCertsDirectoryPath;
 
+    std::optional<bool> EnableLocalBypass;
+
     REGISTER_YSON_STRUCT(TTcpDispatcherDynamicConfig);
 
     static void Register(TRegistrar registrar);
@@ -101,6 +108,8 @@ public:
 
     bool VerifyChecksums;
     bool GenerateChecksums;
+
+    bool EnableLocalBypass;
 
     // Ssl options.
     EEncryptionMode EncryptionMode;

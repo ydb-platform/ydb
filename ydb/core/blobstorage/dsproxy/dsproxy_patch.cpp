@@ -67,7 +67,6 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor {
     TStorageStatusFlags StatusFlags = 0;
     float ApproximateFreeSpaceShare = 0;
 
-    TInstant StartTime;
     TInstant StageStart;
     TInstant Deadline;
 
@@ -140,7 +139,6 @@ public:
         , MaskForCookieBruteForcing(params.Common.Event->MaskForCookieBruteForcing)
         , DiffCount(params.Common.Event->DiffCount)
         , Diffs(params.Common.Event->Diffs.Release())
-        , StartTime(params.Common.Now)
         , Deadline(params.Common.Event->Deadline)
         , Orbit(std::move(params.Common.Event->Orbit))
         , UseVPatch(params.UseVPatch)
@@ -155,7 +153,7 @@ public:
                 StatusFlags, Info->GroupID, ApproximateFreeSpaceShare);
         result->ErrorReason = ErrorReason;
         result->Orbit = std::move(Orbit);
-        TDuration duration = TActivationContext::Now() - StartTime;
+        TDuration duration = TActivationContext::Monotonic() - RequestStartTime;
         Mon->CountPatchResponseTime(Info->GetDeviceType(), duration);
         SendResponseAndDie(std::move(result));
     }
@@ -430,7 +428,7 @@ public:
                 x2Count++;
             }
         }
-        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA23, "VerifyPartPlacement {mirror-3-dc}",
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA00, "VerifyPartPlacement {mirror-3-dc}",
                 (X2Count, x2Count));
         return x2Count >= 2;
     }
@@ -587,6 +585,11 @@ public:
         Become(&TBlobStorageGroupPatchRequest::MovedPatchState);
         IsMovedPatch = true;
         std::optional<ui32> subgroupIdx = 0;
+        ReceivedResponseFlags.resize(VDisks.size(), false);
+        ErrorResponseFlags.resize(VDisks.size(), false);
+        EmptyResponseFlags.resize(VDisks.size(), false);
+        ForceStopFlags.resize(VDisks.size(), false);
+        SlowFlags.resize(VDisks.size(), false);
 
         if (OkVDisksWithParts) {
             ui32 okVDiskIdx = RandomNumber<ui32>(OkVDisksWithParts.size());

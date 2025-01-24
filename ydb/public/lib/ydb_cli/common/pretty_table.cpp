@@ -83,8 +83,8 @@ public:
         return !allColumnsPrinted;
     }
 
-    void Print() {        
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    void Print() {
+        NColorizer::TColors colors = NColorizer::AutoColors(Output_);
         
         Output_ << colors.Default();
         Output_ << "│ ";

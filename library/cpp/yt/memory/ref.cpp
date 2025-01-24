@@ -46,6 +46,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TString>
 class TStringHolder
     : public TSharedRangeHolder
 {
@@ -59,6 +60,8 @@ public:
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
         TRefCountedTrackerFacade::AllocateTagInstance(Cookie_);
         TRefCountedTrackerFacade::AllocateSpace(Cookie_, String_.length());
+#else
+        Y_UNUSED(cookie);
 #endif
     }
     ~TStringHolder()
@@ -119,7 +122,11 @@ protected:
         TRefCountedTypeCookie cookie)
     {
         Size_ = size;
+#ifdef YT_ENABLE_REF_COUNTED_TRACKING
         Cookie_ = cookie;
+#else
+        Y_UNUSED(cookie);
+#endif
         if (options.InitializeStorage) {
             ::memset(static_cast<TDerived*>(this)->GetBegin(), 0, Size_);
         }
@@ -226,9 +233,25 @@ TMutableRef TMutableRef::FromBlob(TBlob& blob)
 
 TSharedRef TSharedRef::FromString(TString str, TRefCountedTypeCookie tagCookie)
 {
-    auto holder = New<TStringHolder>(std::move(str), tagCookie);
+    return FromStringImpl(std::move(str), tagCookie);
+}
+
+TSharedRef TSharedRef::FromString(std::string str, TRefCountedTypeCookie tagCookie)
+{
+    return FromStringImpl(std::move(str), tagCookie);
+}
+
+template <class TString>
+TSharedRef TSharedRef::FromStringImpl(TString str, TRefCountedTypeCookie tagCookie)
+{
+    auto holder = New<TStringHolder<TString>>(std::move(str), tagCookie);
     auto ref = TRef::FromString(holder->String());
     return TSharedRef(ref, std::move(holder));
+}
+
+TSharedRef TSharedRef::FromString(const char* str)
+{
+    return FromString(std::string(str));
 }
 
 TSharedRef TSharedRef::FromBlob(TBlob&& blob)

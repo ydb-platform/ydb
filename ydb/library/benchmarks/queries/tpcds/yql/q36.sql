@@ -17,12 +17,12 @@ select
    cross join {{item}} as item
    cross join {{store}} as store
  where
-    d1.d_year = 1999
+    d1.d_year = 2001
  and d1.d_date_sk = ss_sold_date_sk
  and item.i_item_sk  = ss_item_sk
  and s_store_sk  = ss_store_sk
- and s_state in ('IN','AL','MI','MN',
-                 'TN','LA','FL','NM')
+ and s_state in ('TN','TN','TN','TN',
+                 'TN','TN','TN','TN')
  group by rollup(item.i_category,item.i_class)
  order by
    lochierarchy desc

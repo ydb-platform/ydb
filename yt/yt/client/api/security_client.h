@@ -26,7 +26,7 @@ struct TCheckPermissionOptions
     , public TTransactionalOptions
     , public TPrerequisiteOptions
 {
-    std::optional<std::vector<TString>> Columns;
+    std::optional<std::vector<std::string>> Columns;
     std::optional<bool> Vital;
 };
 
@@ -35,7 +35,7 @@ struct TCheckPermissionResult
     TError ToError(
         const std::string& user,
         NYTree::EPermission permission,
-        const std::optional<TString>& columns = {}) const;
+        const std::optional<std::string>& columns = {}) const;
 
     NSecurityClient::ESecurityAction Action;
     NObjectClient::TObjectId ObjectId;
@@ -89,6 +89,9 @@ struct TIssueTemporaryTokenOptions
 struct TIssueTokenResult
 {
     TString Token;
+    //! Cypress node corresponding to issued token.
+    //! Deleting this node will revoke the token.
+    NCypressClient::TNodeId NodeId;
 };
 
 struct TRefreshTemporaryTokenOptions

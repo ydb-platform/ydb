@@ -1,0 +1,22 @@
+--- contrib/python/docker/docker/api/client.py	(index)
++++ contrib/python/docker/docker/api/client.py	(working tree)
+@@ -8,6 +8,7 @@ import six
+ 
+ from .. import auth
+ from ..constants import (
++    DEFAULT_DOCKER_API_VERSION,
+     DEFAULT_MAX_POOL_SIZE,
+     DEFAULT_NUM_POOLS,
+     DEFAULT_NUM_POOLS_SSH,
+@@ -194,7 +194,10 @@ class APIClient(
+                                 version,
+                                 str
+                                 ) and version.lower() == 'auto'):
+-            self._version = self._retrieve_server_version()
++            try:
++                self._version = self._retrieve_server_version()
++            except:
++                self._version = DEFAULT_DOCKER_API_VERSION
+         else:
+             self._version = version
+         if not isinstance(self._version, str):

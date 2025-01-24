@@ -551,8 +551,8 @@ TError CheckWriterFeedback(
         return TError("Failed to deserialize writer feedback");
     }
 
-    EWriterFeedback actualFeedback;
-    if (!TryEnumCast(protoFeedback.feedback(), &actualFeedback)) {
+    auto actualFeedback = TryCheckedEnumCast<EWriterFeedback>(protoFeedback.feedback());
+    if (!actualFeedback) {
         return TError("Invalid writer feedback value %v",
             static_cast<int>(protoFeedback.feedback()));
     }

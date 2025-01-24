@@ -15,10 +15,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
     error_message_format = '{"status":"error", "code":"%(code)d", "message": "%(message)s"}\n'
 
     # noinspection PyMissingConstructor
-    def __init__(self, target_url: str, timeout: Tuple[int, int], max_reqest_time: int):
+    def __init__(self, target_url: str, timeout: Tuple[int, int], max_request_time: int):
         self._target_url = target_url
         self._timeout = timeout
-        self._max_request_time = max_reqest_time
+        self._max_request_time = max_request_time
 
     def __call__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

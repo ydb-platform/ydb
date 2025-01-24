@@ -52,6 +52,7 @@ YT_DEFINE_ERROR_ENUM(
     ((TransactionSuccessorHasLeases)    (11013))
     ((UnknownClockClusterTag)           (11014))
     ((ClockClusterTagMismatch)          (11015))
+    ((ChaosCoordinatorsAreNotAvailable) (11016))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

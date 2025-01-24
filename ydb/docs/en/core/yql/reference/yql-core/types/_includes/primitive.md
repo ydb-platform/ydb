@@ -1,5 +1,7 @@
 # Primitive data types
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 The terms "simple", "primitive", and "elementary" data types are used synonymously.
 
 ## Numeric types {#numeric}
@@ -89,7 +91,7 @@ Explicit casting using [CAST](../../syntax/expressions.md#cast):
 
 <sup>4</sup> Using the built-in function [Yson::ConvertTo](../../udf/list/yson.md#ysonconvertto).
 
-**Examples**
+##### Examples
 
 {% include [x](../../_includes/cast_examples.md) %}
 

@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-        UNIT_ASSERT(!to_lower(result.GetIssues().ToString()).Contains("query result"));
+        UNIT_ASSERT(!to_lower(TString{result.GetIssues().ToString()}).Contains("query result"));
     }
 
     Y_UNIT_TEST(KqpMkqlMemoryLimitException) {
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         result.GetIssues().PrintTo(Cerr);
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::OVERLOADED);
-        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetIssues().ToString().contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(ComputeActorMemoryAllocationFailureQueryService) {
@@ -214,8 +214,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto stats = result.GetStats();
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::OVERLOADED);
-        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
-        UNIT_ASSERT(stats.Defined());
+        UNIT_ASSERT_C(result.GetIssues().ToString().contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
+        UNIT_ASSERT(stats.has_value());
 
         Cerr << stats->ToString(true) << Endl;
     }
@@ -418,9 +418,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
-                if (result.GetIssues().ToString().Contains("OUT_OF_SPACE")) {
+                if (result.GetIssues().ToString().contains("OUT_OF_SPACE")) {
                     getOutOfSpace = true;
-                } else if (result.GetIssues().ToString().Contains("WRONG_SHARD_STATE")) {
+                } else if (result.GetIssues().ToString().contains("WRONG_SHARD_STATE")) {
                     // shards are allowed to split
                     continue;
                 }
@@ -544,8 +544,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("exceeds limit");
+            [] (const auto& issue) {
+                return issue.GetMessage().contains("exceeds limit");
         }));
     }
 
@@ -569,8 +569,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("larger than the allowed threshold");
+            [] (const auto& issue) {
+                return issue.GetMessage().contains("larger than the allowed threshold");
         }));
     }
 
@@ -667,8 +667,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Memory limit exceeded");
+            [] (const auto& issue) {
+                return issue.GetMessage().contains("Memory limit exceeded");
             }));
     }
 
@@ -739,7 +739,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
                 if (result.IsSuccess()) {
                     auto yson = FormatResultSetYson(result.GetResultSet(0));
-                    CompareYson(TString("[") + expected + "]", yson);
+                    CompareYson(TString("[") + expected + "]", TString{yson});
                     expected += createExpectedRow(createKey(i));
                     if (i != maxTimeoutMs)
                         expected += ";";
@@ -759,10 +759,19 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
-    Y_UNIT_TEST(CancelAfterRoTx) {
-        TKikimrRunner kikimr;
+    void DoCancelAfterRo(bool follower, bool streamLookup, bool dependedRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         {
@@ -772,13 +781,73 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             int maxTimeoutMs = 500;
             bool wasCanceled = false;
 
-            for (int i = 1; i <= maxTimeoutMs; i++) {
-                auto result = session.ExecuteDataQuery(R"(
+            if (follower) {
+                AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                    --!syntax_v1
+                    CREATE TABLE `/Root/OneShardWithFolower` (
+                        Key Uint64,
+                        Text String,
+                        Data Int32,
+                        PRIMARY KEY (Key)
+                    )
+                    WITH (
+                        READ_REPLICAS_SETTINGS = "ANY_AZ:1"
+                    );
+                )").GetValueSync());
+
+                AssertSuccessResult(session.ExecuteDataQuery(R"(
+                    --!syntax_v1
+                    REPLACE INTO `/Root/OneShardWithFolower` (Key, Text, Data) VALUES
+                        (101u, "Value1",  1),
+                        (201u, "Value1",  2),
+                        (301u, "Value1",  3),
+                        (401u, "Value1",  1),
+                        (501u, "Value1",  2),
+                        (601u, "Value1",  3),
+                        (701u, "Value1",  1),
+                        (801u, "Value1",  2),
+                        (102u, "Value2",  3),
+                        (202u, "Value2",  1),
+                        (302u, "Value2",  2),
+                        (402u, "Value2",  3),
+                        (502u, "Value2",  1),
+                        (602u, "Value2",  2),
+                        (702u, "Value2",  3),
+                        (802u, "Value2",  1),
+                        (103u, "Value3",  2),
+                        (203u, "Value3",  3),
+                        (303u, "Value3",  1),
+                        (403u, "Value3",  2),
+                        (503u, "Value3",  3),
+                        (603u, "Value3",  1),
+                        (703u, "Value3",  2),
+                        (803u, "Value3",  3);
+                )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+            }
+
+            const TString q = follower ?
+                (dependedRead ?
+                    TString(R"(
+                        DECLARE $id AS Uint64;
+                        --JOIN with same table to make depended read
+                        SELECT t1.Data as Data, t1.Key as Key, t1.Text as Text FROM `/Root/OneShardWithFolower` as t1
+                            INNER JOIN OneShardWithFolower as t2 ON t1.Key = t2.Key WHERE t1.Text = "Value1" ORDER BY t1.Key;
+                    )"):
+                    TString(R"(
+                        DECLARE $id AS Uint64;
+                        SELECT * FROM `/Root/OneShardWithFolower` WHERE Text = "Value1" ORDER BY Key
+                    )")
+                ):
+                TString(R"(
                     DECLARE $id AS Uint64;
-                    SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key;
-                )",
-                TTxControl::BeginTx(
-                    TTxSettings::SerializableRW()).CommitTx(),
+                    SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key
+                )");
+
+            const auto txCtrl = follower ? TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx() :
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+
+            for (int i = 1; i <= maxTimeoutMs; i++) {
+                auto result = session.ExecuteDataQuery(q, txCtrl,
                     TExecDataQuerySettings().CancelAfter(TDuration::MilliSeconds(i))
                 ).GetValueSync();
 
@@ -801,6 +870,32 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             UNIT_ASSERT(wasCanceled);
         }
         WaitForZeroSessions(counters);
+
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
+        if (follower) {
+            WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/OneShardWithFolower");
+        }
+    }
+
+    Y_UNIT_TEST(CancelAfterRoTx) {
+        // false, false has no sense since we use TEvRead to read without followers
+        DoCancelAfterRo(false, true, false);
+    }
+
+    Y_UNIT_TEST(CancelAfterRoTxWithFollowerLegacy) {
+        DoCancelAfterRo(true, false, false);
+    }
+
+    Y_UNIT_TEST(CancelAfterRoTxWithFollowerLegacyDependedRead) {
+        DoCancelAfterRo(true, false, true);
+    }
+
+    Y_UNIT_TEST(CancelAfterRoTxWithFollowerStreamLookup) {
+        DoCancelAfterRo(true, true, false);
+    }
+
+    Y_UNIT_TEST(CancelAfterRoTxWithFollowerStreamLookupDepededRead) {
+        DoCancelAfterRo(true, true, true);
     }
 
     Y_UNIT_TEST(QueryExecTimeout) {
@@ -937,7 +1032,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        auto settings = TExecDataQuerySettings().OperationTimeout(TDuration::MilliSeconds(500));
+        auto settings = TExecDataQuerySettings().OperationTimeout(TDuration::Seconds(20));
         kikimr.RunInThreadPool([&] { return dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync(); });
 
         TDispatchOptions opts;
@@ -1133,7 +1228,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 SELECT * FROM `/Root/TableTest`;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_C(result.GetIssues().ToString().Contains("result size limit"), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("result size limit"), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(counters.GetTxReplySizeExceededError()->Val(), 1);
         }
     }
@@ -1279,7 +1374,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-        UNIT_ASSERT(!to_lower(result.GetIssues().ToString()).Contains("query result"));
+        UNIT_ASSERT(!to_lower(TString{result.GetIssues().ToString()}).Contains("query result"));
     }
 }
 

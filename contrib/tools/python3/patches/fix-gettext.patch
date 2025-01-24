@@ -1,0 +1,52 @@
+commit 6df9d7282117d14575cba802978b635e0661ce0d
+merge: c7e3ec07a5a75dde4da2c0954eae709906150ee7 56e45ed36ba8ee900952583c2c47040314676f6a
+author: orlovgb
+date: 2019-08-28T21:12:31+03:00
+revision: 5552086
+
+    fix py3 gettext to use resorces from __res
+    
+    Скопипастил с https://a.yandex-team.ru/arc/trunk/arcadia/contrib/tools/python/Lib/gettext.py
+    Дописал, чтобы в resfs_src и resfs_read уходила байтовая строка
+    
+    REVIEW: 930161
+
+--- contrib/tools/python3/Lib/gettext.py	(c7e3ec07a5a75dde4da2c0954eae709906150ee7)
++++ contrib/tools/python3/Lib/gettext.py	(6df9d7282117d14575cba802978b635e0661ce0d)
+@@ -49,7 +49,12 @@ import locale
+ import os
+ import re
+ import sys
++import io
+ 
++try:
++    import __res
++except ImportError:
++    __res = None
+ 
+ __all__ = ['NullTranslations', 'GNUTranslations', 'Catalog',
+            'bindtextdomain', 'find', 'translation', 'install',
+@@ -492,7 +497,7 @@ def find(domain, localedir=None, languages=None, all=False):
+         if lang == 'C':
+             break
+         mofile = os.path.join(localedir, lang, 'LC_MESSAGES', '%s.mo' % domain)
+-        if os.path.exists(mofile):
++        if __res and __res.resfs_src(mofile.encode('utf-8'), resfs_file=True) or os.path.exists(mofile):
+             if all:
+                 result.append(mofile)
+             else:
+@@ -522,8 +527,12 @@ def translation(domain, localedir=None, languages=None,
+         key = (class_, os.path.abspath(mofile))
+         t = _translations.get(key)
+         if t is None:
+-            with open(mofile, 'rb') as fp:
+-                t = _translations.setdefault(key, class_(fp))
++            mores = __res and __res.resfs_read(mofile.encode('utf-8'))
++            if mores:
++                t = _translations.setdefault(key, class_(io.BytesIO(mores)))
++            else:
++                with open(mofile, 'rb') as fp:
++                    t = _translations.setdefault(key, class_(fp))
+         # Copy the translation object to allow setting fallbacks and
+         # output charset. All other instance data is shared with the
+         # cached object.

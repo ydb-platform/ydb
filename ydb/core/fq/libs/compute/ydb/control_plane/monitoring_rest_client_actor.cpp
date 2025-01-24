@@ -12,7 +12,7 @@
 
 #include <ydb/library/yql/utils/actors/http_sender.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <yql/essentials/utils/url_builder.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -56,7 +56,7 @@ public:
                 .Build()
         );
         auto ticket = CredentialsProvider->GetAuthInfo();
-        LOG_D(httpRequest->GetRawData() << " using ticket " << NKikimr::MaskTicket(ticket));
+        LOG_D(httpRequest->GetObfuscatedData() << " using ticket " << NKikimr::MaskTicket(ticket));
         httpRequest->Set("Authorization", ticket);
 
         auto httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy()));
@@ -83,7 +83,7 @@ public:
             forwardResponse->Issues.AddIssue(error);
             Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
             return;
-        }        
+        }
 
         try {
             NJson::TJsonReaderConfig jsonConfig;

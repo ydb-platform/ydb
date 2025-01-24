@@ -155,7 +155,8 @@ void YTreeNodeToUnversionedValue(
             builder->AddValue(MakeUnversionedSentinelValue(EValueType::Null, id, flags));
             break;
         default:
-            builder->AddValue(MakeUnversionedAnyValue(ConvertToYsonString(value).AsStringBuf(), id, flags));
+            value->MutableAttributes()->Clear();
+            builder->AddValue(MakeUnversionedCompositeValue(ConvertToYsonString(value).AsStringBuf(), id, flags));
             break;
     }
 }
@@ -242,8 +243,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
         } else if (treatMissingAsNull) {
             validateAndAddValue(MakeUnversionedSentinelValue(EValueType::Null, id), tableSchema.Columns()[id]);
         } else if (validateValues && tableSchema.Columns()[id].Required()) {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Required column %v cannot have %Qlv value",
                 tableSchema.Columns()[id].GetDiagnosticNameString(),
                 EValueType::Null);
@@ -255,8 +255,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
         int id = nameTable->GetIdOrRegisterName(name);
         if (id >= std::ssize(tableSchema.Columns())) {
             if (validateValues && tableSchema.GetStrict()) {
-                THROW_ERROR_EXCEPTION(
-                    EErrorCode::SchemaViolation,
+                THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                     "Unknown column %Qv in strict schema",
                     name);
             }
@@ -333,7 +332,7 @@ TVersionedRow YsonToVersionedRow(
                 break;
             default:
                 value->MutableAttributes()->Clear();
-                builder.AddValue(MakeVersionedAnyValue(ConvertToYsonString(value).AsStringBuf(), timestamp, id, flags));
+                builder.AddValue(MakeVersionedCompositeValue(ConvertToYsonString(value).AsStringBuf(), timestamp, id, flags));
                 break;
         }
     }
@@ -355,7 +354,7 @@ TVersionedOwningRow YsonToVersionedRow(
     const std::vector<TTimestamp>& deleteTimestamps,
     const std::vector<TTimestamp>& extraWriteTimestamps)
 {
-    // NB: this implementation is extra slow, it is intended only for using in tests.
+    // NB: This implementation is extra slow, it is intended only for using in tests.
     auto rowBuffer = New<TRowBuffer>();
     auto row = YsonToVersionedRow(rowBuffer, keyYson, valueYson, deleteTimestamps, extraWriteTimestamps);
     return TVersionedOwningRow(row);
@@ -827,7 +826,7 @@ void UnversionedValueToProtobufImpl(
         THROW_ERROR_EXCEPTION("Cannot parse a protobuf message from %Qlv",
             unversionedValue.Type);
     }
-    TString wireBytes;
+    TProtobufString wireBytes;
     StringOutputStream outputStream(&wireBytes);
     TProtobufWriterOptions options;
     options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode::Keep);
@@ -991,7 +990,7 @@ void UnversionedValueToListImpl(
         std::unique_ptr<IYsonConsumer> Underlying_;
         int Depth_ = 0;
 
-        TString WireBytes_;
+        TProtobufString WireBytes_;
         StringOutputStream OutputStream_;
 
 
@@ -1300,7 +1299,7 @@ void UnversionedValueToMapImpl(
         std::unique_ptr<IYsonConsumer> Underlying_;
         int Depth_ = 0;
 
-        TString WireBytes_;
+        TProtobufString WireBytes_;
         StringOutputStream OutputStream_;
 
 

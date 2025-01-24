@@ -4,7 +4,7 @@ Improves aggregation efficiency if the query author knows in advance that none o
 
 Unlike the usual GROUP BY, the Map-side combiner stage and additional Reduce are disabled for each field with [DISTINCT](../../../syntax/group_by.md#distinct) aggregation.
 
-**Example:**
+### Example
 
 ```yql
 SELECT

@@ -6,6 +6,7 @@
 #include <util/string/cast.h>
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr {
 
@@ -77,55 +78,35 @@ IOutputStream& operator<<(IOutputStream& output, const TAggregatedResult& result
     return output;
 }
 
-using TColumnPositions = THashMap<TString, ui32>;
-
-TColumnPositions GetColumnPositionsInResponse(const NKikimrMiniKQL::TType& ttype) {
-    TColumnPositions columnPositions;
-    for (const NKikimrMiniKQL::TMember& member : ttype.GetStruct().GetMember()) {
-        if (member.GetName() == "Data") {
-            const auto& listStruct = member.GetType().GetList().GetItem().GetStruct();
-            for (const NKikimrMiniKQL::TMember& listMember : listStruct.GetMember()) {
-                columnPositions.emplace(listMember.GetName(), columnPositions.size());
-            }
-            break;
-        }
-    }
-    return columnPositions;
-}
-
-NKikimrMiniKQL::TValue GetOptional(const NKikimrMiniKQL::TValue& listItem, ui32 pos) {
-    return listItem.GetStruct(pos).GetOptional();
-}
-
 template<typename T>
-T ExtractValue(const NKikimrMiniKQL::TValue& listItem, ui32 pos) {
-    Y_UNUSED(listItem, pos);
+T ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
+    Y_UNUSED(parser, column);
     Y_ABORT("unimplemented");
 }
 
 template<>
-ui32 ExtractValue(const NKikimrMiniKQL::TValue& listItem, ui32 pos) {
-    return GetOptional(listItem, pos).GetUint32();
+ui32 ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
+    return parser.ColumnParser(column).GetOptionalUint32().value_or(0);
 }
 
 template<>
-ui64 ExtractValue(const NKikimrMiniKQL::TValue& listItem, ui32 pos) {
-    return GetOptional(listItem, pos).GetUint64();
+ui64 ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
+    return parser.ColumnParser(column).GetOptionalUint64().value_or(0);
 }
 
 template<>
-double ExtractValue(const NKikimrMiniKQL::TValue& listItem, ui32 pos) {
-    return GetOptional(listItem, pos).GetDouble();
+double ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
+    return parser.ColumnParser(column).GetOptionalDouble().value_or(static_cast<double>(0));
 }
 
 template<>
-TString ExtractValue(const NKikimrMiniKQL::TValue& listItem, ui32 pos) {
-    return GetOptional(listItem, pos).GetBytes();
+TString ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
+    return parser.ColumnParser(column).GetOptionalString().value_or("");
 }
 
 template<>
-TInstant ExtractValue(const NKikimrMiniKQL::TValue& listItem, ui32 pos) {
-    return TInstant::Seconds(GetOptional(listItem, pos).GetUint32());
+TInstant ExtractValue(NYdb::TResultSetParser& parser, const TString& column) {
+    return TInstant::Seconds(parser.ColumnParser(column).GetOptionalUint32().value_or(0));
 }
 
 bool GetStatName(TStringBuf columnName, TStringBuf& statName, TStringBuf& suffix) {
@@ -161,38 +142,40 @@ void SetInAggregatedField(TStringBuf suffix, T value, TAggregatedField<U>& dst) 
     }
 }
 
-TAggregatedResult GetResultFromValueListItem(const NKikimrMiniKQL::TValue& listItem, const TColumnPositions& columnPositions) {
+TAggregatedResult GetResultFromValueListItem(NYdb::TResultSetParser& parser, const NYdb::TResultSet& rs) {
     TAggregatedResult result;
     TStringBuf statName;
     TStringBuf suffix;
     TStringBuf levelSb;
-    for (const auto& [column, pos] : columnPositions) {
+    for (const auto& columnMeta : rs.GetColumnsMeta()) {
+        auto column = TString{columnMeta.Name};
+
         if (column == "id") {
-            result.Uuid = ExtractValue<TString>(listItem, pos);
+            result.Uuid = ExtractValue<TString>(parser, column);
         } else if (column == "start") {
-            result.Start = ExtractValue<TInstant>(listItem, pos);
+            result.Start = ExtractValue<TInstant>(parser, column);
         } else if (column == "finish") {
-            result.Finish = ExtractValue<TInstant>(listItem, pos);
+            result.Finish = ExtractValue<TInstant>(parser, column);
         } else if (column == "total_nodes") {
-            result.Stats.TotalNodes = ExtractValue<ui32>(listItem, pos);
+            result.Stats.TotalNodes = ExtractValue<ui32>(parser, column);
         } else if (column == "success_nodes") {
-            result.Stats.SuccessNodes = ExtractValue<ui32>(listItem, pos);
+            result.Stats.SuccessNodes = ExtractValue<ui32>(parser, column);
         } else if (column == "config") {
-            result.Config = ExtractValue<TString>(listItem, pos);
+            result.Config = ExtractValue<TString>(parser, column);
         } else if (GetStatName(column, statName, suffix)) {
             if (statName == "transactions") {
                 if (suffix == "_avg") {
-                    SetInAggregatedField(suffix, ExtractValue<double>(listItem, pos), result.Stats.Transactions);
+                    SetInAggregatedField(suffix, ExtractValue<double>(parser, column), result.Stats.Transactions);
                 } else {
-                    SetInAggregatedField(suffix, ExtractValue<ui64>(listItem, pos), result.Stats.Transactions);
+                    SetInAggregatedField(suffix, ExtractValue<ui64>(parser, column), result.Stats.Transactions);
                 }
             } else if (statName == "transactions_per_sec") {
-                SetInAggregatedField(suffix, ExtractValue<double>(listItem, pos), result.Stats.TransactionsPerSecond);
+                SetInAggregatedField(suffix, ExtractValue<double>(parser, column), result.Stats.TransactionsPerSecond);
             } else if (statName == "errors_per_sec") {
-                SetInAggregatedField(suffix, ExtractValue<double>(listItem, pos), result.Stats.ErrorsPerSecond);
+                SetInAggregatedField(suffix, ExtractValue<double>(parser, column), result.Stats.ErrorsPerSecond);
             } else if (GetPercentileLevel(statName, levelSb)) {
                 auto level = FromString<EPercentileLevel>(levelSb);
-                SetInAggregatedField(suffix, ExtractValue<double>(listItem, pos), result.Stats.Percentiles[level]);
+                SetInAggregatedField(suffix, ExtractValue<double>(parser, column), result.Stats.Percentiles[level]);
             }
         }
     }
@@ -200,16 +183,16 @@ TAggregatedResult GetResultFromValueListItem(const NKikimrMiniKQL::TValue& listI
 }
 
 bool LoadResultFromResponseProto(const NKikimrKqp::TQueryResponse& response, TVector<TAggregatedResult>& results) {
-    const auto& ttype = response.GetResults(0).GetType();
-    auto columnPositions = GetColumnPositionsInResponse(ttype);
-    if (columnPositions.empty()) {
-        return false;
-    }
+    Y_ABORT_UNLESS(response.GetYdbResults().size() > 0);
+
+    NYdb::TResultSet rs(response.GetYdbResults(0));
+    NYdb::TResultSetParser parser(response.GetYdbResults(0));
 
     results.clear();
-    for (const NKikimrMiniKQL::TValue& listItem : response.GetResults(0).GetValue().GetStruct().Get(0).GetList()) {
-        results.push_back(GetResultFromValueListItem(listItem, columnPositions));
+    while(parser.TryNextRow()) {
+        results.push_back(GetResultFromValueListItem(parser, rs));
     }
+
     return true;
 }
 

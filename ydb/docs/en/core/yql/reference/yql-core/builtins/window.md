@@ -18,4 +18,3 @@
 {% include [x](_includes/window/cume_dist.md) %}
 
 {% include [x](_includes/window/session_state.md) %}
-

@@ -43,9 +43,9 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/zlib
-    library/cpp/sanitizer/include
-    contrib/restricted/abseil-cpp-tstring/y_absl/status
     contrib/restricted/abseil-cpp-tstring/y_absl/log
+    contrib/restricted/abseil-cpp-tstring/y_absl/status
+    library/cpp/sanitizer/include
 )
 
 ADDINCL(

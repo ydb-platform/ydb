@@ -1,0 +1,16 @@
+diff --git a/include/locale b/include/locale
+index e3c63e3..13b911c 100644
+--- a/include/locale
++++ b/include/locale
+@@ -2168,7 +2168,11 @@ public:
+       : time_put<_CharT, _OutputIterator>(__nm, __refs) {}
+ 
+ protected:
++#if defined(_MSC_VER) && defined(__clang__)
++  ~time_put_byname() {}
++#else
+   _LIBCPP_HIDE_FROM_ABI_VIRTUAL ~time_put_byname() override {}
++#endif
+ };
+ 
+ extern template class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS time_put_byname<char>;

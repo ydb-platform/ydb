@@ -1,0 +1,2 @@
+# ydb segfalts
+TestIssue494 # https://github.com/ydb-platform/ydb/issues/8410

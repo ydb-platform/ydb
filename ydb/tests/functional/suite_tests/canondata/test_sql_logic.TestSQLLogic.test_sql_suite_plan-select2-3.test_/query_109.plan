@@ -48,7 +48,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.c <= item.d - 2 Or item.c >= item.d + 2 And item.c > item.d"
+                                                "Predicate": "item.c <= item.d - 2 OR item.c >= item.d + 2 AND item.c > item.d"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -59,6 +59,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableRangeScan",
+                                                        "Path": "/Root/sqllogictest_select2-3.test_plan/t1",
                                                         "ReadColumns": [
                                                             "c",
                                                             "d"

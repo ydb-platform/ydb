@@ -6,6 +6,9 @@
 #include <yt/yt/core/yson/parser.h>
 #include <yt/yt/core/yson/stream.h>
 
+#include <yt/yt/core/ytree/ephemeral_node_factory.h>
+#include <yt/yt/core/ytree/tree_builder.h>
+
 #include <util/string/escape.h>
 
 namespace NYT::NYson {
@@ -453,6 +456,21 @@ TEST(TYsonFragmentWriterTest, NoFirstIndent)
         "\"a2\" = 0;\n";
 
     EXPECT_EQ(output, outputStream.Str());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TYsonTreeBuilderTest, MaxListSize)
+{
+    TString input =
+        "\"a1\" = {\n"
+        "    \"key\" = 42;\n"
+        "};\n";
+
+    auto builder = NYTree::CreateBuilderFromFactory(NYTree::GetEphemeralNodeFactory(), /*treeSizeLimit*/ 0);
+    builder->BeginTree();
+    TStringStream stream(input);
+    EXPECT_THROW(ParseYson(TYsonInput(&stream), builder.get()), std::exception);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

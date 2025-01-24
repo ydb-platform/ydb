@@ -46,6 +46,10 @@ domains_config:
       node: [1, 2, 3, 4, 5, 6, 7, 8]
       nto_select: 5
     ssid: 1
+security_config:
+  default_users:
+  - name: "root"
+    password: "1234"
 # configuration of static blobstorage group.
 # YDB uses this group to store system tablets' data, like SchemeShard
 blob_storage_config:

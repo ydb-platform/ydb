@@ -1,3 +1,4 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
 
 using namespace NKikimr;

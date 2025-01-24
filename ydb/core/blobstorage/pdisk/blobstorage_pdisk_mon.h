@@ -73,6 +73,7 @@ struct TPDiskMon {
             Booting,
             OK,
             Error,
+            Stopped
         };
 
         enum EDetailedState {
@@ -101,6 +102,7 @@ struct TPDiskMon {
             ErrorDeviceSerialMismatch,
             ErrorFake,
             BootingReencryptingFormat,
+            StoppedByYardControl,
         };
 
         static TString StateToStr(i64 val) {
@@ -112,6 +114,7 @@ struct TPDiskMon {
                 case Booting: return "Booting";
                 case OK: return "OK";
                 case Error: return "Error";
+                case Stopped: return "Stopped";
                 default: return "Unknown";
             }
         }
@@ -143,6 +146,7 @@ struct TPDiskMon {
                 case ErrorDeviceSerialMismatch: return "ErrorDeviceSerialMismatch";
                 case ErrorFake: return "ErrorFake";
                 case BootingReencryptingFormat: return "BootingReencryptingFormat";
+                case StoppedByYardControl: return "StoppedByYardControl";
                 default: return "Unknown";
             }
         }
@@ -157,6 +161,8 @@ struct TPDiskMon {
 
         ::NMonitoring::TDynamicCounters::TCounterPtr PDiskThreadBusyTimeNs;
 
+        ui32 PDiskId = 0;
+
     public:
         NMonitoring::TPercentileTrackerLg<5, 4, 15> UpdateCycleTime;
 
@@ -164,6 +170,10 @@ struct TPDiskMon {
         TUpdateDurationTracker()
             : BeginUpdateAt(HPNow())
         {}
+
+        void SetPDiskId(ui32 pdiskId) {
+            PDiskId = pdiskId;
+        }
 
         void SetCounter(const ::NMonitoring::TDynamicCounters::TCounterPtr& pDiskThreadBusyTimeNs) {
             PDiskThreadBusyTimeNs = pDiskThreadBusyTimeNs;
@@ -200,18 +210,19 @@ struct TPDiskMon {
             }
         }
 
-        void UpdateEnded() {
+        float UpdateEnded() {
             NHPTimer::STime updateEndedAt = HPNow();
+            float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt);
             if (IsLwProbeEnabled) {
-                float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt);
                 float inputQueueMs = HPMilliSecondsFloat(SchedulingStartAt - BeginUpdateAt);
                 float schedulingMs = HPMilliSecondsFloat(ProcessingStartAt - SchedulingStartAt);
                 float processingMs = HPMilliSecondsFloat(WaitingStartAt - ProcessingStartAt);
                 float waitingMs = HPMilliSecondsFloat(updateEndedAt - WaitingStartAt);
-                GLOBAL_LWPROBE(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails, entireUpdateMs, inputQueueMs,
+                GLOBAL_LWPROBE(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails, PDiskId, entireUpdateMs, inputQueueMs,
                         schedulingMs, processingMs, waitingMs);
             }
             BeginUpdateAt = updateEndedAt;
+            return entireUpdateMs;
         }
     };
 
@@ -457,6 +468,11 @@ struct TPDiskMon {
     TReqCounters Harakiri;
     TReqCounters YardSlay;
     TReqCounters YardControl;
+
+    TReqCounters ShredPDisk;
+    TReqCounters PreShredCompactVDisk;
+    TReqCounters ShredVDiskResult;
+    TReqCounters MarkDirty;
 
     TIoCounters WriteSyncLog;
     TIoCounters WriteFresh;

@@ -11,15 +11,13 @@
 #include <ydb/library/pdisk_io/drivedata.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 
-namespace NActors {
-class TActorSystem;
-}
-
 namespace NKikimr {
 
 struct TPDiskMon;
 
 namespace NPDisk {
+
+struct TPDiskCtx;
 
 ////////////////////////////////////////////////////////////////////////////
 // IBlockDevice - PDisk Hardware abstraction layer
@@ -30,7 +28,7 @@ public:
     virtual ~IBlockDevice()
     {};
     // Initialization methods
-    virtual void Initialize(TActorSystem *actorSystem, const TActorId &pdiskActor) = 0;
+    virtual void Initialize(std::shared_ptr<TPDiskCtx> pdiskCtx) = 0;
     virtual bool IsGood() = 0;
     virtual int GetLastErrno() = 0;
 
@@ -64,11 +62,12 @@ public:
 
 class TPDisk;
 
-IBlockDevice* CreateRealBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon,
+IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon,
         ui64 reorderingCycles, ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags,
-        ui32 maxQueuedCompletionActions, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk = nullptr);
+        ui32 maxQueuedCompletionActions, ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap,
+        TPDisk * const pdisk = nullptr, bool readOnly = false);
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk = nullptr);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk = nullptr, bool readOnly = false);
 
 } // NPDisk
 } // NKikimr

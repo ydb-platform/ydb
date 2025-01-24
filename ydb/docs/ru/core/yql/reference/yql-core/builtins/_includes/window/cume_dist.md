@@ -2,14 +2,15 @@
 
 Возвращает относительную позицию (> 0 и <= 1) строки в рамках [раздела](../../../syntax/window.md#partition). Без аргументов.
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 CUME_DIST()->Double
 ```
 
+### Примеры
 
-**Примеры**
-``` yql
+```yql
 SELECT
     CUME_DIST() OVER w AS dist
 FROM my_table

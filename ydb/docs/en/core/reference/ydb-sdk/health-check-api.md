@@ -4,18 +4,19 @@
 
 To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` namespace in the SDK. You must also pass the name of the checked DB as usual.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
   App code snippet for creating a client:
+
   ```cpp
   auto client = NYdb::NMonitoring::TMonitoringClient(driver);
   ```
 
   Calling `SelfCheck` method:
 
-  ```
+  ```cpp
   auto settings = TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
@@ -51,7 +52,7 @@ This is a short messages each about a single issue. All parameters will affect t
 
 The complete list of extra parameters is presented below:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -233,8 +234,6 @@ The status (severity) of the current issue:
 
 #### Replication in progress
 
-#### Replication in progress
-
 **Description:** The disk is accepting queries, but not all data has been replicated.
 
 **Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
@@ -249,7 +248,7 @@ The status (severity) of the current issue:
 
 **Description:** `HealthCheck` the system can't parse pdisk state.
 
-#### PDisk state is ...
+#### PDisk state is
 
 **Description:** Indicates state of physical disk.
 
@@ -332,10 +331,6 @@ The status (severity) of the current issue:
 
 #### LoadAverage above 100%
 
-### LOAD_AVERAGE
-
-#### LoadAverage above 100%
-
 **Description:** A physical host is overloaded, meaning the system is operating at or beyond its capacity, potentially due to a high number of processes waiting for I/O operations. For more information on load, see [Load (computing)](https://en.wikipedia.org/wiki/Load_(computing)).
 
 **Logic of work:**
@@ -349,8 +344,8 @@ The status (severity) of the current issue:
 
   - Primary Source: `/sys/fs/cgroup/cpu.max`
   - Fallback Sources: `/sys/fs/cgroup/cpu/cpu.cfs_quota_us`, `/sys/fs/cgroup/cpu/cpu.cfs_period_us`
--
- The number of cores is calculated by dividing the quota by the period (quota / period).
+
+The number of cores is calculated by dividing the quota by the period $(quota / period)$.
 
 **Actions:** Check the CPU load on the nodes.
 

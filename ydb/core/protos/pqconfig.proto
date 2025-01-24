@@ -32,6 +32,7 @@ message TPartitionMeta {
     optional uint64 EndOffset = 2;
     optional bool SubDomainOutOfSpace = 3 [default = false];
     optional TPartitionCounterData CounterData = 4;
+    optional uint64 EndWriteTimestamp = 5;
 }
 
 message TPartitionTxMeta {
@@ -61,7 +62,7 @@ message TPQConfig {
 
     optional NKikimrClient.TKeyValueRequest.ETactic Tactic = 13 [default = MAX_THROUGHPUT];
 
-    optional bool RequireCredentialsInNewProtocol = 14 [default = true];
+    optional bool RequireCredentialsInNewProtocol = 14 [default = false];
 
     optional string ClusterTablePath = 15 [default = ""];
     optional string VersionTablePath = 16 [default = ""];
@@ -426,6 +427,7 @@ message TPQTabletConfig {
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 
+    // The field is filled in only for the PQ tablet. Contains information about linked partitions for constructing a partial PartitionGraph.
     repeated TPartition AllPartitions = 36; // filled by schemeshard
 
     optional TOffloadConfig OffloadConfig = 38;
@@ -862,6 +864,9 @@ message THasDataInfo {
     optional uint64 Cookie = 5;
 
     optional string ClientId = 6;
+
+    optional int32 MaxTimeLagMs = 7; // optional, default = infinity, why we use int instead of uint?
+    optional uint64 ReadTimestampMs = 8; //optional, default = 0
 }
 
 message THasDataInfoResponse { //signal
@@ -1080,6 +1085,20 @@ message TEvPartitionScaleStatusChanged {
     required EScaleStatus ScaleStatus = 2;
 };
 
+message TPartitions {
+    message TPartitionInfo {
+        required uint32 PartitionId = 1;
+
+        message TMessageGroup {
+            required string Id = 1;
+            optional uint64 SeqNo = 2;
+        };
+        repeated TMessageGroup MessageGroup = 2;
+    };
+
+    repeated TPartitionInfo Partition = 1;
+}
+
 message TTransaction {
     enum EKind {
         KIND_UNKNOWN = 0;
@@ -1128,6 +1147,7 @@ message TTransaction {
     //
     optional TPQTabletConfig TabletConfig = 12;
     optional TBootstrapConfig BootstrapConfig = 13;
+    optional TPartitions Partitions = 16;
 
     //
     // получатель результата

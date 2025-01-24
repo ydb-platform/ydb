@@ -86,9 +86,11 @@ namespace boost { namespace locale { namespace impl_icu {
 
         int max_char_size() const { return ucnv_getMaxCharSize(cvt_); }
 
-        std::string go(const UChar* buf, int length, int max_size) const
+        template<typename U8Char = char>
+        std::basic_string<U8Char> go(const UChar* buf, int length, int max_size) const
         {
-            std::string res;
+            static_assert(sizeof(U8Char) == sizeof(char), "Not an UTF-8 char type");
+            std::basic_string<U8Char> res;
             res.resize(UCNV_GET_MAX_BYTES_FOR_STRING(length, max_size));
             char* ptr = reinterpret_cast<char*>(&res[0]);
             UErrorCode err = U_ZERO_ERROR;
@@ -141,7 +143,7 @@ namespace boost { namespace locale { namespace impl_icu {
 
         string_type std(const icu::UnicodeString& str) const
         {
-            return cvt_.go(str.getBuffer(), str.length(), max_len_);
+            return cvt_.go<CharType>(str.getBuffer(), str.length(), max_len_);
         }
 
         icu_std_converter(const std::string& charset, cpcvt_type cvt_type = cpcvt_type::skip) :
@@ -156,7 +158,9 @@ namespace boost { namespace locale { namespace impl_icu {
                    size_t from_char = 0) const
         {
             size_t code_points = str.countChar32(from_u, n);
-            return cvt_.cut(code_points, begin + from_char, end);
+            return cvt_.cut(code_points,
+                            reinterpret_cast<const char*>(begin) + from_char,
+                            reinterpret_cast<const char*>(end));
         }
 
     private:

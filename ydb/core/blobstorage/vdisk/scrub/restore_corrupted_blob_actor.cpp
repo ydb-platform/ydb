@@ -146,7 +146,7 @@ namespace NKikimr {
             // filter out the read queue -- remove items that are already available or not needed
             auto remove = [](const TReadCmd& item) {
                 const NMatrix::TVectorType missing = item.Item->Needed - item.Item->GetAvailableParts();
-                return (missing & item.Parts).Empty() || item.Location == item.Item->CorruptedPart;
+                return (missing & item.Parts).Empty() || item.Location.Includes(item.Item->CorruptedPart);
             };
             ReadQ.erase(std::remove_if(ReadQ.begin(), ReadQ.end(), remove), ReadQ.end());
 

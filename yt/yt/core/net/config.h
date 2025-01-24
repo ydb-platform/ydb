@@ -51,8 +51,6 @@ public:
     //! If set, localhost name will be forcefully set to the given value rather
     //! than retrieved via |NYT::NNet::UpdateLocalHostName|.
     std::optional<TString> LocalHostNameOverride;
-    //! Used to check that bootstrap is being initialized from a correct container.
-    std::optional<TString> ExpectedLocalHostName;
 
     REGISTER_YSON_STRUCT(TAddressResolverConfig);
 

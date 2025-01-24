@@ -1,6 +1,5 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
-#include "stats.h"
 #include "scheme_info.h"
 
 namespace NKikimr::NArrow::NSplitter {

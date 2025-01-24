@@ -61,7 +61,7 @@ namespace NDetail {
     template <class T>
     inline void WriteSurrogatePair(wchar32 s, T& dest) noexcept;
 
-}
+} // namespace NDetail
 
 inline wchar16* SkipSymbol(wchar16* begin, const wchar16* end) noexcept {
     return begin + W16SymbolSize(begin, end);
@@ -81,8 +81,9 @@ inline const wchar32* SkipSymbol(const wchar32* begin, const wchar32* end) noexc
 inline wchar32 ReadSymbol(const wchar16* begin, const wchar16* end) noexcept {
     Y_ASSERT(begin < end);
     if (IsW16SurrogateLead(*begin)) {
-        if (begin + 1 < end && IsW16SurrogateTail(*(begin + 1)))
+        if (begin + 1 < end && IsW16SurrogateTail(*(begin + 1))) {
             return ::NDetail::ReadSurrogatePair(begin);
+        }
 
         return BROKEN_RUNE;
     } else if (IsW16SurrogateTail(*begin)) {
@@ -210,8 +211,9 @@ inline bool WriteSymbol(wchar32 s, wchar16*& dest, const wchar16* destEnd) noexc
             return true;
         }
 
-        if (dest + 2 > destEnd)
+        if (dest + 2 > destEnd) {
             return false;
+        }
 
         ::NDetail::WriteSurrogatePair(s, dest);
     } else {
@@ -333,7 +335,7 @@ namespace NDetail {
     void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar16*& dest) noexcept;
 
     void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar32*& dest) noexcept;
-}
+} // namespace NDetail
 
 //! @return len if robust and position where encoding stopped if not
 template <bool robust, typename TCharType>
@@ -362,8 +364,9 @@ inline TUtf16String UTF8ToWide(const char* text, size_t len) {
     TUtf16String w = TUtf16String::Uninitialized(len);
     size_t written;
     size_t pos = UTF8ToWideImpl<robust>(text, len, w.begin(), written);
-    if (pos != len)
+    if (pos != len) {
         ythrow yexception() << "failed to decode UTF-8 string at pos " << pos << ::NDetail::InStringMsg(text, len);
+    }
     Y_ASSERT(w.size() >= written);
     w.remove(written);
     return w;
@@ -639,7 +642,7 @@ namespace NDetail {
     }
 #endif // _sse2_
 
-}
+} // namespace NDetail
 
 //! returns @c true if character sequence has no symbols with value greater than 0x7F
 template <typename TChar>
@@ -707,15 +710,17 @@ inline TUtf32String ASCIIToUTF32(const TStringBuf s) {
 
 //! returns @c true if string contains whitespace characters only
 inline bool IsSpace(const wchar16* s, size_t n) {
-    if (n == 0)
+    if (n == 0) {
         return false;
+    }
 
     Y_ASSERT(s);
 
     const wchar16* const e = s + n;
     for (const wchar16* p = s; p != e; ++p) {
-        if (!IsWhitespace(*p))
+        if (!IsWhitespace(*p)) {
             return false;
+        }
     }
     return true;
 }
@@ -879,8 +884,9 @@ inline bool IsValidUTF16(const wchar16* b, const wchar16* e) {
     Y_ENSURE(b <= e, TStringBuf("invalid iterators"));
     while (b < e) {
         wchar32 symbol = ReadSymbolAndAdvance(b, e);
-        if (symbol == BROKEN_RUNE)
+        if (symbol == BROKEN_RUNE) {
             return false;
+        }
     }
     return true;
 }

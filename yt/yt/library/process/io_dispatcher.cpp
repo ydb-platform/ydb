@@ -1,21 +1,13 @@
 #include "io_dispatcher.h"
 
+#include "config.h"
+
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 #include <yt/yt/core/concurrency/poller.h>
-
-#include <yt/yt/core/misc/singleton.h>
 
 namespace NYT::NPipes {
 
 using namespace NConcurrency;
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TIODispatcherConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("thread_pool_polling_period", &TThis::ThreadPoolPollingPeriod)
-        .Default(TDuration::MilliSeconds(10));
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -32,7 +24,7 @@ TIODispatcher* TIODispatcher::Get()
 
 void TIODispatcher::Configure(const TIODispatcherConfigPtr& config)
 {
-    Poller_->Reconfigure(config->ThreadPoolPollingPeriod);
+    Poller_->SetPollingPeriod(config->ThreadPoolPollingPeriod);
 }
 
 IInvokerPtr TIODispatcher::GetInvoker()

@@ -312,8 +312,7 @@ public:
         // Try excluding the slow disk
         bool isDone = false;
         // TODO: Mark disk that does not answer when accelerating requests
-        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, info, blackboard, false,
-                accelerationParams);
+        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, blackboard, false, accelerationParams);
         if (slowDiskSubgroupMask >= 0) {
             TBlobStorageGroupInfo::EBlobState fastPessimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
             TBlobStorageGroupInfo::EBlobState fastOptimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;

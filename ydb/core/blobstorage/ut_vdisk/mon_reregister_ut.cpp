@@ -10,7 +10,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/system/event.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/astest.h>

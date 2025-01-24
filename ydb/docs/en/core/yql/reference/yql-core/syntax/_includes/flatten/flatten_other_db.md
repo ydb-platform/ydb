@@ -1,4 +1,4 @@
-### Analogs of FLATTEN BY in other DBMS {#flatten-other-dmb}
+### Analogues of FLATTEN BY in other DBMS {#flatten-other-dmb}
 
 * PostgreSQL: `unnest`
 * Hive: `LATERAL VIEW`

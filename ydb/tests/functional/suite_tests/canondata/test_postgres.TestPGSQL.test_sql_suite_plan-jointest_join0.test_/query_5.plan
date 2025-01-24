@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-InnerJoin (MapJoin)-Filter",
+                                        "Node Type": "TopSort-InnerJoin (MapJoin)-Filter-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -48,7 +48,7 @@
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 5
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
@@ -61,6 +61,15 @@
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.qq)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 5
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.unique2)"
                                             }
                                         ],
                                         "PlanNodeId": 18,
@@ -89,6 +98,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
                                                                                             "unique1",
                                                                                             "unique2"
@@ -164,6 +174,7 @@
                                                                                                     {
                                                                                                         "Inputs": [],
                                                                                                         "Name": "TableFullScan",
+                                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                                                                         "ReadColumns": [
                                                                                                             "q1",
                                                                                                             "q2"
@@ -217,6 +228,7 @@
                                                                                                     {
                                                                                                         "Inputs": [],
                                                                                                         "Name": "TableFullScan",
+                                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                                                                         "ReadColumns": [
                                                                                                             "q1",
                                                                                                             "q2"

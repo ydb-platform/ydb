@@ -54,9 +54,7 @@ public:
                     "Removed expired snapshots at " << Self->TabletID());
         }
 
-        const bool needFutureCleanup = (
-                Self->TxInFly() > 0 ||
-                (expireSnapshotsAllowed && Self->GetSnapshotManager().HasExpiringSnapshots()));
+        const bool needFutureCleanup = Self->TxInFly() > 0 || expireSnapshotsAllowed;
 
         if (needFutureCleanup) {
             Self->PlanCleanup(ctx);
@@ -81,7 +79,6 @@ public:
             Self->SendCommittedReplies(std::move(Replies));
         }
         Self->CheckSplitCanStart(ctx);
-        Self->CheckMvccStateChangeCanStart(ctx);
     }
 
 private:
@@ -136,7 +133,6 @@ public:
             Self->SendCommittedReplies(std::move(Replies));
         }
         Self->CheckSplitCanStart(ctx);
-        Self->CheckMvccStateChangeCanStart(ctx);
     }
 
 private:

@@ -8,14 +8,14 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/naming_conventions/naming_conventions.h>
 
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_join.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -267,6 +267,20 @@ bool IsCompatibleWithBlocks(TPositionHandle pos, const TStructExprType& type, TE
     return resolveStatus == IArrowResolver::OK;
 }
 
+// XXX: Unfortunately, KQP optimizer pipeline is not quite
+// predictable, so there is no guarantees whether the pair
+// (FromFlow(ToFlow(...)) are already squashed or not.
+// The helper below checks both cases to find WideFromBlocks
+// input node:
+// * (WideFromBlocks(...))
+// * (FromFlow(ToFlow(WideFromBlocks(...))))
+static inline bool IsNodeWideFromBlocks(const TMaybeNode<TExprBase> body) {
+    return body.Maybe<TCoWideFromBlocks>() ||
+        body.Maybe<TCoFromFlow>() &&
+        body.Cast<TCoFromFlow>().Input().Maybe<TCoToFlow>() &&
+        body.Cast<TCoFromFlow>().Input().Cast<TCoToFlow>().Input().Maybe<TCoWideFromBlocks>();
+}
+
 // TODO: composite copy-paste from https://github.com/ydb-platform/ydb/blob/122f053354c5df4fc559bf06fe0302f92d813032/ydb/library/yql/dq/opt/dq_opt_build.cpp#L388
 bool CanPropagateWideBlockThroughChannel(
     const TDqOutput& output,
@@ -293,10 +307,10 @@ bool CanPropagateWideBlockThroughChannel(
         return false;
     }
 
-    // Ensure that stage has blocks on top level (i.e. FromFlow(WideFromBlocks(...)))
-    if (!program.Lambda().Body().Maybe<TCoFromFlow>() ||
-        !program.Lambda().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
-    {
+    // Ensure that stage has blocks on top level (i.e. either
+    // (WideFromBlocks(...)) or (FromFlow(ToFlow(WideFromBlocks(...))))).
+    // See the rationale for alternatives nearby IsNodeWideFromBlocks.
+    if (!IsNodeWideFromBlocks(program.Lambda().Body())) {
         return false;
     }
 
@@ -372,30 +386,36 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                     CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, TDqStageSettings::Parse(stage), ctx, typesCtx))
                 {
                     TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())
-                        .Callable("FromFlow")
-                            .Callable(0, "WideFromBlocks")
-                                .Callable(0, "ToFlow")
-                                    .Add(0, newArg.Ptr())
-                                .Seal()
-                            .Seal()
+                        .Callable("WideFromBlocks")
+                            .Add(0, newArg.Ptr())
                         .Seal()
                         .Build();
+
                     argsMap.emplace(oldArg.Raw(), newArgNode);
 
                     auto stageUid = connection.Cast().Output().Stage().Ref().UniqueId();
 
-                    // Update input program with: FromFlow(WideFromBlocks($1)) → FromFlow($1)
-                    if (const auto& inputProgram = programs.at(stageUid); inputProgram.Lambda().Body().Maybe<TCoFromFlow>() &&
-                        inputProgram.Lambda().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
-                    {
-                        auto newBody = Build<TCoFromFlow>(ctx, inputProgram.Lambda().Body().Cast<TCoFromFlow>().Pos())
-                            .Input(inputProgram.Lambda().Body().Cast<TCoFromFlow>().Input().Cast<TCoWideFromBlocks>().Input())
-                            .Done();
+                    const auto& inputProgram = programs.at(stageUid);
+                    TMaybeNode<TExprBase> newBody;
+                    // Update input program with one of the following:
+                    // * (WideFromBlocks($1)) -> ($1)
+                    // * (FromFlow(ToFlow(WideFromBlocks($1)))) -> ($1)
+                    const auto& body = inputProgram.Lambda().Body();
+                    if (IsNodeWideFromBlocks(body)) {
+                        if (body.Maybe<TCoWideFromBlocks>()) {
+                            newBody = body.Cast<TCoWideFromBlocks>().Input();
+                        } else {
+                            newBody = body.Cast<TCoFromFlow>().Input()
+                                .Cast<TCoToFlow>().Input()
+                                .Cast<TCoWideFromBlocks>().Input();
+                        }
+                    }
 
+                    if (newBody) {
                         auto newInputProgram = Build<TKqpProgram>(ctx, inputProgram.Pos())
                             .Lambda()
                                 .Args(inputProgram.Lambda().Args())
-                                .Body(newBody)
+                                .Body(newBody.Cast())
                             .Build()
                             .ArgsType(inputProgram.ArgsType())
                             .Done();

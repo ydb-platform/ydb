@@ -1,0 +1,29 @@
+--- a/crypto/threads_pthread.c
++++ b/crypto/threads_pthread.c
+@@ -158,11 +158,14 @@ int CRYPTO_THREAD_compare_id(CRYPTO_THREAD_ID a, CRYPTO_THREAD_ID b)
+ int CRYPTO_atomic_add(int *val, int amount, int *ret, CRYPTO_RWLOCK *lock)
+ {
+ # if defined(__GNUC__) && defined(__ATOMIC_ACQ_REL)
+-    if (__atomic_is_lock_free(sizeof(*val), val)) {
+-        *ret = __atomic_add_fetch(val, amount, __ATOMIC_ACQ_REL);
+-        return 1;
+-    }
++    _Static_assert(__atomic_is_lock_free(sizeof(*val), val), "'int' should be a lock free atomic type");
++    *ret = __atomic_add_fetch(val, amount, __ATOMIC_ACQ_REL);
++    return 1;
++# else
++#   error "Should not be here. Do not need locks to work with an 'int' value atomically."
+ # endif
++
++#if 0
+     if (!CRYPTO_THREAD_write_lock(lock))
+         return 0;
+ 
+@@ -173,6 +176,7 @@ int CRYPTO_atomic_add(int *val, int amount, int *ret, CRYPTO_RWLOCK *lock)
+         return 0;
+ 
+     return 1;
++#endif
+ }
+ 
+ # ifdef OPENSSL_SYS_UNIX

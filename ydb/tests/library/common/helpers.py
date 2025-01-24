@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import yatest.common
+
 
 def unpack_list(list_of_tuples_of_tuples_and_values):
     """
@@ -60,3 +62,13 @@ def wrap_in_list(item):
         return item
     else:
         return [item]
+
+
+def plain_or_under_sanitizer(plain, sanitized):
+    """
+    Meant to be used in test code for constants (timeouts, etc)
+    See also arcadia/util/system/sanitizers.h
+
+    :return: plain if no sanitizer enabled or sanitized otherwise
+    """
+    return plain if not yatest.common.context.sanitize else sanitized

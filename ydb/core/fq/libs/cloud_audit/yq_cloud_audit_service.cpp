@@ -69,6 +69,8 @@ std::string MapConnectionType(const FederatedQuery::ConnectionSetting::Connectio
         return "GreenplumCluster";
     case FederatedQuery::ConnectionSetting::ConnectionCase::kMysqlCluster:
         return "MySQLCluster";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kLogging:
+        return "Logging";
     case FederatedQuery::ConnectionSetting::ConnectionCase::CONNECTION_NOT_SET:
         Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
     }
@@ -385,7 +387,7 @@ public:
         clientParameters.SetLog(*SdkLogger);
 
         const auto& sharedKey = Config.GetUAConfig().GetSharedSecretKey();
-        if (!sharedKey.Empty()) {
+        if (!sharedKey.empty()) {
             clientParameters.SetSharedSecretKey(sharedKey);
         }
         auto clientPtr = NUnifiedAgent::MakeClient(clientParameters);

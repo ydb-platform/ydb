@@ -1,6 +1,6 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
-#include <ydb/library/minsketch/count_min_sketch.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(StatisticsScan) {
             auto& stat = column.GetStatistics(0);
             UNIT_ASSERT(stat.GetType() == 2);
 
-            auto* data = stat.GetData().Data();
+            auto* data = stat.GetData().data();
             auto* sketch = reinterpret_cast<const TCountMinSketch*>(data);
 
             for (ui32 j = 0; j <= 10; ++j) {

@@ -35,7 +35,9 @@ class RunResults:
         self.user_time_ms = None
         self.system_time = None
         self.rss = None
-        self.output_hash = None
+        self.result_hash = None
+        self.stdout_file_path = None
+        self.stderr_file_path = None
         self.perf_file_path = None
 
     def from_json(self, json):
@@ -64,6 +66,8 @@ def pretty_print(value):
         return f"Unwrap(DateTime::FromSeconds({int(delt.total_seconds())}))"
     if type(value) == datetime.timedelta:
         return f"DateTime::IntervalFromMicroseconds({int(value / datetime.timedelta(microseconds=1))})"
+    if isinstance(value, pathlib.Path):
+        return f'\"{value}\"'
     if type(value) == str:
         return f'\"{value}\"'
     if type(value) in [int, float]:
@@ -74,7 +78,21 @@ def pretty_print(value):
     assert False, f"unrecognized type: {type(value)}"
 
 
-def upload_results(result_path, s3_folder, test_start):
+def upload_file_to_s3(s3_folder, result_path, file):
+    # copying files to folder that will be synced with s3
+    dst = file.relative_to(result_path)
+    s3_file = (s3_folder / dst).resolve()
+    s3_file.parent.mkdir(parents=True, exist_ok=True)
+    _ = shutil.copy2(str(file.resolve()), str(s3_file))
+    return dst
+
+
+def upload_results(result_path, s3_folder, test_start, try_num):
+    def add_try_num_to_path(path):
+        if try_num:
+            path = f"try_{try_num}" / path
+        return path
+
     results_map = {}
     for entry in result_path.glob("*/*"):
         if not entry.is_dir():
@@ -98,17 +116,22 @@ def upload_results(result_path, s3_folder, test_start):
                 if query_num not in this_result:
                     this_result[query_num] = RunResults()
 
+                # q<num>.svg
                 if file.suffix == ".svg":
-                    dst = file.relative_to(result_path)
-                    this_result[query_num].perf_file_path = dst
-                    # copying files to folder that will be synced with s3
-                    dst = (s3_folder / dst).resolve()
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    _ = shutil.copy2(str(file.resolve()), str(dst))
+                    this_result[query_num].perf_file_path = add_try_num_to_path(upload_file_to_s3(s3_folder, result_path, file))
+
+                # q<num>-result.yson
+                if file.stem == f"q{query_num}-result":
+                    with open(file, "r") as result:
+                        this_result[query_num].result_hash = str(hash(result.read().strip()))
+
                 # q<num>-stdout.txt
                 if file.stem == f"q{query_num}-stdout":
-                    with open(file, "r") as stdout:
-                        this_result[query_num].output_hash = str(hash(stdout.read().strip()))
+                    this_result[query_num].stdout_file_path = add_try_num_to_path(upload_file_to_s3(s3_folder, result_path, file))
+
+                # q<num>-stderr.txt
+                if file.stem == f"q{query_num}-stderr":
+                    this_result[query_num].stderr_file_path = add_try_num_to_path(upload_file_to_s3(s3_folder, result_path, file))
 
         summary_file = entry / "summary.json"
 
@@ -144,12 +167,14 @@ def upload_results(result_path, s3_folder, test_start):
                     "WasSpillingInJoin" : None,
                     "WasSpillingInChannels" : None,
                     "MaxTasksPerStage" : params.tasks,
-                    "PerfFileLink" : results.perf_file_path,
                     "ExitCode" : results.exitcode,
-                    "ResultHash" : results.output_hash,
+                    "ResultHash" : results.result_hash,
                     "SpilledBytes" : results.read_bytes,
                     "UserTime" : results.user_time,
-                    "SystemTime" : results.system_time
+                    "SystemTime" : results.system_time,
+                    "StdoutFileLink" : results.stdout_file_path,
+                    "StderrFileLink" : results.stderr_file_path,
+                    "PerfFileLink" : results.perf_file_path
                 }
                 sql = 'UPSERT INTO `perfomance/olap/dq_spilling_nightly_runs`\n\t({columns})\nVALUES\n\t({values})'.format(
                     columns=", ".join(map(str, mapping.keys())),
@@ -164,6 +189,7 @@ def main():
 
     parser.add_argument("--result-path", type=pathlib.Path)
     parser.add_argument("--s3-folder", type=pathlib.Path)
+    parser.add_argument("--try-num", default=None)
 
     args = parser.parse_args()
 
@@ -171,7 +197,7 @@ def main():
         raise AttributeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping uploading")
     os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
 
-    upload_results(args.result_path, args.s3_folder, upload_time)
+    upload_results(args.result_path, args.s3_folder, upload_time, args.try_num)
 
 
 if __name__ == "__main__":

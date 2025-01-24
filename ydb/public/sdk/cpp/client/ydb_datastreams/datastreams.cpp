@@ -4,12 +4,12 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
-namespace NYdb::NDataStreams::V1 {
+namespace NYdb::inline V2::NDataStreams::V1 {
 
     TPartitioningSettingsBuilder<TCreateStreamSettings> TCreateStreamSettings::BeginConfigurePartitioningSettings() {
         return { *this };

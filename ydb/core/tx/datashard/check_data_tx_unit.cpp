@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -90,18 +91,6 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
             TString err = TStringBuilder()
                 << "Operation " << *op << " cannot read from snapshot " << snapshot
                 << " using data tx on a follower " << DataShard.TabletID();
-
-            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
-                ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
-            op->Abort(EExecutionUnitKind::FinishPropose);
-
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-            return EExecutionStatus::Executed;
-        } else if (!DataShard.IsMvccEnabled()) {
-            TString err = TStringBuilder()
-                << "Operation " << *op << " reads from snapshot " << snapshot
-                << " with MVCC feature disabled at " << DataShard.TabletID();
 
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
                 ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
@@ -224,6 +213,11 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                     }
                 }
             }
+        }
+
+        if (!op->IsReadOnly() && op->IsKqpDataTransaction() && op->HasKeysInfo()) {
+            const NMiniKQL::IEngineFlat::TValidationInfo& keys = op->GetKeysInfo();
+            NDataIntegrity::LogIntegrityTrailsKeys(ctx, DataShard.TabletID(), op->GetGlobalTxId(), keys);
         }
     }
 

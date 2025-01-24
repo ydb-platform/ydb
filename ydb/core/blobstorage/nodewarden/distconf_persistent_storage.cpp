@@ -1,6 +1,8 @@
 #include "distconf.h"
 #include <google/protobuf/util/json_util.h>
 
+#include <library/cpp/openssl/crypto/sha.h>
+
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::ReadConfig(ui64 cookie) {
@@ -291,12 +293,15 @@ namespace NKikimr::NStorage {
 
             // generate new list of drives to acquire
             std::vector<TString> drivesToRead;
-            EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
-                drivesToRead.push_back(drive.GetPath());
-            });
-            std::sort(drivesToRead.begin(), drivesToRead.end());
+            if (BaseConfig.GetSelfManagementConfig().GetEnabled()) {
+                EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+                    drivesToRead.push_back(drive.GetPath());
+                });
+                std::sort(drivesToRead.begin(), drivesToRead.end());
+            }
 
             if (DrivesToRead != drivesToRead) { // re-read configuration as it may cover additional drives
+                DrivesToRead = std::move(drivesToRead);
                 ReadConfig();
             } else {
                 ApplyStorageConfig(InitialConfig);

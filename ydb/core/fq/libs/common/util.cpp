@@ -49,7 +49,7 @@ public:
         : DatabasePath(databasePath) {}
 
     TIntrusivePtr<NYql::TIssue> Run(const NYql::TIssue& issue) {
-        auto msg = RemoveDatabaseFromStr(issue.GetMessage(), DatabasePath);
+        auto msg = RemoveDatabaseFromStr(TString(issue.GetMessage()), DatabasePath);
         auto newIssue = MakeIntrusive<NYql::TIssue>(issue.Position, issue.EndPosition, msg);
         newIssue->SetCode(issue.GetCode(), issue.GetSeverity());
         for (auto issue : issue.GetSubIssues()) {
@@ -138,6 +138,9 @@ TString ExtractServiceAccountId(const FederatedQuery::ConnectionSetting& setting
     case FederatedQuery::ConnectionSetting::kMysqlCluster: {
         return GetServiceAccountId(setting.mysql_cluster().auth());
     }
+    case FederatedQuery::ConnectionSetting::kLogging: {
+        return GetServiceAccountId(setting.logging().auth());
+    }
     // Do not replace with default. Adding a new connection should cause a compilation error
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
     break;
@@ -173,6 +176,8 @@ TMaybe<TString> GetLogin(const FederatedQuery::ConnectionSetting& setting) {
             return setting.greenplum_cluster().login();
         case FederatedQuery::ConnectionSetting::kMysqlCluster:
             return setting.mysql_cluster().login();
+        case FederatedQuery::ConnectionSetting::kLogging:
+            return {};
     }
 }
 
@@ -196,6 +201,8 @@ TMaybe<TString> GetPassword(const FederatedQuery::ConnectionSetting& setting) {
             return setting.greenplum_cluster().password();
         case FederatedQuery::ConnectionSetting::kMysqlCluster:
             return setting.mysql_cluster().password();
+        case FederatedQuery::ConnectionSetting::kLogging:
+            return {};
     }
 }
 
@@ -219,6 +226,8 @@ EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting&
             return GetBasicAuthMethod(setting.greenplum_cluster().auth());
         case FederatedQuery::ConnectionSetting::kMysqlCluster:
             return GetBasicAuthMethod(setting.mysql_cluster().auth());
+        case FederatedQuery::ConnectionSetting::kLogging:
+            return GetIamAuthMethod(setting.logging().auth());
     }
 }
 
@@ -240,6 +249,8 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
         return connection.content().setting().greenplum_cluster().auth();
     case FederatedQuery::ConnectionSetting::kMysqlCluster:
         return connection.content().setting().mysql_cluster().auth();
+    case FederatedQuery::ConnectionSetting::kLogging:
+        return connection.content().setting().logging().auth();
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         return FederatedQuery::IamAuth{};
     }

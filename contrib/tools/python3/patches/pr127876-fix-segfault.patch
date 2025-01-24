@@ -1,0 +1,29 @@
+From c56b5256ff30f59955362ab536c6f089dd86f9fd Mon Sep 17 00:00:00 2001
+From: Alexander Shadchin <shadchin@yandex-team.com>
+Date: Thu, 12 Dec 2024 19:39:27 +0300
+Subject: [PATCH 1/2] Fix segmentation fault
+
+---
+ Objects/unicodeobject.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/Objects/unicodeobject.c b/Objects/unicodeobject.c
+index 33c4747bbef488..e043015b49d510 100644
+--- a/Objects/unicodeobject.c
++++ b/Objects/unicodeobject.c
+@@ -1429,12 +1429,12 @@ _copy_characters(PyObject *to, Py_ssize_t to_start,
+     assert(PyUnicode_Check(from));
+     assert(from_start + how_many <= PyUnicode_GET_LENGTH(from));
+ 
+-    assert(PyUnicode_Check(to));
+-    assert(to_start + how_many <= PyUnicode_GET_LENGTH(to));
+-
+     if (how_many == 0)
+         return 0;
+ 
++    assert(PyUnicode_Check(to));
++    assert(to_start + how_many <= PyUnicode_GET_LENGTH(to));
++
+     from_kind = PyUnicode_KIND(from);
+     from_data = PyUnicode_DATA(from);
+     to_kind = PyUnicode_KIND(to);

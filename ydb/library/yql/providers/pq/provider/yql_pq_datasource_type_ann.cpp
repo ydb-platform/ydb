@@ -1,14 +1,17 @@
 #include "yql_pq_provider_impl.h"
+#include "yql_pq_helpers.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/pushdown/type_ann.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -85,7 +88,7 @@ public:
     }
 
     TStatus HandleReadTopic(TExprBase input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(input.Ref(), 6, 8, ctx)) {
+        if (!EnsureMinMaxArgsCount(input.Ref(), 6, 9, ctx)) {
             return TStatus::Error;
         }
 
@@ -131,11 +134,16 @@ public:
     }
 
     TStatus HandleDqTopicSource(TExprBase input, TExprContext& ctx) {
-        if (!EnsureArgsCount(input.Ref(), 4, ctx)) {
+        if (!EnsureArgsCount(input.Ref(), 7, ctx)) {
             return TStatus::Error;
         }
 
         TDqPqTopicSource topicSource = input.Cast<TDqPqTopicSource>();
+
+        if (!EnsureWorldType(topicSource.World().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
         TPqTopic topic = topicSource.Topic();
 
         if (!EnsureCallable(topic.Ref(), ctx)) {
@@ -148,6 +156,14 @@ public:
         if (!meta) {
             ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unknown topic `" << cluster << "`.`" << topicPath << "`"));
             return TStatus::Error;
+        }
+
+        if (const auto maybeSharedReadingSetting = FindSetting(topicSource.Settings().Ptr(), SharedReading)) {
+            const TExprNode& value = maybeSharedReadingSetting.Cast().Ref();
+            if (value.IsAtom() && FromString<bool>(value.Content())) {
+                input.Ptr()->SetTypeAnn(ctx.MakeType<TStreamExprType>(topicSource.RowType().Ref().GetTypeAnn()));
+                return TStatus::Ok;
+            }
         }
 
         if (topic.Metadata().Empty()) {

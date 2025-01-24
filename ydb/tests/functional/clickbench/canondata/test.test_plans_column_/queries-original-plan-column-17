@@ -35,16 +35,25 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Limit",
+                                                "Node Type": "Limit-Aggregate",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Limit": "10",
+                                                        "Name": "Limit"
+                                                    },
                                                     {
                                                         "Inputs": [
                                                             {
                                                                 "ExternalPlanNodeId": 2
                                                             }
                                                         ],
-                                                        "Limit": "10",
-                                                        "Name": "Limit"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Final"
                                                     }
                                                 ],
                                                 "PlanNodeId": 3,
@@ -64,6 +73,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/local/clickbench/plans/column/hits",
                                                                         "ReadColumns": [
                                                                             "SearchPhrase",
                                                                             "UserID"

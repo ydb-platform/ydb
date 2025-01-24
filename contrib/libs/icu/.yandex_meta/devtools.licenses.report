@@ -1,0 +1,1515 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+IGNORE_FILES icudt76_dat.rodata
+
+KEEP     Unicode              0285f1da3a441f34fd441c30fe7aa87e
+BELONGS ya.make
+    License text:
+          " Copyright (C) 2016 and later: Unicode, Inc. and others. License & terms of use: http://www.unicode.org/copyright.html "
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        include/unicode/uvernum.h [50:50]
+
+KEEP     Unicode              110d3101a4390964af6105c359edb37e
+BELONGS ya.make
+    License text:
+             License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        APIChangeReport.html [4:4]
+
+KEEP     BSD-3-Clause         14fa598c20c2900706910e0a6b8704e5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 28.10
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [369:375]
+
+SKIP     LicenseRef-scancode-unknown-spdx 17426ea1b7c606d27ef8c4f7591d2725
+BELONGS ya.make
+    License text:
+        SPDX-License-Identifier: Unicode-3.0
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-spdx
+        Score           : 100.00
+        Match type      : TAG
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-spdx.LICENSE
+    Files with this license:
+        LICENSE [41:41]
+
+KEEP     ICU                  1e6c63b854b364495cdae9a0f0dd4f31
+BELONGS ya.make
+    License text:
+        ICU License - ICU 1.8.1 to ICU 57.1
+        COPYRIGHT AND PERMISSION NOTICE
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        LICENSE [53:55]
+
+SKIP     NAIST-2003           2424a1fc169740d8fa11e54ba47b829a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NAIST-2003
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/NAIST-2003
+    Files with this license:
+        LICENSE [224:290]
+
+SKIP     LicenseRef-scancode-free-unknown 307c3678c9fc74a4c1a81c1c54faa1b4
+BELONGS ya.make
+    License text:
+         Unless otherwise noted in a comment, all helper functions that take
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 10.81
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        i18n/messageformat2_parser.cpp [338:338]
+
+KEEP     MIT                  399584035c417b91040964779555dfac
+BELONGS ya.make
+    License text:
+        MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [440:440]
+
+KEEP     Unicode              4c6205d2789acc5f0eaf022758f1caaf
+BELONGS ya.make
+    License text:
+        // License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        i18n/utmscale.cpp [2:2]
+
+SKIP     NTP                  506238eb9775d9863634676b046cf513
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NTP
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_.28no_advertising_without_permission.29, https://spdx.org/licenses/NTP
+    Files with this license:
+        LICENSE [534:542]
+
+KEEP     Unicode              51f39f17d54765b21f1fa3cec7a5e6a9
+BELONGS ya.make
+    License text:
+          <i>© 2016 and later: Unicode, Inc. and others. License &amp; terms of use: http://www.unicode.org/copyright.html</i> 
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        license.html [14:14]
+
+KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [444:460]
+
+KEEP     Unicode              5878933f57b4a51e1a476204a3d5dd26
+BELONGS ya.make
+    License text:
+            <p> Copyright &copy; 2016 and later: Unicode, Inc. and others. License &amp; terms of use:
+            <a href="http://www.unicode.org/copyright.html">http://www.unicode.org/copyright.html</a><br/>
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        readme.html [24:25]
+
+SKIP     LicenseRef-scancode-proprietary-license 61263200f41b496e20ae1b038c8dae40
+BELONGS ya.make
+    # not a license - parameter description string
+    License text:
+         *                  copy of the string. dest may or may not be modified.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        include/unicode/ures.h [415:415]
+        include/unicode/ures.h [681:681]
+        include/unicode/ures.h [774:774]
+
+KEEP     Unicode              751c1c53100f387cfba9896a0a000d23
+BELONGS ya.make
+    License text:
+        // License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        common/appendable.cpp [2:2]
+        common/bmpset.cpp [2:2]
+        common/bmpset.h [2:2]
+        common/brkeng.cpp [2:2]
+        common/brkeng.h [2:2]
+        common/brkiter.cpp [2:2]
+        common/bytesinkutil.cpp [2:2]
+        common/bytesinkutil.h [2:2]
+        common/bytestream.cpp [2:2]
+        common/bytestrie.cpp [2:2]
+        common/bytestriebuilder.cpp [2:2]
+        common/bytestrieiterator.cpp [2:2]
+        common/caniter.cpp [2:2]
+        common/capi_helper.h [2:2]
+        common/characterproperties.cpp [2:2]
+        common/chariter.cpp [2:2]
+        common/charstr.cpp [2:2]
+        common/charstr.h [2:2]
+        common/charstrmap.h [2:2]
+        common/cmemory.cpp [2:2]
+        common/cmemory.h [2:2]
+        common/cpputils.h [2:2]
+        common/cstr.cpp [2:2]
+        common/cstr.h [2:2]
+        common/cstring.cpp [2:2]
+        common/cstring.h [2:2]
+        common/cwchar.cpp [2:2]
+        common/cwchar.h [2:2]
+        common/dictbe.cpp [2:2]
+        common/dictbe.h [2:2]
+        common/dictionarydata.cpp [2:2]
+        common/dictionarydata.h [2:2]
+        common/dtintrv.cpp [2:2]
+        common/edits.cpp [2:2]
+        common/errorcode.cpp [2:2]
+        common/filteredbrk.cpp [2:2]
+        common/filterednormalizer2.cpp [2:2]
+        common/hash.h [2:2]
+        common/icudataver.cpp [2:2]
+        common/icuplug.cpp [2:2]
+        common/icuplugimp.h [2:2]
+        common/loadednormalizer2impl.cpp [2:2]
+        common/localebuilder.cpp [2:2]
+        common/localefallback_data.h [2:2]
+        common/localematcher.cpp [2:2]
+        common/localeprioritylist.cpp [2:2]
+        common/localeprioritylist.h [2:2]
+        common/localsvc.h [2:2]
+        common/locavailable.cpp [2:2]
+        common/locbased.cpp [2:2]
+        common/locbased.h [2:2]
+        common/locdispnames.cpp [2:2]
+        common/locdistance.cpp [2:2]
+        common/locdistance.h [2:2]
+        common/locdspnm.cpp [2:2]
+        common/locid.cpp [2:2]
+        common/loclikely.cpp [2:2]
+        common/loclikelysubtags.cpp [2:2]
+        common/loclikelysubtags.h [2:2]
+        common/locmap.cpp [2:2]
+        common/locmap.h [2:2]
+        common/locresdata.cpp [2:2]
+        common/locutil.cpp [2:2]
+        common/locutil.h [2:2]
+        common/lsr.cpp [2:2]
+        common/lsr.h [2:2]
+        common/lstmbe.cpp [2:2]
+        common/lstmbe.h [2:2]
+        common/messageimpl.h [2:2]
+        common/messagepattern.cpp [2:2]
+        common/mlbe.cpp [2:2]
+        common/mlbe.h [2:2]
+        common/msvcres.h [2:2]
+        common/mutex.h [2:2]
+        common/norm2_nfc_data.h [2:2]
+        common/norm2allmodes.h [2:2]
+        common/normalizer2.cpp [2:2]
+        common/normalizer2impl.cpp [2:2]
+        common/normalizer2impl.h [2:2]
+        common/normlzr.cpp [2:2]
+        common/parsepos.cpp [2:2]
+        common/patternprops.cpp [2:2]
+        common/patternprops.h [2:2]
+        common/pluralmap.cpp [2:2]
+        common/pluralmap.h [2:2]
+        common/propname.cpp [2:2]
+        common/propname.h [2:2]
+        common/propname_data.h [2:2]
+        common/propsvec.cpp [2:2]
+        common/propsvec.h [2:2]
+        common/punycode.cpp [2:2]
+        common/punycode.h [2:2]
+        common/putil.cpp [2:2]
+        common/putilimp.h [2:2]
+        common/rbbi.cpp [2:2]
+        common/rbbi_cache.cpp [2:2]
+        common/rbbi_cache.h [2:2]
+        common/rbbidata.cpp [2:2]
+        common/rbbidata.h [2:2]
+        common/rbbinode.cpp [2:2]
+        common/rbbinode.h [2:2]
+        common/rbbirb.cpp [2:2]
+        common/rbbirb.h [2:2]
+        common/rbbirpt.h [2:2]
+        common/rbbiscan.cpp [2:2]
+        common/rbbiscan.h [2:2]
+        common/rbbisetb.cpp [2:2]
+        common/rbbisetb.h [2:2]
+        common/rbbistbl.cpp [2:2]
+        common/rbbitblb.cpp [2:2]
+        common/rbbitblb.h [2:2]
+        common/resbund.cpp [2:2]
+        common/resbund_cnv.cpp [2:2]
+        common/resource.cpp [2:2]
+        common/resource.h [2:2]
+        common/restrace.cpp [2:2]
+        common/restrace.h [2:2]
+        common/ruleiter.cpp [2:2]
+        common/ruleiter.h [2:2]
+        common/schriter.cpp [2:2]
+        common/serv.cpp [2:2]
+        common/serv.h [2:2]
+        common/servlk.cpp [2:2]
+        common/servlkf.cpp [2:2]
+        common/servloc.h [2:2]
+        common/servls.cpp [2:2]
+        common/servnotf.cpp [2:2]
+        common/servnotf.h [2:2]
+        common/servrbf.cpp [2:2]
+        common/servslkf.cpp [2:2]
+        common/sharedobject.cpp [2:2]
+        common/sharedobject.h [2:2]
+        common/simpleformatter.cpp [2:2]
+        common/sprpimpl.h [2:2]
+        common/static_unicode_sets.cpp [2:2]
+        common/static_unicode_sets.h [2:2]
+        common/stringpiece.cpp [2:2]
+        common/stringtriebuilder.cpp [2:2]
+        common/uarrsort.cpp [2:2]
+        common/uarrsort.h [2:2]
+        common/uassert.h [2:2]
+        common/ubidi.cpp [2:2]
+        common/ubidi_props.cpp [2:2]
+        common/ubidi_props.h [2:2]
+        common/ubidi_props_data.h [2:2]
+        common/ubidiimp.h [2:2]
+        common/ubidiln.cpp [2:2]
+        common/ubidiwrt.cpp [2:2]
+        common/ubrk.cpp [2:2]
+        common/ubrkimpl.h [2:2]
+        common/ucase.cpp [2:2]
+        common/ucase.h [2:2]
+        common/ucase_props_data.h [2:2]
+        common/ucasemap.cpp [2:2]
+        common/ucasemap_imp.h [2:2]
+        common/ucasemap_titlecase_brkiter.cpp [2:2]
+        common/ucat.cpp [2:2]
+        common/uchar.cpp [2:2]
+        common/uchar_props_data.h [2:2]
+        common/ucharstrie.cpp [2:2]
+        common/ucharstriebuilder.cpp [2:2]
+        common/ucharstrieiterator.cpp [2:2]
+        common/uchriter.cpp [2:2]
+        common/ucln.h [2:2]
+        common/ucln_cmn.cpp [2:2]
+        common/ucln_cmn.h [2:2]
+        common/ucln_imp.h [2:2]
+        common/ucmndata.cpp [2:2]
+        common/ucmndata.h [2:2]
+        common/ucnv.cpp [2:2]
+        common/ucnv2022.cpp [2:2]
+        common/ucnv_bld.cpp [2:2]
+        common/ucnv_bld.h [2:2]
+        common/ucnv_cb.cpp [2:2]
+        common/ucnv_cnv.cpp [2:2]
+        common/ucnv_cnv.h [2:2]
+        common/ucnv_ct.cpp [2:2]
+        common/ucnv_err.cpp [2:2]
+        common/ucnv_ext.cpp [2:2]
+        common/ucnv_ext.h [2:2]
+        common/ucnv_imp.h [2:2]
+        common/ucnv_io.cpp [2:2]
+        common/ucnv_io.h [2:2]
+        common/ucnv_lmb.cpp [2:2]
+        common/ucnv_set.cpp [2:2]
+        common/ucnv_u16.cpp [2:2]
+        common/ucnv_u32.cpp [2:2]
+        common/ucnv_u7.cpp [2:2]
+        common/ucnv_u8.cpp [2:2]
+        common/ucnvbocu.cpp [2:2]
+        common/ucnvdisp.cpp [2:2]
+        common/ucnvhz.cpp [2:2]
+        common/ucnvisci.cpp [2:2]
+        common/ucnvlat1.cpp [2:2]
+        common/ucnvmbcs.cpp [2:2]
+        common/ucnvmbcs.h [2:2]
+        common/ucnvscsu.cpp [2:2]
+        common/ucnvsel.cpp [2:2]
+        common/ucol_data.h [2:2]
+        common/ucol_swp.cpp [2:2]
+        common/ucol_swp.h [2:2]
+        common/ucptrie.cpp [2:2]
+        common/ucptrie_impl.h [2:2]
+        common/ucurr.cpp [2:2]
+        common/ucurrimp.h [2:2]
+        common/udata.cpp [2:2]
+        common/udatamem.cpp [2:2]
+        common/udatamem.h [2:2]
+        common/udataswp.cpp [2:2]
+        common/udataswp.h [2:2]
+        common/uelement.h [2:2]
+        common/uenum.cpp [2:2]
+        common/uenumimp.h [2:2]
+        common/uhash.cpp [2:2]
+        common/uhash.h [2:2]
+        common/uhash_us.cpp [2:2]
+        common/uidna.cpp [2:2]
+        common/uinit.cpp [2:2]
+        common/uinvchar.cpp [2:2]
+        common/uinvchar.h [2:2]
+        common/uiter.cpp [2:2]
+        common/ulayout_props.h [2:2]
+        common/ulist.cpp [2:2]
+        common/ulist.h [2:2]
+        common/uloc.cpp [2:2]
+        common/uloc_keytype.cpp [2:2]
+        common/uloc_tag.cpp [2:2]
+        common/ulocale.cpp [2:2]
+        common/ulocbuilder.cpp [2:2]
+        common/ulocimp.h [2:2]
+        common/umapfile.cpp [2:2]
+        common/umapfile.h [2:2]
+        common/umath.cpp [2:2]
+        common/umutablecptrie.cpp [2:2]
+        common/umutex.cpp [2:2]
+        common/umutex.h [2:2]
+        common/unames.cpp [2:2]
+        common/unifiedcache.cpp [2:2]
+        common/unifiedcache.h [2:2]
+        common/unifilt.cpp [2:2]
+        common/unifunct.cpp [2:2]
+        common/uniquecharstr.h [2:2]
+        common/uniset.cpp [2:2]
+        common/uniset_closure.cpp [2:2]
+        common/uniset_props.cpp [2:2]
+        common/unisetspan.cpp [2:2]
+        common/unisetspan.h [2:2]
+        common/unistr.cpp [2:2]
+        common/unistr_case.cpp [2:2]
+        common/unistr_case_locale.cpp [2:2]
+        common/unistr_cnv.cpp [2:2]
+        common/unistr_props.cpp [2:2]
+        common/unistr_titlecase_brkiter.cpp [2:2]
+        common/unistrappender.h [2:2]
+        common/unorm.cpp [2:2]
+        common/unormcmp.cpp [2:2]
+        common/unormimp.h [2:2]
+        common/uobject.cpp [2:2]
+        common/uposixdefs.h [2:2]
+        common/uprops.cpp [2:2]
+        common/uprops.h [2:2]
+        common/ures_cnv.cpp [2:2]
+        common/uresbund.cpp [2:2]
+        common/uresdata.cpp [2:2]
+        common/uresdata.h [2:2]
+        common/uresimp.h [2:2]
+        common/ureslocs.h [2:2]
+        common/usc_impl.cpp [2:2]
+        common/usc_impl.h [2:2]
+        common/uscript.cpp [2:2]
+        common/uscript_props.cpp [2:2]
+        common/uset.cpp [2:2]
+        common/uset_imp.h [2:2]
+        common/uset_props.cpp [2:2]
+        common/usetiter.cpp [2:2]
+        common/ushape.cpp [2:2]
+        common/usprep.cpp [2:2]
+        common/ustack.cpp [2:2]
+        common/ustr_cnv.cpp [2:2]
+        common/ustr_cnv.h [2:2]
+        common/ustr_imp.h [2:2]
+        common/ustr_titlecase_brkiter.cpp [2:2]
+        common/ustr_wcs.cpp [2:2]
+        common/ustrcase.cpp [2:2]
+        common/ustrcase_locale.cpp [2:2]
+        common/ustrenum.cpp [2:2]
+        common/ustrenum.h [2:2]
+        common/ustrfmt.cpp [2:2]
+        common/ustrfmt.h [2:2]
+        common/ustring.cpp [2:2]
+        common/ustrtrns.cpp [2:2]
+        common/utext.cpp [2:2]
+        common/utf_impl.cpp [2:2]
+        common/util.cpp [2:2]
+        common/util.h [2:2]
+        common/util_props.cpp [2:2]
+        common/utrace.cpp [2:2]
+        common/utracimp.h [2:2]
+        common/utrie.cpp [2:2]
+        common/utrie.h [2:2]
+        common/utrie2.cpp [2:2]
+        common/utrie2.h [2:2]
+        common/utrie2_builder.cpp [2:2]
+        common/utrie2_impl.h [2:2]
+        common/utrie_swap.cpp [2:2]
+        common/uts46.cpp [2:2]
+        common/utypeinfo.h [2:2]
+        common/utypes.cpp [2:2]
+        common/uvector.cpp [2:2]
+        common/uvector.h [2:2]
+        common/uvectr32.cpp [2:2]
+        common/uvectr32.h [2:2]
+        common/uvectr64.cpp [2:2]
+        common/uvectr64.h [2:2]
+        common/wintz.cpp [2:2]
+        common/wintz.h [2:2]
+        i18n/alphaindex.cpp [2:2]
+        i18n/anytrans.cpp [2:2]
+        i18n/anytrans.h [2:2]
+        i18n/astro.cpp [2:2]
+        i18n/astro.h [2:2]
+        i18n/basictz.cpp [2:2]
+        i18n/bocsu.cpp [2:2]
+        i18n/bocsu.h [2:2]
+        i18n/brktrans.cpp [2:2]
+        i18n/brktrans.h [2:2]
+        i18n/buddhcal.cpp [2:2]
+        i18n/buddhcal.h [2:2]
+        i18n/calendar.cpp [2:2]
+        i18n/casetrn.cpp [2:2]
+        i18n/casetrn.h [2:2]
+        i18n/cecal.cpp [2:2]
+        i18n/cecal.h [2:2]
+        i18n/chnsecal.cpp [2:2]
+        i18n/chnsecal.h [2:2]
+        i18n/choicfmt.cpp [2:2]
+        i18n/coleitr.cpp [2:2]
+        i18n/coll.cpp [2:2]
+        i18n/collation.cpp [2:2]
+        i18n/collation.h [2:2]
+        i18n/collationbuilder.cpp [2:2]
+        i18n/collationbuilder.h [2:2]
+        i18n/collationcompare.cpp [2:2]
+        i18n/collationcompare.h [2:2]
+        i18n/collationdata.cpp [2:2]
+        i18n/collationdata.h [2:2]
+        i18n/collationdatabuilder.cpp [2:2]
+        i18n/collationdatabuilder.h [2:2]
+        i18n/collationdatareader.cpp [2:2]
+        i18n/collationdatareader.h [2:2]
+        i18n/collationdatawriter.cpp [2:2]
+        i18n/collationdatawriter.h [2:2]
+        i18n/collationfastlatin.cpp [2:2]
+        i18n/collationfastlatin.h [2:2]
+        i18n/collationfastlatinbuilder.cpp [2:2]
+        i18n/collationfastlatinbuilder.h [2:2]
+        i18n/collationfcd.cpp [2:2]
+        i18n/collationfcd.h [2:2]
+        i18n/collationiterator.cpp [2:2]
+        i18n/collationiterator.h [2:2]
+        i18n/collationkeys.cpp [2:2]
+        i18n/collationkeys.h [2:2]
+        i18n/collationroot.cpp [2:2]
+        i18n/collationroot.h [2:2]
+        i18n/collationrootelements.cpp [2:2]
+        i18n/collationrootelements.h [2:2]
+        i18n/collationruleparser.cpp [2:2]
+        i18n/collationruleparser.h [2:2]
+        i18n/collationsets.cpp [2:2]
+        i18n/collationsets.h [2:2]
+        i18n/collationsettings.cpp [2:2]
+        i18n/collationsettings.h [2:2]
+        i18n/collationtailoring.cpp [2:2]
+        i18n/collationtailoring.h [2:2]
+        i18n/collationweights.cpp [2:2]
+        i18n/collationweights.h [2:2]
+        i18n/collunsafe.h [2:2]
+        i18n/compactdecimalformat.cpp [2:2]
+        i18n/coptccal.cpp [2:2]
+        i18n/coptccal.h [2:2]
+        i18n/cpdtrans.cpp [2:2]
+        i18n/cpdtrans.h [2:2]
+        i18n/csdetect.cpp [2:2]
+        i18n/csdetect.h [2:2]
+        i18n/csmatch.cpp [2:2]
+        i18n/csmatch.h [2:2]
+        i18n/csr2022.cpp [2:2]
+        i18n/csr2022.h [2:2]
+        i18n/csrecog.cpp [2:2]
+        i18n/csrecog.h [2:2]
+        i18n/csrmbcs.cpp [2:2]
+        i18n/csrmbcs.h [2:2]
+        i18n/csrsbcs.cpp [2:2]
+        i18n/csrsbcs.h [2:2]
+        i18n/csrucode.cpp [2:2]
+        i18n/csrucode.h [2:2]
+        i18n/csrutf8.cpp [2:2]
+        i18n/csrutf8.h [2:2]
+        i18n/curramt.cpp [2:2]
+        i18n/currfmt.cpp [2:2]
+        i18n/currfmt.h [2:2]
+        i18n/currpinf.cpp [2:2]
+        i18n/currunit.cpp [2:2]
+        i18n/dangical.cpp [2:2]
+        i18n/dangical.h [2:2]
+        i18n/datefmt.cpp [2:2]
+        i18n/dayperiodrules.cpp [2:2]
+        i18n/dayperiodrules.h [2:2]
+        i18n/dcfmtsym.cpp [2:2]
+        i18n/decContext.cpp [2:2]
+        i18n/decContext.h [2:2]
+        i18n/decNumber.cpp [2:2]
+        i18n/decNumber.h [2:2]
+        i18n/decNumberLocal.h [2:2]
+        i18n/decimfmt.cpp [2:2]
+        i18n/displayoptions.cpp [2:2]
+        i18n/double-conversion-bignum-dtoa.cpp [2:2]
+        i18n/double-conversion-bignum-dtoa.h [2:2]
+        i18n/double-conversion-bignum.cpp [2:2]
+        i18n/double-conversion-bignum.h [2:2]
+        i18n/double-conversion-cached-powers.cpp [2:2]
+        i18n/double-conversion-cached-powers.h [2:2]
+        i18n/double-conversion-diy-fp.h [2:2]
+        i18n/double-conversion-double-to-string.cpp [2:2]
+        i18n/double-conversion-double-to-string.h [2:2]
+        i18n/double-conversion-fast-dtoa.cpp [2:2]
+        i18n/double-conversion-fast-dtoa.h [2:2]
+        i18n/double-conversion-ieee.h [2:2]
+        i18n/double-conversion-string-to-double.cpp [2:2]
+        i18n/double-conversion-string-to-double.h [2:2]
+        i18n/double-conversion-strtod.cpp [2:2]
+        i18n/double-conversion-strtod.h [2:2]
+        i18n/double-conversion-utils.h [2:2]
+        i18n/double-conversion.h [2:2]
+        i18n/dt_impl.h [2:2]
+        i18n/dtfmtsym.cpp [2:2]
+        i18n/dtitv_impl.h [2:2]
+        i18n/dtitvfmt.cpp [2:2]
+        i18n/dtitvinf.cpp [2:2]
+        i18n/dtptngen.cpp [2:2]
+        i18n/dtptngen_impl.h [2:2]
+        i18n/dtrule.cpp [2:2]
+        i18n/erarules.cpp [2:2]
+        i18n/erarules.h [2:2]
+        i18n/esctrn.cpp [2:2]
+        i18n/esctrn.h [2:2]
+        i18n/ethpccal.cpp [2:2]
+        i18n/ethpccal.h [2:2]
+        i18n/fmtable.cpp [2:2]
+        i18n/fmtable_cnv.cpp [2:2]
+        i18n/fmtableimp.h [2:2]
+        i18n/format.cpp [2:2]
+        i18n/formatted_string_builder.cpp [2:2]
+        i18n/formatted_string_builder.h [2:2]
+        i18n/formattedval_impl.h [2:2]
+        i18n/formattedval_iterimpl.cpp [2:2]
+        i18n/formattedval_sbimpl.cpp [2:2]
+        i18n/formattedvalue.cpp [2:2]
+        i18n/fphdlimp.cpp [2:2]
+        i18n/fphdlimp.h [2:2]
+        i18n/fpositer.cpp [2:2]
+        i18n/funcrepl.cpp [2:2]
+        i18n/funcrepl.h [2:2]
+        i18n/gender.cpp [2:2]
+        i18n/gregocal.cpp [2:2]
+        i18n/gregoimp.cpp [2:2]
+        i18n/gregoimp.h [2:2]
+        i18n/hebrwcal.cpp [2:2]
+        i18n/hebrwcal.h [2:2]
+        i18n/indiancal.cpp [2:2]
+        i18n/indiancal.h [2:2]
+        i18n/inputext.cpp [2:2]
+        i18n/inputext.h [2:2]
+        i18n/islamcal.cpp [2:2]
+        i18n/islamcal.h [2:2]
+        i18n/iso8601cal.cpp [2:2]
+        i18n/iso8601cal.h [2:2]
+        i18n/japancal.cpp [2:2]
+        i18n/japancal.h [2:2]
+        i18n/listformatter.cpp [2:2]
+        i18n/measfmt.cpp [2:2]
+        i18n/measunit.cpp [2:2]
+        i18n/measunit_extra.cpp [2:2]
+        i18n/measunit_impl.h [2:2]
+        i18n/measure.cpp [2:2]
+        i18n/messageformat2.cpp [2:2]
+        i18n/messageformat2_allocation.h [2:2]
+        i18n/messageformat2_arguments.cpp [2:2]
+        i18n/messageformat2_checker.cpp [2:2]
+        i18n/messageformat2_checker.h [2:2]
+        i18n/messageformat2_data_model.cpp [2:2]
+        i18n/messageformat2_errors.cpp [2:2]
+        i18n/messageformat2_errors.h [2:2]
+        i18n/messageformat2_evaluation.cpp [2:2]
+        i18n/messageformat2_evaluation.h [2:2]
+        i18n/messageformat2_formattable.cpp [2:2]
+        i18n/messageformat2_formatter.cpp [2:2]
+        i18n/messageformat2_function_registry.cpp [2:2]
+        i18n/messageformat2_function_registry_internal.h [2:2]
+        i18n/messageformat2_macros.h [2:2]
+        i18n/messageformat2_parser.cpp [2:2]
+        i18n/messageformat2_parser.h [2:2]
+        i18n/messageformat2_serializer.cpp [2:2]
+        i18n/messageformat2_serializer.h [2:2]
+        i18n/msgfmt.cpp [2:2]
+        i18n/msgfmt_impl.h [2:2]
+        i18n/name2uni.cpp [2:2]
+        i18n/name2uni.h [2:2]
+        i18n/nfrlist.h [2:2]
+        i18n/nfrs.cpp [2:2]
+        i18n/nfrs.h [2:2]
+        i18n/nfrule.cpp [2:2]
+        i18n/nfrule.h [2:2]
+        i18n/nfsubs.cpp [2:2]
+        i18n/nfsubs.h [2:2]
+        i18n/nortrans.cpp [2:2]
+        i18n/nortrans.h [2:2]
+        i18n/nultrans.cpp [2:2]
+        i18n/nultrans.h [2:2]
+        i18n/number_affixutils.cpp [2:2]
+        i18n/number_affixutils.h [2:2]
+        i18n/number_asformat.cpp [2:2]
+        i18n/number_asformat.h [2:2]
+        i18n/number_capi.cpp [2:2]
+        i18n/number_compact.cpp [2:2]
+        i18n/number_compact.h [2:2]
+        i18n/number_currencysymbols.cpp [2:2]
+        i18n/number_currencysymbols.h [2:2]
+        i18n/number_decimalquantity.cpp [2:2]
+        i18n/number_decimalquantity.h [2:2]
+        i18n/number_decimfmtprops.cpp [2:2]
+        i18n/number_decimfmtprops.h [2:2]
+        i18n/number_decnum.h [2:2]
+        i18n/number_fluent.cpp [2:2]
+        i18n/number_formatimpl.cpp [2:2]
+        i18n/number_formatimpl.h [2:2]
+        i18n/number_grouping.cpp [2:2]
+        i18n/number_integerwidth.cpp [2:2]
+        i18n/number_longnames.cpp [2:2]
+        i18n/number_longnames.h [2:2]
+        i18n/number_mapper.cpp [2:2]
+        i18n/number_mapper.h [2:2]
+        i18n/number_microprops.h [2:2]
+        i18n/number_modifiers.cpp [2:2]
+        i18n/number_modifiers.h [2:2]
+        i18n/number_multiplier.cpp [2:2]
+        i18n/number_multiplier.h [2:2]
+        i18n/number_notation.cpp [2:2]
+        i18n/number_output.cpp [2:2]
+        i18n/number_padding.cpp [2:2]
+        i18n/number_patternmodifier.cpp [2:2]
+        i18n/number_patternmodifier.h [2:2]
+        i18n/number_patternstring.cpp [2:2]
+        i18n/number_patternstring.h [2:2]
+        i18n/number_rounding.cpp [2:2]
+        i18n/number_roundingutils.h [2:2]
+        i18n/number_scientific.cpp [2:2]
+        i18n/number_scientific.h [2:2]
+        i18n/number_simple.cpp [2:2]
+        i18n/number_skeletons.cpp [2:2]
+        i18n/number_skeletons.h [2:2]
+        i18n/number_symbolswrapper.cpp [2:2]
+        i18n/number_types.h [2:2]
+        i18n/number_usageprefs.cpp [2:2]
+        i18n/number_usageprefs.h [2:2]
+        i18n/number_utils.cpp [2:2]
+        i18n/number_utils.h [2:2]
+        i18n/number_utypes.h [2:2]
+        i18n/numfmt.cpp [2:2]
+        i18n/numparse_affixes.cpp [2:2]
+        i18n/numparse_affixes.h [2:2]
+        i18n/numparse_compositions.cpp [2:2]
+        i18n/numparse_compositions.h [2:2]
+        i18n/numparse_currency.cpp [2:2]
+        i18n/numparse_currency.h [2:2]
+        i18n/numparse_decimal.cpp [2:2]
+        i18n/numparse_decimal.h [2:2]
+        i18n/numparse_impl.cpp [2:2]
+        i18n/numparse_impl.h [2:2]
+        i18n/numparse_parsednumber.cpp [2:2]
+        i18n/numparse_scientific.cpp [2:2]
+        i18n/numparse_scientific.h [2:2]
+        i18n/numparse_symbols.cpp [2:2]
+        i18n/numparse_symbols.h [2:2]
+        i18n/numparse_types.h [2:2]
+        i18n/numparse_utils.h [2:2]
+        i18n/numparse_validators.cpp [2:2]
+        i18n/numparse_validators.h [2:2]
+        i18n/numrange_capi.cpp [2:2]
+        i18n/numrange_fluent.cpp [2:2]
+        i18n/numrange_impl.cpp [2:2]
+        i18n/numrange_impl.h [2:2]
+        i18n/numsys.cpp [2:2]
+        i18n/numsys_impl.h [2:2]
+        i18n/olsontz.cpp [2:2]
+        i18n/olsontz.h [2:2]
+        i18n/persncal.cpp [2:2]
+        i18n/persncal.h [2:2]
+        i18n/pluralranges.cpp [2:2]
+        i18n/pluralranges.h [2:2]
+        i18n/plurfmt.cpp [2:2]
+        i18n/plurrule.cpp [2:2]
+        i18n/plurrule_impl.h [2:2]
+        i18n/quant.cpp [2:2]
+        i18n/quant.h [2:2]
+        i18n/quantityformatter.cpp [2:2]
+        i18n/quantityformatter.h [2:2]
+        i18n/rbnf.cpp [2:2]
+        i18n/rbt.cpp [2:2]
+        i18n/rbt.h [2:2]
+        i18n/rbt_data.cpp [2:2]
+        i18n/rbt_data.h [2:2]
+        i18n/rbt_pars.cpp [2:2]
+        i18n/rbt_pars.h [2:2]
+        i18n/rbt_rule.cpp [2:2]
+        i18n/rbt_rule.h [2:2]
+        i18n/rbt_set.cpp [2:2]
+        i18n/rbt_set.h [2:2]
+        i18n/rbtz.cpp [2:2]
+        i18n/regexcmp.cpp [2:2]
+        i18n/regexcmp.h [2:2]
+        i18n/regexcst.h [2:2]
+        i18n/regeximp.cpp [2:2]
+        i18n/regeximp.h [2:2]
+        i18n/regexst.cpp [2:2]
+        i18n/regexst.h [2:2]
+        i18n/regextxt.cpp [2:2]
+        i18n/regextxt.h [2:2]
+        i18n/region.cpp [2:2]
+        i18n/region_impl.h [2:2]
+        i18n/reldatefmt.cpp [2:2]
+        i18n/reldtfmt.cpp [2:2]
+        i18n/reldtfmt.h [2:2]
+        i18n/rematch.cpp [2:2]
+        i18n/remtrans.cpp [2:2]
+        i18n/remtrans.h [2:2]
+        i18n/repattrn.cpp [2:2]
+        i18n/rulebasedcollator.cpp [2:2]
+        i18n/scientificnumberformatter.cpp [2:2]
+        i18n/scriptset.cpp [2:2]
+        i18n/scriptset.h [2:2]
+        i18n/search.cpp [2:2]
+        i18n/selfmt.cpp [2:2]
+        i18n/selfmtimpl.h [2:2]
+        i18n/sharedbreakiterator.cpp [2:2]
+        i18n/sharedbreakiterator.h [2:2]
+        i18n/sharedcalendar.h [2:2]
+        i18n/shareddateformatsymbols.h [2:2]
+        i18n/sharednumberformat.h [2:2]
+        i18n/sharedpluralrules.h [2:2]
+        i18n/simpletz.cpp [2:2]
+        i18n/smpdtfmt.cpp [2:2]
+        i18n/smpdtfst.cpp [2:2]
+        i18n/smpdtfst.h [2:2]
+        i18n/sortkey.cpp [2:2]
+        i18n/standardplural.cpp [2:2]
+        i18n/standardplural.h [2:2]
+        i18n/string_segment.cpp [2:2]
+        i18n/string_segment.h [2:2]
+        i18n/strmatch.cpp [2:2]
+        i18n/strmatch.h [2:2]
+        i18n/strrepl.cpp [2:2]
+        i18n/strrepl.h [2:2]
+        i18n/stsearch.cpp [2:2]
+        i18n/taiwncal.cpp [2:2]
+        i18n/taiwncal.h [2:2]
+        i18n/timezone.cpp [2:2]
+        i18n/titletrn.cpp [2:2]
+        i18n/titletrn.h [2:2]
+        i18n/tmunit.cpp [2:2]
+        i18n/tmutamt.cpp [2:2]
+        i18n/tmutfmt.cpp [2:2]
+        i18n/tolowtrn.cpp [2:2]
+        i18n/tolowtrn.h [2:2]
+        i18n/toupptrn.cpp [2:2]
+        i18n/toupptrn.h [2:2]
+        i18n/translit.cpp [2:2]
+        i18n/transreg.cpp [2:2]
+        i18n/transreg.h [2:2]
+        i18n/tridpars.cpp [2:2]
+        i18n/tridpars.h [2:2]
+        i18n/tzfmt.cpp [2:2]
+        i18n/tzgnames.cpp [2:2]
+        i18n/tzgnames.h [2:2]
+        i18n/tznames.cpp [2:2]
+        i18n/tznames_impl.cpp [2:2]
+        i18n/tznames_impl.h [2:2]
+        i18n/tzrule.cpp [2:2]
+        i18n/tztrans.cpp [2:2]
+        i18n/ucal.cpp [2:2]
+        i18n/ucln_in.cpp [2:2]
+        i18n/ucln_in.h [2:2]
+        i18n/ucol.cpp [2:2]
+        i18n/ucol_imp.h [2:2]
+        i18n/ucol_res.cpp [2:2]
+        i18n/ucol_sit.cpp [2:2]
+        i18n/ucoleitr.cpp [2:2]
+        i18n/ucsdet.cpp [2:2]
+        i18n/udat.cpp [2:2]
+        i18n/udateintervalformat.cpp [2:2]
+        i18n/udatpg.cpp [2:2]
+        i18n/ufieldpositer.cpp [2:2]
+        i18n/uitercollationiterator.cpp [2:2]
+        i18n/uitercollationiterator.h [2:2]
+        i18n/ulistformatter.cpp [2:2]
+        i18n/ulocdata.cpp [2:2]
+        i18n/umsg.cpp [2:2]
+        i18n/umsg_imp.h [2:2]
+        i18n/unesctrn.cpp [2:2]
+        i18n/unesctrn.h [2:2]
+        i18n/uni2name.cpp [2:2]
+        i18n/uni2name.h [2:2]
+        i18n/units_complexconverter.cpp [2:2]
+        i18n/units_complexconverter.h [2:2]
+        i18n/units_converter.cpp [2:2]
+        i18n/units_converter.h [2:2]
+        i18n/units_data.cpp [2:2]
+        i18n/units_data.h [2:2]
+        i18n/units_router.cpp [2:2]
+        i18n/units_router.h [2:2]
+        i18n/unum.cpp [2:2]
+        i18n/unumsys.cpp [2:2]
+        i18n/upluralrules.cpp [2:2]
+        i18n/uregex.cpp [2:2]
+        i18n/uregexc.cpp [2:2]
+        i18n/uregion.cpp [2:2]
+        i18n/usearch.cpp [2:2]
+        i18n/uspoof.cpp [2:2]
+        i18n/uspoof_build.cpp [2:2]
+        i18n/uspoof_conf.cpp [2:2]
+        i18n/uspoof_conf.h [2:2]
+        i18n/uspoof_impl.cpp [2:2]
+        i18n/uspoof_impl.h [2:2]
+        i18n/usrchimp.h [2:2]
+        i18n/utf16collationiterator.cpp [2:2]
+        i18n/utf16collationiterator.h [2:2]
+        i18n/utf8collationiterator.cpp [2:2]
+        i18n/utf8collationiterator.h [2:2]
+        i18n/utrans.cpp [2:2]
+        i18n/vtzone.cpp [2:2]
+        i18n/vzone.cpp [2:2]
+        i18n/vzone.h [2:2]
+        i18n/windtfmt.cpp [2:2]
+        i18n/windtfmt.h [2:2]
+        i18n/winnmfmt.cpp [2:2]
+        i18n/winnmfmt.h [2:2]
+        i18n/wintzimpl.cpp [2:2]
+        i18n/wintzimpl.h [2:2]
+        i18n/zonemeta.cpp [2:2]
+        i18n/zonemeta.h [2:2]
+        i18n/zrule.cpp [2:2]
+        i18n/zrule.h [2:2]
+        i18n/ztrans.cpp [2:2]
+        i18n/ztrans.h [2:2]
+        include/unicode/alphaindex.h [2:2]
+        include/unicode/appendable.h [2:2]
+        include/unicode/basictz.h [2:2]
+        include/unicode/brkiter.h [2:2]
+        include/unicode/bytestream.h [2:2]
+        include/unicode/bytestrie.h [2:2]
+        include/unicode/bytestriebuilder.h [2:2]
+        include/unicode/calendar.h [2:2]
+        include/unicode/caniter.h [2:2]
+        include/unicode/casemap.h [2:2]
+        include/unicode/char16ptr.h [2:2]
+        include/unicode/chariter.h [2:2]
+        include/unicode/choicfmt.h [2:2]
+        include/unicode/coleitr.h [2:2]
+        include/unicode/coll.h [2:2]
+        include/unicode/compactdecimalformat.h [2:2]
+        include/unicode/curramt.h [2:2]
+        include/unicode/currpinf.h [2:2]
+        include/unicode/currunit.h [2:2]
+        include/unicode/datefmt.h [2:2]
+        include/unicode/dbbi.h [2:2]
+        include/unicode/dcfmtsym.h [2:2]
+        include/unicode/decimfmt.h [2:2]
+        include/unicode/displayoptions.h [2:2]
+        include/unicode/docmain.h [2:2]
+        include/unicode/dtfmtsym.h [2:2]
+        include/unicode/dtintrv.h [2:2]
+        include/unicode/dtitvfmt.h [2:2]
+        include/unicode/dtitvinf.h [2:2]
+        include/unicode/dtptngen.h [2:2]
+        include/unicode/dtrule.h [2:2]
+        include/unicode/edits.h [2:2]
+        include/unicode/enumset.h [2:2]
+        include/unicode/errorcode.h [2:2]
+        include/unicode/fieldpos.h [2:2]
+        include/unicode/filteredbrk.h [2:2]
+        include/unicode/fmtable.h [2:2]
+        include/unicode/format.h [2:2]
+        include/unicode/formattednumber.h [2:2]
+        include/unicode/formattedvalue.h [2:2]
+        include/unicode/fpositer.h [2:2]
+        include/unicode/gender.h [2:2]
+        include/unicode/gregocal.h [2:2]
+        include/unicode/icudataver.h [2:2]
+        include/unicode/icuplug.h [2:2]
+        include/unicode/idna.h [2:2]
+        include/unicode/listformatter.h [2:2]
+        include/unicode/localebuilder.h [2:2]
+        include/unicode/localematcher.h [2:2]
+        include/unicode/localpointer.h [2:2]
+        include/unicode/locdspnm.h [2:2]
+        include/unicode/locid.h [2:2]
+        include/unicode/measfmt.h [2:2]
+        include/unicode/measunit.h [2:2]
+        include/unicode/measure.h [2:2]
+        include/unicode/messageformat2.h [2:2]
+        include/unicode/messageformat2_arguments.h [2:2]
+        include/unicode/messageformat2_data_model.h [2:2]
+        include/unicode/messageformat2_data_model_names.h [2:2]
+        include/unicode/messageformat2_formattable.h [2:2]
+        include/unicode/messageformat2_function_registry.h [2:2]
+        include/unicode/messagepattern.h [2:2]
+        include/unicode/msgfmt.h [2:2]
+        include/unicode/normalizer2.h [2:2]
+        include/unicode/normlzr.h [2:2]
+        include/unicode/nounit.h [2:2]
+        include/unicode/numberformatter.h [2:2]
+        include/unicode/numberrangeformatter.h [2:2]
+        include/unicode/numfmt.h [2:2]
+        include/unicode/numsys.h [2:2]
+        include/unicode/parseerr.h [2:2]
+        include/unicode/parsepos.h [2:2]
+        include/unicode/platform.h [2:2]
+        include/unicode/plurfmt.h [2:2]
+        include/unicode/plurrule.h [2:2]
+        include/unicode/ptypes.h [2:2]
+        include/unicode/putil.h [2:2]
+        include/unicode/rbbi.h [2:2]
+        include/unicode/rbnf.h [2:2]
+        include/unicode/rbtz.h [2:2]
+        include/unicode/regex.h [2:2]
+        include/unicode/region.h [2:2]
+        include/unicode/reldatefmt.h [2:2]
+        include/unicode/rep.h [2:2]
+        include/unicode/resbund.h [2:2]
+        include/unicode/schriter.h [2:2]
+        include/unicode/scientificnumberformatter.h [2:2]
+        include/unicode/search.h [2:2]
+        include/unicode/selfmt.h [2:2]
+        include/unicode/simpleformatter.h [2:2]
+        include/unicode/simplenumberformatter.h [2:2]
+        include/unicode/simpletz.h [2:2]
+        include/unicode/smpdtfmt.h [2:2]
+        include/unicode/sortkey.h [2:2]
+        include/unicode/std_string.h [2:2]
+        include/unicode/strenum.h [2:2]
+        include/unicode/stringoptions.h [2:2]
+        include/unicode/stringpiece.h [2:2]
+        include/unicode/stringtriebuilder.h [2:2]
+        include/unicode/stsearch.h [2:2]
+        include/unicode/symtable.h [2:2]
+        include/unicode/tblcoll.h [2:2]
+        include/unicode/timezone.h [2:2]
+        include/unicode/tmunit.h [2:2]
+        include/unicode/tmutamt.h [2:2]
+        include/unicode/tmutfmt.h [2:2]
+        include/unicode/translit.h [2:2]
+        include/unicode/tzfmt.h [2:2]
+        include/unicode/tznames.h [2:2]
+        include/unicode/tzrule.h [2:2]
+        include/unicode/tztrans.h [2:2]
+        include/unicode/ubidi.h [2:2]
+        include/unicode/ubrk.h [2:2]
+        include/unicode/ucal.h [2:2]
+        include/unicode/ucasemap.h [2:2]
+        include/unicode/ucat.h [2:2]
+        include/unicode/uchar.h [2:2]
+        include/unicode/ucharstrie.h [2:2]
+        include/unicode/ucharstriebuilder.h [2:2]
+        include/unicode/uchriter.h [2:2]
+        include/unicode/uclean.h [2:2]
+        include/unicode/ucnv.h [2:2]
+        include/unicode/ucnv_cb.h [2:2]
+        include/unicode/ucnv_err.h [2:2]
+        include/unicode/ucnvsel.h [2:2]
+        include/unicode/ucol.h [2:2]
+        include/unicode/ucoleitr.h [2:2]
+        include/unicode/uconfig.h [2:2]
+        include/unicode/ucpmap.h [2:2]
+        include/unicode/ucptrie.h [2:2]
+        include/unicode/ucsdet.h [2:2]
+        include/unicode/ucurr.h [2:2]
+        include/unicode/udat.h [2:2]
+        include/unicode/udata.h [2:2]
+        include/unicode/udateintervalformat.h [2:2]
+        include/unicode/udatpg.h [2:2]
+        include/unicode/udisplaycontext.h [2:2]
+        include/unicode/udisplayoptions.h [2:2]
+        include/unicode/uenum.h [2:2]
+        include/unicode/ufieldpositer.h [2:2]
+        include/unicode/uformattable.h [2:2]
+        include/unicode/uformattednumber.h [2:2]
+        include/unicode/uformattedvalue.h [2:2]
+        include/unicode/ugender.h [2:2]
+        include/unicode/uidna.h [2:2]
+        include/unicode/uiter.h [2:2]
+        include/unicode/uldnames.h [2:2]
+        include/unicode/ulistformatter.h [2:2]
+        include/unicode/uloc.h [2:2]
+        include/unicode/ulocale.h [2:2]
+        include/unicode/ulocbuilder.h [2:2]
+        include/unicode/ulocdata.h [2:2]
+        include/unicode/umachine.h [2:2]
+        include/unicode/umisc.h [2:2]
+        include/unicode/umsg.h [2:2]
+        include/unicode/umutablecptrie.h [2:2]
+        include/unicode/unifilt.h [2:2]
+        include/unicode/unifunct.h [2:2]
+        include/unicode/unimatch.h [2:2]
+        include/unicode/unirepl.h [2:2]
+        include/unicode/uniset.h [2:2]
+        include/unicode/unistr.h [2:2]
+        include/unicode/unorm.h [2:2]
+        include/unicode/unorm2.h [2:2]
+        include/unicode/unum.h [2:2]
+        include/unicode/unumberformatter.h [2:2]
+        include/unicode/unumberoptions.h [2:2]
+        include/unicode/unumberrangeformatter.h [2:2]
+        include/unicode/unumsys.h [2:2]
+        include/unicode/uobject.h [2:2]
+        include/unicode/upluralrules.h [2:2]
+        include/unicode/uregex.h [2:2]
+        include/unicode/uregion.h [2:2]
+        include/unicode/ureldatefmt.h [2:2]
+        include/unicode/urename.h [2:2]
+        include/unicode/urep.h [2:2]
+        include/unicode/ures.h [2:2]
+        include/unicode/uscript.h [2:2]
+        include/unicode/usearch.h [2:2]
+        include/unicode/uset.h [2:2]
+        include/unicode/usetiter.h [2:2]
+        include/unicode/ushape.h [2:2]
+        include/unicode/usimplenumberformatter.h [2:2]
+        include/unicode/uspoof.h [2:2]
+        include/unicode/usprep.h [2:2]
+        include/unicode/ustdio.h [2:2]
+        include/unicode/ustream.h [2:2]
+        include/unicode/ustring.h [2:2]
+        include/unicode/ustringtrie.h [2:2]
+        include/unicode/utext.h [2:2]
+        include/unicode/utf.h [2:2]
+        include/unicode/utf16.h [2:2]
+        include/unicode/utf32.h [2:2]
+        include/unicode/utf8.h [2:2]
+        include/unicode/utf_old.h [2:2]
+        include/unicode/utmscale.h [2:2]
+        include/unicode/utrace.h [2:2]
+        include/unicode/utrans.h [2:2]
+        include/unicode/utypes.h [2:2]
+        include/unicode/uvernum.h [2:2]
+        include/unicode/uversion.h [2:2]
+        include/unicode/vtzone.h [2:2]
+        io/locbund.cpp [2:2]
+        io/locbund.h [2:2]
+        io/sprintf.cpp [2:2]
+        io/sscanf.cpp [2:2]
+        io/ucln_io.cpp [2:2]
+        io/ucln_io.h [2:2]
+        io/ufile.cpp [2:2]
+        io/ufile.h [2:2]
+        io/ufmt_cmn.cpp [2:2]
+        io/ufmt_cmn.h [2:2]
+        io/uprintf.cpp [2:2]
+        io/uprintf.h [2:2]
+        io/uprntf_p.cpp [2:2]
+        io/uscanf.cpp [2:2]
+        io/uscanf.h [2:2]
+        io/uscanf_p.cpp [2:2]
+        io/ustdio.cpp [2:2]
+        io/ustream.cpp [2:2]
+
+KEEP     ICU                  778506931a345aac92ca090e7dfded09
+BELONGS ya.make
+    License text:
+            The ICU license is now in plain text format, see <a href="./LICENSE">LICENSE</a>.
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 80.00
+        Match type      : REFERENCE
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        license.html [11:11]
+
+KEEP     BSD-3-Clause         7d06a43b6e52b86b42463f4b0edf59f4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [183:209]
+
+KEEP     Unicode              82f4c9f53f2419878d32098c415360dc
+BELONGS ya.make
+    License text:
+                License &amp; terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        APIChangeReport.html [1175:1175]
+
+KEEP     BSD-3-Clause         8324f1990c82a65667a0b4767115a5fa
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [150:175]
+
+KEEP     Unicode              85bddd3f2e4ea40e68200158e49af16d
+BELONGS ya.make
+    License text:
+         * License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        icu4c.css [4:4]
+
+KEEP     Unicode              88a28f9208b91e774958ad1ca00a359c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 90.19
+        Match type      : TEXT
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        LICENSE [13:39]
+
+SKIP     GPL-3.0-or-later AND LicenseRef-scancode-autoconf-simple-exception 8ff1db0ebdcd914b6d4c35c1539fefbf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        LICENSE [502:520]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-autoconf-simple-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob;f=config.guess;h=a7448442748cc6f98a066d2d1051fad3b043761a;hb=HEAD, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/autoconf-simple-exception.LICENSE
+    Files with this license:
+        LICENSE [502:520]
+
+KEEP     ICU                  91a085270fc1d48dfebdc6a3d48f02ae
+BELONGS ya.make
+    License text:
+        <title>ICU License - moved to LICENSE</title>
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        license.html [6:6]
+
+SKIP     GPL-2.0-or-later AND LicenseRef-scancode-autoconf-simple-exception-2.0 92b3c21f9f3c0bddf95618094fbfc825
+BELONGS ya.make
+    # icu4j only
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        LICENSE [471:490]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-autoconf-simple-exception-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob;f=config.guess;h=a7448442748cc6f98a066d2d1051fad3b043761a;hb=HEAD, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/autoconf-simple-exception-2.0.LICENSE
+    Files with this license:
+        LICENSE [471:490]
+
+KEEP     Unicode              97ae9be094ac18e768c99daabb0a51f3
+BELONGS ya.make
+    License text:
+            "Copyright (C) 2016 and later: Unicode, Inc. and others. License &amp; terms of use: http://www.unicode.org/copyright.html"/>
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        readme.html [8:8]
+
+KEEP     ICU                  98811e05c84f8fbcdfe1e50edea7f80e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        LICENSE [60:86]
+
+KEEP     BSD-2-Clause         a1f7b82bf00bd77b34d242b9ce9a17a7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [313:333]
+
+KEEP     Public-Domain        b6459f851b20a51ad49d0fa7b53009d4
+BELONGS ya.make
+    License text:
+          ICU uses the public domain data and code derived from Time Zone
+        Database for its time zone support. The ownership of the TZ database
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [382:383]
+
+KEEP     BSD-3-Clause         b9d405f527cf9e69808df67a0d5250f7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [408:432]
+
+KEEP     Custom-punycode      bd57aec5790d5e2d75543b49589d1e8e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 93.55
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        common/punycode.cpp [27:37]
+
+KEEP     Unicode              c244f57ef5111f62538f666d5a69c3b2
+BELONGS ya.make
+    License text:
+            <a href="http://www.unicode.org/copyright.html">http://www.unicode.org/copyright.html</a><br/>
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 33.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        readme.html [25:25]
+
+KEEP     Unicode              c4e2ec55560687007828230c4408c358
+BELONGS ya.make
+    License text:
+        * License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        common/ubiditransform.cpp [5:5]
+        include/unicode/ubiditransform.h [5:5]
+
+KEEP     Unicode              cb0ff77c7e8670167d90d82390df488a
+BELONGS ya.make
+    License text:
+         \# License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        LICENSE [299:299]
+
+KEEP     ICU                  cc2755bc23e5c1ed387c4aa5f60872ff
+BELONGS ya.make
+    License text:
+        /* This software is made available under the terms of the             */
+        /* ICU License -- ICU 1.8.1 and later.                                */
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        i18n/decContext.cpp [8:9]
+        i18n/decContext.h [8:9]
+        i18n/decNumber.cpp [8:9]
+        i18n/decNumber.h [8:9]
+        i18n/decNumberLocal.h [8:9]
+
+KEEP     BSD-3-Clause         d77fafb2d6fd816773f531a09c9a3be2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [92:97]
+
+KEEP     Public-Domain        df2bc8dc262115ebbb828fdb29e6f95e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [387:401]
+
+KEEP     BSD-3-Clause         ec3329a454335b21cdaf87fb70c0e0a0
+BELONGS ya.make
+    License text:
+         \#  * Libtabe (Chinese)
+         \#    - https://sourceforge.net/project/?group_id=1519
+         \#    - Its license terms and conditions are shown below.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [135:137]
+
+KEEP     BSD-3-Clause         ed5db4de7c7d252513717a44353021e1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [102:127]
+
+SKIP     NAIST-2003           f5bb6486b127439f59ff918b6dfc2d86
+BELONGS ya.make
+    License text:
+         \#  * IPADIC (Japanese)
+         \#    - http://chasen.aist-nara.ac.jp/chasen/distribution.html
+         \#    - Its license terms and conditions are shown below.
+    Scancode info:
+        Original SPDX id: NAIST-2003
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://spdx.org/licenses/NAIST-2003
+    Files with this license:
+        LICENSE [139:141]
+
+KEEP     BSD-3-Clause         f903ceb778f6db21bac728e4622abbd4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        i18n/double-conversion-bignum-dtoa.cpp [7:31]
+        i18n/double-conversion-bignum-dtoa.h [7:31]
+        i18n/double-conversion-bignum.cpp [7:31]
+        i18n/double-conversion-bignum.h [7:31]
+        i18n/double-conversion-cached-powers.cpp [7:31]
+        i18n/double-conversion-cached-powers.h [7:31]
+        i18n/double-conversion-diy-fp.h [7:31]
+        i18n/double-conversion-double-to-string.cpp [7:31]
+        i18n/double-conversion-double-to-string.h [7:31]
+        i18n/double-conversion-fast-dtoa.cpp [7:31]
+        i18n/double-conversion-fast-dtoa.h [7:31]
+        i18n/double-conversion-ieee.h [7:31]
+        i18n/double-conversion-string-to-double.cpp [7:31]
+        i18n/double-conversion-string-to-double.h [7:31]
+        i18n/double-conversion-strtod.cpp [7:31]
+        i18n/double-conversion-strtod.h [7:31]
+        i18n/double-conversion-utils.h [7:31]
+        i18n/double-conversion.h [7:31]

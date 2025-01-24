@@ -1,12 +1,10 @@
 #include "blob_reader.h"
 
+#include "comparator.h"
 #include "name_table.h"
 #include "schema.h"
-
-#include <yt/yt/client/table_client/comparator.h>
-#include <yt/yt/client/table_client/row_batch.h>
-#include <yt/yt/client/table_client/unversioned_reader.h>
-#include <yt/yt/client/table_client/unversioned_row.h>
+#include "row_batch.h"
+#include "unversioned_row.h"
 
 #include <yt/yt/core/concurrency/async_stream.h>
 
@@ -17,8 +15,8 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString TBlobTableSchema::PartIndexColumn = "part_index";
-const TString TBlobTableSchema::DataColumn = "data";
+const std::string TBlobTableSchema::PartIndexColumn = "part_index";
+const std::string TBlobTableSchema::DataColumn = "data";
 
 TTableSchemaPtr TBlobTableSchema::ToTableSchema() const
 {
@@ -48,8 +46,8 @@ class TBlobTableReader
 public:
     TBlobTableReader(
         ITableReaderPtr reader,
-        const std::optional<TString>& partIndexColumnName,
-        const std::optional<TString>& dataColumnName,
+        const std::optional<std::string>& partIndexColumnName,
+        const std::optional<std::string>& dataColumnName,
         i64 startPartIndex,
         const std::optional<i64>& offset,
         const std::optional<i64>& partSize)
@@ -89,8 +87,8 @@ public:
 
 private:
     const ITableReaderPtr Reader_;
-    const TString PartIndexColumnName_;
-    const TString DataColumnName_;
+    const std::string PartIndexColumnName_;
+    const std::string DataColumnName_;
 
     i64 Offset_;
     std::optional<i64> PartSize_;
@@ -124,7 +122,7 @@ private:
 
     TUnversionedValue GetAndValidateValue(
         TUnversionedRow row,
-        const TString& name,
+        const std::string& name,
         EColumnType columnType,
         EValueType expectedType)
     {
@@ -199,8 +197,8 @@ private:
 
 IAsyncZeroCopyInputStreamPtr CreateBlobTableReader(
     ITableReaderPtr reader,
-    const std::optional<TString>& partIndexColumnName,
-    const std::optional<TString>& dataColumnName,
+    const std::optional<std::string>& partIndexColumnName,
+    const std::optional<std::string>& dataColumnName,
     i64 startPartIndex,
     const std::optional<i64>& offset,
     const std::optional<i64>& partSize)

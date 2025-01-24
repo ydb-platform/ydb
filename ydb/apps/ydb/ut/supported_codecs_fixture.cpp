@@ -209,7 +209,9 @@ auto TSupportedCodecsFixture::GetTopicConsumerSupportedCodecs(const TString& des
                 TVector<TString> codecs;
                 Split(fields[1], ",", codecs);
                 for (auto& codec : codecs) {
-                    result.insert(Strip(codec));
+                    if (auto c = Strip(codec); !c.empty()) {
+                        result.insert(c);
+                    }
                 }
 
                 return result;

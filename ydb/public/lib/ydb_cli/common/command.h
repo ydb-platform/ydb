@@ -2,8 +2,8 @@
 
 #include "common.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/colorizer/colors.h>
@@ -136,6 +136,7 @@ public:
         bool NeedToConnect = true;
         bool NeedToCheckForUpdate = true;
         bool ForceVersionCheck = false;
+        bool AllowEmptyDatabase = false;
 
         TCredentialsGetter CredentialsGetter;
 
@@ -204,21 +205,35 @@ public:
             bool minFailed = minSet && count < minValue;
             bool maxFailed = maxSet && count > maxValue;
             if (minFailed || maxFailed) {
+                TStringBuilder errorMessage;
                 if (minSet && maxSet) {
                     if (minValue == maxValue) {
-                        throw TMisuseException() << "Command " << ArgV[0]
+                        errorMessage << "Command " << ArgV[0]
                             << " requires exactly " << minValue << " free arg(s).";
+                    } else {
+                        errorMessage << "Command " << ArgV[0]
+                            << " requires from " << minValue << " to " << maxValue << " free arg(s).";
                     }
-                    throw TMisuseException() << "Command " << ArgV[0]
-                        << " requires from " << minValue << " to " << maxValue << " free arg(s).";
-                }
-                if (minFailed) {
-                    throw TMisuseException() << "Command " << ArgV[0]
+                } else if (minFailed) {
+                    errorMessage << "Command " << ArgV[0]
                         << " requires at least " << minValue << " free arg(s).";
+                } else {
+                    errorMessage << "Command " << ArgV[0]
+                        << " requires at most " << maxValue << " free arg(s).";
                 }
-                throw TMisuseException() << "Command " << ArgV[0]
-                    << " requires at most " << maxValue << " free arg(s).";
+                if (count == 0) {
+                    Cerr << errorMessage << Endl;
+                    PrintHelpAndExit();
+                } else {
+                    throw TMisuseException() << errorMessage;
+                }
             }
+        }
+
+        void PrintHelpAndExit() {
+            NLastGetopt::TOptsParser parser(Opts, ArgC, ArgV);
+            parser.PrintUsage(Cerr);
+            throw TMisuseWithHelpException();
         }
 
     private:

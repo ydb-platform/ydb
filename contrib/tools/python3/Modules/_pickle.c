@@ -1344,6 +1344,10 @@ _Unpickler_ReadFromFile(UnpicklerObject *self, Py_ssize_t n)
             else {
                 read_size = _Unpickler_SetStringInput(self, data);
                 Py_DECREF(data);
+                if (read_size < 0) {
+                    return -1;
+                }
+
                 self->prefetched_idx = 0;
                 if (n <= read_size)
                     return n;
@@ -1865,8 +1869,7 @@ get_dotted_path(PyObject *obj, PyObject *name)
 {
     PyObject *dotted_path;
     Py_ssize_t i, n;
-    _Py_DECLARE_STR(dot, ".");
-    dotted_path = PyUnicode_Split(name, &_Py_STR(dot), -1);
+    dotted_path = PyUnicode_Split(name, _Py_LATIN1_CHR('.'), -1);
     if (dotted_path == NULL)
         return NULL;
     n = PyList_GET_SIZE(dotted_path);
@@ -3725,31 +3728,23 @@ save_global(PickleState *st, PicklerObject *self, PyObject *obj,
         code_obj = PyDict_GetItemWithError(st->extension_registry,
                                            extension_key);
         Py_DECREF(extension_key);
-        /* The object is not registered in the extension registry.
-           This is the most likely code path. */
         if (code_obj == NULL) {
             if (PyErr_Occurred()) {
                 goto error;
             }
+            /* The object is not registered in the extension registry.
+               This is the most likely code path. */
             goto gen_global;
         }
 
-        /* XXX: pickle.py doesn't check neither the type, nor the range
-           of the value returned by the extension_registry. It should for
-           consistency. */
-
-        /* Verify code_obj has the right type and value. */
-        if (!PyLong_Check(code_obj)) {
-            PyErr_Format(st->PicklingError,
-                         "Can't pickle %R: extension code %R isn't an integer",
-                         obj, code_obj);
-            goto error;
-        }
-        code = PyLong_AS_LONG(code_obj);
+        Py_INCREF(code_obj);
+        code = PyLong_AsLong(code_obj);
+        Py_DECREF(code_obj);
         if (code <= 0 || code > 0x7fffffffL) {
+            /* Should never happen in normal circumstances, since the type and
+               the value of the code are checked in copyreg.add_extension(). */
             if (!PyErr_Occurred())
-                PyErr_Format(st->PicklingError, "Can't pickle %R: extension "
-                             "code %ld is out of range", obj, code);
+                PyErr_Format(PyExc_RuntimeError, "extension code %ld is out of range", code);
             goto error;
         }
 
@@ -6725,10 +6720,13 @@ load_build(PickleState *st, UnpicklerObject *self)
             /* normally the keys for instance attributes are
                interned.  we should try to do that here. */
             Py_INCREF(d_key);
-            if (PyUnicode_CheckExact(d_key))
-                PyUnicode_InternInPlace(&d_key);
+            if (PyUnicode_CheckExact(d_key)) {
+                PyInterpreterState *interp = _PyInterpreterState_GET();
+                _PyUnicode_InternMortal(interp, &d_key);
+            }
             if (PyObject_SetItem(dict, d_key, d_value) < 0) {
                 Py_DECREF(d_key);
+                Py_DECREF(dict);
                 goto error;
             }
             Py_DECREF(d_key);

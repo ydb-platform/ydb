@@ -1,0 +1,20 @@
+requirements:
+  - contrib/libs/freetype
+  - contrib/libs/libpng
+  - contrib/libs/qhull
+  - contrib/python/matplotlib/py3/extern/agg24-svn
+  - contrib/python/matplotlib/py3/extern/ttconv
+mark_as_sources:
+  - matplotlib/testing/conftest.py
+exclude:
+  - src/_macosx.m
+  - src/.clang-format
+  - src/doc/segment_intersects_rectangle.svg
+exclude_from_macros:
+  - extern/*
+copy:
+  - extern/*
+  - src/*
+keep:
+  - extern/ya.make
+  - extern/*/ya.make

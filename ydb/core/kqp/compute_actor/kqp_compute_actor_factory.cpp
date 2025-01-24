@@ -117,6 +117,7 @@ public:
         memoryLimits.MkqlHeavyProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load();
         memoryLimits.MinMemAllocSize = MinMemAllocSize.load();
         memoryLimits.MinMemFreeSize = MinMemFreeSize.load();
+        memoryLimits.ArrayBufferMinFillPercentage = args.Task->GetArrayBufferMinFillPercentage();
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
         NRm::TKqpResourcesRequest resourcesRequest;
@@ -210,10 +211,11 @@ public:
         if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
             YQL_ENSURE(args.ComputesByStages);
             auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
-            IActor* computeActor = CreateKqpScanComputeActor(args.ExecuterId, args.TxId, args.LockTxId, args.LockNodeId, args.Task,
-                AsyncIoFactory, runtimeSettings, memoryLimits,
+            IActor* computeActor = CreateKqpScanComputeActor(
+                args.ExecuterId, args.TxId,
+                args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
-                std::move(args.SchedulingOptions));
+                std::move(args.SchedulingOptions), args.BlockTrackingMode);
             TActorId result = TlsActivationContext->Register(computeActor);
             info.MutableActorIds().emplace_back(result);
             return result;
@@ -224,7 +226,7 @@ public:
             }
             IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(args.ExecuterId, args.TxId, args.Task, AsyncIoFactory,
                 runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings,
-                std::move(args.SchedulingOptions));
+                std::move(args.SchedulingOptions), args.BlockTrackingMode);
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);
         }

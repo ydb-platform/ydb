@@ -5,7 +5,8 @@ Calculates {% if select_command == "SELECT STREAM" %}[`SELECT STREAM`](../select
 It's good to combine it with [`Ensure`](../../builtins/basic.md#ensure) to check the final calculation result against the user's criteria.
 
 {% if select_command != true or select_command == "SELECT" %}
-**Examples**
+
+## Examples
 
 ```yql
 DISCARD SELECT 1;

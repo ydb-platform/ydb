@@ -8,7 +8,7 @@
 
 </div>
 
-5 лет назад Яндекс перешел с Kafka на собственную разработку поверх YDB. С тех пор Yandex Topic Service сильно подрос по нагрузке и вышел в Open Source. В этом докладе {{ team.zivaykin.name }} ({{ team.zivaykin.position }}) рассказывает про ускорение YDB Topic Service и приводит сравнение с конкурентами.
+5 лет назад Яндекс перешел с Kafka на собственную разработку поверх YDB. С тех пор Yandex Topic Service сильно подрос по нагрузке и вышел в Open Source. В этом докладе {{ team.zevaykin.name }} ({{ team.zevaykin.position }}) рассказывает про ускорение YDB Topic Service и приводит сравнение с конкурентами.
 
 @[YouTube](https://www.youtube.com/watch?v=I-6SS6_C1Cw&list=PLH-XmS0lSi_yksBrXBOIgnuW_RmwfLKYn&index=22&pp=iAQB)
 

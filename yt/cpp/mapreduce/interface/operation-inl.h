@@ -93,6 +93,7 @@ template <typename TDerived>
 TDerived& TRawOperationIoTableSpec<TDerived>::SetInput(size_t tableIndex, const TRichYPath& path)
 {
     NDetail::Assign(Inputs_, tableIndex, path);
+    return static_cast<TDerived&>(*this);
 }
 
 template <typename TDerived>
@@ -106,6 +107,7 @@ template <typename TDerived>
 TDerived& TRawOperationIoTableSpec<TDerived>::SetOutput(size_t tableIndex, const TRichYPath& path)
 {
     NDetail::Assign(Outputs_, tableIndex, path);
+    return static_cast<TDerived&>(*this);
 }
 
 template <typename TDerived>
@@ -133,6 +135,7 @@ template <typename TDerived>
 TDerived& TRawMapReduceOperationIoSpec<TDerived>::SetMapOutput(size_t tableIndex, const TRichYPath& path)
 {
     NDetail::Assign(MapOutputs_, tableIndex, path);
+    return static_cast<TDerived&>(*this);
 }
 
 template <typename TDerived>

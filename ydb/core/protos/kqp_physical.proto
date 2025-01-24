@@ -60,10 +60,23 @@ message TKqpPhyColumnId {
     string Name = 2;
 }
 
+message TKqpPhyColumnTypeParam {
+    oneof TypeParam {
+        string PgTypeName = 1;    
+        Ydb.DecimalType Decimal = 2;
+    }
+}
+
+message TKqpPhySequenceId {
+    uint64 OwnerId = 2;
+    uint64 LocalPathId = 3;
+}
+
 message TKqpPhyColumn {
+
     TKqpPhyColumnId Id = 1;
     uint32 TypeId = 2;
-    string PgTypeName = 3;
+    optional TKqpPhyColumnTypeParam TypeParam = 3;
     oneof DefaultKind {
         string DefaultFromSequence = 4;
         Ydb.TypedValue DefaultFromLiteral = 5;
@@ -72,6 +85,7 @@ message TKqpPhyColumn {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 7;
+    optional TKqpPhySequenceId DefaultFromSequencePathId = 8;
 }
 
 enum EKqpPhyTableKind {
@@ -273,6 +287,9 @@ message TKqpPhyCnStreamLookup {
     bytes LookupKeysType = 4;
     bytes ResultType = 5;
     EStreamLookupStrategy LookupStrategy = 6;
+    bool KeepRowsOrder = 7;
+    bool AllowNullKeys = 8;
+    uint32 AllowNullKeysPrefixSize = 9;
 }
 
 message TKqpPhyCnSequencer {
@@ -377,6 +394,7 @@ message TKqpPhyStage {
     map<string, string> SecureParams = 12;
     bool AllowWithSpilling = 13;
     uint32 TaskCount = 14;
+    double StageCost = 15;
 }
 
 message TKqpPhyResult {
@@ -460,6 +478,12 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateTopic = 42;
         NKikimrSchemeOp.TModifyScheme AlterTopic = 43;
         NKikimrSchemeOp.TModifyScheme DropTopic = 44;
+        NKikimrSchemeOp.TModifyScheme CreateBackupCollection = 45;
+        NKikimrSchemeOp.TModifyScheme AlterBackupCollection = 46;
+        NKikimrSchemeOp.TModifyScheme DropBackupCollection = 47;
+        NKikimrSchemeOp.TModifyScheme Backup = 48;
+        NKikimrSchemeOp.TModifyScheme BackupIncremental = 49;
+        NKikimrSchemeOp.TModifyScheme Restore = 50;
     }
 }
 

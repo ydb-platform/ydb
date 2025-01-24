@@ -5,12 +5,14 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb-cpp-sdk/client/types/operation/operation.h>
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/base/counters.h>
+#include <library/cpp/threading/local_executor/local_executor.h>
 
 #include <fmt/format.h>
 
@@ -42,7 +44,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             {
                 auto result = db.GetSession().GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetSession().GetId());
+                UNIT_ASSERT(!result.GetSession().GetId().empty());
                 id = result.GetSession().GetId();
             }
             {
@@ -54,7 +56,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         WaitForZeroSessions(counters);
     }
 
-    Y_UNIT_TEST(QueryOnClosedSession) {
+    void DoClosedSessionRemovedWhileActiveTest(bool withQuery) {
         auto kikimr = DefaultKikimrRunner();
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
@@ -66,7 +68,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             {
                 auto result = db.GetSession().GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetSession().GetId());
+                UNIT_ASSERT(!result.GetSession().GetId().empty());
                 auto session = result.GetSession();
                 id = session.GetId();
 
@@ -75,10 +77,12 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
                 UNIT_ASSERT(allDoneOk);
 
-                auto execResult = session.ExecuteQuery("SELECT 1;",
-                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                if (withQuery) {
+                    auto execResult = session.ExecuteQuery("SELECT 1;",
+                        NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
-                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::BAD_SESSION);
+                    UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::BAD_SESSION);
+                }
             }
             // closed session must be removed from session pool
             {
@@ -86,7 +90,295 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 UNIT_ASSERT(result.GetSession().GetId() != id);
             }
+            UNIT_ASSERT_VALUES_EQUAL(db.GetActiveSessionCount(), 0);
         }
+        WaitForZeroSessions(counters);
+    }
+
+    Y_UNIT_TEST(ClosedSessionRemovedWhileActiveWithQuery) {
+        // - Session is active (user gfot it)
+        // - server close it
+        // - user executes query (got BAD SESSION)
+        // - session should be removed from pool 
+        DoClosedSessionRemovedWhileActiveTest(true);
+    }
+
+/*  Not implemented in the sdk
+    Y_UNIT_TEST(ClosedSessionRemovedWhileActiveWithoutQuery) {
+        // - Session is active (user gfot it)
+        // - server close it
+        // - user do not executes any query
+        // - session should be removed from pool
+        DoClosedSessionRemovedWhileActiveTest(false);
+    }
+*/
+    // Copy paste from table service but with some modifications for query service
+    // Checks read iterators/session/sdk counters have expected values  
+    Y_UNIT_TEST(CloseSessionsWithLoad) {
+        auto kikimr = std::make_shared<TKikimrRunner>();
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
+
+        NYdb::NQuery::TQueryClient db = kikimr->GetQueryClient();
+
+        const ui32 SessionsCount = 50;
+        const TDuration WaitDuration = TDuration::Seconds(1);
+
+        TVector<NYdb::NQuery::TQueryClient::TSession> sessions;
+        for (ui32 i = 0; i < SessionsCount; ++i) {
+            auto sessionResult = db.GetSession().GetValueSync();
+            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+
+            sessions.push_back(sessionResult.GetSession());
+        }
+
+        NPar::LocalExecutor().RunAdditionalThreads(SessionsCount + 1);
+        NPar::LocalExecutor().ExecRange([&kikimr, sessions, WaitDuration](int id) mutable {
+            if (id == (i32)sessions.size()) {
+                Sleep(WaitDuration);
+                Cerr << "start sessions close....." << Endl;
+                auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr->GetEndpoint());
+                for (ui32 i = 0; i < sessions.size(); ++i) {
+                    bool allDoneOk = true;
+                    NTestHelpers::CheckDelete(clientConfig, TString{sessions[i].GetId()}, Ydb::StatusIds::SUCCESS, allDoneOk);
+                    UNIT_ASSERT(allDoneOk);
+                }
+
+                Cerr << "finished sessions close....." << Endl;
+                auto counters = GetServiceCounters(kikimr->GetTestServer().GetRuntime()->GetAppData(0).Counters,  "ydb");
+
+                ui64 pendingCompilations = 0;
+                do {
+                    Sleep(WaitDuration);
+                    pendingCompilations = counters->GetNamedCounter("name", "table.query.compilation.active_count", false)->Val();
+                    Cerr << "still compiling... " << pendingCompilations << Endl;
+                } while (pendingCompilations != 0);
+
+                ui64 pendingSessions = 0;
+                do {
+                    Sleep(WaitDuration);
+                    pendingSessions = counters->GetNamedCounter("name", "table.session.active_count", false)->Val();
+                    Cerr << "still active sessions ... " << pendingSessions << Endl;
+                } while (pendingSessions != 0);
+
+                return;
+            }
+
+            auto session = sessions[id];
+            std::optional<TTransaction> tx;
+
+            while (true) {
+                if (tx) {
+                    auto result = tx->Commit().GetValueSync();
+                    if (!result.IsSuccess()) {
+                        return;
+                    }
+
+                    tx = {};
+                    continue;
+                }
+
+                auto query = Sprintf(R"(
+                    SELECT Key, Text, Data FROM `/Root/EightShard` WHERE Key=%1$d + 0;
+                    SELECT Key, Data, Text FROM `/Root/EightShard` WHERE Key=%1$d + 1;
+                    SELECT Text, Key, Data FROM `/Root/EightShard` WHERE Key=%1$d + 2;
+                    SELECT Text, Data, Key FROM `/Root/EightShard` WHERE Key=%1$d + 3;
+                    SELECT Data, Key, Text FROM `/Root/EightShard` WHERE Key=%1$d + 4;
+                    SELECT Data, Text, Key FROM `/Root/EightShard` WHERE Key=%1$d + 5;
+
+                    UPSERT INTO `/Root/EightShard` (Key, Text) VALUES
+                        (%2$dul, "New");
+                )", RandomNumber<ui32>(), RandomNumber<ui32>());
+
+                auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).GetValueSync();
+                if (!result.IsSuccess()) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_SESSION);
+                    Cerr << "received non-success status for session " << id << Endl;
+                    return;
+                }
+
+                tx = result.GetTransaction();
+            }
+        }, 0, SessionsCount + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+        WaitForZeroReadIterators(kikimr->GetTestServer(), "/Root/EightShard");
+    }
+
+    Y_UNIT_TEST(PeriodicTaskInSessionPool) {
+        auto kikimr = DefaultKikimrRunner();
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        {
+            auto db = kikimr.GetQueryClient();
+
+            TString id;
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(!result.GetSession().GetId().empty());
+                auto session = result.GetSession();
+                id = session.GetId();
+
+                auto execResult = session.ExecuteQuery("SELECT 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::SUCCESS);
+            }
+            // This time is more then internal sdk periodic timeout but less than close session
+            // expect nothing happens with session in the pool
+            Sleep(TDuration::Seconds(10));
+
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetSession().GetId() == id);
+
+                auto execResult = result.GetSession().ExecuteQuery("SELECT 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+        WaitForZeroSessions(counters);
+    }
+
+    Y_UNIT_TEST(PeriodicTaskInSessionPoolSessionCloseByIdle) {
+        auto kikimr = DefaultKikimrRunner();
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        {
+            auto settings = NYdb::NQuery::TClientSettings().SessionPoolSettings(
+                NYdb::NQuery::TSessionPoolSettings()
+                    .MinPoolSize(0)
+                    .CloseIdleThreshold(TDuration::Seconds(1)));
+            auto db = kikimr.GetQueryClient(settings);
+
+            TString id;
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(!result.GetSession().GetId().empty());
+                auto session = result.GetSession();
+                id = session.GetId();
+
+                auto execResult = session.ExecuteQuery("SELECT 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::SUCCESS);
+            }
+
+            Sleep(TDuration::Seconds(11));
+            UNIT_ASSERT_VALUES_EQUAL(db.GetCurrentPoolSize(), 0);
+
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetSession().GetId() != id);
+
+                auto execResult = result.GetSession().ExecuteQuery("SELECT 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+        WaitForZeroSessions(counters);
+    }
+
+    // Check closed session removed while its in the session pool
+    Y_UNIT_TEST(ClosedSessionRemovedFromPool) {
+        auto kikimr = DefaultKikimrRunner();
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        {
+            auto db = kikimr.GetQueryClient();
+
+            TString id;
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(!result.GetSession().GetId().empty());
+                auto session = result.GetSession();
+                id = session.GetId();
+            }
+
+            bool allDoneOk = true;
+            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+
+            Sleep(TDuration::Seconds(5));
+
+            UNIT_ASSERT(allDoneOk);
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                auto newSession = result.GetSession();
+                UNIT_ASSERT_C(newSession.GetId() != id, "closed id: " << id << " new id: " << newSession.GetId());
+
+                auto execResult = newSession.ExecuteQuery("SELECT 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+        WaitForZeroSessions(counters);
+    }
+
+    // Attempt to trigger simultanous server side close and return session
+    // From sdk perspective check no dataraces
+    Y_UNIT_TEST(ReturnAndCloseSameTime) {
+        auto kikimr = DefaultKikimrRunner();
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        size_t iterations = 999;
+        auto db = kikimr.GetQueryClient();
+
+        NPar::LocalExecutor().RunAdditionalThreads(2);
+        while (iterations--) {
+            auto lim = iterations % 33;
+            TVector<NYdb::NQuery::TQueryClient::TSession> sessions;
+            TVector<TString> sids;
+            sessions.reserve(lim);
+            sids.reserve(lim);
+            for (size_t i = 0; i < lim; ++i) {
+                auto sessionResult = db.GetSession().GetValueSync();
+                UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+
+                sessions.push_back(sessionResult.GetSession());
+                sids.push_back(TString{sessions.back().GetId()});
+            }
+
+            if (iterations & 1) {
+                auto rng = std::default_random_engine {};
+                std::ranges::shuffle(sids, rng);
+            }
+
+            NPar::LocalExecutor().ExecRange([sessions{std::move(sessions)}, sids{std::move(sids)}, clientConfig](int id) mutable{
+                if (id == 0) {
+                    for (size_t i = 0; i < sessions.size(); i++) {
+                        auto s = std::move(sessions[i]);
+                        auto execResult = s.ExecuteQuery("SELECT 1;",
+                            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                        switch (execResult.GetStatus()) {
+                            case EStatus::SUCCESS:
+                            case EStatus::BAD_SESSION:
+                                break;
+                            default:
+                                UNIT_ASSERT_C(false, "unexpected status: " << execResult.GetStatus());
+                        }
+                    }
+                } else if (id == 1) {
+                    for (size_t i = 0; i < sids.size(); i++) {
+                        bool allDoneOk = true;
+                        NTestHelpers::CheckDelete(clientConfig, sids[i], Ydb::StatusIds::SUCCESS, allDoneOk);
+                        UNIT_ASSERT(allDoneOk);
+                    }
+                } else {
+                    Y_ABORT_UNLESS(false, "unexpected thread cxount");
+                }
+            }, 0, 2, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+        }
+
         WaitForZeroSessions(counters);
     }
 
@@ -119,6 +411,170 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(count, 1);
+    }
+
+    Y_UNIT_TEST(ExecuteQueryUpsertDoesntChangeIndexedValuesIfNotChanged) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = TExecuteQuerySettings()
+            .StatsMode(EStatsMode::Full);
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                create table test (
+                    id1 Uint64,
+                    id2 Uint64,
+                    value Utf8,
+                    PRIMARY KEY(id1, id2),
+                    INDEX Id2Idx GLOBAL ON (id2),
+                    INDEX ValueIdx GLOBAL ON (value)
+                );
+
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO test (id1, id2, value) VALUES (2, 2, "c"u), (3, 3, null), (4, 4, null);
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            AssertTableStats(stats, "/Root/test", {.ExpectedUpdates = 3});
+            AssertTableStats(stats, "/Root/test/Id2Idx/indexImplTable", {.ExpectedUpdates = 3});
+            AssertTableStats(stats, "/Root/test/ValueIdx/indexImplTable", {.ExpectedUpdates = 3});
+        }
+
+        // value not changed, no updates to indexes
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO test (id1, id2) VALUES (2, 2);
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            AssertTableStats(stats, "/Root/test", {.ExpectedUpdates = 1});
+            AssertTableStats(stats, "/Root/test/Id2Idx/indexImplTable", {.ExpectedUpdates = 0});
+            AssertTableStats(stats, "/Root/test/ValueIdx/indexImplTable", {.ExpectedUpdates = 0});
+        }
+
+        // value not changed, no updates to indexes
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO test (id1, id2, value) VALUES (2, 2, "c"u);
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            AssertTableStats(stats, "/Root/test", {.ExpectedUpdates = 1});
+            AssertTableStats(stats, "/Root/test/Id2Idx/indexImplTable", {.ExpectedUpdates = 0});
+            AssertTableStats(stats, "/Root/test/ValueIdx/indexImplTable", {.ExpectedUpdates = 0});
+        }
+
+        // value IS changed, updates to index by VALUE
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO test (id1, id2, value) VALUES (2, 2, "Q"u);
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            AssertTableStats(stats, "/Root/test", {.ExpectedUpdates = 1});
+            AssertTableStats(stats, "/Root/test/Id2Idx/indexImplTable", {.ExpectedUpdates = 0});
+            AssertTableStats(stats, "/Root/test/ValueIdx/indexImplTable", {.ExpectedUpdates = 1});
+            const TString query = "SELECT id1, id2, value FROM test VIEW ValueIdx WHERE value = \"Q\"u";
+            auto selectResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            CompareYson(R"([[[2u];[2u];["Q"]]])", FormatResultSetYson(selectResult.GetResultSet(0)));
+        }
+
+        // value IS NOT changed
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPDATE test ON SELECT 2 as id1, 2 as id2, "Q"u as value;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            AssertTableStats(stats, "/Root/test", {.ExpectedUpdates = 1});
+            AssertTableStats(stats, "/Root/test/Id2Idx/indexImplTable", {.ExpectedUpdates = 0});
+            AssertTableStats(stats, "/Root/test/ValueIdx/indexImplTable", {.ExpectedUpdates = 0});
+            const TString query = "SELECT id1, id2, value FROM test VIEW ValueIdx WHERE value = \"Q\"u";
+            auto selectResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            CompareYson(R"([[[2u];[2u];["Q"]]])", FormatResultSetYson(selectResult.GetResultSet(0)));
+        }
+
+
+        // value IS NOT changed
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPDATE test ON SELECT 2 as id1, 2 as id2, "R"u as value;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            AssertTableStats(stats, "/Root/test", {.ExpectedUpdates = 1});
+            AssertTableStats(stats, "/Root/test/Id2Idx/indexImplTable", {.ExpectedUpdates = 0});
+            AssertTableStats(stats, "/Root/test/ValueIdx/indexImplTable", {.ExpectedUpdates = 1});
+            const TString query = "SELECT id1, id2, value FROM test VIEW ValueIdx WHERE value = \"R\"u";
+            auto selectResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            CompareYson(R"([[[2u];[2u];["R"]]])", FormatResultSetYson(selectResult.GetResultSet(0)));
+        }
+
+        // value (null) IS NOT changed
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO test (id1, id2, value) VALUES (3, 3, null);
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            AssertTableStats(stats, "/Root/test", {.ExpectedUpdates = 1});
+            AssertTableStats(stats, "/Root/test/Id2Idx/indexImplTable", {.ExpectedUpdates = 0});
+            AssertTableStats(stats, "/Root/test/ValueIdx/indexImplTable", {.ExpectedUpdates = 0});
+            const TString query = "SELECT id1, id2, value FROM test VIEW ValueIdx WHERE value is null";
+            auto selectResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            CompareYson(R"([[[3u];[3u];#];[[4u];[4u];#]])", FormatResultSetYson(selectResult.GetResultSet(0)));
+        }
+
+        // value (null) IS NOT changed
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPDATE test ON SELECT 3 as id1, 3 as id2, null as value;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            AssertTableStats(stats, "/Root/test", {.ExpectedUpdates = 1});
+            AssertTableStats(stats, "/Root/test/Id2Idx/indexImplTable", {.ExpectedUpdates = 0});
+            AssertTableStats(stats, "/Root/test/ValueIdx/indexImplTable", {.ExpectedUpdates = 0});
+            const TString query = "SELECT id1, id2, value FROM test VIEW ValueIdx WHERE value is null";
+            auto selectResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            CompareYson(R"([[[3u];[3u];#];[[4u];[4u];#]])", FormatResultSetYson(selectResult.GetResultSet(0)));
+        }
+
+        // value (null) IS changed
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO test (id1, id2, value) VALUES (3, 3, "T"u);
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            AssertTableStats(stats, "/Root/test", {.ExpectedUpdates = 1});
+            AssertTableStats(stats, "/Root/test/Id2Idx/indexImplTable", {.ExpectedUpdates = 0});
+            AssertTableStats(stats, "/Root/test/ValueIdx/indexImplTable", {.ExpectedUpdates = 1});
+            const TString query = "SELECT id1, id2, value FROM test VIEW ValueIdx WHERE value = \"T\"u";
+            auto selectResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            CompareYson(R"([[[3u];[3u];["T"]]])", FormatResultSetYson(selectResult.GetResultSet(0)));
+        }
+
+        // value (null) IS changed
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPDATE test ON SELECT 4 as id1, 4 as id2, "L"u as value;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            AssertTableStats(stats, "/Root/test", {.ExpectedUpdates = 1});
+            AssertTableStats(stats, "/Root/test/Id2Idx/indexImplTable", {.ExpectedUpdates = 0});
+            AssertTableStats(stats, "/Root/test/ValueIdx/indexImplTable", {.ExpectedUpdates = 1});
+            const TString query = "SELECT id1, id2, value FROM test VIEW ValueIdx WHERE value = \"L\"u";
+            auto selectResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            CompareYson(R"([[[4u];[4u];["L"]]])", FormatResultSetYson(selectResult.GetResultSet(0)));
+        }
     }
 
     Y_UNIT_TEST(ExecuteQueryPure) {
@@ -249,7 +705,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         TExecuteQuerySettings settings;
 
         {  // Existing pool
-            settings.PoolId("default");
+            settings.ResourcePool("default");
 
             const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
             auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
@@ -257,7 +713,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         {  // Not existing pool (check workload manager enabled)
-            settings.PoolId("another_pool_id");
+            settings.ResourcePool("another_pool_id");
 
             const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
             auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
@@ -284,7 +740,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             );
             CREATE RESOURCE POOL CLASSIFIER MyPoolClassifier WITH (
                 RESOURCE_POOL="MyPool",
-                MEMBERNAME=")" << userSID << R"("
+                MEMBER_NAME=")" << userSID << R"("
             );
             GRANT ALL ON `/Root` TO `)" << userSID << R"(`;
         )";
@@ -527,8 +983,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         const TString expected = R"([[["Payload2"]]])";
         CompareYson(expected, FormatResultSetYson(selectRes.GetResultSet(0)));
         UNIT_ASSERT_C(HasIssue(selectRes.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
-            [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Given predicate is not suitable for used index: Index");
+            [](const auto& issue) {
+                return issue.GetMessage().contains("Given predicate is not suitable for used index: Index");
             }), selectRes.GetIssues().ToString());
     }
 
@@ -770,8 +1226,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetResultSets().empty());
 
-        UNIT_ASSERT(result.GetStats().Defined());
-        UNIT_ASSERT(result.GetStats()->GetPlan().Defined());
+        UNIT_ASSERT(result.GetStats().has_value());
+        UNIT_ASSERT(result.GetStats()->GetPlan().has_value());
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
@@ -796,8 +1252,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
-        UNIT_ASSERT(result.GetStats().Defined());
-        UNIT_ASSERT(!result.GetStats()->GetPlan().Defined());
+        UNIT_ASSERT(result.GetStats().has_value());
+        UNIT_ASSERT(!result.GetStats()->GetPlan().has_value());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
@@ -821,8 +1277,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
-        UNIT_ASSERT(result.GetStats().Defined());
-        UNIT_ASSERT(result.GetStats()->GetPlan().Defined());
+        UNIT_ASSERT(result.GetStats().has_value());
+        UNIT_ASSERT(result.GetStats()->GetPlan().has_value());
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
@@ -855,8 +1311,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
 
-            UNIT_ASSERT(result.GetStats().Defined());
-            UNIT_ASSERT(result.GetStats()->GetAst().Defined());
+            UNIT_ASSERT(result.GetStats().has_value());
+            UNIT_ASSERT(result.GetStats()->GetAst().has_value());
             UNIT_ASSERT_STRING_CONTAINS(*result.GetStats()->GetAst(), "test_ast_column");
         }
     }
@@ -1241,10 +1697,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             auto resultCreateRestricted = session.ExecuteQuery(queryCreateRestricted, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!resultCreateRestricted.IsSuccess());
-            UNIT_ASSERT_C(resultCreateRestricted.GetIssues().ToString().Contains("error: path is temporary"), resultCreateRestricted.GetIssues().ToString());
+            UNIT_ASSERT_C(resultCreateRestricted.GetIssues().ToString().contains("error: path is temporary"), resultCreateRestricted.GetIssues().ToString());
 
             bool allDoneOk = true;
-            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+            NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
             UNIT_ASSERT(allDoneOk);
         }
@@ -1416,7 +1872,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             }
 
             bool allDoneOk = true;
-            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+            NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
             UNIT_ASSERT(allDoneOk);
         }
@@ -1491,7 +1947,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         bool allDoneOk = true;
-        NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+        NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
         UNIT_ASSERT(allDoneOk);
 
@@ -1746,6 +2202,23 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 }
             }
         };
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE USER user1 PASSWORD 'password1';
+            CREATE USER user2 PASSWORD 'password2';
+            CREATE USER user3 PASSWORD 'password3';
+            CREATE USER user4 PASSWORD 'password4';
+            CREATE USER user5 PASSWORD 'password5';
+            CREATE USER user6 PASSWORD 'password6';
+            CREATE USER user7 PASSWORD 'password7';
+            CREATE USER user8 PASSWORD 'password8';
+            CREATE USER user9 PASSWORD 'password9';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         auto result = db.ExecuteQuery(R"(
             GRANT ROW SELECT ON `/Root` TO user1;
@@ -2136,7 +2609,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+        UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
         NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
         TMaybe<NYdb::NQuery::TScriptExecutionOperation> readyOp;
@@ -2255,6 +2728,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
 
         for (const auto& service: kikimr.GetTestServer().GetGRpcServer().GetServices()) {
             UNIT_ASSERT_VALUES_EQUAL(service->RequestsInProgress(), 0);
@@ -2284,7 +2758,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 );
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Scheme operations cannot be executed inside transaction"));
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Scheme operations cannot be executed inside transaction"));
         }
 
         {
@@ -2300,7 +2774,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 );
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Scheme operations cannot be executed inside transaction"));
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Scheme operations cannot be executed inside transaction"));
         }
 
         {
@@ -2325,7 +2799,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SELECT * FROM TestDdlDml2;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Queries with mixed data and scheme operations are not supported."));
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Queries with mixed data and scheme operations are not supported."));
         }
     }
 
@@ -2351,9 +2825,19 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                     Value2 String,
                     PRIMARY KEY (Key)
                 );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = db.ExecuteQuery(R"(
                 UPSERT INTO TestDdlDml2 (Key, Value1, Value2) VALUES (1, "1", "1");
                 SELECT * FROM TestDdlDml2;
                 ALTER TABLE TestDdlDml2 DROP COLUMN Value2;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+
+            result = db.ExecuteQuery(R"(
+                UPSERT INTO TestDdlDml2 (Key, Value1) VALUES (1, "1");
+                SELECT * FROM TestDdlDml2;
                 UPSERT INTO TestDdlDml2 (Key, Value1) VALUES (2, "2");
                 SELECT * FROM TestDdlDml2;
                 CREATE TABLE TestDdlDml33 (
@@ -2363,7 +2847,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
-            CompareYson(R"([[[1u];["1"];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[1u];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
             CompareYson(R"([[[1u];["1"]];[[2u];["2"]]])", FormatResultSetYson(result.GetResultSet(1)));
             UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
 
@@ -2390,7 +2874,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 );
                 UPSERT INTO TestDdlDml4 (Key, Value1, Value2) VALUES (1, "1", "2");
                 SELECT * FROM TestDdlDml4;
-                ALTER TABLE TestDdlDml4 DROP COLUMN Value2;
                 UPSERT INTO TestDdlDml4 (Key, Value1) VALUES (2, "2");
                 SELECT * FROM TestDdlDml5;
             )", TTxControl::NoTx()).ExtractValueSync();
@@ -2451,7 +2934,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 );
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Check failed: path: '/Root/TestDdl1', error: path exist"));
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Check failed: path: '/Root/TestDdl1', error: path exist"));
 
             result = db.ExecuteQuery(R"(
                 CREATE TABLE TestDdl2 (
@@ -2461,7 +2944,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 );
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Check failed: path: '/Root/TestDdl2', error: path exist"));
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Check failed: path: '/Root/TestDdl2', error: path exist"));
 
             result = db.ExecuteQuery(R"(
                 UPSERT INTO TestDdl2 SELECT * FROM TestDdl1;
@@ -2502,7 +2985,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Check failed: path: '/Root/TestDdl2', error: path exist"));
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Check failed: path: '/Root/TestDdl2', error: path exist"));
 
             result = db.ExecuteQuery(R"(
                 SELECT * FROM TestDdl2;
@@ -2524,7 +3007,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SELECT * FROM TestDdl4;
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Cannot find table 'db.[/Root/TestDdl4]'"));
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Cannot find table 'db.[/Root/TestDdl4]'"));
         }
 
         {
@@ -2576,7 +3059,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 UPSERT INTO TestDdl4 (Key, Value) VALUES (3, 3);
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Unknown name: $a"));
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Unknown name: $a"));
 
             result = db.ExecuteQuery(R"(
                 SELECT * FROM TestDdl4;
@@ -2590,7 +3073,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 UPSERT INTO TestDdl4 (Key, Value) VALUES (3, "3");
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Error: Failed to convert 'Value': String to Optional<Uint64>"));
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Error: Failed to convert 'Value': String to Optional<Uint64>"));
 
             result = db.ExecuteQuery(R"(
                 SELECT * FROM TestDdl4;
@@ -2609,7 +3092,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 UPSERT INTO TestDdl5 (Key, Value) VALUES (3, "3");
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Error: Failed to convert 'Value': String to Optional<Uint64>"));
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Error: Failed to convert 'Value': String to Optional<Uint64>"));
 
             result = db.ExecuteQuery(R"(
                 SELECT * FROM TestDdl5;
@@ -2649,7 +3132,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(
-                result.GetIssues().ToString().Contains("Several CTAS statement can't be used without per-statement mode."),
+                result.GetIssues().ToString().contains("Several CTAS statement can't be used without per-statement mode."),
                 result.GetIssues().ToString());
         }
 
@@ -2663,7 +3146,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(
-                result.GetIssues().ToString().Contains("CTAS statement can't be used with other statements without per-statement mode."),
+                result.GetIssues().ToString().contains("CTAS statement can't be used with other statements without per-statement mode."),
                 result.GetIssues().ToString());
         }
 
@@ -2677,7 +3160,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(
-                result.GetIssues().ToString().Contains("CTAS statement can't be used with other statements without per-statement mode."),
+                result.GetIssues().ToString().contains("CTAS statement can't be used with other statements without per-statement mode."),
                 result.GetIssues().ToString());
         }
 
@@ -3037,10 +3520,403 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(TableSink_Htap, withOltpSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/ColumnShard` (
+                Col1 Uint64 NOT NULL,
+                Col2 String NOT NULL,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+
+            CREATE TABLE `/Root/DataShard` (
+                Col1 Uint64 NOT NULL,
+                Col2 String NOT NULL,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
+                    (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, "test", 13);
+                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                    (10u, "test1", 10), (20u, "test2", 11), (30u, "test3", 12), (40u, "test", 13);
+                INSERT INTO `/Root/ColumnShard` SELECT * FROM `/Root/DataShard`;
+                REPLACE INTO `/Root/DataShard` SELECT * FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[1u;"test1";10];[2u;"test2";11];[3u;"test3";12];[4u;"test";13];[10u;"test1";10];[20u;"test2";11];[30u;"test3";12];[40u;"test";13]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[1u;"test1";10];[2u;"test2";11];[3u;"test3";12];[4u;"test";13];[10u;"test1";10];[20u;"test2";11];[30u;"test3";12];[40u;"test";13]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (1u, "test", 0);
+                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (2u, "test", 0);
+                UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES (1u, "test", 0);
+                UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES (2u, "test", 0);
+                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (3u, "test", 0);
+                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (4u, "test", 0);
+                UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES (3u, "test", 0);
+                UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES (4u, "test", 0);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/DataShard` WHERE Col3 = 0;
+                SELECT COUNT(*) FROM `/Root/ColumnShard` WHERE Col3 = 0;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES (1u, "test", 1);
+                UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES (2u, "test", 1);
+                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (1u, "test", 1);
+                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (2u, "test", 1);
+                UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES (3u, "test", 1);
+                UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES (4u, "test", 1);
+                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (3u, "test", 1);
+                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (4u, "test", 1);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/DataShard` WHERE Col3 = 1;
+                SELECT COUNT(*) FROM `/Root/ColumnShard` WHERE Col3 = 1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                INSERT INTO `/Root/DataShard` SELECT Col1 + 100 AS Col1, Col2, Col3 + 100 AS Col3 FROM `/Root/ColumnShard` WHERE Col3 = 1;
+                INSERT INTO `/Root/ColumnShard` SELECT Col1 + 100 AS Col1, Col2, Col3 + 100 AS Col3 FROM `/Root/DataShard` WHERE Col3 = 1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/DataShard` WHERE Col3 = 101;
+                SELECT COUNT(*) FROM `/Root/ColumnShard` WHERE Col3 = 101;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                INSERT INTO `/Root/ColumnShard` SELECT Col1 + 1000 AS Col1, Col2, Col3 + 1000 AS Col3 FROM `/Root/DataShard` WHERE Col3 = 1;
+                INSERT INTO `/Root/DataShard` SELECT Col1 + 1000 AS Col1, Col2, Col3 + 1000 AS Col3 FROM `/Root/ColumnShard` WHERE Col3 = 1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/DataShard` WHERE Col3 = 1001;
+                SELECT COUNT(*) FROM `/Root/ColumnShard` WHERE Col3 = 1001;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                DELETE FROM `/Root/ColumnShard` ON SELECT * FROM `/Root/DataShard` WHERE Col1 > 9;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                DELETE FROM `/Root/DataShard` ON SELECT Col1 FROM `/Root/ColumnShard`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
+                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[10u;"test1";10];[20u;"test2";11];[30u;"test3";12];[40u;"test";13];[101u;"test";101];[102u;"test";101];[103u;"test";101];[104u;"test";101];[1001u;"test";1001];[1002u;"test";1001];[1003u;"test";1001];[1004u;"test";1001]])",
+                FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[1u;"test";1];[2u;"test";1];[3u;"test";1];[4u;"test";1]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                DELETE FROM `/Root/DataShard` WHERE Col2 != "not found";
+                DELETE FROM `/Root/ColumnShard` WHERE Col2 != "not found";
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard`;
+                SELECT * FROM `/Root/ColumnShard`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                DELETE FROM `/Root/DataShard` WHERE Col2 = "not found";
+                DELETE FROM `/Root/ColumnShard` WHERE Col2 = "not found";
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TableSink_HtapComplex, withOltpSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/ColumnSrc` (
+                Col1 Uint64 NOT NULL,
+                Col2 String NOT NULL,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+
+            CREATE TABLE `/Root/RowSrc` (
+                Col1 Uint64 NOT NULL,
+                Col2 String NOT NULL,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+
+            CREATE TABLE `/Root/ColumnDst` (
+                Col1 Uint64 NOT NULL,
+                Col2 String,
+                Col3 Int32,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+
+            CREATE TABLE `/Root/RowDst` (
+                Col1 Uint64 NOT NULL,
+                Col2 String,
+                Col3 Int32,
+                PRIMARY KEY (Col1)
+            )
+            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/ColumnSrc` (Col1, Col2, Col3) VALUES
+                    (1u, "test1", 10), (2u, "test2", 11);
+                REPLACE INTO `/Root/ColumnSrc` (Col1, Col2, Col3) VALUES
+                    (3u, "test3", 12), (4u, "test", 13);
+                UPSERT INTO `/Root/RowSrc` (Col1, Col2, Col3) VALUES
+                    (10u, "test1", 10), (20u, "test2", 11);
+                REPLACE INTO `/Root/RowSrc` (Col1, Col2, Col3) VALUES
+                    (30u, "test3", 12), (40u, "test", 13);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                $data = SELECT c.Col1 as Col1, c.Col2 As Col2, r.Col3 AS Col3
+                    FROM `/Root/ColumnSrc`as c
+                    JOIN `/Root/RowSrc` as r
+                    ON c.Col1 + 10 = r.Col3;
+                UPSERT INTO `/Root/ColumnDst` SELECT * FROM $data;
+                REPLACE INTO `/Root/RowDst` SELECT * FROM $data;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/ColumnDst`;
+                SELECT COUNT(*) FROM `/Root/RowDst`;
+                DELETE FROM `/Root/ColumnDst` WHERE 1=1;
+                DELETE FROM `/Root/RowDst` WHERE 1=1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[3u]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[3u]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                $prepare = SELECT *
+                    FROM `/Root/ColumnSrc`
+                    WHERE Col2 LIKE '%test%test%';
+                $data = SELECT c.Col1 as Col1, c.Col2 As Col2, r.Col3 AS Col3
+                    FROM `/Root/RowSrc`as c
+                    LEFT OUTER JOIN $prepare as r
+                    ON c.Col1 + 10 = r.Col3;
+                UPSERT INTO `/Root/ColumnDst` SELECT * FROM $data;
+                REPLACE INTO `/Root/RowDst` SELECT * FROM $data;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/ColumnDst`;
+                SELECT COUNT(*) FROM `/Root/RowDst`;
+                DELETE FROM `/Root/ColumnDst` WHERE 1=1;
+                DELETE FROM `/Root/RowDst` WHERE 1=1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TableSink_HtapInteractive, withOltpSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/ColumnShard` (
+                Col1 Uint64 NOT NULL,
+                Col2 String NOT NULL,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+
+            CREATE TABLE `/Root/DataShard` (
+                Col1 Uint64 NOT NULL,
+                Col2 String NOT NULL,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
+                    (1u, "test1", 1);
+            )", NYdb::NQuery::TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto tx = result.GetTransaction();
+
+            result = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                    (2u, "test2", 2);
+            )", NYdb::NQuery::TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                    (3u, "test1", 3);
+            )", NYdb::NQuery::TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto tx = result.GetTransaction();
+
+            result = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
+                    (4u, "test2", 4);
+            )", NYdb::NQuery::TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT Col3 FROM `/Root/ColumnShard`
+                UNION
+                SELECT Col3 FROM `/Root/DataShard`
+                ORDER BY Col3;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[1];[2];[3];[4]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(TableSink_BadTransactions) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
@@ -3096,7 +3972,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().Contains("Write transactions between column and row tables are disabled at current time"),
+                insertResult.GetIssues().ToString().contains("Write transactions between column and row tables are disabled at current time"),
                 insertResult.GetIssues().ToString());
         }
 
@@ -3109,7 +3985,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().Contains("Write transactions between column and row tables are disabled at current time"),
+                insertResult.GetIssues().ToString().contains("Write transactions between column and row tables are disabled at current time"),
                 insertResult.GetIssues().ToString());
         }
 
@@ -3124,7 +4000,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().Contains("Write transactions between column and row tables are disabled at current time"),
+                insertResult.GetIssues().ToString().contains("Write transactions between column and row tables are disabled at current time"),
                 insertResult.GetIssues().ToString());
         }
 
@@ -3138,7 +4014,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().Contains("Write transactions between column and row tables are disabled at current time"),
+                insertResult.GetIssues().ToString().contains("Write transactions between column and row tables are disabled at current time"),
                 insertResult.GetIssues().ToString());
         }
 
@@ -3152,8 +4028,26 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().Contains("Write transactions between column and row tables are disabled at current time"),
+                insertResult.GetIssues().ToString().contains("Write transactions between column and row tables are disabled at current time"),
                 insertResult.GetIssues().ToString());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            {
+                auto insertResult = session.ExecuteQuery(R"(
+                    REPLACE INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
+                        (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT(insertResult.IsSuccess());
+            }
+            {
+                auto insertResult = session.ExecuteQuery(R"(
+                    REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                        (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT(insertResult.IsSuccess());
+            }
         }
     }
 
@@ -3212,7 +4106,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(TableSink_ReplaceColumnShard) {
+    Y_UNIT_TEST(TableSink_Olap_Replace) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto settings = TKikimrSettings()
@@ -3295,14 +4189,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto it = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0);
                 REPLACE INTO `/Root/DataShard` (Col1, Col3) VALUES (1u, 'test');
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
 
         {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]]])");
@@ -3312,7 +4206,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto it = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 'null');
                 REPLACE INTO `/Root/DataShard` (Col1) VALUES (1u);
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
 
@@ -3320,10 +4214,52 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[0u;#;["null"]];[1u;#;#]])");
+        }
+    }
+
+    Y_UNIT_TEST(TableSink_OltpLiteralUpsert) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = Sprintf(R"(
+            CREATE TABLE `/Root/DataShard` (
+                Col1 Uint64 NOT NULL,
+                Col2 Int32,
+                PRIMARY KEY (Col1)
+            );
+        )");
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[0u;[0]]])");
         }
     }
 
@@ -3335,8 +4271,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         virtual void DoExecute() = 0;
     public:
         void Execute() {
-            AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+            AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
+            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!IsOlap);
             AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
             auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
 
@@ -3441,14 +4377,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0);
                 INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (1u, 'test');
                 INSERT INTO `/Root/DataShard` (Col1, Col3, Col2) VALUES (2u, 't', 3);
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             {
                 auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
                 CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
@@ -3457,18 +4393,18 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             {
                 auto it = client.ExecuteQuery(R"(
                 INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 'null');
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_C(!it.IsSuccess(), it.GetIssues().ToString());
                 UNIT_ASSERT_C(
-                    it.GetIssues().ToString().Contains("Operation is aborting because an duplicate key")
-                    || it.GetIssues().ToString().Contains("Conflict with existing key."),
+                    it.GetIssues().ToString().contains("Operation is aborting because an duplicate key")
+                    || it.GetIssues().ToString().contains("Conflict with existing key."),
                     it.GetIssues().ToString());
             }
 
             {
                 auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
                 CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
@@ -3573,14 +4509,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0);
                 INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (1u, 'test');
                 INSERT INTO `/Root/DataShard` (Col1, Col3, Col2) VALUES (2u, 't', 3);
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             {
                 auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
                 CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
@@ -3589,21 +4525,21 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             {
                 auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` SET Col2 = 42 WHERE Col3 == 'not found';
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             {
                 auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` SET Col2 = 42 WHERE Col3 == 't';
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             {
                 auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
                 CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[42];["t"]]])");
@@ -3612,20 +4548,20 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             {
                 auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 1 AS Col2, 'text' AS Col3;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             {
                 auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` ON SELECT 10u AS Col1, 1 AS Col2, 'text' AS Col3;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
                 CompareYson(output, R"([[0u;[1];["text"]];[1u;#;["test"]];[2u;[42];["t"]]])");
@@ -3727,7 +4663,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("Data manipulation queries do not support column shard tables."),
+                prepareResult.GetIssues().ToString().contains("Data manipulation queries do not support column shard tables."),
                 prepareResult.GetIssues().ToString());
         }
 
@@ -3741,7 +4677,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TableSink_ReplaceDataShard, UseSink) {
+    Y_UNIT_TEST_TWIN(TableSink_Oltp_Replace, UseSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(UseSink);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
@@ -3787,14 +4723,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
                     (10u, "test1", 10), (20u, "test2", 11), (2147483647u, "test3", 12), (2147483640u, NULL, 13);
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
         {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT COUNT(*) FROM `/Root/DataShard`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(
@@ -3805,14 +4741,22 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/DataShard2` SELECT * FROM `/Root/DataShard`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            // Empty replace
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/DataShard2` SELECT * FROM `/Root/DataShard` WHERE Col2 == 'not exists';
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
         {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT COUNT(*) FROM `/Root/DataShard2`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(
@@ -3825,14 +4769,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 REPLACE INTO `/Root/DataShard2` (Col1, Col2, Col3) VALUES
                     (11u, "test1", 10), (21u, "test2", 11), (2147483646u, "test3", 12), (2147483641u, NULL, 13);
                 SELECT COUNT(*) FROM `/Root/DataShard`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
         {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT COUNT(*) FROM `/Root/DataShard2`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(
@@ -3841,10 +4785,114 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+     Y_UNIT_TEST(TableSink_OltpInteractive) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/DataShard` (
+                Col1 Uint32 NOT NULL,
+                Col2 String,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 16,
+                UNIFORM_PARTITIONS = 16);
+
+            CREATE TABLE `/Root/DataShard2` (
+                Col1 Uint32 NOT NULL,
+                Col2 String,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 17,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 17,
+                UNIFORM_PARTITIONS = 17);
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        auto session2 = client.GetSession().GetValueSync().GetSession();
+
+        auto tx = session2.BeginTransaction(NYdb::NQuery::TTxSettings::SerializableRW())
+                .ExtractValueSync()
+                .GetTransaction();
+        UNIT_ASSERT(tx.IsActive());
+        {
+            auto prepareResult = session2.ExecuteQuery(R"(
+                REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                    (10u, "test1", 10), (20u, "test2", 11), (2147483647u, "test3", 12), (2147483640u, NULL, 13);
+            )", TTxControl::Tx(tx.GetId()), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = session2.ExecuteQuery(R"(
+                REPLACE INTO `/Root/DataShard2` (Col1, Col2, Col3) VALUES
+                    (11u, "test1", 10), (21u, "test2", 11), (2147483646u, "test3", 12), (2147483641u, NULL, 13);
+            )", TTxControl::Tx(tx.GetId()), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = session2.StreamExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/DataShard`;
+            )", TTxControl::Tx(tx.GetId()), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([[4u]])");
+        }
+
+        {
+            auto prepareResult = session2.ExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard2`;
+            )", TTxControl::Tx(tx.GetId()), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = session2.ExecuteQuery(R"(
+                REPLACE INTO `/Root/DataShard2` (Col1, Col2, Col3) VALUES
+                    (11u, "test1", 10), (21u, "test2", 11), (2147483646u, "test3", 12), (2147483641u, NULL, 13);
+            )", TTxControl::Tx(tx.GetId()), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto commitResult = tx.Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/DataShard2` SELECT * FROM `/Root/DataShard`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(ReadDatashardAndColumnshard) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
@@ -4325,6 +5373,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CheckDirEntry(kikimr, entriesToCheck);
         }
     }
+
     Y_UNIT_TEST(CreateOrDropTopicOverTable) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
@@ -4396,6 +5445,65 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(AlterCdcTopic) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr{serverSettings};
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto tcSession = tableClient.CreateSession().GetValueSync().GetSession();
+            UNIT_ASSERT(tcSession.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TmpTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync().IsSuccess());
+
+            UNIT_ASSERT(tcSession.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/TmpTable` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                    );
+            )").GetValueSync().IsSuccess());
+            tcSession.Close();
+        }
+
+        auto pq = NYdb::NTopic::TTopicClient(kikimr.GetDriver(),
+                                            NYdb::NTopic::TTopicClientSettings().Database("/Root").AuthToken("root@builtin"));
+
+        auto client = kikimr.GetQueryClient(NYdb::NQuery::TClientSettings{}.AuthToken("root@builtin"));
+        auto session = client.GetSession().GetValueSync().GetSession();
+        {
+
+            const auto query = Q_(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/TmpTable/feed` ADD CONSUMER consumer21;
+            )");
+
+            RunQuery(query, session);
+            auto desc = pq.DescribeTopic("/Root/TmpTable/feed").ExtractValueSync();
+            const auto& consumers = desc.GetTopicDescription().GetConsumers();
+            UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(consumers[0].GetConsumerName(), "consumer21");
+
+        }
+        {
+            const auto query = Q_(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/TmpTable/feed` SET (min_active_partitions = 10);
+            )");
+            RunQuery(query, session, false);
+            auto desc = pq.DescribeTopic("/Root/TmpTable/feed").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 1);
+        }
+
+    }
+
     Y_UNIT_TEST(TableSink_OlapRWQueries) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
@@ -4433,6 +5541,183 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13]])", FormatResultSetYson(result.GetResultSet(0)));
             CompareYson(R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13];[101u;["test1"];10];[102u;["test2"];11];[103u;["test3"];12];[104u;#;13]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+    }
+
+    Y_UNIT_TEST(MixedReadQueryWithoutStreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
+
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto createTable = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/DataShard` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 Int32 NOT NULL,
+                    Col3 String,
+                    PRIMARY KEY (Col1, Col2)
+                ) WITH (STORE = ROW);
+                CREATE TABLE `/Root/ColumnShard` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 Int32 NOT NULL,
+                    Col3 String,
+                    PRIMARY KEY (Col1, Col2)
+                ) WITH (STORE = COLUMN);
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+        }
+
+        {
+            auto replaceValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                    (1u, 1, "row"), (1u, 2, "row"), (1u, 3, "row"), (2u, 3, "row");
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(replaceValues.IsSuccess(), replaceValues.GetIssues().ToString());
+        }
+        {
+            auto replaceValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
+                    (1u, 1, "row"), (1u, 2, "row"), (1u, 3, "row"), (2u, 3, "row");
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(replaceValues.IsSuccess(), replaceValues.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"sql(
+                SELECT Col3 FROM `/Root/DataShard` WHERE Col1 = 1u
+                UNION ALL
+                SELECT Col3 FROM `/Root/ColumnShard` WHERE Col1 = 1u;
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"sql(
+                SELECT r.Col3
+                FROM `/Root/DataShard` AS r
+                JOIN `/Root/ColumnShard` AS c
+                ON r.Col1 = c.Col1;
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]]])");
+        }
+    }
+
+    Y_UNIT_TEST(ReadManyRanges) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/DataShard` (
+                Col1 String,
+                Col2 String,
+                Col3 String,
+                PRIMARY KEY (Col1, Col2)
+            )
+            WITH (
+                STORE = ROW,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10,
+                PARTITION_AT_KEYS = (("a"), ("b"), ("c"), ("d"), ("e"), ("f"), ("g"), ("h"), ("k"), ("p"), ("q"), ("x"))
+            );
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES ("y", "1") , ("y", "2"), ("d", "1"), ("b", "1"), ("k", "1"), ("q", "1"), ("p", "1");
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/DataShard` WHERE Col1 IN ("d", "b", "k", "q", "p") OR (Col1 = "y" AND Col2 = "2");
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[6u]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/DataShard` WHERE Col1 = "y";
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[2u]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ReadManyShardsRange) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/DataShard` (
+                Col1 String,
+                Col2 String,
+                Col3 String,
+                PRIMARY KEY (Col1, Col2)
+            )
+            WITH (
+                STORE = ROW,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10,
+                PARTITION_AT_KEYS = (("a", "0"), ("b", "b"), ("c", "d"))
+            );
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES ("a", "a") , ("c", "c"), ("d", "d");
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/DataShard` WHERE  "a" <= Col1 AND Col1 <= "c";
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[2u]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 }

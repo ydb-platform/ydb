@@ -1,6 +1,6 @@
 # Authentication using the metadata service
 
-{% include [work in progress message](_includes/addition.md) %}
+<!-- markdownlint-disable blanks-around-fences -->
 
 Below are examples of the code for authentication using environment variables in different {{ ydb-short-name }} SDKs.
 

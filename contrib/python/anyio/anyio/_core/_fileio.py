@@ -3,7 +3,13 @@ from __future__ import annotations
 import os
 import pathlib
 import sys
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import (
+    AsyncIterator,
+    Callable,
+    Iterable,
+    Iterator,
+    Sequence,
+)
 from dataclasses import dataclass
 from functools import partial
 from os import PathLike
@@ -12,7 +18,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     AnyStr,
-    AsyncIterator,
     Final,
     Generic,
     overload,
@@ -93,10 +98,10 @@ class AsyncFile(AsyncResource, Generic[AnyStr]):
     async def readlines(self) -> list[AnyStr]:
         return await to_thread.run_sync(self._fp.readlines)
 
-    async def readinto(self: AsyncFile[bytes], b: WriteableBuffer) -> bytes:
+    async def readinto(self: AsyncFile[bytes], b: WriteableBuffer) -> int:
         return await to_thread.run_sync(self._fp.readinto, b)
 
-    async def readinto1(self: AsyncFile[bytes], b: WriteableBuffer) -> bytes:
+    async def readinto1(self: AsyncFile[bytes], b: WriteableBuffer) -> int:
         return await to_thread.run_sync(self._fp.readinto1, b)
 
     @overload
@@ -218,6 +223,22 @@ class Path:
     It implements the Python 3.10 version of :class:`pathlib.Path` interface, except for
     the deprecated :meth:`~pathlib.Path.link_to` method.
 
+    Some methods may be unavailable or have limited functionality, based on the Python
+    version:
+
+    * :meth:`~pathlib.Path.copy` (available on Python 3.14 or later)
+    * :meth:`~pathlib.Path.copy_into` (available on Python 3.14 or later)
+    * :meth:`~pathlib.Path.from_uri` (available on Python 3.13 or later)
+    * :meth:`~pathlib.Path.full_match` (available on Python 3.13 or later)
+    * :meth:`~pathlib.Path.is_junction` (available on Python 3.12 or later)
+    * :meth:`~pathlib.Path.match` (the ``case_sensitive`` paramater is only available on
+      Python 3.13 or later)
+    * :meth:`~pathlib.Path.move` (available on Python 3.14 or later)
+    * :meth:`~pathlib.Path.move_into` (available on Python 3.14 or later)
+    * :meth:`~pathlib.Path.relative_to` (the ``walk_up`` parameter is only available on
+      Python 3.12 or later)
+    * :meth:`~pathlib.Path.walk` (available on Python 3.12 or later)
+
     Any methods that do disk I/O need to be awaited on. These methods are:
 
     * :meth:`~pathlib.Path.absolute`
@@ -233,7 +254,10 @@ class Path:
     * :meth:`~pathlib.Path.is_dir`
     * :meth:`~pathlib.Path.is_fifo`
     * :meth:`~pathlib.Path.is_file`
+    * :meth:`~pathlib.Path.is_junction`
     * :meth:`~pathlib.Path.is_mount`
+    * :meth:`~pathlib.Path.is_socket`
+    * :meth:`~pathlib.Path.is_symlink`
     * :meth:`~pathlib.Path.lchmod`
     * :meth:`~pathlib.Path.lstat`
     * :meth:`~pathlib.Path.mkdir`
@@ -244,11 +268,14 @@ class Path:
     * :meth:`~pathlib.Path.readlink`
     * :meth:`~pathlib.Path.rename`
     * :meth:`~pathlib.Path.replace`
+    * :meth:`~pathlib.Path.resolve`
     * :meth:`~pathlib.Path.rmdir`
     * :meth:`~pathlib.Path.samefile`
     * :meth:`~pathlib.Path.stat`
+    * :meth:`~pathlib.Path.symlink_to`
     * :meth:`~pathlib.Path.touch`
     * :meth:`~pathlib.Path.unlink`
+    * :meth:`~pathlib.Path.walk`
     * :meth:`~pathlib.Path.write_bytes`
     * :meth:`~pathlib.Path.write_text`
 
@@ -358,8 +385,71 @@ class Path:
     def as_uri(self) -> str:
         return self._path.as_uri()
 
-    def match(self, path_pattern: str) -> bool:
-        return self._path.match(path_pattern)
+    if sys.version_info >= (3, 13):
+        parser = pathlib.Path.parser
+
+        @classmethod
+        def from_uri(cls, uri: str) -> Path:
+            return Path(pathlib.Path.from_uri(uri))
+
+        def full_match(
+            self, path_pattern: str, *, case_sensitive: bool | None = None
+        ) -> bool:
+            return self._path.full_match(path_pattern, case_sensitive=case_sensitive)
+
+        def match(
+            self, path_pattern: str, *, case_sensitive: bool | None = None
+        ) -> bool:
+            return self._path.match(path_pattern, case_sensitive=case_sensitive)
+    else:
+
+        def match(self, path_pattern: str) -> bool:
+            return self._path.match(path_pattern)
+
+    if sys.version_info >= (3, 14):
+
+        async def copy(
+            self,
+            target: str | os.PathLike[str],
+            *,
+            follow_symlinks: bool = True,
+            dirs_exist_ok: bool = False,
+            preserve_metadata: bool = False,
+        ) -> Path:
+            func = partial(
+                self._path.copy,
+                follow_symlinks=follow_symlinks,
+                dirs_exist_ok=dirs_exist_ok,
+                preserve_metadata=preserve_metadata,
+            )
+            return Path(await to_thread.run_sync(func, target))
+
+        async def copy_into(
+            self,
+            target_dir: str | os.PathLike[str],
+            *,
+            follow_symlinks: bool = True,
+            dirs_exist_ok: bool = False,
+            preserve_metadata: bool = False,
+        ) -> Path:
+            func = partial(
+                self._path.copy_into,
+                follow_symlinks=follow_symlinks,
+                dirs_exist_ok=dirs_exist_ok,
+                preserve_metadata=preserve_metadata,
+            )
+            return Path(await to_thread.run_sync(func, target_dir))
+
+        async def move(self, target: str | os.PathLike[str]) -> Path:
+            # Upstream does not handle anyio.Path properly as a PathLike
+            target = pathlib.Path(target)
+            return Path(await to_thread.run_sync(self._path.move, target))
+
+        async def move_into(
+            self,
+            target_dir: str | os.PathLike[str],
+        ) -> Path:
+            return Path(await to_thread.run_sync(self._path.move_into, target_dir))
 
     def is_relative_to(self, other: str | PathLike[str]) -> bool:
         try:
@@ -367,9 +457,6 @@ class Path:
             return True
         except ValueError:
             return False
-
-    async def is_junction(self) -> bool:
-        return await to_thread.run_sync(self._path.is_junction)
 
     async def chmod(self, mode: int, *, follow_symlinks: bool = True) -> None:
         func = partial(os.chmod, follow_symlinks=follow_symlinks)
@@ -429,6 +516,11 @@ class Path:
 
     async def is_file(self) -> bool:
         return await to_thread.run_sync(self._path.is_file, abandon_on_cancel=True)
+
+    if sys.version_info >= (3, 12):
+
+        async def is_junction(self) -> bool:
+            return await to_thread.run_sync(self._path.is_junction)
 
     async def is_mount(self) -> bool:
         return await to_thread.run_sync(

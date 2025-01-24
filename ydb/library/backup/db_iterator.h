@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/sys.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <util/folder/path.h>
 #include <util/generic/deque.h>
@@ -48,7 +48,7 @@ public:
         Y_ENSURE(listResult.IsSuccess(), "Can't list directory, maybe it doesn't exist, dbPath# "
                 << fullPath.Quote());
 
-        if (listResult.GetEntry().Type == NScheme::ESchemeEntryType::Table) {
+        if (IsIn({NScheme::ESchemeEntryType::Table, NScheme::ESchemeEntryType::View}, listResult.GetEntry().Type)) {
             TPathSplitUnix parentPath(fullPath);
             parentPath.pop_back();
             TraverseRoot = parentPath.Reconstruct();
@@ -76,7 +76,7 @@ public:
                     NextNodes.front().IsListed = true;
 
                     const auto& children = childList.GetChildren();
-                    if (!children) {
+                    if (children.empty()) {
                         break;
                     }
                     const auto& currRelPath = GetRelPath();
@@ -127,6 +127,10 @@ public:
 
     bool IsTable() const {
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Table;
+    }
+
+    bool IsView() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::View;
     }
 
     bool IsDir() const {

@@ -141,7 +141,7 @@ public:
         CLOG_D(ctx, "Execute: " << PubEv->Get()->ToString());
 
         const auto& record = PubEv->Get()->Record;
-        const auto pathId = PathIdFromPathId(record.GetPathId());
+        const auto pathId = TPathId::FromProto(record.GetPathId());
 
         Replication = Self->Find(pathId);
         if (!Replication) {
@@ -187,6 +187,7 @@ public:
         Result = MakeHolder<TEvController::TEvDescribeReplicationResult>();
         Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
         Result->Record.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
+        Result->Record.MutableConsistencySettings()->CopyFrom(replication->GetConfig().GetConsistencySettings());
 
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;
         std::optional<TInitialScanProgress> totalScanProgress;
@@ -255,7 +256,7 @@ public:
             break;
         case TReplication::EState::Error:
             if (auto issue = state.MutableError()->AddIssues()) {
-                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                issue->set_severity(static_cast<uint32_t>(NYdb::NIssue::ESeverity::Error));
                 issue->set_message(replication->GetIssue());
             }
             break;

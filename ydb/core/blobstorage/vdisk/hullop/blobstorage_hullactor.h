@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 
 namespace NKikimr {
 
@@ -23,6 +24,7 @@ namespace NKikimr {
         const bool RunHandoff;
         const TIntrusivePtr<TLevelIndex<TKey, TMemRec>> LevelIndex;
         ui64 FreeUpToLsn = 0;
+        const TActorId HugeKeeperId;
     private:
         // ActorId of the LogCutterNotifier, that aggregates cut log lsn for the Hull database
         TActorId LogNotifierActorId;
@@ -32,12 +34,14 @@ namespace NKikimr {
                 TPDiskCtxPtr pdiskCtx,
                 const TActorId skeletonId,
                 bool runHandoff,
-                TIntrusivePtr<TLevelIndex<TKey, TMemRec>> levelIndex)
+                TIntrusivePtr<TLevelIndex<TKey, TMemRec>> levelIndex,
+                const TActorId hugeKeeperId)
             : LsnMngr(std::move(lsnMngr))
             , PDiskCtx(std::move(pdiskCtx))
             , SkeletonId(skeletonId)
             , RunHandoff(runHandoff)
             , LevelIndex(std::move(levelIndex))
+            , HugeKeeperId(hugeKeeperId)
         {
             Y_ABORT_UNLESS(LsnMngr && PDiskCtx && LevelIndex);
         }
@@ -79,6 +83,8 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     void CompactFreshSegment(
             TIntrusivePtr<THullDs> &hullDs,
+            THugeBlobCtxPtr hugeBlobCtx,
+            ui32 minHugeBlobInBytes,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx,
             const TActorContext &ctx,
             bool allowGarbageCollection);
@@ -86,6 +92,8 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     bool CompactFreshSegmentIfRequired(
             TIntrusivePtr<THullDs> &hullDs,
+            THugeBlobCtxPtr hugeBlobCtx,
+            ui32 minHugeBlobInBytes,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx,
             const TActorContext &ctx,
             bool force,
@@ -94,7 +102,8 @@ namespace NKikimr {
         ui64 yardFreeUpToLsn = rtCtx->GetFreeUpToLsn();
         bool compact = hullDs->HullCtx->FreshCompaction && rtCtx->LevelIndex->NeedsFreshCompaction(yardFreeUpToLsn, force);
         if (compact) {
-            CompactFreshSegment<TKey, TMemRec>(hullDs, rtCtx, ctx, allowGarbageCollection);
+            CompactFreshSegment<TKey, TMemRec>(hullDs, std::move(hugeBlobCtx), minHugeBlobInBytes, rtCtx, ctx,
+                allowGarbageCollection);
         }
         return compact;
     }
@@ -106,6 +115,8 @@ namespace NKikimr {
             TIntrusivePtr<TVDiskConfig> config,
             TIntrusivePtr<THullDs> hullDs,
             std::shared_ptr<THullLogCtx> hullLogCtx,
+            THugeBlobCtxPtr hugeBlobCtx,
+            ui32 minHugeBlobInBytes,
             TActorId loggerId,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKeyLogoBlob, TMemRecLogoBlob>> rtCtx,
             std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep);

@@ -16,12 +16,12 @@ namespace NKikimr::NColumnShard {
 class TColumnShard;
 class TLockFeatures;
 
-class TLockSharingInfo {
+class TLockSharingInfo: TMoveOnly {
 private:
     const ui64 LockId;
     const ui64 Generation;
     TAtomicCounter InternalGenerationCounter = 0;
-    TAtomicCounter Broken = 0;
+    std::atomic<bool> Broken = false;
     TAtomicCounter WritesCounter = 0;
     friend class TLockFeatures;
 
@@ -43,7 +43,7 @@ public:
     }
 
     bool IsBroken() const {
-        return Broken.Val();
+        return Broken;
     }
 
     ui64 GetCounter() const {
@@ -78,7 +78,7 @@ public:
 
     void SetBroken() {
         SharingInfo->Broken = 1;
-        SharingInfo->InternalGenerationCounter = TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken;
+        SharingInfo->InternalGenerationCounter = (i64)TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken;
     }
 
     bool IsBroken() const {
@@ -119,22 +119,50 @@ class TOperationsManager {
     NOlap::NTxInteractions::TInteractionsContext InteractionsContext;
 
     THashMap<ui64, ui64> Tx2Lock;
+    THashMap<TInsertWriteId, TOperationWriteId> InsertWriteIdToOpWriteId;
     THashMap<ui64, TLockFeatures> LockFeatures;
-    THashMap<TWriteId, TWriteOperation::TPtr> Operations;
-    TWriteId LastWriteId = TWriteId(0);
+    THashMap<TOperationWriteId, TWriteOperation::TPtr> Operations;
+    TOperationWriteId LastWriteId = TOperationWriteId(0);
 
 public:
 
+    void StopWriting() {
+        for (auto&& i : Operations) {
+            i.second->StopWriting();
+        }
+    }
+
+    TWriteOperation::TPtr GetOperationByInsertWriteIdVerified(const TInsertWriteId insertWriteId) const {
+        auto it = InsertWriteIdToOpWriteId.find(insertWriteId);
+        AFL_VERIFY(it != InsertWriteIdToOpWriteId.end())("write_id", insertWriteId);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ask_by_insert_id")("write_id", insertWriteId)("operation_id", it->second);
+        return GetOperationVerified(it->second);
+    }
+
+    void LinkInsertWriteIdToOperationWriteId(const std::vector<TInsertWriteId>& insertions, const TOperationWriteId operationId) {
+        const auto op = GetOperationVerified(operationId);
+        AFL_VERIFY(op->GetInsertWriteIds() == insertions)("operation_data", JoinSeq(", ", op->GetInsertWriteIds()))(
+            "expected", JoinSeq(", ", insertions));
+        for (auto&& i : insertions) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "add_by_insert_id")("id", i)("operation_id", operationId);
+            InsertWriteIdToOpWriteId.emplace(i, operationId);
+        }
+    }
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
 
-    TWriteOperation::TPtr GetOperation(const TWriteId writeId) const;
-    TWriteOperation::TPtr GetOperationVerified(const TWriteId writeId) const {
-        return TValidator::CheckNotNull(GetOperationOptional(writeId));
+    TWriteOperation::TPtr GetOperationVerified(const TOperationWriteId writeId) const {
+        auto result = GetOperationOptional(writeId);
+        AFL_VERIFY(!!result)("op_id", writeId);
+        return result;
     }
-    TWriteOperation::TPtr GetOperationOptional(const TWriteId writeId) const {
-        return GetOperation(writeId);
+    TWriteOperation::TPtr GetOperationOptional(const TOperationWriteId writeId) const {
+        auto it = Operations.find(writeId);
+        if (it == Operations.end()) {
+            return nullptr;
+        }
+        return it->second;
     }
     void CommitTransactionOnExecute(
         TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
@@ -170,8 +198,8 @@ public:
         return *result;
     }
 
-    TWriteOperation::TPtr RegisterOperation(
-        const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType);
+    TWriteOperation::TPtr RegisterOperation(const ui64 pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
+        const NEvWrite::EModificationType mType, const bool portionsWriting);
     bool RegisterLock(const ui64 lockId, const ui64 generationId) {
         if (LockFeatures.contains(lockId)) {
             return false;
@@ -180,7 +208,7 @@ public:
             return true;
         }
     }
-    static EOperationBehaviour GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite);
+    static TConclusion<EOperationBehaviour> GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite);
     TLockFeatures& GetLockVerified(const ui64 lockId) {
         auto result = GetLockOptional(lockId);
         AFL_VERIFY(result)("lock_id", lockId);
@@ -196,10 +224,14 @@ public:
         }
     }
 
+    bool HasReadLocks(const ui64 pathId) const {
+        return InteractionsContext.HasReadIntervals(pathId);
+    }
+
     TOperationsManager();
 
 private:
-    TWriteId BuildNextWriteId();
+    TOperationWriteId BuildNextOperationWriteId();
     void RemoveOperationOnExecute(const TWriteOperation::TPtr& op, NTabletFlatExecutor::TTransactionContext& txc);
     void RemoveOperationOnComplete(const TWriteOperation::TPtr& op);
     void OnTransactionFinishOnExecute(const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId,

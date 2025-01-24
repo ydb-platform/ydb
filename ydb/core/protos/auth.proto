@@ -56,6 +56,8 @@ message TAuthConfig {
     optional string CertificateAuthenticationDomain = 80 [default = "cert"];
     optional bool EnableLoginAuthentication = 81 [default = true];
     optional string NodeRegistrationToken = 82 [default = "root@builtin", (Ydb.sensitive) = true];
+    optional TPasswordComplexity PasswordComplexity = 83;
+    optional TAccountLockout AccountLockout = 84;
 }
 
 message TUserRegistryConfig {
@@ -121,4 +123,19 @@ message TLdapAuthentication {
     repeated string Hosts = 10;
     optional string Scheme = 11 [default = "ldap"];
     optional TExtendedSettings ExtendedSettings = 12;
+}
+
+message TPasswordComplexity {
+    optional uint32 MinLength = 1;
+    optional uint32 MinLowerCaseCount = 2;
+    optional uint32 MinUpperCaseCount = 3;
+    optional uint32 MinNumbersCount = 4;
+    optional uint32 MinSpecialCharsCount = 5;
+    optional string SpecialChars = 6;
+    optional bool CanContainUsername = 7;
+}
+
+message TAccountLockout {
+    optional uint32 AttemptThreshold = 1 [default = 4];
+    optional string AttemptResetDuration = 2 [default = "1h"];
 }

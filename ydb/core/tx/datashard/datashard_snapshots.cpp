@@ -12,7 +12,6 @@ namespace NDataShard {
 void TSnapshotManager::Reset() {
     MinWriteVersion = TRowVersion::Min();
 
-    MvccState = EMvccState::MvccUnspecified;
     KeepSnapshotTimeout = 0;
     IncompleteEdge = TRowVersion::Min();
     CompleteEdge = TRowVersion::Min();
@@ -35,7 +34,7 @@ bool TSnapshotManager::Reload(NIceDb::TNiceDb& db) {
     ready &= ReloadSnapshots(db);
 
     if (ready) {
-        Self->SetCounter(COUNTER_MVCC_ENABLED, IsMvccEnabled() ? 1 : 0);
+        Self->SetCounter(COUNTER_MVCC_ENABLED, 1);
     }
 
     return ready;
@@ -79,9 +78,7 @@ bool TSnapshotManager::ReloadSys(NIceDb::TNiceDb& db) {
     if (ready) {
         // We have a consistent view of settings, apply
         MinWriteVersion = minWriteVersion;
-        MvccState = static_cast<EMvccState>(mvccState);
         KeepSnapshotTimeout = keepSnapshotTimeout;
-        PerformedUnprotectedReads = (unprotectedReads != 0);
         CompleteEdge = completeEdge;
         IncompleteEdge = incompleteEdge;
         LowWatermark = lowWatermark;
@@ -97,6 +94,40 @@ bool TSnapshotManager::ReloadSys(NIceDb::TNiceDb& db) {
         CommittedCompleteEdge = completeEdge;
         FollowerReadEdge = followerReadEdge;
         FollowerReadEdgeRepeatable = (followerReadEdgeRepeatable != 0);
+
+        if (!Self->IsFollower()) {
+            // Handle ancient shards that didn't have mvcc enabled for some reason
+            // Note: all shards should have switched to mvcc in previous versions,
+            // but there could be some frozen etc. shards that didn't. This code
+            // is not very precise, but should be good enough.
+            if (mvccState != (ui32)EMvccState::MvccEnabled) {
+                // Next time we restart mvcc will be enabled
+                Self->PersistSys(db, Schema::SysMvcc_State, (ui32)EMvccState::MvccEnabled);
+                // Choose the maximum version this shard could have written at
+                TRowVersion nextVersion = Max(
+                    Self->LastCompleteTxVersion(),
+                    MinWriteVersion,
+                    CompleteEdge,
+                    IncompleteEdge,
+                    ImmediateWriteEdge);
+                if (nextVersion) {
+                    nextVersion.TxId = Max<ui64>();
+                }
+                SetCompleteEdge(db, nextVersion);
+                SetIncompleteEdge(db, nextVersion);
+                SetImmediateWriteEdge(db, nextVersion);
+                SetLowWatermark(db, nextVersion);
+                ImmediateWriteEdgeReplied = ImmediateWriteEdge;
+            }
+
+            // We had UnprotectedReads enabled by default for a long time, but
+            // delayed persistently marking shard until the first snapshot read.
+            // We assume unprotected reads unconditionally now, but make sure
+            // order versions start up correctly too.
+            if (!unprotectedReads && Self->IsStateNewReadAllowed()) {
+                Self->PersistUnprotectedReadsEnabled(db);
+            }
+        }
     }
 
     return ready;
@@ -185,9 +216,6 @@ void TSnapshotManager::SetCompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& v
 }
 
 bool TSnapshotManager::PromoteCompleteEdge(const TRowVersion& version, TTransactionContext& txc) {
-    if (!IsMvccEnabled())
-        return false;
-
     if (CompleteEdge >= version)
         return false;
 
@@ -201,9 +229,6 @@ bool TSnapshotManager::PromoteCompleteEdge(const TRowVersion& version, TTransact
 }
 
 bool TSnapshotManager::PromoteCompleteEdge(TOperation* op, TTransactionContext& txc) {
-    if (!IsMvccEnabled())
-        return false;
-
     Y_ASSERT(op && (op->IsMvccSnapshotRead() || op->GetStep()));
 
     const TRowVersion version = op->IsMvccSnapshotRead()
@@ -230,9 +255,6 @@ void TSnapshotManager::SetIncompleteEdge(NIceDb::TNiceDb& db, const TRowVersion&
 }
 
 bool TSnapshotManager::PromoteIncompleteEdge(TOperation* op, TTransactionContext& txc) {
-    if (!IsMvccEnabled())
-        return false;
-
     Y_ASSERT(op && op->GetStep());
 
     if (TRowVersion version(op->GetStep(), op->GetTxId()); version > IncompleteEdge) {
@@ -253,21 +275,18 @@ TRowVersion TSnapshotManager::GetImmediateWriteEdgeReplied() const {
     return ImmediateWriteEdgeReplied;
 }
 
-void TSnapshotManager::SetImmediateWriteEdge(const TRowVersion& version, TTransactionContext& txc) {
+void TSnapshotManager::SetImmediateWriteEdge(NIceDb::TNiceDb& db, const TRowVersion& version) {
     using Schema = TDataShard::Schema;
 
-    NIceDb::TNiceDb db(txc.DB);
     Self->PersistSys(db, Schema::SysMvcc_ImmediateWriteEdgeStep, version.Step);
     Self->PersistSys(db, Schema::SysMvcc_ImmediateWriteEdgeTxId, version.TxId);
     ImmediateWriteEdge = version;
 }
 
 bool TSnapshotManager::PromoteImmediateWriteEdge(const TRowVersion& version, TTransactionContext& txc) {
-    if (!IsMvccEnabled())
-        return false;
-
     if (version > ImmediateWriteEdge) {
-        SetImmediateWriteEdge(version, txc);
+        NIceDb::TNiceDb db(txc.DB);
+        SetImmediateWriteEdge(db, version);
 
         return true;
     }
@@ -276,9 +295,6 @@ bool TSnapshotManager::PromoteImmediateWriteEdge(const TRowVersion& version, TTr
 }
 
 bool TSnapshotManager::PromoteImmediateWriteEdgeReplied(const TRowVersion& version) {
-    if (!IsMvccEnabled())
-        return false;
-
     if (version > ImmediateWriteEdgeReplied) {
         ImmediateWriteEdgeReplied = version;
         return true;
@@ -287,12 +303,18 @@ bool TSnapshotManager::PromoteImmediateWriteEdgeReplied(const TRowVersion& versi
     return false;
 }
 
+void TSnapshotManager::RestoreImmediateWriteEdge(const TRowVersion& version, const TRowVersion& replied) {
+    // Note: ImmediateWriteEdge is persistent, we must not overwrite it
+    Y_UNUSED(version);
+    ImmediateWriteEdgeReplied = replied;
+}
+
 TRowVersion TSnapshotManager::GetUnprotectedReadEdge() const {
     return UnprotectedReadEdge;
 }
 
 bool TSnapshotManager::PromoteUnprotectedReadEdge(const TRowVersion& version) {
-    if (IsMvccEnabled() && UnprotectedReadEdge < version) {
+    if (UnprotectedReadEdge < version) {
         UnprotectedReadEdge = version;
         return true;
     }
@@ -300,25 +322,8 @@ bool TSnapshotManager::PromoteUnprotectedReadEdge(const TRowVersion& version) {
     return false;
 }
 
-bool TSnapshotManager::GetPerformedUnprotectedReads() const {
-    return PerformedUnprotectedReads;
-}
-
-bool TSnapshotManager::IsPerformedUnprotectedReadsCommitted() const {
-    return PerformedUnprotectedReadsUncommitted == 0;
-}
-
-void TSnapshotManager::SetPerformedUnprotectedReads(bool performedUnprotectedReads, TTransactionContext& txc) {
-    using Schema = TDataShard::Schema;
-
-    NIceDb::TNiceDb db(txc.DB);
-    Self->PersistSys(db, Schema::SysMvcc_UnprotectedReads, ui64(performedUnprotectedReads ? 1 : 0));
-    PerformedUnprotectedReads = performedUnprotectedReads;
-    PerformedUnprotectedReadsUncommitted++;
-
-    txc.DB.OnPersistent([this] {
-        this->PerformedUnprotectedReadsUncommitted--;
-    });
+void TSnapshotManager::RestoreUnprotectedReadEdge(const TRowVersion& version) {
+    UnprotectedReadEdge = version;
 }
 
 std::pair<TRowVersion, bool> TSnapshotManager::GetFollowerReadEdge() const {
@@ -328,21 +333,19 @@ std::pair<TRowVersion, bool> TSnapshotManager::GetFollowerReadEdge() const {
 bool TSnapshotManager::PromoteFollowerReadEdge(const TRowVersion& version, bool repeatable, TTransactionContext& txc) {
     using Schema = TDataShard::Schema;
 
-    if (IsMvccEnabled()) {
-        if (FollowerReadEdge < version) {
-            NIceDb::TNiceDb db(txc.DB);
-            Self->PersistSys(db, Schema::SysMvcc_FollowerReadEdgeStep, version.Step);
-            Self->PersistSys(db, Schema::SysMvcc_FollowerReadEdgeTxId, version.TxId);
-            Self->PersistSys(db, Schema::SysMvcc_FollowerReadEdgeRepeatable, ui64(repeatable ? 1 : 0));
-            FollowerReadEdge = version;
-            FollowerReadEdgeRepeatable = repeatable;
-            return true;
-        } else if (FollowerReadEdge == version && repeatable && !FollowerReadEdgeRepeatable) {
-            NIceDb::TNiceDb db(txc.DB);
-            Self->PersistSys(db, Schema::SysMvcc_FollowerReadEdgeRepeatable, ui64(repeatable ? 1 : 0));
-            FollowerReadEdgeRepeatable = repeatable;
-            return true;
-        }
+    if (FollowerReadEdge < version) {
+        NIceDb::TNiceDb db(txc.DB);
+        Self->PersistSys(db, Schema::SysMvcc_FollowerReadEdgeStep, version.Step);
+        Self->PersistSys(db, Schema::SysMvcc_FollowerReadEdgeTxId, version.TxId);
+        Self->PersistSys(db, Schema::SysMvcc_FollowerReadEdgeRepeatable, ui64(repeatable ? 1 : 0));
+        FollowerReadEdge = version;
+        FollowerReadEdgeRepeatable = repeatable;
+        return true;
+    } else if (FollowerReadEdge == version && repeatable && !FollowerReadEdgeRepeatable) {
+        NIceDb::TNiceDb db(txc.DB);
+        Self->PersistSys(db, Schema::SysMvcc_FollowerReadEdgeRepeatable, ui64(repeatable ? 1 : 0));
+        FollowerReadEdgeRepeatable = repeatable;
+        return true;
     }
 
     return false;
@@ -403,79 +406,6 @@ ui64 TSnapshotManager::GetKeepSnapshotTimeout() const {
 
 TDuration TSnapshotManager::GetCleanupSnapshotPeriod() const {
     return TDuration::MilliSeconds(AppData()->DataShardConfig.GetCleanupSnapshotPeriod());
-}
-
-bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext& txc, EMvccState state) {
-    Y_ABORT_UNLESS(state != EMvccState::MvccUnspecified);
-
-    if (MvccState == state)
-        return false;
-
-    using Schema = TDataShard::Schema;
-    const TRowVersion opVersion(step, txId);
-
-    // We need to choose a version that is at least as large as all previous edges
-    TRowVersion nextVersion = Max(opVersion, MinWriteVersion, CompleteEdge, IncompleteEdge, ImmediateWriteEdge);
-
-    // This must be a version that we may have previously written to, and which
-    // must not be a snapshot. We don't know if there have been any immediate
-    // mvcc writes before the switch, but they would have happened at the end
-    // of the step.
-    if (nextVersion) {
-        nextVersion.TxId = Max<ui64>();
-    }
-
-    if (IsMvccEnabled()) {
-        RemoveRowVersions(txc.DB, LowWatermark, nextVersion);
-    } else {
-        RemoveRowVersions(txc.DB, MinWriteVersion, nextVersion);
-    }
-
-    switch (state) {
-        case EMvccState::MvccEnabled: {
-            NIceDb::TNiceDb nicedb(txc.DB);
-
-            Self->PersistSys(nicedb, Schema::SysMvcc_State, (ui32)state);
-            MvccState = state;
-
-            SetCompleteEdge(nicedb, nextVersion);
-            SetIncompleteEdge(nicedb, nextVersion);
-            SetImmediateWriteEdge(nextVersion, txc);
-            SetLowWatermark(nicedb, nextVersion);
-            ImmediateWriteEdgeReplied = ImmediateWriteEdge;
-
-            break;
-        }
-
-        case EMvccState::MvccDisabled: {
-            NIceDb::TNiceDb nicedb(txc.DB);
-
-            SetMinWriteVersion(nicedb, nextVersion);
-
-            Self->PersistSys(nicedb, Schema::SysMvcc_State, (ui32)state);
-            MvccState = state;
-
-            const auto minVersion = TRowVersion::Min();
-            SetCompleteEdge(nicedb, minVersion);
-            SetIncompleteEdge(nicedb, minVersion);
-            SetImmediateWriteEdge(minVersion, txc);
-            SetLowWatermark(nicedb, minVersion);
-            ImmediateWriteEdgeReplied = ImmediateWriteEdge;
-
-            break;
-        }
-
-        default:
-            Y_ABORT("Unexpected mvcc state# %d", (ui32)state);
-    }
-
-    txc.DB.OnPersistent([this, edge = CompleteEdge] {
-        this->CommittedCompleteEdge = edge;
-    });
-
-    Self->SetCounter(COUNTER_MVCC_ENABLED, IsMvccEnabled() ? 1 : 0);
-
-    return true;
 }
 
 const TSnapshot* TSnapshotManager::FindAvailable(const TSnapshotKey& key) const {
@@ -563,10 +493,6 @@ bool TSnapshotManager::AddSnapshot(NTable::TDatabase& db, const TSnapshotKey& ke
         return false;
     }
 
-    auto* tablePtr = Self->GetUserTables().FindPtr(key.PathId);
-    Y_VERIFY_S(tablePtr && *tablePtr, "DataShard " << Self->TabletID() << " missing table " << key.PathId);
-    const ui32 localTableId = (**tablePtr).LocalTid;
-
     const TRowVersion oldVersion = MinWriteVersion;
     const TRowVersion newVersion(key.Step, key.TxId);
 
@@ -581,11 +507,6 @@ bool TSnapshotManager::AddSnapshot(NTable::TDatabase& db, const TSnapshotKey& ke
     NIceDb::TNiceDb nicedb(db);
 
     PersistAddSnapshot(nicedb, key, name, flags, timeout);
-
-    if (!IsMvccEnabled() && oldVersion < newVersion) {
-        // Everything from oldVersion to newVersion (not inclusive) is not readable
-        db.RemoveRowVersions(localTableId, oldVersion, newVersion);
-    }
 
     // All future writes must happen past the snapshot version
     SetMinWriteVersion(nicedb, newVersion.Next());
@@ -628,7 +549,7 @@ void TSnapshotManager::DoRemoveSnapshot(NTable::TDatabase& db, const TSnapshotKe
 
     // Mark snapshot as no longer accessible in local database
     const TRowVersion rowVersion(key.Step, key.TxId);
-    if (!IsMvccEnabled() || rowVersion < LowWatermark)
+    if (rowVersion < LowWatermark)
         db.RemoveRowVersions(localTableId, rowVersion, rowVersion.Next());
 }
 
@@ -686,28 +607,22 @@ TDuration TSnapshotManager::CleanupTimeout() const {
     if (auto* snapshot = ExpireQueue.Top())
         snapshotTimeout = snapshot->ExpireTime - now;
 
-    if (IsMvccEnabled()) {
-        if (LowWatermark >= CompleteEdge) {
-            mvccGcTimeout = GetCleanupSnapshotPeriod();
-        } else {
-            mvccGcTimeout = TInstant::MilliSeconds(LowWatermark.Step + GetKeepSnapshotTimeout() + 1) - now;
-            if (LastAdvanceWatermark) {
-                // On startup we want to cleanup as soon as needed
-                // But later on we don't want to have too frequent cleanups
-                TMonotonic currentMonotonic = NActors::TActivationContext::Monotonic();
-                TMonotonic nextAdvanceWatermark = LastAdvanceWatermark + GetCleanupSnapshotPeriod();
-                if (currentMonotonic < nextAdvanceWatermark) {
-                    mvccGcTimeout = Max(mvccGcTimeout, nextAdvanceWatermark - currentMonotonic);
-                }
+    if (LowWatermark >= CompleteEdge) {
+        mvccGcTimeout = GetCleanupSnapshotPeriod();
+    } else {
+        mvccGcTimeout = TInstant::MilliSeconds(LowWatermark.Step + GetKeepSnapshotTimeout() + 1) - now;
+        if (LastAdvanceWatermark) {
+            // On startup we want to cleanup as soon as needed
+            // But later on we don't want to have too frequent cleanups
+            TMonotonic currentMonotonic = NActors::TActivationContext::Monotonic();
+            TMonotonic nextAdvanceWatermark = LastAdvanceWatermark + GetCleanupSnapshotPeriod();
+            if (currentMonotonic < nextAdvanceWatermark) {
+                mvccGcTimeout = Max(mvccGcTimeout, nextAdvanceWatermark - currentMonotonic);
             }
         }
     }
 
     return Min(snapshotTimeout, mvccGcTimeout);
-}
-
-bool TSnapshotManager::HasExpiringSnapshots() const {
-    return IsMvccEnabled() || bool(ExpireQueue);
 }
 
 bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext& txc) {
@@ -725,9 +640,6 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
             removed = true;
         }
     }
-
-    if (!IsMvccEnabled())
-        return removed;
 
     ui64 keepSnapshotTimeout = GetKeepSnapshotTimeout();
     TRowVersion proposed = TRowVersion(Max(now.MilliSeconds(), keepSnapshotTimeout) - keepSnapshotTimeout, 0);
@@ -837,19 +749,7 @@ void TSnapshotManager::PersistRemoveAllSnapshots(NIceDb::TNiceDb& db) {
     Snapshots.clear();
 }
 
-void TSnapshotManager::Fix_KIKIMR_12289(NTable::TDatabase& db) {
-    if (IsMvccEnabled()) {
-        return;
-    }
-
-    EnsureRemovedRowVersions(db, TRowVersion::Min(), MinWriteVersion);
-}
-
 void TSnapshotManager::Fix_KIKIMR_14259(NTable::TDatabase& db) {
-    if (!IsMvccEnabled()) {
-        return;
-    }
-
     EnsureRemovedRowVersions(db, TRowVersion::Min(), LowWatermark);
 }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
 

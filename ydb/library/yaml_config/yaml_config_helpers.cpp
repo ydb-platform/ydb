@@ -1,5 +1,8 @@
 #include "yaml_config_helpers.h"
 
+#define XXH_INLINE_ALL
+#include <contrib/libs/xxhash/xxhash.h>
+
 namespace NKikimr::NYaml {
 
 NJson::TJsonValue* Traverse(NJson::TJsonValue& json, const TVector<TString>& pathPieces) {
@@ -183,6 +186,13 @@ void IterateMut(NJson::TJsonValue& json, const TStringBuf& path, std::function<v
     Y_ENSURE_BT(pathPieces.size() > 0);
     std::vector<ui32> offsets;
     IterateMut(json, pathPieces, onElem, offsets);
+}
+
+ui64 GetConfigHash(const TString& config) {
+    XXH3_state_t state;
+    XXH3_64bits_reset(&state);
+    XXH3_64bits_update(&state, config.data(), config.size());
+    return XXH3_64bits_digest(&state);
 }
 
 } // namespace NKikimr::NYaml

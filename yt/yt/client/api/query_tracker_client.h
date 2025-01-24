@@ -62,7 +62,7 @@ struct TReadQueryResultOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
 {
-    std::optional<std::vector<TString>> Columns;
+    std::optional<std::vector<std::string>> Columns;
     std::optional<i64> LowerRowIndex;
     std::optional<i64> UpperRowIndex;
 };
@@ -152,6 +152,7 @@ struct TGetQueryTrackerInfoOptions
 
 struct TGetQueryTrackerInfoResult
 {
+    TString QueryTrackerStage;
     TString ClusterName;
     NYson::TYsonString SupportedFeatures;
     std::vector<TString> AccessControlObjects;

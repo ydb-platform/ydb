@@ -24,13 +24,13 @@ namespace NKikimr {
         const EPhase Phase;
         const NKikimrProto::EReplyStatus Status;
         const TIntrusivePtr<TPDiskParams> Dsk;
-        ui32 MinREALHugeBlobInBytes;
+        ui32 MinHugeBlobInBytes;
         const TVDiskIncarnationGuid VDiskIncarnationGuid;
 
         TEvFrontRecoveryStatus(EPhase phase,
                                NKikimrProto::EReplyStatus status,
                                const TIntrusivePtr<TPDiskParams> &dsk,
-                               ui32 MinREALHugeBlobInBytes,
+                               ui32 MinHugeBlobInBytes,
                                TVDiskIncarnationGuid vdiskIncarnationGuid);
         ~TEvFrontRecoveryStatus();
     };

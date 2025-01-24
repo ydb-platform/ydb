@@ -240,10 +240,6 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const
         NTypeIds::Utf8,
         NTypeIds::Decimal
     };
-    if (!schema.HasEngine() ||
-        schema.GetEngine() != NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES) {
-        return TConclusionStatus::Fail("Invalid scheme engine: " + (schema.HasEngine() ? NKikimrSchemeOp::EColumnTableEngine_Name(schema.GetEngine()) : TString("No")));
-    }
 
     if (!schema.KeyColumnNamesSize()) {
         return TConclusionStatus::Fail("There is no key columns");
@@ -253,12 +249,14 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const
     TVector<TString> columnErrors;
     for (const NKikimrSchemeOp::TOlapColumnDescription& column : schema.GetColumns()) {
         TString name = column.GetName();
-        void* typeDescr = nullptr;
-        if (column.GetTypeId() == NTypeIds::Pg && column.HasTypeInfo()) {
-            typeDescr = NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId());
+        NScheme::TTypeId typeId = column.GetTypeId();
+        NScheme::TTypeInfo schemeType;
+        if (column.HasTypeInfo()) {
+            schemeType = NScheme::TypeInfoFromProto(typeId, column.GetTypeInfo());
+        } else {
+            schemeType = typeId;
         }
 
-        NScheme::TTypeInfo schemeType(column.GetTypeId(), typeDescr);
         if (keyColumns.contains(name) && !pkSupportedTypes.contains(column.GetTypeId())) {
             columnErrors.emplace_back("key column " + name + " has unsupported type " + column.GetTypeName());
         }

@@ -3,12 +3,21 @@ import os
 import os.path
 from threading import Lock
 
-from flask import Flask
-from flask_cors import CORS
+try:
+    from flask import Flask
+    from flask_cors import CORS
+except ImportError:
+    import warnings
+
+    warnings.warn(
+        "When using MotoServer, ensure that you install moto[server] to have all dependencies!\n"
+    )
+    raise
 
 import moto.backends as backends
 import moto.backend_index as backend_index
-from moto.core.utils import convert_to_flask_response
+from moto.core import DEFAULT_ACCOUNT_ID
+from moto.core.utils import convert_to_flask_response, BackendDict
 
 from .utilities import AWSTestHelper, RegexConverter
 
@@ -69,7 +78,7 @@ class DomainDispatcherApplication(object):
                 return backend
 
         if "amazonaws.com" in host:
-            print(
+            print(  # noqa
                 "Unable to find appropriate backend for {}."
                 "Remember to add the URL to urls.py, and run scripts/update_backend_index.py to index it.".format(
                     host
@@ -259,8 +268,13 @@ def create_backend_app(service):
     backend_app.url_map.converters["regex"] = RegexConverter
 
     backend_dict = backends.get_backend(service)
-    if "us-east-1" in backend_dict:
-        backend = backend_dict["us-east-1"]
+    # Get an instance of this backend.
+    # We'll only use this backend to resolve the URL's, so the exact region/account_id is irrelevant
+    if isinstance(backend_dict, BackendDict):
+        if "us-east-1" in backend_dict[DEFAULT_ACCOUNT_ID]:
+            backend = backend_dict[DEFAULT_ACCOUNT_ID]["us-east-1"]
+        else:
+            backend = backend_dict[DEFAULT_ACCOUNT_ID]["global"]
     else:
         backend = backend_dict["global"]
 

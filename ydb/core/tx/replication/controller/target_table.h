@@ -9,6 +9,8 @@ public:
     explicit TTargetTableBase(TReplication* replication, ETargetKind finalKind,
         ui64 id, const TString& srcPath, const TString& dstPath);
 
+    TString GetStreamPath() const override;
+
 protected:
     IActor* CreateWorkerRegistar(const TActorContext& ctx) const override;
     virtual TString BuildStreamPath() const = 0;

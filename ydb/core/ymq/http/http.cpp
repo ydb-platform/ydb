@@ -75,10 +75,12 @@ public:
         response.FolderId = resp.GetFolderId();
         response.IsFifo = resp.GetIsFifo();
         response.ResourceId = resp.GetResourceId();
+        for (const auto& tag : resp.GetQueueTags()) {
+            response.QueueTags[tag.GetKey()] = tag.GetValue();
+        }
 
         Request_->SendResponse(response);
     }
-
 
 private:
     TString LogString(const TSqsResponse& resp) const {
@@ -163,6 +165,19 @@ void THttpRequest::WriteResponse(const TReplyParams& replyParams, const TSqsHttp
         requestAttributes.SourceAddress = SourceAddress_;
         requestAttributes.ResourceId = response.ResourceId;
         requestAttributes.Action = Action_;
+        requestAttributes.QueueTags = response.QueueTags;
+
+        RLOG_SQS_BASE_DEBUG(*Parent_->ActorSystem_,
+            TStringBuilder() << "Send metering event."
+            << " HttpStatusCode: " << requestAttributes.HttpStatusCode
+            << " IsFifo: " << requestAttributes.IsFifo
+            << " FolderId: " << requestAttributes.FolderId
+            << " RequestSizeInBytes: " << requestAttributes.RequestSizeInBytes
+            << " ResponseSizeInBytes: " << requestAttributes.ResponseSizeInBytes
+            << " SourceAddress: " << requestAttributes.SourceAddress
+            << " ResourceId: " << requestAttributes.ResourceId
+            << " Action: " << requestAttributes.Action
+        );
 
         Parent_->ActorSystem_->Send(MakeSqsMeteringServiceID(), reportRequestAttributes.Release());
     }
@@ -524,6 +539,9 @@ bool THttpRequest::SetupRequest() {
         HANDLE_SETUP_ACTION_CASE(SendMessage);
         HANDLE_SETUP_ACTION_CASE(SendMessageBatch);
         HANDLE_SETUP_ACTION_CASE(SetQueueAttributes);
+        HANDLE_SETUP_ACTION_CASE(ListQueueTags);
+        HANDLE_SETUP_ACTION_CASE(TagQueue);
+        HANDLE_SETUP_ACTION_CASE(UntagQueue);
 
         HANDLE_SETUP_PRIVATE_ACTION_CASE(DeleteQueueBatch);
         HANDLE_SETUP_PRIVATE_ACTION_CASE(CountQueues);
@@ -611,6 +629,10 @@ void THttpRequest::SetupCreateQueue(TCreateQueueRequest* const req) {
 
     for (const auto& attr : QueryParams_.Attributes) {
         req->AddAttributes()->CopyFrom(attr.second);
+    }
+
+    for (const auto& tag : QueryParams_.Tags) {
+        req->AddTags()->CopyFrom(tag.second);
     }
 }
 
@@ -929,6 +951,27 @@ void THttpRequest::SetupSetQueueAttributes(TSetQueueAttributesRequest* const req
 
     for (const auto& attr : QueryParams_.Attributes) {
         req->AddAttributes()->CopyFrom(attr.second);
+    }
+}
+
+void THttpRequest::SetupListQueueTags(TListQueueTagsRequest* const req) {
+    req->SetQueueName(QueueName_);
+    req->MutableAuth()->SetUserName(UserName_);
+}
+
+void THttpRequest::SetupTagQueue(TTagQueueRequest* const req) {
+    req->SetQueueName(QueueName_);
+    req->MutableAuth()->SetUserName(UserName_);
+    for (const auto& tag : QueryParams_.Tags) {
+        req->AddTags()->CopyFrom(tag.second);
+    }
+}
+
+void THttpRequest::SetupUntagQueue(TUntagQueueRequest* const req) {
+    req->SetQueueName(QueueName_);
+    req->MutableAuth()->SetUserName(UserName_);
+    for (const auto& key : QueryParams_.TagKeys) {
+        req->AddTagKeys(key.second);
     }
 }
 

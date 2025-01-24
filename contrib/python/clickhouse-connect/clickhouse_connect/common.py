@@ -81,3 +81,6 @@ _init_common('send_os_user', (True, False), True)
 _init_common('use_protocol_version', (True, False), True)
 
 _init_common('max_error_size', (), 1024)
+
+# HTTP raw data buffer for streaming queries.  This should not be reduced below 64KB to ensure compatibility with LZ4 compression
+_init_common('http_buffer_size', (), 10 * 1024 * 1024)

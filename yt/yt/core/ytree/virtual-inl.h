@@ -44,13 +44,13 @@ public:
         return 0;
     }
 
-    std::vector<TString> GetKeys(i64 limit) const override
+    std::vector<std::string> GetKeys(i64 limit) const override
     {
-        std::vector<TString> keys;
+        std::vector<std::string> keys;
         if (auto collection = Collection_.lock()) {
             keys.reserve(limit);
             for (const auto& [key, value] : *collection) {
-                if (static_cast<i64>(keys.size()) >= limit) {
+                if (std::ssize(keys) >= limit) {
                     break;
                 }
                 keys.emplace_back(TConversionTraits::ConvertKeyToString(key));
@@ -59,7 +59,7 @@ public:
         return keys;
     }
 
-    IYPathServicePtr FindItemService(TStringBuf key) const override
+    IYPathServicePtr FindItemService(const std::string& key) const override
     {
         if (auto collection = Collection_.lock()) {
             auto it = collection->find(TConversionTraits::ConvertStringToKey(key));

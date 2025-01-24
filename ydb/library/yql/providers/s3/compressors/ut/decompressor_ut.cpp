@@ -31,14 +31,14 @@ Y_UNIT_TEST_SUITE(TCompressorTests) {
 
     Y_UNIT_TEST(WrongMagicLz4) {
         NDB::ReadBufferFromFile buffer(GetResourcePath("test.json"));
-        UNIT_ASSERT_EXCEPTION_CONTAINS(std::make_unique<NLz4::TReadBuffer>(buffer), yexception, "TReadBuffer(): requirement StreamType != EStreamType::Unknown failed, message: Wrong magic.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(std::make_unique<NLz4::TReadBuffer>(buffer), yexception, "Wrong magic.");
     }
 
     Y_UNIT_TEST(ErrorLz4) {
         NDB::ReadBufferFromFile buffer(GetResourcePath("test.broken.lz4"));
         auto decompressorBuffer = std::make_unique<NLz4::TReadBuffer>(buffer);
         char str[256] = {};
-        UNIT_ASSERT_EXCEPTION_CONTAINS(decompressorBuffer->read(str, 256), yexception, "DecompressFrame(): requirement !LZ4F_isError(NextToLoad) failed, message: Decompression error: ERROR_reservedFlag_set");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(decompressorBuffer->read(str, 256), yexception, "Decompression error: ERROR_reservedFlag_set");
     }
 }
 

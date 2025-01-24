@@ -1,12 +1,12 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
 
 namespace NFq {
 
-NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name, bool useBearerForYdb, const TString& authToken, const TString& accountSignature, const FederatedQuery::DataStreams& ds);
+NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name, bool useBearerForYdb, const TString& authToken, const TString& accountSignature, const FederatedQuery::DataStreams& ds, const TString& readGroup);
 
 NYql::TS3ClusterConfig CreateS3ClusterConfig(const TString& name, const TString& authToken, const TString& objectStorageEndpoint, const TString& accountSignature, const FederatedQuery::ObjectStorageConnection& s3);
 

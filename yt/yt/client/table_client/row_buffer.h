@@ -38,7 +38,9 @@ public:
         , Pool_(
             TTag(),
             startChunkSize)
-    { }
+    {
+        static_assert(IsEmptyClass<TTag>());
+    }
 
     template <class TTag>
     TRowBuffer(
@@ -49,7 +51,9 @@ public:
         , Pool_(
             GetRefCountedTypeCookie<TTag>(),
             std::move(chunkProvider))
-    { }
+    {
+        static_assert(IsEmptyClass<TTag>());
+    }
 
     TChunkedMemoryPool* GetPool();
 

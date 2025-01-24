@@ -489,7 +489,7 @@ namespace NYdb {
             }
         }
 
-        TString BinaryStringToJsonString(const TString& s) {
+        TString BinaryStringToJsonString(const std::string& s) {
             TStringStream str;
             str << "\"";
             switch (Encoding) {
@@ -533,7 +533,7 @@ TString FormatValueJson(const TValue& value, EBinaryStringEncoding encoding)
     return out.Str();
 }
 
-void FormatResultRowJson(TResultSetParser& parser, const TVector<TColumn>& columns, NJsonWriter::TBuf& writer,
+void FormatResultRowJson(TResultSetParser& parser, const std::vector<TColumn>& columns, NJsonWriter::TBuf& writer,
     EBinaryStringEncoding encoding)
 {
     writer.BeginObject();
@@ -545,7 +545,7 @@ void FormatResultRowJson(TResultSetParser& parser, const TVector<TColumn>& colum
     writer.EndObject();
 }
 
-TString FormatResultRowJson(TResultSetParser& parser, const TVector<TColumn>& columns,
+TString FormatResultRowJson(TResultSetParser& parser, const std::vector<TColumn>& columns,
     EBinaryStringEncoding encoding)
 {
     TStringStream out;
@@ -789,7 +789,7 @@ namespace {
                 break;
             case EPrimitiveType::Uuid:
                 EnsureType(jsonValue, NJson::JSON_STRING);
-                ValueBuilder.Uuid(jsonValue.GetString());
+                ValueBuilder.Uuid(TUuidValue{jsonValue.GetString()});
                 break;
             case EPrimitiveType::JsonDocument:
                 EnsureType(jsonValue, NJson::JSON_STRING);
@@ -884,7 +884,7 @@ namespace {
 
             case TTypeParser::ETypeKind::Decimal:
                 EnsureType(jsonValue, NJson::JSON_STRING);
-                ValueBuilder.Decimal(jsonValue.GetString());
+                ValueBuilder.Decimal(TDecimalValue(jsonValue.GetString(), TypeParser.GetDecimal().Precision, TypeParser.GetDecimal().Scale));
                 break;
 
             case TTypeParser::ETypeKind::Pg:
@@ -952,7 +952,7 @@ namespace {
 
                 const auto& jsonMap = jsonValue.GetMap();
                 while (TypeParser.TryNextMember()) {
-                    const TString& memberName = TypeParser.GetMemberName();
+                    const auto& memberName = TypeParser.GetMemberName();
                     const auto it = jsonMap.find(memberName);
                     if (it == jsonMap.end()) {
                         ThrowFatalError(TStringBuilder() << "No member \"" << memberName

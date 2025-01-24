@@ -1,0 +1,14 @@
+--- a/lib/binary-io.h	(212d53b3ad2c86407d6763129fe182ff06c0cd95)
++++ b/lib/binary-io.h	(a21c9f41948a7d01f275966b6e9e9ff0a3ab10da)
+@@ -25,3 +25,11 @@
+ #include <stdio.h>
+ 
++#ifndef O_BINARY
++	#define O_BINARY 0
++#endif
++
++#ifndef O_TEXT
++	#define O_TEXT 0
++#endif
++
+ #ifndef _GL_INLINE_HEADER_BEGIN

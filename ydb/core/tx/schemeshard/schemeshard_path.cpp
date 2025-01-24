@@ -8,10 +8,11 @@
 
 namespace NKikimr::NSchemeShard {
 
-TPath::TChecker::TChecker(const TPath& path)
+TPath::TChecker::TChecker(const TPath& path, const NCompat::TSourceLocation location)
     : Path(path)
     , Failed(false)
     , Status(EStatus::StatusSuccess)
+    , Location(location)
 {
 }
 
@@ -32,7 +33,14 @@ const TPath::TChecker& TPath::TChecker::Fail(EStatus status, const TString& erro
     Status = status;
     Error = TStringBuilder() << "Check failed"
         << ": path: '" << Path.PathString() << "'"
-        << ", error: " << error;
+        << ", error: " << error
+    // this line included only in debug error
+    // because we do not want to forward information
+    // about our sources to db user
+#ifndef NDEBUG
+        << ", source_location: " << NUtil::TrimSourceFileName(Location.file_name()) << ":" << Location.line()
+#endif
+        ;
 
     return *this;
 }
@@ -306,6 +314,19 @@ const TPath::TChecker& TPath::TChecker::IsReplication(EStatus status) const {
     }
 
     return Fail(status, TStringBuilder() << "path is not a replication"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
+const TPath::TChecker& TPath::TChecker::IsTransfer(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsTransfer()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a transfer"
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
@@ -888,6 +909,19 @@ const TPath::TChecker& TPath::TChecker::IsResourcePool(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsBackupCollection()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a backup collection"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
     if (Failed) {
         return *this;
@@ -1102,8 +1136,8 @@ TPath::TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss)
     Y_ABORT_UNLESS(IsResolved());
 }
 
-TPath::TChecker TPath::Check() const {
-    return TChecker(*this);
+TPath::TChecker TPath::Check(const NCompat::TSourceLocation location) const {
+    return TChecker(*this, location);
 }
 
 bool TPath::IsEmpty() const {
@@ -1286,6 +1320,17 @@ TPath TPath::Child(const TString& name) const {
     return result;
 }
 
+TPath TPath::Child(const TString& name, TSplitChildTag) const {
+    TPath result = *this;
+
+    auto pathParts = SplitPath(name);
+    for (const auto& part : pathParts) {
+        result.Dive(part);
+    }
+
+    return result;
+}
+
 TPath TPath::Resolve(const TString path, TSchemeShard* ss) {
     Y_ABORT_UNLESS(ss);
 
@@ -1405,7 +1450,8 @@ bool TPath::IsUnderOperation() const {
             + (ui32)IsUnderRestoring()
             + (ui32)IsUnderDeleting()
             + (ui32)IsUnderDomainUpgrade()
-            + (ui32)IsUnderMoving();
+            + (ui32)IsUnderMoving()
+            + (ui32)IsUnderOutgoingIncrementalRestore();
         Y_VERIFY_S(sum == 1,
                    "only one operation at the time"
                        << " pathId: " << Base()->PathId
@@ -1493,6 +1539,12 @@ bool TPath::IsUnderMoving() const {
     return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateMoving;
 }
 
+bool TPath::IsUnderOutgoingIncrementalRestore() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore;
+}
+
 TPath& TPath::RiseUntilOlapStore() {
     size_t end = Elements.size();
     while (end > 0) {
@@ -1521,6 +1573,8 @@ bool TPath::IsCommonSensePath() const {
         bool ok = (*item)->IsDirectory() || (*item)->IsDomainRoot();
         // Temporarily olap stores are treated like directories
         ok = ok || (*item)->IsOlapStore();
+        // Temporarily backup collections are treated like directories
+        ok = ok || (*item)->IsBackupCollection();
         if (!ok) {
             return false;
         }
@@ -1543,8 +1597,12 @@ bool TPath::AtLocalSchemeShardPath() const {
     return !(*it)->IsMigrated();
 }
 
-bool TPath::IsInsideTableIndexPath() const {
-    Y_ABORT_UNLESS(IsResolved());
+bool TPath::IsInsideTableIndexPath(bool failOnUnresolved) const {
+    if (failOnUnresolved) {
+        Y_ABORT_UNLESS(IsResolved());
+    } else if (!IsResolved()) {
+        return false;
+    }
 
     // expected /<root>/.../<table>/<table_index>/<private_tables>
     if (Depth() < 3) {
@@ -1604,8 +1662,15 @@ bool TPath::IsInsideCdcStreamPath() const {
     return true;
 }
 
-bool TPath::IsTableIndex(const TMaybe<NKikimrSchemeOp::EIndexType>& type) const {
-    Y_ABORT_UNLESS(IsResolved());
+bool TPath::IsTableIndex(
+    const TMaybe<NKikimrSchemeOp::EIndexType>& type,
+    bool failOnUnresolved) const
+{
+    if (failOnUnresolved) {
+        Y_ABORT_UNLESS(IsResolved());
+    } else if (!IsResolved()) {
+        return false;
+    }
 
     if (!Base()->IsTableIndex()) {
         return false;
@@ -1659,6 +1724,12 @@ bool TPath::IsReplication() const {
     Y_ABORT_UNLESS(IsResolved());
 
     return Base()->IsReplication();
+}
+
+bool TPath::IsTransfer() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->IsTransfer();
 }
 
 ui32 TPath::Depth() const {

@@ -1,0 +1,2 @@
+mark_as_tests:
+  - sniffio/_tests/*

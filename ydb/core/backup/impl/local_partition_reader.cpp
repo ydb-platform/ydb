@@ -37,7 +37,7 @@ private:
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[LocalPartitionReader]"
-                << "[" << PQTablet << "]"
+                << PQTablet
                 << "[" << Partition << "]"
                 << SelfId() << " ";
         }
@@ -62,14 +62,14 @@ private:
 
     void HandleInit(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
-        LOG_D("Handshake"
+        LOG_D("HandleInit TEvWorker::TEvHandshake"
             << ": worker# " << Worker);
 
         Send(PQTablet, CreateGetOffsetRequest().Release());
     }
 
     void HandleInit(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_D("HandleInit " << ev->Get()->ToString());
         auto& record = ev->Get()->Record;
         if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
             Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup);

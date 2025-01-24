@@ -1,0 +1,56 @@
+From: Александр Сомов <somov@yandex-team.ru>
+Date: Tue, 2 Apr 2019 12:24:57 +0000
+Subject: [PATCH] Enable weak ciphers
+
+REVIEW: 783205
+
+git-svn-id: svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia/contrib/libs/openssl@4736527 41d65440-b5be-11dd-afe3-b2e846d9b4f8
+--- a/include/openssl/opensslconf-linux.h
++++ b/include/openssl/opensslconf-linux.h
+@@ -75,6 +75,13 @@
+-#ifndef OPENSSL_NO_SSL3
+-# define OPENSSL_NO_SSL3
+-#endif
+-#ifndef OPENSSL_NO_SSL3_METHOD
+-# define OPENSSL_NO_SSL3_METHOD
++
++// https://st.yandex-team.ru/DEVTOOLS-5331
++#define Y_OPENSSL_ENABLE_DEPRECATED
++
++#if !defined(Y_OPENSSL_ENABLE_DEPRECATED)
++# ifndef OPENSSL_NO_SSL3
++#  define OPENSSL_NO_SSL3
++# endif
++# ifndef OPENSSL_NO_SSL3_METHOD
++#  define OPENSSL_NO_SSL3_METHOD
++# endif
+ #endif
++
+@@ -90,3 +97,8 @@
+-#ifndef OPENSSL_NO_WEAK_SSL_CIPHERS
+-# define OPENSSL_NO_WEAK_SSL_CIPHERS
++
++// https://st.yandex-team.ru/DEVTOOLS-5331
++#if !defined(Y_OPENSSL_ENABLE_DEPRECATED)
++# ifndef OPENSSL_NO_WEAK_SSL_CIPHERS
++#  define OPENSSL_NO_WEAK_SSL_CIPHERS
++# endif
+ #endif
++
+--- a/ssl/ssl_cert.c
++++ b/ssl/ssl_cert.c
+@@ -942,9 +942,14 @@ static int ssl_security_default_callback(const SSL *s, const SSL_CTX *ctx,
+             /* No unauthenticated ciphersuites */
+             if (c->algorithm_auth & SSL_aNULL)
+                 return 0;
++
++            // https://st.yandex-team.ru/DEVTOOLS-5331
++#if !defined(Y_OPENSSL_ENABLE_DEPRECATED)
+             /* No MD5 mac ciphersuites */
+             if (c->algorithm_mac & SSL_MD5)
+                 return 0;
++#endif
++
+             /* SHA1 HMAC is 160 bits of security */
+             if (minbits > 160 && c->algorithm_mac & SSL_SHA1)
+                 return 0;

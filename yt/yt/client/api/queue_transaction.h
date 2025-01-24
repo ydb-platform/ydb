@@ -71,7 +71,7 @@ struct IQueueTransaction
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset,
-        const TAdvanceQueueConsumerOptions& options) = 0;
+        const TAdvanceQueueConsumerOptions& options = {}) = 0;
 
     //! Writes rows in the queue with checking their sequence number.
     /*!

@@ -43,7 +43,7 @@ public:
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TLegacyKey> keys,
-        const std::vector<TString>& locks,
+        const std::vector<std::string>& locks,
         NTableClient::ELockType lockType = NTableClient::ELockType::SharedStrong) override;
 };
 

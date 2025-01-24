@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from ._core._eventloop import current_time as current_time
 from ._core._eventloop import get_all_backends as get_all_backends
 from ._core._eventloop import get_cancelled_exc_class as get_cancelled_exc_class
@@ -10,6 +8,7 @@ from ._core._eventloop import sleep as sleep
 from ._core._eventloop import sleep_forever as sleep_forever
 from ._core._eventloop import sleep_until as sleep_until
 from ._core._exceptions import BrokenResourceError as BrokenResourceError
+from ._core._exceptions import BrokenWorkerIntepreter as BrokenWorkerIntepreter
 from ._core._exceptions import BrokenWorkerProcess as BrokenWorkerProcess
 from ._core._exceptions import BusyResourceError as BusyResourceError
 from ._core._exceptions import ClosedResourceError as ClosedResourceError
@@ -36,8 +35,10 @@ from ._core._sockets import create_unix_datagram_socket as create_unix_datagram_
 from ._core._sockets import create_unix_listener as create_unix_listener
 from ._core._sockets import getaddrinfo as getaddrinfo
 from ._core._sockets import getnameinfo as getnameinfo
+from ._core._sockets import wait_readable as wait_readable
 from ._core._sockets import wait_socket_readable as wait_socket_readable
 from ._core._sockets import wait_socket_writable as wait_socket_writable
+from ._core._sockets import wait_writable as wait_writable
 from ._core._streams import create_memory_object_stream as create_memory_object_stream
 from ._core._subprocesses import open_process as open_process
 from ._core._subprocesses import run_process as run_process
@@ -69,8 +70,8 @@ from ._core._typedattr import TypedAttributeSet as TypedAttributeSet
 from ._core._typedattr import typed_attribute as typed_attribute
 
 # Re-export imports so they look like they live directly in this package
-key: str
-value: Any
-for key, value in list(locals().items()):
-    if getattr(value, "__module__", "").startswith("anyio."):
-        value.__module__ = __name__
+for __value in list(locals().values()):
+    if getattr(__value, "__module__", "").startswith("anyio."):
+        __value.__module__ = __name__
+
+del __value

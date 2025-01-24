@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
@@ -9,7 +10,7 @@ enum class EAllocationStatus {
     Failed
 };
 
-class TAllocationInfo {
+class TAllocationInfo: public NColumnShard::TMonitoringObjectsCounter<TAllocationInfo> {
 private:
     std::shared_ptr<IAllocation> Allocation;
     YDB_READONLY(ui64, AllocationInternalGroupId, 0);
@@ -25,7 +26,7 @@ public:
         if (GetAllocationStatus() != EAllocationStatus::Failed) {
             Stage->Free(AllocatedVolume, GetAllocationStatus() == EAllocationStatus::Allocated);
         }
-        
+
         AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "destroy")("allocation_id", Identifier)("stage", Stage->GetName());
     }
 
@@ -47,12 +48,17 @@ public:
         AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier)("stage", Stage->GetName());
         AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName())(
             "allocation_internal_group_id", AllocationInternalGroupId);
+        auto allocationResult = Stage->Allocate(AllocatedVolume);
+        if (allocationResult.IsFail()) {
+            AllocationFailed = true;
+            Allocation->OnAllocationImpossible(allocationResult.GetErrorMessage());
+            Allocation = nullptr;
+            return false;
+        }
         const bool result = Allocation->OnAllocated(
             std::make_shared<TAllocationGuard>(ProcessId, ScopeId, Allocation->GetIdentifier(), ownerId, Allocation->GetMemory()), Allocation);
-        if (result) {
-            Stage->Allocate(AllocatedVolume);
-        } else {
-            Stage->Free(AllocatedVolume, false);
+        if (!result) {
+            Stage->Free(AllocatedVolume, true);
             AllocationFailed = true;
         }
         Allocation = nullptr;
@@ -69,8 +75,8 @@ public:
         }
     }
 
-    TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationInternalGroupId, const std::shared_ptr<IAllocation>& allocation,
-        const std::shared_ptr<TStageFeatures>& stage);
+    TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationInternalGroupId,
+        const std::shared_ptr<IAllocation>& allocation, const std::shared_ptr<TStageFeatures>& stage);
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

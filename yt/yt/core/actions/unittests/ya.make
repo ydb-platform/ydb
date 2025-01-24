@@ -2,15 +2,12 @@ GTEST(unittester-core-actions)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-IF (NOT OS_WINDOWS AND NOT ARCH_AARCH64)
-    ALLOCATOR(YT)
-ENDIF()
-
 PROTO_NAMESPACE(yt)
 
 SRCS(
     actions_ut.cpp
     bind_ut.cpp
+    cancelation_token_ut.cpp
     future_ut.cpp
     invoker_ut.cpp
     new_with_offloaded_dtor_ut.cpp

@@ -8,7 +8,7 @@ Unlike most other aggregate functions, they don't skip `NULL`, but accept it as 
 
 When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing two values is passed as the first [AGGREGATE_BY](../../aggregation.md#aggregateby) argument.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

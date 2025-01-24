@@ -2,7 +2,10 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/hive.h>
 
 namespace {
 
@@ -145,11 +148,16 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     const TSubDomainInfo& subDomain = *path.DomainInfo();
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
+    const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
+        .EnableTablePgTypes = context.SS->EnableTablePgTypes,
+        .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
+        .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+    };
 
 
     TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
         table, copyAlter, *appData->TypeRegistry, limits, subDomain,
-        context.SS->EnableTablePgTypes, context.SS->EnableTableDatetime64, errStr, localSequences);
+        featureFlags, errStr, localSequences);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -261,7 +269,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterTable TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -320,7 +328,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -492,7 +500,7 @@ public:
         TPathId pathId;
         if (alter.HasId_Deprecated() || alter.HasPathId()) {
             pathId = alter.HasPathId()
-                ? PathIdFromPathId(alter.GetPathId())
+                ? TPathId::FromProto(alter.GetPathId())
                 : context.SS->MakeLocalId(alter.GetId_Deprecated());
         }
 
@@ -524,8 +532,10 @@ public:
                 .IsTable()
                 .NotUnderOperation();
 
-            if (!Transaction.GetInternal()) {
-                checks.NotAsyncReplicaTable();
+            if (checks && !Transaction.GetInternal()) {
+                checks
+                    .NotAsyncReplicaTable()
+                    .NotBackupTable();
             }
 
             if (!context.IsAllowedPrivateTables) {
@@ -702,7 +712,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     const TString& parentPathStr = tx.GetWorkingDir();
     const TString& name = alter.GetName();
 
-    TPathId pathId = alter.HasPathId() ? PathIdFromPathId(alter.GetPathId()) : InvalidPathId;
+    TPathId pathId = alter.HasPathId() ? TPathId::FromProto(alter.GetPathId()) : InvalidPathId;
 
     if (!alter.HasName() && !pathId) {
         return {CreateAlterTable(id, tx)};
@@ -724,6 +734,10 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     }
 
     if (path.IsCommonSensePath()) {
+        return {CreateAlterTable(id, tx)};
+    }
+
+    if (path.IsBackupTable()) {
         return {CreateAlterTable(id, tx)};
     }
 

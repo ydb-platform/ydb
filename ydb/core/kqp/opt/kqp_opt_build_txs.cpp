@@ -3,13 +3,13 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/core/services/yql_out_transformers.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
@@ -560,16 +560,20 @@ public:
         }
 
         if (!query.Effects().Empty()) {
-            auto tx = BuildTx(query.Effects().Ptr(), ctx, /* isPrecompute */ false);
-            if (!tx) {
-                return TStatus::Error;
-            }
+            auto collectedEffects = CollectEffects(query.Effects(), ctx, *KqpCtx);
 
-            if (!CheckEffectsTx(tx.Cast(), query, ctx)) {
-                return TStatus::Error;
-            }
+            for (auto& effects : collectedEffects) {
+                auto tx = BuildTx(effects.Ptr(), ctx, /* isPrecompute */ false);
+                if (!tx) {
+                    return TStatus::Error;
+                }
 
-            BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
+                if (!CheckEffectsTx(tx.Cast(), effects, ctx)) {
+                    return TStatus::Error;
+                }
+
+                BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
+            }
         }
 
         return TStatus::Ok;
@@ -581,8 +585,102 @@ public:
     }
 
 private:
-    bool HasTableEffects(const TKqlQuery& query) const {
-        for (const TExprBase& effect : query.Effects()) {
+    TVector<TExprList> CollectEffects(const TExprList& list, TExprContext& ctx, TKqpOptimizeContext& kqpCtx) {
+        struct TEffectsInfo {
+            enum class EType {
+                KQP_EFFECT,
+                KQP_SINK,
+                KQP_BATCH_SINK,
+                EXTERNAL_SINK,
+            };
+
+            EType Type;
+            THashSet<TStringBuf> TablesPathIds;
+            TVector<TExprNode::TPtr> Exprs;
+        };
+        TVector<TEffectsInfo> effectsInfos;
+
+        for (const auto& expr : list) {
+            if (auto sinkEffect = expr.Maybe<TKqpSinkEffect>()) {
+                const size_t sinkIndex = FromString(TStringBuf(sinkEffect.Cast().SinkIndex()));
+                const auto stage = sinkEffect.Cast().Stage().Maybe<TDqStageBase>();
+                YQL_ENSURE(stage);
+                YQL_ENSURE(stage.Cast().Outputs());
+                const auto outputs = stage.Cast().Outputs().Cast();
+                YQL_ENSURE(sinkIndex < outputs.Size());
+                const auto sink = outputs.Item(sinkIndex).Maybe<TDqSink>();
+                YQL_ENSURE(sink);
+
+                const auto sinkSettings = sink.Cast().Settings().Maybe<TKqpTableSinkSettings>();
+                if (!sinkSettings) {
+                    // External writes always use their own physical transaction.
+                    effectsInfos.emplace_back();
+                    effectsInfos.back().Type = TEffectsInfo::EType::EXTERNAL_SINK;
+                    effectsInfos.back().Exprs.push_back(expr.Ptr());
+                } else {
+                    // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
+
+                    const auto& tableDescription = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path());
+                    if (tableDescription.Metadata->Kind == EKikimrTableKind::Olap) {
+                        const TStringBuf tablePathId = sinkSettings.Cast().Table().PathId().Value();
+
+                        auto it = std::find_if(
+                            std::begin(effectsInfos),
+                            std::end(effectsInfos),
+                            [&tablePathId](const auto& effectsInfo) {
+                                return effectsInfo.Type == TEffectsInfo::EType::KQP_SINK
+                                    && !effectsInfo.TablesPathIds.contains(tablePathId);
+                            });
+                        if (it == std::end(effectsInfos)) {
+                            effectsInfos.emplace_back();
+                            it = std::prev(std::end(effectsInfos));
+                            it->Type = TEffectsInfo::EType::KQP_SINK;
+                        }
+                        it->TablesPathIds.insert(tablePathId);
+                        it->Exprs.push_back(expr.Ptr());
+                    } else {
+                        auto it = std::find_if(
+                            std::begin(effectsInfos),
+                            std::end(effectsInfos),
+                            [](const auto& effectsInfo) { return effectsInfo.Type == TEffectsInfo::EType::KQP_BATCH_SINK; });
+                        if (it == std::end(effectsInfos)) {
+                            effectsInfos.emplace_back();
+                            it = std::prev(std::end(effectsInfos));
+                            it->Type = TEffectsInfo::EType::KQP_BATCH_SINK;
+                        }
+                        it->Exprs.push_back(expr.Ptr());
+                    }
+                }
+            } else {
+                // Table effects are executed all in one physical transaction.
+                auto it = std::find_if(
+                    std::begin(effectsInfos),
+                    std::end(effectsInfos),
+                    [](const auto& effectsInfo) { return effectsInfo.Type == TEffectsInfo::EType::KQP_EFFECT; });
+                if (it == std::end(effectsInfos)) {
+                    effectsInfos.emplace_back();
+                    it = std::prev(std::end(effectsInfos));
+                    it->Type = TEffectsInfo::EType::KQP_EFFECT;
+                }
+                it->Exprs.push_back(expr.Ptr());
+            }
+        }
+
+        TVector<TExprList> results;
+
+        for (const auto& effects : effectsInfos) {
+            auto builder = Build<TExprList>(ctx, list.Pos());
+            for (const auto& expr : effects.Exprs) {
+                builder.Add(expr);
+            }
+            results.push_back(builder.Done());
+        }
+
+        return results;
+    }
+
+    bool HasTableEffects(const TExprList& effectsList) const {
+        for (const TExprBase& effect : effectsList) {
             if (auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>()) {
                 // (KqpSinkEffect (DqStage (... ((DqSink '0 (DataSink '"kikimr") ...)))) '0)
                 auto sinkEffect = maybeSinkEffect.Cast();
@@ -608,7 +706,7 @@ private:
         return false;
     }
 
-    bool CheckEffectsTx(TKqpPhysicalTx tx, const TKqlQuery& query, TExprContext& ctx) const {
+    bool CheckEffectsTx(TKqpPhysicalTx tx, const TExprList& effectsList, TExprContext& ctx) const {
         TMaybeNode<TExprBase> blackistedNode;
         VisitExpr(tx.Ptr(), [&blackistedNode](const TExprNode::TPtr& exprNode) {
             if (blackistedNode) {
@@ -630,7 +728,7 @@ private:
             return true;
         });
 
-        if (blackistedNode && HasTableEffects(query)) {
+        if (blackistedNode && HasTableEffects(effectsList)) {
             ctx.AddError(TIssue(ctx.GetPosition(blackistedNode.Cast().Pos()), TStringBuilder()
                 << "Callable not expected in effects tx: " << blackistedNode.Cast<TCallable>().CallableName()));
             return false;

@@ -31,6 +31,8 @@ TDqConfiguration::TDqConfiguration() {
 
     REGISTER_SETTING(*this, _LiteralTimeout);
     REGISTER_SETTING(*this, _TableTimeout);
+    REGISTER_SETTING(*this, QueryTimeout);
+
     REGISTER_SETTING(*this, _LongWorkersAllocationWarnTimeout);
     REGISTER_SETTING(*this, _LongWorkersAllocationFailTimeout);
 
@@ -116,6 +118,7 @@ TDqConfiguration::TDqConfiguration() {
             return res;
         });
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
+    REGISTER_SETTING(*this, Scheduler);
 }
 
 } // namespace NYql

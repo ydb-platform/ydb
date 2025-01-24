@@ -1,0 +1,80 @@
+diff --git a/include/math.h b/include/math.h
+index 5bde46a..33bf0eb 100644
+--- a/include/math.h
++++ b/include/math.h
+@@ -326,7 +326,7 @@ extern "C++" {
+ #      undef isinf
+ #    endif
+ 
+-#    ifdef isnan
++#    if defined(isnan) && !defined(_LIBCPP_MSVCRT)
+ #      undef isnan
+ #    endif
+ 
+diff --git a/include/string b/include/string
+index 123e1d6..57624c7 100644
+--- a/include/string
++++ b/include/string
+@@ -703,6 +703,7 @@ struct __init_with_sentinel_tag {};
+ template<class _CharT, class _Traits, class _Allocator>
+ class basic_string
+ {
++    static_assert(sizeof(_CharT) <= 4, "libc++ implementation of std::basic_string does not support extra-wide character types");
+ public:
+     typedef basic_string                                 __self;
+     typedef basic_string_view<_CharT, _Traits>           __self_view;
+@@ -947,9 +948,11 @@ public:
+     __init(__s, traits_type::length(__s));
+   }
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+   basic_string(nullptr_t) = delete;
+ #endif
++  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
++  basic_string(nullptr_t, size_t) = delete;
+ 
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(const _CharT* __s, size_type __n)
+       : __r_(__default_init_tag(), __default_init_tag()) {
+@@ -957,6 +960,9 @@ public:
+     __init(__s, __n);
+   }
+ 
++  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
++  basic_string(nullptr_t, size_t, const _Allocator&) = delete;
++
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
+   basic_string(const _CharT* __s, size_type __n, const _Allocator& __a)
+       : __r_(__default_init_tag(), __a) {
+@@ -1120,7 +1126,7 @@ public:
+ #endif
+     _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
+     basic_string& operator=(const value_type* __s) {return assign(__s);}
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+     basic_string& operator=(nullptr_t) = delete;
+ #endif
+     _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(value_type __c);
+@@ -1182,6 +1188,13 @@ public:
+         return (__is_long() ? __get_long_cap() : static_cast<size_type>(__min_cap)) - 1;
+     }
+ 
++#if _YNDX_LIBCXX_ENABLE_STRING_RESIZE_UNINITIALIZED == 1
++    inline void resize_uninitialized(size_type __n)
++    {
++        __resize_default_init(__n);
++    }
++#endif
++
+     _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n, value_type __c);
+     _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n) { resize(__n, value_type()); }
+ 
+@@ -1701,7 +1714,7 @@ public:
+     { return ends_with(__self_view(__s)); }
+ #endif
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+     constexpr _LIBCPP_HIDE_FROM_ABI
+     bool contains(__self_view __sv) const noexcept
+     { return __self_view(data(), size()).contains(__sv); }

@@ -58,7 +58,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Process");
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Process");
 
 static constexpr pid_t InvalidProcessId = -1;
 
@@ -615,7 +615,7 @@ private:
 #else
     pid_t DoSpawnChildVFork()
     {
-        // NB: fork() copy-on-write cause undefined behaviour when run concurrently with
+        // NB: Fork() copy-on-write cause undefined behaviour when run concurrently with
         // Disk IO on O_DIRECT file descriptor. vfork don't suffer from the same issue.
         // NB: vfork() blocks parent until child executes new program or exits.
         int pid = vfork();
@@ -657,7 +657,7 @@ private:
                 YT_VERIFY(Pipe_);
                 ssize_t size = HandleEintr(::write, Pipe_->GetWriteFD(), &data, sizeof(data));
                 YT_VERIFY(size == sizeof(data));
-                AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
+                AbortProcessSilently(EProcessExitCode::GenericError);
             }
         }
         YT_ABORT();
@@ -720,6 +720,10 @@ IConnectionWriterPtr TSimpleProcess::GetStdInWriter()
 
 TFuture<void> TProcessBase::Spawn()
 {
+    auto finally = Finally([&] {
+        CleanUpParent();
+    });
+
     try {
         // Resolve binary path.
         std::vector<TError> innerErrors;
@@ -753,13 +757,6 @@ TFuture<void> TProcessBase::Spawn()
 void TSimpleProcess::DoSpawn()
 {
 #ifdef _unix_
-    auto finally = Finally([&] {
-        StdPipes_[STDIN_FILENO].CloseReadFD();
-        StdPipes_[STDOUT_FILENO].CloseWriteFD();
-        StdPipes_[STDERR_FILENO].CloseWriteFD();
-        PipeFactory_.Clear();
-    });
-
     YT_VERIFY(ProcessId_ == InvalidProcessId && !Finished_);
 
     // Make sure no spawn action closes Pipe_.WriteFD
@@ -806,9 +803,19 @@ void TSimpleProcess::DoSpawn()
         PollPeriod_);
 
     AsyncWaitExecutor_->Start();
+
+    YT_LOG_INFO("Process spawned (Pid: %v)", ProcessId_);
 #else
     THROW_ERROR_EXCEPTION("Unsupported platform");
 #endif
+}
+
+void TSimpleProcess::CleanUpParent()
+{
+    StdPipes_[STDIN_FILENO].CloseReadFD();
+    StdPipes_[STDOUT_FILENO].CloseWriteFD();
+    StdPipes_[STDERR_FILENO].CloseWriteFD();
+    PipeFactory_.Clear();
 }
 
 void TSimpleProcess::PrepareErrorPipe()

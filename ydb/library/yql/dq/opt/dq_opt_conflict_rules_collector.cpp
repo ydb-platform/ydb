@@ -8,8 +8,6 @@ EJoinKind GetEquivalentJoinByAlgebraicProperties(EJoinKind joinKind) {
     switch (joinKind) {
         case EJoinKind::Exclusion:
             return EJoinKind::OuterJoin;
-        case EJoinKind::LeftOnly:
-            return EJoinKind::LeftJoin;
         default:
             return joinKind;
     }    
@@ -34,9 +32,9 @@ bool OperatorsAreAssociative(EJoinKind lhs, EJoinKind rhs) {
     rhs = GetEquivalentJoinByAlgebraicProperties(rhs);
 
     static THashMap<EJoinKind, THashSet<EJoinKind>> ASSOC_TABLE = {
-        {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
-        {EJoinKind::InnerJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
-        {EJoinKind::LeftJoin, {EJoinKind::LeftJoin}},
+        {EJoinKind::Cross,     {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftOnly, EJoinKind::LeftJoin}},
+        {EJoinKind::InnerJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftOnly, EJoinKind::LeftJoin}},
+        {EJoinKind::LeftJoin,  {EJoinKind::LeftJoin}},
         {EJoinKind::OuterJoin, {EJoinKind::LeftJoin, EJoinKind::OuterJoin}}
     };
 
@@ -52,10 +50,11 @@ bool OperatorsAreLeftAsscom(EJoinKind lhs, EJoinKind rhs) {
     rhs = GetEquivalentJoinByAlgebraicProperties(rhs);
 
     static THashMap<EJoinKind, THashSet<EJoinKind>> LASSCOM_TABLE = {
-        {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
-        {EJoinKind::InnerJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
-        {EJoinKind::LeftSemi, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
-        {EJoinKind::LeftJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin, EJoinKind::OuterJoin}},
+        {EJoinKind::Cross,     {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftOnly, EJoinKind::LeftJoin}},
+        {EJoinKind::InnerJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftOnly, EJoinKind::LeftJoin}},
+        {EJoinKind::LeftSemi,  {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftOnly, EJoinKind::LeftJoin}},
+        {EJoinKind::LeftOnly,  {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftOnly, EJoinKind::LeftJoin}},
+        {EJoinKind::LeftJoin,  {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin, EJoinKind::OuterJoin}},
         {EJoinKind::OuterJoin, {EJoinKind::LeftJoin, EJoinKind::OuterJoin}}
     };
 
@@ -71,7 +70,7 @@ bool OperatorsAreRightAsscom(EJoinKind lhs, EJoinKind rhs) {
     rhs = GetEquivalentJoinByAlgebraicProperties(rhs);
 
     static THashMap<EJoinKind, THashSet<EJoinKind>> RASSCOM_TABLE = {
-        {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin}},
+        {EJoinKind::Cross,     {EJoinKind::Cross, EJoinKind::InnerJoin}},
         {EJoinKind::InnerJoin, {EJoinKind::Cross, EJoinKind::InnerJoin}},
         {EJoinKind::OuterJoin, {EJoinKind::OuterJoin}}
     };

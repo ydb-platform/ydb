@@ -1,4 +1,4 @@
-# Version 2024083101, Last Updated Sun Sep  1 07:07:02 2024 UTC
+# Version 2025011900, Last Updated Sun Jan 19 07:07:01 2025 UTC
 AAA
 AARP
 ABB
@@ -297,7 +297,6 @@ CY
 CYMRU
 CYOU
 CZ
-DABUR
 DAD
 DANCE
 DATA

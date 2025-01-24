@@ -31,12 +31,12 @@ public:
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
         Bytes += p->GetTotalBlobBytes();
         Count += 1;
-        RecordsCount += p->NumRows();
+        RecordsCount += p->GetRecordsCount();
     }
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
         Bytes -= p->GetTotalBlobBytes();
         Count -= 1;
-        RecordsCount -= p->NumRows();
+        RecordsCount -= p->GetRecordsCount();
         AFL_VERIFY(Bytes >= 0);
         AFL_VERIFY(Count >= 0);
         AFL_VERIFY(RecordsCount >= 0);

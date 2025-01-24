@@ -1,12 +1,12 @@
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/client/flat_ut_client.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include "ydb_common_ut.h"
 

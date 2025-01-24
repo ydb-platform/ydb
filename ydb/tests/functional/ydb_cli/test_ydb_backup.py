@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from ydb.tests.library.common import yatest_common
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -10,12 +9,14 @@ import os
 import logging
 import pytest
 
+import yatest
+
 logger = logging.getLogger(__name__)
 
 
 def backup_bin():
     if os.getenv("YDB_CLI_BINARY"):
-        return yatest_common.binary_path(os.getenv("YDB_CLI_BINARY"))
+        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
     raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
@@ -34,7 +35,7 @@ def upsert_simple(session, full_path):
 
 
 def output_path(*args):
-    path = os.path.join(yatest_common.output_path(), *args)
+    path = os.path.join(yatest.common.output_path(), *args)
     os.makedirs(path, exist_ok=False)
     return path
 
@@ -207,7 +208,7 @@ def is_system_object(object):
 class BaseTestBackupInFiles(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(extra_feature_flags=["enable_resource_pools"]))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags=["enable_resource_pools"]))
         cls.cluster.start()
         cls.root_dir = "/Root"
         driver_config = ydb.DriverConfig(
@@ -229,7 +230,7 @@ class BaseTestBackupInFiles(object):
     def create_backup(cls, path, expected_dirs, check_data, additional_args=[]):
         _, name = os.path.split(path)
         backup_files_dir = output_path(cls.test_name, "backup_files_dir_" + path.replace("/", "_"))
-        execution = yatest_common.execute(
+        execution = yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -270,6 +271,23 @@ class BaseTestBackupInFiles(object):
             for child in self.driver.scheme_client.list_directory(path).children
             if not is_system_object(child)
         ]
+
+    def create_user(self, user, password="password"):
+        yatest.common.execute(
+            [
+                backup_bin(),
+                "--verbose",
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                "--database", "/Root",
+                "yql",
+                "--script", f"CREATE USER {user} PASSWORD '{password}'",
+            ]
+        )
+
+    def create_users(self):
+        self.create_user("alice")
+        self.create_user("bob")
+        self.create_user("eve")
 
 
 class TestBackupSingle(BaseTestBackupInFiles):
@@ -482,7 +500,7 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
 
         # Backup table
         backup_files_dir = output_path(self.test_name, 'test_single_table_with_data_backup_restore' + postfix, "backup_files_dir")
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -514,7 +532,7 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
         ]
         if use_bulk_upsert:
             restore_cmd.append("--bulk-upsert")
-        yatest_common.execute(restore_cmd)
+        yatest.common.execute(restore_cmd)
 
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
@@ -545,7 +563,7 @@ class TestBackupRestoreInRoot(BaseTestBackupInFiles):
 
         # Backup table
         backup_files_dir = output_path(self.test_name, 'test_single_table_with_data_backup_restore', "backup_files_dir")
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -566,7 +584,7 @@ class TestBackupRestoreInRoot(BaseTestBackupInFiles):
         )
 
         # Restore table
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -600,7 +618,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
 
         # Backup table
         backup_files_dir = output_path(self.test_name, 'test_single_table_with_data_backup_restore', "backup_files_dir")
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -622,7 +640,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
         )
 
         # Restore table
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -655,7 +673,7 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
 
         # Backup table
         backup_files_dir = output_path(self.test_name, "backup_files_dir")
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -680,7 +698,7 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
         open(os.path.join(backup_files_dir, "table", "incomplete"), "w").close()
 
         # Restore table and check that it fails without restoring anything
-        execution = yatest_common.execute(
+        execution = yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -705,7 +723,7 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
             is_(["table"])
         )
 
-        execution = yatest_common.execute(
+        execution = yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -771,7 +789,7 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
 
         # Backup table
         backup_files_dir = output_path(self.test_name, 'test_single_table_with_data_backup_restore', "backup_files_dir")
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -792,7 +810,7 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
         )
 
         # Restore table
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -824,12 +842,13 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
         session = self.driver.table_client.session().create()
 
         # Create table and modify permissions on it
+        self.create_users()
         create_table_with_data(session, "folder/table")
         modify_permissions(self.driver.scheme_client, "folder/table")
 
         # Backup table
         backup_files_dir = output_path(self.test_name, "test_single_table", "backup_files_dir")
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -859,7 +878,7 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
             "--path", "/Root/restored",
             "--input", backup_files_dir
         ]
-        yatest_common.execute(restore_cmd)
+        yatest.common.execute(restore_cmd)
 
         assert_that(
             self.scheme_listdir("/Root"),
@@ -878,6 +897,7 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
 class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
     def test_folder_with_table(self):
         # Create folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
@@ -889,7 +909,7 @@ class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
 
         # Backup folder with table
         backup_files_dir = output_path(self.test_name, "test_folder_with_table", "backup_files_dir")
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -915,7 +935,7 @@ class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
             "--path", "/Root/restored",
             "--input", backup_files_dir
         ]
-        yatest_common.execute(restore_cmd)
+        yatest.common.execute(restore_cmd)
 
         assert_that(
             self.scheme_listdir("/Root"),
@@ -934,6 +954,7 @@ class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
 class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupInFiles):
     def test_dont_overwrite_on_already_existing(self):
         # Create folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
@@ -945,7 +966,7 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
 
         # Backup folder with table
         backup_files_dir = output_path(self.test_name, "test_dont_overwrite_on_already_existing", "backup_files_dir")
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -989,7 +1010,7 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
             "--path", "/Root",
             "--input", backup_files_dir
         ]
-        yatest_common.execute(restore_cmd)
+        yatest.common.execute(restore_cmd)
         assert_that(
             self.scheme_listdir("/Root"),
             is_(["folder"])
@@ -1005,7 +1026,7 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
             "--path", "/Root/restored",
             "--input", backup_files_dir
         ]
-        yatest_common.execute(restore_cmd)
+        yatest.common.execute(restore_cmd)
 
         assert_that(
             self.scheme_listdir("/Root"),
@@ -1033,6 +1054,7 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
 class TestPermissionsBackupRestoreSchemeOnly(BaseTestBackupInFiles):
     def test_scheme_only(self):
         # Create folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
@@ -1044,7 +1066,7 @@ class TestPermissionsBackupRestoreSchemeOnly(BaseTestBackupInFiles):
 
         # Backup folder with table
         backup_files_dir = output_path(self.test_name, "test_scheme_only", "backup_files_dir")
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -1071,7 +1093,7 @@ class TestPermissionsBackupRestoreSchemeOnly(BaseTestBackupInFiles):
             "--path", "/Root/restored",
             "--input", backup_files_dir,
         ]
-        yatest_common.execute(restore_cmd)
+        yatest.common.execute(restore_cmd)
 
         assert_that(
             self.scheme_listdir("/Root"),
@@ -1090,12 +1112,13 @@ class TestPermissionsBackupRestoreSchemeOnly(BaseTestBackupInFiles):
 class TestPermissionsBackupRestoreEmptyDir(BaseTestBackupInFiles):
     def test_empty_dir(self):
         # Create empty folder and modify permissions on it
+        self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
         modify_permissions(self.driver.scheme_client, "folder")
 
         # Backup folder
         backup_files_dir = output_path(self.test_name, "test_empty_dir", "backup_files_dir")
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -1121,7 +1144,7 @@ class TestPermissionsBackupRestoreEmptyDir(BaseTestBackupInFiles):
             "--path", "/Root/restored",
             "--input", backup_files_dir
         ]
-        yatest_common.execute(restore_cmd)
+        yatest.common.execute(restore_cmd)
 
         assert_that(
             self.scheme_listdir("/Root"),
@@ -1140,12 +1163,13 @@ class TestRestoreACLOption(BaseTestBackupInFiles):
         session = self.driver.table_client.session().create()
 
         # Create table and modify permissions on it
+        self.create_users()
         create_table_with_data(session, "folder/table")
         modify_permissions(self.driver.scheme_client, "folder/table")
 
         # Backup table
         backup_files_dir = output_path(self.test_name, "test_single_table", "backup_files_dir")
-        yatest_common.execute(
+        yatest.common.execute(
             [
                 backup_bin(),
                 "--verbose",
@@ -1176,7 +1200,7 @@ class TestRestoreACLOption(BaseTestBackupInFiles):
             "--input", backup_files_dir,
             "--restore-acl", "false"
         ]
-        yatest_common.execute(restore_cmd)
+        yatest.common.execute(restore_cmd)
 
         assert_that(
             self.scheme_listdir("/Root"),
@@ -1196,5 +1220,69 @@ class TestRestoreACLOption(BaseTestBackupInFiles):
         )
         assert_that(
             is_permissions_the_same(self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
+            is_(False)
+        )
+
+
+class TestRestoreNoData(BaseTestBackupInFiles):
+    def test_restore_no_data(self):
+        self.driver.scheme_client.make_directory("/Root/folder")
+
+        session = self.driver.table_client.session().create()
+
+        # Create table and modify permissions on it
+        self.create_users()
+        create_table_with_data(session, "folder/table")
+        modify_permissions(self.driver.scheme_client, "folder/table")
+
+        # Backup table
+        backup_files_dir = output_path(self.test_name, "test_single_table", "backup_files_dir")
+        yatest.common.execute(
+            [
+                backup_bin(),
+                "--verbose",
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                "--database", "/Root",
+                "tools", "dump",
+                "--path", "/Root/folder",
+                "--output", backup_files_dir
+            ]
+        )
+        assert_that(
+            os.listdir(backup_files_dir),
+            is_(["table"])
+        )
+        assert_that(
+            self.scheme_listdir("/Root"),
+            is_(["folder"])
+        )
+
+        # Restore table
+        restore_cmd = [
+            backup_bin(),
+            "--verbose",
+            "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+            "--database", "/Root",
+            "tools", "restore",
+            "--path", "/Root/restored",
+            "--input", backup_files_dir,
+            "--restore-data", "false",
+        ]
+        yatest.common.execute(restore_cmd)
+
+        assert_that(
+            self.scheme_listdir("/Root"),
+            contains_inanyorder("folder", "restored")
+        )
+        assert_that(
+            self.scheme_listdir("/Root/restored"),
+            is_(["table"])
+        )
+        assert_that(
+            is_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table", False),
+            is_(True)
+        )
+        assert_that(
+            is_data_the_same(session, "/Root/folder/table", "/Root/restored/table"),
             is_(False)
         )

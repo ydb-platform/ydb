@@ -6,7 +6,7 @@ In {{ ydb-full-name }}, you can use [external connections](#connection-write) or
 
 Using connections for data writing is convenient for prototyping and initial setup. The SQL expression demonstrates writing data directly to an external data source.
 
-```sql
+```yql
 INSERT INTO `connection`.`test/`
 WITH
 (
@@ -24,7 +24,7 @@ When working with external connections, only read (`SELECT`) and insert (`INSERT
 
 If you need to write data regularly, doing this using external tables is convenient. In this case, there is no need to specify all the details of working with this data in each query. To write data to the bucket, create an [external table](external_table.md) in S3 ({{ objstorage-full-name }}) and use the usual SQL `INSERT INTO` statement:
 
-```sql
+```yql
 INSERT INTO `test`
 SELECT
     "value" AS value, "name" AS name

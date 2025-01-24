@@ -1,6 +1,6 @@
 #include "ut_utils.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/lib/fq/scope.h>
 #include <ydb/core/fq/libs/actors/proxy.h>
 #include <ydb/core/fq/libs/events/events.h>
@@ -10,7 +10,7 @@
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
-#include <ydb/library/yql/utils/bind_in_range.h>
+#include <yql/essentials/utils/network/bind_in_range.h>
 
 #include <util/system/file.h>
 #include <util/stream/str.h>

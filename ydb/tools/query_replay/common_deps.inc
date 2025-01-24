@@ -10,7 +10,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/getopt
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/grpc/server
     library/cpp/regex/pcre
     ydb/core/actorlib_impl
@@ -45,15 +45,15 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/core/tx/mediator
     ydb/core/tx/time_cast
     ydb/core/tx/tx_proxy
-    ydb/library/yql/core/services/mounts
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/providers/yt/codec/codegen
-    ydb/library/yql/providers/yt/comp_nodes/llvm14
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/core/services/mounts
+    yql/essentials/minikql/comp_nodes/llvm14
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/llvm14
+    yql/essentials/public/udf/service/exception_policy
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/table
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery
@@ -64,22 +64,22 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/services/ydb
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/udfs/common/datetime
-    ydb/library/yql/udfs/common/datetime2
-    ydb/library/yql/udfs/common/digest
-    ydb/library/yql/udfs/common/histogram
-    ydb/library/yql/udfs/common/hyperloglog
-    ydb/library/yql/udfs/common/hyperscan
-    ydb/library/yql/udfs/common/json
-    ydb/library/yql/udfs/common/json2
-    ydb/library/yql/udfs/common/math
-    ydb/library/yql/udfs/common/pire
-    ydb/library/yql/udfs/common/re2
-    ydb/library/yql/udfs/common/set
-    ydb/library/yql/udfs/common/stat
-    ydb/library/yql/udfs/common/string
-    ydb/library/yql/udfs/common/top
-    ydb/library/yql/udfs/common/topfreq
-    ydb/library/yql/udfs/common/yson2
-    ydb/library/yql/udfs/logs/dsv
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/udfs/common/datetime2
+    yql/essentials/udfs/common/digest
+    yql/essentials/udfs/common/histogram
+    yql/essentials/udfs/common/hyperloglog
+    yql/essentials/udfs/common/hyperscan
+    yql/essentials/udfs/common/json
+    yql/essentials/udfs/common/json2
+    yql/essentials/udfs/common/math
+    yql/essentials/udfs/common/pire
+    yql/essentials/udfs/common/re2
+    yql/essentials/udfs/common/set
+    yql/essentials/udfs/common/stat
+    yql/essentials/udfs/common/string
+    yql/essentials/udfs/common/top
+    yql/essentials/udfs/common/topfreq
+    yql/essentials/udfs/common/yson2
+    yql/essentials/udfs/logs/dsv
+    yql/essentials/sql/pg_dummy
 )

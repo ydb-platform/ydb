@@ -1,0 +1,200 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  14395d49cccf7dd9c262788c7c3eb609
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: COPYING at line 19
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [5:22]
+
+KEEP     BSD-3-Clause         720be7eb831bfde6b4599190542bfa9a
+BELONGS ya.make
+    License text:
+         * // Use of this source code is governed by a BSD-style license that can be
+         * // found in the LICENSE file.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        lib/ngtcp2_window_filter.c [32:33]
+        lib/ngtcp2_window_filter.h [32:33]
+
+KEEP     MIT                  8c6b397cbef46628bea401075e15b1d5
+BELONGS ya.make
+    License text:
+        The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [1:1]
+
+KEEP     MIT                  a00cb0c2918046e6e350bbe37dc87fff
+BELONGS ya.make
+    License text:
+        License
+        -------
+        The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.rst [352:355]
+
+KEEP     MIT                  a3a8f7feced3937b87cd090ba748e24b
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: crypto/includes/ngtcp2/ngtcp2_crypto.h at line 20, crypto/includes/ngtcp2/ngtcp2_crypto_quictls.h at line 20, crypto/quictls/quictls.c at line 20, crypto/shared.c at line 20, crypto/shared.h at line 20, lib/includes/ngtcp2/ngtcp2.h at line 21, lib/includes/ngtcp2/version.h at line 20, lib/ngtcp2_acktr.c at line 20, lib/ngtcp2_acktr.h at line 20, lib/ngtcp2_addr.c at line 20, lib/ngtcp2_addr.h at line 20, lib/ngtcp2_balloc.c at line 20, lib/ngtcp2_balloc.h at line 20, lib/ngtcp2_bbr.c at line 20, lib/ngtcp2_bbr.h at line 20, lib/ngtcp2_buf.c at line 20, lib/ngtcp2_buf.h at line 20, lib/ngtcp2_cc.c at line 20, lib/ngtcp2_cc.h at line 20, lib/ngtcp2_cid.c at line 20, lib/ngtcp2_cid.h at line 20, lib/ngtcp2_conn.c at line 20, lib/ngtcp2_conn.h at line 20, lib/ngtcp2_conn_stat.h at line 20, lib/ngtcp2_conv.c at line 20, lib/ngtcp2_conv.h at line 20, lib/ngtcp2_crypto.c at line 20, lib/ngtcp2_crypto.h at line 20, lib/ngtcp2_err.c at line 20, lib/ngtcp2_err.h at line 20, lib/ngtcp2_frame_chain.c at line 20, lib/ngtcp2_frame_chain.h at line 20, lib/ngtcp2_gaptr.c at line 20, lib/ngtcp2_gaptr.h at line 20, lib/ngtcp2_idtr.c at line 20, lib/ngtcp2_idtr.h at line 20, lib/ngtcp2_ksl.c at line 20, lib/ngtcp2_ksl.h at line 20, lib/ngtcp2_log.c at line 20, lib/ngtcp2_log.h at line 20, lib/ngtcp2_macro.h at line 20, lib/ngtcp2_map.c at line 21, lib/ngtcp2_map.h at line 21, lib/ngtcp2_mem.c at line 21, lib/ngtcp2_mem.h at line 21, lib/ngtcp2_net.h at line 20, lib/ngtcp2_objalloc.c at line 20, lib/ngtcp2_objalloc.h at line 20, lib/ngtcp2_opl.c at line 20, lib/ngtcp2_opl.h at line 20, lib/ngtcp2_path.c at line 20, lib/ngtcp2_path.h at line 20, lib/ngtcp2_pkt.c at line 20, lib/ngtcp2_pkt.h at line 20, lib/ngtcp2_pktns_id.h at line 20, lib/ngtcp2_pmtud.c at line 20, lib/ngtcp2_pmtud.h at line 20, lib/ngtcp2_ppe.c at line 20, lib/ngtcp2_ppe.h at line 20, lib/ngtcp2_pq.c at line 21, lib/ngtcp2_pq.h at line 21, lib/ngtcp2_pv.c at line 20, lib/ngtcp2_pv.h at line 20, lib/ngtcp2_qlog.c at line 20, lib/ngtcp2_qlog.h at line 20, lib/ngtcp2_range.c at line 20, lib/ngtcp2_range.h at line 20, lib/ngtcp2_rcvry.h at line 20, lib/ngtcp2_ringbuf.c at line 20, lib/ngtcp2_ringbuf.h at line 20, lib/ngtcp2_rob.c at line 20, lib/ngtcp2_rob.h at line 20, lib/ngtcp2_rst.c at line 20, lib/ngtcp2_rst.h at line 20, lib/ngtcp2_rtb.c at line 20, lib/ngtcp2_rtb.h at line 20, lib/ngtcp2_settings.c at line 20, lib/ngtcp2_settings.h at line 20, lib/ngtcp2_str.c at line 20, lib/ngtcp2_str.h at line 20, lib/ngtcp2_strm.c at line 20, lib/ngtcp2_strm.h at line 20, lib/ngtcp2_transport_params.c at line 20, lib/ngtcp2_transport_params.h at line 20, lib/ngtcp2_tstamp.h at line 20, lib/ngtcp2_unreachable.c at line 20, lib/ngtcp2_unreachable.h at line 20, lib/ngtcp2_vec.c at line 20, lib/ngtcp2_vec.h at line 20, lib/ngtcp2_version.c at line 20, lib/ngtcp2_window_filter.c at line 20, lib/ngtcp2_window_filter.h at line 20
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        crypto/includes/ngtcp2/ngtcp2_crypto.h [6:23]
+        crypto/includes/ngtcp2/ngtcp2_crypto_quictls.h [6:23]
+        crypto/quictls/quictls.c [6:23]
+        crypto/shared.c [6:23]
+        crypto/shared.h [6:23]
+        lib/includes/ngtcp2/ngtcp2.h [7:24]
+        lib/includes/ngtcp2/version.h [6:23]
+        lib/ngtcp2_acktr.c [6:23]
+        lib/ngtcp2_acktr.h [6:23]
+        lib/ngtcp2_addr.c [6:23]
+        lib/ngtcp2_addr.h [6:23]
+        lib/ngtcp2_balloc.c [6:23]
+        lib/ngtcp2_balloc.h [6:23]
+        lib/ngtcp2_bbr.c [6:23]
+        lib/ngtcp2_bbr.h [6:23]
+        lib/ngtcp2_buf.c [6:23]
+        lib/ngtcp2_buf.h [6:23]
+        lib/ngtcp2_cc.c [6:23]
+        lib/ngtcp2_cc.h [6:23]
+        lib/ngtcp2_cid.c [6:23]
+        lib/ngtcp2_cid.h [6:23]
+        lib/ngtcp2_conn.c [6:23]
+        lib/ngtcp2_conn.h [6:23]
+        lib/ngtcp2_conn_stat.h [6:23]
+        lib/ngtcp2_conv.c [6:23]
+        lib/ngtcp2_conv.h [6:23]
+        lib/ngtcp2_crypto.c [6:23]
+        lib/ngtcp2_crypto.h [6:23]
+        lib/ngtcp2_err.c [6:23]
+        lib/ngtcp2_err.h [6:23]
+        lib/ngtcp2_frame_chain.c [6:23]
+        lib/ngtcp2_frame_chain.h [6:23]
+        lib/ngtcp2_gaptr.c [6:23]
+        lib/ngtcp2_gaptr.h [6:23]
+        lib/ngtcp2_idtr.c [6:23]
+        lib/ngtcp2_idtr.h [6:23]
+        lib/ngtcp2_ksl.c [6:23]
+        lib/ngtcp2_ksl.h [6:23]
+        lib/ngtcp2_log.c [6:23]
+        lib/ngtcp2_log.h [6:23]
+        lib/ngtcp2_macro.h [6:23]
+        lib/ngtcp2_map.c [7:24]
+        lib/ngtcp2_map.h [7:24]
+        lib/ngtcp2_mem.c [7:24]
+        lib/ngtcp2_mem.h [7:24]
+        lib/ngtcp2_net.h [6:23]
+        lib/ngtcp2_objalloc.c [6:23]
+        lib/ngtcp2_objalloc.h [6:23]
+        lib/ngtcp2_opl.c [6:23]
+        lib/ngtcp2_opl.h [6:23]
+        lib/ngtcp2_path.c [6:23]
+        lib/ngtcp2_path.h [6:23]
+        lib/ngtcp2_pkt.c [6:23]
+        lib/ngtcp2_pkt.h [6:23]
+        lib/ngtcp2_pktns_id.h [6:23]
+        lib/ngtcp2_pmtud.c [6:23]
+        lib/ngtcp2_pmtud.h [6:23]
+        lib/ngtcp2_ppe.c [6:23]
+        lib/ngtcp2_ppe.h [6:23]
+        lib/ngtcp2_pq.c [7:24]
+        lib/ngtcp2_pq.h [7:24]
+        lib/ngtcp2_pv.c [6:23]
+        lib/ngtcp2_pv.h [6:23]
+        lib/ngtcp2_qlog.c [6:23]
+        lib/ngtcp2_qlog.h [6:23]
+        lib/ngtcp2_range.c [6:23]
+        lib/ngtcp2_range.h [6:23]
+        lib/ngtcp2_rcvry.h [6:23]
+        lib/ngtcp2_ringbuf.c [6:23]
+        lib/ngtcp2_ringbuf.h [6:23]
+        lib/ngtcp2_rob.c [6:23]
+        lib/ngtcp2_rob.h [6:23]
+        lib/ngtcp2_rst.c [6:23]
+        lib/ngtcp2_rst.h [6:23]
+        lib/ngtcp2_rtb.c [6:23]
+        lib/ngtcp2_rtb.h [6:23]
+        lib/ngtcp2_settings.c [6:23]
+        lib/ngtcp2_settings.h [6:23]
+        lib/ngtcp2_str.c [6:23]
+        lib/ngtcp2_str.h [6:23]
+        lib/ngtcp2_strm.c [6:23]
+        lib/ngtcp2_strm.h [6:23]
+        lib/ngtcp2_transport_params.c [6:23]
+        lib/ngtcp2_transport_params.h [6:23]
+        lib/ngtcp2_tstamp.h [6:23]
+        lib/ngtcp2_unreachable.c [6:23]
+        lib/ngtcp2_unreachable.h [6:23]
+        lib/ngtcp2_vec.c [6:23]
+        lib/ngtcp2_vec.h [6:23]
+        lib/ngtcp2_version.c [6:23]
+        lib/ngtcp2_window_filter.c [6:23]
+        lib/ngtcp2_window_filter.h [6:23]
+
+KEEP     FSFAP                d02cc4799cbd521d2aa8c3ff19e655f6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FSFAP
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP
+    Files with this license:
+        INSTALL [7:10]

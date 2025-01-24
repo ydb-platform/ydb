@@ -8,8 +8,8 @@
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/query/query.h>
 
 namespace NFq {
 
@@ -81,6 +81,7 @@ private:
     const TCompressor Compressor;
     std::unique_ptr<IPlanStatProcessor> Processor;
     bool ShowQueryTimeline = false;
+    ui64 MaxQueryTimelineSize = 0;
 };
 
 TString GetStatViewName(const ::NFq::TRunActorParams& params);

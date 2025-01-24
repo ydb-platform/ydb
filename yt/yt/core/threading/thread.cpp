@@ -295,10 +295,10 @@ YT_PREVENT_TLS_CACHING void TThread::ConfigureSignalHandlerStack()
 
     // The size of of the custom stack to be provided for signal handlers.
     constexpr size_t SignalHandlerStackSize = 16_KB;
-    thread_local std::unique_ptr<char[]> Stack = std::make_unique<char[]>(SignalHandlerStackSize);
+    SignalHandlerStack_ = std::make_unique<char[]>(SignalHandlerStackSize);
 
     stack_t stack{
-        .ss_sp = Stack.get(),
+        .ss_sp = SignalHandlerStack_.get(),
         .ss_flags = 0,
         .ss_size = SignalHandlerStackSize,
     };

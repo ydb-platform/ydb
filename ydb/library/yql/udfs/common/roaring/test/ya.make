@@ -2,7 +2,6 @@ YQL_UDF_YDB_TEST()
 
 DEPENDS(ydb/library/yql/udfs/common/roaring)
 
-TIMEOUT(300)
 SIZE(MEDIUM)
 
 IF (SANITIZER_TYPE == "memory")

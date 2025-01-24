@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(DBase) {
             ABI tests which uses log from this test.
          */
 
-        me.To(19).Begin().Apply(*TAlter().SetRoom(1, 0, 1, 2, 1)).Commit();
+        me.To(19).Begin().Apply(*TAlter().SetRoom(1, 0, 1, {2}, 1)).Commit();
 
         /*_ 20: Check that log is applied correctly */
 
@@ -554,7 +554,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         /* Not sure what this does, copied from Basics test */
 
-        me.To(23).Begin().Apply(*TAlter().SetRoom(1, 0, 1, 2, 1)).Commit();
+        me.To(23).Begin().Apply(*TAlter().SetRoom(1, 0, 1, {2}, 1)).Commit();
 
         /*_ 20: Check that log is applied correctly */
 
@@ -787,7 +787,7 @@ Y_UNIT_TEST_SUITE(DBase) {
                 stream << cache->DumpRanges();
                 return stream.Str();
             } else {
-                return nullptr;
+                return "";
             }
         };
 
@@ -860,7 +860,7 @@ Y_UNIT_TEST_SUITE(DBase) {
                 stream << cache->DumpRanges();
                 return stream.Str();
             } else {
-                return nullptr;
+                return "";
             }
         };
 

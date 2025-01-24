@@ -3,7 +3,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Aliases for event types
@@ -248,6 +248,10 @@ TDataReceivedEvent::TDataReceivedEvent(TVector<TMessage> messages, TVector<TComp
 }
 
 void TDataReceivedEvent::Commit() {
+    if (ReadInTransaction) {
+        ythrow yexception() << "Offsets cannot be commited explicitly when reading in a transaction";
+    }
+
     for (auto [from, to] : OffsetRanges) {
         static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
     }

@@ -30,7 +30,7 @@ namespace std {
         }
         using is_transparent = void;
     };
-}
+} // namespace std
 
 #endif
 
@@ -61,7 +61,7 @@ namespace NHashPrivate {
             return NHashPrivate::ComputeStringHash(s.data(), s.size());
         }
     };
-}
+} // namespace NHashPrivate
 
 template <class T>
 struct hash: public NHashPrivate::THashHelper<T, std::is_scalar<T>::value && !std::is_integral<T>::value> {
@@ -146,7 +146,7 @@ namespace NHashPrivate {
         }
     };
 
-}
+} // namespace NHashPrivate
 
 template <typename... TArgs>
 struct THash<std::tuple<TArgs...>> {
@@ -160,7 +160,7 @@ struct THash: public ::hash<T> {
 };
 
 namespace NHashPrivate {
-    template <class TFirst, class TSecond, bool IsEmpty = std::is_empty<THash<TFirst>>::value&& std::is_empty<THash<TSecond>>::value>
+    template <class TFirst, class TSecond, bool IsEmpty = std::is_empty<THash<TFirst>>::value && std::is_empty<THash<TSecond>>::value>
     struct TPairHash {
     private:
         THash<TFirst> FirstHash;
@@ -188,7 +188,7 @@ namespace NHashPrivate {
             return CombineHashes(THash<TFirstClean>()(pair.first), THash<TSecondClean>()(pair.second));
         }
     };
-}
+} // namespace NHashPrivate
 
 template <class TFirst, class TSecond>
 struct hash<std::pair<TFirst, TSecond>>: public NHashPrivate::TPairHash<TFirst, TSecond> {

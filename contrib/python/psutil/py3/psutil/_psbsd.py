@@ -10,7 +10,7 @@ import functools
 import os
 from collections import defaultdict
 from collections import namedtuple
-from xml.etree import ElementTree
+from xml.etree import ElementTree  # noqa ICN001
 
 from . import _common
 from . import _psposix
@@ -640,7 +640,7 @@ def wrap_exceptions_procfs(inst):
 class Process:
     """Wrapper class around underlying C implementation."""
 
-    __slots__ = ["pid", "_name", "_ppid", "_cache"]
+    __slots__ = ["_cache", "_name", "_ppid", "pid"]
 
     def __init__(self, pid):
         self.pid = pid
@@ -958,7 +958,7 @@ class Process:
                 # <<the call would leave a thread without a valid CPU to run
                 # on because the set does not overlap with the thread's
                 # anonymous mask>>
-                if err.errno in (errno.EINVAL, errno.EDEADLK):
+                if err.errno in {errno.EINVAL, errno.EDEADLK}:
                     for cpu in cpus:
                         if cpu not in allcpus:
                             raise ValueError(

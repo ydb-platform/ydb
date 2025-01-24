@@ -3,11 +3,11 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
-#include <ydb/library/yql/providers/pg/expr_nodes/yql_pg_expr_nodes.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 namespace NYql {
@@ -137,8 +137,6 @@ struct TKiExploreTxResults {
             YQL_ENSURE(indexIt != tableMeta->Indexes.end(), "Index not found");
 
             const auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, indexIt->Type, indexName);
-            YQL_ENSURE(indexTablePaths.size() == 1, "Only index with one impl table is supported");
-            const auto indexTablePath = indexTablePaths[0];
 
             THashSet<TString> indexColumns;
             indexColumns.reserve(indexIt->KeyColumns.size() + indexIt->DataColumns.size());
@@ -158,7 +156,13 @@ struct TKiExploreTxResults {
                 }
             }
 
-            uncommittedChangesRead = HasWriteOps(indexTablePath) || (needMainTableRead && HasWriteOps(tableMeta->Name));
+            uncommittedChangesRead = needMainTableRead && HasWriteOps(tableMeta->Name);
+            for (auto& indexTablePath : indexTablePaths) {
+                if (uncommittedChangesRead) {
+                    break;
+                }
+                uncommittedChangesRead = HasWriteOps(indexTablePath);
+            }
         } else {
             uncommittedChangesRead = HasWriteOps(tableMeta->Name);
         }

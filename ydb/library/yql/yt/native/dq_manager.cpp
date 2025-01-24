@@ -10,11 +10,11 @@
 
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/proto/logger_config.pb.h>
 
 #include <library/cpp/digest/md5/md5.h>
 

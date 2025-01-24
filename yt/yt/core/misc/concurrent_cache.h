@@ -3,6 +3,7 @@
 #include "public.h"
 #include "atomic_ptr.h"
 #include "lock_free_hash_table.h"
+#include "memory_usage_tracker.h"
 
 namespace NYT {
 
@@ -21,7 +22,7 @@ private:
 public:
     using TValuePtr = TIntrusivePtr<T>;
 
-    explicit TConcurrentCache(size_t maxElementCount);
+    explicit TConcurrentCache(size_t maxElementCount, IMemoryUsageTrackerPtr tracker = nullptr);
 
     ~TConcurrentCache();
 
@@ -94,9 +95,10 @@ public:
     bool IsHead(const TIntrusivePtr<TLookupTable>& head) const;
 
 private:
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+
     std::atomic<size_t> Capacity_;
     TAtomicPtr<TLookupTable> Head_;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////

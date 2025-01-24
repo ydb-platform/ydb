@@ -2,12 +2,23 @@ from __future__ import annotations
 
 import array
 import math
+import os
 import socket
 import sys
 import types
 import weakref
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Collection,
+    Coroutine,
+    Iterable,
+    Sequence,
+)
 from concurrent.futures import Future
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
 from io import IOBase
@@ -17,17 +28,10 @@ from socket import AddressFamily, SocketKind
 from types import TracebackType
 from typing import (
     IO,
+    TYPE_CHECKING,
     Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Collection,
-    ContextManager,
-    Coroutine,
     Generic,
-    Mapping,
     NoReturn,
-    Sequence,
     TypeVar,
     cast,
     overload,
@@ -45,7 +49,14 @@ from trio.lowlevel import (
 from trio.socket import SocketType as TrioSocketType
 from trio.to_thread import run_sync
 
-from .. import CapacityLimiterStatistics, EventStatistics, TaskInfo, abc
+from .. import (
+    CapacityLimiterStatistics,
+    EventStatistics,
+    LockStatistics,
+    TaskInfo,
+    WouldBlock,
+    abc,
+)
 from .._core._eventloop import claim_worker_thread
 from .._core._exceptions import (
     BrokenResourceError,
@@ -55,13 +66,23 @@ from .._core._exceptions import (
 )
 from .._core._sockets import convert_ipv6_sockaddr
 from .._core._streams import create_memory_object_stream
-from .._core._synchronization import CapacityLimiter as BaseCapacityLimiter
+from .._core._synchronization import (
+    CapacityLimiter as BaseCapacityLimiter,
+)
 from .._core._synchronization import Event as BaseEvent
-from .._core._synchronization import ResourceGuard
+from .._core._synchronization import Lock as BaseLock
+from .._core._synchronization import (
+    ResourceGuard,
+    SemaphoreStatistics,
+)
+from .._core._synchronization import Semaphore as BaseSemaphore
 from .._core._tasks import CancelScope as BaseCancelScope
 from ..abc import IPSockAddrType, UDPPacketType, UNIXDatagramPacketType
-from ..abc._eventloop import AsyncBackend
+from ..abc._eventloop import AsyncBackend, StrOrBytesPath
 from ..streams.memory import MemoryObjectSendStream
+
+if TYPE_CHECKING:
+    from _typeshed import HasFileno
 
 if sys.version_info >= (3, 10):
     from typing import ParamSpec
@@ -111,8 +132,7 @@ class CancelScope(BaseCancelScope):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> bool | None:
-        # https://github.com/python-trio/trio-typing/pull/79
+    ) -> bool:
         return self.__original.__exit__(exc_type, exc_val, exc_tb)
 
     def cancel(self) -> None:
@@ -165,17 +185,17 @@ class TaskGroup(abc.TaskGroup):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> bool | None:
+    ) -> bool:
         try:
-            return await self._nursery_manager.__aexit__(exc_type, exc_val, exc_tb)
+            # trio.Nursery.__exit__ returns bool; .open_nursery has wrong type
+            return await self._nursery_manager.__aexit__(exc_type, exc_val, exc_tb)  # type: ignore[return-value]
         except BaseExceptionGroup as exc:
-            _, rest = exc.split(trio.Cancelled)
-            if not rest:
-                cancelled_exc = trio.Cancelled._create()
-                raise cancelled_exc from exc
+            if not exc.split(trio.Cancelled)[1]:
+                raise trio.Cancelled._create() from exc
 
             raise
         finally:
+            del exc_val, exc_tb
             self._active = False
 
     def start_soon(
@@ -637,6 +657,116 @@ class Event(BaseEvent):
         self.__original.set()
 
 
+class Lock(BaseLock):
+    def __new__(cls, *, fast_acquire: bool = False) -> Lock:
+        return object.__new__(cls)
+
+    def __init__(self, *, fast_acquire: bool = False) -> None:
+        self._fast_acquire = fast_acquire
+        self.__original = trio.Lock()
+
+    @staticmethod
+    def _convert_runtime_error_msg(exc: RuntimeError) -> None:
+        if exc.args == ("attempt to re-acquire an already held Lock",):
+            exc.args = ("Attempted to acquire an already held Lock",)
+
+    async def acquire(self) -> None:
+        if not self._fast_acquire:
+            try:
+                await self.__original.acquire()
+            except RuntimeError as exc:
+                self._convert_runtime_error_msg(exc)
+                raise
+
+            return
+
+        # This is the "fast path" where we don't let other tasks run
+        await trio.lowlevel.checkpoint_if_cancelled()
+        try:
+            self.__original.acquire_nowait()
+        except trio.WouldBlock:
+            await self.__original._lot.park()
+        except RuntimeError as exc:
+            self._convert_runtime_error_msg(exc)
+            raise
+
+    def acquire_nowait(self) -> None:
+        try:
+            self.__original.acquire_nowait()
+        except trio.WouldBlock:
+            raise WouldBlock from None
+        except RuntimeError as exc:
+            self._convert_runtime_error_msg(exc)
+            raise
+
+    def locked(self) -> bool:
+        return self.__original.locked()
+
+    def release(self) -> None:
+        self.__original.release()
+
+    def statistics(self) -> LockStatistics:
+        orig_statistics = self.__original.statistics()
+        owner = TrioTaskInfo(orig_statistics.owner) if orig_statistics.owner else None
+        return LockStatistics(
+            orig_statistics.locked, owner, orig_statistics.tasks_waiting
+        )
+
+
+class Semaphore(BaseSemaphore):
+    def __new__(
+        cls,
+        initial_value: int,
+        *,
+        max_value: int | None = None,
+        fast_acquire: bool = False,
+    ) -> Semaphore:
+        return object.__new__(cls)
+
+    def __init__(
+        self,
+        initial_value: int,
+        *,
+        max_value: int | None = None,
+        fast_acquire: bool = False,
+    ) -> None:
+        super().__init__(initial_value, max_value=max_value, fast_acquire=fast_acquire)
+        self.__original = trio.Semaphore(initial_value, max_value=max_value)
+
+    async def acquire(self) -> None:
+        if not self._fast_acquire:
+            await self.__original.acquire()
+            return
+
+        # This is the "fast path" where we don't let other tasks run
+        await trio.lowlevel.checkpoint_if_cancelled()
+        try:
+            self.__original.acquire_nowait()
+        except trio.WouldBlock:
+            await self.__original._lot.park()
+
+    def acquire_nowait(self) -> None:
+        try:
+            self.__original.acquire_nowait()
+        except trio.WouldBlock:
+            raise WouldBlock from None
+
+    @property
+    def max_value(self) -> int | None:
+        return self.__original.max_value
+
+    @property
+    def value(self) -> int:
+        return self.__original.value
+
+    def release(self) -> None:
+        self.__original.release()
+
+    def statistics(self) -> SemaphoreStatistics:
+        orig_statistics = self.__original.statistics()
+        return SemaphoreStatistics(orig_statistics.tasks_waiting)
+
+
 class CapacityLimiter(BaseCapacityLimiter):
     def __new__(
         cls,
@@ -916,6 +1046,20 @@ class TrioBackend(AsyncBackend):
         return Event()
 
     @classmethod
+    def create_lock(cls, *, fast_acquire: bool) -> Lock:
+        return Lock(fast_acquire=fast_acquire)
+
+    @classmethod
+    def create_semaphore(
+        cls,
+        initial_value: int,
+        *,
+        max_value: int | None = None,
+        fast_acquire: bool = False,
+    ) -> abc.Semaphore:
+        return Semaphore(initial_value, max_value=max_value, fast_acquire=fast_acquire)
+
+    @classmethod
     def create_capacity_limiter(cls, total_tokens: float) -> CapacityLimiter:
         return CapacityLimiter(total_tokens)
 
@@ -967,26 +1111,39 @@ class TrioBackend(AsyncBackend):
     @classmethod
     async def open_process(
         cls,
-        command: str | bytes | Sequence[str | bytes],
+        command: StrOrBytesPath | Sequence[StrOrBytesPath],
         *,
-        shell: bool,
         stdin: int | IO[Any] | None,
         stdout: int | IO[Any] | None,
         stderr: int | IO[Any] | None,
-        cwd: str | bytes | PathLike | None = None,
-        env: Mapping[str, str] | None = None,
-        start_new_session: bool = False,
+        **kwargs: Any,
     ) -> Process:
-        process = await trio.lowlevel.open_process(  # type: ignore[misc]
-            command,  # type: ignore[arg-type]
-            stdin=stdin,
-            stdout=stdout,
-            stderr=stderr,
-            shell=shell,
-            cwd=cwd,
-            env=env,
-            start_new_session=start_new_session,
-        )
+        def convert_item(item: StrOrBytesPath) -> str:
+            str_or_bytes = os.fspath(item)
+            if isinstance(str_or_bytes, str):
+                return str_or_bytes
+            else:
+                return os.fsdecode(str_or_bytes)
+
+        if isinstance(command, (str, bytes, PathLike)):
+            process = await trio.lowlevel.open_process(
+                convert_item(command),
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                shell=True,
+                **kwargs,
+            )
+        else:
+            process = await trio.lowlevel.open_process(
+                [convert_item(item) for item in command],
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                shell=False,
+                **kwargs,
+            )
+
         stdin_stream = SendStreamWrapper(process.stdin) if process.stdin else None
         stdout_stream = ReceiveStreamWrapper(process.stdout) if process.stdout else None
         stderr_stream = ReceiveStreamWrapper(process.stderr) if process.stderr else None
@@ -1107,18 +1264,18 @@ class TrioBackend(AsyncBackend):
         return await trio.socket.getnameinfo(sockaddr, flags)
 
     @classmethod
-    async def wait_socket_readable(cls, sock: socket.socket) -> None:
+    async def wait_readable(cls, obj: HasFileno | int) -> None:
         try:
-            await wait_readable(sock)
+            await wait_readable(obj)
         except trio.ClosedResourceError as exc:
             raise ClosedResourceError().with_traceback(exc.__traceback__) from None
         except trio.BusyResourceError:
             raise BusyResourceError("reading from") from None
 
     @classmethod
-    async def wait_socket_writable(cls, sock: socket.socket) -> None:
+    async def wait_writable(cls, obj: HasFileno | int) -> None:
         try:
-            await wait_writable(sock)
+            await wait_writable(obj)
         except trio.ClosedResourceError as exc:
             raise ClosedResourceError().with_traceback(exc.__traceback__) from None
         except trio.BusyResourceError:
@@ -1138,7 +1295,7 @@ class TrioBackend(AsyncBackend):
     @classmethod
     def open_signal_receiver(
         cls, *signals: Signals
-    ) -> ContextManager[AsyncIterator[Signals]]:
+    ) -> AbstractContextManager[AsyncIterator[Signals]]:
         return _SignalReceiver(signals)
 
     @classmethod

@@ -1,9 +1,11 @@
-#include <ydb/core/base/ticket_parser.h>
 #include "msgbus_server.h"
 #include "msgbus_server_request.h"
 #include "msgbus_server_proxy.h"
 #include "msgbus_server_persqueue.h"
 #include "msgbus_securereq.h"
+
+#include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -74,6 +76,7 @@ public:
     {
         TBase::SetSecurityToken(Request->Record.GetSecurityToken());
         TBase::SetRequireAdminAccess(true);
+        TBase::SetPeerName(msg->MsgContext.GetPeerName());
     }
 
     //STFUNC(StateWork)
@@ -95,6 +98,7 @@ template <>
 void TMessageBusServerSchemeRequest<TBusPersQueue>::SendProposeRequest(const TActorContext &ctx) {
     TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> req(new TEvTxUserProxy::TEvProposeTransaction());
     NKikimrTxUserProxy::TEvProposeTransaction &record = req->Record;
+    record.SetPeerName(GetPeerName());
 
     if (Request->Record.HasMetaRequest() && Request->Record.GetMetaRequest().HasCmdCreateTopic()) {
         const auto& cmd = Request->Record.GetMetaRequest().GetCmdCreateTopic();
@@ -157,6 +161,7 @@ template <>
 void TMessageBusServerSchemeRequest<TBusSchemeOperation>::SendProposeRequest(const TActorContext &ctx) {
     TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> req(new TEvTxUserProxy::TEvProposeTransaction());
     NKikimrTxUserProxy::TEvProposeTransaction &record = req->Record;
+    record.SetPeerName(GetPeerName());
 
     if (!Request->Record.HasTransaction()) {
         return HandleError(MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::Unknown, "Malformed request: no modify scheme transaction provided", ctx);

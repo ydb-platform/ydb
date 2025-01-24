@@ -74,7 +74,7 @@ Three command modes are supported:
 ---|---
 | `--idle-timeout VAL` | Timeout for deciding if a topic is empty, meaning that it contains no messages for processing. <br/>The time is counted from the point when a connection is established once the command is run or when the last message is received. If no new messages arrive from the server during the specified timeout, the topic is considered to be empty.<br/>Defaults to `1s` (1 second). |
 | `--timestamp VAL` | Message consumption starts from the point in time specified in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.<br/>If not set, messages are consumed starting from the consumer's current offset in the topic.<br/>If set, consumption starts from the first [message](../../concepts/topic.md#message) received after the specified time. |
-| `--with-metadata-fields VAL` | List of [message attributes](../../concepts/topic.md#message) whose values should be output in columns with metadata in `pretty` format. If not set, columns with all attributes are output. <br/>Possible values:<ul><li>`write_time`: The time a message is written to the server in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.</li><li>`meta`: Message metadata.</li><li>`create_time`: The time a message is created by the source in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.</li><li>`seq_no`: Message [sequence number](../../concepts/topic.md#seqno).</li><li>`offset`: [Message sequence number within a partition](../../concepts/topic.md#offset).</li><li>`message_group_id`: [Message group ID](../../concepts/topic.md#producer-id).</li><li>`body`: Message body.</li></ul> |
+| `--metadata-fields VAL` | List of [message attributes](../../concepts/topic.md#message) whose values should be output in columns with metadata in `pretty` format. If not set, columns with all attributes are output. <br/>Possible values:<ul><li>`write_time`: The time a message is written to the server in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.</li><li>`meta`: Message metadata.</li><li>`create_time`: The time a message is created by the source in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.</li><li>`seq_no`: Message [sequence number](../../concepts/topic.md#seqno).</li><li>`offset`: [Message sequence number within a partition](../../concepts/topic.md#offset).</li><li>`message_group_id`: [Message group ID](../../concepts/topic.md#producer-id).</li><li>`body`: Message body.</li></ul> |
 | `--partition-ids VAL` | Comma-separated list of [partition](../../concepts/topic.md#partitioning) identifiers to read from.<br/>If not specified, messages are read from all partitions. |
 
 ## Examples {#examples}
@@ -84,35 +84,41 @@ Three command modes are supported:
 In all the examples below, a topic named `topic1` and a consumer named `c1` are used.
 
 * Reading a single message with output to the terminal: If the topic doesn't contain new messages for this consumer, the command terminates with no data output:
+
    ```bash
    {{ ydb-cli }} -p quickstart topic read topic1 -c c1
    ```
 
 * Waiting for and reading a single message written to a file named `message.bin`. The command keeps running until new messages appear in the topic for this consumer. However, you can terminate it with `Ctrl+C`:
+
    ```bash
    {{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w -f message.bin
    ```
 
 * Viewing information about messages waiting to be handled by the consumer without committing them. Up to 10 first messages are output:
+
    ```bash
    {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format pretty --commit false
    ```
 
 * Output messages to the terminal as they appear, using newline delimiter characters and transforming messages into Base64. The command will be running until you terminate it with `Ctrl+C`:
+
    ```bash
    {{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w --format newline-delimited --transform base64
    ```
 
 * Track when new messages with the `ERROR` text appear in the topic and output them to the terminal once they arrive:
+
    ```bash
    {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format newline-delimited -w | grep ERROR
    ```
 
 * Receive another non-empty batch of no more than 150 messages transformed into base64, delimited with newline characters, and written to the `batch.txt` file:
+
    ```bash
    {{ ydb-cli }} -p quickstart topic read topic1 -c c1 \
      --format newline-delimited -w --limit 150 \
      --transform base64 -f batch.txt
    ```
 
-* [Examples of YDB CLI command integration](topic-pipeline.md)
+* [Examples of {{ ydb-short-name }} CLI command integration](topic-pipeline.md)

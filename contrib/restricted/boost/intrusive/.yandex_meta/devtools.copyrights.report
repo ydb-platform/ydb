@@ -1,0 +1,533 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 01774e8f00f9fa9fc7175f9399854c44
+BELONGS ya.make
+    License text:
+        // Copyright 2021-2023 Peter Dimov
+        // Copyright 2024 Ion Gaztanaga
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/hash_integral.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07a69d34287d5174fbb91c1432623c73
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga  2013-2014
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/bs_set.hpp [3:3]
+        include/boost/intrusive/bstree.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0cf50a14f48d5f6b52260bcafcb4688e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/hash.hpp [3:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1db3ac2a254ab704cc593169e382d4f9
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga  2006-2022
+        // (C) Copyright 2022 Joaquin M Lopez Munoz.
+        // (C) Copyright 2022 Christian Mazakas
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/hashtable.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20879b64ae4df4b3c40306efb7928c57
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2014-2014. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/algo_type.hpp [3:3]
+        include/boost/intrusive/detail/algorithm.hpp [3:3]
+        include/boost/intrusive/detail/array_initializer.hpp [3:3]
+        include/boost/intrusive/detail/bstree_algorithms_base.hpp [3:3]
+        include/boost/intrusive/detail/default_header_holder.hpp [3:3]
+        include/boost/intrusive/detail/ebo_functor_holder.hpp [3:4]
+        include/boost/intrusive/detail/empty_node_checker.hpp [3:3]
+        include/boost/intrusive/detail/equal_to_value.hpp [3:3]
+        include/boost/intrusive/detail/exception_disposer.hpp [3:3]
+        include/boost/intrusive/detail/get_value_traits.hpp [3:3]
+        include/boost/intrusive/detail/has_member_function_callable_with.hpp [3:5]
+        include/boost/intrusive/detail/iterator.hpp [3:3]
+        include/boost/intrusive/detail/key_nodeptr_comp.hpp [3:3]
+        include/boost/intrusive/detail/math.hpp [3:3]
+        include/boost/intrusive/detail/node_cloner_disposer.hpp [3:3]
+        include/boost/intrusive/detail/node_holder.hpp [3:3]
+        include/boost/intrusive/detail/node_to_value.hpp [3:3]
+        include/boost/intrusive/detail/reverse_iterator.hpp [3:3]
+        include/boost/intrusive/detail/simple_disposers.hpp [3:3]
+        include/boost/intrusive/detail/size_holder.hpp [3:3]
+        include/boost/intrusive/detail/std_fwd.hpp [3:5]
+        include/boost/intrusive/detail/twin.hpp [3:3]
+        include/boost/intrusive/pointer_rebind.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 28754ad9c0aa02276f0e2f7033f5dfc4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/hash.hpp [3:7]
+        include/boost/intrusive/detail/hash_combine.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 30aa7d774a6abb0b7427386b7499cf8d
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2007-2013
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/avl_set_hook.hpp [3:3]
+        include/boost/intrusive/avltree.hpp [3:3]
+        include/boost/intrusive/bs_set_hook.hpp [3:3]
+        include/boost/intrusive/detail/avltree_node.hpp [3:3]
+        include/boost/intrusive/detail/generic_hook.hpp [3:3]
+        include/boost/intrusive/detail/parent_from_member.hpp [3:3]
+        include/boost/intrusive/detail/transform_iterator.hpp [3:3]
+        include/boost/intrusive/detail/tree_iterator.hpp [3:3]
+        include/boost/intrusive/detail/tree_node.hpp [3:3]
+        include/boost/intrusive/intrusive_fwd.hpp [3:3]
+        include/boost/intrusive/pointer_plus_bits.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 32f3e9a485f1df17b5b5c669b5cf8a43
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2005-2013. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/workaround.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 357c9e4a4728cee22478622796bb4006
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/hash.hpp [3:7]
+        include/boost/intrusive/detail/hash_integral.hpp [3:6]
+        include/boost/intrusive/detail/hash_mix.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 37fd9db1dbe201a78f182aa8c0557c40
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga  2007-2021
+        // (C) Copyright Daniel Steck   2021
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/bstree_algorithms.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3b16b7cedf0ca0a50b791ba8334e2d98
+BELONGS ya.make
+    License text:
+        // (C) Copyright Olaf Krzikalla 2004-2006.
+        // (C) Copyright Ion Gaztanaga  2006-2014
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/circular_list_algorithms.hpp [3:4]
+        include/boost/intrusive/circular_slist_algorithms.hpp [3:4]
+        include/boost/intrusive/detail/list_iterator.hpp [3:4]
+        include/boost/intrusive/detail/list_node.hpp [3:4]
+        include/boost/intrusive/detail/rbtree_node.hpp [3:4]
+        include/boost/intrusive/detail/slist_iterator.hpp [3:4]
+        include/boost/intrusive/detail/slist_node.hpp [3:4]
+        include/boost/intrusive/linear_slist_algorithms.hpp [3:4]
+        include/boost/intrusive/list.hpp [3:4]
+        include/boost/intrusive/list_hook.hpp [3:4]
+        include/boost/intrusive/rbtree_algorithms.hpp [3:4]
+        include/boost/intrusive/set.hpp [3:4]
+        include/boost/intrusive/set_hook.hpp [3:4]
+        include/boost/intrusive/slist.hpp [3:4]
+        include/boost/intrusive/slist_hook.hpp [3:4]
+        include/boost/intrusive/unordered_set.hpp [3:4]
+        include/boost/intrusive/unordered_set_hook.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 41ac9dd74fc90902a3b53ae84a5fc6aa
+BELONGS ya.make
+    License text:
+        // (C) Copyright Pablo Halpern 2009. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/pointer_traits.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 43faee6d148b38cb4ab05799e5690c79
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga  2010-2013
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/parent_from_member.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 48366b1580583a323a79ad5aea5e52fc
+BELONGS ya.make
+    License text:
+        // Copyright 2021 Ion Gaztanaga
+        // Refactored the original Boost ContainerHash library to avoid
+        // any heavy std header dependencies to just combine two hash
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/hash_combine.hpp [17:19]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5020f6d1c64a1d009e64d39775c8be46
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga  2007-2021
+        // (C) Copyright Daniel Steck   2021
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/bstree_algorithms.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 54a6b4f4ccedc472d9ace99a2ee5a7df
+BELONGS ya.make
+    License text:
+        // Copyright 2007 Alexandre Courpron
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/function_detector.hpp [16:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 68fa6e262fbdbc6640e0f8885a8427e0
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2017-2021. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/value_functors.hpp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7afcace3c11d1de9ed95382d1d122b39
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga  2013-2013
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/pack_options.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 894d6bd4806969d55cdad5d7f1ac76c6
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2011-2014. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/pointer_traits.hpp [9:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d61a324506c4d173913e476c3c6b6fb
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2004 Ralf Mattethat
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/splaytree_algorithms.hpp [21:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a581ea4614243c73584c408309608092
+BELONGS ya.make
+    License text:
+        // (C) Copyright Joaquin M Lopez Munoz  2006-2013
+        // (C) Copyright Ion Gaztanaga          2014-2014
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/ebo_functor_holder.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bd50790614a99115ac76f35dc0c47a91
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2008-2013
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/treap.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cb4c77138a8eb0afa37b2363d470714c
+BELONGS ya.make
+    License text:
+        // (C) Copyright Daniel K. O. 2005.
+        // (C) Copyright Ion Gaztanaga 2007-2014
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/avltree_algorithms.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cba287530567f506b4683cd1a18cce1d
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga  2014-2015
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/minimal_less_equal_header.hpp [3:3]
+        include/boost/intrusive/detail/minimal_pair_header.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cc1022dd712816d11c03b1dfe171b614
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga  2009-2013.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/function_detector.hpp [3:3]
+        include/boost/intrusive/detail/is_stateful_value_traits.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cdd68d4b0cd7f8ae4946423a38dc8906
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga        2006-2014
+        // (C) Copyright Microsoft Corporation  2014
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/mpl.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d5c9959d293a16df5f89bb43bfa0046a
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga  2006-2022
+        // (C) Copyright 2022 Joaquin M Lopez Munoz.
+        // (C) Copyright 2022 Christian Mazakas
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/hashtable.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d7ec3b31087d40f4ec8d4f38c2654306
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2015-2015. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/tree_value_compare.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dade72e8f17d6f5ad231015a08f18f49
+BELONGS ya.make
+    License text:
+        // (C) Copyright Olaf Krzikalla 2004-2006.
+        // (C) Copyright Ion Gaztanaga  2006-2014
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/circular_list_algorithms.hpp [3:4]
+        include/boost/intrusive/circular_slist_algorithms.hpp [3:4]
+        include/boost/intrusive/detail/any_node_and_algorithms.hpp [3:3]
+        include/boost/intrusive/detail/hook_traits.hpp [3:3]
+        include/boost/intrusive/detail/iiterator.hpp [3:3]
+        include/boost/intrusive/detail/mpl.hpp [3:4]
+        include/boost/intrusive/detail/uncast.hpp [3:3]
+        include/boost/intrusive/linear_slist_algorithms.hpp [3:4]
+        include/boost/intrusive/list.hpp [3:4]
+        include/boost/intrusive/rbtree.hpp [3:3]
+        include/boost/intrusive/rbtree_algorithms.hpp [3:4]
+        include/boost/intrusive/set.hpp [3:4]
+        include/boost/intrusive/slist.hpp [3:4]
+        include/boost/intrusive/treap_algorithms.hpp [3:3]
+        include/boost/intrusive/unordered_set.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dd8c56c665cbeb0d19508d2df3017bfb
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2008
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/priority_compare.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL df56a08a51f11ebc1571263ab013bc25
+BELONGS ya.make
+    License text:
+        // Copyright 2022 Peter Dimov
+        // Copyright 2024 Ion Gaztanaga
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/detail/hash_mix.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e71729e6477aae56e877eb4765357f4b
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga  2006-2022
+        // (C) Copyright 2022 Joaquin M Lopez Munoz.
+        // (C) Copyright 2022 Christian Mazakas
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/hashtable.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e9c01b978ee54abfd69646f14ef22a7a
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2007-2014
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/avl_set.hpp [3:3]
+        include/boost/intrusive/avltree_algorithms.hpp [3:4]
+        include/boost/intrusive/detail/common_slist_algorithms.hpp [3:3]
+        include/boost/intrusive/detail/hashtable_node.hpp [3:3]
+        include/boost/intrusive/options.hpp [3:3]
+        include/boost/intrusive/sg_set.hpp [3:3]
+        include/boost/intrusive/sgtree.hpp [3:3]
+        include/boost/intrusive/sgtree_algorithms.hpp [3:3]
+        include/boost/intrusive/splay_set.hpp [3:3]
+        include/boost/intrusive/splaytree.hpp [3:3]
+        include/boost/intrusive/splaytree_algorithms.hpp [3:3]
+        include/boost/intrusive/treap_set.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f25ed8ad442cba4762a4ba108afb3f71
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga  2006-2013
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/intrusive/any_hook.hpp [3:3]
+        include/boost/intrusive/derivation_value_traits.hpp [3:3]
+        include/boost/intrusive/detail/assert.hpp [3:3]
+        include/boost/intrusive/detail/config_begin.hpp [3:3]
+        include/boost/intrusive/detail/config_end.hpp [3:3]
+        include/boost/intrusive/detail/list_iterator.hpp [3:4]
+        include/boost/intrusive/detail/list_node.hpp [3:4]
+        include/boost/intrusive/detail/rbtree_node.hpp [3:4]
+        include/boost/intrusive/detail/slist_iterator.hpp [3:4]
+        include/boost/intrusive/detail/slist_node.hpp [3:4]
+        include/boost/intrusive/link_mode.hpp [3:3]
+        include/boost/intrusive/list_hook.hpp [3:4]
+        include/boost/intrusive/member_value_traits.hpp [3:3]
+        include/boost/intrusive/set_hook.hpp [3:4]
+        include/boost/intrusive/slist_hook.hpp [3:4]
+        include/boost/intrusive/trivial_value_traits.hpp [3:3]
+        include/boost/intrusive/unordered_set_hook.hpp [3:4]

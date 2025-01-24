@@ -1,5 +1,5 @@
 #pragma once
-#include "abstract.h"
+#include <ydb/library/formats/arrow/transformer/abstract.h>
 
 namespace NKikimr::NArrow::NTransformation {
 

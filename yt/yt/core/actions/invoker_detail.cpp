@@ -10,47 +10,63 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TInvokerWrapper::TInvokerWrapper(IInvokerPtr underlyingInvoker)
+template <bool VirtualizeBase>
+TInvokerWrapper<VirtualizeBase>::TInvokerWrapper(IInvokerPtr underlyingInvoker)
     : UnderlyingInvoker_(std::move(underlyingInvoker))
 {
     YT_VERIFY(UnderlyingInvoker_);
 }
 
-void TInvokerWrapper::Invoke(TClosure callback)
+template <bool VirtualizeBase>
+void TInvokerWrapper<VirtualizeBase>::Invoke(TMutableRange<TClosure> callbacks)
 {
-    return UnderlyingInvoker_->Invoke(std::move(callback));
+    for (auto& callback : callbacks) {
+        static_cast<IInvoker*>(this)->Invoke(std::move(callback));
+    }
 }
 
-void TInvokerWrapper::Invoke(TMutableRange<TClosure> callbacks)
-{
-    return UnderlyingInvoker_->Invoke(callbacks);
-}
-
-NThreading::TThreadId TInvokerWrapper::GetThreadId() const
+template <bool VirtualizeBase>
+NThreading::TThreadId TInvokerWrapper<VirtualizeBase>::GetThreadId() const
 {
     return UnderlyingInvoker_->GetThreadId();
 }
 
-bool TInvokerWrapper::CheckAffinity(const IInvokerPtr& invoker) const
+template <bool VirtualizeBase>
+bool TInvokerWrapper<VirtualizeBase>::CheckAffinity(const IInvokerPtr& invoker) const
 {
     return
         invoker.Get() == this ||
         UnderlyingInvoker_->CheckAffinity(invoker);
 }
 
-bool TInvokerWrapper::IsSerialized() const
+template <bool VirtualizeBase>
+bool TInvokerWrapper<VirtualizeBase>::IsSerialized() const
 {
     return UnderlyingInvoker_->IsSerialized();
 }
 
-void TInvokerWrapper::RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver)
+template <bool VirtualizeBase>
+void TInvokerWrapper<VirtualizeBase>::SubscribeWaitTimeObserved(const IInvoker::TWaitTimeObserver& callback)
 {
-    return UnderlyingInvoker_->RegisterWaitTimeObserver(waitTimeObserver);
+    return UnderlyingInvoker_->SubscribeWaitTimeObserved(callback);
+}
+
+template <bool VirtualizeBase>
+void TInvokerWrapper<VirtualizeBase>::UnsubscribeWaitTimeObserved(const IInvoker::TWaitTimeObserver& callback)
+{
+    return UnderlyingInvoker_->SubscribeWaitTimeObserved(callback);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TInvokerProfileWrapper::TInvokerProfileWrapper(NProfiling::IRegistryImplPtr registry, const TString& invokerFamily, const NProfiling::TTagSet& tagSet)
+template class TInvokerWrapper<true>;
+template class TInvokerWrapper<false>;
+// template struct NDetail::TMaybeVirtualInvokerBase<true>; // Primary template.
+template struct NDetail::TMaybeVirtualInvokerBase<false>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+TInvokerProfileWrapper::TInvokerProfileWrapper(NProfiling::IRegistryPtr registry, const TString& invokerFamily, const NProfiling::TTagSet& tagSet)
 {
     auto profiler = NProfiling::TProfiler("/invoker", NProfiling::TProfiler::DefaultNamespace, tagSet, registry).WithHot();
     WaitTimer_ = profiler.Timer(invokerFamily + "/wait");

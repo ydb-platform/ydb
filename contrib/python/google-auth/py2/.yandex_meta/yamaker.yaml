@@ -1,0 +1,7 @@
+requirements:
+  - cryptography
+  - grpcio
+  - requests
+exclude:
+  - google/*_async.py
+  - google/auth/transport/_aiohttp_requests.py

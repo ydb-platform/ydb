@@ -17,7 +17,7 @@ Specifics:
 * `AsDict` and `AsDictStrict` expect `Tuple` of two elements as arguments (key and value, respectively). If the keys repeat, only the value for the first key remains in the dictionary.
 * `AsSet` and `AsSetStrict` expect keys as arguments.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

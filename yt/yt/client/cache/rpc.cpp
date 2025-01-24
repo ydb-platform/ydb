@@ -60,20 +60,20 @@ NApi::IClientPtr CreateClient(const NApi::NRpcProxy::TConnectionConfigPtr& confi
 
 NApi::IClientPtr CreateClient(const NApi::NRpcProxy::TConnectionConfigPtr& config)
 {
-    return CreateClient(config, NApi::GetClientOpsFromEnvStatic());
+    return CreateClient(config, NApi::GetClientOptionsFromEnvStatic());
 }
 
 NApi::IClientPtr CreateClient(TStringBuf clusterUrl)
 {
-    return CreateClient(clusterUrl, NApi::GetClientOpsFromEnvStatic());
+    return CreateClient(clusterUrl, NApi::GetClientOptionsFromEnvStatic());
 }
 
-NApi::IClientPtr CreateClient(TStringBuf cluster, TStringBuf proxyRole)
+NApi::IClientPtr CreateClient(TStringBuf cluster, std::optional<TStringBuf> proxyRole)
 {
     auto config = New<NApi::NRpcProxy::TConnectionConfig>();
     config->ClusterUrl = ToString(cluster);
-    if (!proxyRole.empty()) {
-        config->ProxyRole = ToString(proxyRole);
+    if (proxyRole && !proxyRole->empty()) {
+        config->ProxyRole = ToString(*proxyRole);
     }
     config->Postprocess();
     return CreateClient(config);

@@ -1,0 +1,208 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+# ChangeLog is changelog, it does not describe current status at all
+IGNORE_FILES ChangeLog
+
+KEEP     MIT                  24e6fb6f6ed9a5425a9e54ac886c7a38
+BELONGS utils/linkicc/ya.make utils/psicc/ya.make utils/tificc/ya.make utils/transicc/ya.make
+FILE_INCLUDE AUTHORS found in files: utils/linkicc/linkicc.c at line 19, utils/psicc/psicc.c at line 19, utils/tificc/tificc.c at line 19, utils/transicc/transicc.c at line 19
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        utils/linkicc/linkicc.c [6:22]
+        utils/psicc/psicc.c [6:22]
+        utils/tificc/tificc.c [6:22]
+        utils/transicc/transicc.c [6:22]
+
+KEEP     Softsurfer           311038bc2326a11981bde73df7ba7705
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-softsurfer
+        Score           : 98.08
+        Match type      : TEXT
+        Links           : http://geomalgorithms.com/a05-_intersect-1.html#Intersection%20of%202%20Planes, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/softsurfer.LICENSE
+    Files with this license:
+        src/cmssm.c [208:212]
+
+KEEP     MIT                  399584035c417b91040964779555dfac
+BELONGS ya.make
+    License text:
+        MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [1:1]
+
+SKIP     LicenseRef-scancode-free-unknown 52a6530fbc8416fff7e08fa2845d5a76
+BELONGS ya.make
+# not a license
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        README.md [16:16]
+
+KEEP     IJG                  5540d4850b32f05c6de82e87239d100b
+BELONGS utils/jpgicc/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: IJG
+        Score           : 97.18
+        Match type      : REFERENCE
+        Links           : http://fedoraproject.org/wiki/Licensing/IJG, https://spdx.org/licenses/IJG
+    Files with this license:
+        utils/jpgicc/LICENSE_iccjpeg [4:11]
+
+KEEP     IJG                  5817aede26ed47ea3d800cd135dfe5e5
+BELONGS utils/jpgicc/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: IJG
+        Score           : 97.95
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing/IJG, https://spdx.org/licenses/IJG
+    Files with this license:
+        utils/jpgicc/LICENSE_iccjpeg [13:48]
+
+KEEP     MIT                  7c49e6e986839189d7592cb9b4db0b4c
+BELONGS utils/jpgicc/ya.make ya.make
+FILE_INCLUDE AUTHORS found in files: include/lcms2.h at line 19, include/lcms2_plugin.h at line 19, src/cmsalpha.c at line 19, src/cmscam02.c at line 19, src/cmscgats.c at line 19, src/cmscnvrt.c at line 19, src/cmserr.c at line 19, src/cmsgamma.c at line 19, src/cmsgmt.c at line 19, src/cmshalf.c at line 19, src/cmsintrp.c at line 19, src/cmsio0.c at line 19, src/cmsio1.c at line 19, src/cmslut.c at line 19, src/cmsmd5.c at line 19, src/cmsmtrx.c at line 19, src/cmsnamed.c at line 19, src/cmsopt.c at line 19, src/cmspack.c at line 19, src/cmspcs.c at line 19, src/cmsplugin.c at line 19, src/cmsps2.c at line 19, src/cmssamp.c at line 19, src/cmssm.c at line 19, src/cmstypes.c at line 19, src/cmsvirt.c at line 19, src/cmswtpnt.c at line 19, src/cmsxform.c at line 19, src/lcms2_internal.h at line 19, utils/common/utils.h at line 20, utils/common/vprf.c at line 19, utils/common/xgetopt.c at line 20, utils/jpgicc/jpgicc.c at line 19
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/lcms2.h [6:22]
+        include/lcms2_plugin.h [6:22]
+        src/cmsalpha.c [6:22]
+        src/cmscam02.c [6:22]
+        src/cmscgats.c [6:22]
+        src/cmscnvrt.c [6:22]
+        src/cmserr.c [6:22]
+        src/cmsgamma.c [6:22]
+        src/cmsgmt.c [6:22]
+        src/cmshalf.c [6:22]
+        src/cmsintrp.c [6:22]
+        src/cmsio0.c [6:22]
+        src/cmsio1.c [6:22]
+        src/cmslut.c [6:22]
+        src/cmsmd5.c [6:22]
+        src/cmsmtrx.c [6:22]
+        src/cmsnamed.c [6:22]
+        src/cmsopt.c [6:22]
+        src/cmspack.c [6:22]
+        src/cmspcs.c [6:22]
+        src/cmsplugin.c [6:22]
+        src/cmsps2.c [6:22]
+        src/cmssamp.c [6:22]
+        src/cmssm.c [6:22]
+        src/cmstypes.c [6:22]
+        src/cmsvirt.c [6:22]
+        src/cmswtpnt.c [6:22]
+        src/cmsxform.c [6:22]
+        src/lcms2_internal.h [6:22]
+        utils/common/utils.h [7:23]
+        utils/common/vprf.c [6:22]
+        utils/common/xgetopt.c [7:23]
+        utils/jpgicc/jpgicc.c [6:22]
+
+KEEP     MIT                  94890220f883df92236a2e64421f8224
+BELONGS ya.make
+    License text:
+        redistribute such patches, please make sure to include the mail, or at least the MIT license. By including the MIT license you prevent to get in legal trouble.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        SECURITY.md [22:22]
+
+SKIP     LicenseRef-scancode-unknown-license-reference af7985bc98b322384bcb4e1d99c5d0e4
+BELONGS utils/psicc/ya.make
+    License text:
+                "engine. Both lcms and this program are freeware. You can\n"
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        utils/psicc/psicc.c [61:61]
+
+KEEP     MIT                  b1101be903428cec3d118f4496ad8c15
+BELONGS ya.make
+    License text:
+        Please understand that this is a lot of work, and obviously it can fail as well, so the “no guarantee” clause of MIT license applies. If you choose to 
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        SECURITY.md [21:21]
+
+KEEP     MIT                  fe08b97a5e3117443682cd1138cb81cd
+BELONGS ya.make
+    License text:
+        redistribute such patches, please make sure to include the mail, or at least the MIT license. By including the MIT license you prevent to get in legal trouble.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        SECURITY.md [22:22]
+
+KEEP     MIT                  feae1bf7eb9fd714ebbdf0b08a0a3afd
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: LICENSE at line 19
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [5:22]

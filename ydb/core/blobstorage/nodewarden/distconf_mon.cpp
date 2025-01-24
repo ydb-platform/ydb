@@ -1,5 +1,7 @@
 #include "distconf.h"
 
+#include <google/protobuf/util/json_util.h>
+
 namespace NKikimr::NStorage {
 
     namespace {
@@ -148,6 +150,15 @@ namespace NKikimr::NStorage {
                 DIV() {
                     TAG(TH2) {
                         out << "Distributed config keeper";
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Main operational parameters";
+                    }
+                    DIV_CLASS("panel-body") {
+                        out << "Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "<br/>";
                     }
                 }
 

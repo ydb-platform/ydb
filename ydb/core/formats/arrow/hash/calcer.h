@@ -1,11 +1,11 @@
 #pragma once
-#include "xx_hash.h"
 #include <ydb/core/formats/arrow/common/adapter.h>
-#include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
+#include <ydb/library/formats/arrow/common/validation.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
@@ -67,6 +67,8 @@ public:
 
     static void AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NXX64::TStreamStringHashCalcer& hashCalcer);
     static void AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer);
+    static void AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NXX64::TStreamStringHashCalcer_H3& hashCalcer);
+    static void AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer_H3& hashCalcer);
     static ui64 CalcHash(const std::shared_ptr<arrow::Scalar>& scalar);
     std::optional<std::vector<ui64>> Execute(const std::shared_ptr<arrow::RecordBatch>& batch) const;
 

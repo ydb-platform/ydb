@@ -3,10 +3,88 @@
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/protos/table_service_config.pb.h>
-#include <ydb/library/yql/core/pg_settings/guc_settings.h>
+#include <yql/essentials/core/pg_settings/guc_settings.h>
 
 namespace NKikimr {
 namespace NKqp {
+
+class TKqpAutoParamBuilder : public NYql::IAutoParamBuilder {
+public:
+    TKqpAutoParamBuilder();
+    THashMap<TString, Ydb::TypedValue> Values;
+
+    ui32 Size() const final;
+
+    bool Contains(const TString& name) const final;
+
+    NYql::IAutoParamTypeBuilder& Add(const TString& name) final;
+
+private:
+    class TTypeProxy : public NYql::IAutoParamTypeBuilder {
+    public:
+        TTypeProxy(TKqpAutoParamBuilder& owner);
+
+        void Pg(const TString& name) final;
+
+        void BeginList() final;
+
+        void EndList() final;
+
+        void BeginTuple() final;
+
+        void EndTuple() final;
+
+        void BeforeItem() final;
+
+        void AfterItem() final;
+
+        NYql::IAutoParamDataBuilder& FinishType() final;
+
+        void Push();
+        void Pop();
+
+        TKqpAutoParamBuilder& Owner;
+        Ydb::Type* CurrentType = nullptr;
+        TVector<Ydb::Type*> Stack;
+    };
+
+    class TDataProxy : public NYql::IAutoParamDataBuilder {
+    public:
+        TDataProxy(TKqpAutoParamBuilder& owner);
+
+        void Pg(const TMaybe<TString>& value) final;
+
+        void BeginList() final;
+
+        void EndList() final;
+
+        void BeginTuple() final;
+
+        void EndTuple() final;
+
+        void BeforeItem() final;
+
+        void AfterItem() final;
+
+        NYql::IAutoParamBuilder& FinishData() final;
+
+        void Push();
+        void Pop();
+
+        TKqpAutoParamBuilder& Owner;
+        Ydb::Value* CurrentValue = nullptr;
+        TVector<Ydb::Value*> Stack;
+    };
+
+    Ydb::TypedValue* CurrentParam = nullptr;
+    TTypeProxy TypeProxy;
+    TDataProxy DataProxy;
+};
+
+class TKqpAutoParamBuilderFactory : public NYql::IAutoParamBuilderFactory {
+public:
+    NYql::IAutoParamBuilderPtr MakeBuilder() final;
+};
 
 class TKqpTranslationSettingsBuilder {
 public:
@@ -62,6 +140,16 @@ public:
         return *this;
     }
 
+    TKqpTranslationSettingsBuilder& SetIsEnablePgSyntax(bool value) {
+        IsEnablePgSyntax = value;
+        return *this;
+    }
+
+    TKqpTranslationSettingsBuilder& SetIsEnableAntlr4Parser(bool value) {
+        IsEnableAntlr4Parser = value;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     const ui16 KqpYqlSyntaxVersion;
@@ -73,6 +161,8 @@ private:
     TString KqpTablePathPrefix = {};
     bool IsEnableExternalDataSources = false;
     bool IsEnablePgConstsToParams = false;
+    bool IsEnablePgSyntax = false;
+    bool IsEnableAntlr4Parser = false;
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};
@@ -85,7 +175,8 @@ NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceCon
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
-    NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName);
+    NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName,
+    NSQLTranslation::TTranslationSettings* effectiveSettings = nullptr);
 
 TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution);
 

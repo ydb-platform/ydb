@@ -3,7 +3,7 @@
 #include "common.h"
 #include "actors.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
+#include <ydb-cpp-sdk/client/query/query.h>
 
 
 namespace NKqpRun {
@@ -23,6 +23,8 @@ struct TQueryMeta {
 struct TExecutionMeta : public TQueryMeta {
     bool Ready = false;
     NYdb::NQuery::EExecStatus ExecutionStatus = NYdb::NQuery::EExecStatus::Unspecified;
+
+    TString Database = "";
 
     i32 ResultSetsCount = 0;
 };
@@ -56,15 +58,19 @@ public:
 
     TRequestResult YqlScriptRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 
-    TRequestResult GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const;
+    TRequestResult GetScriptExecutionOperationRequest(const TString& database, const TString& operation, TExecutionMeta& meta) const;
 
-    TRequestResult FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const;
+    TRequestResult FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const;
 
-    TRequestResult ForgetScriptExecutionOperationRequest(const TString& operation) const;
+    TRequestResult ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation) const;
+
+    TRequestResult CancelScriptExecutionOperationRequest(const TString& database, const TString& operation) const;
 
     void QueryRequestAsync(const TRequestOptions& query) const;
 
     void WaitAsyncQueries() const;
+
+    void CloseSessions() const;
 
     void StartTraceOpt() const;
 

@@ -5,6 +5,8 @@
 Содержание:
 
 * [{#T}](convert-table-type.md)
+* [{#T}](benchmarks.md)
+* [{#T}](ttl.md)
 
 Смотрите также:
 

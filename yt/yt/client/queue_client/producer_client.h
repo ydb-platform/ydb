@@ -11,11 +11,23 @@
 
 #include <yt/yt/core/actions/future.h>
 
+#include <yt/yt/core/misc/backoff_strategy.h>
+
 #include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NQueueClient {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TProducerSessionBatchOptions
+{
+    //! Weight of serialized buffered rows when flush will be called regardless of the background flush period.
+    std::optional<i64> ByteSize;
+    //! Buffered rows count when flush will be called regardless of the background flush period.
+    std::optional<i64> RowCount;
+};
+
+using TAckCallback = TCallback<void(NQueueClient::TQueueProducerSequenceNumber)>;
 
 struct TProducerSessionOptions
 {
@@ -24,8 +36,18 @@ struct TProducerSessionOptions
     //! If false, each row should contain value of $sequnce_number column.
     bool AutoSequenceNumber = false;
 
-    //! Size of buffer when rows will be flushed to server.
-    size_t MaxBufferSize = 1_MB;
+    //! Batch sizes when rows will be flushed to server regardless of the background flush period (if it is specified).
+    //! If there is no background flush, rows will be flush when `BatchOptions::ByteSize` or `BatchOptions::RowCount` is reached. If none of them are specified, `BatchOptions::ByteSize` will be equal to 16 MB.
+    TProducerSessionBatchOptions BatchOptions;
+
+    //! If set, rows will be flushed in background with this period.
+    std::optional<TDuration> BackgroundFlushPeriod;
+
+    //! Backoff strategy for retries when background flush is turned on.
+    TBackoffStrategy BackoffStrategy = TBackoffStrategy(TExponentialBackoffOptions{});
+
+    //! Acknowledgment callback.
+    TAckCallback AckCallback;
 };
 
 struct IProducerSession
@@ -38,7 +60,14 @@ struct IProducerSession
 
     //! Get user meta saved in the producer session.
     virtual const NYTree::INodePtr& GetUserMeta() const = 0;
+
+    //! Flush all written rows.
+    virtual TFuture<void> Flush() = 0;
+
+    //! Cancel writing of all not flushed rows.
+    virtual void Cancel() = 0;
 };
+
 DEFINE_REFCOUNTED_TYPE(IProducerSession)
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -47,12 +76,12 @@ struct IProducerClient
     : public virtual TRefCounted
 {
     //! Create a session (or increase its epoch) and return session writer.
-    //! NB: Session writer return by this method is NOT thread-safe.
     virtual TFuture<IProducerSessionPtr> CreateSession(
         const NYPath::TRichYPath& queuePath,
         const NTableClient::TNameTablePtr& nameTable,
         const NQueueClient::TQueueProducerSessionId& sessionId,
-        const TProducerSessionOptions& options = {}) = 0;
+        const TProducerSessionOptions& options = {},
+        const IInvokerPtr& invoker = nullptr) = 0;
 };
 DEFINE_REFCOUNTED_TYPE(IProducerClient)
 

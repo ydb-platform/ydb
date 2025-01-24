@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-#include "grpc_request_proxy.h"
 #include "cancelation/cancelation.h"
 #include "cancelation/cancelation_event.h"
 #include "rpc_common/rpc_common.h"
@@ -14,7 +13,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 
@@ -62,10 +61,6 @@ public:
 
     const typename TRequest::TRequest* GetProtoRequest() const {
         return TRequest::GetProtoRequest(Request_);
-    }
-
-    typename TRequest::TRequest* GetProtoRequestMut() {
-        return TRequest::GetProtoRequestMut(Request_);
     }
 
     Ydb::Operations::OperationParams::OperationMode GetOperationMode() const {

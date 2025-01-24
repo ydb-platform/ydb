@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -235,7 +235,7 @@ TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx,
             .Table(streamLookup.Table())
             .LookupKeys(streamLookup.LookupKeys())
             .Columns(usedColumns.Cast())
-            .LookupStrategy(streamLookup.LookupStrategy())
+            .Settings(streamLookup.Settings())
             .Done();
     }
 

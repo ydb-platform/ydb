@@ -1,0 +1,38 @@
+PROTO_LIBRARY()
+
+IF (GEN_PROTO)
+    SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
+    SET(antlr_templates ${antlr_output}/org/antlr/v4/tool/templates/codegen)
+    SET(sql_grammar ${antlr_output}/SQLv1Antlr4.g)
+
+    SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
+
+    SET(GRAMMAR_STRING_CORE_SINGLE "\"~(['#BACKSLASH#]) | (BACKSLASH .)\"")
+    SET(GRAMMAR_STRING_CORE_DOUBLE "\"~([#DOUBLE_QUOTE##BACKSLASH#]) | (BACKSLASH .)\"")
+    SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\".\"")
+
+    CONFIGURE_FILE(${ARCADIA_ROOT}/yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Java/Java.stg.in ${antlr_templates}/Java/Java.stg)
+
+    IF(EXPORT_CMAKE)
+        MANUAL_GENERATION(${sql_grammar})
+    ELSE()
+        CONFIGURE_FILE(${ARCADIA_ROOT}/yql/essentials/sql/v1/SQLv1Antlr4.g.in ${sql_grammar})
+    ENDIF()
+
+    RUN_ANTLR4(
+        ${sql_grammar}
+        -no-listener
+        -lib .
+        -o ${antlr_output}
+        -Dlanguage=Java
+        IN ${sql_grammar} ${antlr_templates}/Java/Java.stg
+        OUT_NOAUTO SQLv1Parser.proto
+        CWD ${antlr_output}
+    )
+ENDIF()
+
+SRCS(SQLv1Parser.proto)
+
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+
+END()

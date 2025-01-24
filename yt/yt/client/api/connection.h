@@ -46,7 +46,7 @@ struct IConnection
     : public virtual TRefCounted
 {
     virtual TClusterTag GetClusterTag() const = 0;
-    virtual const TString& GetLoggingTag() const = 0;
+    virtual const std::string& GetLoggingTag() const = 0;
     virtual const TString& GetClusterId() const = 0;
     virtual const std::optional<std::string>& GetClusterName() const = 0;
     virtual IInvokerPtr GetInvoker() = 0;
@@ -62,6 +62,7 @@ struct IConnection
 
     virtual void ClearMetadataCaches() = 0;
     virtual void Terminate() = 0;
+    virtual bool IsTerminated() const = 0;
 
     //! Returns a YSON-serialized connection config.
     virtual NYson::TYsonString GetConfigYson() const = 0;

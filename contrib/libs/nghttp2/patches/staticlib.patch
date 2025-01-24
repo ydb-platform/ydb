@@ -1,0 +1,5 @@
+--- contrib/libs/nghttp2/lib/includes/nghttp2/nghttp2.h	(index)
++++ contrib/libs/nghttp2/lib/includes/nghttp2/nghttp2.h	(working tree)
+@@ -55,1 +55,1 @@ extern "C" {
+-#ifdef NGHTTP2_STATICLIB
++#if 1

@@ -8,6 +8,8 @@
 
 #include <aws/common/common.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_string;
 
 /*
@@ -42,5 +44,6 @@ AWS_COMMON_API
 int aws_unset_environment_value(const struct aws_string *variable_name);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_ENVIRONMENT_H */

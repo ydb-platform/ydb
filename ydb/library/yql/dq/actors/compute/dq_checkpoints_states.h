@@ -73,7 +73,7 @@ struct TComputeActorState {
         *out = result.Str();
         return true;
     }
-    size_t ByteSizeLong() const {return MiniKqlProgram ? MiniKqlProgram->Data.Blob.Size() : 0; }
+    size_t ByteSizeLong() const {return MiniKqlProgram ? MiniKqlProgram->Data.Blob.size() : 0; }
 
     Y_SAVELOAD_DEFINE(MiniKqlProgram, Sources, Sinks);
 };

@@ -1,0 +1,147 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07668cb5215fea6ee1517de255c09e3e
+BELONGS ya.make
+    License text:
+        // Copyright (c) 1991-2022 Unicode, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/__format/escaped_output_table.h [29:29]
+        include/__format/extended_grapheme_cluster_table.h [29:29]
+        include/__format/width_estimation_table.h [29:29]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 33fb5dcc2845a99d87d337644dac5e88
+BELONGS ya.make
+    License text:
+        // Copyright 2018 Ulf Adams
+        // Copyright (c) Microsoft Corporation. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/include/ryu/common.h [12:13]
+        src/include/ryu/d2fixed.h [12:13]
+        src/include/ryu/d2fixed_full_table.h [12:13]
+        src/include/ryu/d2s.h [12:13]
+        src/include/ryu/d2s_full_table.h [12:13]
+        src/include/ryu/d2s_intrinsics.h [12:13]
+        src/include/ryu/digit_table.h [12:13]
+        src/include/ryu/f2s.h [12:13]
+        src/include/ryu/ryu.h [13:14]
+        src/ryu/d2fixed.cpp [12:13]
+        src/ryu/d2s.cpp [12:13]
+        src/ryu/f2s.cpp [12:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4bf0a71a5a6e8f89dd3e5e3a19bcfdbb
+BELONGS ya.make
+    License text:
+        //       Copyright (2022) National Technology & Engineering
+        //               Solutions of Sandia, LLC (NTESS).
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/__fwd/mdspan.h [9:10]
+        include/__mdspan/default_accessor.h [9:10]
+        include/__mdspan/extents.h [9:10]
+        include/__mdspan/layout_left.h [9:10]
+        include/__mdspan/layout_right.h [9:10]
+        include/__mdspan/layout_stride.h [9:10]
+        include/__mdspan/mdspan.h [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e0df4d49b106bd82efbad864a93ffce1
+BELONGS ya.make
+    License text:
+        // Copyright (c) Microsoft Corporation.
+        // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/charconv.cpp [31:32]
+        src/include/ryu/common.h [9:10]
+        src/include/ryu/common.h [12:13]
+        src/include/ryu/d2fixed.h [9:10]
+        src/include/ryu/d2fixed.h [12:13]
+        src/include/ryu/d2fixed_full_table.h [9:10]
+        src/include/ryu/d2fixed_full_table.h [12:13]
+        src/include/ryu/d2s.h [9:10]
+        src/include/ryu/d2s.h [12:13]
+        src/include/ryu/d2s_full_table.h [9:10]
+        src/include/ryu/d2s_full_table.h [12:13]
+        src/include/ryu/d2s_intrinsics.h [9:10]
+        src/include/ryu/d2s_intrinsics.h [12:13]
+        src/include/ryu/digit_table.h [9:10]
+        src/include/ryu/digit_table.h [12:13]
+        src/include/ryu/f2s.h [9:10]
+        src/include/ryu/f2s.h [12:13]
+        src/include/ryu/ryu.h [10:11]
+        src/include/ryu/ryu.h [13:14]
+        src/include/to_chars_floating_point.h [9:10]
+        src/ryu/d2fixed.cpp [9:10]
+        src/ryu/d2fixed.cpp [12:13]
+        src/ryu/d2s.cpp [9:10]
+        src/ryu/d2s.cpp [12:13]
+        src/ryu/f2s.cpp [9:10]
+        src/ryu/f2s.cpp [12:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ebc015cad7377d32e7b2fc0ae5293aa1
+BELONGS ya.make
+FILE_INCLUDE CREDITS.TXT found in files: LICENSE.TXT at line 252
+    # libcxxabi/CREDITS.TXT included in libcxxabi
+    License text:
+        Copyright (c) 2009-2019 by the contributors listed in CREDITS.TXT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.TXT [252:252]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f52c727d32a7eaf5a8de6bc96b82797c
+BELONGS ya.make
+FILE_INCLUDE CREDITS.TXT found in files: LICENSE.TXT at line 293
+    # libcxxabi/CREDITS.TXT included in libcxxabi
+    License text:
+        Copyright (c) 2009-2014 by the contributors listed in CREDITS.TXT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.TXT [293:293]

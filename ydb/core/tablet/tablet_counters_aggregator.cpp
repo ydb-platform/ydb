@@ -102,7 +102,7 @@ public:
             typeCounters->Apply(tabletId, executorCounters, appCounters, tabletType);
         }
         //
-        if (!IsFollower && AppData(ctx)->FeatureFlags.GetEnableDbCounters() && tenantPathId) {
+        if (!IsFollower && DbWatcherActorId && tenantPathId) {
             auto dbCounters = GetDbCounters(tenantPathId, ctx);
             if (dbCounters) {
                 auto* limitedAppCounters = GetOrAddLimitedAppCounters(tabletType);
@@ -1474,7 +1474,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
                 groupNames[j] = TString(1, toupper(groupNames[j][0])) + groupNames[j].substr(1);
                 if (groupNames[j] == "Topic") {
                     if (NPersQueue::CorrectName(groups[j])) {
-                        TString dc = to_title(NPersQueue::GetDC(groups[j]));
+                        TString dc = to_title(TString{NPersQueue::GetDC(groups[j])});
                         TString producer = NPersQueue::GetProducer(groups[j]);
                         TString topic = NPersQueue::GetRealTopic(groups[j]);
                         group = group->GetSubgroup("OriginDC", dc);

@@ -4,6 +4,7 @@
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
+#include <yt/cpp/mapreduce/interface/fluent.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
 
@@ -75,26 +76,6 @@ static void SetFirstLastTabletIndex(TNode* node, const TOptions& options)
     if (options.LastTabletIndex_) {
         (*node)["last_tablet_index"] = *options.LastTabletIndex_;
     }
-}
-
-static TString GetDefaultTransactionTitle()
-{
-    const auto processState = TProcessState::Get();
-    TStringStream res;
-
-    res << "User transaction. Created by: " << processState->UserName << " on " << processState->FqdnHostName
-        << " client: " << processState->ClientVersion << " pid: " << processState->Pid;
-    if (!processState->CommandLine.empty()) {
-        res << " program: " << processState->CommandLine[0];
-    } else {
-        res << " command line is unknown probably NYT::Initialize was never called";
-    }
-
-#ifndef NDEBUG
-    res << " build: debug";
-#endif
-
-    return res.Str();
 }
 
 template <typename T>
@@ -193,7 +174,7 @@ TNode SerializeParamsForMultisetAttributes(
     const TTransactionId& transactionId,
     const TString& pathPrefix,
     const TYPath& path,
-    [[maybe_unused]] const TMultisetAttributesOptions& options)
+    const TMultisetAttributesOptions& options)
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
@@ -308,12 +289,11 @@ TNode SerializeParamsForUnlock(
     const TTransactionId& transactionId,
     const TString& pathPrefix,
     const TYPath& path,
-    const TUnlockOptions& options)
+    const TUnlockOptions& /*options*/)
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
-    Y_UNUSED(options);
     return result;
 }
 
@@ -397,7 +377,21 @@ TNode SerializeParamsForListOperations(
     return result;
 }
 
-TNode SerializeParamsForGetOperation(const std::variant<TString, TOperationId>& aliasOrOperationId, const TGetOperationOptions& options)
+TNode SerializeParamsForStartOperation(
+    const TTransactionId& transactionId,
+    EOperationType type,
+    const TNode& spec)
+{
+    TNode result;
+    SetTransactionIdParam(&result, transactionId);
+    result["operation_type"] = ToString(type);
+    result["spec"] = spec;
+    return result;
+}
+
+TNode SerializeParamsForGetOperation(
+    const std::variant<TString, TOperationId>& aliasOrOperationId,
+    const TGetOperationOptions& options)
 {
     auto includeRuntime = options.IncludeRuntime_;
     TNode result;
@@ -453,11 +447,10 @@ TNode SerializeParamsForSuspendOperation(
 
 TNode SerializeParamsForResumeOperation(
     const TOperationId& operationId,
-    const TResumeOperationOptions& options)
+    const TResumeOperationOptions& /*options*/)
 {
     TNode result;
     SetOperationIdParam(&result, operationId);
-    Y_UNUSED(options);
     return result;
 }
 
@@ -525,6 +518,15 @@ TNode SerializeParamsForGetJob(
     return result;
 }
 
+TNode SerializeParamsForGetJobTrace(
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& /* options */)
+{
+    TNode result;
+    SetOperationIdParam(&result, operationId);
+    return result;
+}
+
 TNode SerializeParamsForListJobs(
     const TOperationId& operationId,
     const TListJobsOptions& options)
@@ -552,6 +554,15 @@ TNode SerializeParamsForListJobs(
     }
     if (options.WithMonitoringDescriptor_) {
         result["with_monitoring_descriptor"] = *options.WithMonitoringDescriptor_;
+    }
+    if (options.FromTime_) {
+        result["from_time"] = ToString(options.FromTime_);
+    }
+    if (options.ToTime_) {
+        result["to_time"] = ToString(options.ToTime_);
+    }
+    if (options.ContinuationToken_) {
+        result["continuation_token"] = *options.ContinuationToken_;
     }
 
     if (options.SortField_) {
@@ -627,10 +638,55 @@ TNode SerializeParametersForDeleteRows(
 TNode SerializeParametersForTrimRows(
     const TString& pathPrefix,
     const TYPath& path,
-    const TTrimRowsOptions& /* options*/)
+    const TTrimRowsOptions& /*options*/)
 {
     TNode result;
     SetPathParam(&result, pathPrefix, path);
+    return result;
+}
+
+TNode SerializeParamsForReadTable(
+    const TTransactionId& transactionId,
+    const TTableReaderOptions& options)
+{
+    TNode result;
+    SetTransactionIdParam(&result, transactionId);
+    result["control_attributes"] = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("enable_row_index").Value(options.ControlAttributes_.EnableRowIndex_)
+            .Item("enable_range_index").Value(options.ControlAttributes_.EnableRangeIndex_)
+        .EndMap();
+    return result;
+}
+
+TNode SerializeParamsForReadBlobTable(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TKey& key,
+    const TBlobTableReaderOptions& options)
+{
+    auto lowerLimitKey = key;
+    lowerLimitKey.Parts_.push_back(options.StartPartIndex_);
+    auto upperLimitKey = key;
+    upperLimitKey.Parts_.push_back(std::numeric_limits<i64>::max());
+
+    TNode result = PathToParamNode(
+        TRichYPath(path).
+            AddRange(TReadRange()
+                .LowerLimit(TReadLimit().Key(lowerLimitKey))
+                .UpperLimit(TReadLimit().Key(upperLimitKey))));
+
+    SetTransactionIdParam(&result, transactionId);
+
+    result["start_part_index"] = options.StartPartIndex_;
+    result["offset"] = options.Offset_;
+    if (options.PartIndexColumnName_) {
+        result["part_index_column_name"] = *options.PartIndexColumnName_;
+    }
+    if (options.DataColumnName_) {
+        result["data_column_name"] = *options.DataColumnName_;
+    }
+    result["part_size"] = options.PartSize_;
     return result;
 }
 
@@ -819,6 +875,10 @@ TNode SerializeParamsForSkyShareTable(
         result["enable_fastbone"] = *options.EnableFastbone_;
     }
 
+    if (options.Pool_) {
+        result["pool"] = *options.Pool_;
+    }
+
     return result;
 }
 
@@ -845,9 +905,8 @@ TNode SerializeParamsForGetTabletInfos(
     const TString& pathPrefix,
     const TYPath& path,
     const TVector<int>& tabletIndexes,
-    const TGetTabletInfosOptions& options)
+    const TGetTabletInfosOptions& /*options*/)
 {
-    Y_UNUSED(options);
     TNode result;
     SetPathParam(&result, pathPrefix, path);
     result["tablet_indexes"] = TNode::CreateList();

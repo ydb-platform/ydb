@@ -5,6 +5,8 @@ This section contains recipes for various tasks that can be solved with {{ ydb-s
 Table of contents:
 
 * [{#T}](convert-table-type.md)
+* [{#T}](benchmarks.md)
+* [{#T}](ttl.md)
 
 See also:
 

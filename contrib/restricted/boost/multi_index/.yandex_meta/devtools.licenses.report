@@ -1,0 +1,194 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              089f5df1fde5e9be79fa00a24c4269ff
+BELONGS ya.make
+    License text:
+        http://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [48:48]
+
+KEEP     BSL-1.0              483dde97b6686cd137961e30f0fe963e
+BELONGS ya.make
+    License text:
+        under the [Boost Software License, Version 1.0](
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [48:48]
+
+KEEP     Mit-Old-Style        99b210ed9efe704d061e43a6c4c4beb3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mit-old-style
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-old-style.LICENSE
+    Files with this license:
+        include/boost/multi_index/detail/ord_index_impl.hpp [14:20]
+        include/boost/multi_index/detail/ord_index_node.hpp [14:20]
+        include/boost/multi_index/detail/ord_index_ops.hpp [14:20]
+
+KEEP     Mit-Old-Style        b202f5e6061e3eeef6c7dcc2414164b3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mit-old-style
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-old-style.LICENSE
+    Files with this license:
+        include/boost/multi_index/detail/ord_index_impl.hpp [26:32]
+        include/boost/multi_index/detail/ord_index_node.hpp [26:32]
+        include/boost/multi_index/detail/ord_index_ops.hpp [26:32]
+
+KEEP     BSL-1.0              c01de0902348b7c9494d50eaacc721eb
+BELONGS ya.make
+    License text:
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+         * http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/multi_index/composite_key.hpp [2:4]
+        include/boost/multi_index/detail/access_specifier.hpp [2:4]
+        include/boost/multi_index/detail/adl_swap.hpp [2:4]
+        include/boost/multi_index/detail/allocator_traits.hpp [2:4]
+        include/boost/multi_index/detail/any_container_view.hpp [2:4]
+        include/boost/multi_index/detail/archive_constructed.hpp [2:4]
+        include/boost/multi_index/detail/auto_space.hpp [2:4]
+        include/boost/multi_index/detail/bad_archive_exception.hpp [2:4]
+        include/boost/multi_index/detail/base_type.hpp [2:4]
+        include/boost/multi_index/detail/bidir_node_iterator.hpp [2:4]
+        include/boost/multi_index/detail/bucket_array.hpp [2:4]
+        include/boost/multi_index/detail/cons_stdtuple.hpp [2:4]
+        include/boost/multi_index/detail/converter.hpp [2:4]
+        include/boost/multi_index/detail/copy_map.hpp [2:4]
+        include/boost/multi_index/detail/define_if_constexpr_macro.hpp [2:4]
+        include/boost/multi_index/detail/do_not_copy_elements_tag.hpp [2:4]
+        include/boost/multi_index/detail/duplicates_iterator.hpp [2:4]
+        include/boost/multi_index/detail/has_tag.hpp [2:4]
+        include/boost/multi_index/detail/hash_index_args.hpp [2:4]
+        include/boost/multi_index/detail/hash_index_iterator.hpp [2:4]
+        include/boost/multi_index/detail/hash_index_node.hpp [2:4]
+        include/boost/multi_index/detail/header_holder.hpp [2:4]
+        include/boost/multi_index/detail/ignore_wstrict_aliasing.hpp [2:4]
+        include/boost/multi_index/detail/index_access_sequence.hpp [2:4]
+        include/boost/multi_index/detail/index_base.hpp [2:4]
+        include/boost/multi_index/detail/index_loader.hpp [2:4]
+        include/boost/multi_index/detail/index_matcher.hpp [2:4]
+        include/boost/multi_index/detail/index_node_base.hpp [2:4]
+        include/boost/multi_index/detail/index_saver.hpp [2:4]
+        include/boost/multi_index/detail/invalidate_iterators.hpp [2:4]
+        include/boost/multi_index/detail/invariant_assert.hpp [2:4]
+        include/boost/multi_index/detail/is_function.hpp [2:4]
+        include/boost/multi_index/detail/is_index_list.hpp [2:4]
+        include/boost/multi_index/detail/is_transparent.hpp [2:4]
+        include/boost/multi_index/detail/iter_adaptor.hpp [2:4]
+        include/boost/multi_index/detail/modify_key_adaptor.hpp [2:4]
+        include/boost/multi_index/detail/no_duplicate_tags.hpp [2:4]
+        include/boost/multi_index/detail/node_handle.hpp [2:4]
+        include/boost/multi_index/detail/node_type.hpp [2:4]
+        include/boost/multi_index/detail/ord_index_args.hpp [2:4]
+        include/boost/multi_index/detail/ord_index_impl.hpp [2:4]
+        include/boost/multi_index/detail/ord_index_impl_fwd.hpp [2:4]
+        include/boost/multi_index/detail/ord_index_node.hpp [2:4]
+        include/boost/multi_index/detail/ord_index_ops.hpp [2:4]
+        include/boost/multi_index/detail/promotes_arg.hpp [2:4]
+        include/boost/multi_index/detail/raw_ptr.hpp [2:4]
+        include/boost/multi_index/detail/restore_wstrict_aliasing.hpp [2:4]
+        include/boost/multi_index/detail/rnd_index_loader.hpp [2:4]
+        include/boost/multi_index/detail/rnd_index_node.hpp [2:4]
+        include/boost/multi_index/detail/rnd_index_ops.hpp [2:4]
+        include/boost/multi_index/detail/rnd_index_ptr_array.hpp [2:4]
+        include/boost/multi_index/detail/rnd_node_iterator.hpp [2:4]
+        include/boost/multi_index/detail/rnk_index_ops.hpp [2:4]
+        include/boost/multi_index/detail/safe_mode.hpp [2:4]
+        include/boost/multi_index/detail/scope_guard.hpp [2:4]
+        include/boost/multi_index/detail/scoped_bilock.hpp [2:4]
+        include/boost/multi_index/detail/seq_index_node.hpp [2:4]
+        include/boost/multi_index/detail/seq_index_ops.hpp [2:4]
+        include/boost/multi_index/detail/serialization_version.hpp [2:4]
+        include/boost/multi_index/detail/uintptr_type.hpp [2:4]
+        include/boost/multi_index/detail/unbounded.hpp [2:4]
+        include/boost/multi_index/detail/undef_if_constexpr_macro.hpp [2:4]
+        include/boost/multi_index/detail/value_compare.hpp [2:4]
+        include/boost/multi_index/detail/vartempl_support.hpp [2:4]
+        include/boost/multi_index/global_fun.hpp [2:4]
+        include/boost/multi_index/hashed_index.hpp [2:4]
+        include/boost/multi_index/hashed_index_fwd.hpp [2:4]
+        include/boost/multi_index/identity.hpp [2:4]
+        include/boost/multi_index/identity_fwd.hpp [2:4]
+        include/boost/multi_index/indexed_by.hpp [2:4]
+        include/boost/multi_index/key.hpp [2:4]
+        include/boost/multi_index/key_extractors.hpp [2:4]
+        include/boost/multi_index/mem_fun.hpp [2:4]
+        include/boost/multi_index/member.hpp [2:4]
+        include/boost/multi_index/ordered_index.hpp [2:4]
+        include/boost/multi_index/ordered_index_fwd.hpp [2:4]
+        include/boost/multi_index/random_access_index.hpp [2:4]
+        include/boost/multi_index/random_access_index_fwd.hpp [2:4]
+        include/boost/multi_index/ranked_index.hpp [2:4]
+        include/boost/multi_index/ranked_index_fwd.hpp [2:4]
+        include/boost/multi_index/safe_mode_errors.hpp [2:4]
+        include/boost/multi_index/sequenced_index.hpp [2:4]
+        include/boost/multi_index/sequenced_index_fwd.hpp [2:4]
+        include/boost/multi_index/tag.hpp [2:4]
+        include/boost/multi_index_container.hpp [4:6]
+        include/boost/multi_index_container_fwd.hpp [2:4]
+
+KEEP     BSL-1.0              d21fe46368a553b08b3dd6193f2c907c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [5:5]

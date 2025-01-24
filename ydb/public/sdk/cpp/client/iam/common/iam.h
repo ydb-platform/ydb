@@ -14,7 +14,7 @@
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace NIam {
 constexpr TStringBuf DEFAULT_ENDPOINT = "iam.api.cloud.yandex.net";

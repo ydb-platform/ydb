@@ -5,12 +5,16 @@
 #include "factory.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <util/stream/str.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
+
+extern "C" {
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+}
 
 namespace NKikHouse {
 namespace NSerialization {
@@ -480,9 +484,24 @@ public:
         CONVERT(StepOrderId,    String);
 
         case NScheme::NTypeIds::Pg:
-            // TODO: support pg types
-            throw yexception() << "Unsupported pg type";
-
+            switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
+                case INT2OID:
+                    return Get("Int16");
+                case INT4OID:
+                    return Get("Int32");
+                case INT8OID:
+                    return Get("Int64");
+                case FLOAT4OID:
+                    return Get("Float");
+                case FLOAT8OID:
+                    return Get("Double");
+                case BYTEAOID:
+                    return Get("String");
+                case TEXTOID:
+                    return Get("String");
+                default:
+                    throw yexception() << "Unsupported pg type";
+            }
         default:
             throw yexception() << "Unsupported type: " << type.GetTypeId();
         }

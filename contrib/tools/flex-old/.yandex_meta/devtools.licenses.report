@@ -1,0 +1,98 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     LicenseRef-scancode-flex-2.5 5c469d32fa8c552763123c76d5a2688c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-flex-2.5
+        Score           : 84.00
+        Match type      : TEXT
+        Links           : http://www.cs.cmu.edu/afs/cs/project/ai-repository-9/ai/areas/nlp/parsing/flex/copying.txt, http://www.cs.princeton.edu/~appel/modern/c/software/flex/flex.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/flex-2.5.LICENSE
+    Files with this license:
+        FlexLexer.h [6:25]
+
+KEEP     GPL-2.0-or-later WITH Bison-exception-2.2 d06086ce4c1658e3c150cafc4721ba5a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        parse.c [8:34]
+        parse.h [8:34]
+    Scancode info:
+        Original SPDX id: Bison-exception-2.2
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://spdx.org/licenses/Bison-exception-2.2
+    Files with this license:
+        parse.c [8:34]
+        parse.h [8:34]
+
+KEEP     LicenseRef-scancode-flex-2.5 d97e8bcca51f859ad8339f8743664c44
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-flex-2.5
+        Score           : 84.00
+        Match type      : TEXT
+        Links           : http://www.cs.cmu.edu/afs/cs/project/ai-repository-9/ai/areas/nlp/parsing/flex/copying.txt, http://www.cs.princeton.edu/~appel/modern/c/software/flex/flex.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/flex-2.5.LICENSE
+    Files with this license:
+        flexdef.h [4:26]
+        main.c [4:26]
+
+KEEP     LicenseRef-scancode-flex-2.5 fb63ab0ec1daf6fb064488445ed2b3cd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-flex-2.5
+        Score           : 84.00
+        Match type      : TEXT
+        Links           : http://www.cs.cmu.edu/afs/cs/project/ai-repository-9/ai/areas/nlp/parsing/flex/copying.txt, http://www.cs.princeton.edu/~appel/modern/c/software/flex/flex.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/flex-2.5.LICENSE
+    Files with this license:
+        ccl.c [4:26]
+        dfa.c [4:26]
+        ecs.c [4:26]
+        gen.c [4:26]
+        misc.c [4:26]
+        nfa.c [4:26]
+        parse.c [128:150]
+        scan.c [1251:1273]
+        sym.c [4:26]
+        tblcmp.c [4:26]
+        yylex.c [4:26]

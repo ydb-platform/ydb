@@ -1,6 +1,6 @@
 #include "debug_info.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NFq {
 
@@ -19,14 +19,14 @@ TString TDebugItem::ToString() const {
 size_t TDebugItem::GetByteSize() const {
     size_t paramsSize = 0;
     for (const auto& [key, value]: Params.GetValues()) {
-        paramsSize += key.Size() + NYdb::TProtoAccessor::GetProto(value).ByteSizeLong();
+        paramsSize += key.size() + NYdb::TProtoAccessor::GetProto(value).ByteSizeLong();
     }
     return sizeof(*this)
-            + Query.Size()
+            + Query.size()
             + paramsSize
-            + Plan.Size()
-            + Ast.Size()
-            + Error.Size();
+            + Plan.size()
+            + Ast.size()
+            + Error.size();
 }
 
 } // namespace NFq

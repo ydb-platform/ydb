@@ -470,6 +470,7 @@ struct TStateStorageInfo : public TThrRefBase {
             StatusOk,
             StatusNoInfo,
             StatusOutdated,
+            StatusUnavailable,
         };
 
         ui32 Sz;

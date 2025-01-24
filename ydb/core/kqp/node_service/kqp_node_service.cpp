@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
+#include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
@@ -80,6 +81,9 @@ public:
         }
         if (config.HasIteratorReadQuotaSettings()) {
             SetIteratorReadsQuotaSettings(config.GetIteratorReadQuotaSettings());
+        }
+        if (config.HasWriteActorSettings()) {
+            SetWriteActorSettings(config.GetWriteActorSettings());
         }
 
         SchedulerOptions = {
@@ -149,6 +153,9 @@ private:
             ? TMaybe<ui64>(msg.GetLockTxId())
             : Nothing();
         ui32 lockNodeId = msg.GetLockNodeId();
+        TMaybe<NKikimrDataEvents::ELockMode> lockMode = msg.HasLockMode()
+            ? TMaybe<NKikimrDataEvents::ELockMode>(msg.GetLockMode())
+            : Nothing();
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // todo: support partial start
 
@@ -195,6 +202,31 @@ private:
 
         auto schedulerNow = TlsActivationContext->Monotonic();
 
+        TString schedulerGroup = msg.GetSchedulerGroup();
+
+        if (SchedulerOptions.Scheduler->Disabled(schedulerGroup)) {
+            auto share = msg.GetPoolMaxCpuShare();
+            if (share <= 0 && (msg.HasQueryCpuShare() || msg.HasResourceWeight())) {
+                share = 1.0;
+            }
+            std::optional<double> resourceWeight;
+            if (msg.GetResourceWeight() >= 0) {
+                resourceWeight = msg.GetResourceWeight();
+            }
+
+            if (share > 0) {
+                Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow, resourceWeight);
+                Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
+            } else {
+                schedulerGroup = "";
+            }
+        }
+
+        std::optional<ui64> querySchedulerGroup;
+        if (msg.HasQueryCpuShare() && schedulerGroup) {
+            querySchedulerGroup = Scheduler->MakePerQueryGroup(schedulerNow, msg.GetQueryCpuShare(), schedulerGroup);
+        }
+
         // start compute actors
         TMaybe<NYql::NDqProto::TRlPath> rlPath = Nothing();
         if (msgRtSettings.HasRlPath()) {
@@ -204,34 +236,25 @@ private:
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
             txId, TInstant::Now(), ResourceManager_->GetCounters(),
             msg.GetSchedulerGroup(), msg.GetMemoryPoolPercent(),
-            msg.GetDatabase());
+            msg.GetDatabase(), Config.GetVerboseMemoryLimitException());
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
-            TString group = msg.GetSchedulerGroup();
-
             TComputeActorSchedulingOptions schedulingTaskOptions {
                 .Now = schedulerNow,
                 .SchedulerActorId = SchedulerActorId,
                 .Scheduler = Scheduler.get(),
-                .Group = group,
+                .Group = schedulerGroup,
                 .Weight = 1,
-                .NoThrottle = false,
+                .NoThrottle = schedulerGroup.empty(),
                 .Counters = Counters
             };
 
-            if (SchedulerOptions.Scheduler->Disabled(group)) {
-                auto share = msg.GetMaxCpuShare();
-                if (share > 0) {
-                    Scheduler->UpdateMaxShare(group, share, schedulerNow);
-                    Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabase(), group, share));
-                } else {
-                    schedulingTaskOptions.NoThrottle = true;
-                }
-            } 
-
             if (!schedulingTaskOptions.NoThrottle) {
                 schedulingTaskOptions.Handle = SchedulerOptions.Scheduler->Enroll(schedulingTaskOptions.Group, schedulingTaskOptions.Weight, schedulingTaskOptions.Now);
+                if (querySchedulerGroup) {
+                    Scheduler->AddToGroup(schedulerNow, *querySchedulerGroup, schedulingTaskOptions.Handle);
+                }
             }
 
             auto result = CaFactory_->CreateKqpComputeActor({
@@ -239,6 +262,7 @@ private:
                 .TxId = txId,
                 .LockTxId = lockTxId,
                 .LockNodeId = lockNodeId,
+                .LockMode = lockMode,
                 .Task = &dqTask,
                 .TxInfo = txInfo,
                 .RuntimeSettings = runtimeSettingsBase,
@@ -256,6 +280,7 @@ private:
                 .ComputesByStages = &computesByStage,
                 .State = State_,
                 .SchedulingOptions = std::move(schedulingTaskOptions),
+                // TODO: block tracking mode is not set!
             });
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
@@ -284,7 +309,8 @@ private:
         for (auto&& i : computesByStage) {
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
-                    m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
+                    m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, lockMode,
+                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
             }
         }
 
@@ -417,6 +443,24 @@ private:
         }
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxDelayMs());
         SetReadIteratorBackoffSettings(ptr);
+    }
+
+    void SetWriteActorSettings(const NKikimrConfig::TTableServiceConfig::TWriteActorSettings& settings) {
+        auto ptr = MakeIntrusive<NKikimr::NKqp::TWriteActorSettings>();
+
+        ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
+        ptr->MemoryLimitPerMessageBytes = settings.GetMemoryLimitPerMessageBytes();
+        ptr->MaxBatchesPerMessage = settings.GetMaxBatchesPerMessage();
+
+        ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
+        ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());
+        ptr->UnsertaintyRatio = settings.GetUnsertaintyRatio();
+        ptr->Multiplier = settings.GetMultiplier();
+
+        ptr->MaxWriteAttempts = settings.GetMaxWriteAttempts();
+        ptr->MaxResolveAttempts = settings.GetMaxResolveAttempts();
+
+        NKikimr::NKqp::SetWriteActorSettings(ptr);
     }
 
     void HandleWork(TEvents::TEvUndelivered::TPtr& ev) {

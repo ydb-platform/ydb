@@ -1,0 +1,8 @@
+exclude:
+# Привозим только нужное из оригинального пакета, ниже перечисленное пропускаем
+- future/moves/dbm/gnu.py
+- future/moves/tkinter/*
+- libfuturize/*
+- libpasteurize/*
+- past/translation/*
+- tkinter/*

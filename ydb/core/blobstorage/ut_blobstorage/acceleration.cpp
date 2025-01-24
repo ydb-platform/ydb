@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/vdisk_delay_emulator.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 
@@ -10,136 +11,10 @@
 #define Ctest Cnull
 
 Y_UNIT_TEST_SUITE(Acceleration) {
-    using TFlowRecord = TIntrusivePtr<NBackpressure::TFlowRecord>;
-    using TQueueId = NKikimrBlobStorage::EVDiskQueueId;
-
-    struct TDiskDelay {
-        TWeightedRandom<TDuration> Delays;
-        TDuration Max;
-        TString Tag;
-
-        TDiskDelay(TDuration delay = TDuration::Zero(), TString tag = "")
-            : Max(delay)
-            , Tag(tag)
-        {
-            Delays.AddValue(delay, 1);
-        }
-
-        TDiskDelay(TDuration min, ui64 minWeight, TDuration max, ui64 maxWeight, TString tag = "")
-            : Max(max)
-            , Tag(tag)
-        {
-            Delays.AddValue(min, minWeight);
-            Delays.AddValue(max, maxWeight);
-        }
-
-        TDiskDelay(const TDiskDelay&) = default;
-        TDiskDelay(TDiskDelay&&) = default;
-        TDiskDelay& operator=(const TDiskDelay&) = default;
-        TDiskDelay& operator=(TDiskDelay&&) = default;
-
-        TDuration GetRandom() {
-            return Delays.GetRandom();
-        }
-    };
-
-    struct TEvDelayedMessageWrapper : public TEventLocal<TEvDelayedMessageWrapper, TEvBlobStorage::EvDelayedMessageWrapper> {
-    public:
-        std::unique_ptr<IEventHandle> Event;
-
-        TEvDelayedMessageWrapper(std::unique_ptr<IEventHandle>& ev)
-            : Event(ev.release())
-        {}
-    };
-
-    struct TVDiskDelayEmulator {
-        TVDiskDelayEmulator(const std::shared_ptr<TEnvironmentSetup>& env)
-            : Env(env)
-        {}
-
-        using TFlowKey = std::pair<ui32, TQueueId>;  // { nodeId, queueId }
-
-        std::shared_ptr<TEnvironmentSetup> Env;
-        TActorId Edge;
-        // assuming there is only one disk per node
-        std::unordered_map<TFlowKey, TFlowRecord> FlowRecords;
-
-        std::unordered_map<ui32, TDiskDelay> DelayByNode;
-        std::deque<TDiskDelay> DelayByResponseOrder;
-        TDiskDelay DefaultDelay = TDuration::Seconds(1);
-        bool LogUnwrap = false;
-
-        using TEventHandler = std::function<bool(std::unique_ptr<IEventHandle>&)>;
-
-        std::unordered_map<ui32, TEventHandler> EventHandlers;
-
-        void AddHandler(ui32 eventType, TEventHandler handler) {
-            EventHandlers[eventType] = handler;
-        }
-
-        bool Filter(ui32/* nodeId*/, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDelayedMessageWrapper::EventType) {
-                std::unique_ptr<IEventHandle> delayedMsg(std::move(ev));
-                ev.reset(delayedMsg->Get<TEvDelayedMessageWrapper>()->Event.release());
-                if (LogUnwrap) {
-                    Ctest << TAppData::TimeProvider->Now() << " Unwrap " << ev->ToString() << Endl;
-                }
-                return true;
-            }
-            
-            ui32 type = ev->GetTypeRewrite();
-            auto it = EventHandlers.find(type);
-            if (it != EventHandlers.end() && it->second) {
-                return (it->second)(ev);
-            }
-            return true;
-        }
-
-        TDuration GetMsgDelay(ui32 vdiskNodeId) {
-            TDiskDelay& delay = DefaultDelay;
-            auto it = DelayByNode.find(vdiskNodeId);
-            if (it == DelayByNode.end()) {
-                if (!DelayByResponseOrder.empty()) {
-                    delay = DelayByResponseOrder.front();
-                    DelayByResponseOrder.pop_front();
-                }
-                DelayByNode[vdiskNodeId] = delay;
-            } else {
-                delay = it->second;
-            }
-            TDuration rand = delay.GetRandom();
-            return rand;
-        }
-
-        TDuration DelayMsg(std::unique_ptr<IEventHandle>& ev) {
-            TDuration delay = GetMsgDelay(ev->Sender.NodeId());
-
-            Env->Runtime->WrapInActorContext(Edge, [&] {
-                TActivationContext::Schedule(delay, new IEventHandle(
-                        ev->Sender,
-                        ev->Recipient,
-                        new TEvDelayedMessageWrapper(ev))
-                );
-            });
-            return delay;
-        }
-
-        void SetDelayByResponseOrder(const std::deque<TDiskDelay>& delays) {
-            DelayByResponseOrder = delays;
-            DelayByNode = {};
-        }
-    };
-
-    struct TDelayer {
-        std::shared_ptr<TVDiskDelayEmulator> VDiskDelayEmulator;
-
-        bool operator()(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-            return VDiskDelayEmulator->Filter(nodeId, ev);
-        }
-    };
 
     struct TestCtx {
-        TestCtx(const TBlobStorageGroupType& erasure, float slowDiskThreshold, float delayMultiplier)
+        TestCtx(const TBlobStorageGroupType& erasure, float slowDiskThreshold, float delayMultiplier,
+                ui32 maxSlowCount = 2)
             : NodeCount(erasure.BlobSubgroupSize() + 1)
             , Erasure(erasure)
             , Env(new TEnvironmentSetup({
@@ -148,6 +23,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
                 .LocationGenerator = [this](ui32 nodeId) { return LocationGenerator(nodeId); },
                 .SlowDiskThreshold = slowDiskThreshold,
                 .VDiskPredictedDelayMultiplier = delayMultiplier,
+                .MaxNumOfSlowDisks = maxSlowCount,
             }))
             , VDiskDelayEmulator(new TVDiskDelayEmulator(Env))
         {}
@@ -194,7 +70,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
             });
             auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(Edge, false, TInstant::Max());
 
-            Env->Runtime->FilterFunction = TDelayer{ .VDiskDelayEmulator = VDiskDelayEmulator };
+            Env->Runtime->FilterFunction = TDelayFilterFunctor{ .VDiskDelayEmulator = VDiskDelayEmulator };
 
             for (const TQueueId& queueId : { TQueueId::PutTabletLog, TQueueId::GetFastRead, TQueueId::PutAsyncBlob,
                     TQueueId::GetAsyncRead }) {
@@ -242,31 +118,43 @@ Y_UNIT_TEST_SUITE(Acceleration) {
     void TestAcceleratePut(const TBlobStorageGroupType& erasure, ui32 slowDisksNum,
             NKikimrBlobStorage::EPutHandleClass handleClass, TDuration fastDelay,
             TDuration slowDelay, TDuration initDelay, TDuration waitTime,
-            float delayMultiplier) {
+            float delayMultiplier, ui32 maxSlowCount = 2) {
         ui32 initialRequests = 100;
         float slowDiskThreshold = 2;
         TDiskDelay fastDiskDelay = TDiskDelay(fastDelay);
         TDiskDelay slowDiskDelay = TDiskDelay(slowDelay);
         TDiskDelay initDiskDelay = TDiskDelay(initDelay);
 
-        for (ui32 fastDisksNum = 0; fastDisksNum < erasure.BlobSubgroupSize() - 2; ++fastDisksNum) {
+        ui32 requests = (erasure.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 6;
+
+        for (ui32 fastDisksNum = 0; fastDisksNum < requests - 1; ++fastDisksNum) {
             Ctest << "fastDisksNum# " << fastDisksNum << Endl;
-            TestCtx ctx(erasure, slowDiskThreshold, delayMultiplier);
+            TestCtx ctx(erasure, slowDiskThreshold, delayMultiplier, maxSlowCount);
             ctx.VDiskDelayEmulator->DefaultDelay = initDiskDelay;
             ctx.Initialize();
+            bool verboseHandlers = false;
 
             TString data = MakeData(1024);
-            auto put = [&](TLogoBlobID blobId) {
+            auto put = [&](TLogoBlobID blobId, bool timeout) {
                 ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
-                    SendToBSProxy(ctx.Edge, ctx.GroupId, new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max()), handleClass);
+                    TEvBlobStorage::TEvPut* ev = new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max());
+                    if (verboseHandlers) {
+                        Ctest << TAppData::TimeProvider->Now() << " Send TEvPut# " << ev->ToString() << Endl;
+                    }
+                    SendToBSProxy(ctx.Edge, ctx.GroupId, ev, handleClass);
                 });
                 auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(
-                        ctx.Edge, false, TAppData::TimeProvider->Now() + waitTime);
-                UNIT_ASSERT_C(res, "fastDisksNum# " << fastDisksNum);
-                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+                        ctx.Edge, false, timeout ? (TAppData::TimeProvider->Now() + waitTime) : TInstant::Max());
+                if (timeout) {
+                    if (slowDisksNum <= maxSlowCount) {
+                        UNIT_ASSERT_C(res, "fastDisksNum# " << fastDisksNum);
+                        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+                    } else {
+                        UNIT_ASSERT_C(!res, "fastDisksNum# " << fastDisksNum);
+                    }
+                }
             };
 
-            bool verboseHandlers = false;
             ctx.VDiskDelayEmulator->AddHandler(TEvBlobStorage::TEvVPutResult::EventType, [&](std::unique_ptr<IEventHandle>& ev) {
                 ui32 nodeId = ev->Sender.NodeId();
                 if (nodeId < ctx.NodeCount) {
@@ -283,14 +171,14 @@ Y_UNIT_TEST_SUITE(Acceleration) {
             });
 
             for (ui32 i = 0; i < initialRequests; ++i) {
-                put(TLogoBlobID(1, 1, 1, 1, data.size(), 123 + i));
+                put(TLogoBlobID(1, 1, 1, 1, data.size(), 123 + i), false);
             }
 
             ctx.Env->Sim(slowDelay);
 
             std::deque<TDiskDelay> delayByResponseOrder;
             for (ui32 i = 0; i < erasure.BlobSubgroupSize(); ++i) {
-                if (i >= fastDisksNum  && i < fastDisksNum + slowDisksNum) {
+                if (i >= fastDisksNum && i < fastDisksNum + slowDisksNum) {
                     delayByResponseOrder.push_back(slowDiskDelay);
                 } else {
                     delayByResponseOrder.push_back(fastDiskDelay);
@@ -301,7 +189,8 @@ Y_UNIT_TEST_SUITE(Acceleration) {
             ctx.VDiskDelayEmulator->LogUnwrap = true;
             verboseHandlers = true;
             ADD_DSPROXY_MESSAGE_PRINTER(TEvBlobStorage::TEvVPut);
-            put(TLogoBlobID(1, 1, 1, 1, data.size(), 1));
+            ADD_DSPROXY_MESSAGE_PRINTER(TEvBlobStorage::TEvPutResult);
+            put(TLogoBlobID(1, 1, 1, 1, data.size(), 1), true);
 
         }
     }
@@ -309,16 +198,18 @@ Y_UNIT_TEST_SUITE(Acceleration) {
     void TestAccelerateGet(const TBlobStorageGroupType& erasure, ui32 slowDisksNum,
             NKikimrBlobStorage::EGetHandleClass handleClass, TDuration fastDelay,
             TDuration slowDelay, TDuration initDelay, TDuration waitTime,
-            float delayMultiplier) {
+            float delayMultiplier, ui32 maxSlowCount = 2) {
         ui32 initialRequests = 100;
         float slowDiskThreshold = 2;
         TDiskDelay fastDiskDelay = TDiskDelay(fastDelay);
         TDiskDelay slowDiskDelay = TDiskDelay(slowDelay);
         TDiskDelay initDiskDelay = TDiskDelay(initDelay);
 
-        for (ui32 fastDisksNum = 0; fastDisksNum < erasure.BlobSubgroupSize() - 2; ++fastDisksNum) {
+        ui32 requests = 3;
+
+        for (ui32 fastDisksNum = 0; fastDisksNum < requests - 1; ++fastDisksNum) {
             Ctest << "fastDisksNum# " << fastDisksNum << Endl;
-            TestCtx ctx(erasure, slowDiskThreshold, delayMultiplier);
+            TestCtx ctx(erasure, slowDiskThreshold, delayMultiplier, maxSlowCount);
             ctx.VDiskDelayEmulator->DefaultDelay = initDiskDelay;
             ctx.Initialize();
 
@@ -340,7 +231,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
             });
 
             TString data = MakeData(1024);
-            auto putAndGet = [&](TLogoBlobID blobId) {
+            auto putAndGet = [&](TLogoBlobID blobId, bool timeout) {
                 ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
                     SendToBSProxy(ctx.Edge, ctx.GroupId, new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max()));
                 });
@@ -350,14 +241,21 @@ Y_UNIT_TEST_SUITE(Acceleration) {
                 ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
                     SendToBSProxy(ctx.Edge, ctx.GroupId, new TEvBlobStorage::TEvGet(blobId, 0, data.size(), TInstant::Max(), handleClass));
                 });
-                auto getRes = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(ctx.Edge, false, TAppData::TimeProvider->Now() + waitTime);
-                UNIT_ASSERT_C(getRes, "fastDisksNum# " << fastDisksNum);
-                UNIT_ASSERT_VALUES_EQUAL(getRes->Get()->Status, NKikimrProto::OK);
-                UNIT_ASSERT_VALUES_EQUAL(getRes->Get()->Responses[0].Status, NKikimrProto::OK);
+                auto getRes = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(ctx.Edge, false,
+                        timeout ? (TAppData::TimeProvider->Now() + waitTime) : TInstant::Max());
+                if (timeout) {
+                    if (slowDisksNum <= maxSlowCount) {
+                        UNIT_ASSERT_C(getRes, "fastDisksNum# " << fastDisksNum);
+                        UNIT_ASSERT_VALUES_EQUAL(getRes->Get()->Status, NKikimrProto::OK);
+                        UNIT_ASSERT_VALUES_EQUAL(getRes->Get()->Responses[0].Status, NKikimrProto::OK);
+                    } else {
+                        UNIT_ASSERT_C(!getRes, "fastDisksNum# " << fastDisksNum);
+                    }
+                }
             };
 
             for (ui32 i = 0; i < initialRequests; ++i) {
-                putAndGet(TLogoBlobID(1, 1, 1, 1, data.size(), 123 + i));
+                putAndGet(TLogoBlobID(1, 1, 1, 1, data.size(), 123 + i), false);
             }
             ctx.Env->Sim(slowDelay);
 
@@ -374,7 +272,8 @@ Y_UNIT_TEST_SUITE(Acceleration) {
             ctx.VDiskDelayEmulator->LogUnwrap = true;
             verboseHandlers = true;
             ADD_DSPROXY_MESSAGE_PRINTER(TEvBlobStorage::TEvVGet);
-            putAndGet(TLogoBlobID(1, 1, 1, 1, data.size(), 2));
+            ADD_DSPROXY_MESSAGE_PRINTER(TEvBlobStorage::TEvGetResult);
+            putAndGet(TLogoBlobID(1, 1, 1, 1, data.size(), 2), true);
         }
     }
 
@@ -424,7 +323,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
     }
 
     void TestThreshold(const TBlobStorageGroupType& erasure, ui32 slowDisks, bool delayPuts, bool delayGets,
-            TTestThresholdRequestSender sendRequests) {
+            TTestThresholdRequestSender sendRequests, float maxRatio) {
         float delayMultiplier = 1;
         float slowDiskThreshold = 1.2;
         TDiskDelay fastDiskDelay = TDiskDelay(TDuration::Seconds(0.1), 10, TDuration::Seconds(1), 1, "fast");
@@ -437,7 +336,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
         ui32 groupSize = erasure.BlobSubgroupSize();
 
         std::vector<bool> nodeIsSlow(groupSize, true);
-        std::vector<ui32> vputsByNode(groupSize, 0);
+        std::vector<ui32> vrequestsByNode(groupSize, 0);
     
         for (ui32 i = 0; i < groupSize; ++i) {
             bool isSlow = (i % 3 == 0 && i / 3 < slowDisks);
@@ -457,7 +356,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
                     TDuration delay = ctx.VDiskDelayEmulator->DelayMsg(ev);
                     Ctest << TAppData::TimeProvider->Now() << " TEvVPutResult: vdiskId# " << vdiskId.ToString() <<
                             " partId# " << partId.ToString() << " nodeId# " << nodeId << ", delay " << delay << Endl;
-                    ++vputsByNode[nodeId - 1];
+                    ++vrequestsByNode[nodeId - 1];
                     return false;
                 }
                 return true;
@@ -475,7 +374,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
                     TDuration delay = ctx.VDiskDelayEmulator->DelayMsg(ev);
                     Ctest << TAppData::TimeProvider->Now() << " TEvVGetResult: vdiskId# " << vdiskId.ToString() <<
                             " partId# " << partId.ToString() << " nodeId# " << nodeId << ", delay " << delay << Endl;
-                    ++vputsByNode[nodeId - 1];
+                    ++vrequestsByNode[nodeId - 1];
                     return false;
                 }
                 return true;
@@ -492,15 +391,15 @@ Y_UNIT_TEST_SUITE(Acceleration) {
 
         TStringStream str;
 
-        str << "VPUTS BY NODE: ";
+        str << "VRequests by node: ";
         for (ui32 i = 0; i < groupSize; ++i) {
-            str << "{ nodeId# " << i << " isSlow# " << nodeIsSlow[i] << ' ' << vputsByNode[i] << "}, ";
+            str << "{ nodeId# " << i << " isSlow# " << nodeIsSlow[i] << ' ' << vrequestsByNode[i] << "}, ";
             if (nodeIsSlow[i]) {
                 ++slowNodesCount;
-                slowNodesRequests += vputsByNode[i];
+                slowNodesRequests += vrequestsByNode[i];
             } else {
                 ++fastNodesCount;
-                fastNodesRequests += vputsByNode[i];
+                fastNodesRequests += vrequestsByNode[i];
             }
         }
         Ctest << str.Str() << Endl;
@@ -508,15 +407,17 @@ Y_UNIT_TEST_SUITE(Acceleration) {
         double slowNodeRequestsAvg = 1. * slowNodesRequests / slowNodesCount;
         double fastNodeRequestsAvg = 1. * fastNodesRequests / fastNodesCount;
 
-        UNIT_ASSERT_LE_C(slowNodeRequestsAvg, fastNodeRequestsAvg / 3, str.Str());
+        double ratio = fastNodeRequestsAvg / slowNodeRequestsAvg;
+        Ctest << "Fast to slow ratio# " << ratio << Endl;
+        UNIT_ASSERT_GE_C(ratio, maxRatio, "ratio# " << ratio << " " << str.Str());
     }
 
     void TestThresholdPut(const TBlobStorageGroupType& erasure, ui32 slowDisks) {
-        TestThreshold(erasure, slowDisks, true, false, TestThresholdSendPutRequests);
+        TestThreshold(erasure, slowDisks, true, false, TestThresholdSendPutRequests, 5);
     }
 
     void TestThresholdGet(const TBlobStorageGroupType& erasure, ui32 slowDisks) {
-        TestThreshold(erasure, slowDisks, false, true, TestThresholdSendGetRequests);
+        TestThreshold(erasure, slowDisks, false, true, TestThresholdSendGetRequests, 1.5);
     }
 
     void TestDelayMultiplierPut(const TBlobStorageGroupType& erasure, ui32 slowDisks) {
@@ -526,8 +427,17 @@ Y_UNIT_TEST_SUITE(Acceleration) {
 
     void TestDelayMultiplierGet(const TBlobStorageGroupType& erasure, ui32 slowDisks) {
         TestAccelerateGet(erasure, slowDisks, NKikimrBlobStorage::AsyncRead, TDuration::Seconds(0.9),
-                TDuration::Seconds(2
-                ), TDuration::Seconds(1), TDuration::Seconds(1.95), 0.8);
+                TDuration::Seconds(2), TDuration::Seconds(1), TDuration::Seconds(1.95), 0.8);
+    }
+
+    void TestMaxNumOfSlowDisksPut(const TBlobStorageGroupType& erasure, ui32 slowDisks) {
+        TestAcceleratePut(erasure, slowDisks, NKikimrBlobStorage::AsyncBlob, TDuration::Seconds(1),
+                TDuration::Seconds(5), TDuration::Seconds(1), TDuration::Seconds(4), 1, 1);
+    }
+
+    void TestMaxNumOfSlowDisksGet(const TBlobStorageGroupType& erasure, ui32 slowDisks) {
+        TestAccelerateGet(erasure, slowDisks, NKikimrBlobStorage::AsyncRead, TDuration::Seconds(1),
+                TDuration::Seconds(5), TDuration::Seconds(1), TDuration::Seconds(4), 1, 1);
     }
 
     #define TEST_ACCELERATE(erasure, method, handleClass, slowDisks)                                                    \
@@ -535,6 +445,8 @@ Y_UNIT_TEST_SUITE(Acceleration) {
         TestAccelerate##method(TBlobStorageGroupType::Erasure##erasure, slowDisks, NKikimrBlobStorage::handleClass,     \
                 TDuration::Seconds(1), TDuration::Seconds(5), TDuration::Seconds(1), TDuration::Seconds(4), 1);         \
     }
+
+    // TODO fix Acceleration in mirror-3-of-4
 
     TEST_ACCELERATE(Mirror3dc, Put, AsyncBlob, 1);
 //    TEST_ACCELERATE(Mirror3of4, Put, AsyncBlob, 1);
@@ -557,19 +469,17 @@ Y_UNIT_TEST_SUITE(Acceleration) {
         Test##param##method(TBlobStorageGroupType::Erasure##erasure, slowDisks);    \
     }
 
-//    TEST_ACCELERATE_PARAMS(Threshold, Put, Mirror3dc, 1);
+    TEST_ACCELERATE_PARAMS(Threshold, Put, Mirror3dc, 1);
     TEST_ACCELERATE_PARAMS(Threshold, Put, 4Plus2Block, 1);
 
-//    TEST_ACCELERATE_PARAMS(Threshold, Put, Mirror3dc, 2);
-//    TEST_ACCELERATE_PARAMS(Threshold, Put, 4Plus2Block, 2);
+    TEST_ACCELERATE_PARAMS(Threshold, Put, Mirror3dc, 2);
+    TEST_ACCELERATE_PARAMS(Threshold, Put, 4Plus2Block, 2);
 
-//    TEST_ACCELERATE_PARAMS(Threshold, Get, Mirror3dc, 1);
+    TEST_ACCELERATE_PARAMS(Threshold, Get, Mirror3dc, 1);
     TEST_ACCELERATE_PARAMS(Threshold, Get, 4Plus2Block, 1);
 
-//    TEST_ACCELERATE_PARAMS(Threshold, Get, Mirror3dc, 2);
-//    TEST_ACCELERATE_PARAMS(Threshold, Get, 4Plus2Block, 2);
-
-    // TODO(serg-belyakov): fix all muted tests
+    TEST_ACCELERATE_PARAMS(Threshold, Get, Mirror3dc, 2);
+    TEST_ACCELERATE_PARAMS(Threshold, Get, 4Plus2Block, 2);
 
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Put, Mirror3dc, 1);
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Put, 4Plus2Block, 1);
@@ -582,6 +492,15 @@ Y_UNIT_TEST_SUITE(Acceleration) {
 
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Get, Mirror3dc, 2);
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Get, 4Plus2Block, 2);
+
+    TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Get, Mirror3dc, 1);
+    TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Get, 4Plus2Block, 1);
+
+    TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Put, Mirror3dc, 1);
+    TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Put, 4Plus2Block, 1);
+
+    TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Put, Mirror3dc, 2);
+    TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Put, 4Plus2Block, 2);
 
     #undef TEST_ACCELERATE
     #undef TEST_ACCELERATE_PARAMS

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from ._eventloop import AsyncBackend as AsyncBackend
 from ._resources import AsyncResource as AsyncResource
 from ._sockets import ConnectedUDPSocket as ConnectedUDPSocket
@@ -50,8 +48,8 @@ from .._core._tasks import CancelScope as CancelScope
 from ..from_thread import BlockingPortal as BlockingPortal
 
 # Re-export imports so they look like they live directly in this package
-key: str
-value: Any
-for key, value in list(locals().items()):
-    if getattr(value, "__module__", "").startswith("anyio.abc."):
-        value.__module__ = __name__
+for __value in list(locals().values()):
+    if getattr(__value, "__module__", "").startswith("anyio.abc."):
+        __value.__module__ = __name__
+
+del __value

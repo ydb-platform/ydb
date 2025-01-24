@@ -23,7 +23,7 @@ enum class EInitPhase {
 };
 
 enum EOwner {
-    OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, mens "for dynamic" in requests
+    OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, means "for dynamic" in requests
     OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands
     OwnerBeginUser = 2,
     OwnerEndUser = 241,
@@ -57,6 +57,13 @@ struct TOwnerData {
         VDISK_STATUS_SENT_INIT = 2,
         VDISK_STATUS_READING_LOG = 3,
         VDISK_STATUS_LOGGED = 4,
+    };
+    enum EVDiskShredState {
+        VDISK_SHRED_STATE_NOT_REQUESTED = 0,
+        VDISK_SHRED_STATE_COMPACT_REQUESTED = 1,
+        VDISK_SHRED_STATE_COMPACT_FINISHED = 2,
+        VDISK_SHRED_STATE_SHRED_REQUESTED = 3,
+        VDISK_SHRED_STATE_SHRED_FINISHED = 4,
     };
     struct TLogEndPosition {
         ui32 ChunkIdx;
@@ -92,6 +99,8 @@ struct TOwnerData {
     TIntrusivePtr<TOwnerInflight> InFlight;
 
     bool OnQuarantine = false;
+    ui64 LastShredGeneration = 0;
+    EVDiskShredState ShredState = VDISK_SHRED_STATE_NOT_REQUESTED;
 
     TOperationLog<8> OperationLog;
 
@@ -157,10 +166,14 @@ struct TOwnerData {
         return LogReader || InFlight->ChunkWrites.load() || InFlight->ChunkReads.load() || InFlight->LogWrites.load();
     }
 
+    bool ReadingLog() const {
+        return bool(LogReader);
+    }
+
     TString ToString() const {
         TStringStream str;
         str << "TOwnerData {";
-        str << "VDiskId# " << VDiskId.ToString();
+        str << "VDiskId# " << VDiskId.ToStringWOGeneration();
         str << " Status# " << RenderStatus(Status);
         str << " CurrentFirstLsnToKeep# " << CurrentFirstLsnToKeep;
         str << " LastWrittenCommitLsn# " << LastWrittenCommitLsn;

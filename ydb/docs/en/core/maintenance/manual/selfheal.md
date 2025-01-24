@@ -35,7 +35,7 @@ ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 
 You can configure SelfHeal in **Viewer** → **Cluster Management System** → **CmsConfigItems**.
 
-To create the initial settings, click **Create**. If you want to update the current settings, click ![](../../_assets/pencil.svg).
+To create the initial settings, click **Create**. If you want to update the current settings, click ![pencil](../../_assets/pencil.svg).
 
 You can use the following settings:
 
@@ -65,6 +65,7 @@ You can use the following settings:
 | **Missing** | The node responds, but this PDisk is missing from its list. Transition to `FAULTY`. |
 | **Timeout** | The node didn't respond within the specified timeout. Transition to `FAULTY`. |
 | **NodeDisconnected** | The node has disconnected. Transition to `FAULTY`. |
+| **Stopped** | PDisk has been stopped. Transition to `FAULTY`. |
 | **Unknown** | Unexpected response, for example, `TEvUndelivered` to the state request. Transition to `FAULTY`. |
 
 ## Working with donor disks {#disks}

@@ -20,8 +20,9 @@ EvaluateAtom позволяет динамически создать [атом]
 * выражение не должно приводить к запуску MapReduce операций;
 * данный функционал полностью заблокирован в YQL over YDB.
 
-**Примеры:**
-``` yql
+### Примеры
+
+```yql
 $now = CurrentUtcDate();
 SELECT EvaluateExpr(
     DateTime::MakeDate(DateTime::StartOfWeek($now)

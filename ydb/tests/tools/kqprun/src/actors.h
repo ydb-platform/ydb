@@ -18,6 +18,13 @@ struct TQueryRequest {
     ui32 TargetNode;
     ui64 ResultRowsLimit;
     ui64 ResultSizeLimit;
+    size_t QueryId;
+};
+
+struct TCreateSessionRequest {
+    std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Event;
+    ui32 TargetNode;
+    ui8 VerboseLevel;
 };
 
 struct TEvPrivate {
@@ -70,12 +77,14 @@ struct TEvPrivate {
     };
 };
 
-using TProgressCallback = std::function<void(const NKikimrKqp::TEvExecuterProgress&)>;
+using TProgressCallback = std::function<void(ui64 queryId, const NKikimrKqp::TEvExecuterProgress& executerProgress)>;
 
 NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback);
 
 NActors::IActor* CreateAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings);
 
 NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount);
+
+NActors::IActor* CreateSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise);
 
 }  // namespace NKqpRun

@@ -4,27 +4,27 @@
 
 {{ ydb-short-name }} предоставляет множество сенсоров состояния системы. Мгновенные значения сенсоров можно посмотреть в веб-интерфейсе:
 
-```http
+```text
 http://localhost:31002/counters/
 ```
 
 Связанные сенсоры объединены в подгруппы (например `counters auth`). Чтобы посмотреть значения сенсоров только определенной подгруппы, перейдите по URL следующего вида:
 
-```http
+```text
 http://localhost:31002/counters/counters=<servicename>/
 ```
 
 * `<servicename>` — имя подгруппы сенсоров.
 
->Например, данные об утилизации аппаратных ресурсов сервера доступны по следующему URL:
->
->```http
->http://localhost:31002/counters/counters=utils
->```
+Например, данные об утилизации аппаратных ресурсов сервера доступны по следующему URL:
+
+```text
+http://localhost:31002/counters/counters=utils
+```
 
 Для сбора значений метрик вы можете использовать популярный инструмент с открытым исходным кодом [Prometheus](https://prometheus.io/). Значения сенсоров {{ ydb-short-name }} в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) доступны по URL следующего вида:
 
-```http
+```text
 http://localhost:31002/counters/counters=<servicename>/prometheus
 ```
 

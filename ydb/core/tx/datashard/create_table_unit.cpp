@@ -80,12 +80,8 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-    if (DataShard.GetState() == TShardState::WaitScheme) {
-        txc.DB.NoMoreReadsForTx();
-        DataShard.SetPersistState(TShardState::Ready, txc);
-        DataShard.CheckMvccStateChangeCanStart(ctx); // Recheck
-        DataShard.SendRegistrationRequestTimeCast(ctx);
-    }
+    txc.DB.NoMoreReadsForTx();
+    DataShard.OnTableCreated(txc, ctx);
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }

@@ -9,12 +9,11 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydb_impl.h>
@@ -204,9 +203,17 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-        TStringBuf status = event->Get()->Response->Status;
-        if (event->Get()->Error.empty() && status == "200") {
+        if (event->Get()->Error.empty() && event->Get()->Response && event->Get()->Response->Status == "200") {
             NJson::ReadJsonTree(event->Get()->Response->Body, &JsonReaderConfig, &TenantInfo);
+        } else {
+            if (event->Get()->Response && event->Get()->Response->Status.size() == 3) {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(event->Get()->Response->Reverse(Request.Request)));
+            } else if (!event->Get()->Error.empty()) {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request.Request->CreateResponseServiceUnavailable(event->Get()->Error, "text/plain")));
+            } else {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request.Request->CreateResponseServiceUnavailable("Endpoint returned unknown status", "text/plain")));
+            }
+            return Die(ctx);
         }
         if (--Requests == 0) {
             ReplyAndDie(ctx);

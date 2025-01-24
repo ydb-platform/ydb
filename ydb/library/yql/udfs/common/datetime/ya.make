@@ -1,32 +1,20 @@
-IF (YQL_PACKAGED)
-    PACKAGE()
+YQL_UDF_YDB(datetime_udf)
 
-    FROM_SANDBOX(
-        FILE {FILE_RESOURCE_ID} OUT_NOAUTO
-            libdatetime_udf.so
-    )
+YQL_ABI_VERSION(
+    2
+    28
+    0
+)
 
-    END()
-ELSE()
-    YQL_UDF_YDB(datetime_udf)
+SRCS(
+    datetime_udf.cpp
+)
 
-    YQL_ABI_VERSION(
-        2
-        28
-        0
-    )
-
-    SRCS(
-        datetime_udf.cpp
-    )
-
-    PEERDIR(
-        library/cpp/timezone_conversion
-        util/draft
-    )
-    END()
-
-ENDIF()
+PEERDIR(
+    library/cpp/timezone_conversion
+    util/draft
+)
+END()
 
 RECURSE_FOR_TESTS(
     test

@@ -1,9 +1,9 @@
 #include "yql_pq_gateway.h"
 #include "yql_pq_session.h"
 
-#include <ydb/library/yql/utils/log/context.h>
+#include <yql/essentials/utils/log/context.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <util/system/mutex.h>
 
@@ -39,6 +39,8 @@ public:
         const TString& endpoint,
         const TString& database,
         bool secure) override;
+
+    ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
 
 private:
     void InitClusterConfigs();
@@ -136,6 +138,10 @@ NThreading::TFuture<IPqGateway::TListStreams> TPqNativeGateway::ListStreams(cons
 
 IPqGateway::TPtr CreatePqNativeGateway(const TPqGatewayServices& services) {
     return MakeIntrusive<TPqNativeGateway>(services);
+}
+
+ITopicClient::TPtr TPqNativeGateway::GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings = NYdb::NTopic::TTopicClientSettings()) {
+    return MakeIntrusive<TNativeTopicClient>(driver, settings);
 }
 
 TPqNativeGateway::~TPqNativeGateway() {

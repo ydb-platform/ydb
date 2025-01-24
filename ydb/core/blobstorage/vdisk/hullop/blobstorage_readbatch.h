@@ -2,6 +2,8 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
+#include <ydb/core/blobstorage/vdisk/common/disk_part.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 #include <util/generic/queue.h>
 
@@ -114,9 +116,10 @@ namespace NKikimr {
 
         // enqueue read item -- a read from specific chunk at desired position and length; function returns serial
         // number of this request; all results are then reported sequently in ascending order of returned serial
-        ui64 AddReadItem(TChunkIdx chunkIdx, ui32 offset, ui32 size, TPayload&& payload) {
+        ui64 AddReadItem(TDiskPart location, TPayload&& payload) {
             const ui64 serial = NextSerial++;
-            ReadQueue.push_back(TReadItem{chunkIdx, offset, size, std::move(payload), serial, NKikimrProto::UNKNOWN, {}});
+            ReadQueue.push_back(TReadItem{location.ChunkIdx, location.Offset, location.Size, std::move(payload), serial,
+                NKikimrProto::UNKNOWN, {}});
             return serial;
         }
 

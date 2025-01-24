@@ -2,6 +2,7 @@
 
 #include "ydb/core/client/server/grpc_base.h"
 #include <ydb/library/grpc/server/grpc_server.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <library/cpp/string_utils/quote/quote.h>
 #include <util/generic/queue.h>
 

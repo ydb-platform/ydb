@@ -16,14 +16,6 @@ namespace NMpscFSQueue {
 
 using TCookie = uintptr_t;
 
-// For yandex smart pointer types
-template <typename T>
-    requires requires(T t) { t.Get(); }
-TCookie ToCookie(const T& value)
-{
-    return reinterpret_cast<TCookie>(value.Get());
-}
-
 // For std smart pointers
 template <typename T>
     requires requires(T t) { t.get(); }

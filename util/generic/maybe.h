@@ -18,9 +18,9 @@ namespace NMaybe {
     struct TPolicyUndefinedFail {
         [[noreturn]] static void OnEmpty(const std::type_info& valueTypeInfo);
     };
-}
+} // namespace NMaybe
 
-struct TNothing {
+struct [[nodiscard]] TNothing {
     explicit constexpr TNothing(int) noexcept {
     }
 };
@@ -288,7 +288,7 @@ public:
     std::enable_if_t<TMoveAssignable<U>::value,
                      TMaybe&>
     operator=(TMaybe<U, Policy>&& right) noexcept(
-        std::is_nothrow_assignable<T&, U&&>::value&& std::is_nothrow_constructible<T, U&&>::value)
+        std::is_nothrow_assignable<T&, U&&>::value && std::is_nothrow_constructible<T, U&&>::value)
     {
         if (right.Defined()) {
             if (Defined()) {
@@ -858,7 +858,7 @@ constexpr bool operator>=(const U& value, const TMaybe<T, TPolicy>& maybe) {
 class IOutputStream;
 
 template <class T, class TPolicy>
-inline IOutputStream& operator<<(IOutputStream& out, const TMaybe<T, TPolicy>& maybe) {
+inline IOutputStream& operator<<(IOutputStream& out Y_LIFETIME_BOUND, const TMaybe<T, TPolicy>& maybe) {
     if (maybe.Defined()) {
         out << *maybe;
     } else {

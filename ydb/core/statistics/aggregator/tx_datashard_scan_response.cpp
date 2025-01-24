@@ -39,7 +39,7 @@ struct TStatisticsAggregator::TTxDatashardScanResponse : public TTxBase {
             auto tag = column.GetTag();
             for (auto& statistic : column.GetStatistics()) {
                 if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
-                    auto* data = statistic.GetData().Data();
+                    auto* data = statistic.GetData().data();
                     auto* sketch = reinterpret_cast<const TCountMinSketch*>(data);
 
                     if (Self->ColumnNames.find(tag) == Self->ColumnNames.end()) {

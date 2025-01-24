@@ -15,18 +15,18 @@ namespace NKikimr {
             ui64 Id;
             ui32 NumReads;
             TDiskPart PreallocatedLocation;
-            TDiskBlobMergerWithMask Merger;
-            NMatrix::TVectorType PartsToStore;
+            TDiskBlobMerger Merger;
             TLogoBlobID BlobId;
+            bool IsInline;
 
             TItem(ui64 id, ui32 numReads, const TDiskPart& preallocatedLocation, const TDiskBlobMerger& merger,
-                    NMatrix::TVectorType partsToStore, const TLogoBlobID& blobId)
+                    const TLogoBlobID& blobId, bool isInline)
                 : Id(id)
                 , NumReads(numReads)
                 , PreallocatedLocation(preallocatedLocation)
-                , Merger(merger, partsToStore)
-                , PartsToStore(partsToStore)
+                , Merger(merger)
                 , BlobId(blobId)
+                , IsInline(isInline)
             {}
         };
 
@@ -57,12 +57,12 @@ namespace NKikimr {
             ProcessItemQueue();
         }
 
-        void AddReadDiskBlob(ui64 id, TRope&& buffer, NMatrix::TVectorType expectedParts) {
+        void AddReadDiskBlob(ui64 id, TRope&& buffer, ui8 partIdx) {
             Y_ABORT_UNLESS(Started);
             Y_ABORT_UNLESS(ItemQueue);
             TItem& item = ItemQueue.front();
             Y_ABORT_UNLESS(item.Id == id);
-            item.Merger.Add(TDiskBlob(&buffer, expectedParts, GType, item.BlobId));
+            item.Merger.AddPart(std::move(buffer), GType, TLogoBlobID(item.BlobId, partIdx + 1));
             Y_ABORT_UNLESS(item.NumReads > 0);
             if (!--item.NumReads) {
                 ProcessItemQueue();
@@ -89,12 +89,9 @@ namespace NKikimr {
         }
 
         void ProcessItem(TItem& item) {
-            // ensure that we have all the parts we must have
-            Y_ABORT_UNLESS(item.Merger.GetDiskBlob().GetParts() == item.PartsToStore);
-
             // get newly generated blob raw content and put it into writer queue
             static_cast<TDerived&>(*this).ProcessItemImpl(item.PreallocatedLocation, item.Merger.CreateDiskBlob(Arena,
-                AddHeader));
+                AddHeader), item.IsInline);
         }
     };
 

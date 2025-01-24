@@ -39,6 +39,7 @@ if ! yfm -i . -o $DIR --allowHTML  --apply-presets; then
   echo "================================"
   echo "YFM build completed with ERRORS!"
   echo "================================"
+  echo "It may be necessary to use the latest version of npm. Run the command `nvm use v22.9.0` to update it."
   exit 1
 fi
 

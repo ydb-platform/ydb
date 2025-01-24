@@ -18,9 +18,9 @@ from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
 @pytest.fixture
 def kikimr(request: pytest.FixtureRequest, yq_version: str):
     kikimr_extensions = [
+        AddFormatSizeLimitExtension(),
         AddInflightExtension(),
         AddDataInflightExtension(),
-        AddFormatSizeLimitExtension(),
         DefaultConfigExtension(''),
         YQv2Extension(yq_version),
         ComputeExtension(),

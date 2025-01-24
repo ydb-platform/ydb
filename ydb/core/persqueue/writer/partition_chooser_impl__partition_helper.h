@@ -6,13 +6,18 @@
 
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
 template<typename TPipeCreator>
 class TPartitionHelper {
 public:
+    TPartitionHelper(NWilson::TTraceId traceId)
+        : TraceId(std::move(traceId))
+    {
+    }
+
     void Open(ui64 tabletId, const TActorContext& ctx) {
         Close(ctx);
 
@@ -35,7 +40,7 @@ public:
         cmd.SetForce(true);
         cmd.SetRegisterIfNotExists(registerIfNotExists);
 
-        NTabletPipe::SendData(ctx, Pipe, ev.Release());
+        NTabletPipe::SendData(ctx, Pipe, ev.Release(), 0, NWilson::TTraceId(TraceId));
     }
 
     void SendMaxSeqNoRequest(ui32 partitionId, const TString& sourceId, const TActorContext& ctx) {
@@ -44,7 +49,7 @@ public:
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetMaxSeqNo();
         cmd.AddSourceId(NSourceIdEncoding::EncodeSimple(sourceId));
 
-        NTabletPipe::SendData(ctx, Pipe, ev.Release());
+        NTabletPipe::SendData(ctx, Pipe, ev.Release(), 0, NWilson::TTraceId(TraceId));
     }
 
     void SendCheckPartitionStatusRequest(ui32 partitionId, const TString& sourceId, const TActorContext& ctx) {
@@ -53,7 +58,7 @@ public:
             ev->Record.SetSourceId(sourceId);
         }
 
-        NTabletPipe::SendData(ctx, Pipe, ev.Release());
+        NTabletPipe::SendData(ctx, Pipe, ev.Release(), 0, NWilson::TTraceId(TraceId));
     }
 
     void Close(const TActorContext& ctx) {
@@ -84,6 +89,7 @@ private:
 private:
     TActorId Pipe;
     TString OwnerCookie_;
+    NWilson::TTraceId TraceId;
 };
 
 } // namespace NKikimr::NPQ::NPartitionChooser

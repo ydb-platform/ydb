@@ -1,5 +1,4 @@
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
-#include <ydb/core/client/minikql_result_lib/converter.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
@@ -12,7 +11,6 @@ namespace NYql {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NMiniKQL;
-using namespace NResultLib;
 using namespace NYdb::NTable;
 
 namespace {
@@ -74,7 +72,7 @@ TIntrusivePtr<IKqpGateway> GetIcGateway(Tests::TServer& server) {
     counters->TxProxyMon = new NTxProxy::TTxProxyMon(server.GetRuntime()->GetAppData(0).Counters);
 
     std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TestCluster, server.GetRuntime()->GetAnyNodeActorSystem(),TIntrusivePtr<NYql::TKikimrConfiguration>(nullptr), false);
-    return CreateKikimrIcGateway(TestCluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
+    return CreateKikimrIcGateway(TestCluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, "/Root", "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
         server.GetRuntime()->GetNodeId(0), counters, server.GetSettings().AppConfig->GetQueryServiceConfig());
 }
 

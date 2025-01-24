@@ -3,6 +3,7 @@
 #include "private_events.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

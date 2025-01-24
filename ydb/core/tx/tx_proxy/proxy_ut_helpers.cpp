@@ -478,7 +478,7 @@ void SetRowInSimpletable(TBaseTestEnv &env, ui64 key, ui64 value, const TString 
                                                                                                    "(return pgmReturn)"
                                                                                                    ")", key, value, path.c_str());
 
-    env.GetClient().FlatQuery(query, res);
+    env.GetClient().FlatQuery(&env.GetRuntime(), query, res);
 }
 
 

@@ -458,6 +458,40 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
             emitter.Process(TestSourceId(2), MakeHeartbeat(4));
             UNIT_ASSERT(!emitter.CanEmit().Defined());
         }
+
+        // gaps
+        TSourceIdStorage storage2;
+        storage2.RegisterSourceId(TestSourceId(1), MakeExplicitSourceIdInfo(++offset, MakeHeartbeat(1)));
+        storage2.RegisterSourceId(TestSourceId(2), MakeExplicitSourceIdInfo(++offset, MakeHeartbeat(3)));
+        {
+            THeartbeatEmitter emitter(storage2);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(2));
+            emitter.Process(TestSourceId(2), MakeHeartbeat(4));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(2).Version);
+            }
+        }
+
+        // full update
+        TSourceIdStorage storage3;
+        storage3.RegisterSourceId(TestSourceId(1), MakeExplicitSourceIdInfo(++offset, MakeHeartbeat(1)));
+        storage3.RegisterSourceId(TestSourceId(2), MakeExplicitSourceIdInfo(++offset, MakeHeartbeat(2)));
+        {
+            THeartbeatEmitter emitter(storage3);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(3));
+            emitter.Process(TestSourceId(2), MakeHeartbeat(4));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(3).Version);
+            }
+        }
     }
 
     Y_UNIT_TEST(SourceIdMinSeqNo) {

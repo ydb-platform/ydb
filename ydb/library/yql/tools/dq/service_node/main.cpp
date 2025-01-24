@@ -7,12 +7,12 @@
 #include <ydb/library/yql/providers/dq/global_worker_manager/coordination_helper.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
-#include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/log/tls_backend.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/log/proto/logger_config.pb.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/tls_backend.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/client/api/client.h>

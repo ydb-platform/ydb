@@ -1,0 +1,61 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+            ["Key1";["DataType";"Int32"]];
+            ["Key2";["DataType";"String"]];
+            ["Fk1";["OptionalType";["DataType";"String"]]];
+            ["Value";["OptionalType";["DataType";"String"]]]]
+        ];
+        "SortDirections"=[1;1];
+        "SortedBy"=["Key1";"Key2"];
+        "SortedByTypes"=[["DataType";"Int32";];["DataType";"String"]];
+        "SortMembers"=["Key1";"Key2"];
+    };
+    "schema" = <"strict" = %true; "unique_keys" = %false>
+    [
+        {
+            "name" = "Key1";
+            "sort_order" = "ascending";
+            "type" = "int64";
+            "type_v3" = {"type_name" = "optional"; item = "int64"}
+        };
+        {
+            "name" = "Key2";
+            "sort_order" = "ascending";
+            "type" = "string";
+            "type_v3" = {"type_name" = "optional"; item = "string"}
+        };
+        {
+            "name" = "Fk1";
+            "type" = "string";
+            "type_v3" = {"type_name" = "optional"; item = "string"}
+        };
+        {
+            "name" = "Value";
+            "type" = "string";
+            "type_v3" = {"type_name" = "optional"; item = "string"}
+        };
+    ];
+    "extended_stats" = [
+        {
+            "column_name" = "Key1";
+            "data_weight" = 56;
+            "num_unique_vals" = 11;
+        };
+        {
+            "column_name" = "Key2";
+            "data_weight" = 66;
+            "num_unique_vals" = 5;
+        };
+        {
+            "column_name" = "Fk1";
+            "data_weight" = 70;
+            "num_unique_vals" = 5;
+        };
+        {
+            "column_name" = "Value";
+            "data_weight" = 98;
+            "num_unique_vals" = 6;
+        }
+    ]
+}

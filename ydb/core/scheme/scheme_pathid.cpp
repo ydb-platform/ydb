@@ -97,13 +97,23 @@ TPathId::operator bool() const {
     return OwnerId != InvalidOwnerId && LocalPathId != InvalidLocalPathId;
 }
 
-TPathId PathIdFromPathId(const NKikimrProto::TPathID& proto) {
+TPathId TPathId::FromProto(const NKikimrProto::TPathID& proto) {
     return TPathId(proto.GetOwnerId(), proto.GetLocalId());
 }
 
-void PathIdFromPathId(const TPathId& pathId, NKikimrProto::TPathID* proto) {
-    proto->SetOwnerId(pathId.OwnerId);
-    proto->SetLocalId(pathId.LocalPathId);
+void TPathId::ToProto(NKikimrProto::TPathID& proto) const {
+    proto.SetOwnerId(OwnerId);
+    proto.SetLocalId(LocalPathId);
+}
+
+void TPathId::ToProto(NKikimrProto::TPathID* proto) const {
+    ToProto(*proto);
+}
+
+NKikimrProto::TPathID TPathId::ToProto() const {
+    NKikimrProto::TPathID proto;
+    ToProto(proto);
+    return proto;
 }
 
 } // NKikimr

@@ -111,7 +111,7 @@ namespace NXml {
 
     inline void TNode::SetValue(TStringBuf value) {
         xmlNodeSetContent(NodePointer, XMLCHAR(""));
-        xmlNodeAddContentLen(NodePointer, XMLCHAR(value.data()), value.Size());
+        xmlNodeAddContentLen(NodePointer, XMLCHAR(value.data()), value.size());
     }
 
     inline void TNode::SetAttr(TZtStringBuf name, TZtStringBuf value) {

@@ -33,20 +33,17 @@ struct TEvBootstrapper {
 
 struct TBootstrapperInfo : public TThrRefBase {
     TIntrusivePtr<TTabletSetupInfo> SetupInfo;
-    TVector<ui32> OtherNodes;
-    TDuration WatchThreshold;
-    TDuration OfflineDelay;
-    bool StartFollowers;
+    TVector<ui32> Nodes;
+    TDuration WatchThreshold = TDuration::MilliSeconds(200);
+    TDuration OfflineDelay = TDuration::Seconds(3);
+    bool StartFollowers = false;
 
-    TBootstrapperInfo(TTabletSetupInfo *setupInfo)
+    explicit TBootstrapperInfo(TTabletSetupInfo* setupInfo)
         : SetupInfo(setupInfo)
-        , WatchThreshold(TDuration::MilliSeconds(200))
-        , OfflineDelay(TDuration::Seconds(3))
-        , StartFollowers(false)
     {}
 };
 
-IActor* CreateBootstrapper(TTabletStorageInfo *tabletInfo, TBootstrapperInfo *bootstrapperInfo, bool standby = false);
+IActor* CreateBootstrapper(TTabletStorageInfo* tabletInfo, TBootstrapperInfo* bootstrapperInfo, bool standby = false);
 TActorId MakeBootstrapperID(ui64 tablet, ui32 node);
 
 }

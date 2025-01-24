@@ -2,9 +2,9 @@
 
 #include "backup.h"
 
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/string/builder.h>
 #include <library/cpp/string_utils/quote/quote.h>
@@ -48,10 +48,10 @@ T TryParse(const TStringBuf& buf) {
 
 template<>
 TString TryParse(const TStringBuf& buf) {
-    Y_ENSURE(buf.Size() >= 1 && buf.front() == '"' && buf.back() == '"',
+    Y_ENSURE(buf.size() >= 1 && buf.front() == '"' && buf.back() == '"',
             "Source string neither surrounded by quotes nor equals to null, string# " << TString{buf}.Quote());
     TString tmp;
-    TMemoryInput stream(buf.Data() + 1, buf.Size() - 2);
+    TMemoryInput stream(buf.data() + 1, buf.size() - 2);
     stream >> tmp;
     CGIUnescape(tmp);
     return tmp;
@@ -260,7 +260,7 @@ void TQueryBuilder::AddLine(TStringBuf line) {
         Y_ENSURE(tok, "Empty token on line");
         TTypeParser type(col.Type);
         Value.AddMember(col.Name);
-        AddMemberFromString(type, col.Name, tok);
+        AddMemberFromString(type, TString{col.Name}, tok);
     }
     Value.EndStruct();
 }
@@ -288,7 +288,7 @@ TString TQueryBuilder::GetQueryString() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 void TQueryFromFileIterator::TryReadNextLines() {
-    if (!LinesBunch.Empty() || BytesRemaining == 0) {
+    if (!LinesBunch.empty() || BytesRemaining == 0) {
         return;
     }
 
@@ -326,7 +326,7 @@ std::conditional_t<GetValue, TValue, TParams> TQueryFromFileIterator::ReadNext()
         }
         Query.AddLine(line);
         ++querySizeRows;
-        querySizeBytes += AlignUp<i64>(line.Size(), METERING_ROW_PRECISION);
+        querySizeBytes += AlignUp<i64>(line.size(), METERING_ROW_PRECISION);
         if (MaxRowsPerQuery > 0 && querySizeRows >= MaxRowsPerQuery
                 || MaxBytesPerQuery > 0 && querySizeBytes >= MaxBytesPerQuery) {
             break;

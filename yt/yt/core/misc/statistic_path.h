@@ -65,6 +65,9 @@ TError CheckStatisticPath(const TStatisticPathType& path);
 //! and returns a `TStatisticPath` built from it if it is. Returns an error with explanation otherwise.
 TErrorOr<TStatisticPath> ParseStatisticPath(const TStatisticPathType& path);
 
+//! Replaces all `/` in `path` with `Delimiter` and calls ParseStatisticPath.
+TErrorOr<TStatisticPath> SlashedStatisticPath(const TStatisticPathType& path);
+
 // TODO(pavook) constexpr when constexpr std::string arrives.
 class TStatisticPath
 {
@@ -221,11 +224,12 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NStatisticPathLiterals {
-
+//! Statistic path literal.
 [[nodiscard]] TStatisticPathLiteral operator""_L(const char* str, size_t len);
 
-} // namespace NStatisticPathLiterals
+//! Literal suffix that returns a slashed statistic path from a given string,
+//! i.e. replaces all `/` with Delimiters.
+[[nodiscard]] TStatisticPath operator""_SP(const char* str, size_t len);
 
 ////////////////////////////////////////////////////////////////////////////////
 

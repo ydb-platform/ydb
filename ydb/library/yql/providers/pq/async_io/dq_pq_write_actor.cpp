@@ -6,15 +6,15 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -103,10 +103,11 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
             InFlyData = task->GetCounter("InFlyData");
             AlreadyWritten = task->GetCounter("AlreadyWritten");
             FirstContinuationTokenMs = task->GetCounter("FirstContinuationTokenMs");
+            EgressDataRate = task->GetCounter("EgressDataRate", true);
         }
 
         ~TMetrics() {
-            SubGroup->RemoveSubgroup("id", TxId);
+            SubGroup->RemoveSubgroup("tx_id", TxId);
         }
 
         TString TxId;
@@ -117,6 +118,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyData;
         ::NMonitoring::TDynamicCounters::TCounterPtr AlreadyWritten;
         ::NMonitoring::TDynamicCounters::TCounterPtr FirstContinuationTokenMs;
+        ::NMonitoring::TDynamicCounters::TCounterPtr EgressDataRate;
     };
 
     struct TAckInfo {
@@ -140,7 +142,8 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        i64 freeSpace)
+        i64 freeSpace,
+        const IPqGateway::TPtr& pqGateway)
         : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
@@ -151,7 +154,7 @@ public:
         , Callbacks(callbacks)
         , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", TaskId: " << taskId << ", PQ sink. ")
         , FreeSpace(freeSpace)
-        , TopicClient(Driver, GetTopicClientSettings())
+        , PqGateway(pqGateway)
     { 
         EgressStats.Level = statsLevel;
     }
@@ -300,6 +303,13 @@ private:
                 : NYdb::NTopic::ECodec::GZIP);
     }
 
+    ITopicClient& GetTopicClient() {
+        if (!TopicClient) {
+            TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings());
+        }
+        return *TopicClient;
+    }
+
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() {
         return NYdb::NTopic::TTopicClientSettings()
             .Database(SinkParams.GetDatabase())
@@ -314,7 +324,7 @@ private:
 
     void CreateSessionIfNotExists() {
         if (!WriteSession) {
-            WriteSession = TopicClient.CreateWriteSession(GetWriteSessionSettings());
+            WriteSession = GetTopicClient().CreateWriteSession(GetWriteSessionSettings());
             SubscribeOnNextEvent();
         }
     }
@@ -375,6 +385,7 @@ private:
         auto itemSize = GetItemSize(Buffer.front());
         WaitingAcks.emplace(itemSize, TInstant::Now());
         EgressStats.Bytes += itemSize;
+        Metrics.EgressDataRate->Add(itemSize);
         Buffer.pop();
     }
 
@@ -471,7 +482,7 @@ private:
     i64 FreeSpace = 0;
     bool Finished = false;
 
-    NYdb::NTopic::TTopicClient TopicClient;
+    ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
     TString SourceId;
     ui64 NextSeqNo = 1;
@@ -482,6 +493,7 @@ private:
     std::queue<TString> Buffer;
     std::queue<TAckInfo> WaitingAcks; // Size of items which are waiting for acks (used to update free space)
     std::queue<std::tuple<ui64, NDqProto::TCheckpoint>> DeferredCheckpoints;
+    IPqGateway::TPtr PqGateway;
 };
 
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
@@ -495,6 +507,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const ::NMonitoring::TDynamicCounterPtr& counters,
+    IPqGateway::TPtr pqGateway,
     i64 freeSpace)
 {
     const TString& tokenName = settings.GetToken().GetName();
@@ -511,13 +524,14 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         callbacks,
         counters,
-        freeSpace);
+        freeSpace,
+        pqGateway);
     return {actor, actor};
 }
 
-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters) {
+void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters) {
     factory.RegisterSink<NPq::NProto::TDqPqTopicSink>("PqSink",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway](
             NPq::NProto::TDqPqTopicSink&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
@@ -532,7 +546,8 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
                 driver,
                 credentialsFactory,
                 args.Callback,
-                counters
+                counters,
+                pqGateway
             );
         });
 }

@@ -1,9 +1,9 @@
 #include "accessor.h"
 
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NArrow::NAccessor {
 

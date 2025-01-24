@@ -2,8 +2,8 @@
 
 #include "init.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
@@ -18,10 +18,12 @@
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
 #include <google/protobuf/text_format.h>
@@ -233,7 +235,7 @@ public:
         const auto* curOpt = parser->CurOpt();
         TStringBuf val(parser->CurValStr());
         try {
-            if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().Data()) {
+            if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().data()) {
                 Target->Value = FromString<typename TType::TWrappedType>(curOpt->GetDefaultValue());
                 Target->Default = true;
                 return;
@@ -260,7 +262,7 @@ public:
     void HandleOpt(const NLastGetopt::TOptsParser* parser) override {
         const auto* curOpt = parser->CurOpt();
         TStringBuf val(parser->CurValStr());
-        if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().Data()) {
+        if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().data()) {
             Target->Value = curOpt->GetDefaultValue();
             Target->Default = true;
             return;
@@ -287,6 +289,7 @@ struct TCommonAppOptions {
     ui32 MonitoringPort = 0;
     TString MonitoringAddress;
     ui32 MonitoringThreads = 10;
+    ui32 MonitoringMaxRequestsPerSecond = 0;
     TString MonitoringCertificateFile;
     TString RestartsCountFile = "";
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
@@ -433,17 +436,17 @@ struct TCommonAppOptions {
         }
 
         // apply certificates, if any
-        if (!PathToInterconnectCertFile.Empty()) {
+        if (!PathToInterconnectCertFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToCertificateFile(PathToInterconnectCertFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!PathToInterconnectPrivateKeyFile.Empty()) {
+        if (!PathToInterconnectPrivateKeyFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToPrivateKeyFile(PathToInterconnectPrivateKeyFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!PathToInterconnectCaFile.Empty()) {
+        if (!PathToInterconnectCaFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToCaFile(PathToInterconnectCaFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -453,7 +456,7 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcCertFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcCertFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToCertificateFile(GrpcSslSettings.PathToGrpcCertFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -463,7 +466,7 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcPrivateKeyFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcPrivateKeyFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToPrivateKeyFile(GrpcSslSettings.PathToGrpcPrivateKeyFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -473,7 +476,7 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcCaFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcCaFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToCaFile(GrpcSslSettings.PathToGrpcCaFile);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
@@ -502,7 +505,7 @@ struct TCommonAppOptions {
 
                 // Assign default hostname 'localhost', because
                 // connector is usually deployed to the same host as the dynamic node.
-                if (connectorConfig.GetEndpoint().host().Empty()) {
+                if (connectorConfig.GetEndpoint().host().empty()) {
                     connectorConfig.MutableEndpoint()->Sethost("localhost");
                 }
             }
@@ -1124,6 +1127,12 @@ public:
 
         TenantName = FillTenantPoolConfig(CommonAppOptions);
 
+        std::vector<TString> errors;
+        EValidationResult result = ValidateConfig(AppConfig, errors);
+        if (result == EValidationResult::Error) {
+            ythrow yexception() << errors.front();
+        }
+
         Logger.Out() << "configured" << Endl;
 
         FillData(CommonAppOptions);
@@ -1293,7 +1302,7 @@ public:
         Labels["node_id"] = ToString(NodeId);
         AddLabelToAppConfig("node_id", Labels["node_id"]);
 
-        if (!NodeName.Empty()) {
+        if (!NodeName.empty()) {
             Labels["node_name"] = NodeName;
             AddLabelToAppConfig("node_name", Labels["node_name"]);
         }

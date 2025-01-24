@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <unordered_map>
+
 namespace NKikimr {
 namespace NStat {
 
@@ -20,19 +22,31 @@ public:
 
     void Bootstrap();
    
-    enum EType {
+    enum class ERequestType {
         ANALYZE,
-        STATUS
+        STATUS,
+        COUNT_MIN_SKETCH_PROBE
     };
 
-    THttpRequest(EType type, const TString& path, TActorId replyToActorId);
+    enum class EParamType {
+        DATABASE,
+        PATH,
+        OPERATION_ID,
+        COLUMN_NAME,
+        CELL_VALUE
+    };
+
+    THttpRequest(ERequestType requestType, const std::unordered_map<EParamType, TString>& params, const TActorId& replyToActorId);
 
 private:
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+
     STFUNC(StateWork) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvStatistics::TEvAnalyzeStatusResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            hFunc(TEvStatistics::TEvGetStatisticsResult, Handle);
             IgnoreFunc(TEvStatistics::TEvAnalyzeResponse);
             default:
                 LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -42,24 +56,22 @@ private:
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev);
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
+    void Handle(TEvStatistics::TEvGetStatisticsResult::TPtr& ev);
 
-    void ResolveSuccess();
+    void DoRequest(const TNavigate::TEntry& entry);
+    void DoAnalyze(const TNavigate::TEntry& entry);
+    void DoStatus(const TNavigate::TEntry& entry);
+    void DoCountMinSketchProbe(const TNavigate::TEntry& entry);
+
     void HttpReply(const TString& msg);
 
     void PassAway();
 
 private:
-    const EType Type;
-    const TString Path;
+    const ERequestType RequestType;
+    std::unordered_map<EParamType, TString> Params;
     const TActorId ReplyToActorId;
-
-    TPathId PathId;
-    TString OperationId;
-    ui64 StatisticsAggregatorId = 0;
-
-    static const ui64 FirstRoundCookie = 1;
-    static const ui64 SecondRoundCookie = 2;    
 };
 
 } // NStat

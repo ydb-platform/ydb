@@ -1,6 +1,6 @@
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 using namespace NYdb;
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
         THashMap<TString, THashSet<TString>> clustersFound;
         for (auto i = 0u; i < paths.size() * 2; i++) {
             auto ev = readSession->GetEvent(true);
-            Y_ABORT_UNLESS(ev.Defined());
+            Y_ABORT_UNLESS(ev.has_value());
             auto* lockEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev);
             if (!lockEvent) {
                 if (auto* otherEv = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
             UNIT_ASSERT(paths.contains(path));
             auto& clusters = clustersFound[path];
             UNIT_ASSERT(!clusters.contains(cluster));
-            clusters.insert(cluster);
+            clusters.insert(TString{cluster});
             //lockEvent->Confirm();
         }
         UNIT_ASSERT_VALUES_EQUAL(clustersFound.size(), paths.size());
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
             Ydb::Topic::StreamWriteMessage::FromServer resp;
 
             req.mutable_init_request()->set_path("topic2");
-            if (!producerId.Empty()) {
+            if (!producerId.empty()) {
                 req.mutable_init_request()->set_producer_id(producerId);
                 req.mutable_init_request()->set_message_group_id(producerId);
             }

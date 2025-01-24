@@ -13,8 +13,8 @@ PEERDIR(
     ydb/core/grpc_services/base
     ydb/core/protos
     ydb/library/mkql_proto
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/computation
+    yql/essentials/minikql
+    yql/essentials/minikql/computation
     ydb/public/api/protos
     library/cpp/protobuf/json
 )

@@ -1,6 +1,6 @@
 #include "tasks_packer.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NFq {
 

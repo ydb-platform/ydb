@@ -4,11 +4,11 @@
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
-#include <ydb/core/formats/arrow/simple_builder/array.h>
-#include <ydb/core/formats/arrow/simple_builder/batch.h>
-#include <ydb/core/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/batch.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/formats/arrow/splitter/scheme_info.h>
-#include <ydb/core/formats/arrow/splitter/similar_packer.h>
+#include <ydb/library/formats/arrow/splitter/similar_packer.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
@@ -30,13 +30,6 @@ Y_UNIT_TEST_SUITE(Splitter) {
         }
 
     public:
-        virtual bool NeedMinMaxForColumn(const ui32 /*columnId*/) const override {
-            return true;
-        }
-        virtual bool IsSortedColumn(const ui32 /*columnId*/) const override {
-            return false;
-        }
-
         virtual std::optional<NKikimr::NArrow::NSplitter::TColumnSerializationStat> GetColumnSerializationStats(
             const ui32 /*columnId*/) const override {
             return {};

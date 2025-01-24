@@ -1,0 +1,53 @@
+--- contrib/python/matplotlib/py3/matplotlib/__init__.py	(index)
++++ contrib/python/matplotlib/py3/matplotlib/__init__.py	(working tree)
+@@ -529,1 +529,1 @@ def _get_data_path():
+-    return str(Path(__file__).with_name("mpl-data"))
++    return _get_internal_mpl_data()
+@@ -530,4 +530,18 @@ def get_cachedir():
+ 
+ 
++def _get_internal_mpl_data():
++    import tempfile
++    import __res
++
++    tmp_dir = tempfile.mkdtemp(prefix='mpl-temp', dir=tempfile.gettempdir())
++    for key, rel_path in __res.iter_keys(b"resfs/file/contrib/python/matplotlib/py3/matplotlib/mpl-data/"):
++        filename = f"{tmp_dir}/{str(rel_path, 'ascii')}"
++        os.makedirs(os.path.dirname(filename), exist_ok=True)
++        with open(filename, 'wb') as f:
++            f.write(__res.find(key))
++
++    return tmp_dir
++
++
+ def matplotlib_fname():
+     """
+--- contrib/python/matplotlib/py3/matplotlib/backends/backend_nbagg.py	(index)
++++ contrib/python/matplotlib/py3/matplotlib/backends/backend_nbagg.py	(working tree)
+@@ -111,9 +111,9 @@ class FigureManagerNbAgg(FigureManagerWebAgg):
+         else:
+             output = stream
+         super().get_javascript(stream=output)
+-        output.write((pathlib.Path(__file__).parent
+-                      / "web_backend/js/nbagg_mpl.js")
+-                     .read_text(encoding="utf-8"))
++        import pkgutil
++        data = pkgutil.get_data(__package__, "web_backend/js/nbagg_mpl.js").decode("utf-8")
++        output.write(data)
+         if stream is None:
+             return output.getvalue()
+ 
+--- contrib/python/matplotlib/py3/matplotlib/backends/backend_webagg_core.py	(index)
++++ contrib/python/matplotlib/py3/matplotlib/backends/backend_webagg_core.py	(working tree)
+@@ -505,8 +505,9 @@ class FigureManagerWebAgg(backend_bases.FigureManagerBase):
+         else:
+             output = stream
+ 
+-        output.write((Path(__file__).parent / "web_backend/js/mpl.js")
+-                     .read_text(encoding="utf-8"))
++        import pkgutil
++        data = pkgutil.get_data(__package__, "web_backend/js/mpl.js").decode("utf-8")
++        output.write(data)
+ 
+         toolitems = []
+         for name, tooltip, image, method in cls.ToolbarCls.toolitems:

@@ -90,6 +90,8 @@ public:
     explicit TUserToken(const TString& token);
     bool IsExist(const TSID& someSID) const; // check for presence of SID specified in the token
     TSID GetUserSID() const;
+    using NACLibProto::TUserToken::GetSanitizedToken;
+    using NACLibProto::TUserToken::SetSanitizedToken;
     TVector<TSID> GetGroupSIDs() const;
     TString GetOriginalUserToken() const;
     TString SerializeAsString() const;
@@ -115,6 +117,7 @@ public:
     std::pair<ui32, ui32> AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     std::pair<ui32, ui32> RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     std::pair<ui32, ui32> RemoveAccess(const NACLibProto::TACE& filter);
+    bool HasAccess(const NACLib::TSID& sid);
     std::pair<ui32, ui32> ClearAccess();
     std::pair<ui32, ui32> ApplyDiff(const NACLibProto::TDiffACL& diffACL);
     NACLibProto::TACL GetImmediateACL() const;

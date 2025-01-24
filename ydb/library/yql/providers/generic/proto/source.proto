@@ -5,7 +5,7 @@ option cc_enable_arenas = true;
 package NYql.Generic;
 
 import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";
-import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
+import "yql/essentials/providers/common/proto/gateways_config.proto";
 
 message TSource {
     // Prepared Select expression
@@ -25,7 +25,7 @@ message TSource {
 
 //TODO(YQ-3093) move SA creds to some common message
 message TLookupSource {
-    NYql.NConnector.NApi.TDataSourceInstance data_source_instance = 1;
+    NYql.TGenericDataSourceInstance data_source_instance = 1;
     string table = 2;
     // Credentials used to access managed databases APIs.
     // When working with external data source instances deployed in clouds,

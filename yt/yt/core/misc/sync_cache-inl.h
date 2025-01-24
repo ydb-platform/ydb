@@ -378,9 +378,9 @@ bool TSyncSlruCacheBase<TKey, TValue, THash>::Touch(TShard* shard, TItem* item)
 template <class TKey, class TValue, class THash>
 void TSyncSlruCacheBase<TKey, TValue, THash>::DrainTouchBuffer(TShard* shard)
 {
-    int count = std::min(
+    int count = std::min<int>(
         shard->TouchBufferPosition.load(),
-        static_cast<int>(shard->TouchBuffer.size()));
+        std::ssize(shard->TouchBuffer));
     for (int index = 0; index < count; ++index) {
         MoveToOlder(shard, shard->TouchBuffer[index]);
     }
@@ -525,14 +525,22 @@ void TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::Reconfigure(const TS
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TKey, class TValue, class THash>
-TSimpleLruCache<TKey, TValue, THash>::TSimpleLruCache(size_t maxWeight)
+TSimpleLruCache<TKey, TValue, THash>::TItem::TItem(TValue value, i64 weight)
+    : Value(std::move(value))
+    , Weight(weight)
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TKey, class TValue, class THash>
+TSimpleLruCache<TKey, TValue, THash>::TSimpleLruCache(i64 maxWeight)
     : MaxWeight_(maxWeight)
 { }
 
 template <class TKey, class TValue, class THash>
-size_t TSimpleLruCache<TKey, TValue, THash>::GetSize() const
+int TSimpleLruCache<TKey, TValue, THash>::GetSize() const
 {
-    return ItemMap_.size();
+    return std::ssize(ItemMap_);
 }
 
 template <class TKey, class TValue, class THash>
@@ -566,7 +574,7 @@ TValue* TSimpleLruCache<TKey, TValue, THash>::FindNoTouch(const TKey& key)
 }
 
 template <class TKey, class TValue, class THash>
-TValue* TSimpleLruCache<TKey, TValue, THash>::Insert(const TKey& key, TValue value, size_t weight)
+TValue* TSimpleLruCache<TKey, TValue, THash>::Insert(const TKey& key, TValue value, i64 weight)
 {
     {
         auto mapIt = ItemMap_.find(key);
@@ -592,7 +600,7 @@ TValue* TSimpleLruCache<TKey, TValue, THash>::Insert(const TKey& key, TValue val
 }
 
 template <class TKey, class TValue, class THash>
-void TSimpleLruCache<TKey, TValue, THash>::SetMaxWeight(size_t maxWeight)
+void TSimpleLruCache<TKey, TValue, THash>::SetMaxWeight(i64 maxWeight)
 {
     MaxWeight_ = maxWeight;
 }
@@ -625,14 +633,22 @@ void TSimpleLruCache<TKey, TValue, THash>::UpdateLruList(typename TItemMap::iter
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TKey, class TValue, class THash>
-TMultiLruCache<TKey, TValue, THash>::TMultiLruCache(size_t maxWeight)
+TMultiLruCache<TKey, TValue, THash>::TItem::TItem(TValue value, i64 weight)
+    : Value(std::move(value))
+    , Weight(weight)
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TKey, class TValue, class THash>
+TMultiLruCache<TKey, TValue, THash>::TMultiLruCache(i64 maxWeight)
     : MaxWeight_(maxWeight)
 { }
 
 template <class TKey, class TValue, class THash>
-size_t TMultiLruCache<TKey, TValue, THash>::GetSize() const
+int TMultiLruCache<TKey, TValue, THash>::GetSize() const
 {
-    return LruList_.size();
+    return std::ssize(LruList_);
 }
 
 template <class TKey, class TValue, class THash>
@@ -661,7 +677,7 @@ TValue* TMultiLruCache<TKey, TValue, THash>::Find(const TKey& key)
 }
 
 template <class TKey, class TValue, class THash>
-TValue* TMultiLruCache<TKey, TValue, THash>::Insert(const TKey& key, TValue value, size_t weight)
+TValue* TMultiLruCache<TKey, TValue, THash>::Insert(const TKey& key, TValue value, i64 weight)
 {
     YT_VERIFY(weight <= MaxWeight_);
 
@@ -678,7 +694,7 @@ TValue* TMultiLruCache<TKey, TValue, THash>::Insert(const TKey& key, TValue valu
 }
 
 template <class TKey, class TValue, class THash>
-std::optional<TValue> TMultiLruCache<TKey, TValue, THash>::Extract(const TKey& key)
+std::optional<TValue> TMultiLruCache<TKey, TValue, THash>::TryExtract(const TKey& key)
 {
     auto mapIt = ItemMap_.find(key);
     if (mapIt == ItemMap_.end()) {
@@ -702,6 +718,7 @@ std::optional<TValue> TMultiLruCache<TKey, TValue, THash>::Extract(const TKey& k
 template <class TKey, class TValue, class THash>
 TValue TMultiLruCache<TKey, TValue, THash>::Pop()
 {
+    YT_VERIFY(!LruList_.empty());
     auto listIt = std::prev(LruList_.end());
     auto mapIt = *listIt;
 
@@ -728,12 +745,6 @@ void TMultiLruCache<TKey, TValue, THash>::Clear()
     LruList_.clear();
     CurrentWeight_ = 0;
 }
-
-template <class TKey, class TValue, class THash>
-TMultiLruCache<TKey, TValue, THash>::TItem::TItem(TValue value, size_t weight)
-    : Value(std::move(value))
-    , Weight(weight)
-{ }
 
 template <class TKey, class TValue, class THash>
 void TMultiLruCache<TKey, TValue, THash>::UpdateLruList(typename std::deque<TItem>::iterator dequeIt)

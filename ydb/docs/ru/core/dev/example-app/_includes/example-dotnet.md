@@ -2,8 +2,6 @@
 
 На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-dotnet-examples), использующего [C# (.NET) SDK](https://github.com/ydb-platform/ydb-dotnet-sdk) {{ ydb-short-name }}.
 
-{% include [addition.md](auxilary/addition.md) %}
-
 {% include [steps/01_init.md](steps/01_init.md) %}
 
 Фрагмент кода приложения для инициализации драйвера:
@@ -89,6 +87,7 @@ await queryClient.Exec(@"
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
 Для чтения YQL-запросов используется методы `queryClient.ReadRow` или `queryClient.ReadAllRows`. SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxMode`. Во фрагменте кода, приведенном ниже, используется транзакция с режимом `NoTx` и автоматическим коммитом после выполнения запроса. Значения параметров запроса передаются в виде словаря имя-значение в аргументе `parameters`.
+
 
 ```c#
 var row = await queryClient.ReadRow(@"

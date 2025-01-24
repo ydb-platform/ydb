@@ -12,7 +12,6 @@ class TJsonFeatureFlags : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
-    TString FilterDatabase;
     THashSet<TString> FilterFeatures;
     bool ChangedOnly = false;
     TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> TenantsResponse;
@@ -26,23 +25,17 @@ public:
     {}
 
     void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        FilterDatabase = params.Get("database");
         StringSplitter(params.Get("features")).Split(',').SkipEmpty().Collect(&FilterFeatures);
-        bool direct = FromStringWithDefault<bool>(params.Get("direct"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         ChangedOnly = FromStringWithDefault<bool>(params.Get("changed"), ChangedOnly);
-
-        direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-        direct |= (FilterDatabase == AppData()->TenantName); // we're already on the right node
-        if (FilterDatabase && !direct) {
-            return RedirectToDatabase(FilterDatabase); // to find some dynamic node and redirect query there
-        }
-
-        if (FilterDatabase) {
-            PathNameNavigateKeySetResults[FilterDatabase] = MakeRequestSchemeCacheNavigate(FilterDatabase);
+        if (Database && DatabaseNavigateResponse) {
+            PathNameNavigateKeySetResults[Database] = std::move(*DatabaseNavigateResponse);
         } else {
             TenantsResponse = MakeRequestConsoleListTenants();
         }
@@ -62,28 +55,30 @@ public:
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
-        TenantsResponse.Set(std::move(ev));
-        if (TenantsResponse.IsOk()) {
-            Ydb::Cms::ListDatabasesResult listDatabasesResult;
-            TenantsResponse->Record.GetResponse().operation().result().UnpackTo(&listDatabasesResult);
-            for (const TString& database : listDatabasesResult.paths()) {
-                if (PathNameNavigateKeySetResults.count(database) == 0) {
-                    PathNameNavigateKeySetResults[database] = MakeRequestSchemeCacheNavigate(database);
+        if (TenantsResponse.Set(std::move(ev))) {
+            if (TenantsResponse.IsOk()) {
+                Ydb::Cms::ListDatabasesResult listDatabasesResult;
+                TenantsResponse->Record.GetResponse().operation().result().UnpackTo(&listDatabasesResult);
+                for (const TString& database : listDatabasesResult.paths()) {
+                    if (PathNameNavigateKeySetResults.count(database) == 0) {
+                        PathNameNavigateKeySetResults[database] = MakeRequestSchemeCacheNavigate(database);
+                    }
                 }
             }
-        }
-        if (PathNameNavigateKeySetResults.empty()) {
-            if (AppData()->DomainsInfo && AppData()->DomainsInfo->Domain) {
-                TString domain = "/" + AppData()->DomainsInfo->Domain->Name;
-                PathNameNavigateKeySetResults[domain] = MakeRequestSchemeCacheNavigate(domain);
+            if (PathNameNavigateKeySetResults.empty()) {
+                if (AppData()->DomainsInfo && AppData()->DomainsInfo->Domain) {
+                    TString domain = "/" + AppData()->DomainsInfo->Domain->Name;
+                    PathNameNavigateKeySetResults[domain] = MakeRequestSchemeCacheNavigate(domain);
+                }
             }
+            RequestDone();
         }
-        RequestDone();
     }
 
     void Handle(NConsole::TEvConsole::TEvGetAllConfigsResponse::TPtr& ev) {
-        AllConfigsResponse.Set(std::move(ev));
-        RequestDone();
+        if (AllConfigsResponse.Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -91,19 +86,20 @@ public:
         if (path) {
             auto it = PathNameNavigateKeySetResults.find(path);
             if (it != PathNameNavigateKeySetResults.end() && !it->second.IsDone()) {
-                it->second.Set(std::move(ev));
-                if (it->second.IsOk()) {
-                    TSchemeCacheNavigate::TEntry& entry(it->second->Request->ResultSet.front());
-                    if (entry.DomainInfo) {
-                        if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
-                            TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
-                            if (PathIdNavigateKeySetResults.count(resourceDomainKey) == 0) {
-                                PathIdNavigateKeySetResults[resourceDomainKey] = MakeRequestSchemeCacheNavigate(resourceDomainKey);
+                if (it->second.Set(std::move(ev))) {
+                    if (it->second.IsOk()) {
+                        TSchemeCacheNavigate::TEntry& entry(it->second->Request->ResultSet.front());
+                        if (entry.DomainInfo) {
+                            if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
+                                TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
+                                if (PathIdNavigateKeySetResults.count(resourceDomainKey) == 0) {
+                                    PathIdNavigateKeySetResults[resourceDomainKey] = MakeRequestSchemeCacheNavigate(resourceDomainKey);
+                                }
                             }
                         }
                     }
+                    RequestDone();
                 }
-                RequestDone();
                 return;
             }
         }
@@ -111,8 +107,9 @@ public:
         if (pathId) {
             auto it = PathIdNavigateKeySetResults.find(pathId);
             if (it != PathIdNavigateKeySetResults.end() && !it->second.IsDone()) {
-                it->second.Set(std::move(ev));
-                RequestDone();
+                if (it->second.Set(std::move(ev))) {
+                    RequestDone();
+                }
                 return;
             }
         }

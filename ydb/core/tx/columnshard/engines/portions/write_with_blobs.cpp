@@ -17,7 +17,9 @@ void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(TWritePortionInf
     chunk->AddIntoPortionBeforeBlob(bRange, owner.GetPortionConstructor());
 }
 
-void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId) const {
+void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId) {
+    AFL_VERIFY(!BlobId);
+    BlobId = blobId;
     const TBlobRangeLink16::TLinkId idx = owner.GetPortionConstructor().RegisterBlobId(blobId);
     for (auto&& i : Chunks) {
         owner.GetPortionConstructor().RegisterBlobIdx(i, idx);
@@ -28,14 +30,15 @@ TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::Bui
     const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
     const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators)
 {
-    TPortionInfoConstructor constructor(granule);
-    constructor.SetMinSnapshotDeprecated(snapshot);
-    constructor.SetSchemaVersion(schemaVersion);
+    TPortionAccessorConstructor constructor(granule);
+    constructor.MutablePortionConstructor().SetMinSnapshotDeprecated(snapshot);
+    constructor.MutablePortionConstructor().SetSchemaVersion(schemaVersion);
     return BuildByBlobs(std::move(chunks), inplaceChunks, std::move(constructor), operators);
 }
 
-TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
-    std::vector<TSplittedBlob>&& chunks, const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionInfoConstructor&& constructor, const std::shared_ptr<IStoragesManager>& operators) {
+TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
+    const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionAccessorConstructor&& constructor,
+    const std::shared_ptr<IStoragesManager>& operators) {
     TWritePortionInfoWithBlobsConstructor result(std::move(constructor));
     for (auto&& blob : chunks) {
         auto storage = operators->GetOperatorVerified(blob.GetGroupName());

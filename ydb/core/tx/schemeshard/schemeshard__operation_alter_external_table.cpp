@@ -252,12 +252,12 @@ private:
         if (!isSameDataSource) {
             auto& reference = *externalDataSource->ExternalTableReferences.AddReferences();
             reference.SetPath(dstPath.PathString());
-            PathIdFromPathId(externalTable->PathId, reference.MutablePathId());
+            externalTable->PathId.ToProto(reference.MutablePathId());
 
             EraseIf(*oldDataSource->ExternalTableReferences.MutableReferences(),
                     [pathId = externalTable->PathId](
                         const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) {
-                        return PathIdFromPathId(reference.GetPathId()) == pathId;
+                        return TPathId::FromProto(reference.GetPathId()) == pathId;
                     });
         }
     }
@@ -307,6 +307,13 @@ public:
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(ssId));
+
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            if (!context.SS->EnableExternalDataSourcesOnServerless) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "External data sources are disabled for serverless domains. Please contact your system administrator to enable it");
+                return result;
+            }
+        }
 
         const auto parentPath = TPath::Resolve(parentPathStr, context.SS);
         RETURN_RESULT_UNLESS(NExternalTable::IsParentPathValid(result, parentPath));

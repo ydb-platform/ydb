@@ -1222,10 +1222,10 @@ namespace NUnifiedAgent::NPrivate {
 
 namespace NUnifiedAgent {
     size_t SizeOf(const TClientMessage& message) {
-        auto result = message.Payload.Size() + sizeof(TInstant);
+        auto result = message.Payload.size() + sizeof(TInstant);
         if (message.Meta.Defined()) {
             for (const auto& m: *message.Meta) {
-                result += m.first.Size() + m.second.Size();
+                result += m.first.size() + m.second.size();
             }
         }
         return result;

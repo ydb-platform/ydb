@@ -58,7 +58,7 @@ public:
 
         bool operator == (const TKey& key) const {
             return TabletId == key.TabletId &&
-                Partition.IsEqual(key.Partition) &&
+                Partition == key.Partition &&
                 Offset == key.Offset &&
                 PartNo == key.PartNo;
         }

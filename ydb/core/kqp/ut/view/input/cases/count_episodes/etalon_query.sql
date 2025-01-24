@@ -9,4 +9,4 @@ FROM (
     GROUP BY
         series_id,
         season_id
-);
+) ORDER BY series_id, season_id;

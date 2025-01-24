@@ -60,10 +60,12 @@ Decoding is a reverse process. Character codes in `\u00XX`, maximum 255.
 
 * Type in JSON: `string`.
 * Sample {{ backend_name }} value: A sequence of 4 bytes:
+
   * 5 `0x05`: A control character.
   * 10 `0x0a`: The `\n` newline character.
   * 107 `0x6b`: The `k` character.
   * 255 `0xff`: The `ÿ` character in Unicode.
+
 * Sample JSON value: `"\u0005\nk\u00FF"`.
 
 ## Utf8, Json, Uuid {#utf}
@@ -129,8 +131,10 @@ List. An ordered set of values of a given type.
 
 * Type in JSON: `array`.
 * Sample {{ backend_name }} value:
+
   * Type: `List<Int32>`.
   * Value: `1, 10, 100`.
+
 * Sample JSON value: `[1,10,100]`.
 
 ## Stream {#stream}
@@ -139,8 +143,10 @@ Stream. Single-pass iterator by same-type values,
 
 * Type in JSON: `array`.
 * Sample {{ backend_name }} value:
+
   * Type: `Stream<Int32>`.
   * Value: `1, 10, 100`.
+
 * Sample JSON value: `[1,10,100]`.
 
 ## Struct {#struct}
@@ -149,8 +155,10 @@ Structure. An unordered set of values with the specified names and type.
 
 * Type in JSON: `object`.
 * Sample {{ backend_name }} value:
+
   * Type: `Struct<'Id':Uint32,'Name':String,'Value':Int32,'Description':Utf8?>`;
   * Value: `"Id":1,"Name":"Anna","Value":-100,"Description":null`.
+
 * Sample JSON value: `{"Id":1,"Name":"Anna","Value":-100,"Description":null}`.
 
 ## Tuple {#tuple}
@@ -159,8 +167,10 @@ Tuple. An ordered set of values of the set types.
 
 * Type in JSON: `array`.
 * Sample {{ backend_name }} value:
+
   * Type: `Tuple<Int32??,Int64???,String??,Utf8???>`;
   * Value: `10,-1,null,"Some string"`.
+
 * Sample JSON value: `[10,-1,null,"Some string"]`.
 
 ## Dict {#dict}
@@ -169,7 +179,9 @@ Dictionary. An unordered set of key-value pairs. The type is set both for the ke
 
 * Type in JSON: `array`.
 * Sample {{ backend_name }} value:
+
   * Type: `Dict<Int64,String>`.
   * Value: `1:"Value1",2:"Value2"`.
+
 * Sample JSON value: `[[1,"Value1"],[2,"Value2"]]`.
 

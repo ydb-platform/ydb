@@ -1,0 +1,20 @@
+--- contrib/python/boto/py3/boto/compat.py	(index)
++++ contrib/python/boto/py3/boto/compat.py	(working tree)
+@@ -49 +49 @@ except (AttributeError, ImportError):
+-from boto.vendored import six
++import six
+@@ -51,2 +51,2 @@ from boto.vendored import six
+-from boto.vendored.six import BytesIO, StringIO
+-from boto.vendored.six.moves import filter, http_client, map, _thread, \
++from six import BytesIO, StringIO
++from six.moves import filter, http_client, map, _thread, \
+@@ -54,2 +54,2 @@ from boto.vendored.six.moves import filter, http_client, map, _thread, \
+-from boto.vendored.six.moves.queue import Queue
+-from boto.vendored.six.moves.urllib.parse import parse_qs, quote, unquote, \
++from six.moves.queue import Queue
++from six.moves.urllib.parse import parse_qs, quote, unquote, \
+@@ -57,2 +57,2 @@ from boto.vendored.six.moves.urllib.parse import parse_qs, quote, unquote, \
+-from boto.vendored.six.moves.urllib.parse import unquote_plus
+-from boto.vendored.six.moves.urllib.request import urlopen
++from six.moves.urllib.parse import unquote_plus
++from six.moves.urllib.request import urlopen

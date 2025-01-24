@@ -1,10 +1,11 @@
 #include "appdata.h"
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 namespace NKikimr {
 
@@ -62,7 +63,7 @@ namespace NKikimr {
         app->AwsCompatibilityConfig = AwsCompatibilityConfig;
         app->S3ProxyResolverConfig = S3ProxyResolverConfig;
         app->GraphConfig = GraphConfig;
-        app->FeatureFlags = FeatureFlags;
+        app->InitFeatureFlags(FeatureFlags);
 
         // This is a special setting active in test runtime only
         app->EnableMvccSnapshotWithLegacyDomainRoot = true;

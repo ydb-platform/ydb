@@ -82,6 +82,9 @@
 /* Define to 1 if you have the <poll.h> header file. */
 #define HAVE_POLL_H 1
 
+/* Define to 1 if you have the memmem function. */
+#define HAVE_MEMMEM 1
+
 /* Define to 1 if you have the poll function. */
 #define HAVE_POLL 1
 
@@ -242,6 +245,9 @@
 /* Define to 1 if you have the send function. */
 #define HAVE_SEND 1
 
+/* Define to 1 if you have the sendto function. */
+#define HAVE_SENDTO 1
+
 /* Define to 1 if you have the setsockopt function. */
 #define HAVE_SETSOCKOPT 1
 
@@ -250,6 +256,9 @@
 
 /* Define to 1 if you have the <signal.h> header file. */
 #define HAVE_SIGNAL_H 1
+
+/* Define to 1 if you have the strnlen function. */
+#define HAVE_STRNLEN 1
 
 /* Define to 1 if your struct sockaddr_in6 has sin6_scope_id. */
 #define HAVE_STRUCT_SOCKADDR_IN6_SIN6_SCOPE_ID 1

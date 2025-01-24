@@ -124,8 +124,8 @@ public:
                 ui32 columnTag = validatedOperation.GetColumnIds()[valueColIdx];
                 const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
 
-                NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
-                ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeInfo));
+                const NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, columnTag)->PType.GetTypeId();
+                ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeId));
             }
         };
 
@@ -139,8 +139,8 @@ public:
                 if (cell.IsNull()) {
                     key.emplace_back();
                 } else {
-                    NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, keyCol)->PType;
-                    key.emplace_back(cell.Data(), cell.Size(), vtypeInfo);
+                    NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, keyCol)->PType.GetTypeId();
+                    key.emplace_back(cell.Data(), cell.Size(), vtypeId);
                 }
             }
 
@@ -286,6 +286,12 @@ public:
             }
 
             if (guardLocks.LockTxId) {
+                auto abortLock = [&]() {
+                    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because it cannot acquire locks");
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because it cannot acquire locks");
+                    return EExecutionStatus::Executed;
+                };
+
                 switch (DataShard.SysLocksTable().EnsureCurrentLock()) {
                     case EEnsureCurrentLock::Success:
                         // Lock is valid, we may continue with reads and side-effects
@@ -294,23 +300,23 @@ public:
                     case EEnsureCurrentLock::Broken:
                         // Lock is valid, but broken, we could abort early in some
                         // cases, but it doesn't affect correctness.
+                        if (!op->IsReadOnly()) {
+                            return abortLock();
+                        }
                         break;
 
                     case EEnsureCurrentLock::TooMany:
                         // Lock cannot be created, it's not necessarily a problem
                         // for read-only transactions, for non-readonly we need to
                         // abort;
-                        if (op->IsReadOnly()) {
-                            break;
+                        if (!op->IsReadOnly()) {
+                            return abortLock();
                         }
-
-                        [[fallthrough]];
+                        break;
 
                     case EEnsureCurrentLock::Abort:
                         // Lock cannot be created and we must abort
-                        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because it cannot acquire locks");
-                        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because it cannot acquire locks");
-                        return EExecutionStatus::Executed;
+                        return abortLock();
                 }
             }
 

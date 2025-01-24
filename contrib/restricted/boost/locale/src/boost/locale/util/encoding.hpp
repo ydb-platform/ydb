@@ -12,6 +12,7 @@
 #include <boost/utility/string_view.hpp>
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace boost { namespace locale { namespace util {
@@ -37,6 +38,14 @@ namespace boost { namespace locale { namespace util {
         }
         BOOST_UNREACHABLE_RETURN("Unknown UTF");
     }
+
+#ifdef __cpp_char8_t
+    template<typename T>
+    struct is_char8_t : std::is_same<T, char8_t> {};
+#else
+    template<typename T>
+    struct is_char8_t : std::false_type {};
+#endif
 
     /// Make encoding lowercase and remove all non-alphanumeric characters
     BOOST_LOCALE_DECL std::string normalize_encoding(string_view encoding);

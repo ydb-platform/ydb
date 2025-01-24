@@ -22,28 +22,28 @@ public:
         NTableClient::IValueConsumer* valueConsumer);
 
     void Reset();
-    virtual void OnStringScalar(TStringBuf value) override;
-    virtual void OnInt64Scalar(i64 value) override;
-    virtual void OnUint64Scalar(ui64 value) override;
-    virtual void OnDoubleScalar(double value) override;
-    virtual void OnBooleanScalar(bool value) override;
-    virtual void OnEntity() override;
-    virtual void OnBeginList() override;
-    virtual void OnListItem() override;
-    virtual void OnBeginMap() override;
-    virtual void OnKeyedItem(TStringBuf name) override;
-    virtual void OnEndMap() override;
-    virtual void OnBeginAttributes() override;
-    virtual void OnEndList() override;
-    virtual void OnEndAttributes() override;
+    void OnStringScalar(TStringBuf value) override;
+    void OnInt64Scalar(i64 value) override;
+    void OnUint64Scalar(ui64 value) override;
+    void OnDoubleScalar(double value) override;
+    void OnBooleanScalar(bool value) override;
+    void OnEntity() override;
+    void OnBeginList() override;
+    void OnListItem() override;
+    void OnBeginMap() override;
+    void OnKeyedItem(TStringBuf name) override;
+    void OnEndMap() override;
+    void OnBeginAttributes() override;
+    void OnEndList() override;
+    void OnEndAttributes() override;
 
 private:
-    virtual const NTableClient::TNameTablePtr& GetNameTable() const override;
-    virtual bool GetAllowUnknownColumns() const override;
-    virtual void OnBeginRow() override;
-    virtual void OnValue(const NTableClient::TUnversionedValue& value) override;
-    virtual void OnEndRow() override;
-    virtual const NTableClient::TTableSchemaPtr& GetSchema() const override;
+    const NTableClient::TNameTablePtr& GetNameTable() const override;
+    bool GetAllowUnknownColumns() const override;
+    void OnBeginRow() override;
+    void OnValue(const NTableClient::TUnversionedValue& value) override;
+    void OnEndRow() override;
+    const NTableClient::TTableSchemaPtr& GetSchema() const override;
 
 private:
     NTableClient::IValueConsumer* const Consumer_;

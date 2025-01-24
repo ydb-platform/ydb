@@ -1,5 +1,7 @@
 #include "tx_data_ack_to_source.h"
+
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -22,19 +24,15 @@ bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc
     }
 
     NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::SourceSessions>().Key(Session->GetSessionId())
-        .Update(NIceDb::TUpdate<Schema::SourceSessions::CursorDynamic>(Session->GetCursorVerified()->SerializeDynamicToProto().SerializeAsString()));
-    if (!Session->GetCursorVerified()->GetStaticSaved()) {
-        db.Table<Schema::SourceSessions>().Key(Session->GetSessionId())
-            .Update(NIceDb::TUpdate<Schema::SourceSessions::CursorStatic>(Session->GetCursorVerified()->SerializeStaticToProto().SerializeAsString()));
-        Session->GetCursorVerified()->SetStaticSaved(true);
-    }
+    Session->SaveCursorToDatabase(db);
     std::swap(SharedBlobIds, sharedTabletBlobIds);
     return true;
 }
 
 void TTxDataAckToSource::DoComplete(const TActorContext& /*ctx*/) {
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("TTxDataAckToSource::DoComplete", "1");
+
     Session->ActualizeDestination(*Self, Self->GetDataLocksManager());
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

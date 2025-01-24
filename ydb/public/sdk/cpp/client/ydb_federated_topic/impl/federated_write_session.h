@@ -6,7 +6,7 @@
 
 #include <deque>
 
-namespace NYdb::NFederatedTopic {
+namespace NYdb::inline V2::NFederatedTopic {
 
 std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHashImpl(
     NTopic::TFederatedWriteSessionSettings const& settings,
@@ -155,10 +155,16 @@ public:
     NThreading::TFuture<ui64> GetInitSeqNo() override {
         return TryGetImpl()->GetInitSeqNo();
     }
-    void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message) override {
+    void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message, NTable::TTransaction* tx = nullptr) override {
+        if (tx) {
+            ythrow yexception() << "transactions are not supported";
+        }
         TryGetImpl()->Write(std::move(continuationToken), std::move(message));
     }
-    void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params) override {
+    void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params, NTable::TTransaction* tx = nullptr) override {
+        if (tx) {
+            ythrow yexception() << "transactions are not supported";
+        }
         TryGetImpl()->WriteEncoded(std::move(continuationToken), std::move(params));
     }
     void Write(NTopic::TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ui64> seqNo = Nothing(),

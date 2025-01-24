@@ -10,6 +10,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/api/protos/ydb_clickhouse_internal.pb.h>
 
 #include <util/string/vector.h>
 #include <util/generic/hash.h>

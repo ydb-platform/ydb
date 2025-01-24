@@ -2,7 +2,7 @@
 
 Переопределение настроек.
 
-**Синтаксис**
+### Синтаксис
 
 `PRAGMA x.y = "z";` или `PRAGMA x.y("z", "z2", "z3");`:
 
@@ -13,17 +13,17 @@
   * `Kb`, `Mb`, `Gb` — для объема информации.
   * `sec`, `min`, `h`, `d` — для временных значений.
 
-**Примеры**
+### Примеры
 
-``` yql
+```yql
 PRAGMA AutoCommit;
 ```
 
-``` yql
+```yql
 PRAGMA TablePathPrefix = "home/yql";
 ```
 
-``` yql
+```yql
 PRAGMA Warning("disable", "1101");
 ```
 

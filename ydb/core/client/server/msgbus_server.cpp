@@ -16,6 +16,7 @@ public:
     virtual void SendReplyMove(NBus::TBusMessageAutoPtr response) = 0;
     virtual TVector<TStringBuf> FindClientCert() const = 0;
     virtual THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() = 0;
+    virtual TString GetPeerName() const = 0;
 };
 
 class TBusMessageContext::TImplMessageBus
@@ -61,6 +62,13 @@ public:
         return {};
     }
 
+    TString GetPeerName() const override {
+        TStringBuilder ret;
+        if (IsConnectionAlive()) {
+            ret << GetPeerAddrNetAddr();
+        }
+        return std::move(ret);
+    }
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 };
@@ -116,7 +124,6 @@ public:
             MTYPE(TBusNodeRegistrationRequest)
             MTYPE(TBusCmsRequest)
             MTYPE(TBusChooseProxy)
-            MTYPE(TBusSqsRequest)
             MTYPE(TBusStreamRequest)
             MTYPE(TBusInterconnectDebug)
             MTYPE(TBusConsoleRequest)
@@ -181,6 +188,10 @@ public:
     };
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
+
+    TString GetPeerName() const override {
+        return RequestContext->GetPeer();
+    }
 };
 
 TBusMessageContext::TBusMessageContext()
@@ -226,6 +237,8 @@ void TBusMessageContext::Swap(TBusMessageContext &msg) {
 }
 
 TVector<TStringBuf> TBusMessageContext::FindClientCert() const { return Impl->FindClientCert(); }
+
+TString TBusMessageContext::GetPeerName() const { return Impl->GetPeerName(); }
 
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::CreateSessionIdentHolder() {
     Y_ABORT_UNLESS(Impl);
@@ -486,8 +499,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     const ui32 msgType = msg.GetMessage()->GetHeader()->Type;
 
     switch (msgType) {
-    case MTYPE_CLIENT_REQUEST:
-        return ClientProxyRequest<TEvBusProxy::TEvRequest>(msg);
     case MTYPE_CLIENT_SCHEME_INITROOT:
         return ClientProxyRequest<TEvBusProxy::TEvInitRoot>(msg);
     case MTYPE_CLIENT_SCHEME_NAVIGATE:
@@ -534,8 +545,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusResolveNode, msg);
     case MTYPE_CLIENT_CMS_REQUEST:
         return ClientActorRequest(CreateMessageBusCmsRequest, msg);
-    case MTYPE_CLIENT_SQS_REQUEST:
-        return ClientActorRequest(CreateMessageBusSqsRequest, msg);
     case MTYPE_CLIENT_INTERCONNECT_DEBUG:
         return ClientActorRequest(CreateMessageBusInterconnectDebug, msg);
     case MTYPE_CLIENT_CONSOLE_REQUEST:

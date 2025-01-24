@@ -1,5 +1,6 @@
 #pragma once
 #include "abstract.h"
+#include "fetch_database.h"
 #include "modification_controller.h"
 #include "preparation_controller.h"
 #include "restore.h"
@@ -57,6 +58,7 @@ protected:
     typename IObjectOperationsManager<TObject>::TPtr Manager;
     const IOperationsManager::TInternalModificationContext Context;
     std::vector<NInternal::TTableRecord> Patches;
+    std::vector<TModificationStage::TPtr> Preconditions;
     NInternal::TTableRecords RestoreObjectIds;
     const NACLib::TUserToken UserToken = NACLib::TSystemUsers::Metadata();
     virtual bool PrepareRestoredObjects(std::vector<TObject>& objects) const = 0;
@@ -111,6 +113,7 @@ public:
             hFunc(NRequest::TEvRequestFailed, Handle);
             hFunc(TEvRestoreProblem, Handle);
             hFunc(TEvAlterPreparationProblem, Handle);
+            hFunc(TEvFetchDatabaseResponse, Handle);
             default:
                 break;
         }
@@ -126,6 +129,30 @@ public:
             return this->PassAway();
         }
 
+        if (!AppData()->FeatureFlags.GetEnableMetadataObjectsOnServerless() && Context.GetActivityType() != IOperationsManager::EActivityType::Drop) {
+            TBase::Register(CreateDatabaseFetcherActor(Context.GetExternalData().GetDatabase()));
+        } else {
+            CreateSession();
+        }
+    }
+
+    void Handle(TEvFetchDatabaseResponse::TPtr& ev) {
+        TString errorMessage;
+        if (const auto& errorString = ev->Get()->GetErrorString()) {
+            errorMessage = TStringBuilder() << "Cannot fetch database '" << Context.GetExternalData().GetDatabase() << "': " << *errorString;
+        } else if (ev->Get()->GetServerless()) {
+            errorMessage = TStringBuilder() << "Objects " << TObject::GetTypeId() << " are disabled for serverless domains. Please contact your system administrator to enable it";
+        }
+
+        if (errorMessage) {
+            auto g = TBase::PassAwayGuard();
+            ExternalController->OnAlteringProblem(errorMessage);
+        } else {
+            CreateSession();
+        }
+    }
+
+    void CreateSession() const {
         TBase::Register(new NRequest::TYDBCallbackRequest<NRequest::TDialogCreateSession>(
             NRequest::TDialogCreateSession::TRequest(), UserToken, TBase::SelfId()));
     }
@@ -153,6 +180,7 @@ public:
     }
 
     void Handle(typename TEvAlterPreparationFinished<TObject>::TPtr& ev) {
+        Preconditions = Manager->GetPreconditions(ev->Get()->GetObjects(), Context);
         NInternal::TTableRecords records;
         records.InitColumns(Manager->GetSchema().GetYDBColumns());
         records.ReserveRows(ev->Get()->GetObjects().size());

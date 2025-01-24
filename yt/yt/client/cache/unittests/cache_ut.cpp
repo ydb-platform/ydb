@@ -93,6 +93,7 @@ TEST(TClientsCacheTest, MultiThreads)
 TEST(TClientsCacheTest, MakeClusterConfig)
 {
     auto clientsCacheConfig = New<TClientsCacheConfig>();
+    clientsCacheConfig->DefaultConfig = New<NApi::NRpcProxy::TConnectionConfig>();
     clientsCacheConfig->DefaultConfig->ClusterUrl = "seneca-nan"; // will be ignored
     clientsCacheConfig->DefaultConfig->ProxyRole = "default_role"; // can be overwritten
     clientsCacheConfig->DefaultConfig->DynamicChannelPool->MaxPeerCount = 42;

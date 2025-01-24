@@ -14,7 +14,7 @@ static constexpr double BlobCapacityMultiplier = 1.5;
 TBlob::TBlob(
     TRefCountedTypeCookie tagCookie,
     size_t size,
-    bool initiailizeStorage,
+    bool initializeStorage,
     bool pageAligned)
     : PageAligned_(pageAligned)
 {
@@ -24,7 +24,7 @@ TBlob::TBlob(
     } else {
         Allocate(std::max(size, InitialBlobCapacity));
         Size_ = size;
-        if (initiailizeStorage) {
+        if (initializeStorage) {
             ::memset(Begin_, 0, Size_);
         }
     }
@@ -197,6 +197,8 @@ void TBlob::SetTagCookie(TRefCountedTypeCookie tagCookie)
 {
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
     TagCookie_ = tagCookie;
+#else
+    Y_UNUSED(tagCookie);
 #endif
 }
 
@@ -204,6 +206,8 @@ void TBlob::SetTagCookie(const TBlob& other)
 {
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
     TagCookie_ = other.TagCookie_;
+#else
+    Y_UNUSED(other);
 #endif
 }
 

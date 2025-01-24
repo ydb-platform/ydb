@@ -1,0 +1,33 @@
+diff --git a/include/initializer_list b/include/initializer_list
+index 827f137..66b0575 100644
+--- a/include/initializer_list
++++ b/include/initializer_list
+@@ -47,7 +47,13 @@ template<class E> const E* end(initializer_list<E> il) noexcept; // constexpr in
+ 
+ #if defined(_LIBCPP_COMPILER_MSVC) && !defined(__clang__)
+ 
++// save __cpp_lib_concepts because it can be redefined inside MSVC standard headers
++#pragma push_macro("__cpp_lib_concepts")
++
+ #include Y_MSVC_INCLUDE_NEXT(yvals.h)
++
++#pragma pop_macro("__cpp_lib_concepts")
++
+ #include Y_MSVC_INCLUDE_NEXT(initializer_list)
+ 
+ #else
+diff --git a/include/version b/include/version
+index 25d112a..0dadcfb 100644
+--- a/include/version
++++ b/include/version
+@@ -314,7 +314,9 @@ __cpp_lib_void_t                                        201411L <type_traits>
+ # if !defined(_LIBCPP_HAS_NO_CHAR8_T)
+ #   define __cpp_lib_char8_t                            201907L
+ # endif
+-# define __cpp_lib_concepts                             202002L
++# if !defined(_LIBCPP_HAS_NO_CONCEPTS)
++#   define __cpp_lib_concepts                           202002L
++# endif
+ # define __cpp_lib_constexpr_algorithms                 201806L
+ // # define __cpp_lib_constexpr_complex                    201711L
+ # define __cpp_lib_constexpr_dynamic_alloc              201907L

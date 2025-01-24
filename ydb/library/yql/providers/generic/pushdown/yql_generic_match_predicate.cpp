@@ -53,6 +53,9 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kTypedValue:
                 case NYql::NConnector::NApi::TExpression::kArithmeticalExpression:
                 case NYql::NConnector::NApi::TExpression::kNull:
+                case NYql::NConnector::NApi::TExpression::kCoalesce:
+                case NYql::NConnector::NApi::TExpression::kIf:
+                case NYql::NConnector::NApi::TExpression::kCast:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return false;
             }
@@ -66,6 +69,9 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kColumn:
                 case NYql::NConnector::NApi::TExpression::kArithmeticalExpression:
                 case NYql::NConnector::NApi::TExpression::kNull:
+                case NYql::NConnector::NApi::TExpression::kCoalesce:
+                case NYql::NConnector::NApi::TExpression::kIf:
+                case NYql::NConnector::NApi::TExpression::kCast:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return false;
             }
@@ -115,6 +121,8 @@ namespace NYql::NGenericPushDown {
                     return rightValueTimestamp < timestampStatistics.highValue ? Triple::True : Triple::False;
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::NE:
                     return rightValueTimestamp < timestampStatistics.lowValue || timestampStatistics.highValue < rightValueTimestamp ? Triple::True : Triple::False;
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::IND:
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::ID:
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED:
                 case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -147,6 +155,8 @@ namespace NYql::NGenericPushDown {
                     return timestampStatistics.lowValue < leftValueTimestamp ? Triple::True : Triple::False;
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::NE:
                     return leftValueTimestamp < timestampStatistics.lowValue || timestampStatistics.highValue < leftValueTimestamp ? Triple::True : Triple::False;
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::IND:
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::ID:
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED:
                 case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -271,6 +281,9 @@ namespace NYql::NGenericPushDown {
                 }
                 case NYql::NConnector::NApi::TExpression::kArithmeticalExpression:
                 case NYql::NConnector::NApi::TExpression::kNull:
+                case NYql::NConnector::NApi::TExpression::kCoalesce:
+                case NYql::NConnector::NApi::TExpression::kIf:
+                case NYql::NConnector::NApi::TExpression::kCast:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return Triple::Unknown;
             }

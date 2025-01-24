@@ -15,6 +15,7 @@
 
 #include <yt/yt/core/misc/async_expiring_cache.h>
 #include <yt/yt/core/misc/fs.h>
+#include <yt/yt/core/misc/configurable_singleton_def.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -106,6 +107,13 @@ TStringBuf GetServiceHostName(TStringBuf address)
     TStringBuf result;
     ParseServiceAddress(address, &result, nullptr);
     return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString FormatNetworkAddress(TStringBuf address, int port)
+{
+    return Format("[%v]:%v", address, port);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -709,6 +717,13 @@ bool TIP6Address::FromString(TStringBuf str, TIP6Address* address)
     return true;
 }
 
+bool TIP6Address::IsMtn() const
+{
+    static const auto BackboneNetwork = TIP6Network::FromString("2a02:6b8:c00::/40");
+    static const auto FastboneNetwork = TIP6Network::FromString("2a02:6b8:fc00::/40");
+    return BackboneNetwork.Contains(*this) || FastboneNetwork.Contains(*this);
+}
+
 void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStringBuf /*spec*/)
 {
     const auto* parts = reinterpret_cast<const ui16*>(address.GetRawBytes());
@@ -973,7 +988,7 @@ public:
         : TAsyncExpiringCache(
             config,
             /*logger*/ {},
-            DnsProfiler.WithPrefix("/resolve_cache"))
+            DnsProfiler().WithPrefix("/resolve_cache"))
     {
         Configure(std::move(config));
     }
@@ -1014,10 +1029,12 @@ public:
 
     bool IsLocalAddress(const TNetworkAddress& address)
     {
-        TNetworkAddress localIP{address, 0};
-
+        if (!address.IsIP()) {
+            return false;
+        }
+        TNetworkAddress candidateAddress(address, /*port*/ 0);
         const auto& localAddresses = GetLocalAddresses();
-        return std::find(localAddresses.begin(), localAddresses.end(), localIP) != localAddresses.end();
+        return std::find(localAddresses.begin(), localAddresses.end(), candidateAddress) != localAddresses.end();
     }
 
     void PurgeCache()
@@ -1187,7 +1204,7 @@ TMtnAddress& TMtnAddress::SetHost(ui64 host)
     return *this;
 }
 
-const TIP6Address& TMtnAddress::ToIP6Address() const
+TIP6Address TMtnAddress::ToIP6Address() const
 {
     return Address_;
 }

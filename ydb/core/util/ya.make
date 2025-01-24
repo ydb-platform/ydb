@@ -41,14 +41,11 @@ SRCS(
     proto_duration.h
     queue_inplace.h
     queue_oneone_inplace.h
+    random.cpp
     simple_cache.h
-    single_thread_ic_mock.cpp
-    single_thread_ic_mock.h
+    source_location.cpp
     stlog.cpp
     stlog.h
-    templates.h
-    testactorsys.cpp
-    testactorsys.h
     text.cpp
     text.h
     token_bucket.h
@@ -77,6 +74,7 @@ PEERDIR(
     library/cpp/random_provider
     ydb/core/base
     ydb/core/protos
+    ydb/core/mon
     library/cpp/deprecated/atomic
     ydb/library/yverify_stream
 )

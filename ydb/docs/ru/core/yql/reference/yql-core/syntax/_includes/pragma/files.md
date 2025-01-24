@@ -48,7 +48,7 @@
 
 Пример с приложенным файлом к запросу:
 
-``` yql
+```yql
 PRAGMA library("a.sql");
 IMPORT a SYMBOLS $x;
 SELECT $x;
@@ -56,7 +56,7 @@ SELECT $x;
 
 В случае указания URL библиотека скачивается с него, а не с предварительного приложенного файла, как в следующем примере:
 
-``` yql
+```yql
 PRAGMA library("a.sql","{{ corporate-paste }}/5618566/text");
 IMPORT a SYMBOLS $x;
 SELECT $x;
@@ -64,7 +64,7 @@ SELECT $x;
 
 При этом можно использовать подстановку текстовых параметров в URL:
 
-``` yql
+```yql
 DECLARE $_ver AS STRING; -- "5618566"
 PRAGMA library("a.sql","{{ corporate-paste }}/{$_ver}/text");
 IMPORT a SYMBOLS $x;
@@ -83,7 +83,7 @@ SELECT $x;
 
 Пример для пакета с плоской иерархией, состоящего из двух библиотек - foo.sql и bar.sql:
 
-``` yql
+```yql
 PRAGMA package("project.package", "{{ corporate-yt }}/{{ corporate-yt-cluster }}/path/to/package");
 IMPORT pkg.project.package.foo SYMBOLS $foo;
 IMPORT pkg.project.package.bar SYMBOLS $bar;
@@ -92,7 +92,7 @@ SELECT $foo, $bar;
 
 При этом можно использовать подстановку текстовых параметров в URL:
 
-``` yql
+```yql
 DECLARE $_path AS STRING; -- "path"
 PRAGMA package("project.package","{{ corporate-yt }}/{{ corporate-yt-cluster }}/{$_path}/to/package");
 IMPORT pkg.project.package.foo SYMBOLS $foo;
@@ -112,7 +112,7 @@ SELECT $foo, $bar;
 
 Пример:
 
-``` yql
+```yql
 PRAGMA package("project.package", "{{ corporate-yt }}/{{ corporate-yt-cluster }}/path/to/package");
 PRAGMA override_library("project/package/maybe/nested/module/name.sql");
 

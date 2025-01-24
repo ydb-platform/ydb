@@ -1,10 +1,15 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/grpc.pb.h>
 #include <ydb/core/protos/grpc.grpc.pb.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/console_base.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 #include <ydb/core/kqp/tests/tpch/lib/tpch_runner.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>

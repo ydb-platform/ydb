@@ -6,17 +6,17 @@
 
 ```yql
 SELECT
-    *
+  *
 FROM
-    object_storage.`*.tsv`
+  object_storage.`*.tsv`
 WITH
 (
-    FORMAT = "tsv_with_names",
-    SCHEMA =
-    (
-        ts Uint32,
-        action Utf8
-    )
+  FORMAT = "tsv_with_names",
+  SCHEMA =
+  (
+    ts Uint32,
+    action Utf8
+  )
 );
 ```
 
@@ -84,7 +84,7 @@ WHERE
 
 * `object_storage_connection_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
 * `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [в разделе](#path_format).
-* `file_format` — [формат данных](formats.md#formats) в файлах.
+* `file_format` — [формат данных](formats.md#formats) в файлах. Поддерживаются все форматы, кроме `raw` и `json_as_string`.
 * `compression` — [формат сжатия](formats.md#compression_formats) файлов.
 
 В результате выполнения такого запроса будут автоматически выведены названия и типы полей.
@@ -101,18 +101,18 @@ WHERE
 
 ```yql
 SELECT
-    *
+  *
 FROM
-    connection.`folder/filename.csv`
+  connection.`folder/filename.csv`
 WITH(
-    FORMAT = "csv_with_names",
-    SCHEMA =
-    (
-        Year Int32,
-        Manufacturer Utf8,
-        Model Utf8,
-        Price Double
-    )
+  FORMAT = "csv_with_names",
+  SCHEMA =
+  (
+    Year Int32,
+    Manufacturer Utf8,
+    Model Utf8,
+    Price Double
+  )
 );
 ```
 

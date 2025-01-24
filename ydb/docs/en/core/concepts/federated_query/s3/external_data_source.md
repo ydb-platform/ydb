@@ -6,17 +6,17 @@ An example query to read data:
 
 ```yql
 SELECT
-    *
+  *
 FROM
  object_storage.`*.tsv`
 WITH
 (
- FORMAT = "tsv_with_names",
-    SCHEMA =
- (
- ts Uint32,
-        action Utf8
- )
+  FORMAT = "tsv_with_names",
+  SCHEMA =
+  (
+    ts Uint32,
+    action Utf8
+  )
 );
 ```
 
@@ -32,7 +32,7 @@ SELECT
 FROM
   <object_storage_connection_name>.`<file_path>`
 WITH(
- FORMAT = "<file_format>",
+  FORMAT = "<file_format>",
   COMPRESSION = "<compression>",
   SCHEMA = (<schema_definition>))
 WHERE
@@ -73,7 +73,7 @@ SELECT
 FROM
   <object_storage_connection_name>.`<file_path>`
 WITH(
- FORMAT = "<file_format>",
+  FORMAT = "<file_format>",
   COMPRESSION = "<compression>",
   WITH_INFER = "true")
 WHERE
@@ -84,7 +84,7 @@ Where:
 
 * `object_storage_connection_name` — the name of the external data source leading to the S3 bucket ({{ objstorage-full-name }}).
 * `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported; more details [in the section](#path_format).
-* `file_format` — the [data format](formats.md#formats) in the files.
+* `file_format` — the [data format](formats.md#formats) in the files. All formats except for `raw` and `json_as_string` are supported.
 * `compression` — the [compression format](formats.md#compression_formats) of the files.
 
 As a result of executing such a query, the names and types of fields will be inferred.
@@ -101,18 +101,18 @@ Example query to read data from S3 ({{ objstorage-full-name }}):
 
 ```yql
 SELECT
-    *
+  *
 FROM
-    connection.`folder/filename.csv`
+  connection.`folder/filename.csv`
 WITH(
- FORMAT = "csv_with_names",
-    SCHEMA =
- (
-        Year Int32,
- Manufacturer Utf8,
- Model Utf8,
- Price Double
- )
+  FORMAT = "csv_with_names",
+  SCHEMA =
+  (
+    Year Int32,
+    Manufacturer Utf8,
+    Model Utf8,
+    Price Double
+  )
 );
 ```
 

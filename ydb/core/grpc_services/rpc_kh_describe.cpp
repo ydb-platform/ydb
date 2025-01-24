@@ -178,7 +178,7 @@ private:
             auto* colMeta = Result.add_columns();
             colMeta->set_name(col.second.Name);
             auto& typeInfo = col.second.PType;
-            ProtoFromTypeInfo(typeInfo, *colMeta->mutable_type());
+            ProtoFromTypeInfo(typeInfo, *colMeta->mutable_type(), false);
 
             if (col.second.KeyOrder == -1)
                 continue;

@@ -68,16 +68,10 @@ ELSEIF (OS_WINDOWS)
 ELSEIF (OS_EMSCRIPTEN)
     DEFAULT(CXX_RT "libcxxabi")
     LDFLAGS(-Wl,-Bdynamic)
-    CXXFLAGS(
-        -Wno-unknown-pragmas
-        -nostdinc++
-    )
+    CXXFLAGS(-nostdinc++)
 ELSE()
     DEFAULT(CXX_RT "glibcxx_static")
-    CXXFLAGS(
-        -Wno-unknown-pragmas
-        -nostdinc++
-    )
+    CXXFLAGS(-nostdinc++)
 ENDIF()
 
 IF (OS_LINUX)

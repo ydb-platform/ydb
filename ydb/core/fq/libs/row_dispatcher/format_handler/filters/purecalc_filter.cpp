@@ -248,7 +248,7 @@ namespace NFq::NRowDispatcher {
 
 namespace {
 
-class TProgramHolder : public IProgramHolder {
+class TProgramHolder : public NYdb::NPurecalc::IProgramHolder {
 public:
     using TPtr = TIntrusivePtr<TProgramHolder>;
 
@@ -299,14 +299,14 @@ public:
         ProgramHolder->GetConsumer().OnObject({.Values = values, .NumberRows = numberRows});
     }
 
-    std::unique_ptr<TEvRowDispatcher::TEvPurecalcCompileRequest> GetCompileRequest() override {
+    std::unique_ptr<NYdb::NPurecalc::TEvPurecalcCompileRequest> GetCompileRequest() override {
         Y_ENSURE(ProgramHolder, "Can not create compile request twice");
-        auto result = std::make_unique<TEvRowDispatcher::TEvPurecalcCompileRequest>(std::move(ProgramHolder), PurecalcSettings);
+        auto result = std::make_unique<NYdb::NPurecalc::TEvPurecalcCompileRequest>(std::move(ProgramHolder), PurecalcSettings);
         ProgramHolder = nullptr;
         return result;
     }
 
-    void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr ev) override {
+    void OnCompileResponse(NYdb::NPurecalc::TEvPurecalcCompileResponse::TPtr ev) override {
         Y_ENSURE(!ProgramHolder, "Can not handle compile response twice");
 
         auto result = static_cast<TProgramHolder*>(ev->Get()->ProgramHolder.Release());
@@ -327,7 +327,7 @@ private:
 
 private:
     const IPurecalcFilterConsumer::TPtr Consumer;
-    const TPurecalcCompileSettings PurecalcSettings;
+    const NYdb::NPurecalc::TPurecalcCompileSettings PurecalcSettings;
     const TString LogPrefix;
 
     TProgramHolder::TPtr ProgramHolder;

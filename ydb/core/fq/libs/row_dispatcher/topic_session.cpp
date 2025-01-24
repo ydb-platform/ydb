@@ -144,7 +144,7 @@ private:
             return Settings.GetSource().GetPredicate();
         }
 
-        TPurecalcCompileSettings GetPurecalcSettings() const override {
+        NYdb::NPurecalc::TPurecalcCompileSettings GetPurecalcSettings() const override {
             return {.EnabledLLVM = Settings.GetSource().GetEnabledLLVM()};
         }
 

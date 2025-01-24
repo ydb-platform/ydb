@@ -26,11 +26,11 @@ public:
     {}
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);
+        hFunc(NYdb::NPurecalc::TEvPurecalcCompileRequest, Handle);
     )
 
-    void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
-        IProgramHolder::TPtr programHolder = std::move(ev->Get()->ProgramHolder);
+    void Handle(NYdb::NPurecalc::TEvPurecalcCompileRequest::TPtr& ev) {
+        NYdb::NPurecalc::IProgramHolder::TPtr programHolder = std::move(ev->Get()->ProgramHolder);
 
         try {
             programHolder->CreateProgram(ProgramFactory);
@@ -38,7 +38,7 @@ public:
             UNIT_FAIL("Failed to compile purecalc filter: sql: " << e.GetYql() << ", error: " << e.GetIssues());
         }
 
-        Send(ev->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder)), 0, ev->Cookie);
+        Send(ev->Sender, new NYdb::NPurecalc::TEvPurecalcCompileResponse(std::move(programHolder)), 0, ev->Cookie);
         Send(Owner, new NActors::TEvents::TEvPing());
     }
 

@@ -473,7 +473,8 @@ void TRowDispatcher::Bootstrap() {
     auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters).release());
     Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, Counters).release());
 
-    CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
+    NYdb::NPurecalc::TCompileServiceConfig purecalcConfig = {Config.GetCompileService().GetParallelCompilationLimit()};
+    CompileServiceActorId = Register(NYdb::NPurecalc::CreatePurecalcCompileService(purecalcConfig, Counters));
 
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());

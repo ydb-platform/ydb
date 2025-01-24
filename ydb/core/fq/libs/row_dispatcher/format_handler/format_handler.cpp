@@ -194,7 +194,7 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
             return Client->GetWhereFilter();
         }
 
-        TPurecalcCompileSettings GetPurecalcSettings() const override {
+        NYdb::NPurecalc::TPurecalcCompileSettings GetPurecalcSettings() const override {
             return Client->GetPurecalcSettings();
         }
 
@@ -310,13 +310,13 @@ public:
     }
 
     STRICT_STFUNC_EXC(StateFunc,
-        hFunc(TEvRowDispatcher::TEvPurecalcCompileResponse, Handle);
+        hFunc(NYdb::NPurecalc::TEvPurecalcCompileResponse, Handle);
         hFunc(NActors::TEvents::TEvWakeup, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);,
         ExceptionFunc(std::exception, HandleException)
     )
 
-    void Handle(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) {
+    void Handle(NYdb::NPurecalc::TEvPurecalcCompileResponse::TPtr& ev) {
         if (Filters) {
             Filters->OnCompileResponse(std::move(ev));
         }

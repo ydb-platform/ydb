@@ -1,14 +1,15 @@
 #pragma once
 
+#include <ydb/core/fq/libs/events/event_subspace.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
+#include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
+
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event_local.h>
-#include <ydb/core/fq/libs/events/event_subspace.h>
-#include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
+#include <ydb/library/purecalc/compilation/compile_service.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
-#include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/public/purecalc/common/fwd.h>
 
 #include <util/generic/set.h>
 #include <util/generic/map.h>
@@ -16,21 +17,6 @@
 namespace NFq {
 
 NActors::TActorId RowDispatcherServiceActorId();
-
-struct TPurecalcCompileSettings {
-    bool EnabledLLVM = false;
-
-    std::strong_ordering operator<=>(const TPurecalcCompileSettings& other) const = default;
-};
-
-class IProgramHolder : public TThrRefBase {
-public:
-    using TPtr = TIntrusivePtr<IProgramHolder>;
-
-public:
-    // Perform program creation and saving
-    virtual void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) = 0;
-};
 
 struct TEvRowDispatcher {
     // Event ids.
@@ -182,35 +168,6 @@ struct TEvRowDispatcher {
         NFq::NRowDispatcherProto::TEvGetInternalStateResponse, EEv::EvGetInternalStateResponse> {
         TEvGetInternalStateResponse() = default;
     };
-
-    // Compilation events
-    struct TEvPurecalcCompileRequest : public NActors::TEventLocal<TEvPurecalcCompileRequest, EEv::EvPurecalcCompileRequest> {
-        TEvPurecalcCompileRequest(IProgramHolder::TPtr programHolder, const TPurecalcCompileSettings& settings)
-            : ProgramHolder(std::move(programHolder))
-            , Settings(settings)
-        {}
-
-        IProgramHolder::TPtr ProgramHolder;
-        TPurecalcCompileSettings Settings;
-    };
-
-    struct TEvPurecalcCompileResponse : public NActors::TEventLocal<TEvPurecalcCompileResponse, EEv::EvPurecalcCompileResponse> {
-        TEvPurecalcCompileResponse(NYql::NDqProto::StatusIds::StatusCode status, NYql::TIssues issues)
-            : Status(status)
-            , Issues(std::move(issues))
-        {}
-
-        explicit TEvPurecalcCompileResponse(IProgramHolder::TPtr programHolder)
-            : ProgramHolder(std::move(programHolder))
-            , Status(NYql::NDqProto::StatusIds::SUCCESS)
-        {}
-
-        IProgramHolder::TPtr ProgramHolder;  // Same holder that passed into TEvPurecalcCompileRequest
-        NYql::NDqProto::StatusIds::StatusCode Status;
-        NYql::TIssues Issues;
-    };
-
-    struct TEvPurecalcCompileAbort : public NActors::TEventLocal<TEvPurecalcCompileAbort, EEv::EvPurecalcCompileAbort> {};
 };
 
 } // namespace NFq

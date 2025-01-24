@@ -30,7 +30,7 @@ public:
 public:
     // columnIndex - mapping from stable column id to index in values array
     virtual void FilterData(const TVector<ui64>& columnIndex, const TVector<ui64>& offsets, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) = 0;
-    virtual void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr ev) = 0;
+    virtual void OnCompileResponse(NYdb::NPurecalc::TEvPurecalcCompileResponse::TPtr ev) = 0;
 
     virtual TStatus AddFilter(IFilteredDataConsumer::TPtr filter) = 0;
     virtual void RemoveFilter(NActors::TActorId filterId) = 0;

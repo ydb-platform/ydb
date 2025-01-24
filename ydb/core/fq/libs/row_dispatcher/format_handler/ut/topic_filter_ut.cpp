@@ -34,7 +34,7 @@ public:
             return WhereFilter;
         }
 
-        TPurecalcCompileSettings GetPurecalcSettings() const override {
+        NYdb::NPurecalc::TPurecalcCompileSettings GetPurecalcSettings() const override {
             return {.EnabledLLVM = false};
         }
 
@@ -92,7 +92,7 @@ public:
     virtual void SetUp(NUnitTest::TTestContext& ctx) override {
         TBase::SetUp(ctx);
 
-        CompileServiceActorId = Runtime.Register(CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        CompileServiceActorId = Runtime.Register(NYdb::NPurecalc::CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>()));
     }
 
     virtual void TearDown(NUnitTest::TTestContext& ctx) override {
@@ -163,7 +163,7 @@ private:
     void CompileFilter() {
         const auto edgeActor = Runtime.AllocateEdgeActor();
         Runtime.Send(CompileServiceActorId, edgeActor, Filter->GetCompileRequest().release());
-        auto response = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvPurecalcCompileResponse>(edgeActor, TDuration::Seconds(5));
+        auto response = Runtime.GrabEdgeEvent<NYdb::NPurecalc::TEvPurecalcCompileResponse>(edgeActor, TDuration::Seconds(5));
 
         UNIT_ASSERT_C(response, "Failed to get compile response");
         if (!CompileError) {
@@ -171,7 +171,7 @@ private:
             Filter->OnCompileResponse(std::move(response));
             FilterHandler->OnFilterStarted();
         } else {
-            CheckError(TStatus::Fail(response->Get()->Status, response->Get()->Issues), CompileError->first, CompileError->second);
+            CheckError(TStatus::Fail(EStatusId::INTERNAL_ERROR, response->Get()->Issues), CompileError->first, CompileError->second);
         }
     }
 
@@ -242,7 +242,7 @@ public:
 
         if (!filterSetHandler->IsStarted()) {
             // Wait filter compilation
-            auto response = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvPurecalcCompileResponse>(CompileNotifier, TDuration::Seconds(5));
+            auto response = Runtime.GrabEdgeEvent<NYdb::NPurecalc::TEvPurecalcCompileResponse>(CompileNotifier, TDuration::Seconds(5));
             UNIT_ASSERT_C(response, "Compilation is not performed for filter: " << whereFilter);
             FiltersSet->OnCompileResponse(std::move(response));
         }

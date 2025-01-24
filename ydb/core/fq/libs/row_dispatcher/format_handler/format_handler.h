@@ -5,6 +5,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/util/rope.h>
+#include <ydb/library/purecalc/compilation/compile_service.h>
 
 namespace NFq::NRowDispatcher {
 
@@ -17,7 +18,7 @@ public:
 public:
     virtual TVector<TSchemaColumn> GetColumns() const = 0;
     virtual const TString& GetWhereFilter() const = 0;
-    virtual TPurecalcCompileSettings GetPurecalcSettings() const = 0;
+    virtual NYdb::NPurecalc::TPurecalcCompileSettings GetPurecalcSettings() const = 0;
     virtual NActors::TActorId GetClientId() const = 0;
     virtual std::optional<ui64> GetNextMessageOffset() const = 0;
 

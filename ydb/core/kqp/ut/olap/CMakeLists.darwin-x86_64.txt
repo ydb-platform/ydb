@@ -69,6 +69,7 @@ target_sources(ydb-core-kqp-ut-olap PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/tiering_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/decimal_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/compression_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/optimizer_ut.cpp
 )
 
 

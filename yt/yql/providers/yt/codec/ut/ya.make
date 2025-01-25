@@ -13,7 +13,7 @@ PEERDIR(
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/mkql
     yt/yql/providers/yt/lib/yson_helpers
-    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/codec/codegen/llvm14
 )
 
 YQL_LAST_ABI_VERSION()

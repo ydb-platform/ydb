@@ -382,6 +382,89 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         }
     }
 
+    template<bool MultiPart>
+    void DoFdCounterTest()
+    {
+        TTestActorRuntime runtime;
+        runtime.Initialize();
+
+        auto spillingService = runtime.StartSpillingService(1000, 100, 25);
+        auto tester = runtime.AllocateEdgeActor();
+        auto spillingActor = runtime.StartSpillingActor(tester, MultiPart);
+
+        runtime.WaitBootstrap();
+
+        const TString filePrefix = TStringBuilder() << runtime.GetSpillingRoot().GetPath() << "/node_" << runtime.GetNodeId() << "_" << runtime.GetSpillingSessionId() << "/1_test_";
+
+        constexpr const size_t numBlobs = 5;
+        constexpr const size_t numFiles = MultiPart ? numBlobs : 1;
+
+        auto assertFdCounter = [&](const size_t expected) {
+            THttpRequest httpReq(HTTP_METHOD_GET);
+            NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, nullptr, "", nullptr);
+
+            runtime.Send(new IEventHandle(spillingService, tester, new NMon::TEvHttpInfo(monReq)));
+            auto resp = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(tester, TDuration::Seconds(1));
+            UNIT_ASSERT(((NMon::TEvHttpInfoRes*) resp->Get())->Answer.Contains(TStringBuilder() << "Used file descriptors: " << expected));
+        };
+
+        // write some blobs; one file per blob is created when MultiPart is true, a file per client otherwise
+        for (ui32 i = 0; i < numBlobs; ++i) {
+            auto ev = new TEvDqSpilling::TEvWrite(i, CreateRope(20, 'a' + i));
+            runtime.Send(new IEventHandle(spillingActor, tester, ev));
+
+            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester);
+        }
+
+        assertFdCounter(numFiles);
+
+        // read back a single blob
+        {
+            const size_t blobIdx = 0;
+            auto ev = new TEvDqSpilling::TEvRead(blobIdx);
+            runtime.Send(new IEventHandle(spillingActor, tester, ev));
+            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvReadResult>(tester);
+        }
+
+        if (MultiPart) {
+            assertFdCounter(numFiles - 1);
+        } else {
+            assertFdCounter(numFiles);
+        }
+
+        // close everything
+        {
+            runtime.Send(new IEventHandle(spillingActor, tester, new TEvents::TEvPoison));
+
+            std::atomic<bool> done = false;
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+                if (event->GetRecipientRewrite() == spillingService) {
+                    if (event->GetTypeRewrite() == 2146435074 /* EvCloseFileResponse */) {
+                        done = true;
+                    }
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() {
+                return (bool) done;
+            };
+
+            runtime.DispatchEvents(options, TDuration::Seconds(1));
+        }
+
+        assertFdCounter(0);
+    }
+
+    Y_UNIT_TEST(FdCounterSingleFile) {
+        DoFdCounterTest<false>();
+    }
+
+    Y_UNIT_TEST(FdCounterMultiFile) {
+        DoFdCounterTest<true>();
+    }
+
     Y_UNIT_TEST(ReadError) {
         TTestActorRuntime runtime;
         runtime.Initialize();

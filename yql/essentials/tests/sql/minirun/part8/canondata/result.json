@@ -677,6 +677,20 @@
             "uri": "https://{canondata_backend}/1946324/cf18b25a645c304e04f3cd9ae86b529b02089d7a/resource.tar.gz#test.test_expr-literal_list_element-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[expr-table_record_index-default.txt-Debug]": [
+        {
+            "checksum": "836660447c45e0eeeacbbc676d3e874f",
+            "size": 360,
+            "uri": "https://{canondata_backend}/1903280/8586fe5d85df76b4ff13b957377dab05967ef91b/resource.tar.gz#test.test_expr-table_record_index-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-table_record_index-default.txt-Results]": [
+        {
+            "checksum": "4523574daad6e8f8d9cfcf4551087420",
+            "size": 696,
+            "uri": "https://{canondata_backend}/1903280/8586fe5d85df76b4ff13b957377dab05967ef91b/resource.tar.gz#test.test_expr-table_record_index-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[expr-to_hashed_dict_list_key-default.txt-Debug]": [
         {
             "checksum": "9822c424fda426e6fb0817ca947254ed",

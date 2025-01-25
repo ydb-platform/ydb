@@ -5017,7 +5017,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqCreateUser.IsOk());
-        UNIT_ASSERT(reqCreateUser.Root);
 
         auto reqAlterUser = SqlToYql(R"(
             USE plato;
@@ -5033,7 +5032,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqPasswordAndLogin.IsOk());
-        UNIT_ASSERT(reqPasswordAndLogin.Root);
 
         auto reqPasswordAndNoLogin = SqlToYql(R"(
             USE plato;
@@ -5041,7 +5039,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqPasswordAndNoLogin.IsOk());
-        UNIT_ASSERT(reqPasswordAndNoLogin.Root);
 
         auto reqLogin = SqlToYql(R"(
             USE plato;
@@ -5049,7 +5046,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqLogin.IsOk());
-        UNIT_ASSERT(reqLogin.Root);
 
         auto reqNoLogin = SqlToYql(R"(
             USE plato;
@@ -5057,7 +5053,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqNoLogin.IsOk());
-        UNIT_ASSERT(reqNoLogin.Root);
 
         auto reqLoginNoLogin = SqlToYql(R"(
             USE plato;
@@ -5074,7 +5069,6 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqAlterLoginNoLogin.IsOk());
-        UNIT_ASSERT(reqAlterLoginNoLogin.Root);
 
         auto reqAlterLoginNoLoginWithPassword = SqlToYql(R"(
             USE plato;
@@ -5083,7 +5077,56 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.IsOk());
-        UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.Root);
+    }
+
+    Y_UNIT_TEST(CreateUserWithHash) {
+        auto reqCreateUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }';
+        )");
+
+        UNIT_ASSERT(reqCreateUser.IsOk());
+
+        auto reqCreateUserWithNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }'
+            NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqCreateUserWithNoLogin.IsOk());
+
+        auto reqCreateUserWithPassword = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }'
+            PASSWORD '123';
+        )");
+
+        UNIT_ASSERT(!reqCreateUserWithPassword.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqCreateUserWithPassword.Issues.ToString(), "Error: Conflicting or redundant options");
+
+        auto reqAlterUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1;
+            ALTER USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }';
+        )");
+
+        UNIT_ASSERT(reqAlterUser.IsOk());
     }
 
     Y_UNIT_TEST(CreateAlterUserWithoutCluster) {

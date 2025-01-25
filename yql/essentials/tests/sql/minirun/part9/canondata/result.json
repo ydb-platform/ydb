@@ -1258,6 +1258,20 @@
             "uri": "https://{canondata_backend}/1920236/c44c9c6aaab3edcf60318a670d0a5e6c410c3acc/resource.tar.gz#test.test_pg_duplicated-star_proj-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[produce-reduce_row_all-default.txt-Debug]": [
+        {
+            "checksum": "f4d09c8a6c3d8cdd724f5c97eebd6f51",
+            "size": 519,
+            "uri": "https://{canondata_backend}/1775319/bbc0e4846d8bae59999fb05d21f19c430d59727f/resource.tar.gz#test.test_produce-reduce_row_all-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[produce-reduce_row_all-default.txt-Results]": [
+        {
+            "checksum": "f510b6dec6295b71d801f789f9cdbcfd",
+            "size": 981,
+            "uri": "https://{canondata_backend}/1775319/bbc0e4846d8bae59999fb05d21f19c430d59727f/resource.tar.gz#test.test_produce-reduce_row_all-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[udf-udaf_default-default.txt-Debug]": [
         {
             "checksum": "8f8b1454954834dfed9debc99927346a",

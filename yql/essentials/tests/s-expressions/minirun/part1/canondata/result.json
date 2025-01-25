@@ -13,6 +13,20 @@
             "uri": "https://{canondata_backend}/1597364/2bcf682be46fd123dd8441bdc3a8569ce29c838a/resource.tar.gz#test.test_Aggregation-InMemAggregateZeroOpt-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Builtins-AuthTokens-default.txt-Debug]": [
+        {
+            "checksum": "62466a88378b8a5430b4e3c67ab6f477",
+            "size": 224,
+            "uri": "https://{canondata_backend}/1942278/e2edb7de3e558eabe40d574ead6a9590815f14a8/resource.tar.gz#test.test_Builtins-AuthTokens-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Builtins-AuthTokens-default.txt-Results]": [
+        {
+            "checksum": "14a561a84d2e8cec6ca75f1dc356d2c3",
+            "size": 1147,
+            "uri": "https://{canondata_backend}/1942278/e2edb7de3e558eabe40d574ead6a9590815f14a8/resource.tar.gz#test.test_Builtins-AuthTokens-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Casts-StrictCastOverStruct-default.txt-Debug]": [
         {
             "checksum": "2ba7618bbf70bc6e62ce5fc113352f77",
@@ -635,6 +649,23 @@
             "checksum": "d0792df44311fc0d07e513f31b6d9f41",
             "size": 587,
             "uri": "https://{canondata_backend}/1942415/054c1d7fd20b3e982e839abb8377408e17c953e1/resource.tar.gz#test.test_Result-Resource-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[Stream-Squeeze1-default.txt-Debug]": [
+        {
+            "checksum": "b3dd6f07aebb2a11aee21a0c2c920ab3",
+            "size": 246,
+            "uri": "https://{canondata_backend}/1937492/b0aad9e1a4dfe51745d834402a36af079c7698cd/resource.tar.gz#test.test_Stream-Squeeze1-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Stream-Squeeze1-default.txt-Results]": [
+        {
+            "checksum": "20a63d050eca6011f2d055aa1222d184",
+            "size": 332,
+            "uri": "https://{canondata_backend}/1937492/b0aad9e1a4dfe51745d834402a36af079c7698cd/resource.tar.gz#test.test_Stream-Squeeze1-default.txt-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_Stream-Squeeze1-default.txt-Results_/extracted"
         }
     ]
 }

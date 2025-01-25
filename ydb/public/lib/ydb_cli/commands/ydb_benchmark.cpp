@@ -6,6 +6,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <util/string/printf.h>
 #include <util/folder/path.h>
+#include <optional>
 
 namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
@@ -358,9 +359,18 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
         for (ui32 i = 0; i < IterationsCount && Now() < GlobalDeadline; ++i) {
             auto t1 = TInstant::Now();
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
+
+            TQueryBenchmarkSettings settings;
+            settings.Deadline = GetDeadline();
+            settings.WithProgress = true;
+
+            if (PlanFileName) {
+                settings.PlanFileName = TStringBuilder() << PlanFileName << "." << queryN << "." << ToString(i);
+            }
+
             try {
                 if (client) {
-                    res = Execute(query, *client, GetDeadline());
+                    res = Execute(query, *client, settings);
                 } else {
                     res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "");
                 }

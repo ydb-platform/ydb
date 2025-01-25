@@ -170,7 +170,7 @@ public:
     ui32 StatementResultSize = 0;
 
     TMaybe<TString> CommandTagName;
-    THashSet<uint32_t> ParticipantNodes;
+    THashSet<ui32> ParticipantNodes;
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {

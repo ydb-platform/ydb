@@ -5,6 +5,7 @@
 #include "rpc_scheme_base.h"
 #include "rpc_common/rpc_common.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/kesus/tablet/events.h>
 
@@ -66,19 +67,8 @@ public:
 
         if (resource.has_metering_config()) {
             auto self = static_cast<TDerived*>(this);
-            const auto& userTokenStr = self->Request_->GetSerializedToken();
-            bool allowed = AppData()->AdministrationAllowedSIDs.empty();
-            if (userTokenStr) {
-                NACLib::TUserToken userToken(userTokenStr);
-                for (auto &sid : AppData()->AdministrationAllowedSIDs) {
-                    if (userToken.IsExist(sid)) {
-                        allowed = true;
-                        break;
-                    }
-                }
-            }
 
-            if (!allowed) {
+            if (!IsAdministrator(AppData(), self->Request_->GetInternalToken().Get())) {
                 status = StatusIds::UNAUTHORIZED;
                 issues.AddIssue("Setting metering is allowed only for administrators");
                 return false;

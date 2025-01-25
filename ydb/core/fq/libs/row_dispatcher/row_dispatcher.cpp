@@ -61,11 +61,15 @@ struct TUserPoolMetrics {
         auto microsecGroup = execpoolGroup->GetSubgroup("sensor", "ElapsedMicrosecByActivity");
         Session = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER_SESSION", true);
         RowDispatcher = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER", true);
-        Compiler = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER_COMPILER", true);
+        CompilerActor = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER_COMPILE_ACTOR", true);
+        CompilerService = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER_COMPILE_SERVICE", true);
+        FormatHandler = microsecGroup->GetNamedCounter("activity", "FQ_ROW_DISPATCHER_FORMAT_HANDLER", true);
     }
     ::NMonitoring::TDynamicCounters::TCounterPtr Session;
     ::NMonitoring::TDynamicCounters::TCounterPtr RowDispatcher;
-    ::NMonitoring::TDynamicCounters::TCounterPtr Compiler;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompilerActor;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompilerService;
+    ::NMonitoring::TDynamicCounters::TCounterPtr FormatHandler;
 };
 
 struct TEvPrivate {
@@ -1146,7 +1150,9 @@ void TRowDispatcher::UpdateCpuTime() {
     }
     auto currentCpuTime = UserPoolMetrics.Session->Val()
         + UserPoolMetrics.RowDispatcher->Val()
-        + UserPoolMetrics.Compiler->Val();
+        + UserPoolMetrics.CompilerActor->Val()
+        + UserPoolMetrics.CompilerService->Val()
+        + UserPoolMetrics.FormatHandler->Val();
     auto diff = (currentCpuTime - LastCpuTime) / Consumers.size();
     for (auto& [actorId, consumer] : Consumers) {
         consumer->CpuMicrosec += diff;

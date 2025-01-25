@@ -506,7 +506,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .WithSpilling = WithSpilling,
         .StatsMode = GetDqStatsMode(StatsMode),
         .Deadline = Deadline,
-        .ShareMailbox = (computeTasksSize <= 1) || NeedToRunLocally(task),
+        .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode
     });

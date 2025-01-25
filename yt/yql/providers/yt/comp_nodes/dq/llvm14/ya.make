@@ -5,5 +5,7 @@ PEERDIR(
     yql/essentials/minikql/computation/llvm14
 )
 
+INCLUDE(../ya.make.inc)
+
 END()
 

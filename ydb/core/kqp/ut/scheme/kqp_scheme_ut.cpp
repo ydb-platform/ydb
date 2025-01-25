@@ -9487,7 +9487,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 */
     Y_UNIT_TEST(AddColumnWithStore) {
         auto runnerSettings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
@@ -9552,7 +9551,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(AddPgColumnWithStore) {
         auto runnerSettings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
@@ -9961,7 +9959,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(DropColumnTableStoreErrors) {
         auto runnerSettings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
+            //.SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 

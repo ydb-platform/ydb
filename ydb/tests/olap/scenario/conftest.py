@@ -31,11 +31,7 @@ class YdbClusterInstance():
             self._database = database
             self._mon_port = 8765
         else:
-            config = KikimrConfigGenerator(
-                column_shard_config={
-                    'alter_object_enabled': True,
-                }
-            )
+            config = KikimrConfigGenerator()
             cluster = KiKiMR(configurator=config)
             cluster.start()
             node = cluster.nodes[1]

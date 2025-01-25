@@ -71,10 +71,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     TKikimrSettings GetKikimrSettings() {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAlterShardingInColumnShard(true);
-        return TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
-            .SetWithSampleTables(false)
-            .SetFeatureFlags(featureFlags);
+        return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
     }
 
     class TSharingDataTestCase {

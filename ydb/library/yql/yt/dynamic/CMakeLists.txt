@@ -29,7 +29,6 @@ target_link_options(yqlplugin PRIVATE
   -fPIC
   -Wl,-z,notext
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

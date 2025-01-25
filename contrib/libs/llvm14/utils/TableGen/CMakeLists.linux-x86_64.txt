@@ -47,7 +47,6 @@ target_link_options(llvm-tblgen PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

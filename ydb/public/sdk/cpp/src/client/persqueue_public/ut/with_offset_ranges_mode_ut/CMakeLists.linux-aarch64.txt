@@ -45,7 +45,6 @@ target_link_options(with_offset_ranges_mode_ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

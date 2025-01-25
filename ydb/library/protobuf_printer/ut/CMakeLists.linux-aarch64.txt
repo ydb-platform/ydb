@@ -52,7 +52,6 @@ target_link_options(ydb-library-protobuf_printer-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

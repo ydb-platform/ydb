@@ -52,7 +52,6 @@ target_link_options(ydb-core-load_test-ut_ycsb PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

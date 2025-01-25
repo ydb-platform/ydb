@@ -43,7 +43,6 @@ target_link_options(ydb-core-blobstorage-vdisk-ingress-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

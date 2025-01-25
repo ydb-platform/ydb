@@ -51,7 +51,6 @@ target_link_options(ydb-core-fq-libs-control_plane_proxy-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

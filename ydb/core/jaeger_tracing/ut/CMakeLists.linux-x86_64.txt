@@ -39,7 +39,6 @@ target_link_options(ydb-core-jaeger_tracing-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

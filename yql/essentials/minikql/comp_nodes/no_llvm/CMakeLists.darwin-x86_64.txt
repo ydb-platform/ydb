@@ -87,6 +87,7 @@ target_sources(minikql-comp_nodes-no_llvm PRIVATE
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_decimal_mul.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_dictitems.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_discard.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_dynamic_variant.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_element.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_ensure.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_enumerate.cpp
@@ -376,6 +377,11 @@ copy_file(
 copy_file(
   ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/comp_nodes/mkql_discard.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_discard.cpp
+)
+
+copy_file(
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/comp_nodes/mkql_dynamic_variant.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/comp_nodes/no_llvm/mkql_dynamic_variant.cpp
 )
 
 copy_file(

@@ -47,7 +47,6 @@ target_link_options(ydb-core-tx-replication-service-ut_topic_reader PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

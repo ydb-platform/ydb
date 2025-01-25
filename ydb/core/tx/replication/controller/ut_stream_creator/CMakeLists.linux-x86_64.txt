@@ -45,7 +45,6 @@ target_link_options(tx-replication-controller-ut_stream_creator PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

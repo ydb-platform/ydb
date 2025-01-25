@@ -47,7 +47,6 @@ target_link_options(ydb-core-tx-tx_proxy-ut_encrypted_storage PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

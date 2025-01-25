@@ -39,7 +39,6 @@ target_link_options(ydb-public-lib-ydb_cli-common-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

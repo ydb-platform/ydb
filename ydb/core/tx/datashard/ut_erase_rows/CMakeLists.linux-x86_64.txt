@@ -55,7 +55,6 @@ target_link_options(ydb-core-tx-datashard-ut_erase_rows PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

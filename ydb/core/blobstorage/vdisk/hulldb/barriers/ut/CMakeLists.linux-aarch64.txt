@@ -41,7 +41,6 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-barriers-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

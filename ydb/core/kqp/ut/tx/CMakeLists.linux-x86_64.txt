@@ -46,7 +46,6 @@ target_link_options(ydb-core-kqp-ut-tx PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

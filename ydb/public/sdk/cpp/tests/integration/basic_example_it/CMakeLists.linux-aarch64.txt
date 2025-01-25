@@ -41,7 +41,6 @@ target_link_options(sdk-cpp-tests-integration-basic_example_it PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

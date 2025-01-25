@@ -50,7 +50,6 @@ target_link_options(tx-schemeshard-ut_vector_index_build_reboots PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

@@ -54,7 +54,6 @@ target_link_options(ydb-services-ydb-backup_ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

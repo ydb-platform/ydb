@@ -37,7 +37,6 @@ target_link_options(ydb-core-ymq-http-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

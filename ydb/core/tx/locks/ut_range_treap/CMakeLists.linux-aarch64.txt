@@ -51,7 +51,6 @@ target_link_options(ydb-core-tx-locks-ut_range_treap PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

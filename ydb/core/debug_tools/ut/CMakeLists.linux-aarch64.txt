@@ -33,7 +33,6 @@ target_link_options(ydb-core-debug_tools-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

@@ -39,7 +39,6 @@ target_link_options(read_from_topic_in_transaction PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

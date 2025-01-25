@@ -47,7 +47,6 @@ target_link_options(ydb-core-fq-libs-row_dispatcher-format_handler-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

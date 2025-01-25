@@ -32,7 +32,6 @@ target_link_options(stream_store PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

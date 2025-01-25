@@ -40,7 +40,6 @@ target_link_options(ydb-public-sdk-cpp-tests-unit-client-draft PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

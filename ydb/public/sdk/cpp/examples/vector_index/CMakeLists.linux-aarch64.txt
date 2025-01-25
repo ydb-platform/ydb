@@ -37,7 +37,6 @@ target_link_options(vector_index PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

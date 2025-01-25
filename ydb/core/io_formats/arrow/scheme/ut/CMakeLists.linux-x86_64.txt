@@ -45,7 +45,6 @@ target_link_options(ydb-core-io_formats-arrow-scheme-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

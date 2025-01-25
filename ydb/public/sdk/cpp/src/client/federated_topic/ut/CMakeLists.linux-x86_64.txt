@@ -57,7 +57,6 @@ target_link_options(ydb-public-sdk-cpp-src-client-federated_topic-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

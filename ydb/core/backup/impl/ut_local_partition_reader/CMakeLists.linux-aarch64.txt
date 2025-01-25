@@ -43,7 +43,6 @@ target_link_options(ydb-core-backup-impl-ut_local_partition_reader PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

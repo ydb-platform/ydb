@@ -41,7 +41,6 @@ target_link_options(ydb-public-lib-json_value-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

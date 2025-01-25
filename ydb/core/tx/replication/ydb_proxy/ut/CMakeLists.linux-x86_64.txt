@@ -46,7 +46,6 @@ target_link_options(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

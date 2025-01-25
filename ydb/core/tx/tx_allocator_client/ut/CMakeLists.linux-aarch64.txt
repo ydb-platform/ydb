@@ -45,7 +45,6 @@ target_link_options(ydb-core-tx-tx_allocator_client-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

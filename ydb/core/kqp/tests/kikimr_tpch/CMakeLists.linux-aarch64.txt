@@ -38,7 +38,6 @@ target_link_options(ydb-core-kqp-tests-kikimr_tpch PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

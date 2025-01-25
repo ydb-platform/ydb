@@ -45,7 +45,6 @@ target_link_options(ydb-core-tx-scheme_board-ut_cache PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

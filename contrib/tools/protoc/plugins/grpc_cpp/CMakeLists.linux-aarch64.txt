@@ -42,7 +42,6 @@ target_link_options(grpc_cpp PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

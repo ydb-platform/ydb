@@ -37,7 +37,6 @@ target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_huge PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

@@ -48,7 +48,6 @@ target_link_options(ydb-services-persqueue_v1-ut-describes_ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

@@ -43,7 +43,6 @@ target_link_options(ydb-library-query_actor-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

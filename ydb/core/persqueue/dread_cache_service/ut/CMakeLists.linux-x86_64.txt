@@ -46,7 +46,6 @@ target_link_options(ydb-core-persqueue-dread_cache_service-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

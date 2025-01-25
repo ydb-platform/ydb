@@ -40,7 +40,6 @@ target_link_options(ydb-public-lib-validation-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

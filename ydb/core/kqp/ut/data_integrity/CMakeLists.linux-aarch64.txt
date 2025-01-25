@@ -43,7 +43,6 @@ target_link_options(ydb-core-kqp-ut-data_integrity PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

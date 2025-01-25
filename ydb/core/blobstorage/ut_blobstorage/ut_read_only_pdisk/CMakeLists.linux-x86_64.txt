@@ -39,7 +39,6 @@ target_link_options(ut_blobstorage-ut_read_only_pdisk PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

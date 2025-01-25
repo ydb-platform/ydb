@@ -42,7 +42,6 @@ target_link_options(ydb-library-yql-providers-common-http_gateway-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

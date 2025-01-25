@@ -44,7 +44,6 @@ target_link_options(tx-replication-service-ut_json_change_record PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

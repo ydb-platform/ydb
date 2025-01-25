@@ -119,7 +119,6 @@ target_link_options(query_replay_yt PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

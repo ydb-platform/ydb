@@ -72,7 +72,6 @@ target_link_options(worker_node PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

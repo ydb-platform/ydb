@@ -43,7 +43,6 @@ target_link_options(ydb-core-tx-sequenceshard-public-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

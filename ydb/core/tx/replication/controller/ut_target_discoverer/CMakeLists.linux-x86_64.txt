@@ -45,7 +45,6 @@ target_link_options(replication-controller-ut_target_discoverer PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

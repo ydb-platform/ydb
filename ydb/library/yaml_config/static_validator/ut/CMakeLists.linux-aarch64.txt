@@ -36,7 +36,6 @@ target_link_options(ydb-library-yaml_config-static_validator-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

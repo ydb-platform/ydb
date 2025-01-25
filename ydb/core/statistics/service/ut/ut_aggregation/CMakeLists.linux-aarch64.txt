@@ -45,7 +45,6 @@ target_link_options(ydb-core-statistics-service-ut-ut_aggregation PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

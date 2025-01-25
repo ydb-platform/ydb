@@ -50,7 +50,6 @@ target_link_options(example_02_discovery PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

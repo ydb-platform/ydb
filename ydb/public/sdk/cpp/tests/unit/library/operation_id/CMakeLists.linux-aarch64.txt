@@ -38,7 +38,6 @@ target_link_options(public-sdk-cpp-tests-unit-library-operation_id PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

@@ -50,7 +50,6 @@ target_link_options(ydb-core-tx-schemeshard-ut_background_cleaning PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

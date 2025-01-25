@@ -51,7 +51,6 @@ target_link_options(dq_vanilla_job PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

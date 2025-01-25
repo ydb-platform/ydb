@@ -39,7 +39,6 @@ target_link_options(ydb-library-workload-benchmark_base-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

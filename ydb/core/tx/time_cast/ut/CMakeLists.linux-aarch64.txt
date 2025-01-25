@@ -43,7 +43,6 @@ target_link_options(ydb-core-tx-time_cast-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

@@ -38,7 +38,6 @@ target_link_options(ydb-public-sdk-cpp-tests-unit-client-coordination PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

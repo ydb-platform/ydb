@@ -43,7 +43,6 @@ target_link_options(core-config-validation-auth_config_validator_ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

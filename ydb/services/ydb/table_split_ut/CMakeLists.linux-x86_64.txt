@@ -64,7 +64,6 @@ target_link_options(ydb-services-ydb-table_split_ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

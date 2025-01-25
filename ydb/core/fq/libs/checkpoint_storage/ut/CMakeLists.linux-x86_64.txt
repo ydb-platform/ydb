@@ -50,7 +50,6 @@ target_link_options(ydb-core-fq-libs-checkpoint_storage-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

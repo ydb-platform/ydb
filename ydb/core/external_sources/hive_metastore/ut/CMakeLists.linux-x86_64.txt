@@ -47,7 +47,6 @@ target_link_options(ydb-core-external_sources-hive_metastore-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

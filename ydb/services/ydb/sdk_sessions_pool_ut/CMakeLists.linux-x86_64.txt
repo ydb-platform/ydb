@@ -47,7 +47,6 @@ target_link_options(ydb-services-ydb-sdk_sessions_pool_ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

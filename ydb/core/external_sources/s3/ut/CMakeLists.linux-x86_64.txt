@@ -49,7 +49,6 @@ target_link_options(ydb-core-external_sources-s3-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

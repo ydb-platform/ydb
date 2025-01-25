@@ -37,7 +37,6 @@ target_link_options(tests-unit-client-oauth2_token_exchange PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

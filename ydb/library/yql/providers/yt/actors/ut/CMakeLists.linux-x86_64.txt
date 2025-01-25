@@ -53,7 +53,6 @@ target_link_options(ydb-library-yql-providers-yt-actors-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

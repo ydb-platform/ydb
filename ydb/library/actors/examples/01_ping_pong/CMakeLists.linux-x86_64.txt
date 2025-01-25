@@ -33,7 +33,6 @@ target_link_options(example_01_ping_pong PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

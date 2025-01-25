@@ -45,7 +45,6 @@ target_link_options(ydb-core-sys_view-query_stats-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

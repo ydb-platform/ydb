@@ -46,7 +46,6 @@ target_link_options(ydb-core-blobstorage-ut_mirror3of4 PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

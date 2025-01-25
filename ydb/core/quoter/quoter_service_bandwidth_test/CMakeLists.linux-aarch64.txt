@@ -41,7 +41,6 @@ target_link_options(quoter_service_bandwidth_test PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

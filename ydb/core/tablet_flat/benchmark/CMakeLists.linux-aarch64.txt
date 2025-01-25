@@ -37,7 +37,6 @@ target_link_options(core_tablet_flat_benchmark PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

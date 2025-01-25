@@ -51,7 +51,6 @@ target_link_options(ydb-core-tx-datashard-ut_local_kmeans PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
   -lutil

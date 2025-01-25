@@ -33,7 +33,6 @@ target_link_options(yaml_config-validator-ut-validator_builder PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
   -lrt
   -ldl
 )

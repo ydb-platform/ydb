@@ -55,7 +55,7 @@ class TLockFeatures: TMoveOnly {
 private:
     YDB_ACCESSOR_DEF(std::vector<TWriteOperation::TPtr>, WriteOperations);
     YDB_ACCESSOR_DEF(std::vector<NOlap::NTxInteractions::TTxEventContainer>, Events);
-    YDB_ACCESSOR(ui64, LockId, 0);
+    YDB_ACCESSOR_DEF(NOlap::TLockWithSnapshot, Lock);
     YDB_ACCESSOR(ui64, Generation, 0);
     std::shared_ptr<TLockSharingInfo> SharingInfo;
 
@@ -108,10 +108,10 @@ public:
         }
     }
 
-    TLockFeatures(const ui64 lockId, const ui64 gen)
-        : LockId(lockId)
+    TLockFeatures(const NOlap::TLockWithSnapshot lock, const ui64 gen)
+        : Lock(lock)
         , Generation(gen) {
-        SharingInfo = std::make_shared<TLockSharingInfo>(lockId, gen);
+        SharingInfo = std::make_shared<TLockSharingInfo>(Lock.LockId, gen);
     }
 };
 
@@ -198,13 +198,13 @@ public:
         return *result;
     }
 
-    TWriteOperation::TPtr RegisterOperation(const ui64 pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
+    TWriteOperation::TPtr RegisterOperation(const ui64 pathId, const NOlap::TLockWithSnapshot& lock, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
         const NEvWrite::EModificationType mType, const bool portionsWriting);
-    bool RegisterLock(const ui64 lockId, const ui64 generationId) {
-        if (LockFeatures.contains(lockId)) {
+    bool RegisterLock(const NOlap::TLockWithSnapshot& lock, const ui64 generationId) {
+        if (LockFeatures.contains(lock.LockId)) {
             return false;
         } else {
-            LockFeatures.emplace(lockId, TLockFeatures(lockId, generationId));
+            LockFeatures.emplace(lock.LockId, TLockFeatures(lock, generationId));
             return true;
         }
     }

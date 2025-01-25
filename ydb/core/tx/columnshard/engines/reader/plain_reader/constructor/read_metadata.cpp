@@ -13,15 +13,15 @@ std::unique_ptr<TScanIteratorBase> TReadMetadata::StartScan(const std::shared_pt
 TConclusionStatus TReadMetadata::DoInitCustom(
     const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) {
     CommittedBlobs =
-        dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey(), LockId, GetRequestSnapshot());
+        dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey(), Lock ? std::optional{Lock->LockId} : std::nullopt, GetRequestSnapshot());
 
-    if (LockId) {
+    if (Lock) {
         for (auto&& i : CommittedBlobs) {
             if (!i.IsCommitted()) {
                 if (owner->HasLongTxWrites(i.GetInsertWriteId())) {
                 } else {
                     auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i.GetInsertWriteId());
-                    AddWriteIdToCheck(i.GetInsertWriteId(), op->GetLockId());
+                    AddWriteIdToCheck(i.GetInsertWriteId(), op->GetLock().LockId);
                 }
             }
         }

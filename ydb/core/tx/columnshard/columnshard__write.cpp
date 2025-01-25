@@ -463,6 +463,10 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
+    if (record.GetLockMode() == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
+        Y_UNUSED(true);
+    }
+
     const auto behaviourConclusion = TOperationsManager::GetBehaviour(*ev->Get());
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_WRITE)("ev_write", record.DebugString());
     if (behaviourConclusion.IsFail()) {
@@ -592,8 +596,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         lockId = record.GetLockTxId();
     }
 
+    const auto& lockSnapshot = record.HasMvccSnapshot() ? 
+        NOlap::TSnapshot(record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId()) :
+        NOlap::TSnapshot::Zero();
     Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
-    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, granuleShardingVersionId, pathId, cookie, lockId, *mType, behaviour));
+    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, granuleShardingVersionId, pathId, cookie, {lockId, lockSnapshot}, *mType, behaviour));
     WriteTasksQueue->Drain(false, ctx);
 }
 

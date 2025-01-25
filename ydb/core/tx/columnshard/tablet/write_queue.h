@@ -14,14 +14,14 @@ private:
     const std::optional<ui32> GranuleShardingVersionId;
     const ui64 PathId;
     const ui64 Cookie;
-    const ui64 LockId;
+    const NOlap::TLockWithSnapshot Lock;
     const NEvWrite::EModificationType ModificationType;
     const EOperationBehaviour Behaviour;
     const TMonotonic Created = TMonotonic::Now();
 
 public:
     TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
-        const std::optional<ui32>& granuleShardingVersionId, const ui64 pathId, const ui64 cookie, const ui64 lockId,
+        const std::optional<ui32>& granuleShardingVersionId, const ui64 pathId, const ui64 cookie, const  NOlap::TLockWithSnapshot& lock,
         const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour)
         : ArrowData(arrowData)
         , Schema(schema)
@@ -29,7 +29,7 @@ public:
         , GranuleShardingVersionId(granuleShardingVersionId)
         , PathId(pathId)
         , Cookie(cookie)
-        , LockId(lockId)
+        , Lock(lock)
         , ModificationType(modificationType)
         , Behaviour(behaviour) {
     }

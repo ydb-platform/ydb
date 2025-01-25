@@ -97,4 +97,17 @@ public:
     NJson::TJsonValue DebugJson() const;
 };
 
+//TODO move me to a proper place
+class TLockWithSnapshot {
+public:
+    ui64 LockId = 0;
+    TSnapshot LockSnapshot = NOlap::TSnapshot::Zero(); //zero for serializable mode, non-zero for snapshot isolation
+public:
+    TLockWithSnapshot() = default;
+    TLockWithSnapshot(ui64 lockId, const TSnapshot& lockSnapshot)
+        : LockId(lockId)
+        , LockSnapshot(lockSnapshot)
+    {}
+};
+
 } // namespace NKikimr::NOlap

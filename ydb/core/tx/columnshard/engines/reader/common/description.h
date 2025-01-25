@@ -17,7 +17,7 @@ private:
 public:
     // Table
     ui64 TxId = 0;
-    std::optional<ui64> LockId;
+    std::optional<NOlap::TLockWithSnapshot> Lock;
     ui64 PathId = 0;
     TString TableName;
     bool ReadNothing = false;

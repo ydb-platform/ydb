@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h> //TODO fixme
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/monotonic.h>
@@ -48,7 +49,7 @@ private:
 
     YDB_ACCESSOR(EModificationType, ModificationType, EModificationType::Replace);
     YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
-    std::optional<ui64> LockId;
+    std::optional<NOlap::TLockWithSnapshot> Lock;
     const std::shared_ptr<TWriteFlowCounters> Counters;
     mutable TMonotonic LastStageInstant = TMonotonic::Now();
     mutable EWriteStage CurrentStage = EWriteStage::Created;
@@ -62,17 +63,17 @@ public:
         }
     }
 
-    void SetLockId(const ui64 lockId) {
-        LockId = lockId;
+    void SetLock(const NOlap::TLockWithSnapshot& lock) {
+        Lock.emplace(lock);
     }
 
-    ui64 GetLockIdVerified() const {
-        AFL_VERIFY(LockId);
-        return *LockId;
+    NOlap::TLockWithSnapshot GetLockVerified() const {
+        AFL_VERIFY(Lock);
+        return *Lock;
     }
 
-    std::optional<ui64> GetLockIdOptional() const {
-        return LockId;
+    std::optional<NOlap::TLockWithSnapshot> GetLockOptional() const {
+        return Lock;
     }
 
     bool IsGuaranteeWriter() const {

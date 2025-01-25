@@ -68,14 +68,15 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         } else {
-            auto& info = Self->OperationsManager->GetLockVerified(operation->GetLockId());
+            const auto lockId = operation->GetLock().LockId;
+            auto& info = Self->OperationsManager->GetLockVerified(lockId);
             NKikimrDataEvents::TLock lock;
-            lock.SetLockId(operation->GetLockId());
+            lock.SetLockId(lockId);
             lock.SetDataShard(Self->TabletID());
             lock.SetGeneration(info.GetGeneration());
             lock.SetCounter(info.GetInternalGenerationCounter());
             lock.SetPathId(writeMeta.GetTableId());
-            auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
+            auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), lockId, lock);
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }
     }
@@ -147,10 +148,11 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorCont
         const auto& writeMeta = wResult.GetWriteMeta();
         AFL_VERIFY(!writeMeta.HasLongTxId());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
-        Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
-        Self->OperationsManager->AbortTransactionOnExecute(*Self, op->GetLockId(), txc);
+        const auto& lockId = op->GetLock().LockId;
+        Self->OperationsManager->AddTemporaryTxLink(lockId);
+        Self->OperationsManager->AbortTransactionOnExecute(*Self, lockId, txc);
 
-        auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
+        auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), lockId,
             NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, "cannot write blob: " + ::ToString(PutBlobResult));
         Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
     }

@@ -122,7 +122,7 @@ public:
     }
 
     bool HasLock() const {
-        return !!ReadMetadata->GetLockId();
+        return !!ReadMetadata->GetLock();
     }
 
     const TReadMetadataBase::TConstPtr& GetReadMetadata() const {

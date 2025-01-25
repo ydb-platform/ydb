@@ -14,9 +14,9 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) {
     }
 
     owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
-    owner->OperationsManager->RegisterLock(LockId, owner->Generation());
+    owner->OperationsManager->RegisterLock(Lock, owner->Generation());
     auto writeOperation = owner->OperationsManager->RegisterOperation(
-        PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
+        PathId, Lock, Cookie, GranuleShardingVersionId, ModificationType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
         "in_flight", owner->Counters.GetWritesMonitor()->GetWritesInFlight())(

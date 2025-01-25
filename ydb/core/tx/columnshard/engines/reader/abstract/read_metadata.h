@@ -59,7 +59,7 @@ private:
 protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     ui64 TxId = 0;
-    std::optional<ui64> LockId;
+    std::optional<NOlap::TLockWithSnapshot> Lock;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
@@ -93,8 +93,8 @@ public:
         return ScanCursor;
     }
 
-    std::optional<ui64> GetLockId() const {
-        return LockId;
+    std::optional<NOlap::TLockWithSnapshot> GetLock() const {
+        return Lock;
     }
 
     void OnReadFinished(NColumnShard::TColumnShard& owner) const {

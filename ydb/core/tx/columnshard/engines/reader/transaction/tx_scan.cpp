@@ -58,7 +58,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         TReadDescription read(snapshot, request.GetReverse());
         read.TxId = txId;
         if (request.HasLockTxId()) {
-            read.LockId = request.GetLockTxId();
+            read.Lock = {request.GetLockTxId(), {0, 0}}; //todo fixme
         }
         read.PathId = request.GetLocalPathId();
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);

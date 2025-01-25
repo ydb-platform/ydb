@@ -12,20 +12,20 @@ TConclusionStatus TReadMetadata::Init(
     SetPKRangesFilter(readDescription.PKRangesFilter);
     InitShardingInfo(readDescription.PathId);
     TxId = readDescription.TxId;
-    LockId = readDescription.LockId;
-    if (LockId) {
-        owner->GetOperationsManager().RegisterLock(*LockId, owner->Generation());
-        LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
+    Lock = readDescription.Lock;
+    if (Lock) {
+        owner->GetOperationsManager().RegisterLock(*Lock, owner->Generation());
+        LockSharingInfo = owner->GetOperationsManager().GetLockVerified(Lock->LockId).GetSharingInfo();
     }
 
-    SelectInfo = dataAccessor.Select(readDescription, !!LockId);
-    if (LockId) {
+    SelectInfo = dataAccessor.Select(readDescription, !!Lock);
+    if (Lock) {
         for (auto&& i : SelectInfo->Portions) {
             if (i->HasInsertWriteId() && !i->HasCommitSnapshot()) {
                 if (owner->HasLongTxWrites(i->GetInsertWriteIdVerified())) {
                 } else {
                     auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i->GetInsertWriteIdVerified());
-                    AddWriteIdToCheck(i->GetInsertWriteIdVerified(), op->GetLockId());
+                    AddWriteIdToCheck(i->GetInsertWriteIdVerified(), op->GetLock().LockId);
                 }
             }
         }
@@ -69,29 +69,28 @@ NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const
 }
 
 void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
-    if (!GetLockId()) {
+    if (!Lock) {
         return;
     }
-    const ui64 lock = *GetLockId();
     if (GetBrokenWithCommitted()) {
-        owner.GetOperationsManager().GetLockVerified(lock).SetBroken();
+        owner.GetOperationsManager().GetLockVerified(Lock->LockId).SetBroken();
     } else {
         NOlap::NTxInteractions::TTxConflicts conflicts;
         for (auto&& i : GetConflictableLockIds()) {
-            conflicts.Add(i, lock);
+            conflicts.Add(i, Lock->LockId);
         }
         auto writer = std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(PathId, conflicts);
-        owner.GetOperationsManager().AddEventForLock(owner, lock, writer);
+        owner.GetOperationsManager().AddEventForLock(owner, Lock->LockId, writer);
     }
 }
 
 void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const {
-    if (!LockId) {
+    if (!Lock) {
         return;
     }
     auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(
         PathId, GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds());
-    owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);
+    owner.GetOperationsManager().AddEventForLock(owner, Lock->LockId, evWriter);
 }
 
 void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData) const {

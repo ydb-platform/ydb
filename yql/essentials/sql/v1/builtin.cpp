@@ -2954,6 +2954,7 @@ struct TBuiltinFuncData {
             {"emptydict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDict", 0, 0)},
             {"callable", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Callable", 2, 2)},
             {"way", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Way", 1, 1) },
+            {"dynamicvariant", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DynamicVariant", 3, 3) },
             {"variant", BuildSimpleBuiltinFactoryCallback<TYqlVariant>() },
             {"enum", BuildSimpleBuiltinFactoryCallback<TYqlEnum>() },
             {"asvariant", BuildSimpleBuiltinFactoryCallback<TYqlAsVariant>() },

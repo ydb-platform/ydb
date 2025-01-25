@@ -10,6 +10,7 @@
 
 #include <util/folder/pathsplit.h>
 #include <util/string/builder.h>
+#include <util/string/strip.h>
 
 #include <format>
 #include <re2/re2.h>
@@ -252,6 +253,7 @@ TString GetBackupRoot(TStringInput query) {
     constexpr TStringBuf discardedSuffix = "\"";
     TString line;
     while (query.ReadLine(line)) {
+        StripInPlace(line);
         if (line.StartsWith(targetLinePrefix)) {
             backupRoot = line.substr(
                 std::size(targetLinePrefix),

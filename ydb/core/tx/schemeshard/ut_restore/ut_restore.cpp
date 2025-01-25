@@ -4766,6 +4766,64 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )");
     }
 
+    Y_UNIT_TEST(ShouldSucceedOnSingleView) {
+        ShouldSucceed(
+            {
+                EPathTypeView,
+                R"(
+                    -- backup root: "/MyRoot"
+                    CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+                )"
+            }
+        );
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnViewsAndTables) {
+        ShouldSucceed(
+            {
+                {
+                    "/view",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+                        )"
+                    }
+                }, {
+                    "/table",
+                    {
+                        EPathTypeTable,
+                        R"(
+                            columns {
+                                name: "key"
+                                type { optional_type { item { type_id: UTF8 } } }
+                            }
+                            columns {
+                                name: "value"
+                                type { optional_type { item { type_id: UTF8 } } }
+                            }
+                            primary_key: "key"
+                        )"
+                    }
+                }
+            }, R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "view"
+                        destination_path: "/MyRoot/View"
+                    }
+                    items {
+                        source_prefix: "table"
+                        destination_path: "/MyRoot/Table"
+                    }
+                }
+            )"
+        );
+    }
+
     void CancelShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -4855,5 +4913,63 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
               global_index {}
             }
         )");
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleView) {
+        CancelShouldSucceed(
+            {
+                EPathTypeView,
+                R"(
+                    -- backup root: "/MyRoot"
+                    CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+                )"
+            }
+        );
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnViewsAndTables) {
+        CancelShouldSucceed(
+            {
+                {
+                    "/view",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+                        )"
+                    }
+                }, {
+                    "/table",
+                    {
+                        EPathTypeTable,
+                        R"(
+                            columns {
+                                name: "key"
+                                type { optional_type { item { type_id: UTF8 } } }
+                            }
+                            columns {
+                                name: "value"
+                                type { optional_type { item { type_id: UTF8 } } }
+                            }
+                            primary_key: "key"
+                        )"
+                    }
+                }
+            }, R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "view"
+                        destination_path: "/MyRoot/View"
+                    }
+                    items {
+                        source_prefix: "table"
+                        destination_path: "/MyRoot/Table"
+                    }
+                }
+            )"
+        );
     }
 }

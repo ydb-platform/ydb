@@ -29,5 +29,6 @@ target_sources(limiter-grouped_memory-usage PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/usage/config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/usage/abstract.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/usage/service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/usage/stage_features.cpp
 )
 

@@ -241,6 +241,7 @@ private:
 
 template <typename TDerived>
 class TBlockStorageBase : public TComputationValue<TDerived> {
+    using TSelf = TBlockStorageBase<TDerived>;
     using TBase = TComputationValue<TDerived>;
 
 public:
@@ -264,6 +265,54 @@ public:
             : BlockOffset(blockOffset)
             , ItemOffset(itemOffset)
         {}
+    };
+
+    class TRowIterator {
+        friend class TBlockStorageBase;
+
+    public:
+        TRowIterator() = default;
+
+        TRowIterator(const TRowIterator&) = default;
+        TRowIterator& operator=(const TRowIterator&) = default;
+
+        TMaybe<TRowEntry> Next() {
+            Y_ENSURE(IsValid());
+            if (IsEmpty()) {
+                return Nothing();
+            }
+
+            auto entry = TRowEntry(CurrentBlockOffset_, CurrentItemOffset_);
+
+            auto& block = BlockStorage_->GetBlock(CurrentBlockOffset_);
+            CurrentItemOffset_++;
+            if (CurrentItemOffset_ == block.Size) {
+                CurrentBlockOffset_++;
+                CurrentItemOffset_ = 0;
+            }
+
+            return entry;
+        }
+
+        bool IsValid() const {
+            return BlockStorage_;
+        }
+
+        bool IsEmpty() const {
+            Y_ENSURE(IsValid());
+            return CurrentBlockOffset_ >= BlockStorage_->GetBlockCount();
+        }
+
+    private:
+        TRowIterator(const TSelf* blockStorage)
+            : BlockStorage_(blockStorage)
+        {}
+
+    private:
+        size_t CurrentBlockOffset_ = 0;
+        size_t CurrentItemOffset_ = 0;
+
+        const TSelf* BlockStorage_ = nullptr;
     };
 
     TBlockStorageBase(
@@ -323,6 +372,16 @@ public:
 
     size_t GetBlockCount() const {
         return Data_.size();
+    }
+
+    TRowEntry GetRowEntry(size_t blockOffset, size_t itemOffset) const {
+        auto& block = GetBlock(blockOffset);
+        Y_ENSURE(itemOffset < block.Size);
+        return TRowEntry(blockOffset, itemOffset);
+    }
+
+    TRowIterator GetRowIterator() const {
+        return TRowIterator(this);
     }
 
     TBlockItem GetItem(TRowEntry entry, ui32 columnIdx) const {
@@ -973,6 +1032,185 @@ private:
     const TContainerCacheOnContext KeyTupleCache_;
 };
 
+class TBlockCrossJoinCoreWraper : public TMutableComputationNode<TBlockCrossJoinCoreWraper>
+{
+using TBaseComputation = TMutableComputationNode<TBlockCrossJoinCoreWraper>;
+using TJoinState = TBlockJoinState<true>;
+using TStorageState = TBlockStorage;
+public:
+    TBlockCrossJoinCoreWraper(
+        TComputationMutables& mutables,
+        const TVector<TType*>&& resultItemTypes,
+        const TVector<TType*>&& leftItemTypes,
+        const TVector<ui32>&& leftKeyColumns,
+        const TVector<ui32>&& leftIOMap,
+        const TVector<TType*>&& rightItemTypes,
+        const TVector<ui32>&& rightKeyColumns,
+        const TVector<ui32>&& rightIOMap,
+        IComputationNode* leftStream,
+        IComputationNode* rightStream
+    )
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , ResultItemTypes_(std::move(resultItemTypes))
+        , LeftItemTypes_(std::move(leftItemTypes))
+        , LeftKeyColumns_(std::move(leftKeyColumns))
+        , LeftIOMap_(std::move(leftIOMap))
+        , RightItemTypes_(std::move(rightItemTypes))
+        , RightKeyColumns_(std::move(rightKeyColumns))
+        , RightIOMap_(std::move(rightIOMap))
+        , LeftStream_(std::move(leftStream))
+        , RightStream_(std::move(rightStream))
+        , KeyTupleCache_(mutables)
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        const auto joinState = ctx.HolderFactory.Create<TJoinState>(
+            ctx,
+            LeftItemTypes_,
+            LeftIOMap_,
+            ResultItemTypes_
+        );
+        const auto indexState = ctx.HolderFactory.Create<TStorageState>(
+            RightItemTypes_,
+            std::move(RightStream_->GetValue(ctx)),
+            &ctx.ArrowMemoryPool
+        );
+
+        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
+                                                      std::move(joinState),
+                                                      std::move(indexState),
+                                                      std::move(LeftStream_->GetValue(ctx)),
+                                                      std::move(RightStream_->GetValue(ctx)),
+                                                      RightIOMap_
+        );
+    }
+
+private:
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    using TBase = TComputationValue<TStreamValue>;
+    public:
+        TStreamValue(
+            TMemoryUsageInfo* memInfo,
+            const THolderFactory& holderFactory,
+            NUdf::TUnboxedValue&& joinState,
+            NUdf::TUnboxedValue&& storageState,
+            NUdf::TUnboxedValue&& leftStream,
+            NUdf::TUnboxedValue&& rightStream,
+            const TVector<ui32>& rightIOMap
+        )
+            : TBase(memInfo)
+            , JoinState_(joinState)
+            , StorageState_(storageState)
+            , LeftStream_(leftStream)
+            , RightStream_(rightStream)
+            , RightIOMap_(rightIOMap)
+            , HolderFactory_(holderFactory)
+        {}
+
+    private:
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
+            auto& storageState = *static_cast<TStorageState*>(StorageState_.AsBoxed().Get());
+
+            if (!RightStreamConsumed_) {
+                auto fetchStatus = NUdf::EFetchStatus::Ok;
+                while (fetchStatus != NUdf::EFetchStatus::Finish) {
+                    fetchStatus = storageState.FetchStream();
+                    if (fetchStatus == NUdf::EFetchStatus::Yield) {
+                        return NUdf::EFetchStatus::Yield;
+                    }
+                }
+
+                RightStreamConsumed_ = true;
+                RightRowIterator_ = storageState.GetRowIterator();
+            }
+
+            auto* inputFields = joinState.GetRawInputFields();
+            const size_t inputWidth = joinState.GetInputWidth();
+            const size_t outputWidth = joinState.GetOutputWidth();
+
+            MKQL_ENSURE(width == outputWidth,
+                        "The given width doesn't equal to the result type size");
+
+            std::vector<NYql::NUdf::TBlockItem> rightRow(RightIOMap_.size());
+            while (!joinState.HasBlocks()) {
+                while (!RightRowIterator_.IsEmpty() && joinState.RemainingRowsCount() > 0 && joinState.IsNotFull()) {
+                    auto rowEntry = *RightRowIterator_.Next();
+                    storageState.GetRow(rowEntry, RightIOMap_, rightRow);
+                    joinState.MakeRow(rightRow);
+                }
+
+                if (joinState.IsNotFull() && joinState.RemainingRowsCount() > 0) {
+                    joinState.NextRow();
+                    RightRowIterator_ = storageState.GetRowIterator();
+                    continue;
+                }
+
+                if (joinState.IsNotFull() && !joinState.IsFinished()) {
+                    switch (LeftStream_.WideFetch(inputFields, inputWidth)) {
+                    case NUdf::EFetchStatus::Yield:
+                        return NUdf::EFetchStatus::Yield;
+                    case NUdf::EFetchStatus::Ok:
+                        joinState.Reset();
+                        continue;
+                    case NUdf::EFetchStatus::Finish:
+                        joinState.Finish();
+                        break;
+                    }
+                    // Leave the loop, if no values left in the stream.
+                    Y_DEBUG_ABORT_UNLESS(joinState.IsFinished());
+                }
+                if (joinState.IsEmpty()) {
+                    return NUdf::EFetchStatus::Finish;
+                }
+                joinState.MakeBlocks(HolderFactory_);
+            }
+
+            const auto sliceSize = joinState.Slice();
+
+            for (size_t i = 0; i < outputWidth; i++) {
+                output[i] = joinState.Get(sliceSize, HolderFactory_, i);
+            }
+
+            return NUdf::EFetchStatus::Ok;
+        }
+
+        NUdf::TUnboxedValue JoinState_;
+        NUdf::TUnboxedValue StorageState_;
+
+        NUdf::TUnboxedValue LeftStream_;
+
+        NUdf::TUnboxedValue RightStream_;
+        const TVector<ui32>& RightIOMap_;
+        bool RightStreamConsumed_ = false;
+
+        TStorageState::TRowIterator RightRowIterator_;
+
+        const THolderFactory& HolderFactory_;
+    };
+
+    void RegisterDependencies() const final {
+        this->DependsOn(LeftStream_);
+        this->DependsOn(RightStream_);
+    }
+
+private:
+    const TVector<TType*> ResultItemTypes_;
+
+    const TVector<TType*> LeftItemTypes_;
+    const TVector<ui32> LeftKeyColumns_;
+    const TVector<ui32> LeftIOMap_;
+
+    const TVector<TType*> RightItemTypes_;
+    const TVector<ui32> RightKeyColumns_;
+    const TVector<ui32> RightIOMap_;
+
+    IComputationNode* const LeftStream_;
+    IComputationNode* const RightStream_;
+
+    const TContainerCacheOnContext KeyTupleCache_;
+};
+
 } // namespace
 
 IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -1009,7 +1247,7 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
     const auto joinKind = GetJoinKind(rawKind);
     Y_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
-             joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly);
+             joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly || joinKind == EJoinKind::Cross);
 
     const auto leftKeyColumnsLiteral = callable.GetInput(3);
     const auto leftKeyColumnsTuple = AS_VALUE(TTupleLiteral, leftKeyColumnsLiteral);
@@ -1059,6 +1297,10 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
                     "Only key columns has to be specified in drop column set");
     }
 
+    if (joinKind == EJoinKind::Cross) {
+        MKQL_ENSURE(leftKeyColumns.empty() && leftKeyDrops.empty() && rightKeyColumns.empty() && rightKeyDrops.empty(),
+                    "Specifying key columns is not allowed for cross join");
+    }
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key columns mismatch");
 
     const auto rightAnyNode = callable.GetInput(7);
@@ -1075,7 +1317,7 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
 
     // XXX: Mind the last wide item, containing block length.
     TVector<ui32> rightIOMap;
-    if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left) {
+    if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left || joinKind == EJoinKind::Cross) {
         for (size_t i = 0; i < rightStreamItems.size() - 1; i++) {
             if (rightKeyDrops.contains(i)) {
                 continue;
@@ -1130,6 +1372,20 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
         } else {
             JOIN_WRAPPER(true, false, false);
         }
+    case EJoinKind::Cross:
+        MKQL_ENSURE(!rightAny, "rightAny can't be used with cross join");
+        return new TBlockCrossJoinCoreWraper(
+            ctx.Mutables,
+            std::move(joinItems),
+            std::move(leftStreamItems),
+            std::move(leftKeyColumns),
+            std::move(leftIOMap),
+            std::move(rightStreamItems),
+            std::move(rightKeyColumns),
+            std::move(rightIOMap),
+            leftStream,
+            rightStream
+        );
     default:
         /* TODO: Display the human-readable join kind name. */
         MKQL_ENSURE(false, "BlockMapJoinCore doesn't support join type #"

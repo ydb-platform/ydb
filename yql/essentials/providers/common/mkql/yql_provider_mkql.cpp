@@ -2132,6 +2132,13 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 ctx.ProgramBuilder.NewVariant(item, node.Child(1)->Content(), type);
     });
 
+    AddCallable("DynamicVariant", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto varType = ctx.BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+        const auto item = MkqlBuildExpr(node.Head(), ctx);
+        const auto index = MkqlBuildExpr(*node.Child(1), ctx);
+        return ctx.ProgramBuilder.DynamicVariant(item, index, varType);
+    });
+
     AddCallable("AsStruct", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         std::vector<std::pair<std::string_view, TRuntimeNode>> members;
         members.reserve(node.ChildrenSize());

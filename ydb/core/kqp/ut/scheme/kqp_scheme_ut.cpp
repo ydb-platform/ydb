@@ -9486,8 +9486,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 */
     Y_UNIT_TEST(AddColumnWithStore) {
-        auto runnerSettings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -9550,8 +9550,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(AddPgColumnWithStore) {
-        auto runnerSettings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -9958,9 +9958,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(DropColumnTableStoreErrors) {
-        auto runnerSettings = TKikimrSettings()
-            //.SetColumnShardAlterObjectEnabled(true)
-            .SetWithSampleTables(false);
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

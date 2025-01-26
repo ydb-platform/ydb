@@ -125,9 +125,13 @@ private:
 public:
     using TBase::Send;
     using TBase::TBase;
-    void Reply(const typename TBase::TRequest& /*request*/, const typename TBase::TOutcome& outcome) const {
+    void Reply(const typename TBase::TRequest& request, const typename TBase::TOutcome& outcome) const {
         Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
-        Send(std::make_unique<TEvCheckObjectExistsResponse>(outcome, RequestContext));
+        TString key;
+        if (request.KeyHasBeenSet()) {
+            key = request.GetKey();
+        }
+        Send(std::make_unique<TEvCheckObjectExistsResponse>(key, outcome, RequestContext));
     }
 };
 
@@ -153,6 +157,7 @@ private:
         }
     };
 
+    std::optional<std::pair<ui64, ui64>> Range;
 public:
     using TContextBase<TEvRequest, TEvResponse>::TContextBase;
 

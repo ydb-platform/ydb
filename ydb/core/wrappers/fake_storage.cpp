@@ -161,11 +161,11 @@ void TFakeExternalStorage::Execute(TEvCheckObjectExistsRequest::TPtr& ev, const 
         Aws::S3::Model::HeadObjectResult awsResult;
         awsResult.SetETag(MD5::Calc(*object));
         awsResult.SetContentLength(object->size());
-        result.reset(new TEvCheckObjectExistsResponse(awsResult, ev->Get()->GetRequestContext()));
+        result.reset(new TEvCheckObjectExistsResponse(key, awsResult, ev->Get()->GetRequestContext()));
         Y_DEBUG_ABORT_UNLESS(result->IsSuccess());
     } else {
         Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> awsOutcome;
-        result.reset(new TEvCheckObjectExistsResponse(awsOutcome, ev->Get()->GetRequestContext()));
+        result.reset(new TEvCheckObjectExistsResponse(key, awsOutcome, ev->Get()->GetRequestContext()));
         Y_DEBUG_ABORT_UNLESS(!result->IsSuccess());
     }
 

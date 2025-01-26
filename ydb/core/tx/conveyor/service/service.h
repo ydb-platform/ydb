@@ -122,7 +122,7 @@ public:
 
     TProcess(const ui64 processId)
         : ProcessId(processId) {
-
+        IncRegistration();
     }
 
     void AddCPUTime(const TDuration d) {

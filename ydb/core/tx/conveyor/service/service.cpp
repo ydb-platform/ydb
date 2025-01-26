@@ -50,9 +50,10 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
     auto it = Processes.find(ev->Get()->GetProcessId());
     if (it == Processes.end()) {
-        it = Processes.emplace(ev->Get()->GetProcessId(), TProcess(ev->Get()->GetProcessId())).first;
+        AddProcess(ev->Get()->GetProcessId());
+    } else {
+        it->second.IncRegistration();
     }
-    it->second.IncRegistration();
     Counters.ProcessesCount->Set(Processes.size());
 }
 

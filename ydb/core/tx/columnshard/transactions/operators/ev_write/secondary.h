@@ -155,6 +155,10 @@ private:
     }
 
     void SendResult(TColumnShard& owner) {
+        if (NYDBTest::TControllers::GetColumnShardController()->GetInterruptionOnLockedTransactions()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_continue");
+            return;
+        }
         NKikimrTx::TReadSetData readSetData;
         readSetData.SetDecision(SelfBroken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
         owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),

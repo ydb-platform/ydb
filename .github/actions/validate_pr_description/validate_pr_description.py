@@ -57,7 +57,7 @@ def validate_pr_description(file_path):
             sys.exit(1)
 
         if not any(cat.startswith(category) for cat in not_for_cl_categories):
-            entry_section = re.search(r"### Changelog entry\n(.*?)(\n###|$)", description, re.DOTALL)
+            entry_section = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", description, re.DOTALL)
             if not entry_section or len(entry_section.group(1).strip()) < 20:
                 print("::warning::Changelog entry is too short or missing.")
                 sys.exit(1)

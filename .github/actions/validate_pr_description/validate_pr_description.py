@@ -64,7 +64,7 @@ def validate_pr_description(file_path):
 
             if category == "Bugfix":
                 def check_issue_pattern(issue_pattern):
-                    return re.search(issue_pattern, entry_section.group(1))
+                    return re.search(issue_pattern, description)
 
                 if not any(check_issue_pattern(issue_pattern) for issue_pattern in issue_patterns):
                     print("::warning::Bugfix requires a linked issue in the changelog entry")

@@ -1635,6 +1635,7 @@ message TColumnShardConfig {
     // optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36; NB. exists in main
     //optional int32 DefaultCompressionLevel = 37; NB. exists in main
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
+    optional bool AlterObjectEnabled = 39 [default = false];
 }
 
 message TSchemeShardConfig {

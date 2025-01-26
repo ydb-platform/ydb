@@ -995,7 +995,9 @@ private:
             Self->TxIdToImport.erase(txId);
             txId = InvalidTxId;
 
-            if (record.GetStatus() == NKikimrScheme::StatusMultipleModifications) {
+            if (IsIn({ NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAlreadyExists },
+                record.GetStatus()
+            )) {
                 if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
                 } else if (item.State == EState::Transferring) {

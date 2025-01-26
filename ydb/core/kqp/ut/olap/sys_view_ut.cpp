@@ -117,6 +117,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
             auto settings = TKikimrSettings()
+                .SetColumnShardAlterObjectEnabled(true)
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -137,6 +138,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         const ui32 groupsCount = 512;
         {
             auto settings = TKikimrSettings()
+                .SetColumnShardAlterObjectEnabled(true)
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -194,6 +196,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         NKikimrConfig::TAppConfig appConfig;
         auto* CSConfig = appConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+        CSConfig->SetAlterObjectEnabled(true);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -230,7 +233,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 rawBytes1;
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
@@ -264,6 +269,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         NKikimrConfig::TAppConfig appConfig;
         auto* CSConfig = appConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+        CSConfig->SetAlterObjectEnabled(true);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -305,6 +311,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         NKikimrConfig::TAppConfig appConfig;
         auto* CSConfig = appConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+        CSConfig->SetAlterObjectEnabled(true);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

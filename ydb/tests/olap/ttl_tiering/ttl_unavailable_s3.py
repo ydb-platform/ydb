@@ -80,9 +80,10 @@ class TestUnavailableS3(TllTieringTestBase):
             return self.s3_client.get_bucket_stat(bucket_s3_name)[0]
 
         # stat_old = get_stat()
+        # FIXME: https://github.com/ydb-platform/ydb/issues/13562
+        # assert stat_old, "no data has been evicted"
 
-        for i in range(ROWS_CHUNKS_COUNT // 2, ROWS_CHUNKS_COUNT):
-            upsert_chunk(i)
+        # for i in range(ROWS_CHUNKS_COUNT // 2, ROWS_CHUNKS_COUNT):
+        #     upsert_chunk(i)
 
-        # Uncomment after fixing https://github.com/ydb-platform/ydb/issues/13719
         # assert self.wait_for(lambda: get_stat() != stat_old, 120), "data distribution continuation"

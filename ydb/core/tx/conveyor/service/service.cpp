@@ -61,6 +61,9 @@ void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     auto it = Processes.find(ev->Get()->GetProcessId());
     AFL_VERIFY(it != Processes.end());
     if (it->second.DecRegistration()) {
+        if (it->second.GetTasks().size()) {
+            ProcessesOrdered.erase(it->second.GetAddress());
+        }
         Processes.erase(it);
     }
     Counters.ProcessesCount->Set(Processes.size());

@@ -145,58 +145,20 @@ private:
     std::optional<NActors::TActorId> SlowWorkerId;
     TCounters Counters;
     THashMap<TString, std::shared_ptr<TTaskSignals>> Signals;
+    TMonotonic LastAddProcessInstant = TMonotonic::Now();
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
     void HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev);
     void HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev);
 
-    void AddProcess(const ui64 processId) {
-        ProcessesOrdered.clear();
-        AFL_VERIFY(Processes.emplace(processId, TProcess(processId)).second);
-        for (auto&& i : Processes) {
-            i.second.CleanCPUMetric();
-            if (i.second.GetTasks().size()) {
-                ProcessesOrdered.emplace(i.second.GetAddress());
-            }
-        }
-    }
+    void AddProcess(const ui64 processId);
 
-    void AddCPUTime(const ui64 processId, const TDuration d) {
-        auto it = Processes.find(processId);
-        if (it == Processes.end()) {
-            return;
-        }
-        if (it->second.GetTasks().size()) {
-            AFL_VERIFY(ProcessesOrdered.erase(it->second.GetAddress()));
-        }
-        it->second.AddCPUTime(d);
-        if (it->second.GetTasks().size()) {
-            AFL_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress()).second);
-        }
-    }
+    void AddCPUTime(const ui64 processId, const TDuration d);
 
-    TWorkerTask PopTask() {
-        AFL_VERIFY(ProcessesOrdered.size());
-        auto it = Processes.find(ProcessesOrdered.begin()->GetProcessId());
-        AFL_VERIFY(it != Processes.end());
-        AFL_VERIFY(it->second.GetTasks().size());
-        WaitingTasksCount.Dec();
-        if (it->second.GetTasks().size() == 1) {
-            ProcessesOrdered.erase(ProcessesOrdered.begin());
-        }
-        return it->second.MutableTasks().pop();
-    }
+    TWorkerTask PopTask();
 
-    void PushTask(const TWorkerTask& task) {
-        auto it = Processes.find(task.GetProcessId());
-        AFL_VERIFY(it != Processes.end());
-        if (it->second.GetTasks().size() == 0) {
-            AFL_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress()).second);
-        }
-        it->second.MutableTasks().push(task);
-        WaitingTasksCount.Inc();
-    }
+    void PushTask(const TWorkerTask& task);
 
 public:
 

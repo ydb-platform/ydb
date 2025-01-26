@@ -2,8 +2,8 @@ import sys
 import re
 
 issue_patterns = [
-    r"https://github.com/ydb-platform/ydb/issues/\d+"
-    # TODO: Add pattern for Yandex issue
+    r"https://github.com/ydb-platform/ydb/issues/\d+",
+    r"https://st.yandex-team.ru/[a-zA-Z]+-\d+"
 ]
 
 def validate_pr_description(file_path):

@@ -1261,9 +1261,9 @@ private:
 
         if (op.Maybe<TYtTransientOpBase>()) {
             auto trOp = TYtTransientOpBase(&node);
-            if (!hasOtherSortedOuts && NYql::HasAnySetting(trOp.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::KeepSorted)) {
+            if (!hasOtherSortedOuts && NYql::HasSetting(trOp.Settings().Ref(), EYtSettingType::Ordered)) {
                 res = ctx.ChangeChild(res ? *res : node, TYtTransientOpBase::idx_Settings,
-                    NYql::RemoveSettings(trOp.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::KeepSorted, ctx));
+                    NYql::RemoveSetting(trOp.Settings().Ref(), EYtSettingType::Ordered, ctx));
             }
 
             if (TYtMap::Match(&node)) {

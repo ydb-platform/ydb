@@ -62,7 +62,7 @@ void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     AFL_VERIFY(it != Processes.end());
     if (it->second.DecRegistration()) {
         if (it->second.GetTasks().size()) {
-            ProcessesOrdered.erase(it->second.GetAddress());
+            AFL_VERIFY(ProcessesOrdered.erase(it->second.GetAddress()));
         }
         Processes.erase(it);
     }

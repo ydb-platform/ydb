@@ -106,6 +106,10 @@ private:
     YDB_ACCESSOR_DEF(TDequePriorityFIFO, Tasks);
     ui32 LinksCount = 0;
 public:
+    void CleanCPUMetric() {
+        CPUTime = 0;
+    }
+
     bool DecRegistration() {
         AFL_VERIFY(LinksCount);
         --LinksCount;
@@ -148,7 +152,14 @@ private:
     void HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev);
 
     void AddProcess(const ui64 processId) {
+        ProcessesOrdered.clear();
         AFL_VERIFY(Processes.emplace(processId, TProcess(processId)).second);
+        for (auto&& i : Processes) {
+            i.second.CleanCPUMetric();
+            if (i.second.GetTasks().size()) {
+                ProcessesOrdered.emplace(i.second.GetAddress());
+            }
+        }
     }
 
     void AddCPUTime(const ui64 processId, const TDuration d) {

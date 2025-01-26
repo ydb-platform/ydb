@@ -1,0 +1,17 @@
+LIBRARY()
+
+SRCS(
+    compile_service.cpp
+)
+
+PEERDIR(
+    ydb/core/fq/libs/actors/logging
+
+    ydb/library/purecalc/no_pg_wrapper
+
+    ydb/library/actors/core
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()

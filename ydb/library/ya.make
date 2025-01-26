@@ -24,6 +24,7 @@ RECURSE(
     persqueue
     pretty_types_print
     protobuf_printer
+    purecalc
     query_actor
     schlab
     security

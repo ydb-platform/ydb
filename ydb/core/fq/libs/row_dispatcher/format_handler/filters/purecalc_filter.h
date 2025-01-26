@@ -14,7 +14,7 @@ public:
 public:
     virtual const TVector<TSchemaColumn>& GetColumns() const = 0;
     virtual const TString& GetWhereFilter() const = 0;
-    virtual TPurecalcCompileSettings GetPurecalcSettings() const = 0;
+    virtual NYdb::NPurecalc::TPurecalcCompileSettings GetPurecalcSettings() const = 0;
 
     virtual void OnFilteredData(ui64 rowId) = 0;
 };
@@ -26,8 +26,8 @@ public:
 public:
     virtual void FilterData(const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) = 0;
 
-    virtual std::unique_ptr<TEvRowDispatcher::TEvPurecalcCompileRequest> GetCompileRequest() = 0;  // Should be called exactly once
-    virtual void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr ev) = 0;
+    virtual std::unique_ptr<NYdb::NPurecalc::TEvPurecalcCompileRequest> GetCompileRequest() = 0;  // Should be called exactly once
+    virtual void OnCompileResponse(NYdb::NPurecalc::TEvPurecalcCompileResponse::TPtr ev) = 0;
 };
 
 TValueStatus<IPurecalcFilter::TPtr> CreatePurecalcFilter(IPurecalcFilterConsumer::TPtr consumer);

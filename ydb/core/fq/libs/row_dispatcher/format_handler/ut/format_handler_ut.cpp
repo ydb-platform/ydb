@@ -65,7 +65,7 @@ public:
             return WhereFilter;
         }
 
-        TPurecalcCompileSettings GetPurecalcSettings() const override {
+        NYdb::NPurecalc::TPurecalcCompileSettings GetPurecalcSettings() const override {
             return {.EnabledLLVM = false};
         }
 

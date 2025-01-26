@@ -89,13 +89,13 @@ class TTopicFilters : public ITopicFilters {
             }
 
             LOG_ROW_DISPATCHER_TRACE("Send abort compile request with id " << InFlightCompilationId);
-            NActors::TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(Self.Config.CompileServiceId, Self.Owner, new TEvRowDispatcher::TEvPurecalcCompileAbort(), 0, InFlightCompilationId));
+            NActors::TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(Self.Config.CompileServiceId, Self.Owner, new NYdb::NPurecalc::TEvPurecalcCompileAbort(), 0, InFlightCompilationId));
 
             InFlightCompilationId = 0;
             Self.Counters.InFlightCompileRequests->Dec();
         }
 
-        void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr ev) {
+        void OnCompileResponse(NYdb::NPurecalc::TEvPurecalcCompileResponse::TPtr ev) {
             if (ev->Cookie != InFlightCompilationId) {
                 LOG_ROW_DISPATCHER_DEBUG("Outdated compiler response ignored for id " << ev->Cookie << ", current compile id " << InFlightCompilationId);
                 return;
@@ -106,7 +106,7 @@ class TTopicFilters : public ITopicFilters {
             Self.Counters.InFlightCompileRequests->Dec();
 
             if (!ev->Get()->ProgramHolder) {
-                auto status = TStatus::Fail(ev->Get()->Status, std::move(ev->Get()->Issues));
+                auto status = TStatus::Fail(EStatusId::INTERNAL_ERROR, std::move(ev->Get()->Issues));
                 LOG_ROW_DISPATCHER_ERROR("Filter compilation error: " << status.GetErrorMessage());
 
                 Self.Counters.CompileErrors->Inc();
@@ -171,7 +171,7 @@ public:
         Stats.AddFilterLatency(TInstant::Now() - startFilter);
     }
 
-    void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr ev) override {
+    void OnCompileResponse(NYdb::NPurecalc::TEvPurecalcCompileResponse::TPtr ev) override {
         LOG_ROW_DISPATCHER_TRACE("Got compile response for request with id " << ev->Cookie);
 
         const auto requestIt = InFlightCompilations.find(ev->Cookie);

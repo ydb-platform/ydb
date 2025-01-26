@@ -1,15 +1,13 @@
 #include "compile_service.h"
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <yql/essentials/public/purecalc/common/interface.h>
 
-namespace NFq::NRowDispatcher {
+namespace NYdb::NPurecalc {
 
 namespace {
 
@@ -36,7 +34,7 @@ struct TEvPrivate {
 
 class TPurecalcCompileActor : public NActors::TActorBootstrapped<TPurecalcCompileActor> {
 public:
-    TPurecalcCompileActor(NActors::TActorId owner, NYql::NPureCalc::IProgramFactoryPtr factory, TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr request)
+    TPurecalcCompileActor(NActors::TActorId owner, NYql::NPureCalc::IProgramFactoryPtr factory, TEvPurecalcCompileRequest::TPtr request)
         : Owner(owner)
         , Factory(factory)
         , LogPrefix(TStringBuilder() << "TPurecalcCompileActor " << request->Sender << " [id " << request->Cookie << "]: ")
@@ -53,23 +51,25 @@ public:
         LOG_ROW_DISPATCHER_TRACE("Started compile request");
         IProgramHolder::TPtr programHolder = std::move(Request->Get()->ProgramHolder);
 
-        TStatus status = TStatus::Success();
+        std::optional<NYql::TIssues> issues;
         try {
             programHolder->CreateProgram(Factory);
         } catch (const NYql::NPureCalc::TCompileError& error) {
-            status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile issues: " << error.GetIssues())
-                .AddIssue(TStringBuilder() << "Final yql: " << error.GetYql())
-                .AddParentIssue(TStringBuilder() << "Failed to compile purecalc program");
+            issues = NYql::TIssues();
+            issues->AddIssue(TStringBuilder() << "Failed to compile purecalc program");
+            issues->back().AddSubIssue(MakeIntrusive<NYql::TIssue>(TStringBuilder() << "Compile issues: " << error.GetIssues()));
+            issues->back().AddSubIssue(MakeIntrusive<NYql::TIssue>(TStringBuilder() << "Final yql: " << error.GetYql()));
         } catch (...) {
-            status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to compile purecalc program, got unexpected exception: " << CurrentExceptionMessage());
+            issues = NYql::TIssues();
+            issues->AddIssue(TStringBuilder() << "Failed to compile purecalc program, got unexpected exception: " << CurrentExceptionMessage());
         }
 
-        if (status.IsFail()) {
+        if (issues) {
             LOG_ROW_DISPATCHER_ERROR("Compilation failed for request");
-            Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(status.GetStatus(), status.GetErrorDescription()), 0, Request->Cookie);
+            Send(Request->Sender, new TEvPurecalcCompileResponse(issues.value()), 0, Request->Cookie);
         } else {
             LOG_ROW_DISPATCHER_TRACE("Compilation completed for request");
-            Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder)), 0, Request->Cookie);
+            Send(Request->Sender, new TEvPurecalcCompileResponse(std::move(programHolder)), 0, Request->Cookie);
         }
     }
 
@@ -84,7 +84,7 @@ private:
     const NYql::NPureCalc::IProgramFactoryPtr Factory;
     const TString LogPrefix;
 
-    TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr Request;
+    TEvPurecalcCompileRequest::TPtr Request;
 };
 
 class TPurecalcCompileService : public NActors::TActor<TPurecalcCompileService> {
@@ -110,10 +110,10 @@ class TPurecalcCompileService : public NActors::TActor<TPurecalcCompileService> 
     };
 
 public:
-    TPurecalcCompileService(const NConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters)
+    TPurecalcCompileService(const TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters)
         : TBase(&TPurecalcCompileService::StateFunc)
         , Config(config)
-        , InFlightLimit(Config.GetParallelCompilationLimit() ? Config.GetParallelCompilationLimit() : 1)
+        , InFlightLimit(Config.ParallelCompilationLimit)
         , LogPrefix("TPurecalcCompileService: ")
         , Counters(counters)
     {}
@@ -121,12 +121,12 @@ public:
     static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_COMPILE_SERVICE";
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);
-        hFunc(TEvRowDispatcher::TEvPurecalcCompileAbort, Handle)
+        hFunc(TEvPurecalcCompileRequest, Handle);
+        hFunc(TEvPurecalcCompileAbort, Handle)
         hFunc(TEvPrivate::TEvCompileFinished, Handle);
     )
 
-    void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
+    void Handle(TEvPurecalcCompileRequest::TPtr& ev) {
         const auto requestActor = ev->Sender;
         const ui64 requestId = ev->Cookie;
         LOG_ROW_DISPATCHER_TRACE("Add to compile queue request with id " << requestId << " from " << requestActor);
@@ -142,7 +142,7 @@ public:
         StartCompilation();
     }
 
-    void Handle(TEvRowDispatcher::TEvPurecalcCompileAbort::TPtr& ev) {
+    void Handle(TEvPurecalcCompileAbort::TPtr& ev) {
         LOG_ROW_DISPATCHER_TRACE("Abort compile request with id " << ev->Cookie << " from " << ev->Sender);
 
         RemoveRequest(ev->Sender, ev->Cookie);
@@ -193,12 +193,12 @@ private:
     }
 
 private:
-    const NConfig::TCompileServiceConfig Config;
+    const TCompileServiceConfig Config;
     const ui64 InFlightLimit;
     const TString LogPrefix;
 
-    std::list<TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr> RequestsQueue;
-    THashMap<std::pair<NActors::TActorId, ui64>, std::list<TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr>::iterator> RequestsIndex;
+    std::list<TEvPurecalcCompileRequest::TPtr> RequestsQueue;
+    THashMap<std::pair<NActors::TActorId, ui64>, std::list<TEvPurecalcCompileRequest::TPtr>::iterator> RequestsIndex;
     std::unordered_set<NActors::TActorId> InFlightCompilations;
 
     std::map<TPurecalcCompileSettings, NYql::NPureCalc::IProgramFactoryPtr> ProgramFactories;
@@ -208,7 +208,7 @@ private:
 
 }  // anonymous namespace
 
-NActors::IActor* CreatePurecalcCompileService(const NConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters) {
+NActors::IActor* CreatePurecalcCompileService(const TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters) {
     return new TPurecalcCompileService(config, counters);
 }
 

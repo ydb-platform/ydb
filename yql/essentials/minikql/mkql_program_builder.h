@@ -633,6 +633,7 @@ public:
     TRuntimeNode VisitAll(TRuntimeNode variant, std::function<TRuntimeNode(ui32, TRuntimeNode)> handler);
     TRuntimeNode Way(TRuntimeNode variant);
     TRuntimeNode VariantItem(TRuntimeNode variant);
+    TRuntimeNode DynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType);
 
     //-- random functions
     // expects ui64 seed, returns resource

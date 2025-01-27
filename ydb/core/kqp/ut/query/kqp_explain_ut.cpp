@@ -593,7 +593,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
         Cout << plan.GetStringRobust() << Endl;
-        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (Grace)");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (JoinDict)");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());

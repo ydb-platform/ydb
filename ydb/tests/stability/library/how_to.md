@@ -20,6 +20,9 @@
     - `start_workload_simple_queue_row`
     - `start_workload_simple_queue_column`
     - `start_workload_olap_workload`
+    
+    not included in  `start_all_workloads`:
+    - `start_workload_log`
 
     ```
     ./library start_all_workloads --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
@@ -48,7 +51,7 @@
         ``yq '.hosts[].name' <path_to_cluster.yaml> > ~/hosts.txt``
     2) check status
         ```
-        parallel-ssh -h ~/hosts.txt -i '
+        parallel-ssh -h ~/hosts.txt -i -x "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" '
         if systemctl is-active --quiet nemesis; then
             echo "nemesis: Active"
         else
@@ -68,6 +71,11 @@
             echo "simple_queue_column: Running"
         else
             echo "simple_queue_column: Stopped"
+        fi
+        if ps aux | grep "/Berkanavt/nemesis/bin/ydb_cli" | grep -v grep > /dev/null; then
+            echo "log workload: Running"
+        else
+            echo "log workload: Stopped"
         fi
         '
         ```

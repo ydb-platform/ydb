@@ -19,16 +19,16 @@ std::vector<std::shared_ptr<TAllocationInfo>> TGrouppedAllocations::AllocatePoss
     return result;
 }
 
-bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemoryScope& process, const ui32 allocationsLimit) {
+bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemoryScope& scope, const ui32 allocationsLimit) {
     AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "try_allocation")("limit", allocationsLimit)(
-        "external_process_id", process.ExternalProcessId)("forced_internal_group_id", process.GroupIds.GetMinInternalIdOptional())(
-        "external_scope_id", process.ExternalScopeId)("forced_external_group_id", process.GroupIds.GetMinExternalIdOptional());
+        "external_process_id", scope.ExternalProcessId)("forced_internal_group_id", scope.GroupIds.GetMinInternalIdOptional())(
+        "external_scope_id", scope.ExternalScopeId)("forced_external_group_id", scope.GroupIds.GetMinExternalIdOptional());
     ui32 allocationsCount = 0;
     while (true) {
         std::vector<ui64> toRemove;
         for (auto it = Groups.begin(); it != Groups.end();) {
             const ui64 internalGroupId = it->first;
-            const bool forced = isPriorityProcess && internalGroupId == process.GroupIds.GetMinInternalIdVerified();
+            const bool forced = isPriorityProcess && internalGroupId == scope.GroupIds.GetMinInternalIdVerified();
             std::vector<std::shared_ptr<TAllocationInfo>> allocated;
             if (forced) {
                 allocated = it->second.ExtractAllocationsToVector();
@@ -38,7 +38,7 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
                 break;
             }
             for (auto&& i : allocated) {
-                if (!i->Allocate(process.OwnerActorId)) {
+                if (!i->Allocate(scope.OwnerActorId)) {
                     toRemove.emplace_back(i->GetIdentifier());
                 } else if (!forced) {
                     AFL_VERIFY(++allocationsCount <= allocationsLimit)("count", allocationsCount)("limit", allocationsLimit);
@@ -56,7 +56,7 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
             }
         }
         for (auto&& i : toRemove) {
-            process.UnregisterAllocation(i);
+            scope.UnregisterAllocation(i);
         }
         if (toRemove.empty() || allocationsCount == allocationsLimit) {
             break;

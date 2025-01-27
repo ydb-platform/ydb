@@ -52,7 +52,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TTxInitRoot DoExecute"
                          << ", path: " << rootName
-                         << ", error creating user: " << defaultUser.GetName()
+                         << ", error creating user: '" << defaultUser.GetName() << "'"
                          << ", error: " << response.Error);
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
@@ -91,7 +91,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                         LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "TTxInitRoot DoExecute"
                                 << ", path: " << rootName
-                                << ", error modifying group: " << defaultGroup.GetName()
+                                << ", error modifying group: '" << defaultGroup.GetName() << "'"
                                 << ", with member: " << member
                                 << ", error: " << response.Error);
                     } else {
@@ -123,9 +123,17 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
         NACLib::TDiffACL diffAcl;
         for (const auto& defaultAccess : securityConfig.GetDefaultAccess()) {
-            NACLibProto::TACE ace;
-            NACLib::TACL::FromString(ace, defaultAccess);
-            diffAcl.AddAccess(ace);
+            try {
+                NACLibProto::TACE ace;
+                NACLib::TACL::FromString(ace, defaultAccess);
+                diffAcl.AddAccess(ace);
+            } catch (const yexception& e) {
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "TTxInitRoot DoExecute"
+                                << ", path: " << rootName
+                                << ", error setting access right: '" << defaultAccess << "'"
+                                << ", error: " << e.what());
+            }
         }
         newPath->ApplyACL(diffAcl.SerializeAsString());
         newPath->CachedEffectiveACL.Init(newPath->ACL);

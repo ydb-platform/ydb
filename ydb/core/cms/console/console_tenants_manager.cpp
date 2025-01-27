@@ -3,6 +3,7 @@
 #include "http.h"
 #include "util.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
@@ -1927,15 +1928,8 @@ bool TTenantsManager::CheckAccess(const TString &token,
                                   TString &error,
                                   const TActorContext &ctx)
 {
-    auto *appData = AppData(ctx);
-    if (appData->AdministrationAllowedSIDs.empty())
+    if (IsAdministrator(AppData(ctx), token)) {
         return true;
-
-    if (token) {
-        NACLib::TUserToken userToken(token);
-        for (auto &sid : appData->AdministrationAllowedSIDs)
-            if (userToken.IsExist(sid))
-                return true;
     }
 
     code = Ydb::StatusIds::UNAUTHORIZED;

@@ -57,13 +57,6 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             targetTierName = tieringInfo.GetNextTierNameVerified();
         }
         if (d) {
-            if (targetTierName != NTiering::NCommon::DeleteTierName) {
-                if (const auto op = StoragesManager->GetOperatorOptional(targetTierName); !op || !op->IsReady()) {
-                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_eviction")("reason", "storage_not_ready")("tier", targetTierName)(
-                        "portion", portion.GetPortionId());
-                    return std::nullopt;
-                }
-            }
             //            if (currentTierName == "deploy_logs_s3" && targetTierName == IStoragesManager::DefaultStorageId) {
             //                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
             //                AFL_VERIFY(false)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
@@ -112,7 +105,8 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
         auto schema = portion.GetSchema(VersionedIndex);
         if (*TValidator::CheckNotNull(TieringColumnId) == schema->GetIndexInfo().GetPKColumnIds().front()) {
             NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
-            auto max = NArrow::TStatusValidator::GetValid(portion.GetMeta().GetFirstLastPK().GetFirst().Column(0).GetScalar(0));
+            const auto lastPk = portion.GetMeta().GetFirstLastPK().GetLast();
+            const auto max = NArrow::TStatusValidator::GetValid(lastPk.Column(0).GetScalar(lastPk.GetPosition()));
             AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
             AddPortionImpl(portion, addContext.GetNow());
         } else {

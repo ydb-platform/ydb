@@ -822,7 +822,7 @@ private:
             .WriteNanAsString = true,
         });
         TStringBuilder data;
-        data << "--boundary\r\nContent-Type: application/json\r\n\r\n" << content.Str() << "\r\n";
+        data << "--boundary\r\nContent-Type: application/json\r\nContent-Length: " << content.Size() << "\r\n\r\n" << content.Str() << "\r\n";
         auto dataChunk = HttpResponse->CreateDataChunk(data);
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
     }

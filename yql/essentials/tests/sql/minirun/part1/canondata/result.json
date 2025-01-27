@@ -456,9 +456,9 @@
     ],
     "test.test[expr-struct_gather_spread-default.txt-Debug]": [
         {
-            "checksum": "3b03be580bb5ee4055289064cd9cb70a",
-            "size": 2828,
-            "uri": "https://{canondata_backend}/1942525/d23808e75f3586fe0f94591ae8678878a50edd66/resource.tar.gz#test.test_expr-struct_gather_spread-default.txt-Debug_/opt.yql"
+            "checksum": "79a0577d1314802f774a1ba46f6e171d",
+            "size": 2641,
+            "uri": "https://{canondata_backend}/1936273/02beea5ab56d3ebcc167d39c4c5aa820e0dc8e63/resource.tar.gz#test.test_expr-struct_gather_spread-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[expr-struct_gather_spread-default.txt-Results]": [

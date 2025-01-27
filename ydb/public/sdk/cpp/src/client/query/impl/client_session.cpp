@@ -79,13 +79,12 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
             case grpc::StatusCode::OK:
                 StartAsyncRead(ptr, client, holder);
                 break;
-            case grpc::StatusCode::OUT_OF_RANGE: {
+            default: {
                 auto impl = holder->TrySharedOwning();
                 if (impl) {
                     impl->CloseFromServer(client);
                     holder->Release();
                 }
-                break;
             }
         }
     });

@@ -35,7 +35,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             *GUCSettings // GUC settings
         );
 
-        // TO DO: pass cancel after from the import operation
+        // TO DO: get default query timeout from the app config
         auto deadline = TAppData::TimeProvider->Now() + TDuration::Minutes(1);
         TKqpCounters kqpCounters(AppData()->Counters, &TlsActivationContext->AsActorContext());
         IsInterestedInResult = std::make_shared<std::atomic<bool>>(true);
@@ -44,10 +44,10 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
         return std::make_unique<TEvKqp::TEvCompileRequest>(
             UserToken, // user token
             "", // client address
-            Nothing(), // uid
+            Nothing(), // query uid in query cache
             query, // TKqpQueryId
-            false, // keep in cache
-            true, // is query action == prepare?
+            false, // keep in query cache
+            true, // is query action prepare?
             false, // per statement result
             deadline, // deadline
             kqpCounters.GetDbCounters(Database), // db counters
@@ -60,7 +60,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
 
     void PrepareSchemeQuery() {
         if (!Send(MakeKqpCompileServiceID(SelfId().NodeId()), BuildCompileRequest().release())) {
-            return Reply(Ydb::StatusIds::INTERNAL_ERROR, "cannot send query request");
+            return Finish(Ydb::StatusIds::INTERNAL_ERROR, "cannot send query request");
         }
         Become(&TThis::StateExecute);
     }
@@ -68,9 +68,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
     void HandleCompileResponse(const TEvKqp::TEvCompileResponse::TPtr& ev) {
         const auto* result = ev->Get()->CompileResult.get();
         if (!result) {
-            // TO DO: figure out the proper status for this situation.
-            // Probably, just change the reply event to contain a plain bool status.
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "no compile result");
+            return Finish(Ydb::StatusIds::GENERIC_ERROR, "empty compile response");
         }
 
         LOG_D("TSchemeQueryExecutor HandleCompileResponse"
@@ -79,39 +77,39 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
         );
 
         if (result->Status != Ydb::StatusIds::SUCCESS) {
-            return Reply(result->Status, result->Issues.ToOneLineString());
+            return Finish(result->Status, result->Issues.ToOneLineString());
         }
         if (!result->PreparedQuery) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "no prepared query");
+            return Finish(Ydb::StatusIds::GENERIC_ERROR, "no prepared query");
         }
         const auto& transactions = result->PreparedQuery->GetPhysicalQuery().GetTransactions();
         if (transactions.empty()) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "empty transactions");
+            return Finish(Ydb::StatusIds::GENERIC_ERROR, "empty transactions");
         }
         if (!transactions[0].HasSchemeOperation()) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "no scheme operations");
+            return Finish(Ydb::StatusIds::GENERIC_ERROR, "no scheme operations");
         }
         if (!transactions[0].GetSchemeOperation().HasCreateView()) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "no create view operation");
+            return Finish(Ydb::StatusIds::GENERIC_ERROR, "no create view operation");
         }
         const auto& createView = transactions[0].GetSchemeOperation().GetCreateView();
-        Reply(result->Status, createView);
+        Finish(result->Status, createView);
     }
 
-    void Reply(Ydb::StatusIds::StatusCode status, std::variant<TString, NKikimrSchemeOp::TModifyScheme> result) {
+    void Finish(Ydb::StatusIds::StatusCode status, std::variant<TString, NKikimrSchemeOp::TModifyScheme> result) {
         auto logMessage = TStringBuilder() << "TSchemeQueryExecutor Reply"
             << ", self: " << SelfId()
             << ", success: " << status;
         LOG_I(logMessage);
 
-        std::visit([&]<typename T>(T& rresult) {
+        std::visit([&]<typename T>(T& value) {
             if constexpr (std::is_same_v<T, TString>) {
-                logMessage << ", error: " << rresult;
+                logMessage << ", error: " << value;
             } else if constexpr (std::is_same_v<T, NKikimrSchemeOp::TModifyScheme>) {
-                logMessage << ", prepared query: " << rresult.ShortDebugString().Quote();
+                logMessage << ", prepared query: " << value.ShortDebugString().Quote();
             }
             LOG_D(logMessage);
-            Send(ReplyTo, new TEvPrivate::TEvImportSchemeQueryResult(ImportId, ItemIdx, status, std::move(rresult)));
+            Send(ReplyTo, new TEvPrivate::TEvImportSchemeQueryResult(ImportId, ItemIdx, status, std::move(value)));
         }, result);
 
         PassAway();
@@ -164,7 +162,8 @@ private:
     TString SchemeQuery;
     TString Database;
 
-    // Pointer type event arguments need to live until we receive the compilation response.
+    // The following pointer-type event arguments are necessary for constructing the compile request.
+    // These pointers must remain valid until the compilation response is received.
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TGUCSettings::TPtr GUCSettings;
     std::shared_ptr<std::atomic<bool>> IsInterestedInResult;

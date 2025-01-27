@@ -26,8 +26,20 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
+namespace {
+
+bool IsWaiting(const TImportInfo::TItem& item) {
+    return item.State == TImportInfo::EState::Waiting;
+}
+
 bool IsDoneOrWaiting(const TImportInfo::TItem& item) {
-    return TImportInfo::TItem::IsDone(item) || item.State == TImportInfo::EState::Waiting;
+    return TImportInfo::TItem::IsDone(item) || IsWaiting(item);
+}
+
+TString GetDatabase(TSchemeShard& ss) {
+    return CanonizePath(ss.RootPathElements);
+}
+
 }
 
 struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
@@ -391,7 +403,7 @@ private:
     }
 
     void RetryViewsCreation(TImportInfo::TPtr importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
-        const auto database = CanonizePath(Self->RootPathElements);
+        const auto database = GetDatabase(*Self);
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo->Items.size())) {
             auto& item = importInfo->Items[itemIdx];
@@ -724,7 +736,7 @@ private:
                         if (item.CreationQuery.empty() || item.PreparedCreationQuery.HasOperationType()) {
                             AllocateTxId(importInfo, itemIdx);
                         } else {
-                            const auto database = CanonizePath(Self->RootPathElements);
+                            const auto database = GetDatabase(*Self);
                             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                                 Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery, database
                             ));
@@ -825,8 +837,8 @@ private:
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid scheme");
             }
         } else {
-            // send the creation script to KQP to prepare
-            const auto database = CanonizePath(Self->RootPathElements);
+            // Send the creation query to KQP to prepare.
+            const auto database = GetDatabase(*Self);
             const TString source = TStringBuilder()
                 << importInfo->Settings.items(msg.ItemIdx).source_prefix() << NYdb::NDump::NFiles::CreateView().FileName;
 
@@ -887,11 +899,8 @@ private:
             // Instead of tracking view dependencies, we simply retry the creation of the view later.
             item.State = EState::Waiting;
 
-            auto isWaiting = [](const TImportInfo::TItem& item) {
-                return item.State == EState::Waiting;
-            };
-            if (AllOf(importInfo->Items, isWaiting)) {
-                // All items are waiting? Cancel the import, or we will end up waiting indefinetely.
+            if (AllOf(importInfo->Items, IsWaiting)) {
+                // All items are waiting? Cancel the import, or we will end up waiting indefinitely.
                 return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
             }
 
@@ -948,7 +957,7 @@ private:
                 }
                 if (!item.CreationQuery.empty()) {
                     // We only need a txId for modify scheme transactions.
-                    // If an object lacks a PreparedCreationQuery, it doesn't require a txId at this stage.
+                    // If an object’s CreationQuery has not been prepared, it does not need a txId at this point.
                     break;
                 }
                 if (!Self->TableProfilesLoaded) {

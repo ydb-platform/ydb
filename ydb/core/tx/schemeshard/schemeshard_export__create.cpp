@@ -518,9 +518,9 @@ private:
     }
 
     void KillChildActors(TExportInfo::TItem& item) {
-        if (auto schemeUploader = std::exchange(item.SchemeUploader, {})) {
-            Send(schemeUploader, new TEvents::TEvPoisonPill());
-            Self->RunningExportSchemeUploaders.erase(schemeUploader);
+        if (item.SchemeUploader) {
+            Send(item.SchemeUploader, new TEvents::TEvPoisonPill());
+            Self->RunningExportSchemeUploaders.erase(std::exchange(item.SchemeUploader, TActorId()));
         }
     }
 
@@ -988,8 +988,7 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         auto& item = exportInfo->Items[itemIdx];
-        Self->RunningExportSchemeUploaders.erase(item.SchemeUploader);
-        item.SchemeUploader = TActorId();
+        Self->RunningExportSchemeUploaders.erase(std::exchange(item.SchemeUploader, TActorId()));
 
         if (!result.Success) {
             item.State = EState::Cancelled;

@@ -28,7 +28,7 @@ permissions                 Modify permissions
 All commands have an additional parameter, which is not critical for them:
 `--timeout ms` - a technical parameter that sets the server response timeout.
 
-## grant, revoke
+## grant, revoke {#grant-revoke}
 
 The `grant` and `revoke` commands allow you to establish and revoke, respectively, access rights to schema objects for a user or group of users. Essentially, they are analogues of the corresponding YQL [GRANT](../../../yql/reference/syntax/grant.md) and [REVOKE](../../../yql/reference/syntax/revoke.md) commands.
 
@@ -51,7 +51,7 @@ Additional parameters `[options...]`:
 Each right must be passed as a separate parameter, for example:
 
 ```bash
-{{ ydb-cli }} scheme permissions grant -p "ydb.access.grant" -p "ydb.generic.read" '/Root/db1/MyApp/Orders' testuser 
+{{ ydb-cli }} scheme permissions grant -p "ydb.access.grant" -p "ydb.generic.read" '/Root/db1/MyApp/Orders' testuser
 ```
 
 ## set
@@ -129,7 +129,7 @@ Parameters:
 For example, if you execute the command over the database state from the previous example [`list`](#list):
 
 ```bash
-{{ ydb-cli }} scheme permissions clear '/Root/db1/MyApp' 
+{{ ydb-cli }} scheme permissions clear '/Root/db1/MyApp'
 ```
 
 And then execute the `list` command again on the object `/Root/db1/MyApp`, you will get the following result:

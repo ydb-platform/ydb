@@ -2855,6 +2855,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
         TTxId WaitTxId = InvalidTxId;
+        TActorId SchemeGetter;
+        TActorId SchemeQueryExecutor;
         int NextIndexIdx = 0;
         TString Issue;
         int ViewCreationRetries = 0;

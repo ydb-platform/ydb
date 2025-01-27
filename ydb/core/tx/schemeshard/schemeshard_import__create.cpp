@@ -323,13 +323,14 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
 private:
     void GetScheme(TImportInfo::TPtr importInfo, ui32 itemIdx, const TActorContext& ctx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        const auto& item = importInfo->Items.at(itemIdx);
+        auto& item = importInfo->Items.at(itemIdx);
 
         LOG_I("TImport::TTxProgress: Get scheme"
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
 
-        ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx));
+        item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx));
+        Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
     }
 
     void CreateTable(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
@@ -391,9 +392,10 @@ private:
         for (ui32 itemIdx : xrange(importInfo->Items.size())) {
             auto& item = importInfo->Items[itemIdx];
             if (!item.CreationQuery.empty() && item.ViewCreationRetries == 0) {
-                ctx.Register(CreateSchemeQueryExecutor(
+                item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                     Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery, database
                 ));
+                Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
 
                 item.State = EState::CreateTable;
                 item.ViewCreationRetries++;
@@ -553,6 +555,17 @@ private:
         return TStringBuilder() << importInfo->Id << "-" << itemIdx << "-" << item.NextIndexIdx;
     }
 
+    void KillChildActors(TImportInfo::TItem& item) {
+        if (item.SchemeGetter) {
+            Send(item.SchemeGetter, new TEvents::TEvPoisonPill());
+            Self->RunningImportSchemeGetters.erase(std::exchange(item.SchemeGetter, TActorId()));
+        }
+        if (item.SchemeQueryExecutor) {
+            Send(item.SchemeQueryExecutor, new TEvents::TEvPoisonPill());
+            Self->RunningImportSchemeQueryExecutors.erase(std::exchange(item.SchemeQueryExecutor, TActorId()));
+        }
+    }
+
     void Cancel(TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf marker) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         const auto& item = importInfo->Items.at(itemIdx);
@@ -564,6 +577,7 @@ private:
         importInfo->State = EState::Cancelled;
 
         for (ui32 i : xrange(importInfo->Items.size())) {
+            KillChildActors(importInfo->Items[i]);
             if (i == itemIdx) {
                 continue;
             }
@@ -707,9 +721,10 @@ private:
                             AllocateTxId(importInfo, itemIdx);
                         } else {
                             const auto database = CanonizePath(Self->RootPathElements);
-                            ctx.Register(CreateSchemeQueryExecutor(
+                            item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                                 Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery, database
                             ));
+                            Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
                         }
                     } else {
                         SubscribeTx(importInfo, itemIdx);
@@ -792,8 +807,10 @@ private:
             return;
         }
 
-        auto& item = importInfo->Items.at(msg.ItemIdx);
         NIceDb::TNiceDb db(txc.DB);
+
+        auto& item = importInfo->Items.at(msg.ItemIdx);
+        Self->RunningImportSchemeGetters.erase(std::exchange(item.SchemeGetter, TActorId()));
 
         if (!msg.Success) {
             return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
@@ -813,7 +830,10 @@ private:
             if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, source, issues)) {
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid view creation query");
             }
-            ctx.Register(CreateSchemeQueryExecutor(Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database));
+            item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
+                Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database
+            ));
+            Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
         }
 
         Self->PersistImportItemScheme(db, importInfo, msg.ItemIdx);
@@ -854,7 +874,9 @@ private:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+
         auto& item = importInfo->Items[message.ItemIdx];
+        Self->RunningImportSchemeQueryExecutors.erase(std::exchange(item.SchemeQueryExecutor, TActorId()));
 
         if (message.Status == Ydb::StatusIds::SCHEME_ERROR && item.ViewCreationRetries == 0) {
             // Scheme error happens when the view depends on a table (or a view) that is not yet imported.

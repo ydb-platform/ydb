@@ -18,8 +18,6 @@ public:
 
     [[nodiscard]] TSignaturePtr Sign(NYson::TYsonString data);
 
-    virtual ~TSignatureGeneratorBase() = default;
-
 protected:
     NYson::TYsonString& GetHeader(const TSignaturePtr& signature);
 

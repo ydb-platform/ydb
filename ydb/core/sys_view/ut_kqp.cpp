@@ -2859,6 +2859,53 @@ Y_UNIT_TEST_SUITE(SystemView) {
         // and test tenant user and tenant admin
     }
 
+    Y_UNIT_TEST(AuthOwners_ResultOrder) {
+        TTestEnv env;
+        SetupAuthEnvironment(env);
+        TTableClient client(env.GetDriver());
+
+        for (auto path : {
+            "Dir2/SubDir2",
+            "Dir1/SubDir1",
+            "Dir2/SubDir1",
+            "Dir1/SubDir2",
+            "Dir2/SubDir3",
+            "Dir1/SubDir3",
+            "Dir11/SubDir",
+            "Dir/SubDir",
+        }) {
+            env.GetClient().MkDir("/Root", path);
+        }
+        
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT *
+            FROM `Root/.sys/auth_owners`
+        )").GetValueSync();
+
+        auto expected = R"([
+            [["/Root"];["root@builtin"]];
+            [["/Root/.metadata"];["metadata@system"]];
+            [["/Root/.metadata/workload_manager"];["metadata@system"]];
+            [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
+            [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
+            [["/Root/Dir"];["root@builtin"]];
+            [["/Root/Dir/SubDir"];["root@builtin"]];
+            [["/Root/Dir1"];["root@builtin"]];
+            [["/Root/Dir1/SubDir1"];["root@builtin"]];
+            [["/Root/Dir1/SubDir2"];["root@builtin"]];
+            [["/Root/Dir1/SubDir3"];["root@builtin"]];
+            [["/Root/Dir11"];["root@builtin"]];
+            [["/Root/Dir11/SubDir"];["root@builtin"]];
+            [["/Root/Dir2"];["root@builtin"]];
+            [["/Root/Dir2/SubDir1"];["root@builtin"]];
+            [["/Root/Dir2/SubDir2"];["root@builtin"]];
+            [["/Root/Dir2/SubDir3"];["root@builtin"]];
+            [["/Root/Table0"];["root@builtin"]]
+        ])";
+
+        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+    }
+
     Y_UNIT_TEST(AuthPermissions) {
         TTestEnv env;
         SetupAuthEnvironment(env);

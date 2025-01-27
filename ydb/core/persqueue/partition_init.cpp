@@ -622,7 +622,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
                                   pair.GetValueSize(),
                                   TInstant::Seconds(pair.GetCreationUnixTime()),
                                   dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size,
-                                  1);
+                                  std::make_shared<size_t>(1));
     }
 
     Y_ABORT_UNLESS(endOffset >= startOffset);

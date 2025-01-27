@@ -1999,6 +1999,9 @@ void TPartition::RunPersist() {
         EndHandleRequests(PersistRequest.Get(), ctx);
         //haveChanges = true;
     }
+
+    TryAddDeleteHeadKeysToPersistRequest();
+
     if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
         WriteCycleStartTime = now;
         WriteStartTime = now;
@@ -2059,6 +2062,27 @@ void TPartition::RunPersist() {
         HaveWriteMsg = false;
     }
     PersistRequest = nullptr;
+}
+
+void TPartition::TryAddDeleteHeadKeysToPersistRequest()
+{
+    while (!DeletedHeadKeys.empty()) {
+        auto& k = DeletedHeadKeys.back();
+        if (*k.RefCount > 0) {
+            // the blob has already been repackaged and is still being read
+            break;
+        }
+
+        auto* cmd = PersistRequest->Record.AddCmdDeleteRange();
+        auto* range = cmd->MutableRange();
+
+        range->SetFrom(k.Key.Data(), k.Key.Size());
+        range->SetIncludeFrom(true);
+        range->SetTo(k.Key.Data(), k.Key.Size());
+        range->SetIncludeTo(true);
+
+        DeletedHeadKeys.pop_back();
+    }
 }
 
 void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
@@ -3378,25 +3402,19 @@ void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue:
     PQ_LOG_D("=== ClearOldHead ===");
     PQ_LOG_D("offset=" << offset << ", partNo=" << partNo);
     for (const auto& v : HeadKeys) {
-        PQ_LOG_D("key=" << v.Key.ToString() << ", refs=" << v.RefCount);
+        PQ_LOG_D("key=" << v.Key.ToString() << ", refs=" << *v.RefCount);
     }
     PQ_LOG_D("====================");
 
     for (auto it = HeadKeys.rbegin(); it != HeadKeys.rend(); ++it) {
         if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
-            Y_ABORT_UNLESS(it->RefCount > 0,
+            Y_ABORT_UNLESS(*it->RefCount > 0,
                            "Key: %s, RefCount %" PRISZT,
-                           it->Key.ToString().data(), it->RefCount);
-            --it->RefCount;
+                           it->Key.ToString().data(), *it->RefCount);
+            --*it->RefCount;
 
-            PQ_LOG_D("delete blob " << it->Key.ToString());
+            PQ_LOG_D("blob " << it->Key.ToString() << " will be deleted");
 
-            //auto del = request->Record.AddCmdDeleteRange();
-            //auto range = del->MutableRange();
-            //range->SetFrom(it->Key.Data(), it->Key.Size());
-            //range->SetIncludeFrom(true);
-            //range->SetTo(it->Key.Data(), it->Key.Size());
-            //range->SetIncludeTo(true);
             Y_UNUSED(request);
         } else {
             break;

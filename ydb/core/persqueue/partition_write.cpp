@@ -386,6 +386,10 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 
     if (!CompactedKeys.empty()) {
         PQ_LOG_D("clear head keys");
+        for (auto& k : HeadKeys) {
+            // The keys are queued. They will be deleted later when the `RefCount' value is reset.
+            DeletedHeadKeys.push_back(std::move(k));
+        }
         HeadKeys.clear();
     }
 
@@ -393,12 +397,16 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         while (!HeadKeys.empty() &&
                (HeadKeys.back().Key.GetOffset() > NewHeadKey.Key.GetOffset() ||
                 (HeadKeys.back().Key.GetOffset() == NewHeadKey.Key.GetOffset() && HeadKeys.back().Key.GetPartNo() >= NewHeadKey.Key.GetPartNo()))) {
-            Y_ABORT_UNLESS(HeadKeys.back().RefCount == 0);
-            PQ_LOG_D("delete head key " << HeadKeys.back().Key.ToString());
+            auto k = std::move(HeadKeys.back());
             HeadKeys.pop_back();
+            PQ_LOG_D("delete head key " << k.Key.ToString());
+            // The key is placed in the queue. It will be deleted later when the `RefCount` value is reset.
+            DeletedHeadKeys.push_back(std::move(k));
         }
+
         PQ_LOG_D("add new head key " << NewHeadKey.Key.ToString());
-        HeadKeys.push_back(NewHeadKey);
+        HeadKeys.push_back(std::move(NewHeadKey));
+
         NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};
     }
 
@@ -433,7 +441,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
                                   ck.second,
                                   ctx.Now(),
                                   DataKeysBody.empty() ? 0 : DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size,
-                                  1);
+                                  std::make_shared<size_t>(1));
 
         CompactedKeys.pop_front();
     } // head cleared, all data moved to body
@@ -1513,7 +1521,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
         NewHead.PartNo = 0;
     } else {
         Y_ABORT_UNLESS(NewHeadKey.Size == 0);
-        NewHeadKey = {key, res.second, CurrentTimestamp, 0, 1};
+        NewHeadKey = {key, res.second, CurrentTimestamp, 0, std::make_shared<size_t>(1)};
     }
     WriteCycleSize += write->GetValue().size();
     UpdateWriteBufferIsFullState(ctx.Now());

@@ -699,6 +699,7 @@ private:
     std::deque<TDataKey> DataKeysBody;
     TVector<TKeyLevel> DataKeysHead;
     std::deque<TDataKey> HeadKeys;
+    std::deque<TDataKey> DeletedHeadKeys;
 
     std::deque<std::pair<ui64,ui64>> GapOffsets;
     ui64 GapSize;
@@ -978,6 +979,7 @@ private:
 
     size_t WriteNewSizeFromSupportivePartitions = 0;
 
+    void TryAddDeleteHeadKeysToPersistRequest();
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
 };
 

@@ -76,7 +76,7 @@ namespace NPQ {
         ui32 Size = 0;
         TInstant Timestamp;
         ui64 CumulativeSize = 0;
-        size_t RefCount = 0;
+        std::shared_ptr<size_t> RefCount = nullptr;
     };
 
     struct TErrorInfo {

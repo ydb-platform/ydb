@@ -37,7 +37,7 @@ public:
                     request.User = createUser.GetUser();
                     request.Password = createUser.GetPassword();
                     request.CanLogin = createUser.GetCanLogin();
-                    request.IsPasswordHashedAlready = createUser.GetIsPasswordHashedAlready();
+                    request.IsHashedPassword = createUser.GetIsHashedPassword();
 
                     auto response = context.SS->LoginProvider.CreateUser(request);
 
@@ -74,7 +74,7 @@ public:
 
                     if (modifyUser.HasPassword()) {
                         request.Password = modifyUser.GetPassword();
-                        request.IsPasswordHashedAlready = modifyUser.GetIsPasswordHashedAlready();
+                        request.IsHashedPassword = modifyUser.GetIsHashedPassword();
                     }
 
                     if (modifyUser.HasCanLogin()) {

@@ -1381,7 +1381,7 @@ public:
             createUser.SetUser(settings.UserName);
             if (settings.Password) {
                 createUser.SetPassword(settings.Password);
-                createUser.SetIsPasswordHashedAlready(settings.IsPasswordHashedAlready);
+                createUser.SetIsHashedPassword(settings.IsHashedPassword);
             }
 
             createUser.SetCanLogin(settings.CanLogin);
@@ -1428,7 +1428,7 @@ public:
 
             if (settings.Password.has_value()) {
                 alterUser.SetPassword(settings.Password.value());
-                alterUser.SetIsPasswordHashedAlready(settings.IsPasswordHashedAlready);
+                alterUser.SetIsHashedPassword(settings.IsHashedPassword);
             }
 
             if (settings.CanLogin.has_value()) {

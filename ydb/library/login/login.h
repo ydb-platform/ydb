@@ -94,14 +94,14 @@ public:
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
-        bool IsPasswordHashedAlready = false;
+        bool IsHashedPassword = false;
         bool CanLogin = true;
     };
 
     struct TModifyUserRequest : TBasicRequest {
         TString User;
         std::optional<TString> Password;
-        bool IsPasswordHashedAlready = false;
+        bool IsHashedPassword = false;
         std::optional<bool> CanLogin;
     };
 

@@ -546,7 +546,7 @@ Y_UNIT_TEST_SUITE(Login) {
             TLoginProvider::TCreateUserRequest createRequest;
             createRequest.User = user;
             createRequest.Password = hash;
-            createRequest.IsPasswordHashedAlready = true;
+            createRequest.IsHashedPassword = true;
             auto createResponse = provider.CreateUser(createRequest);
             std::cerr << createResponse.Error << std::endl;
             UNIT_ASSERT(!createResponse.Error);

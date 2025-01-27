@@ -538,26 +538,58 @@ Y_UNIT_TEST_SUITE(Login) {
         TLoginProvider provider;
         provider.RotateKeys();
 
-        TString user = "user1";
-        TString password = "password1";
-        TString hash = provider.GenerateHash(password);
-
         {
-            TLoginProvider::TCreateUserRequest createRequest;
-            createRequest.User = user;
-            createRequest.Password = hash;
-            createRequest.IsHashedPassword = true;
-            auto createResponse = provider.CreateUser(createRequest);
-            std::cerr << createResponse.Error << std::endl;
-            UNIT_ASSERT(!createResponse.Error);
+            TString user = "user1";
+            TString password = "password1";
+            TString hash = provider.GenerateHash(password);
+
+            {
+                TLoginProvider::TCreateUserRequest createRequest;
+                createRequest.User = user;
+                createRequest.Password = hash;
+                createRequest.IsHashedPassword = true;
+                auto createResponse = provider.CreateUser(createRequest);
+                UNIT_ASSERT(!createResponse.Error);
+            }
+
+            {
+                TLoginProvider::TLoginUserRequest loginRequest;
+                loginRequest.User = user;
+                loginRequest.Password = password;
+                auto loginResponse = provider.LoginUser(loginRequest);
+                UNIT_ASSERT(!loginResponse.Error);
+            }
         }
 
         {
-            TLoginProvider::TLoginUserRequest loginRequest;
-            loginRequest.User = user;
-            loginRequest.Password = password;
-            auto loginResponse = provider.LoginUser(loginRequest);
-            UNIT_ASSERT(!loginResponse.Error);
+            TString user = "user2";
+            TString hash = R"(
+            {
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "Not in base64 format =) ",
+                "type": "argon2id"
+            }
+            )";
+
+            {
+                TLoginProvider::TCreateUserRequest createRequest;
+                createRequest.User = user;
+                createRequest.Password = hash;
+                createRequest.IsHashedPassword = true;
+                auto createResponse = provider.CreateUser(createRequest);
+                UNIT_ASSERT_STRING_CONTAINS(createResponse.Error, "Field \'salt\' must be in base64 format");
+            }
+
+            {
+                TLoginProvider::TLoginUserRequest loginRequest;
+                loginRequest.User = user;
+                loginRequest.Password = "somePassword";
+                auto loginResponse = provider.LoginUser(loginRequest);
+                UNIT_ASSERT_STRING_CONTAINS(loginResponse.Error, "Invalid user");
+
+                auto sids = provider.Sids;
+                UNIT_ASSERT(!sids.contains(user));
+            }
         }
     }
 }

@@ -68,10 +68,15 @@ private:
 private:
     TPasswordComplexity PasswordComplexity;
 
+private:
+    static constexpr size_t SaltSizeBase64 = 24;
+    static constexpr size_t HashSizeBase64 = 44;
+    static bool IsBase64(const std::string& value);
+
 public:
     TPasswordChecker(const TPasswordComplexity& passwordComplexity);
     TResult Check(const TString& username, const TString& password) const;
-    TResult CheckSyntaxOfHash(const TString& hash) const;
+    static TResult CheckSyntaxOfHash(const TString& hash);
     void Update(const TPasswordComplexity& passwordComplexity);
 };
 

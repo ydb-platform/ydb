@@ -30,6 +30,10 @@ namespace NKikimr::NBsController {
             pdisk->Status = s;
             pdisk->StatusTimestamp = Timestamp;
             fitGroups = s == NKikimrBlobStorage::EDriveStatus::BROKEN;
+
+            if (s == NKikimrBlobStorage::EDriveStatus::READONLY_FAULTY) {
+                pdisk->Mood = TPDiskMood::ReadOnly;
+            }
         }
         if (const auto ds = cmd.GetDecommitStatus(); ds != NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET &&
                 ds != pdisk->DecommitStatus) {

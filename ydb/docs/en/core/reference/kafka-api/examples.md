@@ -153,7 +153,7 @@ For examples of how to set up authentication, see the section [Authentication Ex
    Currently, not all functionality of Flink is supported for reading and writing. The following limitations exist:
   - Exactly once functionality via Kafka API is not supported at the moment, as transaction support in Kafka API is still under development;
   - Subscription to topics using a pattern is currently unavailable;
-  - Using message CreateTime as a watermark is not available at the moment, as the current read time is used instead of CreateTime (this bug will be fixed in future versions).
+  - Using message CreateTime as a watermark is not available at the moment, as the current read time is used instead of CreateTime (will be fixed in future versions).
 
   {% endnote %}
 
@@ -463,7 +463,7 @@ Note: in path_to_database the username is not specified, only @ is indicated, fo
 
 To test working with authentication in a on-prem database:
 
-1. Create a user. [How to do this in YQL](../../yql/reference/yql-core/syntax/create-user.md). [How to execute YQL from CLI](../ydb-cli/yql.md).
+1. Create a user. [How to do this in YQL](../../yql/reference/syntax/create-user.md). [How to execute YQL from CLI](../ydb-cli/yql.md).
 2. Connect to the Kafka API as shown in the examples below. In all examples, it is assumed that:
 
    - YDB is running locally with the environment variable YDB_KAFKA_PROXY_PORT=9092, meaning that the Kafka API is available at localhost:9092. You can run YDB in Docker for instance as described [here](../../quickstart.md#install).

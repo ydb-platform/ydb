@@ -4,7 +4,7 @@
 
 Аутентификация всегда включена при использовании [Kafka API в Yandex Cloud](https://yandex.cloud/ru/docs/data-streams/kafkaapi/auth)
 
-При самостоятельном развертывании YDB по умолчанию используется [анонимная аутентификация](../../security/authentication.md#anonymous)
+При [самостоятельном развертывании YDB](../../quickstart.md) по умолчанию используется [анонимная аутентификация](../../security/authentication.md#anonymous)
 , не требующая логина-пароля.
 Чтобы включить обязательную аутентификацию, укажите опцию [`enforce_user_token_requirement` в конфиге](../configuration/index.md#auth).
 
@@ -18,7 +18,8 @@
 * `<password>` — пароль пользователя. Об управлении пользователями читайте в разделе [{#T}](../../security/authentication.md).
 * `<database>` — [путь базы данных](../../concepts/connect#database).
 
-Из этих параметров формируются:
+Из этих параметров формируются следующие переменные, которые вы можете использовать в
+`sasl.jaas.config` параметре конфигурации клиента Kafka:
 
 * `<sasl.username>` = `<user-name>@<database>`
 * `<sasl.password>` = `<password>`

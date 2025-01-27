@@ -5518,8 +5518,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AlterColumnTableTtl) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -9222,9 +9223,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(AddColumnWithTtl) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -9890,8 +9892,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(DropTtlColumn) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -10238,10 +10241,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
         auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-        TTestHelper::TCompression plainCompression =
-            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
-        TTestHelper::TColumnFamily defaultFamily =
-            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression);
+        TTestHelper::TColumnFamily defaultFamily = TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default");
 
         UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
         TTestHelper::TColumnFamily defaultFromScheme;
@@ -10249,18 +10249,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         {
             TString errorMessage;
             UNIT_ASSERT_C(defaultFromScheme.IsEqual(defaultFamily, errorMessage), errorMessage);
-        }
-
-        auto columns = schema.GetColumns();
-        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
-            auto column = columns[i];
-            UNIT_ASSERT(column.HasSerializer());
-            UNIT_ASSERT_EQUAL_C(
-                column.GetColumnFamilyId(), 0, TStringBuilder() << "family for column " << column.GetName() << " is not default");
-            TTestHelper::TCompression compression;
-            UNIT_ASSERT(compression.DeserializeFromProto(schema.GetColumns(i).GetSerializer()));
-            TString errorMessage;
-            UNIT_ASSERT_C(compression.IsEqual(defaultFamily.GetCompression(), errorMessage), errorMessage);
         }
     }
 
@@ -11033,11 +11021,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
         TString tableName = "/Root/TableWithFamily";
 
-        TTestHelper::TCompression plainCompression =
-            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
 
         TVector<TTestHelper::TColumnFamily> families = {
-            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(plainCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(lz4Compression),
         };
 
         {
@@ -11060,7 +11047,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             testHelper.CreateTable(testTable);
         }
 
-        families.push_back(TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression));
+        families.push_back(TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default"));
         auto& runner = testHelper.GetKikimr();
         auto runtime = runner.GetTestServer().GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
@@ -11405,9 +11392,74 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.CreateTable(testTable, EStatus::GENERIC_ERROR);
     }
 
+    Y_UNIT_TEST(CreateTableWithDefaultFamilyWithoutSettings) {
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TString tableName = "/Root/ColumnTableTest";
+        auto session = testHelper.GetSession();
+        auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+            Key Uint64 NOT NULL, 
+            Value1 String, 
+            Value2 Uint32, 
+            PRIMARY KEY (Key), 
+            FAMILY default ()) 
+            WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        TTestHelper::TColumnFamily defaultFamily = TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default");
+
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
+        TTestHelper::TColumnFamily defaultFromScheme;
+        UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
+        {
+            TString errorMessage;
+            UNIT_ASSERT_C(defaultFromScheme.IsEqual(defaultFamily, errorMessage), errorMessage);
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithFamilyWithOnlyCompressionLevel) {
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TString tableName = "/Root/ColumnTableTest";
+        auto session = testHelper.GetSession();
+        auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+            Key Uint64 NOT NULL, 
+            Value1 String, 
+            Value2 Uint32, 
+            PRIMARY KEY (Key), 
+            FAMILY family1 (
+                COMPRESSION_LEVEL = 2
+            )) 
+            WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CreateTableNonDefaultFamilyWithoutCompression) {
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TString tableName = "/Root/ColumnTableTest";
+        auto session = testHelper.GetSession();
+        auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+            Key Uint64 NOT NULL, 
+            Value1 String, 
+            Value2 Uint32, 
+            PRIMARY KEY (Key), 
+            FAMILY family1 (
+            )) 
+            WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(DropColumnAndResetTtl) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -11442,8 +11494,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(InitTtlSettingsOnShardStart) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -11484,7 +11537,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         testHelper.RebootTablets("/Root/ColumnTableTest");
     }
-
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapTypes) {

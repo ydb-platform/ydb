@@ -18,6 +18,7 @@ public:
     TWriteUnit(const std::shared_ptr<NEvWrite::TWriteData>& data, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& batch)
         : Data(data)
         , Batch(batch) {
+        Data->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::WaitFlush);
         AFL_VERIFY(Data->GetWritePortions());
         AFL_VERIFY(Batch.HasContainer());
     }
@@ -48,6 +49,9 @@ public:
         , WriteUnits(std::move(writeUnits))
         , Context(context) {
         AFL_VERIFY(WriteUnits.size());
+        for (auto&& i : WriteUnits) {
+            i.GetData()->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildSlicesPack);
+        }
     }
 };
 }   // namespace NKikimr::NOlap::NWritingPortions

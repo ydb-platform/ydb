@@ -1365,12 +1365,14 @@ TScanQueryPartIterator::TScanQueryPartIterator(
 {}
 
 TAsyncScanQueryPart TScanQueryPartIterator::ReadNext() {
-    if (ReaderImpl_->IsFinished())
+    if (!ReaderImpl_ || ReaderImpl_->IsFinished()) {
+        if (!IsSuccess())
+            RaiseError(TStringBuilder() << "Attempt to perform read on an unsuccessful result " 
+                << GetIssues().ToString());
         RaiseError("Attempt to perform read on invalid or finished stream");
+    }
     return ReaderImpl_->ReadNext(ReaderImpl_);
 }
-
-
 
 static bool IsSessionStatusRetriable(const TCreateSessionResult& res) {
     switch (res.GetStatus()) {

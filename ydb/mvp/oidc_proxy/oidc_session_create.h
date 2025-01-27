@@ -29,16 +29,17 @@ public:
                           const TOpenIdConnectSettings& settings);
 
     virtual void RequestSessionToken(const TString&) = 0;
-    virtual void ProcessSessionToken(const TString& accessToken, const NActors::TActorContext&) = 0;
+    virtual void ProcessSessionToken(const NJson::TJsonValue& jsonValue) = 0;
 
     void Bootstrap();
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
 
 protected:
     TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
     void RetryRequestToProtectedResourceAndDie();
     void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders);
     void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
+    void ReplyBadRequestAndPassAway(TString errorMessage);
 
 private:
     void SendUnknownErrorResponseAndDie();

@@ -42,6 +42,7 @@ SET(ORIG_SOURCES
     mkql_decimal_mul.cpp
     mkql_dictitems.cpp
     mkql_discard.cpp
+    mkql_dynamic_variant.cpp
     mkql_element.cpp
     mkql_ensure.cpp
     mkql_enumerate.cpp

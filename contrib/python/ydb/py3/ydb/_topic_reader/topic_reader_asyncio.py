@@ -627,6 +627,7 @@ class ReaderStream:
                         written_at=server_batch.written_at,
                         producer_id=server_batch.producer_id,
                         data=message_data.data,
+                        metadata_items=message_data.metadata_items,
                         _partition_session=partition_session,
                         _commit_start_offset=partition_session._next_message_start_commit_offset,
                         _commit_end_offset=message_data.offset + 1,

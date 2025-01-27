@@ -49,11 +49,15 @@ ya make -tA                                                    \
 UNCOVERED_ANCHOR="<td class='uncovered-line'><pre>0</pre></td>"
 # ... find the return type of the type annotation callback,
 # preceding the target function name ...
+RETURN_TYPE="IGraphTransformer::TStatus"
 # XXX: See more info re \K here: https://perldoc.perl.org/perlre#%5CK.
-CALLBACK_PREFIX="<td class='code'><pre>\s*IGraphTransformer::TStatus\s*\K"
+CALLBACK_PREFIX="<td class='code'><pre>\s*$RETURN_TYPE\s*\K"
 # ... and find the parameters types of the type annotation
 # callback, following the target function name.
-CALLBACK_SUFFIX="(?=\(const TExprNode::TPtr&amp; input, TExprNode::TPtr&amp; output, TContext&amp; ctx\))"
+INPUT_TYPE="const TExprNode::TPtr&amp; input"
+OUTPUT_TYPE="TExprNode::TPtr&amp; output"
+CONTEXT_TYPE="(?:TExtContext|TContext)&amp; ctx"
+CALLBACK_SUFFIX="(?=\($INPUT_TYPE,\s*$OUTPUT_TYPE,\s*$CONTEXT_TYPE\))"
 grep -oP "$UNCOVERED_ANCHOR$CALLBACK_PREFIX(\w+)$CALLBACK_SUFFIX" \
     -r $REPORT_ROOT/coverage.report/                              \
     --no-filename                                                 \

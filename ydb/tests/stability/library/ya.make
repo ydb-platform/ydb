@@ -9,6 +9,7 @@ DATA(
 )
 
 DEPENDS(
+    ydb/apps/ydb
     ydb/tools/cfg/bin
     ydb/tests/tools/nemesis/driver
 )
@@ -19,9 +20,11 @@ BUNDLE(
     ydb/tests/stress/statistics_workload NAME statistics_workload
     ydb/tools/cfg/bin NAME cfg
     ydb/tests/tools/nemesis/driver NAME nemesis
+    ydb/apps/ydb NAME ydb_cli
 )
 
 RESOURCE(
+    ydb_cli ydb_cli
     simple_queue simple_queue
     olap_workload olap_workload
     statistics_workload statistics_workload

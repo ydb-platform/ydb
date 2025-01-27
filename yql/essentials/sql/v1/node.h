@@ -1302,18 +1302,20 @@ namespace NSQLTranslationV1 {
     };
 
     struct TRoleParameters {
+    protected:
+        TRoleParameters() {}
+    public:
+        TVector<TDeferredAtom> Roles;
+    };
+
+    struct TUserParameters : TRoleParameters {
         TMaybe<TDeferredAtom> Password;
         bool IsPasswordEncrypted = false;
-        TVector<TDeferredAtom> Roles;
-
-        enum class ETypeOfLogin {
-            Undefined,
-            Login,
-            NoLogin
-        };
-
-        ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
+        std::optional<bool> CanLogin;
+        TMaybe<TDeferredAtom> Hash;
     };
+
+    struct TCreateGroupParameters : TRoleParameters {};
 
     struct TSequenceParameters {
         bool MissingOk = false;
@@ -1522,9 +1524,9 @@ namespace NSQLTranslationV1 {
     );
 
     // Implemented in query.cpp
-    TNodePtr BuildCreateUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped);
-    TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped);
-    TNodePtr BuildAlterUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TRoleParameters& params, TScopedStatePtr scoped);
+    TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TCreateGroupParameters>& params, TScopedStatePtr scoped);
+    TNodePtr BuildControlUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name,
+                                const TMaybe<TUserParameters>& params, TScopedStatePtr scoped, bool isCreateUser);
     TNodePtr BuildRenameUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
     TNodePtr BuildAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop,
         TScopedStatePtr scoped);

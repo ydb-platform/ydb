@@ -17,6 +17,7 @@ struct TSpillingCounters : public TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingTooBigFileErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingNoSpaceErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIoErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingFileDescriptors;
 };
 
 struct TSpillingTaskCounters : public TThrRefBase {

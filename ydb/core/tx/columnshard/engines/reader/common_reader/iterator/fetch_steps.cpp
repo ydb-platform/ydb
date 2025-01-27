@@ -52,7 +52,7 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
     }
     Step.Next();
     auto task = std::make_shared<TStepAction>(data, std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId());
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task, data->GetContext()->GetCommonContext()->GetConveyorProcessId());
     return true;
 }
 

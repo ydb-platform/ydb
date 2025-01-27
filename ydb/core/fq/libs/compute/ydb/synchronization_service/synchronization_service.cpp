@@ -628,13 +628,15 @@ private:
                         CREATE RESOURCE POOL `{resource_pool_name}` WITH (
                             CONCURRENT_QUERY_LIMIT="{concurrent_query_limit}",
                             QUEUE_SIZE="{queue_size}",
-                            DATABASE_LOAD_CPU_THRESHOLD="{database_load_cpu_threshold}"
+                            DATABASE_LOAD_CPU_THRESHOLD="{database_load_cpu_threshold}",
+                            TOTAL_CPU_LIMIT_PERCENT_PER_NODE="{total_cpu_limit_percent_per_node}"
                         );
                     )",
                     "resource_pool_name"_a = resourcePool.GetName(),
                     "concurrent_query_limit"_a = resourcePool.GetConcurrentQueryLimit(),
                     "queue_size"_a = resourcePool.GetQueueSize(),
-                    "database_load_cpu_threshold"_a = resourcePool.GetDatabaseLoadCpuThreshold()));
+                    "database_load_cpu_threshold"_a = resourcePool.GetDatabaseLoadCpuThreshold(),
+                    "total_cpu_limit_percent_per_node"_a = resourcePool.GetTotalCpuLimitPercentPerNode()));
                 })
                 .Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId(), i](const NYdb::TAsyncStatus& future) {
                     actorSystem->Send(self, new TEvYdbCompute::TEvCreateResourcePoolResponse(ExtractStatus(future)), 0, i);
@@ -664,13 +666,16 @@ private:
                     ALTER RESOURCE POOL `{resource_pool_name}` SET (
                         CONCURRENT_QUERY_LIMIT="{concurrent_query_limit}",
                         QUEUE_SIZE="{queue_size}",
-                        DATABASE_LOAD_CPU_THRESHOLD="{database_load_cpu_threshold}"
+                        DATABASE_LOAD_CPU_THRESHOLD="{database_load_cpu_threshold}",
+                        TOTAL_CPU_LIMIT_PERCENT_PER_NODE="{total_cpu_limit_percent_per_node}"
                     );
                 )",
                 "resource_pool_name"_a = resourcePool.GetName(),
                 "concurrent_query_limit"_a = resourcePool.GetConcurrentQueryLimit(),
                 "queue_size"_a = resourcePool.GetQueueSize(),
-                "database_load_cpu_threshold"_a = resourcePool.GetDatabaseLoadCpuThreshold()));
+                "database_load_cpu_threshold"_a = resourcePool.GetDatabaseLoadCpuThreshold(),
+                "total_cpu_limit_percent_per_node"_a = resourcePool.GetTotalCpuLimitPercentPerNode()
+                ));
             })
             .Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId(), index](const NYdb::TAsyncStatus& future) {
                 actorSystem->Send(self, new TEvYdbCompute::TEvCreateResourcePoolResponse(ExtractStatus(future)), 0, index);

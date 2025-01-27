@@ -1,11 +1,11 @@
 import yatest.common
 import os
 import time
-import ydb
 import logging
 import boto3
 import requests
 from library.recipes import common as recipes_common
+from ydb.tests.olap.helpers.ydb_client import YdbClient
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -50,23 +50,6 @@ class S3Client:
         return (count, size)
 
 
-class YdbClient:
-    def __init__(self, endpoint, database):
-        self.driver = ydb.Driver(endpoint=endpoint, database=database, oauth=None)
-        self.database = database
-        self.session_pool = ydb.QuerySessionPool(self.driver)
-
-    def stop(self):
-        self.session_pool.stop()
-        self.driver.stop()
-
-    def wait_connection(self, timeout=5):
-        self.driver.wait(timeout, fail_fast=True)
-
-    def query(self, statement):
-        return self.session_pool.execute_with_retries(statement)
-
-
 class ColumnTableHelper:
     def __init__(self, ydb_client: YdbClient, path: str):
         self.ydb_client = ydb_client
@@ -109,10 +92,7 @@ class TllTieringTestBase(object):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
-            extra_feature_flags={
-                "enable_external_data_sources": True,
-                "enable_tiering_in_column_shard": True
-            },
+            extra_feature_flags={"enable_external_data_sources": True, "enable_tiering_in_column_shard": True},
             column_shard_config={
                 "lag_for_compaction_before_tierings_ms": 0,
                 "compaction_actualization_lag_ms": 0,

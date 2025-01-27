@@ -4,6 +4,7 @@ PY3TEST()
 
     TEST_SRCS(
         test_quota_exhaustion.py
+        test_log_scenario.py
     )
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
@@ -20,6 +21,10 @@ PY3TEST()
 
     PEERDIR(
         ydb/tests/library
+        ydb/tests/olap/lib
+        ydb/tests/olap/scenario/helpers
+        ydb/tests/olap/helpers
+        library/recipes/common
     )
 END()
 
@@ -29,4 +34,5 @@ RECURSE(
     docs
     load
     ttl_tiering
+    helpers
 )

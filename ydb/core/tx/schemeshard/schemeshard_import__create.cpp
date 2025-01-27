@@ -26,6 +26,10 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
+bool IsDoneOrWaiting(const TImportInfo::TItem& item) {
+    return TImportInfo::TItem::IsDone(item) || item.State == TImportInfo::EState::Waiting;
+}
+
 struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     TEvImport::TEvCreateImportRequest::TPtr Request;
     bool Progress;
@@ -1202,10 +1206,7 @@ private:
         if (AllOf(importInfo->Items, &TImportInfo::TItem::IsDone)) {
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
-        } else if (AllOf(importInfo->Items, [](const TImportInfo::TItem& item) {
-                return TImportInfo::TItem::IsDone(item) || item.State == EState::Waiting;
-            }
-        )) {
+        } else if (AllOf(importInfo->Items, IsDoneOrWaiting)) {
             RetryViewsCreation(importInfo, db, ctx);
         }
 

@@ -358,6 +358,24 @@ bool TLoginProvider::ShouldUnlockAccount(const TSidRecord& sid) const {
     return sid.IsEnabled && ShouldResetFailedAttemptCount(sid);
 }
 
+bool TLoginProvider::IsLockedOut(const TSidRecord& user) const {
+    Y_ABORT_UNLESS(user.Type == NLoginProto::ESidType::USER);
+    
+    if (AccountLockout.AttemptThreshold == 0) {
+        return false;
+    }
+
+    if (user.FailedLoginAttemptCount < AccountLockout.AttemptThreshold) {
+        return false;
+    }
+
+    if (ShouldResetFailedAttemptCount(user)) {
+        return false;
+    }
+
+    return true;
+}
+
 TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCheckLockOutRequest& request) {
     TCheckLockOutResponse response;
     auto itUser = Sids.find(request.User);
@@ -371,7 +389,7 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
         return response;
     }
 
-    TSidRecord& sid  = itUser->second;
+    TSidRecord& sid = itUser->second;
     if (CheckLockout(sid)) {
         if (ShouldUnlockAccount(sid)) {
             UnlockAccount(&sid);

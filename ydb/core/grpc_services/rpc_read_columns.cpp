@@ -321,7 +321,7 @@ private:
                 JoinPath(ResolveNamesResult->ResultSet.front().Path),
                 range,
                 columns,
-                {}); //TODO
+                Request->GetInternalToken());
 
             if (!tableScanActor) {
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,

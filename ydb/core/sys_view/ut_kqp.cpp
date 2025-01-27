@@ -2408,7 +2408,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 FROM `Root/.sys/auth_groups`
             )").GetValueSync();
 
-            NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+            NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
         }
 
         { // user1 is /Root admin
@@ -2464,7 +2464,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     FROM `Root/.sys/auth_groups`
                 )").GetValueSync();
 
-                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
             }
 
             {
@@ -2473,7 +2473,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     FROM `Root/Tenant1/.sys/auth_groups`
                 )").GetValueSync();
 
-                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
             }
         }
 
@@ -2577,7 +2577,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 FROM `Root/.sys/auth_group_members`
             )").GetValueSync();
 
-            NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+            NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
         }
 
         { // user1 is /Root admin
@@ -2633,7 +2633,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     FROM `Root/.sys/auth_group_members`
                 )").GetValueSync();
 
-                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
             }
 
             {
@@ -2642,7 +2642,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     FROM `Root/Tenant1/.sys/auth_group_members`
                 )").GetValueSync();
 
-                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "User isn't administrator");
+                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
             }
         }
 

@@ -60,7 +60,7 @@ protected:
         TBase::Become(&TAuthScanBase::StateScan);
 
         if (RequireUserAdministratorAccess && !IsAdministrator(AppData(), UserToken.Get())) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "User isn't administrator");
+            TBase::ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "Administrator access is required");
             return;
         }
 

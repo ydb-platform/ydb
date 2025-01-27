@@ -305,9 +305,9 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
         jsonReport = MakeHolder<NJson::TJsonValue>(NJson::JSON_ARRAY);
     }
     const auto qtokens = workloadGen.GetWorkload(Type);
-    ui32 allSuccessQueries = 0;
-    ui32 someFailQueries = 0;
-    ui32 withDiffCount = 0;
+    ui32 queriesWithAllSuccess = 0;
+    ui32 queriesWithSomeFails = 0;
+    ui32 queriesWithDiff = 0;
     THolder<TOFStream> plansReport;
     THolder<TOFStream> csvReport;
     if (CsvReportFileName) {
@@ -385,6 +385,8 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
                     res = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "");
                 }
             } catch (...) {
+                const auto msg = CurrentExceptionMessage();
+                Cerr << "Exception while execute query: " << msg << Endl;
                 res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
             }
             auto duration = TInstant::Now() - t1;
@@ -430,23 +432,23 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
         auto& testInfo = inserted->second;
         CollectStats(statTable, csvReport.Get(), jsonReport.Get(), Sprintf("Query%02u", queryN), successIteration, failsCount, diffsCount, testInfo);
         if (successIteration != IterationsCount) {
-            ++someFailQueries;
+            ++queriesWithSomeFails;
         } else {
-            ++allSuccessQueries;
+            ++queriesWithAllSuccess;
             sumInfo += testInfo;
             productInfo *= testInfo;
         }
         if (diffsCount) {
-            ++withDiffCount;
+            ++queriesWithDiff;
         }
     }
 
-    if (allSuccessQueries) {
-        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Sum", allSuccessQueries, someFailQueries, withDiffCount, sumInfo);
-        sumInfo /= allSuccessQueries;
-        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Avg", allSuccessQueries, someFailQueries, withDiffCount, sumInfo);
-        productInfo ^= allSuccessQueries;
-        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "GAvg", allSuccessQueries, someFailQueries, withDiffCount, productInfo);
+    if (queriesWithAllSuccess) {
+        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Sum", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, sumInfo);
+        sumInfo /= queriesWithAllSuccess;
+        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "Avg", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, sumInfo);
+        productInfo ^= queriesWithAllSuccess;
+        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), "GAvg", queriesWithAllSuccess, queriesWithSomeFails, queriesWithDiff, productInfo);
     }
 
     statTable.Print(report);
@@ -486,7 +488,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
         Cout << "Summary table saved in CSV format to " << CsvReportFileName << Endl;
     }
 
-    return someFailQueries ? EXIT_FAILURE : EXIT_SUCCESS;
+    return queriesWithSomeFails ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const {

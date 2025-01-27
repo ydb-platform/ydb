@@ -193,3 +193,27 @@ A consumer may be flagged as "important". This flag indicates that messages in a
 As a long timeout of an important consumer may result in full use of all available free space by unread messages, be sure to monitor important consumers' data read lags.
 
 {% endnote %}
+
+## Topic protocols {#topic-protocols}
+
+For work with topics {{ ydb-short-name }} SDK is used (see also in [Reference](../reference/ydb-sdk/topic.md)).
+
+Kafka API version 3.4.0. is also supported with some restrictions (see [Work with Kafka API](../reference/kafka-api/index.md)).
+
+## Transactions with topics {#topic-transactions}
+
+{{ ydb-short-name }} supports work with topics within [transactions](./transactions.md).
+
+### Read from a topic within transaction {#topic-transactions-read}
+
+Topic data are not changed during reading from topic. So within transactional reading from topic only offset commit is a real transactional operation. Postponed offset commit occurs automatically at transaction commit, SDK makes it transparent for user.
+
+### Write into a topic within transaction {#topic-transactions-write}
+
+During transactional writing into a topic data are stored outside a partition until transaction commit, and then published in a partition at transaction commit. At this moment data are added into the end of the partition with sequential offsets. There is no visibility of own changes in transaction with topics in {{ ydb-short-name }}.
+
+### Topic transactions constraints {#topic-transactions-constraints}
+
+There are no additional constraints when working with topics within a transaction. Writing large amounts of data into a topic, writing to several partitions, reading by multiple consumers are possible.
+
+However it is recommended to take into account that data are published at a transaction commit. So if transaction is long, data will become visible only after a considerable time.

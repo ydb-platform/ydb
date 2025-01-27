@@ -541,7 +541,13 @@ Y_UNIT_TEST_SUITE(Login) {
         {
             TString user = "user1";
             TString password = "password1";
-            TString hash = provider.GenerateHash(password);
+            TString hash = R"(
+                {
+                    "hash":"ZO37rNB37kP9hzmKRGfwc4aYrboDt4OBDsF1TBn5oLw=",
+                    "salt":"HTkpQjtVJgBoA0CZu+i3zg==",
+                    "type":"argon2id"
+                }
+            )";
 
             {
                 TLoginProvider::TCreateUserRequest createRequest;

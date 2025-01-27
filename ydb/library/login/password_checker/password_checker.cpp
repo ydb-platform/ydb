@@ -2,11 +2,6 @@
 #include <util/string/builder.h>
 #include "password_checker.h"
 
-#include <library/cpp/json/json_value.h>
-#include <library/cpp/json/json_reader.h>
-
-#include <format>
-
 namespace NLogin {
 
 TPasswordComplexity::TPasswordComplexity()
@@ -74,80 +69,6 @@ bool TPasswordChecker::TComplexityState::CheckSpecialCharsCount() const {
 TPasswordChecker::TPasswordChecker(const TPasswordComplexity& passwordComplexity)
     : PasswordComplexity(passwordComplexity)
 {}
-
-bool TPasswordChecker::IsBase64(const std::string& value) {
-    std::unordered_set<char> Base64Symbols;
-    auto add = [&Base64Symbols](char l, char r) -> void {
-        for (char c = l; c <= r; c++) {
-            Base64Symbols.insert(c);
-        }
-    };
-
-    add('A', 'Z');
-    add('a', 'z');
-    add('0', '9');
-    add('+', '+');
-    add('=', '=');
-    add('/', '/');
-
-    for (auto c : value) {
-        if (!Base64Symbols.contains(c)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-TPasswordChecker::TResult TPasswordChecker::CheckSyntaxOfHash(const TString& hash) {
-    NJson::TJsonValue json;
-    if (!NJson::ReadJsonTree(hash, &json)) {
-        return {.Success = false, .Error = "Cannot parse hash value; it should be in JSON-format"};
-    }
-
-    if (json.GetType() != NJson::JSON_MAP
-        || json.GetMap().size() != 3
-        || !json.Has("type")
-        || !json.Has("salt")
-        || !json.Has("hash")
-        || json["type"].GetType() != NJson::JSON_STRING
-        || json["salt"].GetType() != NJson::JSON_STRING
-        || json["hash"].GetType() != NJson::JSON_STRING
-    ) {
-        return {.Success = false,
-                .Error = "There should be strictly three fields here: salt, hash and type"};
-    }
-
-    if (json["type"].GetStringRobust() != "argon2id") {
-        return {.Success = false,
-                .Error = "Field \'type\' must be equal \"argon2id\""};
-    }
-
-    const auto& hashField = json["hash"].GetStringRobust();
-    const auto& saltField = json["salt"].GetStringRobust();
-
-    if (hashField.size() != HashSizeBase64) {
-        std::string error = std::format("Length of field \'hash\' is {}, but it must be equal {}", hashField.size(), HashSizeBase64);
-        return {.Success = false, .Error = std::move(error)};
-    }
-
-    if (saltField.size() != SaltSizeBase64) {
-        std::string error = std::format("Length of field \'salt\' is {}, but it must be equal {}", saltField.size(), SaltSizeBase64);
-        return {.Success = false, .Error = std::move(error)};
-    }
-
-    if (!TPasswordChecker::IsBase64(hashField)) {
-        return {.Success = false,
-                .Error = "Field \'hash\' must be in base64 format"};
-    }
-
-    if (!TPasswordChecker::IsBase64(saltField)) {
-        return {.Success = false,
-                .Error = "Field \'salt\' must be in base64 format"};
-    }
-
-    return {.Success = true};
-};
 
 TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const TString& password) const {
     if (password.empty() && PasswordComplexity.MinLength == 0) {

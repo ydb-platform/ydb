@@ -390,7 +390,7 @@ void TDqPqRdReadActor::ProcessGlobalState() {
         if (!CoordinatorActorId) {
             SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local row dispatcher, self id " << SelfId());
             Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
-            State = EState::WAIT_COORDINATOR_ID; 
+            State = EState::WAIT_COORDINATOR_ID;
         }
         [[fallthrough]];
     case EState::WAIT_COORDINATOR_ID: {
@@ -664,7 +664,7 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartb
     bool needSend = sessionInfo.EventsQueue.Heartbeat();
     if (needSend) {
         SRC_LOG_T("Send TEvEvHeartbeat");
-        Send(sessionInfo.RowDispatcherActorId, new NFq::TEvRowDispatcher::TEvHeartbeat(), sessionInfo.Generation);
+        Send(sessionInfo.RowDispatcherActorId, new NFq::TEvRowDispatcher::TEvHeartbeat(), IEventHandle::FlagTrackDelivery, sessionInfo.Generation);
     }
 }
 
@@ -764,7 +764,7 @@ void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    SRC_LOG_D("Received TEvUndelivered, " << ev->Get()->ToString() << " from " << ev->Sender.ToString() << ", reason " << ev->Get()->Reason);
+    SRC_LOG_D("Received TEvUndelivered, " << ev->Get()->ToString() << " from " << ev->Sender.ToString() << ", reason " << ev->Get()->Reason << ", cookie " << ev->Cookie);
     Counters.Undelivered++;
     
     auto sessionIt = Sessions.find(ev->Sender);

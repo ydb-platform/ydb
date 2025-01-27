@@ -141,6 +141,11 @@ void SetupAuthAccessEnvironment(TTestEnv& env) {
     }
 }
 
+void CheckAuthAdministratorAccessIsRequired(TScanQueryPartIterator& it) {
+    NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, 
+        "Administrator access is required");
+}
+
 class TYsonFieldChecker {
     NYT::TNode Root;
     NYT::TNode::TListType::const_iterator RowIterator;
@@ -2408,7 +2413,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 FROM `Root/.sys/auth_groups`
             )").GetValueSync();
 
-            NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
+            CheckAuthAdministratorAccessIsRequired(it);
         }
 
         { // user1 is /Root admin
@@ -2464,7 +2469,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     FROM `Root/.sys/auth_groups`
                 )").GetValueSync();
 
-                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
+                CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
@@ -2473,7 +2478,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     FROM `Root/Tenant1/.sys/auth_groups`
                 )").GetValueSync();
 
-                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
+                CheckAuthAdministratorAccessIsRequired(it);
             }
         }
 
@@ -2577,7 +2582,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 FROM `Root/.sys/auth_group_members`
             )").GetValueSync();
 
-            NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
+            CheckAuthAdministratorAccessIsRequired(it);
         }
 
         { // user1 is /Root admin
@@ -2633,7 +2638,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     FROM `Root/.sys/auth_group_members`
                 )").GetValueSync();
 
-                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
+                CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
@@ -2642,7 +2647,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     FROM `Root/Tenant1/.sys/auth_group_members`
                 )").GetValueSync();
 
-                NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, "Administrator access is required");
+                CheckAuthAdministratorAccessIsRequired(it);
             }
         }
 

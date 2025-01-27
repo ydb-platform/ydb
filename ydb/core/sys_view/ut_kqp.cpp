@@ -2242,7 +2242,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthAccessEnvironment(env);
         TTableClient client(env.GetDriver());
 
-        { // anonymous
+        { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint());
             auto driver = TDriver(driverConfig);
@@ -2402,7 +2402,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().CreateGroup("/Root/Tenant1", "group3");
         env.GetClient().CreateGroup("/Root/Tenant1", "group4");
 
-        { // anonymous
+        { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint());
             auto driver = TDriver(driverConfig);
@@ -2571,7 +2571,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().AddGroupMembership("/Root/Tenant1", "group3", "user3");
         env.GetClient().AddGroupMembership("/Root/Tenant1", "group4", "user4");
 
-        { // anonymous
+        { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint());
             auto driver = TDriver(driverConfig);
@@ -2755,7 +2755,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().ModifyOwner("/Root", "Dir1", "user1");
         env.GetClient().ModifyOwner("/Root/Tenant1", "Dir3", "user3");
 
-        { // anonymous
+        { // anonymous login gives `ydb.granular.describe_schema` access
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint());
             auto driver = TDriver(driverConfig);
@@ -2995,7 +2995,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             env.GetClient().ModifyACL("/Root/Tenant1", "Dir3", acl.SerializeAsString());
         }
 
-        { // anonymous
+        { // anonymous login gives `ydb.granular.describe_schema` access
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint());
             auto driver = TDriver(driverConfig);

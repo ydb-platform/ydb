@@ -509,4 +509,112 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             }
         )");
     }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleShardTableWithChangefeed) {
+        const char* tableName = "Table";
+        RunS3({
+            TTypedScheme {
+                Sprintf(R"(
+                    Name: "%s"
+                    Columns { Name: "key" Type: "Utf8" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )", tableName),
+                EPathTypeTable
+            },
+            TTypedScheme {
+                Sprintf(R"(
+                    TableName: "%s"
+                    StreamDescription {
+                        Name: "update_feed"
+                        Mode: ECdcStreamModeUpdate
+                        Format: ECdcStreamFormatJson
+                        State: ECdcStreamStateReady
+                    }
+                )", tableName),
+                EPathTypeCdcStream
+            }
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(CancelOnSingleShardTableWithChangefeed) {
+        const char* tableName = "Table";
+        CancelS3({
+            TTypedScheme {
+                Sprintf(R"(
+                    Name: "%s"
+                    Columns { Name: "key" Type: "Utf8" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )", tableName),
+                EPathTypeTable
+            },
+            TTypedScheme {
+                Sprintf(R"(
+                    TableName: "%s"
+                    StreamDescription {
+                        Name: "update_feed"
+                        Mode: ECdcStreamModeUpdate
+                        Format: ECdcStreamFormatJson
+                        State: ECdcStreamStateReady
+                    }
+                )", tableName),
+                EPathTypeCdcStream
+            }
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleShardTableWithChangefeed) {
+        const char* tableName = "Table";
+        ForgetS3({
+            TTypedScheme {
+                Sprintf(R"(
+                    Name: "%s"
+                    Columns { Name: "key" Type: "Utf8" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )", tableName),
+                EPathTypeTable
+            },
+            TTypedScheme {
+                Sprintf(R"(
+                    TableName: "%s"
+                    StreamDescription {
+                        Name: "update_feed"
+                        Mode: ECdcStreamModeUpdate
+                        Format: ECdcStreamFormatJson
+                        State: ECdcStreamStateReady
+                    }
+                )", tableName),
+                EPathTypeCdcStream
+            }
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )");
+    }
 }

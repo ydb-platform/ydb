@@ -241,6 +241,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void UploadChangefeed() {
+        Y_ABORT_UNLESS(!ChangefeedsUploaded);
         if (IndexExportedChangefeed == Changefeeds.size()) {
             ChangefeedsUploaded = true;
             if (Scanner) {

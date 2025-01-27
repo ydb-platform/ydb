@@ -11,6 +11,34 @@ using namespace NKikimrSchemeOp;
 namespace NSchemeShardUT_Private {
 namespace NExportReboots {
 
+// using TCreateHandler = std::function<ui64(TTestActorRuntime&, ui64&, const TString&, const TString&)>;
+
+// template <typename T>
+// TCreateHandler GenCreateHandler(T func) {
+//     return [func](TTestActorRuntime& runtime, ui64& txId, const TString& parentPath, const TString&  scheme) {
+//         return func(runtime, txId, parentPath, scheme);
+//     };
+// }
+
+// THashMap<NKikimrSchemeOp::EPathType, TCreateHandler> CreateHandlers = {
+//     {EPathTypeTable, GenCreateHandler(TestCreateTable)},
+//     {EPathTypeView, GenCreateHandler(TestCreateView)},
+//     {EPathTypeCdcStream, GenCreateHandler(TestCreateCdcStream)},
+// };
+
+// void TestCreate(
+//     TTestActorRuntime& runtime,
+//     ui64& txId,
+//     const TString& scheme,
+//     NKikimrSchemeOp::EPathType pathType
+// ) {
+//     if (CreateHandlers.contains(pathType)) {
+//         CreateHandlers[pathType](runtime, txId, "/MyRoot", scheme);
+//     } else {
+//         UNIT_FAIL("export is not implemented for the scheme object type: " << pathType);
+//     }
+// }
+
 void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<TTypedScheme>& schemeObjects) {
     TSet<ui64> toWait;
     for (const auto& [type, scheme, _] : schemeObjects) {
@@ -20,6 +48,9 @@ void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const 
                 break;
             case EPathTypeView:
                 TestCreateView(runtime, ++t.TxId, "/MyRoot", scheme);
+                break;
+            case EPathTypeCdcStream:
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", scheme);
                 break;
             default:
                 UNIT_FAIL("export is not implemented for the scheme object type: " << type);

@@ -5,6 +5,7 @@ import logging
 import boto3
 import requests
 from library.recipes import common as recipes_common
+from ydb.tests.olap.helpers.ydb_client import YdbClient
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -50,6 +51,31 @@ class S3Client:
         return (count, size)
 
 
+class ColumnTableHelper:
+    def __init__(self, ydb_client: YdbClient, path: str):
+        self.ydb_client = ydb_client
+        self.path = path
+
+    def get_row_count(self) -> int:
+        return self.ydb_client.query(f"select count(*) as Rows from `{self.path}`")[0].rows[0]["Rows"]
+
+    def get_portion_count(self) -> int:
+        return self.ydb_client.query(f"select count(*) as Rows from `{self.path}/.sys/primary_index_portion_stats`")[0].rows[0]["Rows"]
+
+    def get_portion_stat_by_tier(self) -> dict[str, dict[str, int]]:
+        results = self.ydb_client.query(f"select TierName, sum(Rows) as Rows, count(*) as Portions from `{self.path}/.sys/primary_index_portion_stats` group by TierName")
+        return {row["TierName"]: {"Rows": row["Rows"], "Portions": row["Portions"]} for result_set in results for row in result_set.rows}
+
+    def get_blob_stat_by_tier(self) -> dict[str, (int, int)]:
+        stmt = f"""
+            select TierName, count(*) as Portions, sum(BlobSize) as BlobSize, sum(BlobCount) as BlobCount from (
+                select TabletId, PortionId, TierName, sum(BlobRangeSize) as BlobSize, count(*) as BlobCount from `{self.path}/.sys/primary_index_stats` group by TabletId, PortionId, TierName
+            ) group by TierName
+        """
+        results = self.ydb_client.query(stmt)
+        return {row["TierName"]: {"Portions": row["Portions"], "BlobSize": row["BlobSize"], "BlobCount": row["BlobCount"]} for result_set in results for row in result_set.rows}
+
+
 class TllTieringTestBase(object):
     @classmethod
     def setup_class(cls):
@@ -67,10 +93,7 @@ class TllTieringTestBase(object):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
-            extra_feature_flags={
-                "enable_external_data_sources": True,
-                "enable_tiering_in_column_shard": True
-            },
+            extra_feature_flags={"enable_external_data_sources": True, "enable_tiering_in_column_shard": True},
             column_shard_config={
                 "lag_for_compaction_before_tierings_ms": 0,
                 "compaction_actualization_lag_ms": 0,

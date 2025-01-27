@@ -45,8 +45,8 @@ The number of commits (reading confirmations) after processing messages that wer
 
 Labels:
 
-- _topic_ – the name of the topic.
-- _consumer_ – the name of the consumer.
+- _topic_ – the topic name.
+- _consumer_ – the consumer name.
 
 ||
 
@@ -83,7 +83,7 @@ Labels:
 `grpc.topic.stream_read.partition_session.errors`
 `RATE`, pieces
 |
-The number of errors occurred when working with the partition.
+The number of errors occurred when working with a partition.
 
 Labels:
 
@@ -125,7 +125,7 @@ Labels:
 `grpc.topic.stream_read.partition_session.starting_count`
 `RATE`, pieces
 |
-The number of sessions in the process of opening (the client received the command to open a session, but did not open the session yet).
+The number of sessions in the process of opening (the client received the command to open a session but has not done it yet).
 
 Labels:
 
@@ -341,7 +341,7 @@ Labels:
 `api.http.data_streams.response.duration_milliseconds`
 `HIST_RATE`, pieces
 |
-Histogram counter. Intervals are specified in milliseconds. The number of responses, which execution time falls within the specified interval.
+Histogram counter. Intervals are specified in milliseconds. The number of responses whose execution time falls within the specified interval.
 
 Labels:
 
@@ -485,7 +485,7 @@ Labels:
 `api.kafka.response.duration_milliseconds`
 `HIST_RATE`, pieces
 |
-Histogram counter. A set of intervals, in milliseconds, with the number of requests processed within these intervals.
+Histogram counter. A set of intervals, in milliseconds, with the number of requests whose processing duration falls within each interval.
 
 Labels:
 
@@ -622,7 +622,7 @@ You can analyze a transaction's execution time using a histogram counter. The in
 
 ## Aggregated topic partition metrics {#topics_partitions}
 
-The following table describes aggregated metrics for topic partitions. The maximum and minimum values are calculated for all partitions of a specified topic.
+The following table describes aggregated metrics for topic partitions. The maximum and minimum values are calculated across all partitions of a specified topic.
 
 #|
 
@@ -680,7 +680,7 @@ Labels:
 |
 The minimum uptime of a topic partition after a restart.
 
-`topic.partition.uptime_milliseconds_min` is close to 0 during a rolling restart. After the rolling restart is completed, the `topic.partition.uptime_milliseconds_min` value should increase indefinitely.
+`topic.partition.uptime_milliseconds_min` is close to 0 during a rolling restart. After the rolling restart is completed, the `topic.partition.uptime_milliseconds_min` value should increase continuously.
 
 Labels:
 
@@ -719,7 +719,7 @@ Labels:
 `topic.partition.committed_end_to_end_lag_milliseconds_max`
 `GAUGE`, milliseconds
 |
-The maximum difference (in all topic partitions) between the current time and the time when the last committed message was created.
+The maximum difference (across all topic partitions) between the current time and the time when the last committed message was created.
 
 Labels:
 
@@ -804,7 +804,7 @@ Labels:
 `topic.partition.read.idle_milliseconds_max`
 `GAUGE`, milliseconds
 |
-The maximum idle time (the time since the last read operation from a partition) in all partitions.
+The maximum idle time across all partitions. The idle time is the time elapsed since the last read operation from a partition.
 
 Labels:
 
@@ -844,7 +844,7 @@ Labels:
 `topic.partition.write.speed_limit_bytes_per_second`
 `GAUGE`, bytes per second
 |
-The limit for the writing speed to a single partition.
+The limit for the speed of writing to a single partition.
 
 Labels:
 
@@ -857,7 +857,7 @@ Labels:
 `topic.partition.write.throttled_nanoseconds_max`
 `GAUGE`, nanoseconds
 |
-The maximum throttled time for writing operations by all partitions. The worst case scenario, `topic.partition.write.throttled_nanoseconds_maх` = 10^9, means that writing was throttled for the whole second.
+The maximum throttled time for write operations across all partitions. In the worst-case scenario, $topic.partition.write.throttled_nanoseconds_max = 10^9$, which means that writing was throttled for an entire second.
 
 Labels:
 
@@ -883,7 +883,7 @@ Labels:
 `topic.partition.write.bytes_per_hour_max`
 `GAUGE`, bytes
 |
-The maximum number of bytes written for the last hour in all topic partitions.
+The maximum number of bytes written in the last hour across all topic partitions.
 
 Labels:
 
@@ -941,7 +941,7 @@ Average database load. `DATABASE_LOAD_CPU_THRESHOLD` uses this metric.
 `kqp.workload_manager.InFlightLimit`
 `GAUGE`, pieces
 |
-The limit on the number of simultaneous (in flight) requests.
+The limit on the number of concurrent in-flight requests.
 ||
 
 ||
@@ -962,6 +962,6 @@ The size of the execution queue for the requests that await processing.
 `kqp.workload_manager.GlobalDelayedRequests`
 `GAUGE`, pieces
 |
-The number of requests in the execution queue. This metric works only for the pools with the enabled `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` option.
+The number of requests in the execution queue. This metric is available only for pools with the `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` option enabled.
 ||
 |#

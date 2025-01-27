@@ -685,6 +685,8 @@ message TReqPushQueueProducer
     optional bytes user_meta = 6; // YSON
     optional int64 sequence_number = 7;
 
+    optional bool require_sync_replica = 8;
+
     required TRowsetDescriptor rowset_descriptor = 200;
 }
 

@@ -35,7 +35,7 @@ select
     end) as low_line_count
 from $join
 where
-    (l_shipmode = 'MAIL' or l_shipmode = 'TRUCK')
+    (l_shipmode = 'MAIL' or l_shipmode = 'SHIP')
     and l_commitdate < l_receiptdate
     and l_shipdate < l_commitdate
     and l_receiptdate >= $border

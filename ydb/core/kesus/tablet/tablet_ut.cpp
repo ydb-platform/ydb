@@ -5,6 +5,7 @@
 
 #include <ydb/core/metering/metering.h>
 
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <util/random/random.h>
@@ -130,6 +131,38 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
             ctx.Runtime->DispatchEvents(options);
         }
+        ctx.VerifyProxyNotRegistered(proxy);
+    }
+
+    Y_UNIT_TEST(TestRegisterProxyLinkFailureRace) {
+        TTestContext ctx;
+        ctx.Setup(2);
+
+        // block registration requests
+        TBlockEvents<TEvKesus::TEvRegisterProxy> blockedRegister(*ctx.Runtime);
+
+        // start registering proxy from the second node
+        auto proxy = ctx.Runtime->AllocateEdgeActor(1);
+        ctx.SendRegisterProxy(proxy, 1);
+
+        ctx.Runtime->WaitFor("register request", [&]{ return blockedRegister.size() >= 1; });
+
+        // drop link between 2 nodes and unblock the request
+        {
+            ctx.Runtime->Send(
+                new IEventHandle(
+                    ctx.Runtime->GetInterconnectProxy(0, 1),
+                    TActorId(),
+                    new TEvInterconnect::TEvDisconnect()),
+                0, true);
+            blockedRegister.Stop().Unblock();
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
+            ctx.Runtime->DispatchEvents(options);
+        }
+
+        // Verify proxy is not registered
+        ctx.Runtime->SimulateSleep(TDuration::Seconds(1));
         ctx.VerifyProxyNotRegistered(proxy);
     }
 

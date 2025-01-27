@@ -405,6 +405,9 @@ namespace boost { namespace locale { namespace impl_posix {
             case char_facet_t::nochar: break;
             case char_facet_t::char_f: return create_formatting_impl<char>(in, std::move(lc));
             case char_facet_t::wchar_f: return create_formatting_impl<wchar_t>(in, std::move(lc));
+#ifdef __cpp_char8_t
+            case char_facet_t::char8_f: break; // std-facet not available (yet)
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
             case char_facet_t::char16_f: return create_formatting_impl<char16_t>(in, lc);
 #endif
@@ -421,6 +424,9 @@ namespace boost { namespace locale { namespace impl_posix {
             case char_facet_t::nochar: break;
             case char_facet_t::char_f: return create_parsing_impl<char>(in, std::move(lc));
             case char_facet_t::wchar_f: return create_parsing_impl<wchar_t>(in, std::move(lc));
+#ifdef __cpp_char8_t
+            case char_facet_t::char8_f: break; // std-facet not available (yet)
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
             case char_facet_t::char16_f: return create_parsing_impl<char16_t>(in, lc);
 #endif

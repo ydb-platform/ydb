@@ -28,7 +28,7 @@ class TYamrConsumerBase
 {
 public:
     explicit TYamrConsumerBase(NYson::IYsonConsumer* consumer);
-    virtual void SwitchTable(i64 tableIndex) override;
+    void SwitchTable(i64 tableIndex) override;
 
 protected:
     NYson::IYsonConsumer* Consumer;
@@ -53,8 +53,8 @@ public:
         bool enableKeyEscaping,
         bool enableValueEscaping);
 
-    virtual void Read(TStringBuf data) override;
-    virtual void Finish() override;
+    void Read(TStringBuf data) override;
+    void Finish() override;
 
 private:
     using EState = EYamrDelimitedBaseParserState;
@@ -123,8 +123,8 @@ public:
         bool enableSubkey,
         bool enableEom);
 
-    virtual void Read(TStringBuf data) override;
-    virtual void Finish() override;
+    void Read(TStringBuf data) override;
+    void Finish() override;
 
 private:
     using EState = EYamrLenvalBaseParserState;

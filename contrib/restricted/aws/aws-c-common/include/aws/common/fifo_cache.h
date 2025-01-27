@@ -7,6 +7,7 @@
 
 #include <aws/common/cache.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
 AWS_EXTERN_C_BEGIN
 
 /**
@@ -25,5 +26,6 @@ struct aws_cache *aws_cache_new_fifo(
     size_t max_items);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_FIFO_CACHE_H */

@@ -10,7 +10,7 @@ namespace numpy
       -> decltype(std::forward<T>(expr)[std::forward<F>(indices)]);
 
   DEFINE_FUNCTOR(pythonic::numpy, take);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

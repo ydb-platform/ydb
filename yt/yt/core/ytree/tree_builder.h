@@ -52,4 +52,3 @@ std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(INodeFactory* factory);
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree
-

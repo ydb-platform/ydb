@@ -1,7 +1,8 @@
 #pragma once
 #include "container.h"
-#include <ydb/core/tx/columnshard/engines/portion_info.h>
-#include <ydb/core/tx/columnshard/engines/index_info.h>
+
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap {
 
@@ -15,9 +16,14 @@ private:
     }
 
 public:
-
     bool IsEmpty() const {
         return PredicateFrom.IsEmpty() && PredicateTo.IsEmpty();
+    }
+
+    bool IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema) const {
+        return PredicateFrom.GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL &&
+               PredicateTo.GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL && PredicateFrom.IsEqualPointTo(PredicateTo) &&
+               PredicateFrom.IsSchemaEqualTo(pkSchema);
     }
 
     const TPredicateContainer& GetPredicateFrom() const {
@@ -48,4 +54,4 @@ public:
     std::set<std::string> GetColumnNames() const;
 };
 
-}
+}   // namespace NKikimr::NOlap

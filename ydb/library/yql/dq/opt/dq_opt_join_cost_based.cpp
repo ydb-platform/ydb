@@ -2,10 +2,10 @@
 #include "dq_opt_dphyp_solver.h"
 #include "dq_opt_make_join_hypergraph.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_join.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NDq {
 
@@ -221,10 +221,10 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
     if (join->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
-    join->Stats = std::make_shared<TOptimizerStatistics>(
+    join->Stats = TOptimizerStatistics(
         ctx.ComputeJoinStats(
-            *join->LeftArg->Stats, 
-            *join->RightArg->Stats,
+            join->LeftArg->Stats, 
+            join->RightArg->Stats,
             join->LeftJoinKeys, 
             join->RightJoinKeys, 
             EJoinAlgoType::GraceJoin,
@@ -235,9 +235,10 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
 
 class TOptimizerNativeNew: public IOptimizerNew {
 public:
-    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize)
+    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize, TExprContext& exprCtx)
         : IOptimizerNew(ctx)
-        , MaxDPhypTableSize_(maxDPhypDPTableSize)
+        , MaxDPHypTableSize_(maxDPhypDPTableSize)
+        , ExprCtx(exprCtx)
     {}
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
@@ -272,8 +273,15 @@ private:
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
         TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
 
-        if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
+        if (solver.CountCC(MaxDPHypTableSize_) >= MaxDPHypTableSize_) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
+            ExprCtx.AddWarning(
+                YqlIssue(
+                    {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
+                    "Cost Based Optimizer could not be applied to this query: "
+                    "Enumeration is too large, use PRAGMA MaxDPHypDPTableSize='4294967295' to disable the limitation"
+                )
+            );
             ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
         }
@@ -304,11 +312,12 @@ private:
     }
 
 private:
-    ui32 MaxDPhypTableSize_;
+    ui32 MaxDPHypTableSize_;
+    TExprContext& ExprCtx;
 };
 
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPhypDPTableSize) {
-    return new TOptimizerNativeNew(ctx, maxDPhypDPTableSize);
+IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& pctx, const ui32 maxDPhypDPTableSize, TExprContext& ectx) {
+    return new TOptimizerNativeNew(pctx, maxDPhypDPTableSize, ectx);
 }
 
 TExprBase DqOptimizeEquiJoinWithCosts(
@@ -357,6 +366,11 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     // of the EquiJoin and n-1 argument are the parameters to EquiJoin
 
     if (!DqCollectJoinRelationsWithStats(rels, typesCtx, equiJoin, providerCollect)){
+        ctx.AddWarning(
+            YqlIssue(ctx.GetPosition(equiJoin.Pos()), TIssuesIds::CBO_MISSING_TABLE_STATS,
+            "Cost Based Optimizer could not be applied to this query: couldn't load statistics"
+            )
+        );
         return node;
     }
 
@@ -365,7 +379,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     bool allRowStorage = std::all_of(
         rels.begin(), 
         rels.end(), 
-        [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats->StorageType==EStorageType::RowStorage; });
+        [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats.StorageType==EStorageType::RowStorage; });
 
     if (optLevel == 2 && allRowStorage) {
         return node;
@@ -396,7 +410,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);
-    typesCtx.SetStats(res.Raw(), joinTree->Stats);
+    typesCtx.SetStats(res.Raw(), std::make_shared<TOptimizerStatistics>(joinTree->Stats));
     return res;
 
 }

@@ -58,6 +58,7 @@ protected:
     typename IObjectOperationsManager<TObject>::TPtr Manager;
     const IOperationsManager::TInternalModificationContext Context;
     std::vector<NInternal::TTableRecord> Patches;
+    std::vector<TModificationStage::TPtr> Preconditions;
     NInternal::TTableRecords RestoreObjectIds;
     const NACLib::TUserToken UserToken = NACLib::TSystemUsers::Metadata();
     virtual bool PrepareRestoredObjects(std::vector<TObject>& objects) const = 0;
@@ -179,6 +180,7 @@ public:
     }
 
     void Handle(typename TEvAlterPreparationFinished<TObject>::TPtr& ev) {
+        Preconditions = Manager->GetPreconditions(ev->Get()->GetObjects(), Context);
         NInternal::TTableRecords records;
         records.InitColumns(Manager->GetSchema().GetYDBColumns());
         records.ReserveRows(ev->Get()->GetObjects().size());

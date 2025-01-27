@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/full_like.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/numpy/full.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -26,7 +26,7 @@ namespace numpy
     return full(sutils::getshape(expr), fill_value,
                 types::dtype_t<typename E::dtype>());
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

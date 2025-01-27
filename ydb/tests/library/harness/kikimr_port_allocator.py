@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import abc
 import os
-import ydb.tests.library.common.yatest_common as yatest_common
+import yatest
+import yatest.common.network
 
 
 class KikimrNodePortAllocatorInterface(object):
@@ -140,7 +141,7 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
 class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
     def __init__(self, port_manager=None):
         super(KikimrPortManagerPortAllocator, self).__init__()
-        self.__port_manager = yatest_common.PortManager() if port_manager is None else port_manager
+        self.__port_manager = yatest.common.network.PortManager() if port_manager is None else port_manager
         self.__nodes_allocators = []
         self.__slots_allocators = []
 

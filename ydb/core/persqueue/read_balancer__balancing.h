@@ -2,6 +2,9 @@
 
 #include "read_balancer.h"
 
+namespace NKikimr::NPQ::NApp {
+struct TNavigationBar;
+}
 namespace NKikimr::NPQ::NBalancing {
 
 using namespace NTabletFlatExecutor;
@@ -127,6 +130,8 @@ struct TPartitionFamily {
     void InactivatePartition(ui32 partitionId);
 
     bool PossibleForBalance(TSession* session);
+    template<typename TCollection>
+    bool CanAttach(const TCollection& partitionsIds);
 
     TString DebugStr() const;
 
@@ -154,7 +159,7 @@ private:
     void LockPartition(ui32 partitionId, const TActorContext& ctx);
     std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
     std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
-    TString GetPrefix() const;
+    TString LogPrefix() const;
 };
 
 struct TPartitionFamilyComparator {
@@ -186,6 +191,7 @@ struct TConsumer {
     // All reading sessions in which the family is currently being read.
     std::unordered_map<TActorId, TSession*> Sessions;
     std::optional<TOrderedSessions> OrderedSessions;
+    bool WithCommonSessions;
 
     // Families is not reading now.
     std::unordered_map<size_t, TPartitionFamily*> UnreadableFamilies;
@@ -226,7 +232,7 @@ struct TConsumer {
     bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
 
     bool SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie);
-    bool ProccessReadingFinished(ui32 partitionId, const TActorContext& ctx);
+    bool ProccessReadingFinished(ui32 partitionId, bool wasInactive, const TActorContext& ctx);
     void StartReading(ui32 partitionId, const TActorContext& ctx);
     void FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx);
 
@@ -240,7 +246,7 @@ struct TConsumer {
     bool ScalingSupport() const;
 
 private:
-    TString GetPrefix() const;
+    TString LogPrefix() const;
 };
 
 struct TSession {
@@ -331,10 +337,10 @@ public:
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void ProcessPendingStats(const TActorContext& ctx);
 
-    void RenderApp(TStringStream& str) const;
+    void RenderApp(NApp::TNavigationBar&) const;
 
 private:
-    TString GetPrefix() const;
+    TString LogPrefix() const;
     ui32 NextStep();
 
 private:

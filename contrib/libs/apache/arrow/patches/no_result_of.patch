@@ -1,0 +1,64 @@
+--- contrib/libs/apache/arrow/cpp/src/arrow/result.h	(2e0006a95f0ad665eca5b48386842a8a0354061f)
++++ contrib/libs/apache/arrow/cpp/src/arrow/result.h	(working tree)
+@@ -385,7 +385,7 @@ class ARROW_MUST_USE_TYPE Result : public util::EqualityComparable<Result<T>> {
+   /// Apply a function to the internally stored value to produce a new result or propagate
+   /// the stored error.
+   template <typename M>
+-  typename EnsureResult<typename std::result_of<M && (T)>::type>::type Map(M&& m) && {
++  typename EnsureResult<decltype(std::declval<M&&>()(std::declval<T&&>()))>::type Map(M&& m) && {
+     if (!ok()) {
+       return status();
+     }
+@@ -395,7 +395,7 @@ class ARROW_MUST_USE_TYPE Result : public util::EqualityComparable<Result<T>> {
+   /// Apply a function to the internally stored value to produce a new result or propagate
+   /// the stored error.
+   template <typename M>
+-  typename EnsureResult<typename std::result_of<M && (const T&)>::type>::type Map(
++  typename EnsureResult<decltype(std::declval<M&&>()(std::declval<const T&>()))>::type Map(
+       M&& m) const& {
+     if (!ok()) {
+       return status();
+--- contrib/libs/apache/arrow/cpp/src/arrow/util/bitmap_generate.h	(2e0006a95f0ad665eca5b48386842a8a0354061f)
++++ contrib/libs/apache/arrow/cpp/src/arrow/util/bitmap_generate.h	(working tree)
+@@ -62,7 +62,7 @@ void GenerateBits(uint8_t* bitmap, int64_t start_offset, int64_t length, Generat
+ template <class Generator>
+ void GenerateBitsUnrolled(uint8_t* bitmap, int64_t start_offset, int64_t length,
+                           Generator&& g) {
+-  static_assert(std::is_same<typename std::result_of<Generator && ()>::type, bool>::value,
++  static_assert(std::is_same<decltype(std::declval<Generator>()()), bool>::value,
+                 "Functor passed to GenerateBitsUnrolled must return bool");
+
+   if (length == 0) {
+--- contrib/libs/apache/arrow/cpp/src/arrow/util/functional.h	(2e0006a95f0ad665eca5b48386842a8a0354061f)
++++ contrib/libs/apache/arrow/cpp/src/arrow/util/functional.h	(working tree)
+@@ -129,7 +129,7 @@ class FnOnce<R(A...)> {
+
+   template <typename Fn,
+             typename = typename std::enable_if<std::is_convertible<
+-                typename std::result_of<Fn && (A...)>::type, R>::value>::type>
++                decltype(std::declval<Fn&&>()(std::declval<A>()...)), R>::value>::type>
+   FnOnce(Fn fn) : impl_(new FnImpl<Fn>(std::move(fn))) {  // NOLINT runtime/explicit
+   }
+
+--- contrib/libs/apache/arrow/cpp/src/arrow/util/future.h	(2e0006a95f0ad665eca5b48386842a8a0354061f)
++++ contrib/libs/apache/arrow/cpp/src/arrow/util/future.h	(working tree)
+@@ -47,8 +47,17 @@ struct is_future : std::false_type {};
+ template <typename T>
+ struct is_future<Future<T>> : std::true_type {};
+
++template <typename Signature, typename Enable = void>
++struct result_of;
++
++template <typename Fn, typename... A>
++struct result_of<Fn(A...),
++                 std::void_t<decltype(std::declval<Fn>()(std::declval<A>()...))>> {
++  using type = decltype(std::declval<Fn>()(std::declval<A>()...));
++};
++
+ template <typename Signature>
+-using result_of_t = typename std::result_of<Signature>::type;
++using result_of_t = typename result_of<Signature>::type;
+
+ // Helper to find the synchronous counterpart for a Future
+ template <typename T>
+

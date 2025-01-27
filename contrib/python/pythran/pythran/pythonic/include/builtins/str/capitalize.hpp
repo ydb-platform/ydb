@@ -15,7 +15,7 @@ namespace builtins
     types::str capitalize(types::str const &s);
 
     DEFINE_FUNCTOR(pythonic::builtins::str, capitalize);
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

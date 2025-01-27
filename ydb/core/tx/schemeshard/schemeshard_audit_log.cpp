@@ -81,56 +81,77 @@ TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) 
 
 }  // anonymous namespace
 
-void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID) {
+void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operation,
+                                   NKikimrScheme::EStatus status, const TString& reason, TSchemeShard* SS,
+                                   const TString& peerName, const TString& userSID, const TString& sanitizedToken,
+                                   ui64 txId, const TParts& additionalParts) {
+    auto logEntry = MakeAuditLogFragment(operation);
+
+    TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
+    auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(databasePath);
+    auto address = NKikimr::NAddressClassifier::ExtractAddress(peerName);
+
+    AUDIT_LOG(
+        AUDIT_PART("component", SchemeshardComponentName)
+        AUDIT_PART("tx_id", std::to_string(txId))
+        AUDIT_PART("remote_address", (!address.empty() ? address : EmptyValue))
+        AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
+        AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
+        AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
+        AUDIT_PART("operation", logEntry.Operation)
+        AUDIT_PART("paths", RenderList(logEntry.Paths), !logEntry.Paths.empty())
+        AUDIT_PART("status", GeneralStatus(status))
+        AUDIT_PART("detailed_status", NKikimrScheme::EStatus_Name(status))
+        AUDIT_PART("reason", reason, !reason.empty())
+
+        for (const auto& [name, value] : additionalParts) {
+            AUDIT_PART(name, (!value.empty() ? value : EmptyValue))
+        }
+
+        AUDIT_PART("cloud_id", cloud_id, !cloud_id.empty());
+        AUDIT_PART("folder_id", folder_id, !folder_id.empty());
+        AUDIT_PART("resource_id", database_id, !database_id.empty());
+
+        // Additionally:
+
+        // ModifyACL.
+        // Technically, non-empty ModifyACL field could come with any ModifyScheme operation.
+        // In practice, ModifyACL will get processed only by:
+        // 1. explicit operation ESchemeOpModifyACL -- to modify ACL on a path
+        // 2. ESchemeOpMkDir or ESchemeOpCreate* operations -- to set rights to newly created paths/entities
+        // 3. ESchemeOpCopyTable -- to be checked against acl size limit, not to be applied in any way
+        AUDIT_PART("new_owner", logEntry.NewOwner, !logEntry.NewOwner.empty());
+        AUDIT_PART("acl_add", RenderList(logEntry.ACLAdd), !logEntry.ACLAdd.empty());
+        AUDIT_PART("acl_remove", RenderList(logEntry.ACLRemove), !logEntry.ACLRemove.empty());
+
+        // AlterUserAttributes.
+        // 1. explicit operation ESchemeOpAlterUserAttributes -- to modify user attributes on a path
+        // 2. ESchemeOpMkDir or some ESchemeOpCreate* operations -- to set user attributes for newly created paths/entities
+        AUDIT_PART("user_attrs_add", RenderList(logEntry.UserAttrsAdd), !logEntry.UserAttrsAdd.empty());
+        AUDIT_PART("user_attrs_remove", RenderList(logEntry.UserAttrsRemove), !logEntry.UserAttrsRemove.empty());
+
+        // AlterLogin.
+        // explicit operation ESchemeOpAlterLogin -- to modify user and groups
+        AUDIT_PART("login_user", logEntry.LoginUser);
+        AUDIT_PART("login_group", logEntry.LoginGroup);
+        AUDIT_PART("login_member", logEntry.LoginMember);
+    );
+}
+
+void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request,
+                                     const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS,
+                                     const TString& peerName, const TString& userSID, const TString& sanitizedToken) { 
     // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
     // (even if it was packed into a single TxProxy transaction with some other operations).
+    const auto txId = request.GetTxId();
+    const auto status = response.GetStatus();
+    const auto reason = response.HasReason() ? response.GetReason() : TString();
     for (const auto& operation : request.GetTransaction()) {
-        auto logEntry = MakeAuditLogFragment(operation);
-
-        TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
-        auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(databasePath);
-        auto peerName = NKikimr::NAddressClassifier::ExtractAddress(request.GetPeerName());
-
-        AUDIT_LOG(
-            AUDIT_PART("component", SchemeshardComponentName)
-            AUDIT_PART("tx_id", std::to_string(request.GetTxId()))
-            AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue))
-            AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
-            AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
-            AUDIT_PART("operation", logEntry.Operation)
-            AUDIT_PART("paths", RenderList(logEntry.Paths), !logEntry.Paths.empty())
-            AUDIT_PART("status", GeneralStatus(response.GetStatus()))
-            AUDIT_PART("detailed_status", NKikimrScheme::EStatus_Name(response.GetStatus()))
-            AUDIT_PART("reason", response.GetReason(), response.HasReason())
-
-            AUDIT_PART("cloud_id", cloud_id, !cloud_id.empty());
-            AUDIT_PART("folder_id", folder_id, !folder_id.empty());
-            AUDIT_PART("resource_id", database_id, !database_id.empty());
-
-            // Additionally:
-
-            // ModifyACL.
-            // Technically, non-empty ModifyACL field could come with any ModifyScheme operation.
-            // In practice, ModifyACL will get processed only by:
-            // 1. explicit operation ESchemeOpModifyACL -- to modify ACL on a path
-            // 2. ESchemeOpMkDir or ESchemeOpCreate* operations -- to set rights to newly created paths/entities
-            // 3. ESchemeOpCopyTable -- to be checked against acl size limit, not to be applied in any way
-            AUDIT_PART("new_owner", logEntry.NewOwner, !logEntry.NewOwner.empty());
-            AUDIT_PART("acl_add", RenderList(logEntry.ACLAdd), !logEntry.ACLAdd.empty());
-            AUDIT_PART("acl_remove", RenderList(logEntry.ACLRemove), !logEntry.ACLRemove.empty());
-
-            // AlterUserAttributes.
-            // 1. explicit operation ESchemeOpAlterUserAttributes -- to modify user attributes on a path
-            // 2. ESchemeOpMkDir or some ESchemeOpCreate* operations -- to set user attributes for newly created paths/entities
-            AUDIT_PART("user_attrs_add", RenderList(logEntry.UserAttrsAdd), !logEntry.UserAttrsAdd.empty());
-            AUDIT_PART("user_attrs_remove", RenderList(logEntry.UserAttrsRemove), !logEntry.UserAttrsRemove.empty());
-
-            // AlterLogin.
-            // explicit operation ESchemeOpAlterLogin -- to modify user and groups
-            AUDIT_PART("login_user", logEntry.LoginUser);
-            AUDIT_PART("login_group", logEntry.LoginGroup);
-            AUDIT_PART("login_member", logEntry.LoginMember);
-        );
+        const auto type = operation.GetOperationType();
+        if (NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin == type) {
+            continue;
+        }
+        AuditLogModifySchemeOperation(operation, status, reason, SS, peerName, userSID, sanitizedToken, txId, TParts());
     }
 }
 
@@ -173,7 +194,7 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
             entry << ", add access: " << i;
         }
         for (const auto& i : logEntry.ACLRemove) {
-            entry << ", add access: " << i;
+            entry << ", remove access: " << i;
         }
 
         LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  entry);
@@ -188,11 +209,12 @@ struct TXxportRecord {
     TString Uid;
     TString RemoteAddress;
     TString UserSID;
+    TString SanitizedToken;
     TString DatabasePath;
     TString Status;
     Ydb::StatusIds::StatusCode DetailedStatus;
     TString Reason;
-    TVector<std::pair<TString, TString>> AdditionalParts;
+    TParts AdditionalParts;
     TString StartTime;
     TString EndTime;
     TString CloudId;
@@ -208,6 +230,7 @@ void AuditLogXxport(TXxportRecord&& record) {
         AUDIT_PART("uid", record.Uid);
         AUDIT_PART("remote_address", (!record.RemoteAddress.empty() ? record.RemoteAddress : EmptyValue))
         AUDIT_PART("subject", (!record.UserSID.empty() ? record.UserSID : EmptyValue))
+        AUDIT_PART("sanitized_token", (!record.SanitizedToken.empty() ? record.SanitizedToken : EmptyValue))
         AUDIT_PART("database", (!record.DatabasePath.empty() ? record.DatabasePath : EmptyValue))
         AUDIT_PART("operation", record.OperationName)
         AUDIT_PART("status", record.Status)
@@ -275,7 +298,7 @@ TParts ImportKindSpecificParts(const Proto& proto) {
 template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromS3Settings& proto) {
     return {
         {"import_type", "s3"},
-        {"export_item_count", ToString(proto.items().size())},
+        {"import_item_count", ToString(proto.items().size())},
         {"import_s3_bucket", proto.bucket()},
         //NOTE: take first item's source_prefix as a "good enough approximation"
         // (each item has its own source_prefix, but in practice they are all the same)
@@ -299,6 +322,7 @@ void _AuditLogXxportStart(const Request& request, const Response& response, cons
         .Uid = GetUid(request.GetRequest().GetOperationParams()),
         .RemoteAddress = peerName,
         .UserSID = request.GetUserSID(),
+        .SanitizedToken = request.GetSanitizedToken(),
         .DatabasePath = databasePath.PathString(),
         .Status = (entry.GetStatus() == Ydb::StatusIds::SUCCESS ? "SUCCESS" : "ERROR"),
         .DetailedStatus = entry.GetStatus(),
@@ -377,27 +401,6 @@ void AuditLogExportEnd(const TExportInfo& info, TSchemeShard* SS) {
 }
 void AuditLogImportEnd(const TImportInfo& info, TSchemeShard* SS) {
     _AuditLogXxportEnd(info, "IMPORT END", ImportKindSpecificParts(info.Settings), SS);
-}
-
-void AuditLogLogin(const NKikimrScheme::TEvLogin& request, const NKikimrScheme::TEvLoginResult& response, TSchemeShard* SS) {
-    static const TString LoginOperationName = "LOGIN";
-
-    TPath databasePath = TPath::Root(SS);
-    auto peerName = NKikimr::NAddressClassifier::ExtractAddress(request.GetPeerName());
-
-    // NOTE: audit field set here must be in sync with ydb/core/security/login_page.cpp, AuditLogWebUILogout()
-    AUDIT_LOG(
-        AUDIT_PART("component", SchemeshardComponentName)
-        AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue))
-        AUDIT_PART("database", (!databasePath.PathString().empty() ? databasePath.PathString() : EmptyValue))
-        AUDIT_PART("operation", LoginOperationName)
-        AUDIT_PART("status", TString(response.GetError().empty() ? "SUCCESS" : "ERROR"))
-        AUDIT_PART("reason", response.GetError(), response.HasError())
-
-        // Login
-        AUDIT_PART("login_user", (request.HasUser() ? request.GetUser() : EmptyValue))
-        AUDIT_PART("login_auth_domain", (!request.GetExternalAuth().empty() ? request.GetExternalAuth() : EmptyValue))
-    );
 }
 
 }

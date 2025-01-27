@@ -242,3 +242,15 @@ namespace NKikimr::NBlobDepot {
     }
 
 } // NKikimr::NBlobDepot
+
+using TAliasEKeyBlobState = ::NKikimr::NBlobDepot::TUncertaintyResolverScope::EKeyBlobState;
+template<>
+void Out<TAliasEKeyBlobState>(IOutputStream& s, TAliasEKeyBlobState value) {
+    switch (value) {
+        case TAliasEKeyBlobState::INITIAL:            s << "INITIAL";             break;
+        case TAliasEKeyBlobState::QUERY_IN_FLIGHT:    s << "QUERY_IN_FLIGHT";     break;
+        case TAliasEKeyBlobState::CONFIRMED:          s << "CONFIRMED";           break;
+        case TAliasEKeyBlobState::WASNT_WRITTEN:      s << "WASNT_WRITTEN";       break;
+        case TAliasEKeyBlobState::ERROR:              s << "ERROR";               break;
+    }
+}

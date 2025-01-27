@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/library/query_actor)
 
 PEERDIR(
     ydb/core/testlib
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/sql/pg_dummy
 )
 
 SRCS(

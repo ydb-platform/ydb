@@ -12,5 +12,6 @@ jobs:
     uses: ./.github/workflows/build_and_test_provisioned.yml
     with:
       runner_label: auto-provisioned
+      ninja_target: ydb/apps/all
     secrets: inherit
 

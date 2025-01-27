@@ -7,6 +7,7 @@
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
@@ -22,19 +23,18 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <google/protobuf/any.h>
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         if (enforceUserTokenCheckRequirement) {
             UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
         } else {
-            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::UNAUTHORIZED, grpc::StatusCode::OK));
         }
 
         UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", "invalid token"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
@@ -420,6 +420,10 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
 
+        {
+            TClient client(*server.ServerSettings);
+            client.CreateUser("/Root", "qqq", "password");
+        }
         {
             NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Scheme::V1::SchemeService>(clientConfig);
@@ -823,6 +827,87 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
         client.CreateSession().Apply(createSessionHandler).Wait();
         UNIT_ASSERT(done);
     }
+
+    Y_UNIT_TEST(InMemoryTables) {
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiKeepInMemory(true);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+
+        auto client = NYdb::NTable::TTableClient(connection);
+        auto createSessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT(!createSessionResult.IsTransportError());
+        auto session = createSessionResult.GetSession();
+
+        auto createTableResult = session.CreateTable("/Root/Table", client.GetTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Int32)
+            .AddNullableColumn("Value", EPrimitiveType::String)
+            .SetPrimaryKeyColumn("Key")
+            // Note: only needed because this test doesn't initial table profiles
+            .BeginStorageSettings()
+                .SetTabletCommitLog0("ssd")
+                .SetTabletCommitLog1("ssd")
+            .EndStorageSettings()
+            .BeginColumnFamily("default")
+                .SetData("ssd")
+                .SetKeepInMemory(true)
+            .EndColumnFamily()
+            .Build()).ExtractValueSync();
+        UNIT_ASSERT_C(createTableResult.IsSuccess(), (NYdb::TStatus&)createTableResult);
+
+        {
+            auto describeTableResult = session.DescribeTable("/Root/Table").ExtractValueSync();
+            UNIT_ASSERT_C(describeTableResult.IsSuccess(), (NYdb::TStatus&)describeTableResult);
+            auto desc = describeTableResult.GetTableDescription();
+            auto families = desc.GetColumnFamilies();
+            UNIT_ASSERT_VALUES_EQUAL(families.size(), 1u);
+            auto family = families.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(*family.GetKeepInMemory(), true);
+        }
+
+        {
+            auto alterTableResult = session.AlterTable("/Root/Table", NYdb::NTable::TAlterTableSettings()
+                .BeginAlterColumnFamily("default")
+                    .SetKeepInMemory(false)
+                .EndAlterColumnFamily()).ExtractValueSync();
+            UNIT_ASSERT_C(alterTableResult.IsSuccess(), (NYdb::TStatus&)alterTableResult);
+        }
+
+        {
+            auto describeTableResult = session.DescribeTable("/Root/Table").ExtractValueSync();
+            UNIT_ASSERT_C(describeTableResult.IsSuccess(), (NYdb::TStatus&)describeTableResult);
+            auto desc = describeTableResult.GetTableDescription();
+            auto families = desc.GetColumnFamilies();
+            UNIT_ASSERT_VALUES_EQUAL(families.size(), 1u);
+            auto family = families.at(0);
+            // Note: server cannot currently distinguish between implicitly
+            // unset and explicitly disabled, so it returns the former.
+            UNIT_ASSERT(!family.GetKeepInMemory());
+        }
+
+        {
+            auto alterTableResult = session.AlterTable("/Root/Table", NYdb::NTable::TAlterTableSettings()
+                .BeginAlterColumnFamily("default")
+                    .SetKeepInMemory(true)
+                .EndAlterColumnFamily()).ExtractValueSync();
+            UNIT_ASSERT_C(alterTableResult.IsSuccess(), (NYdb::TStatus&)alterTableResult);
+        }
+
+        {
+            auto describeTableResult = session.DescribeTable("/Root/Table").ExtractValueSync();
+            UNIT_ASSERT_C(describeTableResult.IsSuccess(), (NYdb::TStatus&)describeTableResult);
+            auto desc = describeTableResult.GetTableDescription();
+            auto families = desc.GetColumnFamilies();
+            UNIT_ASSERT_VALUES_EQUAL(families.size(), 1u);
+            auto family = families.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(*family.GetKeepInMemory(), true);
+        }
+    }
 }
 
 static TString CreateSession(std::shared_ptr<grpc::Channel> channel) {
@@ -842,7 +927,7 @@ static TString CreateSession(std::shared_ptr<grpc::Channel> channel) {
     return result.session_id();
 }
 
-void IncorrectConnectionStringPending(const TString& incorrectLocation) {
+void IncorrectConnectionStringPending(const std::string& incorrectLocation) {
     auto connection = NYdb::TDriver(incorrectLocation);
     auto client = NYdb::NTable::TTableClient(connection);
     auto session = client.CreateSession().ExtractValueSync().GetSession();
@@ -856,7 +941,7 @@ Y_UNIT_TEST_SUITE(GrpcConnectionStringParserTest) {
         bool done = false;
 
         {
-            TString location = TStringBuilder() << "localhost:" << grpc;
+            std::string location = TStringBuilder() << "localhost:" << grpc;
 
             // by default, location won't have database path
             auto connection = NYdb::TDriver(location);
@@ -1221,9 +1306,9 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             UNIT_ASSERT(status.ok());
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST);
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(deferred.issues(), issues);
-            UNIT_ASSERT(issues.ToString().Contains("invalid or unset index type"));
+            NYdb::NIssue::TIssues issues;
+            NYdb::NIssue::IssuesFromMessage(deferred.issues(), issues);
+            UNIT_ASSERT(issues.ToString().contains("invalid or unset index type"));
         }
     }
 
@@ -3173,6 +3258,205 @@ tx_meta {
         }
     }
 
+    Y_UNIT_TEST(ReadTablePg) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableTablePgTypes(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
+        ui16 grpc = server.GetPort();
+
+        std::shared_ptr<grpc::Channel> Channel_;
+        Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
+        TString sessionId;
+
+        TVector<std::tuple<ui64, TString>> data = {
+            {42, "data42"},
+            {43, "data43"},
+            {44, "data44"},
+            {45, "data45"},
+            {46, "data46"},
+            {47, "data47"},
+            {48, "data48"},
+            {49, "data49"},
+            {50, "data50"},
+            {51, "data51"},
+            {52, "data52"}
+        };
+        TString id;
+        {
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
+            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
+            grpc::ClientContext context;
+            Ydb::Table::CreateTableRequest request;
+            TString scheme(
+                "path: \"/Root/TheTable\""
+                "columns { name: \"Key\"             type: { pg_type { type_name: \"pgint8\" } } }"
+                "columns { name: \"Value\"           type: { pg_type { type_name: \"pgtext\" } } }"
+                "primary_key: [\"Key\", \"Value\"]");
+            ::google::protobuf::TextFormat::ParseFromString(scheme, &request);
+            Ydb::Table::CreateTableResponse response;
+
+            auto status = Stub_->CreateTable(&context, request, &response);
+            auto deferred = response.operation();
+            UNIT_ASSERT(status.ok());  // GRpc layer - OK
+            UNIT_ASSERT(deferred.ready() == true); // Not finished yet
+        }
+        {
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
+            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
+            grpc::ClientContext context;
+            Ydb::Table::CreateSessionRequest request;
+            Ydb::Table::CreateSessionResponse response;
+
+            auto status = Stub_->CreateSession(&context, request, &response);
+            auto deferred = response.operation();
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(deferred.ready() == true);
+            Ydb::Table::CreateSessionResult result;
+
+            deferred.result().UnpackTo(&result);
+            sessionId = result.session_id();
+        }
+        {
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
+            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
+            grpc::ClientContext context;
+            Ydb::Table::ExecuteDataQueryRequest request;
+            request.set_session_id(sessionId);
+            TStringBuilder requestBuilder;
+            requestBuilder << "UPSERT INTO `Root/TheTable` (Key, Value) VALUES";
+            for (auto pair : data) {
+                requestBuilder << "(" << std::get<0>(pair) << "pi, \"" << std::get<1>(pair) << "\"pt),";
+            }
+            TString req(requestBuilder);
+            req.back() = ';';
+            request.mutable_query()->set_yql_text(req);
+
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
+            request.mutable_tx_control()->set_commit_tx(true);
+            Ydb::Table::ExecuteDataQueryResponse response;
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            UNIT_ASSERT(status.ok());
+            auto deferred = response.operation();
+            UNIT_ASSERT(deferred.ready() == true);
+            UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::SUCCESS);
+        }
+        {
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
+            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
+            grpc::ClientContext context;
+            Ydb::Table::ReadTableRequest request;
+            Ydb::Table::ReadTableResponse response;
+
+            auto reader = Stub_->StreamReadTable(&context, request);
+            bool res = true;
+            // Empty request - we expect to get BAD_REQUEST response
+            while (res) {
+                res = reader->Read(&response);
+                if (res) {
+                    UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::BAD_REQUEST);
+                }
+            }
+        }
+        {
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
+            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
+            grpc::ClientContext context;
+            Ydb::Table::ReadTableRequest request;
+            Ydb::Table::ReadTableResponse response;
+
+            TString scheme(
+                "path: \"/Root/TheTable\""
+            );
+            ::google::protobuf::TextFormat::ParseFromString(scheme, &request);
+            auto reader = Stub_->StreamReadTable(&context, request);
+            bool res = true;
+            while (res) {
+                res = reader->Read(&response);
+                // Expect all data in first response message
+                if (res) {
+                    UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
+                    if (response.result().has_result_set()) {
+                        size_t i = 0;
+                        UNIT_ASSERT_VALUES_EQUAL((size_t)response.result().result_set().rows_size(), data.size());
+                        for (const auto& row : response.result().result_set().rows()) {
+                            const auto& pair = data[i++];
+                            UNIT_ASSERT_VALUES_EQUAL(ToString(std::get<0>(pair)), row.items(0).text_value());
+                            UNIT_ASSERT_VALUES_EQUAL(std::get<1>(pair), row.items(1).text_value());
+                        }
+                    }
+                }
+            }
+        }
+        {
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
+            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
+            grpc::ClientContext context;
+            Ydb::Table::ReadTableRequest request;
+            Ydb::Table::ReadTableResponse response;
+
+            TString scheme(
+                "path: \"/Root/TheTable\""
+            );
+            ::google::protobuf::TextFormat::ParseFromString(scheme, &request);
+            auto keyRange = request.mutable_key_range();
+            auto greater = keyRange->mutable_greater();
+            greater->mutable_type()->mutable_tuple_type()->add_elements()->mutable_pg_type()->set_type_name("pgint8");
+            greater->mutable_value()->add_items()->set_text_value("50");
+            auto reader = Stub_->StreamReadTable(&context, request);
+            bool res = true;
+            while (res) {
+                res = reader->Read(&response);
+                if (res) {
+                    UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
+                    if (response.result().has_result_set()) {
+                        size_t i = 9;
+                        UNIT_ASSERT_VALUES_EQUAL(response.result().result_set().rows_size(), 2);
+                        for (const auto& row : response.result().result_set().rows()) {
+                            const auto& pair = data[i++];
+                            UNIT_ASSERT_VALUES_EQUAL(ToString(std::get<0>(pair)), row.items(0).text_value());
+                            UNIT_ASSERT_VALUES_EQUAL(std::get<1>(pair), row.items(1).text_value());
+                        }
+                    }
+                }
+            }
+        }
+        {
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
+            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
+            grpc::ClientContext context;
+            Ydb::Table::ReadTableRequest request;
+            Ydb::Table::ReadTableResponse response;
+
+            TString scheme(
+                "path: \"/Root/TheTable\""
+            );
+            ::google::protobuf::TextFormat::ParseFromString(scheme, &request);
+            auto keyRange = request.mutable_key_range();
+            auto less = keyRange->mutable_less_or_equal();
+            less->mutable_type()->mutable_tuple_type()->add_elements()->mutable_pg_type()->set_type_name("pgint8");
+            less->mutable_value()->add_items()->set_text_value("50");
+            auto reader = Stub_->StreamReadTable(&context, request);
+            bool res = true;
+            while (res) {
+                res = reader->Read(&response);
+                if (res) {
+                    UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
+                    if (response.result().has_result_set()) {
+                        UNIT_ASSERT_VALUES_EQUAL(response.result().result_set().rows_size(), 9);
+                        size_t i = 0;
+                        for (const auto& row : response.result().result_set().rows()) {
+                            const auto& pair = data[i++];
+                            UNIT_ASSERT_VALUES_EQUAL(ToString(std::get<0>(pair)), row.items(0).text_value());
+                            UNIT_ASSERT_VALUES_EQUAL(std::get<1>(pair), row.items(1).text_value());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(OperationTimeout) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
@@ -3294,9 +3578,9 @@ tx_meta {
 
 namespace {
 
-NKikimrSchemeOp::TCompactionPolicy DEFAULT_COMPACTION_POLICY;
-NKikimrSchemeOp::TCompactionPolicy COMPACTION_POLICY1;
-NKikimrSchemeOp::TCompactionPolicy COMPACTION_POLICY2;
+NKikimrCompaction::TCompactionPolicy DEFAULT_COMPACTION_POLICY;
+NKikimrCompaction::TCompactionPolicy COMPACTION_POLICY1;
+NKikimrCompaction::TCompactionPolicy COMPACTION_POLICY2;
 NKikimrSchemeOp::TPipelineConfig PIPELINE_CONFIG1;
 NKikimrSchemeOp::TPipelineConfig PIPELINE_CONFIG2;
 NKikimrSchemeOp::TStorageConfig STORAGE_CONFIG1;
@@ -3702,7 +3986,7 @@ void CheckTablePartitions(const TKikimrWithGrpcAndRootSchema &server,
     }
 }
 
-void Apply(const NKikimrSchemeOp::TCompactionPolicy &policy,
+void Apply(const NKikimrCompaction::TCompactionPolicy &policy,
            NKikimrSchemeOp::TTableDescription &description)
 {
     description.MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(policy);
@@ -4252,7 +4536,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
                 auto parser = TValueParser(val);
                 parser.OpenTuple();
                 UNIT_ASSERT(parser.TryNextElement());
-                return parser.GetOptionalUint64().GetRef();
+                return parser.GetOptionalUint64().value();
             };
 
             int n = 0;
@@ -5667,32 +5951,55 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
         ), false
     );
 
-    ExecSQL(server, sender, Sprintf(R"(
-                UPSERT INTO `%s` (Key, Value) VALUES (1u, "Foo");
-            )", table.c_str()
-        )
-    );
+    auto upsert = [&](
+        const TString& table, const TString& row,
+        Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS
+    ) {
+        ExecSQL(server, sender, Sprintf(R"(
+                    UPSERT INTO `%s` (Key, Value) VALUES (%s);
+                )", table.c_str(), row.c_str()
+            ), true, expectedStatus
+        );
+    };
+
+    upsert(table, "1u, \"Foo\"");
 
     auto shards = GetTableShards(server, sender, table);
     UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
     auto& datashard = shards[0];
     auto tableId = ResolveTableId(server, sender, table);
-
     // Compaction is a must. Table stats are missing channels usage statistics until the table is compacted at least once.
     CompactTableAndCheckResult(runtime, datashard, tableId);
-    WaitTableStats(runtime, datashard, 1);
 
-    ExecSQL(server, sender, Sprintf(R"(
-                UPSERT INTO `%s` (Key, Value) VALUES (2u, "Bar");
-            )", table.c_str()
-        ), true, Ydb::StatusIds::UNAVAILABLE
-    );
-    auto schemeEntry = Navigate(runtime, sender, tenantPath, NSchemeCache::TSchemeCacheNavigate::EOp::OpPath)->ResultSet.at(0);
-    UNIT_ASSERT_C(schemeEntry.DomainDescription, schemeEntry.ToString());
-    auto& domainDescription = schemeEntry.DomainDescription->Description;
-    UNIT_ASSERT_C(domainDescription.HasDomainState(), domainDescription.DebugString());
-    bool quotaExceeded = domainDescription.GetDomainState().GetDiskQuotaExceeded();
-    UNIT_ASSERT_C(quotaExceeded, domainDescription.DebugString());
+    auto checkDatabaseState = [&](const TString& database, bool expectedQuotaExceeded) {
+        auto schemeEntry = Navigate(
+            runtime, sender, database, NSchemeCache::TSchemeCacheNavigate::EOp::OpPath
+        )->ResultSet.at(0);
+        UNIT_ASSERT_C(schemeEntry.DomainDescription, schemeEntry.ToString());
+        auto& domainDescription = schemeEntry.DomainDescription->Description;
+        bool quotaExceeded = domainDescription.GetDomainState().GetDiskQuotaExceeded();
+        UNIT_ASSERT_VALUES_EQUAL_C(quotaExceeded, expectedQuotaExceeded, domainDescription.DebugString());
+    };
+
+    // try upsert when the feature flag is enabled
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(true);
+        WaitTableStats(runtime, datashard, [](const NKikimrTableStats::TTableStats& stats) {
+            return stats.GetPartCount() >= 1;
+        });
+        upsert(table, "2u, \"Bar\"", Ydb::StatusIds::UNAVAILABLE);
+        checkDatabaseState(tenantPath, true);
+    }
+
+    // try upsert when the feature flag is disabled
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
+        WaitTableStats(runtime, datashard, [](const NKikimrTableStats::TTableStats& stats) {
+            return stats.GetPartCount() >= 1;
+        });
+        upsert(table, "2u, \"Bar\"");
+        checkDatabaseState(tenantPath, false);
+    }
 }
 
 }

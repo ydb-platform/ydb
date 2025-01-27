@@ -1,6 +1,5 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/testlib/cs_helper.h>
-#include <ydb/core/tx/tiering/external_data.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -9,7 +8,7 @@
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/manager/table_record.h>
@@ -24,8 +23,6 @@
 #include <contrib/libs/xxhash/xxhash.h>
 
 namespace NKikimr {
-
-using namespace NColumnShard;
 
 class TLocalHelper: public Tests::NCS::THelper {
 private:

@@ -1,11 +1,12 @@
 #pragma once
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/counters/counters.h>
 
 namespace NKikimr::NOlap {
 class TVersionedIndex;
 class TTiering;
-}
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NActualizer {
 class TTieringActualizer;
@@ -21,9 +22,17 @@ private:
 
     const ui64 PathId;
     const TVersionedIndex& VersionedIndex;
+    std::shared_ptr<IStoragesManager> StoragesManager;
+
 public:
+    std::vector<TCSMetadataRequest> CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions);
+
+    bool IsStarted() const {
+        return Actualizers.size();
+    }
+
     void Start();
-    TGranuleActualizationIndex(const ui64 pathId, const TVersionedIndex& versionedIndex);
+    TGranuleActualizationIndex(const ui64 pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager);
 
     void ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const;
 
@@ -34,4 +43,4 @@ public:
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion);
 };
 
-}
+}   // namespace NKikimr::NOlap::NActualizer

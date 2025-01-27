@@ -1,5 +1,6 @@
 #include "base_table_writer.h"
 #include "logging.h"
+#include "service.h"
 #include "worker.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
@@ -14,8 +15,10 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
+#include <util/generic/set.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NReplication::NService {
@@ -409,6 +412,8 @@ class TLocalTableWriter
         CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
 
         if (!Initialized) {
+            LOG_D("Send handshake"
+                << ": worker# " << Worker);
             Send(Worker, new TEvWorker::TEvHandshake());
             Initialized = true;
         }
@@ -426,16 +431,121 @@ class TLocalTableWriter
 
         Y_ABORT_UNLESS(PendingRecords.empty());
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records(::Reserve(ev->Get()->Records.size()));
+        TSet<TRowVersion> versionsWithoutTxId;
 
-        for (auto& record : ev->Get()->Records) {
-            records.emplace_back(record.Offset, TablePathId, record.Data.size());
-            auto res = PendingRecords.emplace(
-                record.Offset, Parser->Parse(ev->Get()->Source, record.Offset, std::move(record.Data))
-            );
-            Y_ABORT_UNLESS(res.second);
+        for (auto& [offset, data, _] : ev->Get()->Records) {
+            auto record = Parser->Parse(ev->Get()->Source, offset, std::move(data));
+
+            if (Mode == EWriteMode::Consistent) {
+                const auto version = TRowVersion(record->GetStep(), record->GetTxId());
+
+                if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
+                    PendingHeartbeat = version;
+                    continue;
+                } else if (record->GetKind() != NChangeExchange::IChangeRecord::EKind::CdcDataChange) {
+                    Y_ABORT("Unexpected record kind");
+                }
+
+                if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
+                    record->RewriteTxId(it->second);
+                    if (PendingTxId.empty()) {
+                        records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
+                    } else {
+                        BlockedRecords.insert(record->GetOrder());
+                    }
+                } else {
+                    versionsWithoutTxId.insert(version);
+                    PendingTxId.insert(record->GetOrder());
+                }
+            } else {
+                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
+            }
+
+            Y_ABORT_UNLESS(PendingRecords.emplace(record->GetOrder(), std::move(record)).second);
         }
 
-        EnqueueRecords(std::move(records));
+        if (versionsWithoutTxId) {
+            Send(Worker, new TEvService::TEvGetTxId(versionsWithoutTxId));
+        }
+
+        if (records) {
+            EnqueueRecords(std::move(records));
+        } else if (PendingTxId.empty()) {
+            Y_ABORT_UNLESS(PendingRecords.empty());
+
+            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
+                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
+                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
+            }
+
+            Send(Worker, new TEvWorker::TEvPoll());
+        }
+    }
+
+    void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
+
+        for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
+            const auto version = TRowVersion::FromProto(kv.GetVersion());
+            TxIds.emplace(version, kv.GetTxId());
+
+            auto pendingIt = PendingTxId.begin();
+            auto blockedIt = BlockedRecords.begin();
+
+            auto processPending = [this, &records, &version, txId = kv.GetTxId()](auto& it) -> bool {
+                Y_ABORT_UNLESS(PendingRecords.contains(*it));
+                auto& record = PendingRecords.at(*it);
+
+                if (TRowVersion(record->GetStep(), record->GetTxId()) >= version) {
+                    return false;
+                }
+
+                record->RewriteTxId(txId);
+                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
+
+                it = PendingTxId.erase(it);
+                return true;
+            };
+
+            auto processBlocked = [this, &records](auto& it) {
+                Y_ABORT_UNLESS(PendingRecords.contains(*it));
+                auto& record = PendingRecords.at(*it);
+
+                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
+
+                it = BlockedRecords.erase(it);
+            };
+
+            while (pendingIt != PendingTxId.end() && blockedIt != BlockedRecords.end()) {
+                if (*pendingIt < *blockedIt) {
+                    if (!processPending(pendingIt)) {
+                        break;
+                    }
+                } else {
+                    processBlocked(blockedIt);
+                }
+            }
+
+            if (blockedIt == BlockedRecords.end()) {
+                for (; pendingIt != PendingTxId.end();) {
+                    if (!processPending(pendingIt)) {
+                        break;
+                    }
+                }
+            }
+
+            if (pendingIt == PendingTxId.end()) {
+                for (; blockedIt != BlockedRecords.end();) {
+                    processBlocked(blockedIt);
+                }
+            }
+        }
+
+        if (records) {
+            EnqueueRecords(std::move(records));
+        }
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
@@ -459,7 +569,12 @@ class TLocalTableWriter
             PendingRecords.erase(record);
         }
 
-        if (PendingRecords.empty()) {
+        if (PendingRecords.empty() && PendingTxId.empty()) {
+            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
+                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
+                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
+            }
+
             Send(Worker, new TEvWorker::TEvPoll());
         }
     }
@@ -502,12 +617,14 @@ public:
     }
 
     explicit TLocalTableWriter(
+            EWriteMode mode,
             const TPathId& tablePathId,
             THolder<IChangeRecordParser>&& parser,
             THolder<IChangeRecordSerializer>&& serializer,
             std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn)
         : TActor(&TThis::StateWork)
         , TChangeSender(this, this, this, this, TActorId())
+        , Mode(mode)
         , TablePathId(tablePathId)
         , Parser(std::move(parser))
         , Serializer(std::move(serializer))
@@ -523,6 +640,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);
+            hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
@@ -536,6 +654,7 @@ public:
 
 private:
     mutable TMaybe<TString> LogPrefix;
+    const EWriteMode Mode;
     const TPathId TablePathId;
     THolder<IChangeRecordParser> Parser;
     THolder<IChangeRecordSerializer> Serializer;
@@ -548,7 +667,11 @@ private:
     bool Resolving = false;
     bool Initialized = false;
 
-    TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
+    THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
+    TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
+    TSet<ui64> PendingTxId;
+    TSet<ui64> BlockedRecords;
+    TRowVersion PendingHeartbeat = TRowVersion::Min();
 
 }; // TLocalTableWriter
 
@@ -556,9 +679,10 @@ IActor* CreateLocalTableWriter(
         const TPathId& tablePathId,
         THolder<IChangeRecordParser>&& parser,
         THolder<IChangeRecordSerializer>&& serializer,
-        std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn)
+        std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
+        EWriteMode mode)
 {
-    return new TLocalTableWriter(tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
+    return new TLocalTableWriter(mode, tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
 }
 
 } // namespace NKikimr::NReplication::NService

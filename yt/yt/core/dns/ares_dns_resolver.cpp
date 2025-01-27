@@ -180,7 +180,7 @@ public:
 private:
     const TAresDnsResolverConfigPtr Config_;
 
-    const NProfiling::TProfiler Profiler_ = DnsProfiler.WithPrefix("/ares_resolver");
+    const NProfiling::TProfiler Profiler_ = DnsProfiler().WithPrefix("/ares_resolver");
     const NProfiling::TCounter RequestCounter_ = Profiler_.Counter("/request_count");
     const NProfiling::TCounter FailureCounter_ = Profiler_.Counter("/failure_count");
     const NProfiling::TCounter TimeoutCounter_ = Profiler_.Counter("/timeout_count");

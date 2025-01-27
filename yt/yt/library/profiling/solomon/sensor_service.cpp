@@ -1,16 +1,16 @@
 #include "sensor_service.h"
+
+#include "config.h"
 #include "cube.h"
 #include "exporter.h"
 #include "registry.h"
 #include "private.h"
 
-#include <yt/yt/core/concurrency/async_rw_lock.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/virtual.h>
 #include <yt/yt/core/ytree/ypath_client.h>
-#include <yt/yt/core/ytree/ypath_detail.h>
 
 namespace NYT::NProfiling {
 
@@ -178,7 +178,7 @@ private:
 
             auto node = CreateVirtualNode(std::move(sensorServiceImpl));
             try {
-                auto path = "/" + NYPath::ToYPathLiteral(name);
+                auto path = TYPath("/" + name);
                 ForceYPath(Root_, path);
                 SetNodeByYPath(Root_, path, node);
             } catch (const std::exception& ex) {
@@ -196,7 +196,7 @@ private:
         SensorTreeUpdateDuration_.Record(elapsed);
 
         YT_LOG_DEBUG(
-            "Finished updating sensor service tree"
+            "Finished updating sensor service tree "
             "(TotalSensorCount: %v, AddedSensorCount: %v, MalformedSensorCount: %v, Elapsed: %v)",
             sensors.size(),
             addedSensorCount,

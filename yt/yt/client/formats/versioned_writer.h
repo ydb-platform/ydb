@@ -2,6 +2,8 @@
 
 #include <yt/yt/client/formats/public.h>
 
+#include <yt/yt/client/complex_types/yson_format_conversion.h>
+
 #include <yt/yt/client/table_client/versioned_writer.h>
 #include <yt/yt/client/table_client/schema.h>
 
@@ -26,11 +28,11 @@ public:
         NTableClient::TTableSchemaPtr schema,
         const std::function<std::unique_ptr<NYson::IFlushableYsonConsumer>(IZeroCopyOutput*)>& consumerBuilder);
 
-    virtual TFuture<void> Close() override;
+    TFuture<void> Close() override;
 
-    virtual bool Write(TRange<NTableClient::TVersionedRow> rows) override;
+    bool Write(TRange<NTableClient::TVersionedRow> rows) override;
 
-    virtual TFuture<void> GetReadyEvent() override;
+    TFuture<void> GetReadyEvent() override;
 
 private:
     const NConcurrency::IAsyncOutputStreamPtr Stream_;
@@ -40,6 +42,8 @@ private:
     TFuture<void> Result_;
 
     const std::unique_ptr<NYson::IFlushableYsonConsumer> Consumer_;
+
+    THashMap<int, NComplexTypes::TYsonServerToClientConverter> ColumnConverters_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

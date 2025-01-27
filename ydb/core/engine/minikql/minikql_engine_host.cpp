@@ -3,9 +3,9 @@
 #include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/tablet_flat/flat_table_stats.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/minikql/computation/mkql_custom_list.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -498,7 +498,7 @@ public:
                     }
                     firstKey.AppendNoAlias((const char*)typeIds.data(), tuple.ColumnCount * sizeof(NScheme::TTypeId));
                     firstKey.AppendNoAlias(cells);
-                    // TODO: support pg types
+                    // no need to support pg types in the deprecated minikql engine
 
                     if (List.FirstKey) {
                         Y_DEBUG_ABORT_UNLESS(*List.FirstKey == firstKey);

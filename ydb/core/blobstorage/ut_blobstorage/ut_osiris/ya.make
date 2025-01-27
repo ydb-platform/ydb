@@ -4,8 +4,6 @@ FORK_SUBTESTS()
 
 SIZE(LARGE)
 
-TIMEOUT(3600)
-
 TAG(ya:fat)
 
 SRCS(

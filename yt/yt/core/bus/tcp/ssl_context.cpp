@@ -2,11 +2,12 @@
 #include "ssl_helpers.h"
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <library/cpp/openssl/init/init.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
+
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 #include <util/system/mutex.h>
 

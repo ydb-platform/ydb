@@ -11,6 +11,6 @@ namespace builtins
   {
     USING_FUNCTOR(next, pythonic::__dispatch__::functor::next);
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

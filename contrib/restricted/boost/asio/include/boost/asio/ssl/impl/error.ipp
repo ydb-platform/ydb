@@ -2,7 +2,7 @@
 // ssl/impl/error.ipp
 // ~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -29,7 +29,7 @@ namespace detail {
 class ssl_category : public boost::system::error_category
 {
 public:
-  const char* name() const BOOST_ASIO_ERROR_CATEGORY_NOEXCEPT
+  const char* name() const noexcept
   {
     return "asio.ssl";
   }
@@ -40,7 +40,11 @@ public:
     if (reason)
     {
       const char* lib = ::ERR_lib_error_string(value);
+#if (OPENSSL_VERSION_NUMBER < 0x30000000L)
       const char* func = ::ERR_func_error_string(value);
+#else // (OPENSSL_VERSION_NUMBER < 0x30000000L)
+      const char* func = 0;
+#endif // (OPENSSL_VERSION_NUMBER < 0x30000000L)
       std::string result(reason);
       if (lib || func)
       {
@@ -85,7 +89,7 @@ namespace detail {
 class stream_category : public boost::system::error_category
 {
 public:
-  const char* name() const BOOST_ASIO_ERROR_CATEGORY_NOEXCEPT
+  const char* name() const noexcept
   {
     return "asio.ssl.stream";
   }

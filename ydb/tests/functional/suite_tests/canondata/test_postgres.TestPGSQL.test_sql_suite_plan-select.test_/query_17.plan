@@ -49,6 +49,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_select.test_plan/foo",
                                                         "ReadColumns": [
                                                             "f1"
                                                         ],

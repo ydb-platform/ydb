@@ -17,6 +17,7 @@ private:
     mutable std::unique_ptr<NTabletFlatExecutor::ITransaction> TxPropose;
     mutable std::unique_ptr<NTabletFlatExecutor::ITransaction> TxConfirm;
     mutable std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAbort;
+    mutable std::unique_ptr<NTabletFlatExecutor::ITransaction> TxFinish;
     static inline auto Registrator = TFactory::TRegistrator<TSharingTransactionOperator>(NKikimrTxColumnShard::TX_KIND_SHARING);
     THashSet<TActorId> NotifySubscribers;
     virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;

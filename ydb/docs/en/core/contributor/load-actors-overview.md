@@ -38,55 +38,15 @@ You can run load using the following tools:
 
 The use case described below shows how to create and run the KqpLoad actor. The actor accesses the `/slice/db` database as a key-value store using 64 threads with a 30-second load. Before the test, the actor creates the necessary tables and deletes them once the test is completed. When being created, the actor is automatically assigned a tag. The same tag will be assigned to the test result.
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Embedded UI
 
-  1. Open the page for managing load actors on the desired node (for example, `http://<address>:8765/actors/load`, where `address` is the address of the cluster node to run the load on).
-  2. Paste the actor configuration into the input/output field:
+    1. Open the page for managing load actors on the desired node (for example, `http://<address>:8765/actors/load`, where `address` is the address of the cluster node to run the load on).
+    2. Paste the actor configuration into the input/output field:
 
     ```proto
     KqpLoad: {
-      DurationSeconds: 30
-      WindowDuration: 1
-      WorkingDir: "/slice/db"
-      NumOfSessions: 64
-      UniformPartitionsCount: 1000
-      DeleteTableOnFinish: 1
-      WorkloadType: 0
-      Kv: {
-        InitRowCount: 1000
-        PartitionsByLoad: true
-        MaxFirstKey: 18446744073709551615
-        StringLen: 8
-        ColumnsCnt: 2
-        RowsCnt: 1
-      }
-    }
-    ```
-
-  3. To create and run the actor, click:
-
-  * **Start new load on current node**: Runs the load on the current node.
-  * **Start new load on all tenant nodes**: Runs the load on all the tenant nodes at once.
-
-  You'll see the following message in the input/output field:
-
-  ```text
-  {"status":"OK","tag":1}
-  ```
-
-  * `status`: Load run status.
-  * `tag`: Tag assigned to the load.
-
-- CLI
-
-  1. Create an actor configuration file:
-
-    ```proto
-    NodeId: 1
-    Event: {
-      KqpLoad: {
         DurationSeconds: 30
         WindowDuration: 1
         WorkingDir: "/slice/db"
@@ -95,38 +55,63 @@ The use case described below shows how to create and run the KqpLoad actor. The 
         DeleteTableOnFinish: 1
         WorkloadType: 0
         Kv: {
-          InitRowCount: 1000
-          PartitionsByLoad: true
-          MaxFirstKey: 18446744073709551615
-          StringLen: 8
-          ColumnsCnt: 2
-          RowsCnt: 1
+            InitRowCount: 1000
+            PartitionsByLoad: true
+            MaxFirstKey: 18446744073709551615
+            StringLen: 8
+            ColumnsCnt: 2
+            RowsCnt: 1
         }
-      }
     }
     ```
 
-    `NodeId`: ID of the node to start the actor on. To specify multiple nodes, list them in separate lines:
+    3. To create and run the actor, click:
+
+    * **Start new load on current node**: Runs the load on the current node.
+    * **Start new load on all tenant nodes**: Runs the load on all the tenant nodes at once.
+
+    You'll see the following message in the input/output field:
+
+    ```text
+    {"status":"OK","tag":1}
+    ```
+
+    * `status`: Load run status.
+    * `tag`: Tag assigned to the load.
+
+- CLI
+
+    1. Create an actor configuration file:
 
     ```proto
-    NodeId: 1
-    NodeId: 2
-    ...
-    NodeId: N
-    Event: {
-    ...
+    KqpLoad: {
+        DurationSeconds: 30
+        WindowDuration: 1
+        WorkingDir: "/slice/db"
+        NumOfSessions: 64
+        UniformPartitionsCount: 1000
+        DeleteTableOnFinish: 1
+        WorkloadType: 0
+        Kv: {
+            InitRowCount: 1000
+            PartitionsByLoad: true
+            MaxFirstKey: 18446744073709551615
+            StringLen: 8
+            ColumnsCnt: 2
+            RowsCnt: 1
+        }
+    }
     ```
 
-    `Event`: Actor configuration.
-
-  2. Start the actor:
+    2. Start the actor:
 
     ```bash
-    ydbd load-test --server <endpoint> --protobuf "$(cat <proto_file>)"
+    curl <endpoint>/actors/load -H "Content-Type: application/x-protobuf-text" --data mode=start --data all_nodes=<start_on_all_nodes> --data config="$(cat proto_file)"
     ```
 
-    `endpoint`: Node gRPC endpoint (for example, `grpc://<address>:<port>`, where `address` is the node address and `port` is the node gRPC port).
-    `proto_file`: Path to the actor configuration file.
+    * `endpoint`: Node HTTP endpoint (for example, `http://<address>:<port>`, where `address` is the node address and `port` is the node HTTP port).
+    * `proto_file`: Path to the actor configuration file.
+    * `start_on_all_nodes`: `true` to start load on all nodes of a tenant, `false` to start load only on node with given `endpoint`.
 
 {% endlist %}
 
@@ -134,15 +119,15 @@ The use case described below shows how to create and run the KqpLoad actor. The 
 
 You can view the test results using the Embedded UI. For a description of output parameters, see the documentation of the respective actor.
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Embedded UI
 
-  1. Open the page for managing load actors on the desired node (for example, `http://<address>:<port>/actors/load`, where `address` is the node address and `port` is the HTTP port used for monitoring the node under load).
-  2. Click **Results**.
+    1. Open the page for managing load actors on the desired node (for example, `http://<address>:<port>/actors/load`, where `address` is the node address and `port` is the HTTP port used for monitoring the node under load).
+    2. Click **Results**.
 
-  This shows the results of completed tests. Find the results with the appropriate tag.
+    This shows the results of completed tests. Find the results with the appropriate tag.
 
-  ![load-actors-finished-tests](../_assets/load-actors-finished-tests.png)
+    ![load-actors-finished-tests](../_assets/load-actors-finished-tests.png)
 
 {% endlist %}

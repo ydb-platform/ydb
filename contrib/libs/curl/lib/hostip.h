@@ -32,10 +32,6 @@
 
 #include <setjmp.h>
 
-#ifdef USE_HTTPSRR
-# include <stdint.h>
-#endif
-
 /* Allocate enough memory to hold the full name information structs and
  * everything. OSF1 is known to require at least 8872 bytes. The buffer
  * required for storing all possible aliases and IP numbers is according to
@@ -62,48 +58,15 @@ struct connectdata;
  */
 struct Curl_hash *Curl_global_host_cache_init(void);
 
-#ifdef USE_HTTPSRR
-
-#define CURL_MAXLEN_host_name 253
-
-struct Curl_https_rrinfo {
-  size_t len; /* raw encoded length */
-  unsigned char *val; /* raw encoded octets */
-  /*
-   * fields from HTTPS RR, with the mandatory fields
-   * first (priority, target), then the others in the
-   * order of the keytag numbers defined at
-   * https://datatracker.ietf.org/doc/html/rfc9460#section-14.3.2
-   */
-  uint16_t priority;
-  char *target;
-  char *alpns; /* keytag = 1 */
-  bool no_def_alpn; /* keytag = 2 */
-  /*
-   * we do not support ports (keytag = 3) as we do not support
-   * port-switching yet
-   */
-  unsigned char *ipv4hints; /* keytag = 4 */
-  size_t ipv4hints_len;
-  unsigned char *echconfiglist; /* keytag = 5 */
-  size_t echconfiglist_len;
-  unsigned char *ipv6hints; /* keytag = 6 */
-  size_t ipv6hints_len;
-};
-#endif
-
 struct Curl_dns_entry {
   struct Curl_addrinfo *addr;
-#ifdef USE_HTTPSRR
-  struct Curl_https_rrinfo *hinfo;
-#endif
-  /* timestamp == 0 -- permanent CURLOPT_RESOLVE entry (does not time out) */
+  /* timestamp == 0 -- permanent CURLOPT_RESOLVE entry (doesn't time out) */
   time_t timestamp;
-  /* reference counter, entry is freed on reaching 0 */
-  size_t refcount;
+  /* use-counter, use Curl_resolv_unlock to release reference */
+  long inuse;
   /* hostname port number that resolved to addr. */
   int hostport;
-  /* hostname that resolved to addr. may be NULL (Unix domain sockets). */
+  /* hostname that resolved to addr. may be NULL (unix domain sockets). */
   char hostname[1];
 };
 
@@ -113,8 +76,8 @@ bool Curl_host_is_ipnum(const char *hostname);
  * Curl_resolv() returns an entry with the info for the specified host
  * and port.
  *
- * The returned data *MUST* be "released" with Curl_resolv_unlink() after
- * use, or we will leak memory!
+ * The returned data *MUST* be "unlocked" with Curl_resolv_unlock() after
+ * use, or we'll leak memory!
  */
 /* return codes */
 enum resolve_t {
@@ -133,7 +96,7 @@ enum resolve_t Curl_resolv_timeout(struct Curl_easy *data,
                                    struct Curl_dns_entry **dnsentry,
                                    timediff_t timeoutms);
 
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
 /*
  * Curl_ipv6works() returns TRUE if IPv6 seems to work.
  */
@@ -161,12 +124,12 @@ struct Curl_addrinfo *Curl_getaddrinfo(struct Curl_easy *data,
                                        int *waitp);
 
 
-/* unlink a dns entry, potentially shared with a cache */
-void Curl_resolv_unlink(struct Curl_easy *data,
-                        struct Curl_dns_entry **pdns);
+/* unlock a previously resolved dns entry */
+void Curl_resolv_unlock(struct Curl_easy *data,
+                        struct Curl_dns_entry *dns);
 
 /* init a new dns cache */
-void Curl_init_dnscache(struct Curl_hash *hash, size_t hashsize);
+void Curl_init_dnscache(struct Curl_hash *hash, int hashsize);
 
 /* prune old entries from the DNS cache */
 void Curl_hostcache_prune(struct Curl_easy *data);
@@ -199,8 +162,8 @@ void Curl_printable_address(const struct Curl_addrinfo *ip,
  *
  * Returns the Curl_dns_entry entry pointer or NULL if not in the cache.
  *
- * The returned data *MUST* be "released" with Curl_resolv_unlink() after
- * use, or we will leak memory!
+ * The returned data *MUST* be "unlocked" with Curl_resolv_unlock() after
+ * use, or we'll leak memory!
  */
 struct Curl_dns_entry *
 Curl_fetch_addr(struct Curl_easy *data,
@@ -209,13 +172,12 @@ Curl_fetch_addr(struct Curl_easy *data,
 
 /*
  * Curl_cache_addr() stores a 'Curl_addrinfo' struct in the DNS cache.
- * @param permanent   iff TRUE, entry will never become stale
+ *
  * Returns the Curl_dns_entry entry pointer or NULL if the storage failed.
  */
 struct Curl_dns_entry *
 Curl_cache_addr(struct Curl_easy *data, struct Curl_addrinfo *addr,
-                const char *hostname, size_t hostlen, int port,
-                bool permanent);
+                const char *hostname, size_t hostlen, int port);
 
 #ifndef INADDR_NONE
 #define CURL_INADDR_NONE (in_addr_t) ~0

@@ -34,7 +34,7 @@ from ._exceptions import (
     WriteError,
     WriteTimeout,
 )
-from ._models import URL, Origin, Request, Response
+from ._models import URL, Origin, Proxy, Request, Response
 from ._ssl import default_ssl_context
 from ._sync import (
     ConnectionInterface,
@@ -79,6 +79,7 @@ __all__ = [
     "URL",
     "Request",
     "Response",
+    "Proxy",
     # async
     "AsyncHTTPConnection",
     "AsyncConnectionPool",
@@ -130,7 +131,7 @@ __all__ = [
     "WriteError",
 ]
 
-__version__ = "1.0.5"
+__version__ = "1.0.7"
 
 
 __locals = locals()

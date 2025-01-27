@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: grpcio
-Version: 1.54.2
+Version: 1.54.3
 Summary: HTTP/2-based RPC framework
 Home-page: https://grpc.io
 Author: The gRPC Authors
@@ -22,7 +22,7 @@ Requires-Python: >=3.7
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 Provides-Extra: protobuf
-Requires-Dist: grpcio-tools (>=1.54.2) ; extra == 'protobuf'
+Requires-Dist: grpcio-tools (>=1.54.3) ; extra == 'protobuf'
 
 gRPC Python
 ===========

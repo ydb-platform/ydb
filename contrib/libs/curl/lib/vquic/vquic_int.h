@@ -27,7 +27,7 @@
 #include "curl_setup.h"
 #include "bufq.h"
 
-#ifdef USE_HTTP3
+#ifdef ENABLE_QUIC
 
 #define MAX_PKT_BURST 10
 #define MAX_UDP_PAYLOAD_SIZE  1452
@@ -40,7 +40,6 @@ struct cf_quic_ctx {
   socklen_t local_addrlen; /* length of local address */
 
   struct bufq sendbuf; /* buffer for sending one or more packets */
-  struct curltime first_byte_at;     /* when first byte was recvd */
   struct curltime last_op; /* last (attempted) send/recv operation */
   struct curltime last_io; /* last successful socket IO */
   size_t gsolen; /* length of individual packets in send buf */
@@ -49,8 +48,7 @@ struct cf_quic_ctx {
 #ifdef DEBUGBUILD
   int wblock_percent; /* percent of writes doing EAGAIN */
 #endif
-  BIT(got_first_byte); /* if first byte was received */
-  BIT(no_gso); /* do not use gso on sending */
+  bool no_gso; /* do not use gso on sending */
 };
 
 CURLcode vquic_ctx_init(struct cf_quic_ctx *qctx);
@@ -88,6 +86,6 @@ CURLcode vquic_recv_packets(struct Curl_cfilter *cf,
                             size_t max_pkts,
                             vquic_recv_pkt_cb *recv_cb, void *userp);
 
-#endif /* !USE_HTTP3 */
+#endif /* !ENABLE_QUIC */
 
 #endif /* HEADER_CURL_VQUIC_QUIC_INT_H */

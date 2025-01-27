@@ -39,7 +39,7 @@ namespace detail {
 
 template <typename RealType, typename... RealTypes>
 struct promote_args_n {
-  using type = typename tools::promote_args_2<RealType, typename promote_args_n<RealTypes...>::type>::type;
+  using type = typename tools::promote_args<RealType, typename promote_args_n<RealTypes...>::type>::type;
 };
 
 template <typename RealType>
@@ -2002,9 +2002,9 @@ using autodiff_root_type = typename autodiff_fvar_type<RealType, Order>::root_ty
 
 // See boost/math/tools/promotion.hpp
 template <typename RealType0, size_t Order0, typename RealType1, size_t Order1>
-struct promote_args_2<detail::autodiff_fvar_type<RealType0, Order0>,
+struct promote_args<detail::autodiff_fvar_type<RealType0, Order0>,
                       detail::autodiff_fvar_type<RealType1, Order1>> {
-  using type = detail::autodiff_fvar_type<typename promote_args_2<RealType0, RealType1>::type,
+  using type = detail::autodiff_fvar_type<typename promote_args<RealType0, RealType1>::type,
 #ifndef BOOST_MATH_NO_CXX14_CONSTEXPR
                                           (std::max)(Order0, Order1)>;
 #else
@@ -2018,13 +2018,13 @@ struct promote_args<detail::autodiff_fvar_type<RealType, Order>> {
 };
 
 template <typename RealType0, size_t Order0, typename RealType1>
-struct promote_args_2<detail::autodiff_fvar_type<RealType0, Order0>, RealType1> {
-  using type = detail::autodiff_fvar_type<typename promote_args_2<RealType0, RealType1>::type, Order0>;
+struct promote_args<detail::autodiff_fvar_type<RealType0, Order0>, RealType1> {
+  using type = detail::autodiff_fvar_type<typename promote_args<RealType0, RealType1>::type, Order0>;
 };
 
 template <typename RealType0, typename RealType1, size_t Order1>
-struct promote_args_2<RealType0, detail::autodiff_fvar_type<RealType1, Order1>> {
-  using type = detail::autodiff_fvar_type<typename promote_args_2<RealType0, RealType1>::type, Order1>;
+struct promote_args<RealType0, detail::autodiff_fvar_type<RealType1, Order1>> {
+  using type = detail::autodiff_fvar_type<typename promote_args<RealType0, RealType1>::type, Order1>;
 };
 
 template <typename destination_t, typename RealType, std::size_t Order>

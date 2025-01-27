@@ -13,7 +13,7 @@
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 using namespace NThreading;
 
@@ -31,6 +31,9 @@ static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::Transaction
             break;
         case TTxSettings::TS_SNAPSHOT_RO:
             proto->mutable_snapshot_read_only();
+            break;
+        case TTxSettings::TS_SNAPSHOT_RW:
+            proto->mutable_snapshot_read_write();
             break;
         default:
             throw TContractViolation("Unexpected transaction mode.");
@@ -223,7 +226,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
     request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
     request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
-    request.set_pool_id(settings.PoolId_);
+    request.set_pool_id(settings.ResourcePool_);
     request.mutable_query_content()->set_text(query);
     request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
     if (session.Defined()) {

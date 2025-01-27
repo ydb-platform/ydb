@@ -29,10 +29,6 @@
                         "Key1",
                         "Key2"
                     ],
-                    "lookup_by": [
-                        "Key1",
-                        "Key2"
-                    ],
                     "type": "Lookup"
                 }
             ]
@@ -44,9 +40,6 @@
                     "columns": [
                         "Key",
                         "Value"
-                    ],
-                    "lookup_by": [
-                        "Key"
                     ],
                     "type": "Lookup"
                 }

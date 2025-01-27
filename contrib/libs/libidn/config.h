@@ -1,6 +1,8 @@
 #pragma once
 
-#if defined(__APPLE__)
+#if defined(__ANDROID__)
+#   include "config-android.h"
+#elif defined(__APPLE__)
 #   include "config-osx.h"
 #elif defined(_MSC_VER)
 #   include "config-win.h"

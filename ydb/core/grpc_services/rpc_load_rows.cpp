@@ -7,14 +7,14 @@
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/minikql/dom/yson.h>
-#include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/utils/utf8.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/minikql/dom/json.h>
+#include <yql/essentials/utils/utf8.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
@@ -460,46 +460,13 @@ private:
             case EUploadSource::CSV:
             {
                 auto& data = GetSourceData();
-                auto& cvsSettings = GetCsvSettings();
-                ui32 skipRows = cvsSettings.skip_rows();
-                auto& delimiter = cvsSettings.delimiter();
-                auto& nullValue = cvsSettings.null_value();
-                bool withHeader = cvsSettings.header();
-
-                auto reader = NFormats::TArrowCSV::Create(SrcColumns, withHeader, NotNullColumns);
+                auto& csvSettings = GetCsvSettings();
+                auto reader = NFormats::TArrowCSVScheme::Create(SrcColumns, csvSettings.header(), NotNullColumns);
                 if (!reader.ok()) {
                     errorMessage = reader.status().ToString();
                     return false;
                 }
-                const auto& quoting = cvsSettings.quoting();
-                if (quoting.quote_char().length() > 1) {
-                    errorMessage = TStringBuilder() << "Wrong quote char '" << quoting.quote_char() << "'";
-                    return false;
-                }
-                const char qchar = quoting.quote_char().empty() ? '"' : quoting.quote_char().front();
-                reader->SetQuoting(!quoting.disabled(), qchar, !quoting.double_quote_disabled());
-                reader->SetSkipRows(skipRows);
-
-                if (!delimiter.empty()) {
-                    if (delimiter.size() != 1) {
-                        errorMessage = TStringBuilder() << "Wrong delimiter '" << delimiter << "'";
-                        return false;
-                    }
-
-                    reader->SetDelimiter(delimiter[0]);
-                }
-
-                if (!nullValue.empty()) {
-                    reader->SetNullValue(nullValue);
-                }
-
-                if (data.size() > NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
-                    ui32 blockSize = NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
-                    blockSize *= data.size() / blockSize + 1;
-                    reader->SetBlockSize(blockSize);
-                }
-
-                Batch = reader->ReadSingleBatch(data, errorMessage);
+                Batch = reader->ReadSingleBatch(data, csvSettings, errorMessage);
                 if (!Batch) {
                     return false;
                 }

@@ -1,9 +1,11 @@
 | Version | Release date | Download | Changelog |
 :--- | :--- | :--- | :---
+**v24.3**
+v.24.3.11.13  | 24/12/2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.11.13` | [See the changelog](../../../changelog-server.md#24-3)
 **v24.2**
-v.24.2.7  | 20/08/2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.2.7`
+v.24.2.7  | 20/08/2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.2.7`| [See the changelog](../../../changelog-server.md#24-2)
 **v24.1**
-v.24.1.18 | 31/07/2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.1.18`
+v.24.1.18 | 31/07/2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.1.18` | [See the changelog](../../../changelog-server.md#24-1)
 **v23.4**
 v.23.4.11 | 14/05/2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.4.11` | [See the changelog](../../../changelog-server.md#23-4)
 **v23.3**

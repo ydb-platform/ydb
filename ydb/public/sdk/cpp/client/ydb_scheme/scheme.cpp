@@ -11,7 +11,7 @@
 
 #include <util/string/join.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NScheme {
 
 using namespace NThreading;
@@ -252,6 +252,9 @@ public:
         request.set_path(path);
         if (settings.ClearAcl_) {
             request.set_clear_permissions(true);
+        }
+        if (settings.SetInterruptInheritance_) {
+            request.set_interrupt_inheritance(settings.InterruptInheritanceValue_);
         }
 
         for (const auto& action : settings.Actions_) {

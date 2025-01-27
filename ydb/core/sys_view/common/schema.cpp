@@ -1,7 +1,7 @@
 #include "schema.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -286,6 +286,16 @@ private:
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);
 
         RegisterPgTablesSystemViews();
+
+        {
+            using namespace NAuth;
+            RegisterSystemView<Schema::AuthUsers>(UsersName);
+            RegisterSystemView<Schema::AuthGroups>(NAuth::GroupsName);
+            RegisterSystemView<Schema::AuthGroupMembers>(GroupMembersName);
+            RegisterSystemView<Schema::AuthOwners>(OwnersName);
+            RegisterSystemView<Schema::AuthPermissions>(PermissionsName);
+            RegisterSystemView<Schema::AuthPermissions>(EffectivePermissionsName);
+        }
     }
 
 private:

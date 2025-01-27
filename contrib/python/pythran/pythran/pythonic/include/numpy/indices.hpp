@@ -1,9 +1,9 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_INDICES_HPP
 #define PYTHONIC_INCLUDE_NUMPY_INDICES_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/numpy/int64.hpp"
 #include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -17,7 +17,7 @@ namespace numpy
   indices(pS const &shape, dtype d = dtype());
 
   DEFINE_FUNCTOR(pythonic::numpy, indices);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

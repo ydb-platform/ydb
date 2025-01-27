@@ -744,7 +744,7 @@ private:
     bool Reply(THolder<TEvKqp::TEvQueryResponse>&& responseEv, const TActorContext &ctx) {
         Y_ABORT_UNLESS(QueryState);
 
-        auto& record = responseEv->Record.GetRef();
+        auto& record = responseEv->Record;
         auto& response = *record.MutableResponse();
         const auto& status = record.GetYdbStatus();
 
@@ -753,7 +753,7 @@ private:
             response.SetSessionId(SessionId);
         }
 
-        ctx.Send(QueryState->Sender, responseEv.Release(), 0, QueryState->ProxyRequestId);
+        ctx.Send<ESendingType::Tail>(QueryState->Sender, responseEv.Release(), 0, QueryState->ProxyRequestId);
         LOG_D("Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
             << ", proxyId: " << QueryState->Sender.ToString());
 
@@ -791,10 +791,10 @@ private:
         Y_ABORT_UNLESS(QueryState);
         auto& queryResult = QueryState->QueryResult;
 
-        auto responseEv = MakeHolder<TEvKqp::TEvQueryResponse>();
+        auto responseEv = MakeHolder<TEvKqp::TEvQueryResponse>(QueryState->QueryResult.ProtobufArenaPtr);
         FillResponse(responseEv->Record);
 
-        auto& record = responseEv->Record.GetRef();
+        auto& record = responseEv->Record;
         auto status = record.GetYdbStatus();
 
         auto now = TAppData::TimeProvider->Now();
@@ -852,7 +852,7 @@ private:
             record.MutableResponse()->SetQueryPlan(queryResult.QueryPlan);
         }
 
-        AddTrailingInfo(responseEv->Record.GetRef());
+        AddTrailingInfo(responseEv->Record);
         return Reply(std::move(responseEv), ctx);
     }
 
@@ -869,12 +869,12 @@ private:
     {
         LOG_W(message);
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
-        response->Record.GetRef().SetYdbStatus(ydbStatus);
+        response->Record.SetYdbStatus(ydbStatus);
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
         NYql::TIssues issues;
         issues.AddIssue(issue);
-        NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
-        AddTrailingInfo(response->Record.GetRef());
+        NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());
+        AddTrailingInfo(response->Record);
         return Send(sender, response.release(), 0, proxyRequestId);
     }
 
@@ -928,15 +928,11 @@ private:
         return QueryState->RequestEv->GetQuery();
     }
 
-    void FillResponse(TEvKqp::TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>& record) {
+    void FillResponse(NKikimrKqp::TEvQueryResponse& record) {
         Y_ABORT_UNLESS(QueryState);
 
         auto& queryResult = QueryState->QueryResult;
-        auto arena = queryResult.ProtobufArenaPtr;
-        if (arena) {
-            record.Realloc(arena);
-        }
-        auto& ev = record.GetRef();
+        auto& ev = record;
 
         bool replyResults = IsExecuteAction(QueryState->RequestEv->GetAction());
         bool replyPlan = true;
@@ -956,9 +952,8 @@ private:
         if (replyResults) {
             auto resp = ev.MutableResponse();
             for (auto& result : queryResult.Results) {
-                // If we have result it must be allocated on protobuf arena
-                Y_ASSERT(result->GetArena());
-                Y_ASSERT(resp->GetArena() == result->GetArena());
+                YQL_ENSURE(result->GetArena());
+                YQL_ENSURE(result->GetArena() == resp->GetArena());
                 resp->AddYdbResults()->Swap(result);
             }
         } else {

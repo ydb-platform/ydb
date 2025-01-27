@@ -162,9 +162,8 @@ class TLSStream(ByteStream):
             except ssl.SSLError as exc:
                 self._read_bio.write_eof()
                 self._write_bio.write_eof()
-                if (
-                    isinstance(exc, ssl.SSLEOFError)
-                    or "UNEXPECTED_EOF_WHILE_READING" in exc.strerror
+                if isinstance(exc, ssl.SSLEOFError) or (
+                    exc.strerror and "UNEXPECTED_EOF_WHILE_READING" in exc.strerror
                 ):
                     if self.standard_compatible:
                         raise BrokenResourceError from exc

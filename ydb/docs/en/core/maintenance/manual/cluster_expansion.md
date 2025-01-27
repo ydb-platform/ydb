@@ -6,20 +6,20 @@ When expanding your {{ ydb-short-name }} cluster, you do not have to pause user 
 
 ## Preparing new servers {#add-host}
 
-If you deploy new static or dynamic nodes of the cluster on new servers added to the expanded {{ ydb-short-name }} cluster, on each new server, you need to install the {{ ydb-short-name }} software according to the procedures described in the [cluster deployment instructions](../../deploy/manual/deploy-ydb-on-premises.md). Among other things, you need to:
+If you deploy new static or dynamic nodes of the cluster on new servers added to the expanded {{ ydb-short-name }} cluster, on each new server, you need to install the {{ ydb-short-name }} software according to the procedures described in the [cluster deployment instructions](../../devops/manual/initial-deployment.md). Among other things, you need to:
 
 1. Create an account and a group in the operating system to enable {{ ydb-short-name }} operation.
 1. Install the {{ ydb-short-name }} software.
 1. Generate the appropriate TLS key and certificate for the software and add them to the server.
 1. Copy the up-to-date configuration file for the {{ ydb-short-name }} cluster to the server.
 
-The TLS certificates used on the new servers must meet the [requirements for filling out the fields](../../deploy/manual/deploy-ydb-on-premises.md#tls-certificates) and be signed by the same trusted certification authority that signed the certificates for the existing servers of the expanded {{ ydb-short-name }} cluster.
+The TLS certificates used on the new servers must meet the [requirements for filling out the fields](../../devops/manual/initial-deployment.md#tls-certificates) and be signed by the same trusted certification authority that signed the certificates for the existing servers of the expanded {{ ydb-short-name }} cluster.
 
 ## Adding dynamic nodes {#add-dynamic-node}
 
 By adding dynamic nodes, you can expand the available computing resources (CPU cores and RAM) needed for your {{ ydb-short-name }} cluster to process user queries.
 
-To add a dynamic node to the cluster, run the process that serves this node, passing to it, in the command line options, the name of the served database and the addresses of any three static nodes of the {{ ydb-short-name }} cluster, as shown in the [cluster deployment instructions](../../deploy/manual/deploy-ydb-on-premises.md#start-dynnode).
+To add a dynamic node to the cluster, run the process that serves this node, passing to it, in the command line options, the name of the served database and the addresses of any three static nodes of the {{ ydb-short-name }} cluster, as shown in the [cluster deployment instructions](../../devops/manual/initial-deployment.md#start-dynnode).
 
 Once you have added the dynamic node to the cluster, the information about it becomes available on the [cluster monitoring page in the built-in UI](../../reference/embedded-ui/ydb-monitoring.md).
 
@@ -31,9 +31,9 @@ By adding static nodes, you can increase the throughput of your I/O operations
 
 To add static nodes to the cluster, perform the following steps:
 
-1. Format the disks that will be used to store the {{ ydb-short-name }} data by following the [procedure for the cluster deployment step](../../deploy/manual/deploy-ydb-on-premises.md#prepare-disks)
+1. Format the disks that will be used to store the {{ ydb-short-name }} data by following the [procedure for the cluster deployment step](../../devops/manual/initial-deployment.md#prepare-disks)
 
-2. Edit the [cluster's configuration file](../../deploy/manual/deploy-ydb-on-premises.md#config):
+2. Edit the [cluster's configuration file](../../devops/manual/initial-deployment.md#config):
 
     * Add, to the configuration, the description of the added nodes (in the `hosts` section) and disks used by them (in the `host_configs` section).
     * Use the `storage_config_generation: K` option to set the ID of the configuration update at the top level, where `K` is the integer update ID (for the initial config, `K=0` or omitted; for the first expansion, `K=1`; for the second expansion, `K=2`; and so on).

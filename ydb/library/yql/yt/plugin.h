@@ -89,7 +89,7 @@ struct IYqlPlugin
     virtual TQueryResult Run(
         TQueryId queryId,
         TString user,
-        TString token,
+        NYson::TYsonString credentials,
         TString queryText,
         NYson::TYsonString settings,
         std::vector<TQueryFile> files,

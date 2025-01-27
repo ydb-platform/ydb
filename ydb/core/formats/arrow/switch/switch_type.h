@@ -2,13 +2,13 @@
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/scheme/scheme_type_id.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <util/system/yassert.h>
 
 extern "C" {
-#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
 }
 
 namespace NKikimr::NArrow {

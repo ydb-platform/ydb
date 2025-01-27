@@ -127,12 +127,15 @@ class Key(object):
 
 def nemesis_logic(arguments):
     logging.config.dictConfig(setup_logging_config(arguments.log_file))
+    ssh_username = os.getenv('NEMESIS_USER', 'robot-nemesis')
     nemesis = catalog.nemesis_factory(
         ExternalKiKiMRCluster(
             arguments.ydb_cluster_template,
-            binary_path=arguments.ydb_binary_path,
-            output_path=tempfile.gettempdir(),
+            kikimr_configure_binary_path=None,
+            kikimr_path=arguments.ydb_binary_path,
+            ssh_username=ssh_username,
         ),
+        ssh_username=ssh_username,
         enable_nemesis_list_filter_by_hostname=arguments.enable_nemesis_list_filter_by_hostname,
     )
     nemesis.start()

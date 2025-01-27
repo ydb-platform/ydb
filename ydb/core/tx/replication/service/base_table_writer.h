@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lightweight_schema.h"
+#include "table_writer.h"
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/change_exchange/change_record.h>
@@ -31,6 +32,7 @@ IActor* CreateLocalTableWriter(
     const TPathId& tablePathId,
     THolder<IChangeRecordParser>&& parser,
     THolder<IChangeRecordSerializer>&& serializer,
-    std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn);
+    std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
+    EWriteMode mode = EWriteMode::Simple);
 
 }

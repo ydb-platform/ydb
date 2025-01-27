@@ -52,8 +52,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplySchedule(const TActorContext& ct
 }
 
 ui64 TSchemeShard::TIndexBuilder::TTxBase::RequestUnits(const TBillingStats& stats) {
-    return TRUCalculator::ReadTable(stats.GetBytes())
-         + TRUCalculator::BulkUpsert(stats.GetBytes(), stats.GetRows());
+    return TRUCalculator::ReadTable(stats.GetReadBytes())
+         + TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::RoundPeriod(TInstant& start, TInstant& end) {
@@ -93,8 +93,10 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
         auto& buildInfo = *buildInfoPtr->Get();
+        auto& processed = buildInfo.Processed;
+        auto& billed = buildInfo.Billed;
 
-        TBillingStats toBill = buildInfo.Processed - buildInfo.Billed;
+        TBillingStats toBill = processed - billed;
         if (!toBill) {
             continue;
         }
@@ -137,18 +139,20 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             continue;
         }
 
-        NIceDb::TNiceDb db(txc.DB);
-
-        buildInfo.Billed += toBill;
-        Self->PersistBuildIndexBilling(db, buildInfo);
-
-        ui64 requestUnits = RequestUnits(toBill);
-
         TString id = TStringBuilder()
             << buildId << "-"
             << buildInfo.TablePathId.OwnerId << "-" << buildInfo.TablePathId.LocalPathId << "-"
-            << buildInfo.Billed.GetRows() << "-" << buildInfo.Billed.GetBytes() << "-"
-            << buildInfo.Processed.GetRows() << "-" << buildInfo.Processed.GetBytes();
+            << billed.GetUploadRows() << "-" << billed.GetReadRows() << "-"
+            << billed.GetUploadBytes() << "-" << billed.GetReadBytes() << "-"
+            << processed.GetUploadRows() << "-" << processed.GetReadRows() << "-"
+            << processed.GetUploadBytes() << "-" << processed.GetReadBytes();
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        billed += toBill;
+        Self->PersistBuildIndexBilled(db, buildInfo);
+
+        ui64 requestUnits = RequestUnits(toBill);
 
         const TString billRecord = TBillRecord()
             .Id(id)

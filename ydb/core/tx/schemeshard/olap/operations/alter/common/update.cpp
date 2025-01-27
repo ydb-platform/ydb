@@ -12,6 +12,27 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
     auto tableInfo = context.GetSSOperationContext()->SS->ColumnTables.TakeVerified(pathId);
     context.GetSSOperationContext()->SS->PersistColumnTableAlter(*context.GetDB(), pathId, *GetTargetTableInfoVerified());
     tableInfo->AlterData = GetTargetTableInfoVerified();
+
+    {
+        THashSet<TString> oldDataSources = tableInfo->GetUsedTiers();
+        THashSet<TString> newDataSources = GetTargetTableInfoVerified()->GetUsedTiers();
+        for (const auto& tier : oldDataSources) {
+            if (!newDataSources.contains(tier)) {
+                auto tierPath = TPath::Resolve(tier, context.GetSSOperationContext()->SS);
+                AFL_VERIFY(tierPath.IsResolved())("path", tier);
+                context.GetSSOperationContext()->SS->PersistRemoveExternalDataSourceReference(*context.GetDB(), tierPath->PathId, pathId);
+            }
+        }
+        for (const auto& tier : newDataSources) {
+            if (!oldDataSources.contains(tier)) {
+                auto tierPath = TPath::Resolve(tier, context.GetSSOperationContext()->SS);
+                AFL_VERIFY(tierPath.IsResolved())("path", tier);
+                context.GetSSOperationContext()->SS->PersistExternalDataSourceReference(
+                    *context.GetDB(), tierPath->PathId, TPath::Init(pathId, context.GetSSOperationContext()->SS));
+            }
+        }
+    }
+
     return TConclusionStatus::Success();
 }
 

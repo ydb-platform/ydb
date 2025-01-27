@@ -109,6 +109,7 @@ class Event:
 
 class EventAdapter(Event):
     _internal_event: Event | None = None
+    _is_set: bool = False
 
     def __new__(cls) -> EventAdapter:
         return object.__new__(cls)
@@ -117,14 +118,22 @@ class EventAdapter(Event):
     def _event(self) -> Event:
         if self._internal_event is None:
             self._internal_event = get_async_backend().create_event()
+            if self._is_set:
+                self._internal_event.set()
 
         return self._internal_event
 
     def set(self) -> None:
-        self._event.set()
+        if self._internal_event is None:
+            self._is_set = True
+        else:
+            self._event.set()
 
     def is_set(self) -> bool:
-        return self._internal_event is not None and self._internal_event.is_set()
+        if self._internal_event is None:
+            return self._is_set
+
+        return self._internal_event.is_set()
 
     async def wait(self) -> None:
         await self._event.wait()
@@ -719,6 +728,5 @@ class ResourceGuard:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> bool | None:
+    ) -> None:
         self._guarded = False
-        return None

@@ -10,9 +10,9 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
@@ -1149,7 +1149,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             // get records
             auto reader = client.CreateReadSession(TReadSessionSettings()
-                .AppendTopics(TString("/Root/Table/Stream"))
+                .AppendTopics(std::string{"/Root/Table/Stream"})
                 .ConsumerName("user")
                 .DisableClusterDiscovery(true)
             );
@@ -1164,7 +1164,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionStream();
                     for (const auto& item : data->GetMessages()) {
                         const auto& record = records.at(reads++);
-                        AssertJsonsEqual(item.GetData(), record);
+                        AssertJsonsEqual(TString{item.GetData()}, record);
                         if (checkKey) {
                             UNIT_ASSERT_VALUES_EQUAL(item.GetPartitionKey(), CalcPartitionKey(record));
                         }
@@ -1314,7 +1314,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct TopicRunner {
     private:
-        using TMessageMeta = TVector<std::pair<TString, TString>>;
+        using TMessageMeta = std::vector<std::pair<std::string, std::string>>;
 
         static TString DumpMessageMeta(TMessageMeta messageMeta) {
             std::stable_sort(messageMeta.begin(), messageMeta.end());
@@ -1324,7 +1324,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         static void AssertMessageMetaContains(const TMessageMeta& actual, const TMessageMeta& expected) {
             for (const auto& e : expected) {
                 auto it = std::find_if(actual.begin(), actual.end(), [&e](const auto& a) {
-                    return a.first == e.first && CheckJsonsEqual(a.second, e.second);
+                    return a.first == e.first && CheckJsonsEqual(TString{a.second}, TString{e.second});
                 });
                 UNIT_ASSERT_C(it != actual.end(), TStringBuilder() << "Message meta '" << e << "' was expected"
                     << ": actual# " << DumpMessageMeta(actual)
@@ -1344,7 +1344,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionSession();
                     for (const auto& item : data->GetMessages()) {
                         const auto& [body, meta] = records.at(reads++);
-                        AssertJsonsEqual(item.GetData(), body);
+                        AssertJsonsEqual(TString{item.GetData()}, body);
                         AssertMessageMetaContains(item.GetMessageMeta()->Fields, meta);
                     }
                 } else if (auto* create = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev)) {
@@ -1383,7 +1383,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             // create reader
             auto reader = client.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
-                .AppendTopics(TString("/Root/Table/Stream"))
+                .AppendTopics(std::string{"/Root/Table/Stream"})
                 .ConsumerName("user")
             );
 
@@ -2936,7 +2936,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         // create reader
         auto reader = client.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
-            .AppendTopics(TString("/Root/Table/Stream"))
+            .AppendTopics(std::string{"/Root/Table/Stream"})
             .ConsumerName("user")
         );
 
@@ -3868,6 +3868,44 @@ Y_UNIT_TEST_SUITE(Cdc) {
         MustNotLoseSchemaSnapshot(true);
     }
 
+    Y_UNIT_TEST(ShouldBreakLocksOnConcurrentSchemeTx) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+
+        TString sessionId;
+        TString txId;
+        KqpSimpleBegin(runtime, sessionId, txId, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 11);");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, "SELECT key, value FROM `/Root/Table`;"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1;"),
+            "ERROR: ABORTED");
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+        });
+    }
+
     Y_UNIT_TEST(ResolvedTimestampsContinueAfterMerge) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -4097,6 +4135,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
 template <>
 void Out<std::pair<TString, TString>>(IOutputStream& output, const std::pair<TString, TString>& x) {
+    output << x.first << ":" << x.second;
+}
+
+template <>
+void Out<std::pair<std::string, std::string>>(IOutputStream& output, const std::pair<std::string, std::string>& x) {
     output << x.first << ":" << x.second;
 }
 

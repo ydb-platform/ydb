@@ -2,12 +2,14 @@
 #include "blobstorage_groupinfo_sets.h"
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 
+#include <bit>
+
 namespace NKikimr {
 
     template<typename Iterator>
     ui32 CountEffectiveReplicasGeneric(Iterator begin, Iterator end, ui32 usedDiskMask = 0) {
         if (begin == end) {
-            return PopCount(usedDiskMask);
+            return std::popcount(usedDiskMask);
         }
         ui32 value = *begin++ & ~usedDiskMask;
         ui32 res = CountEffectiveReplicasGeneric(begin, end, usedDiskMask); // try skipping this disk
@@ -49,7 +51,7 @@ namespace NKikimr {
                 total &= mainMask;
 
                 // count them as effective replicas
-                ui32 res = PopCount(total);
+                ui32 res = std::popcount(total);
 
                 if (total != mainMask) {
                     // here we filter out handoff disks containing at least one of required parts (which are indicated
@@ -72,7 +74,7 @@ namespace NKikimr {
 
                         case 2: { // two handoff disks contain parts
                             const ui32 a = handoffDiskByPart[0], b = handoffDiskByPart[1];
-                            res += Min(2U, PopCount(a | b)); // if both disks contain the same part, we can use only one disk
+                            res += Min(2, std::popcount(a | b)); // if both disks contain the same part, we can use only one disk
                             break;
                         }
 

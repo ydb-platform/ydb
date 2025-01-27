@@ -32,6 +32,10 @@ protected:
     }
 
 public:
+    const std::shared_ptr<arrow::Array>& GetArray() const {
+        return Array;
+    }
+
     TTrivialArray(const std::shared_ptr<arrow::Array>& data)
         : TBase(data->length(), EType::Array, data->type())
         , Array(data) {

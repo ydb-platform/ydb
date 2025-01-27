@@ -1,14 +1,14 @@
 #include "health_check.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/digest/old_crc/crc.h>
 #include <library/cpp/protobuf/json/proto2json.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <util/random/shuffle.h>
 
@@ -1029,9 +1029,12 @@ public:
     }
 
     template<typename TEvent>
-    [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId) {
+    [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId, std::initializer_list<int> fields = {}) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         auto request = MakeHolder<TEvent>();
+        for (int field : fields) {
+            request->Record.AddFieldsRequired(field);
+        }
         TRequestResponse<typename WhiteboardResponse<TEvent>::Type> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
         if (response.Span) {
             response.Span.Attribute("target_node_id", nodeId);
@@ -1043,7 +1046,7 @@ public:
 
     void RequestGenericNode(TNodeId nodeId) {
         if (NodeSystemState.count(nodeId) == 0) {
-            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId));
+            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1}));
             ++Requests;
         }
     }
@@ -2167,6 +2170,7 @@ public:
         if (pDiskInfo.HasState()) {
             switch (pDiskInfo.GetState()) {
                 case NKikimrBlobStorage::TPDiskState::Normal:
+                case NKikimrBlobStorage::TPDiskState::Stopped:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                     break;
                 case NKikimrBlobStorage::TPDiskState::Initial:
@@ -2194,9 +2198,9 @@ public:
                                          TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()),
                                          ETags::PDiskState);
                     break;
-                case NKikimrBlobStorage::TPDiskState::Reserved14:
                 case NKikimrBlobStorage::TPDiskState::Reserved15:
                 case NKikimrBlobStorage::TPDiskState::Reserved16:
+                case NKikimrBlobStorage::TPDiskState::Reserved17:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state");
                     break;
             }
@@ -3120,7 +3124,7 @@ public:
             }
             break;
         }
-        if (!config.Locator) {
+        if (config.Locator.empty()) {
             AddIssue(Ydb::Monitoring::StatusFlag::RED, "Couldn't find local gRPC endpoint");
             ReplyAndPassAway();
         }

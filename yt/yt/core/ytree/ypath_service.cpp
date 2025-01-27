@@ -22,9 +22,10 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <yt/yt/core/misc/checksum.h>
-#include <yt/yt/core/misc/atomic_object.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 namespace NYT::NYTree {
 
@@ -461,7 +462,7 @@ private:
         try {
             Producer_.Run(consumer.get());
         } catch (const TErrorException& ex) {
-            if (ex.Error().FindMatching(EErrorCode::ResolveError)) {
+            if (ex.Error().FindMatching(NYTree::EErrorCode::ResolveError)) {
                 Reply(context, /*exists*/ false);
                 return;
             }
@@ -523,7 +524,7 @@ private:
     const IInvokerPtr WorkerInvoker_;
     const TDuration UpdatePeriod_;
 
-    TAtomicObject<TYsonString> CachedString_ = {BuildYsonStringFluently().Entity()};
+    NThreading::TAtomicObject<TYsonString> CachedString_ = {BuildYsonStringFluently().Entity()};
 
     void Produce(IYsonConsumer* consumer)
     {

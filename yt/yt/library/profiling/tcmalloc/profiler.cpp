@@ -1,8 +1,8 @@
 #include "profiler.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/library/profiling/producer.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <tcmalloc/malloc_extension.h>
 

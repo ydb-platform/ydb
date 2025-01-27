@@ -1,5 +1,5 @@
 #include "yql_s3_settings.h"
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <util/generic/size_literals.h>
 
 namespace NYql {
@@ -60,8 +60,6 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
         config.HasMinDesiredDirectoriesOfFilesPerQuery()
             ? config.GetMinDesiredDirectoriesOfFilesPerQuery()
             : 100;
-    MaxReadSizePerQuery =
-        config.HasMaxReadSizePerQuery() ? config.GetMaxReadSizePerQuery() : 4_GB;
     MaxInflightListsPerQuery =
         config.HasMaxInflightListsPerQuery() ? config.GetMaxInflightListsPerQuery() : 1;
     ListingCallbackThreadCount = config.HasListingCallbackThreadCount()

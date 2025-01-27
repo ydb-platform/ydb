@@ -301,7 +301,13 @@ void TConfigsDispatcher::Bootstrap()
         CurrentConfig,
         0,
         true,
-        1);
+        1,
+        {},
+        {},
+        TNodeInfo{
+            .Tenant = Labels.contains("tenant") ? Labels.at("tenant") : TString(""),
+            .NodeType = Labels.contains("node_type") ? Labels.at("node_type") : TString(""),
+        });
     CommonSubscriptionClient = RegisterWithSameMailbox(commonClient);
 
     Become(&TThis::StateInit);

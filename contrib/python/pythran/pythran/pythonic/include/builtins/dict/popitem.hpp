@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_BUILTIN_DICT_POPITEM_HPP
 #define PYTHONIC_INCLUDE_BUILTIN_DICT_POPITEM_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/dict.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 #include <tuple>
 
@@ -18,8 +18,8 @@ namespace builtins
     auto popitem(D &&d) -> decltype(std::forward<D>(d).popitem());
 
     DEFINE_FUNCTOR(pythonic::builtins::dict, popitem);
-  }
-}
+  } // namespace dict
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

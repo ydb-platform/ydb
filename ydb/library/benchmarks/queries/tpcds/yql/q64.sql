@@ -68,9 +68,9 @@ $cross_sales =
          hd1.hd_income_band_sk = ib1.ib_income_band_sk and
          hd2.hd_income_band_sk = ib2.ib_income_band_sk and
          cd1.cd_marital_status <> cd2.cd_marital_status and
-         i_color in ('azure','gainsboro','misty','blush','hot','lemon') and
-         i_current_price between 80 and 80 + 10 and
-         i_current_price between 80 + 1 and 80 + 15
+         i_color in ('purple','burlywood','indian','spring','floral','medium') and
+         i_current_price between 64 and 64 + 10 and
+         i_current_price between 64 + 1 and 64 + 15
 group by item.i_product_name
        ,item.i_item_sk
        ,store.s_store_name

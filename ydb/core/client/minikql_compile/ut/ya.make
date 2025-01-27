@@ -13,8 +13,8 @@ PEERDIR(
     ydb/core/client/server
     ydb/core/tablet
     ydb/core/testlib/default
-    ydb/library/yql/minikql
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/minikql
+    yql/essentials/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()

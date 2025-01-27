@@ -29,37 +29,10 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     }
@@ -75,10 +48,19 @@
                                                         "ExternalPlanNodeId": 22
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 14
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 14
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.x1)"
                                             }
                                         ],
                                         "PlanNodeId": 23,
@@ -89,7 +71,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "LeftJoin (MapJoin)",
+                                                        "Node Type": "LeftJoin (MapJoin)-Filter",
                                                         "Operators": [
                                                             {
                                                                 "Condition": "x_1.x1 = y.y1",
@@ -98,10 +80,19 @@
                                                                         "ExternalPlanNodeId": 20
                                                                     },
                                                                     {
-                                                                        "ExternalPlanNodeId": 18
+                                                                        "InternalOperatorId": 1
                                                                     }
                                                                 ],
                                                                 "Name": "LeftJoin (MapJoin)"
+                                                            },
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 18
+                                                                    }
+                                                                ],
+                                                                "Name": "Filter",
+                                                                "Predicate": "Exist(item.y1)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 21,
@@ -140,6 +131,7 @@
                                                                                                     }
                                                                                                 ],
                                                                                                 "Name": "TableRangeScan",
+                                                                                                "Path": "/Root/postgres_jointest/join2.test_plan/y",
                                                                                                 "ReadColumns": [
                                                                                                     "y1",
                                                                                                     "y2"
@@ -306,6 +298,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join2.test_plan/x",
                                                         "ReadColumns": [
                                                             "x1",
                                                             "x2"

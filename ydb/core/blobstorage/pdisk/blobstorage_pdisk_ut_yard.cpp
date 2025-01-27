@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/crypto/default.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/util/random.h>
 
 namespace NKikimr {
 
@@ -442,7 +443,7 @@ YARD_UNIT_TEST(TestSysLogOverwrite) {
         dataPath = MakePDiskPath((*tc.TempDir)().c_str());
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
-    EntropyPool().Read(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
+    SafeEntropyPoolRead(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 2048ull << 20, false, tc.SectorMap);
 
     Run<TTestInit<true, 1>>(&tc, 1, chunkSize, false);
@@ -853,7 +854,7 @@ YARD_UNIT_TEST(TestFormatInfo) {
             MakeDirIfNotExist(databaseDirectory.c_str());
         }
     }
-    EntropyPool().Read(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
+    SafeEntropyPoolRead(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 1 << 30, false, tc.SectorMap);
 
     TPDiskInfo info;
@@ -872,7 +873,7 @@ YARD_UNIT_TEST(TestStartingPointReboots) {
         dataPath = MakePDiskPath((*tc.TempDir)().c_str());
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
-    EntropyPool().Read(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
+    SafeEntropyPoolRead(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 1 << 30, false, tc.SectorMap);
     for (ui32 i = 0; i < 32; ++i) {
         Run<TTestStartingPointRebootsIteration>(&tc, 1, chunkSize);
@@ -944,7 +945,7 @@ YARD_UNIT_TEST(TestEnormousDisk) {
     ui64 diskSize = 100ull << 40;
 
     TString dataPath;
-    EntropyPool().Read(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
+    SafeEntropyPoolRead(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, diskSize, false, tc.SectorMap);
 
     Run<TTestInit<true, 1>>(&tc, 1, chunkSize, false);

@@ -5,8 +5,8 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace NYql {
     struct TTypeAnnotationContext;
@@ -48,6 +48,9 @@ NNodes::TExprBase DqBuildPureFlatmapStage(NNodes::TExprBase node, TExprContext& 
 NNodes::TExprBase DqBuildFlatmapStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
+NNodes::TExprBase DqPushFlatmapToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
+
 NNodes::TExprBase DqPushCombineToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
@@ -68,6 +71,9 @@ NNodes::TExprBase DqBuildFinalizeByKeyStage(NNodes::TExprBase node, TExprContext
 
 NNodes::TExprBase DqBuildAggregationResultStage(NNodes::TExprBase node, TExprContext& ctx,
     IOptimizationContext& optCtx);
+
+NNodes::TExprBase DqBuildTopStageRemoveSort(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    TTypeAnnotationContext& typeCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
 NNodes::TExprBase DqBuildTopStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);

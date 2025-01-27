@@ -33,22 +33,22 @@
 #include "test.h"
 #include "erasure_code.h"
 
-//#define CACHED_TEST
-#ifdef CACHED_TEST
+#ifndef GT_L3_CACHE
+# define GT_L3_CACHE  32*1024*1024	/* some number > last level cache */
+#endif
+
+#if !defined(COLD_TEST) && !defined(TEST_CUSTOM)
 // Cached test, loop many times over small dataset
 # define TEST_SOURCES 10
 # define TEST_LEN     8*1024
 # define TEST_TYPE_STR "_warm"
-#else
-# ifndef TEST_CUSTOM
+#elif defined (COLD_TEST)
 // Uncached test.  Pull from large mem base.
-#  define TEST_SOURCES 10
-#  define GT_L3_CACHE  32*1024*1024	/* some number > last level cache */
-#  define TEST_LEN     GT_L3_CACHE / TEST_SOURCES
-#  define TEST_TYPE_STR "_cold"
-# else
-#  define TEST_TYPE_STR "_cus"
-# endif
+# define TEST_SOURCES 10
+# define TEST_LEN     (GT_L3_CACHE / TEST_SOURCES)
+# define TEST_TYPE_STR "_cold"
+#elif defined (TEST_CUSTOM)
+# define TEST_TYPE_STR "_cus"
 #endif
 
 typedef unsigned char u8;
@@ -111,9 +111,19 @@ void gf_vect_dot_prod_mult(int len, int vlen, u8 * v, u8 ** src, u8 * dest)
 int main(void)
 {
 	int i, j;
-	u8 vec[TEST_SOURCES], dest1[TEST_LEN], dest2[TEST_LEN];
+	u8 vec[TEST_SOURCES], *dest1, *dest2;
 	u8 *matrix[TEST_SOURCES];
 	struct perf start;
+
+	dest1 = (u8 *) malloc(TEST_LEN);
+	dest2 = (u8 *) malloc(TEST_LEN);
+
+	if (NULL == dest1 || NULL == dest2) {
+		printf("buffer alloc error\n");
+		return -1;
+	}
+	memset(dest1, 0xfe, TEST_LEN);
+	memset(dest2, 0xfe, TEST_LEN);
 
 	mk_gf_field();
 	mk_gf_mul_table(gf_mul_table);

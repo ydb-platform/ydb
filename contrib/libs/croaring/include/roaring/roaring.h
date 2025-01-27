@@ -387,7 +387,9 @@ void roaring_bitmap_add_range_closed(roaring_bitmap_t *r, uint32_t min,
  */
 inline void roaring_bitmap_add_range(roaring_bitmap_t *r, uint64_t min,
                                      uint64_t max) {
-    if (max <= min) return;
+    if (max <= min || min > (uint64_t)UINT32_MAX + 1) {
+        return;
+    }
     roaring_bitmap_add_range_closed(r, (uint32_t)min, (uint32_t)(max - 1));
 }
 
@@ -407,7 +409,9 @@ void roaring_bitmap_remove_range_closed(roaring_bitmap_t *r, uint32_t min,
  */
 inline void roaring_bitmap_remove_range(roaring_bitmap_t *r, uint64_t min,
                                         uint64_t max) {
-    if (max <= min) return;
+    if (max <= min || min > (uint64_t)UINT32_MAX + 1) {
+        return;
+    }
     roaring_bitmap_remove_range_closed(r, (uint32_t)min, (uint32_t)(max - 1));
 }
 
@@ -434,6 +438,14 @@ bool roaring_bitmap_contains(const roaring_bitmap_t *r, uint32_t val);
  */
 bool roaring_bitmap_contains_range(const roaring_bitmap_t *r,
                                    uint64_t range_start, uint64_t range_end);
+
+/**
+ * Check whether a range of values from range_start (included)
+ * to range_end (included) is present
+ */
+bool roaring_bitmap_contains_range_closed(const roaring_bitmap_t *r,
+                                          uint32_t range_start,
+                                          uint32_t range_end);
 
 /**
  * Check if an items is present, using context from a previous insert or search
@@ -466,6 +478,12 @@ uint64_t roaring_bitmap_range_cardinality(const roaring_bitmap_t *r,
                                           uint64_t range_start,
                                           uint64_t range_end);
 
+/**
+ * Returns the number of elements in the range [range_start, range_end].
+ */
+uint64_t roaring_bitmap_range_cardinality_closed(const roaring_bitmap_t *r,
+                                                 uint32_t range_start,
+                                                 uint32_t range_end);
 /**
  * Returns true if the bitmap is empty (cardinality is zero).
  */
@@ -868,6 +886,14 @@ roaring_bitmap_t *roaring_bitmap_flip(const roaring_bitmap_t *r1,
                                       uint64_t range_start, uint64_t range_end);
 
 /**
+ * Compute the negation of the bitmap in the interval [range_start, range_end].
+ * The number of negated values is range_end - range_start + 1.
+ * Areas outside the range are passed through unchanged.
+ */
+roaring_bitmap_t *roaring_bitmap_flip_closed(const roaring_bitmap_t *x1,
+                                             uint32_t range_start,
+                                             uint32_t range_end);
+/**
  * compute (in place) the negation of the roaring bitmap within a specified
  * interval: [range_start, range_end). The number of negated values is
  * range_end - range_start.
@@ -875,6 +901,16 @@ roaring_bitmap_t *roaring_bitmap_flip(const roaring_bitmap_t *r1,
  */
 void roaring_bitmap_flip_inplace(roaring_bitmap_t *r1, uint64_t range_start,
                                  uint64_t range_end);
+
+/**
+ * compute (in place) the negation of the roaring bitmap within a specified
+ * interval: [range_start, range_end]. The number of negated values is
+ * range_end - range_start + 1.
+ * Areas outside the range are passed through unchanged.
+ */
+void roaring_bitmap_flip_inplace_closed(roaring_bitmap_t *r1,
+                                        uint32_t range_start,
+                                        uint32_t range_end);
 
 /**
  * Selects the element at index 'rank' where the smallest element is at index 0.

@@ -5,6 +5,7 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_board/cache.h>
@@ -252,7 +253,7 @@ private:
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "stale response with generation " << ev->Cookie << ", actual is " << Generation->Val());
             return;
         }
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
         if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             LOG_ERROR_S(ctx, NKikimrServices::PQ_METACACHE,
@@ -273,7 +274,7 @@ private:
 
     void HandleCheckVersionResult(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
 
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
         Y_VERIFY(record.GetResponse().YdbResultsSize() == 1);
         NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
@@ -297,7 +298,7 @@ private:
     void HandleGetTopicsResult(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleGetTopicsResult");
 
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
         Y_VERIFY(record.GetResponse().YdbResultsSize() == 1);
         TString path, dc;
@@ -357,9 +358,10 @@ private:
         bool FirstRequestDone = false;
         bool SyncVersion;
         bool ShowPrivate;
+        NWilson::TSpan Span;
 
         TWaiter(const TActorId& waiterId, const TString& dbRoot, bool syncVersion, bool showPrivate,
-                const TVector<NPersQueue::TDiscoveryConverterPtr>& topics, EWaiterType type)
+                const TVector<NPersQueue::TDiscoveryConverterPtr>& topics, EWaiterType type, NWilson::TSpan span = {})
 
             : WaiterId(waiterId)
             , DbRoot(dbRoot)
@@ -367,6 +369,7 @@ private:
             , Type(type)
             , SyncVersion(syncVersion)
             , ShowPrivate(showPrivate)
+            , Span(std::move(span))
         {}
 
         bool ApplyResult(std::shared_ptr<TSchemeCacheNavigate>& result) {
@@ -457,7 +460,7 @@ private:
         }
         SendSchemeCacheRequest(
                 std::make_shared<TWaiter>(ev->Sender, DbRoot, msg.SyncVersion, msg.ShowPrivate, ev->Get()->Topics,
-                                          EWaiterType::DescribeCustomTopics),
+                                          EWaiterType::DescribeCustomTopics, NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.SchemeCacheRequest", NWilson::EFlags::AUTO_END)),
                 ctx
         );
     }
@@ -532,7 +535,7 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "send request for " << (waiter->Type == EWaiterType::DescribeAllTopics ? " all " : "") << waiter->GetTopics().size() << " topics, got " << DescribeTopicsWaiters.size() << " requests infly");
 
-        ctx.Send(SchemeCacheId, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.release()));
+        ctx.Send(SchemeCacheId, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.release()), 0, 0, waiter->Span.GetTraceId());
     }
 
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {

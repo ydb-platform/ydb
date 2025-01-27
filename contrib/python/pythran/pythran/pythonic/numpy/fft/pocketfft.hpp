@@ -53,24 +53,24 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 #include <cmath>
-#include <cstring>
-#include <cstdlib>
-#include <stdexcept>
-#include <memory>
-#include <vector>
 #include <complex>
+#include <cstdlib>
+#include <cstring>
+#include <memory>
+#include <stdexcept>
+#include <vector>
 #if POCKETFFT_CACHE_SIZE != 0
 #include <array>
 #include <mutex>
 #endif
 
 #ifndef POCKETFFT_NO_MULTITHREADING
-#include <mutex>
-#include <condition_variable>
-#include <thread>
-#include <queue>
 #include <atomic>
+#include <condition_variable>
 #include <functional>
+#include <mutex>
+#include <queue>
+#include <thread>
 
 #ifdef POCKETFFT_PTHREADS
 #include <pthread.h>
@@ -93,8 +93,8 @@ namespace pocketfft
 
   namespace detail
   {
-    using std::size_t;
     using std::ptrdiff_t;
+    using std::size_t;
 
     // Always use std:: for <cmath> functions
     template <typename T>
@@ -145,7 +145,7 @@ namespace pocketfft
     struct VLEN<double> {
       static constexpr size_t val = 8;
     };
-#elif(defined(__AVX__))
+#elif (defined(__AVX__))
     template <>
     struct VLEN<float> {
       static constexpr size_t val = 8;
@@ -154,7 +154,7 @@ namespace pocketfft
     struct VLEN<double> {
       static constexpr size_t val = 4;
     };
-#elif(defined(__SSE2__))
+#elif (defined(__SSE2__))
     template <>
     struct VLEN<float> {
       static constexpr size_t val = 4;
@@ -163,7 +163,7 @@ namespace pocketfft
     struct VLEN<double> {
       static constexpr size_t val = 2;
     };
-#elif(defined(__VSX__))
+#elif (defined(__VSX__))
     template <>
     struct VLEN<float> {
       static constexpr size_t val = 4;
@@ -199,7 +199,7 @@ namespace pocketfft
         free(ptr);
       }
 // C++17 in principle has "aligned_alloc", but unfortunately not everywhere ...
-#elif(__cplusplus >= 201703L) &&                                               \
+#elif (__cplusplus >= 201703L) &&                                              \
     ((!defined(__MINGW32__)) || defined(_GLIBCXX_HAVE_ALIGNED_ALLOC)) &&       \
     (!defined(__APPLE__))
       static T *ralloc(size_t num)
@@ -340,31 +340,31 @@ namespace pocketfft
         return *this;
       }
       template <typename T2>
-      auto operator*(const T2 &other) const -> cmplx<decltype(r *other)>
+      auto operator*(const T2 &other) const -> cmplx<decltype(r * other)>
       {
         return {r * other, i * other};
       }
       template <typename T2>
-      auto operator+(const cmplx<T2> &other) const
-          -> cmplx<decltype(r + other.r)>
+      auto
+      operator+(const cmplx<T2> &other) const -> cmplx<decltype(r + other.r)>
       {
         return {r + other.r, i + other.i};
       }
       template <typename T2>
-      auto operator-(const cmplx<T2> &other) const
-          -> cmplx<decltype(r + other.r)>
+      auto
+      operator-(const cmplx<T2> &other) const -> cmplx<decltype(r + other.r)>
       {
         return {r - other.r, i - other.i};
       }
       template <typename T2>
-      auto operator*(const cmplx<T2> &other) const
-          -> cmplx<decltype(r + other.r)>
+      auto
+      operator*(const cmplx<T2> &other) const -> cmplx<decltype(r + other.r)>
       {
         return {r * other.r - i * other.i, r * other.i + i * other.r};
       }
       template <bool fwd, typename T2>
-      auto special_mul(const cmplx<T2> &other) const
-          -> cmplx<decltype(r + other.r)>
+      auto
+      special_mul(const cmplx<T2> &other) const -> cmplx<decltype(r + other.r)>
       {
         using Tres = cmplx<decltype(r + other.r)>;
         return fwd ? Tres(r * other.r + i * other.i, i * other.r - r * other.i)
@@ -508,7 +508,7 @@ namespace pocketfft
     };
 
     struct util // hack to avoid duplicate symbols
-        {
+    {
       static POCKETFFT_NOINLINE size_t largest_prime_factor(size_t n)
       {
         size_t res = 1;
@@ -859,10 +859,11 @@ namespace pocketfft
 #ifdef POCKETFFT_PTHREADS
         static std::once_flag f;
         std::call_once(f, [] {
-          pthread_atfork(+[] { get_pool().shutdown(); }, // prepare
-                         +[] { get_pool().restart(); },  // parent
-                         +[] { get_pool().restart(); }   // child
-                         );
+          pthread_atfork(
+              +[] { get_pool().shutdown(); }, // prepare
+              +[] { get_pool().restart(); },  // parent
+              +[] { get_pool().restart(); }   // child
+          );
         });
 #endif
 
@@ -904,7 +905,7 @@ namespace pocketfft
       }
 
 #endif
-    }
+    } // namespace threading
 
     //
     // complex FFTPACK transforms
@@ -933,12 +934,15 @@ namespace pocketfft
                  T *POCKETFFT_RESTRICT ch,
                  const cmplx<T0> *POCKETFFT_RESTRICT wa) const
       {
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
-        auto CC = [cc, ido](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + 2 * c)]; };
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i - 1 + x * (ido - 1)]; };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
+        auto CC = [cc, ido](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + 2 * c)];
+        };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i - 1 + x * (ido - 1)];
+        };
 
         if (ido == 1)
           for (size_t k = 0; k < l1; ++k) {
@@ -983,12 +987,15 @@ namespace pocketfft
                      tw1i = (fwd ? -1 : 1) *
                             T0(0.8660254037844386467637231707529362L);
 
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
-        auto CC = [cc, ido](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + 3 * c)]; };
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i - 1 + x * (ido - 1)]; };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
+        auto CC = [cc, ido](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + 3 * c)];
+        };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i - 1 + x * (ido - 1)];
+        };
 
         if (ido == 1)
           for (size_t k = 0; k < l1; ++k) {
@@ -1017,12 +1024,15 @@ namespace pocketfft
                  T *POCKETFFT_RESTRICT ch,
                  const cmplx<T0> *POCKETFFT_RESTRICT wa) const
       {
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
-        auto CC = [cc, ido](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + 4 * c)]; };
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i - 1 + x * (ido - 1)]; };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
+        auto CC = [cc, ido](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + 4 * c)];
+        };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i - 1 + x * (ido - 1)];
+        };
 
         if (ido == 1)
           for (size_t k = 0; k < l1; ++k) {
@@ -1097,12 +1107,15 @@ namespace pocketfft
                      tw2i = (fwd ? -1 : 1) *
                             T0(0.5877852522924731291687059546390728L);
 
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
-        auto CC = [cc, ido](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + 5 * c)]; };
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i - 1 + x * (ido - 1)]; };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
+        auto CC = [cc, ido](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + 5 * c)];
+        };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i - 1 + x * (ido - 1)];
+        };
 
         if (ido == 1)
           for (size_t k = 0; k < l1; ++k) {
@@ -1172,12 +1185,15 @@ namespace pocketfft
                      tw3i = (fwd ? -1 : 1) *
                             T0(0.433883739117558120475768332848359L);
 
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
-        auto CC = [cc, ido](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + 7 * c)]; };
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i - 1 + x * (ido - 1)]; };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
+        auto CC = [cc, ido](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + 7 * c)];
+        };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i - 1 + x * (ido - 1)];
+        };
 
         if (ido == 1)
           for (size_t k = 0; k < l1; ++k) {
@@ -1246,12 +1262,15 @@ namespace pocketfft
                  T *POCKETFFT_RESTRICT ch,
                  const cmplx<T0> *POCKETFFT_RESTRICT wa) const
       {
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
-        auto CC = [cc, ido](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + 8 * c)]; };
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i - 1 + x * (ido - 1)]; };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
+        auto CC = [cc, ido](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + 8 * c)];
+        };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i - 1 + x * (ido - 1)];
+        };
 
         if (ido == 1)
           for (size_t k = 0; k < l1; ++k) {
@@ -1370,12 +1389,15 @@ namespace pocketfft
             tw5r = T0(-0.9594929736144973898903680570663277L),
             tw5i = (fwd ? -1 : 1) * T0(0.2817325568414296977114179153466169L);
 
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
-        auto CC = [cc, ido](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + 11 * c)]; };
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i - 1 + x * (ido - 1)]; };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
+        auto CC = [cc, ido](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + 11 * c)];
+        };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i - 1 + x * (ido - 1)];
+        };
 
         if (ido == 1)
           for (size_t k = 0; k < l1; ++k) {
@@ -1441,16 +1463,21 @@ namespace pocketfft
         size_t ipph = (ip + 1) / 2;
         size_t idl1 = ido * l1;
 
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
-        auto CC = [cc, ido, cdim](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + cdim * c)]; };
-        auto CX = [cc, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return cc[a + ido * (b + l1 * c)]; };
-        auto CX2 =
-            [cc, idl1](size_t a, size_t b) -> T &{ return cc[a + idl1 * b]; };
-        auto CH2 = [ch, idl1](size_t a, size_t b)
-                       -> const T &{ return ch[a + idl1 * b]; };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
+        auto CC = [cc, ido, cdim](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + cdim * c)];
+        };
+        auto CX = [cc, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return cc[a + ido * (b + l1 * c)];
+        };
+        auto CX2 = [cc, idl1](size_t a, size_t b) -> T & {
+          return cc[a + idl1 * b];
+        };
+        auto CH2 = [ch, idl1](size_t a, size_t b) -> const T & {
+          return ch[a + idl1 * b];
+        };
 
         arr<cmplx<T0>> wal(ip);
         wal[0] = cmplx<T0>(1., 0.);
@@ -1708,12 +1735,15 @@ namespace pocketfft
                  T *POCKETFFT_RESTRICT ch,
                  const T0 *POCKETFFT_RESTRICT wa) const
       {
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i + x * (ido - 1)]; };
-        auto CC = [cc, ido, l1](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + l1 * c)]; };
-        auto CH = [ch, ido](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + 2 * c)]; };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i + x * (ido - 1)];
+        };
+        auto CC = [cc, ido, l1](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + l1 * c)];
+        };
+        auto CH = [ch, ido](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + 2 * c)];
+        };
 
         for (size_t k = 0; k < l1; k++)
           PM(CH(0, 0, k), CH(ido - 1, 1, k), CC(0, k, 0), CC(0, k, 1));
@@ -1753,12 +1783,15 @@ namespace pocketfft
         constexpr T0 taur = -0.5,
                      taui = T0(0.8660254037844386467637231707529362L);
 
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i + x * (ido - 1)]; };
-        auto CC = [cc, ido, l1](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + l1 * c)]; };
-        auto CH = [ch, ido](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + 3 * c)]; };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i + x * (ido - 1)];
+        };
+        auto CC = [cc, ido, l1](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + l1 * c)];
+        };
+        auto CH = [ch, ido](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + 3 * c)];
+        };
 
         for (size_t k = 0; k < l1; k++) {
           T cr2 = CC(0, k, 1) + CC(0, k, 2);
@@ -1795,12 +1828,15 @@ namespace pocketfft
       {
         constexpr T0 hsqt2 = T0(0.707106781186547524400844362104849L);
 
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i + x * (ido - 1)]; };
-        auto CC = [cc, ido, l1](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + l1 * c)]; };
-        auto CH = [ch, ido](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + 4 * c)]; };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i + x * (ido - 1)];
+        };
+        auto CC = [cc, ido, l1](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + l1 * c)];
+        };
+        auto CH = [ch, ido](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + 4 * c)];
+        };
 
         for (size_t k = 0; k < l1; k++) {
           T tr1, tr2;
@@ -1849,12 +1885,15 @@ namespace pocketfft
                      tr12 = T0(-0.8090169943749474241022934171828191L),
                      ti12 = T0(0.5877852522924731291687059546390728L);
 
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i + x * (ido - 1)]; };
-        auto CC = [cc, ido, l1](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + l1 * c)]; };
-        auto CH = [ch, ido](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + 5 * c)]; };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i + x * (ido - 1)];
+        };
+        auto CC = [cc, ido, l1](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + l1 * c)];
+        };
+        auto CH = [ch, ido](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + 5 * c)];
+        };
 
         for (size_t k = 0; k < l1; k++) {
           T cr2, cr3, ci4, ci5;
@@ -1909,16 +1948,21 @@ namespace pocketfft
         size_t ipph = (ip + 1) / 2;
         size_t idl1 = ido * l1;
 
-        auto CC = [cc, ido, cdim](size_t a, size_t b, size_t c)
-                      -> T &{ return cc[a + ido * (b + cdim * c)]; };
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> const T &{ return ch[a + ido * (b + l1 * c)]; };
-        auto C1 = [cc, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return cc[a + ido * (b + l1 * c)]; };
-        auto C2 =
-            [cc, idl1](size_t a, size_t b) -> T &{ return cc[a + idl1 * b]; };
-        auto CH2 =
-            [ch, idl1](size_t a, size_t b) -> T &{ return ch[a + idl1 * b]; };
+        auto CC = [cc, ido, cdim](size_t a, size_t b, size_t c) -> T & {
+          return cc[a + ido * (b + cdim * c)];
+        };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> const T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
+        auto C1 = [cc, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return cc[a + ido * (b + l1 * c)];
+        };
+        auto C2 = [cc, idl1](size_t a, size_t b) -> T & {
+          return cc[a + idl1 * b];
+        };
+        auto CH2 = [ch, idl1](size_t a, size_t b) -> T & {
+          return ch[a + idl1 * b];
+        };
 
         if (ido > 1) {
           for (size_t j = 1, jc = ip - 1; j < ipph; ++j, --jc) // 114
@@ -2064,12 +2108,15 @@ namespace pocketfft
                  T *POCKETFFT_RESTRICT ch,
                  const T0 *POCKETFFT_RESTRICT wa) const
       {
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i + x * (ido - 1)]; };
-        auto CC = [cc, ido](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + 2 * c)]; };
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i + x * (ido - 1)];
+        };
+        auto CC = [cc, ido](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + 2 * c)];
+        };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
 
         for (size_t k = 0; k < l1; k++)
           PM(CH(0, k, 0), CH(0, k, 1), CC(0, 0, k), CC(ido - 1, 1, k));
@@ -2099,12 +2146,15 @@ namespace pocketfft
         constexpr T0 taur = -0.5,
                      taui = T0(0.8660254037844386467637231707529362L);
 
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i + x * (ido - 1)]; };
-        auto CC = [cc, ido](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + 3 * c)]; };
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i + x * (ido - 1)];
+        };
+        auto CC = [cc, ido](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + 3 * c)];
+        };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
 
         for (size_t k = 0; k < l1; k++) {
           T tr2 = 2 * CC(ido - 1, 1, k);
@@ -2144,12 +2194,15 @@ namespace pocketfft
       {
         constexpr T0 sqrt2 = T0(1.414213562373095048801688724209698L);
 
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i + x * (ido - 1)]; };
-        auto CC = [cc, ido](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + 4 * c)]; };
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i + x * (ido - 1)];
+        };
+        auto CC = [cc, ido](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + 4 * c)];
+        };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
 
         for (size_t k = 0; k < l1; k++) {
           T tr1, tr2;
@@ -2203,12 +2256,15 @@ namespace pocketfft
                      tr12 = T0(-0.8090169943749474241022934171828191L),
                      ti12 = T0(0.5877852522924731291687059546390728L);
 
-        auto WA =
-            [wa, ido](size_t x, size_t i) { return wa[i + x * (ido - 1)]; };
-        auto CC = [cc, ido](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + 5 * c)]; };
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
+        auto WA = [wa, ido](size_t x, size_t i) {
+          return wa[i + x * (ido - 1)];
+        };
+        auto CC = [cc, ido](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + 5 * c)];
+        };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
 
         for (size_t k = 0; k < l1; k++) {
           T ti5 = CC(0, 2, k) + CC(0, 2, k);
@@ -2266,16 +2322,21 @@ namespace pocketfft
         size_t ipph = (ip + 1) / 2;
         size_t idl1 = ido * l1;
 
-        auto CC = [cc, ido, cdim](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + cdim * c)]; };
-        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c)
-                      -> T &{ return ch[a + ido * (b + l1 * c)]; };
-        auto C1 = [cc, ido, l1](size_t a, size_t b, size_t c)
-                      -> const T &{ return cc[a + ido * (b + l1 * c)]; };
-        auto C2 =
-            [cc, idl1](size_t a, size_t b) -> T &{ return cc[a + idl1 * b]; };
-        auto CH2 =
-            [ch, idl1](size_t a, size_t b) -> T &{ return ch[a + idl1 * b]; };
+        auto CC = [cc, ido, cdim](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + cdim * c)];
+        };
+        auto CH = [ch, ido, l1](size_t a, size_t b, size_t c) -> T & {
+          return ch[a + ido * (b + l1 * c)];
+        };
+        auto C1 = [cc, ido, l1](size_t a, size_t b, size_t c) -> const T & {
+          return cc[a + ido * (b + l1 * c)];
+        };
+        auto C2 = [cc, idl1](size_t a, size_t b) -> T & {
+          return cc[a + idl1 * b];
+        };
+        auto CH2 = [ch, idl1](size_t a, size_t b) -> T & {
+          return ch[a + idl1 * b];
+        };
 
         for (size_t k = 0; k < l1; ++k)    // 102
           for (size_t i = 0; i < ido; ++i) // 101
@@ -3338,8 +3399,8 @@ namespace pocketfft
 #ifndef POCKETFFT_NO_VECTORS
     template <>
     struct VTYPE<float> {
-      using type = float
-          __attribute__((vector_size(VLEN<float>::val * sizeof(float))));
+      using type =
+          float __attribute__((vector_size(VLEN<float>::val * sizeof(float))));
     };
     template <>
     struct VTYPE<double> {
@@ -3348,9 +3409,8 @@ namespace pocketfft
     };
     template <>
     struct VTYPE<long double> {
-      using type = long double
-          __attribute__((vector_size(VLEN<long double>::val *
-                                     sizeof(long double))));
+      using type = long double __attribute__((
+          vector_size(VLEN<long double>::val * sizeof(long double))));
     };
 #endif
 
@@ -3911,18 +3971,18 @@ namespace pocketfft
 
   } // namespace detail
 
-  using detail::FORWARD;
   using detail::BACKWARD;
-  using detail::shape_t;
-  using detail::stride_t;
   using detail::c2c;
   using detail::c2r;
-  using detail::r2c;
-  using detail::r2r_fftpack;
-  using detail::r2r_separable_hartley;
-  using detail::r2r_genuine_hartley;
   using detail::dct;
   using detail::dst;
+  using detail::FORWARD;
+  using detail::r2c;
+  using detail::r2r_fftpack;
+  using detail::r2r_genuine_hartley;
+  using detail::r2r_separable_hartley;
+  using detail::shape_t;
+  using detail::stride_t;
 
 } // namespace pocketfft
 

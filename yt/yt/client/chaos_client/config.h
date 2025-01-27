@@ -10,10 +10,24 @@ namespace NYT::NChaosClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TChaosCacheChannelConfig
+    : public NRpc::TRetryingChannelConfig
+    , public NRpc::TBalancingChannelConfig
+{
+public:
+    REGISTER_YSON_STRUCT(TChaosCacheChannelConfig);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
+};
+
+DEFINE_REFCOUNTED_TYPE(TChaosCacheChannelConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TReplicationCardCacheConfig
     : public TAsyncExpiringCacheConfig
-    , public NRpc::TBalancingChannelConfig
-    , public NRpc::TRetryingChannelConfig
+    , public TChaosCacheChannelConfig
 {
 public:
     bool EnableWatching;

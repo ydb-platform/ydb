@@ -2,8 +2,7 @@
 
 #include "oidc_session_create.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 class THandlerSessionCreateNebius : public THandlerSessionCreate {
 private:
@@ -15,16 +14,15 @@ public:
                                 const NActors::TActorId& httpProxyId,
                                 const TOpenIdConnectSettings& settings);
 
-    void RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) override;
-    void ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) override;
+    void RequestSessionToken(const TString& code) override;
+    void ProcessSessionToken(const NJson::TJsonValue& jsonValue) override;
 
 private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
         }
     }
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

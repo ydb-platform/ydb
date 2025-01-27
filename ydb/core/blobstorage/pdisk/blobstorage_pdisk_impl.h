@@ -79,7 +79,6 @@ public:
     std::queue<TIntrusivePtr<TRequestBase>> JointChunkReads;
     std::queue<TRequestBase*> JointChunkWrites;
     std::queue<TLogWrite*> JointLogWrites;
-    TVector<TLogWrite*> JointCommits;
     TVector<TChunkTrim*> JointChunkTrims;
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
@@ -149,7 +148,18 @@ public:
     ui64 InsaneLogChunks = 0;  // Set when pdisk sees insanely large log, to give vdisks a chance to cut it
     ui32 FirstLogChunkToParseCommits = 0;
 
-    // Chunks that is owned by killed owner, but has operations InFlight
+    enum EShredState {
+        EShredStateDefault = 0,
+        EShredStateSendPreShredCompactVDisk = 1,
+        EShredStateSendShredVDisk = 2,
+        EShredStateFinished = 3,
+        EShredStateFailed = 4,
+    };
+    EShredState ShredState = EShredStateDefault;
+    ui64 ShredGeneration = 0;
+    std::deque<TActorId> ShredRequesters;
+
+    // Chunks that are owned by killed owner, but have operations InFlight
     TVector<TChunkIdx> QuarantineChunks;
     TVector<TOwner> QuarantineOwners;
 
@@ -183,6 +193,10 @@ public:
 
     TIntrusivePtr<TPDiskConfig> Cfg;
     TInstant CreationTime;
+    // Last chunk and sector indexes we have seen on initial log read.
+    // Used to limit log reading in read-only mode.
+    ui32 LastInitialChunkIdx;
+    ui64 LastInitialSectorIdx;
 
     ui64 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
 
@@ -331,7 +345,7 @@ public:
             std::optional<TRcBuf> metadata);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
-    void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str);
+    void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str, NKikimrProto::EReplyStatus status = NKikimrProto::ERROR);
     TOwner FindNextOwnerId();
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
@@ -385,6 +399,12 @@ public:
     void HandleNextWriteMetadata();
     void ProcessWriteMetadataResult(TWriteMetadataResult& request);
 
+    void ProgressShredState();
+    void ProcessShredPDisk(TShredPDisk& request);
+    void ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& request);
+    void ProcessShredVDiskResult(TShredVDiskResult& request);
+    void ProcessMarkDirty(TMarkDirty& request);
+
     void DropAllMetadataRequests();
 
     TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize, bool encryption,
@@ -429,6 +449,7 @@ private:
     void AddCbs(ui32 ownerId, EGate gate, const char *gateName, ui64 minBudget);
     void AddCbsSet(ui32 ownerId);
     void UpdateMinLogCostNs();
+    bool HandleReadOnlyIfWrite(TRequestBase *request);
 };
 
 void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, ui64 lastSector, ui64 currentSector,

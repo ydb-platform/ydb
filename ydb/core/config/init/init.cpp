@@ -161,23 +161,23 @@ class TDefaultNodeBrokerClient
                 if (node.NodeId == result.GetNodeId()) {
                     auto &nodeInfo = *dnConfig.MutableNodeInfo();
                     nodeInfo.SetNodeId(node.NodeId);
-                    nodeInfo.SetHost(node.Host);
+                    nodeInfo.SetHost(TString{node.Host});
                     nodeInfo.SetPort(node.Port);
-                    nodeInfo.SetResolveHost(node.ResolveHost);
-                    nodeInfo.SetAddress(node.Address);
+                    nodeInfo.SetResolveHost(TString{node.ResolveHost});
+                    nodeInfo.SetAddress(TString{node.Address});
                     nodeInfo.SetExpire(node.Expire);
                     NConfig::CopyNodeLocation(nodeInfo.MutableLocation(), node.Location);
                     if (result.HasNodeName()) {
-                        nodeInfo.SetName(result.GetNodeName());
+                        nodeInfo.SetName(TString{result.GetNodeName()});
                         outNodeName = result.GetNodeName();
                     }
                 } else {
                     auto &info = *nsConfig.AddNode();
                     info.SetNodeId(node.NodeId);
-                    info.SetAddress(node.Address);
+                    info.SetAddress(TString{node.Address});
                     info.SetPort(node.Port);
-                    info.SetHost(node.Host);
-                    info.SetInterconnectHost(node.ResolveHost);
+                    info.SetHost(TString{node.Host});
+                    info.SetInterconnectHost(TString{node.ResolveHost});
                     NConfig::CopyNodeLocation(info.MutableLocation(), node.Location);
                 }
             }
@@ -478,16 +478,16 @@ void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDisc
         dst->SetBody(src.Body.value());
     }
     if (src.DataCenter) {
-        dst->SetDataCenter(src.DataCenter.value());
+        dst->SetDataCenter(TString{src.DataCenter.value()});
     }
     if (src.Module) {
-        dst->SetModule(src.Module.value());
+        dst->SetModule(TString{src.Module.value()});
     }
     if (src.Rack) {
-        dst->SetRack(src.Rack.value());
+        dst->SetRack(TString{src.Rack.value()});
     }
     if (src.Unit) {
-        dst->SetUnit(src.Unit.value());
+        dst->SetUnit(TString{src.Unit.value()});
     }
 }
 
@@ -588,6 +588,12 @@ void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConf
     IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
     const TString yamlConfigString = protoConfigFileProvider.GetProtoFromFile(yamlConfigFile, errorCollector);
+
+    if (appConfig.GetSelfManagementConfig().GetEnabled()) {
+        // fill in InitialConfigYaml only when self-management through distconf is enabled
+        appConfig.MutableSelfManagementConfig()->SetInitialConfigYaml(yamlConfigString);
+    }
+
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
      */

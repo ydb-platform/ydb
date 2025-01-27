@@ -1,0 +1,5 @@
+SELECT
+    CurrentOperationId(),
+    CurrentOperationSharedId(),
+    CurrentAuthenticatedUser()
+;

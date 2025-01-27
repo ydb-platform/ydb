@@ -88,6 +88,29 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
         }
     }
 
+    for (const auto& opStat : taskStats.OperatorStat) {
+        auto& op = *protoTask->MutableOperators()->Add();
+        op.SetOperatorId(opStat.OperatorId);
+        op.SetBytes(std::max<i64>(0, opStat.Bytes));
+        op.SetRows(std::max<i64>(0, opStat.Rows));
+        switch (opStat.OperatorType) {
+            case TOperatorType::Join: {
+                    op.MutableJoin();
+                }
+                break;
+            case TOperatorType::Filter: {
+                    op.MutableFilter();
+                }
+                break;
+            case TOperatorType::Aggregation: {
+                    op.MutableAggregation();
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
     TDqAsyncStats taskPushStats;
 
     for (auto& [srcStageId, inputChannels] : taskStats.InputChannels) {

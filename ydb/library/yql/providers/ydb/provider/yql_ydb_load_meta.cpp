@@ -1,17 +1,18 @@
 #include "yql_ydb_provider_impl.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 namespace NYql {
 
@@ -218,7 +219,7 @@ public:
                 const auto& config = State_->Configuration->Clusters[TString(client.first)];
                 ctx.AddError(TIssue({}, TStringBuilder() << "Failed to take snapshot for: `" << client.first << "`, endpoint: " << config.Endpoint << ", status: " << snapshot.GetStatus()));
                 for (const auto& issue : snapshot.GetIssues())
-                    ctx.AddError(issue);
+                    ctx.AddError(NYdb::NAdapters::ToYqlIssue(issue));
             }
         }
 
@@ -255,7 +256,7 @@ public:
                 failed = true;
                 ctx.AddError(TIssue({}, TStringBuilder() << "Failed to load table metadata for: `" << pair.first.second << ", status: " << result.GetStatus() << "`\n"));
                 for (const auto& issue : result.GetIssues())
-                    ctx.AddError(issue);
+                    ctx.AddError(NYdb::NAdapters::ToYqlIssue(issue));
             }
         }
 

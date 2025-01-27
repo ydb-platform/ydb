@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:3:110: Info: Cannot execute self join in DQ
-        	select aggregate_list(a.k), aval from (select cast(subkey as uint32) as k, value as val from plato.Input) as a left only join (select cast(key as uint32) as k, cast(subkey as uint32) as s from plato.Input) as b using(k) group by a.val as aval;
-	                                                                                                             ^

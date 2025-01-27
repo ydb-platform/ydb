@@ -470,12 +470,6 @@ void TGRpcService::SetupIncomingRequests() {
         RegisterRequestActor(CreateMessageBusCmsRequest(msg));
     })
 
-    // SQS request
-    ADD_REQUEST(SqsRequest, TSqsRequest, TSqsResponse, {
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST));
-        RegisterRequestActor(CreateMessageBusSqsRequest(msg));
-    })
-
     // Console request
     ADD_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST));
@@ -499,7 +493,6 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_PROXY_REQUEST(SchemeInitRoot,  TSchemeInitRoot,  TEvBusProxy::TEvInitRoot,            MTYPE_CLIENT_SCHEME_INITROOT)
 
     ADD_PROXY_REQUEST(PersQueueRequest, TPersQueueRequest, TEvBusProxy::TEvPersQueue,           MTYPE_CLIENT_PERSQUEUE)
-    ADD_PROXY_REQUEST(Request,          TRequest,          TEvBusProxy::TEvRequest,             MTYPE_CLIENT_REQUEST)
     ADD_PROXY_REQUEST(SchemeOperation,  TSchemeOperation,  TEvBusProxy::TEvFlatTxRequest,       MTYPE_CLIENT_FLAT_TX_REQUEST)
     ADD_PROXY_REQUEST(SchemeDescribe,   TSchemeDescribe,   TEvBusProxy::TEvFlatDescribeRequest, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST)
 }

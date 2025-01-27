@@ -51,7 +51,7 @@
  * Parameters:
  *
  * chlg    [in]     - The challenge.
- * userp   [in]     - The username.
+ * userp   [in]     - The user name.
  * passwdp [in]     - The user's password.
  * out     [out]    - The result storage.
  *

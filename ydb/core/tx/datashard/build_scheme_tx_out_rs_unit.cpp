@@ -44,7 +44,7 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto &schemeTx = tx->GetSchemeTx();
-    if (!schemeTx.HasSendSnapshot())
+    if (!schemeTx.HasSendSnapshot() && !schemeTx.HasCreateIncrementalBackupSrc())
         return EExecutionStatus::Executed;
 
     Y_ABORT_UNLESS(!op->InputSnapshots().empty(), "Snapshots expected");
@@ -52,7 +52,10 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
     auto &outReadSets = op->OutReadSets();
     ui64 srcTablet = DataShard.TabletID();
 
-    const auto& snapshot = schemeTx.GetSendSnapshot();
+    const auto& snapshot =
+        schemeTx.HasSendSnapshot() ?
+        schemeTx.GetSendSnapshot() :
+        schemeTx.GetCreateIncrementalBackupSrc().GetSendSnapshot();
     ui64 targetTablet = snapshot.GetSendTo(0).GetShard();
     ui64 tableId = snapshot.GetTableId_Deprecated();
     if (snapshot.HasTableId()) {

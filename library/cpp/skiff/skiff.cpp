@@ -32,6 +32,18 @@ bool operator!=(TUint128 lhs, TUint128 rhs)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool operator==(const TInt256& lhs, const TInt256& rhs)
+{
+    return lhs.Parts == rhs.Parts;
+}
+
+bool operator==(const TUint256& lhs, const TUint256& rhs)
+{
+    return lhs.Parts == rhs.Parts;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TUncheckedSkiffParser::TUncheckedSkiffParser(IZeroCopyInput* underlying)
     : Underlying_(underlying)
     , Buffer_(512 * 1024)
@@ -93,6 +105,26 @@ TUint128 TUncheckedSkiffParser::ParseUint128()
     auto low = ParseSimple<ui64>();
     auto high = ParseSimple<ui64>();
     return {low, high};
+}
+
+TInt256 TUncheckedSkiffParser::ParseInt256()
+{
+    TInt256 result;
+    for (auto& part : result.Parts) {
+        part = ParseSimple<ui64>();
+    }
+
+    return result;
+}
+
+TUint256 TUncheckedSkiffParser::ParseUint256()
+{
+    TUint256 result;
+    for (auto& part : result.Parts) {
+        part  = ParseSimple<ui64>();
+    }
+
+    return result;
 }
 
 double TUncheckedSkiffParser::ParseDouble()
@@ -274,6 +306,18 @@ TUint128 TCheckedSkiffParser::ParseUint128()
     return Parser_.ParseUint128();
 }
 
+TInt256 TCheckedSkiffParser::ParseInt256()
+{
+    Validator_->OnSimpleType(EWireType::Int256);
+    return Parser_.ParseInt256();
+}
+
+TUint256 TCheckedSkiffParser::ParseUint256()
+{
+    Validator_->OnSimpleType(EWireType::Uint256);
+    return Parser_.ParseUint256();
+}
+
 double TCheckedSkiffParser::ParseDouble()
 {
     Validator_->OnSimpleType(EWireType::Double);
@@ -387,6 +431,20 @@ void TUncheckedSkiffWriter::WriteUint128(TUint128 value)
 {
     WriteSimple<ui64>(value.Low);
     WriteSimple<ui64>(value.High);
+}
+
+void TUncheckedSkiffWriter::WriteInt256(const TInt256& value)
+{
+    for (auto part : value.Parts) {
+        WriteSimple<ui64>(part);
+    }
+}
+
+void TUncheckedSkiffWriter::WriteUint256(const TUint256& value)
+{
+    for (auto part : value.Parts) {
+        WriteSimple<ui64>(part);
+    }
 }
 
 void TUncheckedSkiffWriter::WriteUint8(ui8 value)
@@ -549,6 +607,18 @@ void TCheckedSkiffWriter::WriteUint128(TUint128 value)
 {
     Validator_->OnSimpleType(EWireType::Uint128);
     Writer_.WriteUint128(value);
+}
+
+void TCheckedSkiffWriter::WriteInt256(TInt256 value)
+{
+    Validator_->OnSimpleType(EWireType::Int256);
+    Writer_.WriteInt256(std::move(value));
+}
+
+void TCheckedSkiffWriter::WriteUint256(TUint256 value)
+{
+    Validator_->OnSimpleType(EWireType::Uint256);
+    Writer_.WriteUint256(std::move(value));
 }
 
 void TCheckedSkiffWriter::WriteString32(TStringBuf value)

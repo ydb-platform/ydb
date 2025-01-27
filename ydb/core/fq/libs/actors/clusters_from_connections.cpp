@@ -1,9 +1,9 @@
 #include "clusters_from_connections.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/http/http.h>
 
 #include <util/generic/hash.h>
@@ -41,7 +41,8 @@ void FillClusterAuth(TClusterConfig& clusterCfg,
 void FillPqClusterConfig(NYql::TPqClusterConfig& clusterConfig,
         const TString& name, bool useBearerForYdb,
         const TString& authToken, const THashMap<TString, TString>& accountIdSignatures,
-        const FederatedQuery::DataStreams& ds) {
+        const FederatedQuery::DataStreams& ds,
+        const TString& readGroup) {
     clusterConfig.SetName(name);
     if (ds.endpoint()) {
         clusterConfig.SetEndpoint(ds.endpoint());
@@ -52,6 +53,7 @@ void FillPqClusterConfig(NYql::TPqClusterConfig& clusterConfig,
     clusterConfig.SetAddBearerToToken(useBearerForYdb);
     clusterConfig.SetClusterType(TPqClusterConfig::CT_DATA_STREAMS);
     clusterConfig.SetSharedReading(ds.shared_reading());
+    clusterConfig.SetReadGroup(readGroup);
     FillClusterAuth(clusterConfig, ds.auth(), authToken, accountIdSignatures);
 }
 
@@ -110,7 +112,7 @@ void FillGenericClusterConfigBase(
     TGenericClusterConfig& clusterCfg,
     const TConnection& connection,
     const TString& connectionName,
-    NConnector::NApi::EDataSourceKind dataSourceKind,
+    NYql::EGenericDataSourceKind dataSourceKind,
     const TString& authToken,
     const THashMap<TString, TString>& accountIdSignatures
 ) {
@@ -126,21 +128,21 @@ void FillGenericClusterConfigBase(
     // In YQv1 we just hardcode the appropriate protocols here.
     // In YQv2 protocol can be configured via `CREATE EXTERNAL DATA SOURCE` params.
     switch (dataSourceKind) {
-        case NYql::NConnector::NApi::CLICKHOUSE:
-            clusterCfg.SetProtocol(common.GetUseNativeProtocolForClickHouse() ? NYql::NConnector::NApi::EProtocol::NATIVE : NYql::NConnector::NApi::EProtocol::HTTP);
+        case NYql::EGenericDataSourceKind::CLICKHOUSE:
+            clusterCfg.SetProtocol(common.GetUseNativeProtocolForClickHouse() ? NYql::EGenericProtocol::NATIVE : NYql::EGenericProtocol::HTTP);
             break;
-        case NYql::NConnector::NApi::GREENPLUM:
-            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
+        case NYql::EGenericDataSourceKind::GREENPLUM:
+            clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
             break;
-        case NYql::NConnector::NApi::MYSQL:
-            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
+        case NYql::EGenericDataSourceKind::MYSQL:
+            clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
             break;
-        case NYql::NConnector::NApi::POSTGRESQL:
-            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
+        case NYql::EGenericDataSourceKind::POSTGRESQL:
+            clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
             break;
         default:
             ythrow yexception() << "Unexpected data source kind: '" 
-                                << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
+                                << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";
     }
 
     ValidateGenericClusterConfig(clusterCfg, "NFq::FillGenericClusterFromConfig");
@@ -152,7 +154,7 @@ void FillGenericClusterConfig(
     TGenericClusterConfig& clusterCfg,
     const TConnection& connection,
     const TString& connectionName,
-    NConnector::NApi::EDataSourceKind dataSourceKind,
+    NYql::EGenericDataSourceKind dataSourceKind,
     const TString& authToken,
     const THashMap<TString, TString>& accountIdSignatures
 ) {
@@ -165,7 +167,7 @@ void FillGenericClusterConfig<FederatedQuery::PostgreSQLCluster>(
     TGenericClusterConfig& clusterCfg,
     const FederatedQuery::PostgreSQLCluster& connection,
     const TString& connectionName,
-    NConnector::NApi::EDataSourceKind dataSourceKind,
+    NYql::EGenericDataSourceKind dataSourceKind,
     const TString& authToken,
     const THashMap<TString, TString>& accountIdSignatures
 ){
@@ -177,13 +179,14 @@ void FillGenericClusterConfig<FederatedQuery::PostgreSQLCluster>(
 
 NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name,
         bool useBearerForYdb, const TString& authToken,
-        const TString& accountSignature, const FederatedQuery::DataStreams& ds) {
+        const TString& accountSignature, const FederatedQuery::DataStreams& ds,
+        const TString& readGroup) {
     NYql::TPqClusterConfig cluster;
     THashMap<TString, TString> accountIdSignatures;
     if (ds.auth().has_service_account()) {
         accountIdSignatures[ds.auth().service_account().id()] = accountSignature;
     }
-    FillPqClusterConfig(cluster, name, useBearerForYdb, authToken, accountIdSignatures, ds);
+    FillPqClusterConfig(cluster, name, useBearerForYdb, authToken, accountIdSignatures, ds, readGroup);
     return cluster;
 }
 
@@ -224,8 +227,8 @@ void AddClustersFromConnections(
         case FederatedQuery::ConnectionSetting::kYdbDatabase: {
             const auto& db = conn.content().setting().ydb_database();
             auto* clusterCfg = gatewaysConfig.MutableGeneric()->AddClusterMapping();
-            clusterCfg->SetKind(NYql::NConnector::NApi::EDataSourceKind::YDB);
-            clusterCfg->SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
+            clusterCfg->SetKind(NYql::EGenericDataSourceKind::YDB);
+            clusterCfg->SetProtocol(NYql::EGenericProtocol::NATIVE);
             clusterCfg->SetName(connectionName);
             clusterCfg->SetDatabaseId(db.database_id());
             clusterCfg->SetUseSsl(!common.GetDisableSslForGenericDataSources());
@@ -239,7 +242,7 @@ void AddClustersFromConnections(
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
                 conn.content().setting().clickhouse_cluster(),
                 connectionName,
-                NYql::NConnector::NApi::EDataSourceKind::CLICKHOUSE,
+                NYql::EGenericDataSourceKind::CLICKHOUSE,
                 authToken,
                 accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
@@ -255,7 +258,7 @@ void AddClustersFromConnections(
         case FederatedQuery::ConnectionSetting::kDataStreams: {
             const auto& ds = conn.content().setting().data_streams();
             auto* clusterCfg = gatewaysConfig.MutablePq()->AddClusterMapping();
-            FillPqClusterConfig(*clusterCfg, connectionName, common.GetUseBearerForYdb(), authToken, accountIdSignatures, ds);
+            FillPqClusterConfig(*clusterCfg, connectionName, common.GetUseBearerForYdb(), authToken, accountIdSignatures, ds, conn.meta().id());
             clusters.emplace(connectionName, PqProviderName);
             break;
         }
@@ -272,7 +275,7 @@ void AddClustersFromConnections(
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
                 conn.content().setting().postgresql_cluster(),
                 connectionName,
-                NYql::NConnector::NApi::EDataSourceKind::POSTGRESQL,
+                NYql::EGenericDataSourceKind::POSTGRESQL,
                 authToken,
                 accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
@@ -284,7 +287,7 @@ void AddClustersFromConnections(
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
                 conn.content().setting().greenplum_cluster(),
                 connectionName,
-                NYql::NConnector::NApi::EDataSourceKind::GREENPLUM,
+                NYql::EGenericDataSourceKind::GREENPLUM,
                 authToken,
                 accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
@@ -296,9 +299,19 @@ void AddClustersFromConnections(
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
                 conn.content().setting().mysql_cluster(),
                 connectionName,
-                NYql::NConnector::NApi::EDataSourceKind::MYSQL,
+                NYql::EGenericDataSourceKind::MYSQL,
                 authToken,
                 accountIdSignatures);
+            clusters.emplace(connectionName, GenericProviderName);
+            break;
+        }
+        case FederatedQuery::ConnectionSetting::kLogging: {
+            const auto& connection = conn.content().setting().logging();
+            auto* clusterCfg = gatewaysConfig.MutableGeneric()->AddClusterMapping();
+            clusterCfg->SetKind(NYql::EGenericDataSourceKind::LOGGING);
+            clusterCfg->SetName(connectionName);
+            clusterCfg->mutable_datasourceoptions()->insert({"folder_id", connection.folder_id()});
+            FillClusterAuth(*clusterCfg, connection.auth(), authToken, accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
             break;
         }

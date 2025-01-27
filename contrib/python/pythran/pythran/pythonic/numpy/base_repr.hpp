@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/base_repr.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -46,7 +46,7 @@ namespace numpy
 
     return res;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

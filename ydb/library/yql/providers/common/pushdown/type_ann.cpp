@@ -1,7 +1,7 @@
 #include "predicate_node.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 namespace NYql::NPushdown {
 

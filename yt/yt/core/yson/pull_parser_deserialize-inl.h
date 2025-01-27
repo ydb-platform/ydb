@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/yson/token_writer.h>
 
+#include <library/cpp/yt/misc/cast.h>
+
 #include <vector>
 
 namespace NYT::NYson {
@@ -38,7 +40,7 @@ void DeserializeVector(T& value, TYsonPullParserCursor* cursor)
 {
     int index = 0;
     auto itemVisitor = [&] (TYsonPullParserCursor* cursor) {
-        if (index < static_cast<int>(value.size())) {
+        if (index < std::ssize(value)) {
             Deserialize(value[index], cursor);
         } else {
             value.emplace_back();
@@ -237,6 +239,18 @@ void Deserialize(T& value, TYsonPullParserCursor* cursor)
         value = ParseEnum<T>((*cursor)->UncheckedAsString());
         cursor->Next();
     }
+}
+
+template <class T>
+requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void Deserialize(T& value, TYsonPullParserCursor* cursor)
+{
+    static_assert(CanFitSubtype<i64, std::underlying_type_t<T>>());
+
+    MaybeSkipAttributes(cursor);
+    EnsureYsonToken("enum", *cursor, EYsonItemType::Int64Value);
+    value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>((*cursor)->UncheckedAsInt64()));
+    cursor->Next();
 }
 
 // TCompactVector

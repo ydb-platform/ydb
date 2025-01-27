@@ -1,8 +1,6 @@
 items:
-- name: Deployment
-  include:
-    mode: link
-    path: ../../deploy/toc_p.yaml
+- name: Initial deployment
+  href: initial-deployment.md
 - name: Managing a cluster's disk subsystem
   include:
     mode: link
@@ -23,6 +21,8 @@ items:
   href: system-views.md
 - name: Maintenance without downtime
   href: maintenance-without-downtime.md
-- include:
+- name: Federated queries
+  href: federated-queries/index.md
+  include:
     mode: link
-    path: ../../deploy/manual/toc_p.yaml
+    path: federated-queries/toc_p.yaml

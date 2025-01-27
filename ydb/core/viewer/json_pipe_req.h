@@ -47,6 +47,8 @@ protected:
     NWilson::TSpan Span;
     IViewer* Viewer = nullptr;
     NMon::TEvHttpInfo::TPtr Event;
+    NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr HttpEvent;
+    TCgiParameters Params;
     TJsonSettings JsonSettings;
     TProto2JsonConfig Proto2JsonConfig;
     TDuration Timeout = TDuration::Seconds(10);
@@ -80,22 +82,23 @@ protected:
         TRequestResponse& operator =(const TRequestResponse&) = delete;
         TRequestResponse& operator =(TRequestResponse&&) = default;
 
-        void Set(std::unique_ptr<T>&& response) {
+        bool Set(std::unique_ptr<T>&& response) {
+            if (IsDone()) {
+                return false;
+            }
             constexpr bool hasErrorCheck = requires(const std::unique_ptr<T>& r) {TViewerPipeClient::IsSuccess(r);};
             if constexpr (hasErrorCheck) {
                 if (!TViewerPipeClient::IsSuccess(response)) {
-                    Error(TViewerPipeClient::GetError(response));
-                    return;
+                    return Error(TViewerPipeClient::GetError(response));
                 }
             }
-            if (!IsDone()) {
-                Span.EndOk();
-                Response = std::move(response);
-            }
+            Span.EndOk();
+            Response = std::move(response);
+            return true;
         }
 
-        void Set(TAutoPtr<TEventHandle<T>>&& response) {
-            Set(std::unique_ptr<T>(response->Release().Release()));
+        bool Set(TAutoPtr<TEventHandle<T>>&& response) {
+            return Set(std::unique_ptr<T>(response->Release().Release()));
         }
 
         bool Error(const TString& error) {
@@ -176,6 +179,7 @@ protected:
     TViewerPipeClient();
     TViewerPipeClient(NWilson::TTraceId traceId);
     TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName = {});
+    TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, const TString& handlerName = {});
     TActorId ConnectTabletPipe(TTabletId tabletId);
     void SendEvent(std::unique_ptr<IEventHandle> event);
     void SendRequest(TActorId recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {});
@@ -273,6 +277,8 @@ protected:
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
+    void BuildParamsFromJson(TStringBuf data);
+    void SetupTracing(const TString& handlerName);
     void ClosePipes();
     ui32 FailPipeConnect(TTabletId tabletId);
 

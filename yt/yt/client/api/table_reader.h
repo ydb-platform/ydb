@@ -26,7 +26,7 @@ struct ITableReader
 
     //! Returns the names of columns that are not accessible according to columnar ACL
     //! and were omitted. See #TTableReaderOptions::OmitInaccessibleColumns.
-    virtual const std::vector<TString>& GetOmittedInaccessibleColumns() const = 0;
+    virtual const std::vector<std::string>& GetOmittedInaccessibleColumns() const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(ITableReader)

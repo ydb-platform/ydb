@@ -72,7 +72,7 @@ struct IKafkaProtocolWriter
 
     virtual void WriteUuid(TGuid value) = 0;
 
-    virtual void WriteErrorCode(EErrorCode value) = 0;
+    virtual void WriteErrorCode(NKafka::EErrorCode value) = 0;
 
     virtual void WriteString(const TString& value) = 0;
     virtual void WriteNullableString(const std::optional<TString>& value) = 0;

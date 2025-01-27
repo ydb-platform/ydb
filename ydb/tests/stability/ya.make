@@ -1,3 +1,4 @@
 RECURSE(
     ydb
+    library
 )

@@ -1,7 +1,6 @@
 #include "yt_poller.h"
 
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
+#include <yt/cpp/mapreduce/http_client/raw_batch_request.h>
 
 #include <yt/cpp/mapreduce/common/debug_metrics.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
@@ -92,14 +91,14 @@ void TYtPoller::WatchLoop()
             Y_ABORT_UNLESS(!InProgress_.empty());
         }
 
-        TRawBatchRequest rawBatchRequest(Context_.Config);
+        THttpRawBatchRequest rawBatchRequest(Context_, ClientRetryPolicy_->CreatePolicyForGenericRequest());
 
         for (auto& item : InProgress_) {
             item->PrepareRequest(&rawBatchRequest);
         }
 
         try {
-            ExecuteBatch(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, rawBatchRequest);
+            rawBatchRequest.ExecuteBatch();
         } catch (const std::exception& ex) {
             YT_LOG_ERROR("Exception while executing batch request: %v", ex.what());
         }

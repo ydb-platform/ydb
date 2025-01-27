@@ -115,7 +115,8 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "value", defaultValue, Ydb::StatusIds::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(InvalidValue) {
+    // TODO: rename to InvalidValue and check invalid default value
+    Y_UNIT_TEST(ValidDefaultValue) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
         ui64 txId = 100;
@@ -215,7 +216,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
         Ydb::TypedValue defaultValue;
         defaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
-        defaultValue.mutable_value()->set_text_value("1111");
+        defaultValue.mutable_value()->set_uint64_value(1111); // TODO: check invalid value
 
         TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "ColumnValue", defaultValue, Ydb::StatusIds::SUCCESS);
     

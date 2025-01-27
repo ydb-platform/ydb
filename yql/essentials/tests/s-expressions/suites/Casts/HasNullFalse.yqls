@@ -1,0 +1,56 @@
+(
+
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+
+
+# Data
+(let value (String 'test))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+(let value (Int32 '1))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+(let value (TzDatetime '"1546981200,Europe/Moscow"))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+(let valye (/ (Float '1) (Float '0)))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+# Optional 
+(let value (Just (Int32 '1)))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+# Tuple 
+(let value '((Int32 '1) (String 'test) (Float '1)))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+(let value '())
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+# Struct
+(let value (AsStruct '('a (Int32 '1)) '('b (String 'one))))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+(let value (Struct))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+# Variant
+(let valueType (VariantType (TupleType (DataType 'Int32) (NullType))))
+(let value (Variant (Int32 '123) '0 valueType))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+(let valueType (VariantType (StructType '('a (DataType 'Int32)) '('b (OptionalType (DataType 'String))))))
+(let value (Variant (Int32 '1) 'a valueType))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+# List 
+(let value (AsList (Int32 '1) (Int32 '2) (Int32 '3)))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+(let value (List (ListType (NullType))))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

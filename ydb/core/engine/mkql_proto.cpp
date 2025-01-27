@@ -1,12 +1,12 @@
 #include "mkql_proto.h"
 
-#include <ydb/library/yql/minikql/defs.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 
@@ -223,6 +223,19 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             }
             break;
         }
+        case NScheme::NTypeIds::Decimal:
+        {
+            if (v.HasLow128() && v.HasHi128()) {
+                NYql::NDecimal::TInt128 int128 = NYql::NDecimal::FromProto(v);
+                auto &data = memoryOwner.emplace_back();
+                data.resize(sizeof(NYql::NDecimal::TInt128));
+                std::memcpy(data.Detach(), &int128, sizeof(NYql::NDecimal::TInt128));
+                c = TCell(data);                
+            } else {
+                CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Decimal in tuple at position %" PRIu32, i));
+            }
+            break;
+        }        
         default:
             CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, typeId, i));
             break;

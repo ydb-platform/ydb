@@ -1,6 +1,6 @@
 #include "status_code_counters.h"
 
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
 #include <util/string/builder.h>
 

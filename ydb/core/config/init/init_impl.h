@@ -2,8 +2,8 @@
 
 #include "init.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
@@ -18,6 +18,7 @@
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/yaml_config/yaml_config.h>
@@ -317,6 +318,7 @@ struct TCommonAppOptions {
     TString GRpcPublicHost = "";
     ui32 GRpcPublicPort = 0;
     ui32 GRpcsPublicPort = 0;
+    ui32 KafkaPort = 0;
     TString PGWireAddress = "";
     ui32 PGWirePort = 0;
     TVector<TString> GRpcPublicAddressesV4;
@@ -387,6 +389,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
+        opts.AddLongOption("kafka-port", "enable kafka proxy to listen on port").OptionalArgument("PORT").StoreResult(&KafkaPort);
         opts.AddLongOption("pgwire-address", "set host for listen postgres protocol").RequiredArgument("ADDR").StoreResult(&PGWireAddress);
         opts.AddLongOption("pgwire-port", "set port for listen postgres protocol").OptionalArgument("PORT").StoreResult(&PGWirePort);
         opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
@@ -602,6 +605,12 @@ struct TCommonAppOptions {
                 }
             }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+	if (KafkaPort) {
+            auto& conf = *appConfig.MutableKafkaProxyConfig();
+            conf.SetEnableKafkaProxy(true);
+            conf.SetListeningPort(KafkaPort);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::KafkaProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (PGWireAddress) {
             appConfig.MutableLocalPgWireConfig()->SetAddress(PGWireAddress);
@@ -1125,6 +1134,12 @@ public:
         }
 
         TenantName = FillTenantPoolConfig(CommonAppOptions);
+
+        std::vector<TString> errors;
+        EValidationResult result = ValidateConfig(AppConfig, errors);
+        if (result == EValidationResult::Error) {
+            ythrow yexception() << errors.front();
+        }
 
         Logger.Out() << "configured" << Endl;
 

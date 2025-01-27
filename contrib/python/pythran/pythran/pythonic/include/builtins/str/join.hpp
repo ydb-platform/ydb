@@ -40,7 +40,7 @@ namespace builtins
     join(S const &s, Iterable &&iterable);
 
     DEFINE_FUNCTOR(pythonic::builtins::str, join);
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

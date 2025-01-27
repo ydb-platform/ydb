@@ -2,8 +2,6 @@
 
 This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-dotnet-examples) that uses the {{ ydb-short-name }} [C# (.NET) SDK](https://github.com/ydb-platform/ydb-dotnet-sdk).
 
-{% include [addition.md](auxilary/addition.md) %}
-
 {% include [steps/01_init.md](steps/01_init.md) %}
 
 App code snippet for driver initialization:

@@ -7,8 +7,7 @@
 #include "oidc_settings.h"
 #include "context.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 TContext::TContext(const TInitializer& initializer)
     : State(initializer.State)
@@ -94,5 +93,4 @@ TStringBuf TContext::GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& reque
     return requestedUrl;
 }
 
-} // NOIDC
-} // NMVP
+} // NMVP::NOIDC

@@ -1,4 +1,5 @@
 //  Copyright (c) 2006 Xiaogang Zhang, 2015 John Maddock
+//  Copyright (c) 2024 Matt Borland
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -18,8 +19,9 @@
 #pragma once
 #endif
 
-#include <boost/math/special_functions/math_fwd.hpp>
 #include <boost/math/tools/config.hpp>
+#include <boost/math/tools/numeric_limits.hpp>
+#include <boost/math/special_functions/math_fwd.hpp>
 #include <boost/math/policies/error_handling.hpp>
 #include <boost/math/special_functions/ellint_rc.hpp>
 #include <boost/math/special_functions/ellint_rf.hpp>
@@ -32,7 +34,7 @@
 namespace boost { namespace math { namespace detail{
 
 template <typename T, typename Policy>
-T ellint_rc1p_imp(T y, const Policy& pol)
+BOOST_MATH_GPU_ENABLED T ellint_rc1p_imp(T y, const Policy& pol)
 {
    using namespace boost::math;
    // Calculate RC(1, 1 + x)
@@ -70,11 +72,11 @@ T ellint_rc1p_imp(T y, const Policy& pol)
 }
 
 template <typename T, typename Policy>
-T ellint_rj_imp(T x, T y, T z, T p, const Policy& pol)
+BOOST_MATH_GPU_ENABLED T ellint_rj_imp_final(T x, T y, T z, T p, const Policy& pol)
 {
    BOOST_MATH_STD_USING
 
-   static const char* function = "boost::math::ellint_rj<%1%>(%1%,%1%,%1%)";
+   constexpr auto function = "boost::math::ellint_rj<%1%>(%1%,%1%,%1%)";
 
    if(x < 0)
    {
@@ -94,37 +96,7 @@ T ellint_rj_imp(T x, T y, T z, T p, const Policy& pol)
    }
    if(x + y == 0 || y + z == 0 || z + x == 0)
    {
-      return policies::raise_domain_error<T>(function, "At most one argument can be zero, only possible result is %1%.", std::numeric_limits<T>::quiet_NaN(), pol);
-   }
-
-   // for p < 0, the integral is singular, return Cauchy principal value
-   if(p < 0)
-   {
-      //
-      // We must ensure that x < y < z.
-      // Since the integral is symmetrical in x, y and z
-      // we can just permute the values:
-      //
-      if(x > y)
-         std::swap(x, y);
-      if(y > z)
-         std::swap(y, z);
-      if(x > y)
-         std::swap(x, y);
-
-      BOOST_MATH_ASSERT(x <= y);
-      BOOST_MATH_ASSERT(y <= z);
-
-      T q = -p;
-      p = (z * (x + y + q) - x * y) / (z + q);
-
-      BOOST_MATH_ASSERT(p >= 0);
-
-      T value = (p - z) * ellint_rj_imp(x, y, z, p, pol);
-      value -= 3 * ellint_rf_imp(x, y, z, pol);
-      value += 3 * sqrt((x * y * z) / (x * y + p * q)) * ellint_rc_imp(T(x * y + p * q), T(p * q), pol);
-      value /= (z + q);
-      return value;
+      return policies::raise_domain_error<T>(function, "At most one argument can be zero, only possible result is %1%.", boost::math::numeric_limits<T>::quiet_NaN(), pol);
    }
 
    //
@@ -148,13 +120,12 @@ T ellint_rj_imp(T x, T y, T z, T p, const Policy& pol)
       else
       {
          // x = y only, permute so y = z:
-         using std::swap;
-         swap(x, z);
+         BOOST_MATH_GPU_SAFE_SWAP(x, z);
          if(y == p)
          {
             return ellint_rd_imp(x, y, y, pol);
          }
-         else if((std::max)(y, p) / (std::min)(y, p) > T(1.2))
+         else if(BOOST_MATH_GPU_SAFE_MAX(y, p) / BOOST_MATH_GPU_SAFE_MIN(y, p) > T(1.2))
          {
             return 3 * (ellint_rc_imp(x, y, pol) - ellint_rc_imp(x, p, pol)) / (p - y);
          }
@@ -168,7 +139,7 @@ T ellint_rj_imp(T x, T y, T z, T p, const Policy& pol)
          // y = z = p:
          return ellint_rd_imp(x, y, y, pol);
       }
-      else if((std::max)(y, p) / (std::min)(y, p) > T(1.2))
+      else if(BOOST_MATH_GPU_SAFE_MAX(y, p) / BOOST_MATH_GPU_SAFE_MIN(y, p) > T(1.2))
       {
          // y = z:
          return 3 * (ellint_rc_imp(x, y, pol) - ellint_rc_imp(x, p, pol)) / (p - y);
@@ -187,7 +158,7 @@ T ellint_rj_imp(T x, T y, T z, T p, const Policy& pol)
    T An = (x + y + z + 2 * p) / 5;
    T A0 = An;
    T delta = (p - x) * (p - y) * (p - z);
-   T Q = pow(tools::epsilon<T>() / 5, -T(1) / 8) * (std::max)((std::max)(fabs(An - x), fabs(An - y)), (std::max)(fabs(An - z), fabs(An - p)));
+   T Q = pow(tools::epsilon<T>() / 5, -T(1) / 8) * BOOST_MATH_GPU_SAFE_MAX(BOOST_MATH_GPU_SAFE_MAX(fabs(An - x), fabs(An - y)), BOOST_MATH_GPU_SAFE_MAX(fabs(An - z), fabs(An - p)));
 
    unsigned n;
    T lambda;
@@ -260,10 +231,71 @@ T ellint_rj_imp(T x, T y, T z, T p, const Policy& pol)
    return result;
 }
 
+template <typename T, typename Policy>
+BOOST_MATH_GPU_ENABLED T ellint_rj_imp(T x, T y, T z, T p, const Policy& pol)
+{
+   BOOST_MATH_STD_USING
+   
+   constexpr auto function = "boost::math::ellint_rj<%1%>(%1%,%1%,%1%)";
+
+   if(x < 0)
+   {
+      return policies::raise_domain_error<T>(function, "Argument x must be non-negative, but got x = %1%", x, pol);
+   }
+   if(y < 0)
+   {
+      return policies::raise_domain_error<T>(function, "Argument y must be non-negative, but got y = %1%", y, pol);
+   }
+   if(z < 0)
+   {
+      return policies::raise_domain_error<T>(function, "Argument z must be non-negative, but got z = %1%", z, pol);
+   }
+   if(p == 0)
+   {
+      return policies::raise_domain_error<T>(function, "Argument p must not be zero, but got p = %1%", p, pol);
+   }
+   if(x + y == 0 || y + z == 0 || z + x == 0)
+   {
+      return policies::raise_domain_error<T>(function, "At most one argument can be zero, only possible result is %1%.", boost::math::numeric_limits<T>::quiet_NaN(), pol);
+   }
+
+   // for p < 0, the integral is singular, return Cauchy principal value
+   if(p < 0)
+   {
+      //
+      // We must ensure that x < y < z.
+      // Since the integral is symmetrical in x, y and z
+      // we can just permute the values:
+      //
+      if(x > y)
+         BOOST_MATH_GPU_SAFE_SWAP(x, y);
+      if(y > z)
+         BOOST_MATH_GPU_SAFE_SWAP(y, z);
+      if(x > y)
+         BOOST_MATH_GPU_SAFE_SWAP(x, y);
+
+      BOOST_MATH_ASSERT(x <= y);
+      BOOST_MATH_ASSERT(y <= z);
+
+      T q = -p;
+      p = (z * (x + y + q) - x * y) / (z + q);
+
+      BOOST_MATH_ASSERT(p >= 0);
+
+      T value = (p - z) * ellint_rj_imp_final(x, y, z, p, pol);
+      value -= 3 * ellint_rf_imp(x, y, z, pol);
+      value += 3 * sqrt((x * y * z) / (x * y + p * q)) * ellint_rc_imp(T(x * y + p * q), T(p * q), pol);
+      value /= (z + q);
+      return value;
+   }
+
+   return ellint_rj_imp_final(x, y, z, p, pol);
+}
+
 } // namespace detail
 
 template <class T1, class T2, class T3, class T4, class Policy>
-inline typename tools::promote_args<T1, T2, T3, T4>::type 
+BOOST_MATH_GPU_ENABLED inline typename tools::promote_args<T1, T2, T3, T4>::type 
    ellint_rj(T1 x, T2 y, T3 z, T4 p, const Policy& pol)
 {
    typedef typename tools::promote_args<T1, T2, T3, T4>::type result_type;
@@ -278,7 +310,7 @@ inline typename tools::promote_args<T1, T2, T3, T4>::type
 }
 
 template <class T1, class T2, class T3, class T4>
-inline typename tools::promote_args<T1, T2, T3, T4>::type 
+BOOST_MATH_GPU_ENABLED inline typename tools::promote_args<T1, T2, T3, T4>::type 
    ellint_rj(T1 x, T2 y, T3 z, T4 p)
 {
    return ellint_rj(x, y, z, p, policies::policy<>());

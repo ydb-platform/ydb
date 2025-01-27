@@ -35,10 +35,15 @@ std::shared_ptr<arrow::Schema> TConstructor::DoGetExpectedSchema(const std::shar
 
 std::shared_ptr<arrow::RecordBatch> TConstructor::DoConstruct(
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
-    auto chunked = columnData->GetChunkedArray();
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
-    auto table = arrow::Table::Make(schema, { chunked }, columnData->GetRecordsCount());
-    return NArrow::ToBatch(table, true);
+    if (columnData->GetType() == IChunkedArray::EType::Array) {
+        const auto* arr = static_cast<const TTrivialArray*>(columnData.get());
+        return arrow::RecordBatch::Make(schema, columnData->GetRecordsCount(), { arr->GetArray() });
+    } else {
+        auto chunked = columnData->GetChunkedArray();
+        auto table = arrow::Table::Make(schema, { chunked }, columnData->GetRecordsCount());
+        return NArrow::ToBatch(table, chunked->num_chunks() > 1);
+    }
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NPlain

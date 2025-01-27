@@ -95,7 +95,7 @@ Curl_freeaddrinfo(struct Curl_addrinfo *cahead)
  * the only difference that instead of returning a linked list of
  * addrinfo structs this one returns a linked list of Curl_addrinfo
  * ones. The memory allocated by this function *MUST* be free'd with
- * Curl_freeaddrinfo(). For each successful call to this function
+ * Curl_freeaddrinfo().  For each successful call to this function
  * there must be an associated call later to Curl_freeaddrinfo().
  *
  * There should be no single call to system's getaddrinfo() in the
@@ -130,7 +130,7 @@ Curl_getaddrinfo_ex(const char *nodename,
     /* settle family-specific sockaddr structure size.  */
     if(ai->ai_family == AF_INET)
       ss_size = sizeof(struct sockaddr_in);
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
     else if(ai->ai_family == AF_INET6)
       ss_size = sizeof(struct sockaddr_in6);
 #endif
@@ -221,7 +221,7 @@ Curl_getaddrinfo_ex(const char *nodename,
  * stack, but usable also for IPv4, all hosts and environments.
  *
  * The memory allocated by this function *MUST* be free'd later on calling
- * Curl_freeaddrinfo(). For each successful call to this function there
+ * Curl_freeaddrinfo().  For each successful call to this function there
  * must be an associated call later to Curl_freeaddrinfo().
  *
  *   Curl_addrinfo defined in "lib/curl_addrinfo.h"
@@ -259,7 +259,7 @@ Curl_he2ai(const struct hostent *he, int port)
   struct Curl_addrinfo *prevai = NULL;
   struct Curl_addrinfo *firstai = NULL;
   struct sockaddr_in *addr;
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
   struct sockaddr_in6 *addr6;
 #endif
   CURLcode result = CURLE_OK;
@@ -275,7 +275,7 @@ Curl_he2ai(const struct hostent *he, int port)
   for(i = 0; (curr = he->h_addr_list[i]) != NULL; i++) {
     size_t ss_size;
     size_t namelen = strlen(he->h_name) + 1; /* include null-terminator */
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
     if(he->h_addrtype == AF_INET6)
       ss_size = sizeof(struct sockaddr_in6);
     else
@@ -317,24 +317,16 @@ Curl_he2ai(const struct hostent *he, int port)
       addr = (void *)ai->ai_addr; /* storage area for this info */
 
       memcpy(&addr->sin_addr, curr, sizeof(struct in_addr));
-#ifdef __MINGW32__
-      addr->sin_family = (short)(he->h_addrtype);
-#else
       addr->sin_family = (CURL_SA_FAMILY_T)(he->h_addrtype);
-#endif
       addr->sin_port = htons((unsigned short)port);
       break;
 
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
     case AF_INET6:
       addr6 = (void *)ai->ai_addr; /* storage area for this info */
 
       memcpy(&addr6->sin6_addr, curr, sizeof(struct in6_addr));
-#ifdef __MINGW32__
-      addr6->sin6_family = (short)(he->h_addrtype);
-#else
       addr6->sin6_family = (CURL_SA_FAMILY_T)(he->h_addrtype);
-#endif
       addr6->sin6_port = htons((unsigned short)port);
       break;
 #endif
@@ -356,7 +348,7 @@ struct namebuff {
   struct hostent hostentry;
   union {
     struct in_addr  ina4;
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
     struct in6_addr ina6;
 #endif
   } addrentry;
@@ -367,7 +359,7 @@ struct namebuff {
 /*
  * Curl_ip2addr()
  *
- * This function takes an Internet address, in binary form, as input parameter
+ * This function takes an internet address, in binary form, as input parameter
  * along with its address family and the string version of the address, and it
  * returns a Curl_addrinfo chain filled in correctly with information for the
  * given address/host
@@ -409,7 +401,7 @@ Curl_ip2addr(int af, const void *inaddr, const char *hostname, int port)
     addrentry = (void *)&buf->addrentry.ina4;
     memcpy(addrentry, inaddr, sizeof(struct in_addr));
     break;
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
   case AF_INET6:
     addrsize = sizeof(struct in6_addr);
     addrentry = (void *)&buf->addrentry.ina6;
@@ -455,7 +447,7 @@ struct Curl_addrinfo *Curl_str2addr(char *address, int port)
   if(Curl_inet_pton(AF_INET, address, &in) > 0)
     /* This is a dotted IP address 123.123.123.123-style */
     return Curl_ip2addr(AF_INET, &in, address, port);
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
   {
     struct in6_addr in6;
     if(Curl_inet_pton(AF_INET6, address, &in6) > 0)
@@ -519,7 +511,7 @@ struct Curl_addrinfo *Curl_unix2addr(const char *path, bool *longpath,
  *
  * This is strictly for memory tracing and are using the same style as the
  * family otherwise present in memdebug.c. I put these ones here since they
- * require a bunch of structs I did not want to include in memdebug.c
+ * require a bunch of structs I didn't want to include in memdebug.c
  */
 
 void
@@ -543,7 +535,7 @@ curl_dbg_freeaddrinfo(struct addrinfo *freethis,
  *
  * This is strictly for memory tracing and are using the same style as the
  * family otherwise present in memdebug.c. I put these ones here since they
- * require a bunch of structs I did not want to include in memdebug.c
+ * require a bunch of structs I didn't want to include in memdebug.c
  */
 
 int
@@ -571,14 +563,14 @@ curl_dbg_getaddrinfo(const char *hostname,
 
 #if defined(HAVE_GETADDRINFO) && defined(USE_RESOLVE_ON_IPS)
 /*
- * Work-arounds the sin6_port is always zero bug on iOS 9.3.2 and macOS
+ * Work-arounds the sin6_port is always zero bug on iOS 9.3.2 and Mac OS X
  * 10.11.5.
  */
 void Curl_addrinfo_set_port(struct Curl_addrinfo *addrinfo, int port)
 {
   struct Curl_addrinfo *ca;
   struct sockaddr_in *addr;
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
   struct sockaddr_in6 *addr6;
 #endif
   for(ca = addrinfo; ca != NULL; ca = ca->ai_next) {
@@ -588,7 +580,7 @@ void Curl_addrinfo_set_port(struct Curl_addrinfo *addrinfo, int port)
       addr->sin_port = htons((unsigned short)port);
       break;
 
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
     case AF_INET6:
       addr6 = (void *)ca->ai_addr; /* storage area for this info */
       addr6->sin6_port = htons((unsigned short)port);

@@ -8,14 +8,14 @@
 #include <util/string/printf.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
-#include <ydb/library/yql/utils/exceptions.h>
+#include <yql/essentials/utils/exceptions.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 
 namespace NFq {

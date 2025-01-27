@@ -26,6 +26,7 @@ struct TVolumeSpace {
 struct TFileStoreSpace {
     ui64 SSD = 0;
     ui64 HDD = 0;
+    ui64 SSDSystem = 0;
 };
 
 struct TSpaceLimits {
@@ -78,6 +79,7 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     TSpaceLimits VolumeSpaceSSDSystem;
     TSpaceLimits FileStoreSpaceSSD;
     TSpaceLimits FileStoreSpaceHDD;
+    TSpaceLimits FileStoreSpaceSSDSystem;
     ui64 DocumentApiVersion = 0;
     NJson::TJsonValue AsyncReplication;
     bool IsAsyncReplica = false;
@@ -99,10 +101,9 @@ private:
 public:
     TPathElement(TPathId pathId, TPathId parentPathId, TPathId domainPathId, const TString& name, const TString& owner);
     ui64 GetAliveChildren() const;
-    void SetAliveChildren(ui64 val);
+    void IncAliveChildrenPrivate(bool isBackup = false);
+    void DecAliveChildrenPrivate(bool isBackup = false);
     ui64 GetBackupChildren() const;
-    void IncAliveChildren(ui64 delta = 1, bool isBackup = false);
-    void DecAliveChildren(ui64 delta = 1, bool isBackup = false);
     ui64 GetShardsInside() const;
     void SetShardsInside(ui64 val);
     void IncShardsInside(ui64 delta = 1);
@@ -125,6 +126,7 @@ public:
     bool IsColumnTable() const;
     bool IsSequence() const;
     bool IsReplication() const;
+    bool IsTransfer() const;
     bool IsBlobDepot() const;
     bool IsContainer() const;
     bool IsLikeDirectory() const;

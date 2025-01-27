@@ -1,9 +1,9 @@
 #include "ydb_service_operation.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_export/export.h>
-#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
+#include <ydb-cpp-sdk/client/export/export.h>
+#include <ydb-cpp-sdk/client/import/import.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/query/query.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 
 #include <util/string/builder.h>
@@ -34,7 +34,7 @@ namespace {
     template <typename T>
     void ListOperations(NOperation::TOperationClient& client, ui64 pageSize, const TString& pageToken, EDataFormat format) {
         NOperation::TOperationsList<T> operations = client.List<T>(pageSize, pageToken).GetValueSync();
-        ThrowOnError(operations);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(operations);
         PrintOperationsList(operations, format);
     }
 
@@ -87,21 +87,21 @@ int TCommandGetOperation::Run(TConfig& config) {
     NOperation::TOperationClient client(CreateDriver(config));
 
     switch (OperationId.GetKind()) {
-    case Ydb::TOperationId::EXPORT:
+    case TOperationId::EXPORT:
         if (OperationId.GetSubKind() == "s3") {
             return GetOperation<NExport::TExportToS3Response>(client, OperationId, OutputFormat);
         } else { // fallback to "yt"
             return GetOperation<NExport::TExportToYtResponse>(client, OperationId, OutputFormat);
         }
-    case Ydb::TOperationId::IMPORT:
+    case TOperationId::IMPORT:
         if (OperationId.GetSubKind() == "s3") {
             return GetOperation<NImport::TImportFromS3Response>(client, OperationId, OutputFormat);
         } else {
             throw TMisuseException() << "Invalid operation ID (unexpected sub-kind of operation)";
         }
-    case Ydb::TOperationId::BUILD_INDEX:
+    case TOperationId::BUILD_INDEX:
         return GetOperation<NTable::TBuildIndexOperation>(client, OperationId, OutputFormat);
-    case Ydb::TOperationId::SCRIPT_EXECUTION:
+    case TOperationId::SCRIPT_EXECUTION:
         return GetOperation<NQuery::TScriptExecutionOperation>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
@@ -117,7 +117,7 @@ TCommandCancelOperation::TCommandCancelOperation()
 
 int TCommandCancelOperation::Run(TConfig& config) {
     NOperation::TOperationClient client(CreateDriver(config));
-    ThrowOnError(client.Cancel(OperationId).GetValueSync());
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Cancel(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
 
@@ -128,7 +128,7 @@ TCommandForgetOperation::TCommandForgetOperation()
 
 int TCommandForgetOperation::Run(TConfig& config) {
     NOperation::TOperationClient client(CreateDriver(config));
-    ThrowOnError(client.Forget(OperationId).GetValueSync());
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Forget(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
 

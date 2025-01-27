@@ -5,6 +5,7 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
@@ -547,6 +548,8 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
     app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
+    app.SetEnableExportChecksums(true);
+    app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

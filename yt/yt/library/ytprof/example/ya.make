@@ -14,6 +14,7 @@ ENDIF()
 
 PEERDIR(
     yt/yt/library/ytprof/http
+    library/cpp/yt/backtrace/absl_unwinder
 )
 
 END()

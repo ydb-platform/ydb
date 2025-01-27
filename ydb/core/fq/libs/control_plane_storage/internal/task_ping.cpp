@@ -8,7 +8,7 @@
 #include <ydb/core/metering/metering.h>
 
 #include <ydb/library/protobuf_printer/size_printer.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
 #include <google/protobuf/util/time_util.h>
 
@@ -48,7 +48,7 @@ THashMap<TString, i64> DeserializeFlatStats(const google::protobuf::RepeatedPtrF
 struct TPingTaskParams {
     TString Query;
     TParams Params;
-    const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)> Prepare;
+    const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)> Prepare;
     std::shared_ptr<std::vector<TString>> MeteringRecords;
 };
 
@@ -91,7 +91,7 @@ TPingTaskParams ConstructHardPingTask(
 
     auto meteringRecords = std::make_shared<std::vector<TString>>();
 
-    auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem(), request=request](const TVector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem(), request=request](const std::vector<TResultSet>& resultSets) mutable {
         TString jobId;
         FederatedQuery::Query query;
         FederatedQuery::Internal::QueryInternal internal;
@@ -140,9 +140,9 @@ TPingTaskParams ConstructHardPingTask(
                 ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request.query_id().value() << "\" MISMATCHED: \"" << request.owner_id() << "\" (received) != \"" << owner << "\" (selected)";
             }
             retryLimiter.Assign(
-                parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().GetOrElse(0),
-                parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero()),
-                parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0)
+                parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().value_or(0),
+                parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Zero()),
+                parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().value_or(0.0)
             );
         }
 
@@ -180,7 +180,16 @@ TPingTaskParams ConstructHardPingTask(
                 policy = it->second;
             }
 
-            if (retryLimiter.UpdateOnRetry(Now(), policy)) {
+            auto now = TInstant::Now();
+            auto executionDeadline = TInstant::Max();
+
+            auto submittedAt = NProtoInterop::CastFromProto(query.meta().submitted_at());
+            auto executionTtl = NProtoInterop::CastFromProto(internal.execution_ttl());
+            if (submittedAt && executionTtl) {
+                executionDeadline = submittedAt + executionTtl;
+            }
+
+            if (retryLimiter.UpdateOnRetry(now, policy) && now < executionDeadline) {
                 queryStatus.Clear();
                 // failing query is throttled for backoff period
                 backoff = policy.BackoffPeriod * (retryLimiter.RetryRate + 1);
@@ -191,7 +200,7 @@ TPingTaskParams ConstructHardPingTask(
                 TStringBuilder builder;
                 builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code())
                     << " and will be restarted (RetryCount: " << retryLimiter.RetryCount << ")"
-                    << " at " << Now();
+                    << " at " << now;
                 transientIssues->AddIssue(NYql::TIssue(builder));
             } else {
                 // failure query should be processed instantly
@@ -202,7 +211,7 @@ TPingTaskParams ConstructHardPingTask(
                 if (policy.RetryCount) {
                     builder << " (" << retryLimiter.LastError << ")";
                 }
-                builder << " at " << Now();
+                builder << " at " << now;
 
                 // in case of problems with finalization, do not change the issues
                 if (query.meta().status() == FederatedQuery::QueryMeta::FAILING || query.meta().status() == FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM || query.meta().status() == FederatedQuery::QueryMeta::ABORTING_BY_USER) {
@@ -563,7 +572,7 @@ TPingTaskParams ConstructSoftPingTask(
         "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
-    auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=](const std::vector<TResultSet>& resultSets) {
         TString owner;
         FederatedQuery::Internal::QueryInternal internal;
 

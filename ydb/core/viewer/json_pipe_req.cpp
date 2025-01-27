@@ -1,4 +1,6 @@
 #include "json_pipe_req.h"
+#include "log.h"
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NViewer {
@@ -21,19 +23,37 @@ TViewerPipeClient::TViewerPipeClient(NWilson::TTraceId traceId) {
     }
 }
 
-TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName)
-    : Viewer(viewer)
-    , Event(ev)
-{
-    InitConfig(Event->Get()->Request.GetParams());
+void TViewerPipeClient::BuildParamsFromJson(TStringBuf data) {
+    NJson::TJsonValue jsonData;
+    if (NJson::ReadJsonTree(data, &jsonData)) {
+        if (jsonData.IsMap()) {
+            for (const auto& [key, value] : jsonData.GetMap()) {
+                switch (value.GetType()) {
+                    case NJson::EJsonValueType::JSON_STRING:
+                    case NJson::EJsonValueType::JSON_INTEGER:
+                    case NJson::EJsonValueType::JSON_UINTEGER:
+                    case NJson::EJsonValueType::JSON_DOUBLE:
+                    case NJson::EJsonValueType::JSON_BOOLEAN:
+                        Params.InsertUnescaped(key, value.GetStringRobust());
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+}
+
+void TViewerPipeClient::SetupTracing(const TString& handlerName) {
+    auto request = GetRequest();
     NWilson::TTraceId traceId;
-    TStringBuf traceparent = Event->Get()->Request.GetHeader("traceparent");
+    TString traceparent = request.GetHeader("traceparent");
     if (traceparent) {
         traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
     }
-    TStringBuf wantTrace = Event->Get()->Request.GetHeader("X-Want-Trace");
-    TStringBuf traceVerbosity = Event->Get()->Request.GetHeader("X-Trace-Verbosity");
-    TStringBuf traceTTL = Event->Get()->Request.GetHeader("X-Trace-TTL");
+    TString wantTrace = request.GetHeader("X-Want-Trace");
+    TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
+    TString traceTTL = request.GetHeader("X-Trace-TTL");
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
         ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
         if (traceVerbosity) {
@@ -49,9 +69,35 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     }
     if (traceId) {
         Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), handlerName ? "http " + handlerName : "http viewer", NWilson::EFlags::AUTO_END};
-        Span.Attribute("request_type", TString(Event->Get()->Request.GetUri().Before('?')));
-        Span.Attribute("request_params", TString(Event->Get()->Request.GetUri().After('?')));
+        TString uri = request.GetUri();
+        Span.Attribute("request_type", TString(TStringBuf(uri).Before('?')));
+        Span.Attribute("request_params", TString(TStringBuf(uri).After('?')));
     }
+}
+
+TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName)
+    : Viewer(viewer)
+    , Event(ev)
+{
+    Params = Event->Get()->Request.GetParams();
+    if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/json") {
+        BuildParamsFromJson(Event->Get()->Request.GetPostContent());
+    }
+    InitConfig(Params);
+    SetupTracing(handlerName);
+}
+
+TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, const TString& handlerName)
+    : Viewer(viewer)
+    , HttpEvent(ev)
+{
+    Params = TCgiParameters(HttpEvent->Get()->Request->URL.After('?'));
+    NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
+    if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/json") {
+        BuildParamsFromJson(HttpEvent->Get()->Request->Body);
+    }
+    InitConfig(Params);
+    SetupTracing(handlerName);
 }
 
 TActorId TViewerPipeClient::ConnectTabletPipe(NNodeWhiteboard::TTabletId tabletId) {
@@ -231,6 +277,15 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
                 break;
             case NKikimrViewer::TEvViewerRequest::kSystemRequest:
                 response.Span.Attribute("request_type", "SystemRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kPDiskRequest:
+                response.Span.Attribute("request_type", "PDiskRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kVDiskRequest:
+                response.Span.Attribute("request_type", "VDiskRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kNodeRequest:
+                response.Span.Attribute("request_type", "NodeRequest");
                 break;
             case NKikimrViewer::TEvViewerRequest::kQueryRequest:
                 response.Span.Attribute("request_type", "QueryRequest");
@@ -542,6 +597,12 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
 void TViewerPipeClient::RequestTxProxyDescribe(const TString& path) {
     THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
     request->Record.MutableDescribePath()->SetPath(path);
+    if (Event && !Event->Get()->UserToken.empty()) {
+        request->Record.SetUserToken(Event->Get()->UserToken);
+    }
+    if (HttpEvent && !HttpEvent->Get()->UserToken.empty()) {
+        request->Record.SetUserToken(HttpEvent->Get()->UserToken);
+    }
     SendRequest(MakeTxProxyID(), request.Release());
 }
 
@@ -641,14 +702,36 @@ ui32 TViewerPipeClient::FailPipeConnect(NNodeWhiteboard::TTabletId tabletId) {
 }
 
 TRequestState TViewerPipeClient::GetRequest() const {
-    return {Event->Get(), Span.GetTraceId()};
+    if (Event) {
+        return {Event->Get(), Span.GetTraceId()};
+    } else if (HttpEvent) {
+        return {HttpEvent->Get(), Span.GetTraceId()};
+    }
+    return {};
 }
 
 void TViewerPipeClient::ReplyAndPassAway(TString data, const TString& error) {
-    Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+    TString message = error;
+
+    if (Event) {
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+    } else if (HttpEvent) {
+        auto response = HttpEvent->Get()->Request->CreateResponseString(data);
+        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response.Release()));
+    }
+
+    if (message.empty()) {
+        TStringBuf dataParser(data);
+        if (dataParser.NextTok(' ') == "HTTP/1.1") {
+            TStringBuf code = dataParser.NextTok(' ');
+            if (code.size() == 3 && code[0] != '2') {
+                message = dataParser.NextTok('\n');
+            }
+        }
+    }
     if (Span) {
-        if (error) {
-            Span.EndError(error);
+        if (message) {
+            Span.EndError(message);
         } else {
             Span.EndOk();
         }
@@ -665,7 +748,18 @@ TString TViewerPipeClient::GetHTTPOKJSON(TString response, TInstant lastModified
 }
 
 TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TInstant lastModified) {
-    return GetHTTPOKJSON(NJson::WriteJson(response, false), lastModified);
+    constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
+    constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
+    constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
+    TStringStream content;
+    NJson::WriteJson(&content, &response, {
+        .DoubleNDigits = doubleNDigits,
+        .FloatNDigits = floatNDigits,
+        .FloatToStringMode = floatMode,
+        .ValidateUtf8 = false,
+        .WriteNanAsString = true,
+    });
+    return GetHTTPOKJSON(content.Str(), lastModified);
 }
 
 TString TViewerPipeClient::GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified) {
@@ -698,6 +792,13 @@ void TViewerPipeClient::RequestDone(ui32 requests) {
     if (requests == 0) {
         return;
     }
+    if (requests > Requests) {
+        BLOG_ERROR("Requests count mismatch: " << requests << " > " << Requests);
+        if (Span) {
+            Span.Event("Requests count mismatch");
+        }
+        requests = Requests;
+    }
     Requests -= requests;
     if (!DelayedRequests.empty()) {
         SendDelayedRequests();
@@ -722,13 +823,15 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
             SharedDatabase = CanonizePath(entry.Path);
             if (SharedDatabase == AppData()->TenantName) {
                 Direct = true;
-                return Bootstrap(); // retry bootstrap without redirect this time
+                Bootstrap(); // retry bootstrap without redirect this time
+            } else {
+                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
             }
-            DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
         } else {
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"));
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"));
         }
     }
+    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -739,24 +842,27 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
             if (entry.DomainInfo && entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                 ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(TPathId(entry.DomainInfo->ResourcesDomainKey));
                 Become(&TViewerPipeClient::StateResolveResource);
-                return;
+            } else {
+                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
             }
-            DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
         } else {
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"));
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"));
         }
     }
+    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
     if (DatabaseBoardInfoResponse) {
         DatabaseBoardInfoResponse->Set(std::move(ev));
         if (DatabaseBoardInfoResponse->IsOk()) {
-            ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
+            return ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
         } else {
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - no nodes found"));
+            Direct = true;
+            Bootstrap(); // retry bootstrap without redirect this time
         }
     }
+    RequestDone();
 }
 
 void TViewerPipeClient::HandleTimeout() {
@@ -785,8 +891,9 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
 }
 
 bool TViewerPipeClient::NeedToRedirect() {
-    if (Event) {
-        Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
+    auto request = GetRequest();
+    if (request) {
+        Direct |= !request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
         if (Database && !Direct) {
             RedirectToDatabase(Database); // to find some dynamic node and redirect query there
@@ -797,6 +904,9 @@ bool TViewerPipeClient::NeedToRedirect() {
 }
 
 void TViewerPipeClient::PassAway() {
+    if (Span) {
+        Span.EndError("unterminated span");
+    }
     std::sort(SubscriptionNodeIds.begin(), SubscriptionNodeIds.end());
     SubscriptionNodeIds.erase(std::unique(SubscriptionNodeIds.begin(), SubscriptionNodeIds.end()), SubscriptionNodeIds.end());
     for (TNodeId nodeId : SubscriptionNodeIds) {

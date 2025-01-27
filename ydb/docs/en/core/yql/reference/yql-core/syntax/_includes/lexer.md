@@ -13,7 +13,7 @@ Two syntax compatibility modes are supported:
 * Advanced C++ (default)
 * ANSI SQL
 
-ANSI SQL mode is enabled with a special comment `--!ansi-lexer`, which must be in the beginning of the {% if feature_mapreduce %}program{% else %}query{% endif %}.
+ANSI SQL mode is enabled with a special comment `--!ansi_lexer`, which must be in the beginning of the {% if feature_mapreduce %}program{% else %}query{% endif %}.
 
 Specifics of interpretation of lexical elements in different compatibility modes are described below.
 

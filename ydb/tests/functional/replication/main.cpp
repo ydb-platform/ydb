@@ -1,10 +1,10 @@
 #include <util/system/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -60,12 +60,18 @@ Y_UNIT_TEST_SUITE(Replication)
             {
                 const TString query = "UPSERT INTO ProducerUuidValue (Key,Key2,v01,v02,v03) VALUES"
                     "(1, "
-                      "CAST(\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea00\" as Uuid), "
-                      "CAST(\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea01\" as Uuid), "
-                      "UNWRAP(CAST(\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea02\" as Uuid)), "
+                      "CAST(\"00078af5-0000-0000-6c0b-040000000000\" as Uuid), "
+                      "CAST(\"00078af5-0000-0000-6c0b-040000000001\" as Uuid), "
+                      "UNWRAP(CAST(\"00078af5-0000-0000-6c0b-040000000002\" as Uuid)), "
                       "CAST(\"311111111113.222222223\" as Double) "
                     ");";
                 auto res = s.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+
+            {
+                const TString query = "GRANT ALL ON `/local` TO `user@builtin`";
+                auto res = s.ExecuteSchemeQuery(query).GetValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
 
@@ -74,7 +80,7 @@ Y_UNIT_TEST_SUITE(Replication)
                     "`ProducerUuidValue` AS `ConsumerUuidValue`"
                     "WITH ("
                         "CONNECTION_STRING = 'grpc://%s',"
-                        "TOKEN = 'root@builtin'"
+                        "TOKEN = 'user@builtin'"
                     ");", connectionString.data());
                 auto res = s.ExecuteSchemeQuery(query).GetValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
@@ -90,9 +96,9 @@ Y_UNIT_TEST_SUITE(Replication)
         UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
 
         auto s = sessionResult.GetSession();
-        TUuidValue expectedKey2("5b99a330-04ef-4f1a-9b64-ba6d5f44ea00");
-        TUuidValue expectedV1("5b99a330-04ef-4f1a-9b64-ba6d5f44ea01");
-        TUuidValue expectedV2("5b99a330-04ef-4f1a-9b64-ba6d5f44ea02");
+        TUuidValue expectedKey2("00078af5-0000-0000-6c0b-040000000000");
+        TUuidValue expectedV1("00078af5-0000-0000-6c0b-040000000001");
+        TUuidValue expectedV2("00078af5-0000-0000-6c0b-040000000002");
         double expectedV3 = 311111111113.222222223;
         ui32 attempt = 10;
         while (--attempt) {

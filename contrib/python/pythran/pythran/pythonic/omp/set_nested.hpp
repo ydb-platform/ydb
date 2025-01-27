@@ -3,8 +3,8 @@
 
 #include "pythonic/include/omp/set_nested.hpp"
 
-#include <omp.h>
 #include "pythonic/utils/functor.hpp"
+#include <omp.h>
 
 PYTHONIC_NS_BEGIN
 
@@ -15,7 +15,7 @@ namespace omp
   {
     return omp_set_nested(val);
   }
-}
+} // namespace omp
 PYTHONIC_NS_END
 
 #endif

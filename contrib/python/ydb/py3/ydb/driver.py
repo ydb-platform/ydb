@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
+import grpc
+import logging
+import os
+from typing import Any  # noqa
+
 from . import credentials as credentials_impl, table, scheme, pool
 from . import tracing
-import os
-import grpc
 from . import iam
 from . import _utilities
 
-from typing import Any  # noqa
+
+logger = logging.getLogger(__name__)
 
 
 class RPCCompression:
@@ -85,6 +89,7 @@ class DriverConfig(object):
         "secure_channel",
         "table_client_settings",
         "topic_client_settings",
+        "query_client_settings",
         "endpoints",
         "primary_user_agent",
         "tracer",
@@ -108,6 +113,7 @@ class DriverConfig(object):
         grpc_keep_alive_timeout=None,
         table_client_settings=None,
         topic_client_settings=None,
+        query_client_settings=None,
         endpoints=None,
         primary_user_agent="python-library",
         tracer=None,
@@ -155,6 +161,7 @@ class DriverConfig(object):
         self.grpc_keep_alive_timeout = grpc_keep_alive_timeout
         self.table_client_settings = table_client_settings
         self.topic_client_settings = topic_client_settings
+        self.query_client_settings = query_client_settings
         self.primary_user_agent = primary_user_agent
         self.tracer = tracer if tracer is not None else tracing.Tracer(None)
         self.grpc_lb_policy_name = grpc_lb_policy_name
@@ -172,7 +179,7 @@ class DriverConfig(object):
             database,
             credentials=default_credentials(credentials),
             root_certificates=root_certificates,
-            **kwargs
+            **kwargs,
         )
 
     @classmethod
@@ -183,12 +190,21 @@ class DriverConfig(object):
             database,
             credentials=default_credentials(credentials),
             root_certificates=root_certificates,
-            **kwargs
+            **kwargs,
         )
 
     def set_grpc_keep_alive_timeout(self, timeout):
         self.grpc_keep_alive_timeout = timeout
         return self
+
+    def _update_attrs_by_kwargs(self, **kwargs):
+        for key, value in kwargs.items():
+            if value is not None:
+                if getattr(self, key) is not None:
+                    logger.warning(
+                        f"Arg {key} was used in both DriverConfig and Driver. Value from Driver will be used."
+                    )
+                setattr(self, key, value)
 
 
 ConnectionParams = DriverConfig
@@ -202,7 +218,7 @@ def get_config(
     root_certificates=None,
     credentials=None,
     config_class=DriverConfig,
-    **kwargs
+    **kwargs,
 ):
     if driver_config is None:
         if connection_string is not None:
@@ -213,7 +229,17 @@ def get_config(
             driver_config = config_class.default_from_endpoint_and_database(
                 endpoint, database, root_certificates, credentials, **kwargs
             )
-        return driver_config
+    else:
+        kwargs["endpoint"] = endpoint
+        kwargs["database"] = database
+        kwargs["root_certificates"] = root_certificates
+        kwargs["credentials"] = credentials
+
+        driver_config._update_attrs_by_kwargs(**kwargs)
+
+    if driver_config.credentials is not None:
+        driver_config.credentials._update_driver_config(driver_config)
+
     return driver_config
 
 
@@ -228,7 +254,7 @@ class Driver(pool.ConnectionPool):
         database=None,
         root_certificates=None,
         credentials=None,
-        **kwargs
+        **kwargs,
     ):
         """
         Constructs a driver instance to be used in table and scheme clients.
@@ -259,3 +285,7 @@ class Driver(pool.ConnectionPool):
         self.scheme_client = scheme.SchemeClient(self)
         self.table_client = table.TableClient(self, driver_config.table_client_settings)
         self.topic_client = topic.TopicClient(self, driver_config.topic_client_settings)
+
+    def stop(self, timeout=10):
+        self.table_client._stop_pool_if_needed(timeout=timeout)
+        super().stop(timeout=timeout)

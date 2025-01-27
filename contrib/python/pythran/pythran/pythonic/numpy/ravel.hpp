@@ -18,7 +18,7 @@ namespace numpy
   }
 
   NUMPY_EXPR_TO_NDARRAY0_IMPL(ravel);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

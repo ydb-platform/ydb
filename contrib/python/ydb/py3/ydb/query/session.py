@@ -22,6 +22,10 @@ from .transaction import QueryTxContext
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_ATTACH_FIRST_RESP_TIMEOUT = 600
+DEFAULT_ATTACH_LONG_TIMEOUT = 31536000  # year
+
+
 class QuerySessionStateEnum(enum.Enum):
     NOT_INITIALIZED = "NOT_INITIALIZED"
     CREATED = "CREATED"
@@ -134,8 +138,25 @@ class BaseQuerySession:
 
     def __init__(self, driver: common_utils.SupportedDriverType, settings: Optional[base.QueryClientSettings] = None):
         self._driver = driver
-        self._settings = settings if settings is not None else base.QueryClientSettings()
+        self._settings = self._get_client_settings(driver, settings)
         self._state = QuerySessionState(settings)
+        self._attach_settings: BaseRequestSettings = (
+            BaseRequestSettings()
+            .with_operation_timeout(DEFAULT_ATTACH_LONG_TIMEOUT)
+            .with_cancel_after(DEFAULT_ATTACH_LONG_TIMEOUT)
+            .with_timeout(DEFAULT_ATTACH_LONG_TIMEOUT)
+        )
+
+    def _get_client_settings(
+        self,
+        driver: common_utils.SupportedDriverType,
+        settings: Optional[base.QueryClientSettings] = None,
+    ) -> base.QueryClientSettings:
+        if settings is not None:
+            return settings
+        if driver._driver_config.query_client_settings is not None:
+            return driver._driver_config.query_client_settings
+        return base.QueryClientSettings()
 
     def _create_call(self, settings: Optional[BaseRequestSettings] = None) -> "BaseQuerySession":
         return self._driver(
@@ -157,12 +178,12 @@ class BaseQuerySession:
             settings=settings,
         )
 
-    def _attach_call(self, settings: Optional[BaseRequestSettings] = None) -> Iterable[_apis.ydb_query.SessionState]:
+    def _attach_call(self) -> Iterable[_apis.ydb_query.SessionState]:
         return self._driver(
             _apis.ydb_query.AttachSessionRequest(session_id=self._state.session_id),
             _apis.QueryService.Stub,
             _apis.QueryService.AttachSession,
-            settings=settings,
+            settings=self._attach_settings,
         )
 
     def _execute_call(
@@ -202,16 +223,24 @@ class QuerySession(BaseQuerySession):
 
     _stream = None
 
-    def _attach(self, settings: Optional[BaseRequestSettings] = None) -> None:
-        self._stream = self._attach_call(settings=settings)
+    def _attach(self, first_resp_timeout: int = DEFAULT_ATTACH_FIRST_RESP_TIMEOUT) -> None:
+        self._stream = self._attach_call()
         status_stream = _utilities.SyncResponseIterator(
             self._stream,
             lambda response: common_utils.ServerStatus.from_proto(response),
         )
 
-        first_response = next(status_stream)
-        if first_response.status != issues.StatusCode.SUCCESS:
-            pass
+        try:
+            first_response = _utilities.get_first_message_with_timeout(
+                status_stream,
+                first_resp_timeout,
+            )
+            if first_response.status != issues.StatusCode.SUCCESS:
+                raise RuntimeError("Failed to attach session")
+        except Exception as e:
+            self._state.reset()
+            status_stream.cancel()
+            raise e
 
         self._state.set_attached(True)
         self._state._change_state(QuerySessionStateEnum.CREATED)
@@ -219,7 +248,7 @@ class QuerySession(BaseQuerySession):
         threading.Thread(
             target=self._check_session_status_loop,
             args=(status_stream,),
-            name="check session status thread",
+            name="attach stream thread",
             daemon=True,
         ).start()
 

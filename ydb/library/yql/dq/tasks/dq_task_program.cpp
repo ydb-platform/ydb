@@ -1,9 +1,9 @@
 #include "dq_task_program.h"
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_runtime_version.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_runtime_version.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 
 namespace NYql::NDq {
 

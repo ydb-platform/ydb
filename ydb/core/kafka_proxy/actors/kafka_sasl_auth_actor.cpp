@@ -49,7 +49,7 @@ void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx) {
     if (ev->Get()->Error) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", ev->Get()->Error.Message, ctx);
+        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TString{ev->Get()->Error.Message}, ctx);
         return;
     }
     UserToken = ev->Get()->Token;
@@ -134,12 +134,13 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
     auto password = tokens[2];
     size_t atPos = userAndDatabase.rfind('@');
     if (atPos == TString::npos) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "Database not provided.", "", ctx);
-        return false;
+        authData.UserName = "";
+        authData.Database = userAndDatabase;
+    } else {
+        authData.UserName = userAndDatabase.substr(0, atPos);
+        authData.Database = userAndDatabase.substr(atPos + 1);
     }
 
-    authData.UserName = userAndDatabase.substr(0, atPos);
-    authData.Database = userAndDatabase.substr(atPos + 1);
     authData.Password = password;
     return true;
 }

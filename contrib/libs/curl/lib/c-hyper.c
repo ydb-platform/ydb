@@ -53,9 +53,7 @@
 
 #error #include <hyper.h>
 #include "urldata.h"
-#include "cfilters.h"
 #include "sendf.h"
-#include "headers.h"
 #include "transfer.h"
 #include "multiif.h"
 #include "progress.h"
@@ -67,9 +65,6 @@
 #include "curl_memory.h"
 #include "memdebug.h"
 
-
-static CURLcode cr_hyper_add(struct Curl_easy *data);
-
 typedef enum {
     USERDATA_NOT_SET = 0, /* for tasks with no userdata set; must be zero */
     USERDATA_RESP_BODY
@@ -78,8 +73,7 @@ typedef enum {
 size_t Curl_hyper_recv(void *userp, hyper_context *ctx,
                        uint8_t *buf, size_t buflen)
 {
-  struct hyp_io_ctx *io_ctx = userp;
-  struct Curl_easy *data = io_ctx->data;
+  struct Curl_easy *data = userp;
   struct connectdata *conn = data->conn;
   CURLcode result;
   ssize_t nread;
@@ -87,8 +81,7 @@ size_t Curl_hyper_recv(void *userp, hyper_context *ctx,
   (void)ctx;
 
   DEBUGF(infof(data, "Curl_hyper_recv(%zu)", buflen));
-  result = Curl_conn_recv(data, io_ctx->sockindex,
-                          (char *)buf, buflen, &nread);
+  result = Curl_read(data, conn->sockfd, (char *)buf, buflen, &nread);
   if(result == CURLE_AGAIN) {
     /* would block, register interest */
     DEBUGF(infof(data, "Curl_hyper_recv(%zu) -> EAGAIN", buflen));
@@ -112,14 +105,15 @@ size_t Curl_hyper_recv(void *userp, hyper_context *ctx,
 size_t Curl_hyper_send(void *userp, hyper_context *ctx,
                        const uint8_t *buf, size_t buflen)
 {
-  struct hyp_io_ctx *io_ctx = userp;
-  struct Curl_easy *data = io_ctx->data;
+  struct Curl_easy *data = userp;
+  struct connectdata *conn = data->conn;
   CURLcode result;
-  size_t nwrote;
+  ssize_t nwrote;
 
   DEBUGF(infof(data, "Curl_hyper_send(%zu)", buflen));
-  result = Curl_conn_send(data, io_ctx->sockindex,
-                          (void *)buf, buflen, FALSE, &nwrote);
+  result = Curl_write(data, conn->sockfd, (void *)buf, buflen, &nwrote);
+  if(!result && !nwrote)
+    result = CURLE_AGAIN;
   if(result == CURLE_AGAIN) {
     DEBUGF(infof(data, "Curl_hyper_send(%zu) -> EAGAIN", buflen));
     /* would block, register interest */
@@ -154,9 +148,12 @@ static int hyper_each_header(void *userdata,
 
   if(name_len + value_len + 2 > CURL_MAX_HTTP_HEADER) {
     failf(data, "Too long response header");
-    data->state.hresult = CURLE_TOO_LARGE;
+    data->state.hresult = CURLE_OUT_OF_MEMORY;
     return HYPER_ITER_BREAK;
   }
+
+  if(!data->req.bytecount)
+    Curl_pgrsTime(data, TIMER_STARTTRANSFER);
 
   Curl_dyn_reset(&data->state.headerb);
   if(name_len) {
@@ -171,7 +168,7 @@ static int hyper_each_header(void *userdata,
   len = Curl_dyn_len(&data->state.headerb);
   headp = Curl_dyn_ptr(&data->state.headerb);
 
-  result = Curl_http_header(data, headp, len);
+  result = Curl_http_header(data, data->conn, headp);
   if(result) {
     data->state.hresult = result;
     return HYPER_ITER_BREAK;
@@ -206,7 +203,8 @@ static int hyper_body_chunk(void *userdata, const hyper_buf *chunk)
   struct SingleRequest *k = &data->req;
   CURLcode result = CURLE_OK;
 
-  if(!k->bodywritten) {
+  if(0 == k->bodywrites) {
+    bool done = FALSE;
 #if defined(USE_NTLM)
     struct connectdata *conn = data->conn;
     if(conn->bits.close &&
@@ -219,26 +217,27 @@ static int hyper_body_chunk(void *userdata, const hyper_buf *chunk)
       Curl_safefree(data->req.newurl);
     }
 #endif
-    if(Curl_http_exp100_is_selected(data)) {
+    if(data->state.expect100header) {
+      Curl_expire_done(data, EXPIRE_100_TIMEOUT);
       if(data->req.httpcode < 400) {
-        Curl_http_exp100_got100(data);
-        if(data->hyp.send_body_waker) {
-          hyper_waker_wake(data->hyp.send_body_waker);
-          data->hyp.send_body_waker = NULL;
+        k->exp100 = EXP100_SEND_DATA;
+        if(data->hyp.exp100_waker) {
+          hyper_waker_wake(data->hyp.exp100_waker);
+          data->hyp.exp100_waker = NULL;
         }
       }
       else { /* >= 4xx */
-        Curl_req_abort_sending(data);
+        k->exp100 = EXP100_FAILED;
       }
     }
     if(data->state.hconnect && (data->req.httpcode/100 != 2) &&
        data->state.authproxy.done) {
-      data->req.done = TRUE;
+      done = TRUE;
       result = CURLE_OK;
     }
     else
-      result = Curl_http_firstwrite(data);
-    if(result || data->req.done) {
+      result = Curl_http_firstwrite(data, data->conn, &done);
+    if(result || done) {
       infof(data, "Return early from hyper_body_chunk");
       data->state.hresult = result;
       return HYPER_ITER_BREAK;
@@ -274,13 +273,14 @@ static CURLcode status_line(struct Curl_easy *data,
   /* We need to set 'httpcodeq' for functions that check the response code in
      a single place. */
   data->req.httpcode = http_status;
-  data->req.httpversion = http_version == HYPER_HTTP_VERSION_1_1? 11 :
-                          (http_version == HYPER_HTTP_VERSION_2 ? 20 : 10);
+
   if(data->state.hconnect)
     /* CONNECT */
     data->info.httpproxycode = http_status;
   else {
-    conn->httpversion = (unsigned char)data->req.httpversion;
+    conn->httpversion =
+      http_version == HYPER_HTTP_VERSION_1_1 ? 11 :
+      (http_version == HYPER_HTTP_VERSION_2 ? 20 : 10);
     if(http_version == HYPER_HTTP_VERSION_1_0)
       data->state.httpwant = CURL_HTTP_VERSION_1_0;
 
@@ -324,10 +324,7 @@ static CURLcode empty_header(struct Curl_easy *data)
     result = hyper_each_header(data, NULL, 0, NULL, 0) ?
       CURLE_WRITE_ERROR : CURLE_OK;
     if(result)
-      failf(data, "hyperstream: could not pass blank header");
-    /* Hyper does chunked decoding itself. If it was added during
-     * response header processing, remove it again. */
-    Curl_cwriter_remove_by_name(data, "chunked");
+      failf(data, "hyperstream: couldn't pass blank header");
   }
   return result;
 }
@@ -335,6 +332,7 @@ static CURLcode empty_header(struct Curl_easy *data)
 CURLcode Curl_hyper_stream(struct Curl_easy *data,
                            struct connectdata *conn,
                            int *didwhat,
+                           bool *done,
                            int select_res)
 {
   hyper_response *resp = NULL;
@@ -351,11 +349,20 @@ CURLcode Curl_hyper_stream(struct Curl_easy *data,
   struct SingleRequest *k = &data->req;
   (void)conn;
 
-  if(data->hyp.send_body_waker) {
-    /* If there is still something to upload, wake it to give it
-     * another try. */
-    hyper_waker_wake(data->hyp.send_body_waker);
-    data->hyp.send_body_waker = NULL;
+  if(k->exp100 > EXP100_SEND_DATA) {
+    struct curltime now = Curl_now();
+    timediff_t ms = Curl_timediff(now, k->start100);
+    if(ms >= data->set.expect_100_timeout) {
+      /* we've waited long enough, continue anyway */
+      k->exp100 = EXP100_SEND_DATA;
+      k->keepon |= KEEP_SEND;
+      Curl_expire_done(data, EXPIRE_100_TIMEOUT);
+      infof(data, "Done waiting for 100-continue");
+      if(data->hyp.exp100_waker) {
+        hyper_waker_wake(data->hyp.exp100_waker);
+        data->hyp.exp100_waker = NULL;
+      }
+    }
   }
 
   if(select_res & CURL_CSELECT_IN) {
@@ -369,7 +376,8 @@ CURLcode Curl_hyper_stream(struct Curl_easy *data,
     h->write_waker = NULL;
   }
 
-  while(1) {
+  *done = FALSE;
+  do {
     hyper_task_return_type t;
     task = hyper_executor_poll(h->exec);
     if(!task) {
@@ -393,152 +401,141 @@ CURLcode Curl_hyper_stream(struct Curl_easy *data,
         switch(code) {
         case HYPERE_ABORTED_BY_CALLBACK:
           result = CURLE_OK;
-          goto out;
+          break;
         case HYPERE_UNEXPECTED_EOF:
           if(!data->req.bytecount)
             result = CURLE_GOT_NOTHING;
           else
             result = CURLE_RECV_ERROR;
-          goto out;
+          break;
         case HYPERE_INVALID_PEER_MESSAGE:
           /* bump headerbytecount to avoid the count remaining at zero and
              appearing to not having read anything from the peer at all */
           data->req.headerbytecount++;
           result = CURLE_UNSUPPORTED_PROTOCOL; /* maybe */
-          goto out;
+          break;
         default:
           result = CURLE_RECV_ERROR;
-          goto out;
+          break;
         }
       }
-      data->req.done = TRUE;
+      *done = TRUE;
       hyper_error_free(hypererr);
       break;
     }
     else if(t == HYPER_TASK_EMPTY) {
       void *userdata = hyper_task_userdata(task);
       hyper_task_free(task);
-      if(userdata == (void *)USERDATA_RESP_BODY) {
+      if((userdata_t)userdata == USERDATA_RESP_BODY) {
         /* end of transfer */
-        data->req.done = TRUE;
+        *done = TRUE;
         infof(data, "hyperstream is done");
-        if(!k->bodywritten) {
-          /* hyper does not always call the body write callback */
-          result = Curl_http_firstwrite(data);
+        if(!k->bodywrites) {
+          /* hyper doesn't always call the body write callback */
+          bool stilldone;
+          result = Curl_http_firstwrite(data, data->conn, &stilldone);
         }
         break;
       }
       else {
         /* A background task for hyper; ignore */
-        DEBUGF(infof(data, "hyper: some background task done"));
         continue;
       }
     }
-    else if(t == HYPER_TASK_RESPONSE) {
-      resp = hyper_task_value(task);
-      hyper_task_free(task);
 
-      *didwhat = KEEP_RECV;
-      if(!resp) {
-        failf(data, "hyperstream: could not get response");
-        result = CURLE_RECV_ERROR;
-        goto out;
-      }
+    DEBUGASSERT(HYPER_TASK_RESPONSE);
 
-      http_status = hyper_response_status(resp);
-      http_version = hyper_response_version(resp);
-      reasonp = hyper_response_reason_phrase(resp);
-      reason_len = hyper_response_reason_phrase_len(resp);
+    resp = hyper_task_value(task);
+    hyper_task_free(task);
 
-      if(http_status == 417 && Curl_http_exp100_is_selected(data)) {
-        infof(data, "Got 417 while waiting for a 100");
-        data->state.disableexpect = TRUE;
-        data->req.newurl = strdup(data->state.url);
-        Curl_req_abort_sending(data);
-      }
+    *didwhat = KEEP_RECV;
+    if(!resp) {
+      failf(data, "hyperstream: couldn't get response");
+      return CURLE_RECV_ERROR;
+    }
 
-      result = status_line(data, conn,
-                           http_status, http_version, reasonp, reason_len);
-      if(result)
-        goto out;
+    http_status = hyper_response_status(resp);
+    http_version = hyper_response_version(resp);
+    reasonp = hyper_response_reason_phrase(resp);
+    reason_len = hyper_response_reason_phrase_len(resp);
 
-      headers = hyper_response_headers(resp);
-      if(!headers) {
-        failf(data, "hyperstream: could not get response headers");
-        result = CURLE_RECV_ERROR;
-        goto out;
-      }
+    if(http_status == 417 && data->state.expect100header) {
+      infof(data, "Got 417 while waiting for a 100");
+      data->state.disableexpect = TRUE;
+      data->req.newurl = strdup(data->state.url);
+      Curl_done_sending(data, k);
+    }
 
-      /* the headers are already received */
-      hyper_headers_foreach(headers, hyper_each_header, data);
-      if(data->state.hresult) {
-        result = data->state.hresult;
-        goto out;
-      }
+    result = status_line(data, conn,
+                         http_status, http_version, reasonp, reason_len);
+    if(result)
+      break;
 
-      result = empty_header(data);
-      if(result)
-        goto out;
+    headers = hyper_response_headers(resp);
+    if(!headers) {
+      failf(data, "hyperstream: couldn't get response headers");
+      result = CURLE_RECV_ERROR;
+      break;
+    }
 
-      k->deductheadercount =
-        (100 <= http_status && 199 >= http_status)?k->headerbytecount:0;
+    /* the headers are already received */
+    hyper_headers_foreach(headers, hyper_each_header, data);
+    if(data->state.hresult) {
+      result = data->state.hresult;
+      break;
+    }
+
+    result = empty_header(data);
+    if(result)
+      break;
+
+    k->deductheadercount =
+      (100 <= http_status && 199 >= http_status)?k->headerbytecount:0;
 #ifdef USE_WEBSOCKETS
-      if(k->upgr101 == UPGR101_WS) {
-        if(http_status == 101) {
-          /* verify the response */
-          result = Curl_ws_accept(data, NULL, 0);
-          if(result)
-            goto out;
-        }
-        else {
-          failf(data, "Expected 101, got %u", k->httpcode);
-          result = CURLE_HTTP_RETURNED_ERROR;
-          goto out;
-        }
+    if(k->upgr101 == UPGR101_WS) {
+      if(http_status == 101) {
+        /* verify the response */
+        result = Curl_ws_accept(data, NULL, 0);
+        if(result)
+          return result;
       }
+      else {
+        failf(data, "Expected 101, got %u", k->httpcode);
+        result = CURLE_HTTP_RETURNED_ERROR;
+        break;
+      }
+    }
 #endif
 
-      /* Curl_http_auth_act() checks what authentication methods that are
-       * available and decides which one (if any) to use. It will set 'newurl'
-       * if an auth method was picked. */
-      result = Curl_http_auth_act(data);
-      if(result)
-        goto out;
+    /* Curl_http_auth_act() checks what authentication methods that are
+     * available and decides which one (if any) to use. It will set 'newurl'
+     * if an auth method was picked. */
+    result = Curl_http_auth_act(data);
+    if(result)
+      break;
 
-      resp_body = hyper_response_body(resp);
-      if(!resp_body) {
-        failf(data, "hyperstream: could not get response body");
-        result = CURLE_RECV_ERROR;
-        goto out;
-      }
-      foreach = hyper_body_foreach(resp_body, hyper_body_chunk, data);
-      if(!foreach) {
-        failf(data, "hyperstream: body foreach failed");
-        result = CURLE_OUT_OF_MEMORY;
-        goto out;
-      }
-      hyper_task_set_userdata(foreach, (void *)USERDATA_RESP_BODY);
-      if(HYPERE_OK != hyper_executor_push(h->exec, foreach)) {
-        failf(data, "Couldn't hyper_executor_push the body-foreach");
-        result = CURLE_OUT_OF_MEMORY;
-        goto out;
-      }
-
-      hyper_response_free(resp);
-      resp = NULL;
+    resp_body = hyper_response_body(resp);
+    if(!resp_body) {
+      failf(data, "hyperstream: couldn't get response body");
+      result = CURLE_RECV_ERROR;
+      break;
     }
-    else {
-      DEBUGF(infof(data, "hyper: unhandled tasktype %x", t));
+    foreach = hyper_body_foreach(resp_body, hyper_body_chunk, data);
+    if(!foreach) {
+      failf(data, "hyperstream: body foreach failed");
+      result = CURLE_OUT_OF_MEMORY;
+      break;
     }
-  } /* while(1) */
+    hyper_task_set_userdata(foreach, (void *)USERDATA_RESP_BODY);
+    if(HYPERE_OK != hyper_executor_push(h->exec, foreach)) {
+      failf(data, "Couldn't hyper_executor_push the body-foreach");
+      result = CURLE_OUT_OF_MEMORY;
+      break;
+    }
 
-  if(!result && Curl_xfer_needs_flush(data)) {
-    DEBUGF(infof(data, "Curl_hyper_stream(), connection needs flush"));
-    result = Curl_xfer_flush(data);
-  }
-
-out:
-  DEBUGF(infof(data, "Curl_hyper_stream() -> %d", result));
+    hyper_response_free(resp);
+    resp = NULL;
+  } while(1);
   if(resp)
     hyper_response_free(resp);
   return result;
@@ -654,108 +651,150 @@ static CURLcode request_target(struct Curl_easy *data,
   return result;
 }
 
+static int uploadpostfields(void *userdata, hyper_context *ctx,
+                            hyper_buf **chunk)
+{
+  struct Curl_easy *data = (struct Curl_easy *)userdata;
+  (void)ctx;
+  if(data->req.exp100 > EXP100_SEND_DATA) {
+    if(data->req.exp100 == EXP100_FAILED)
+      return HYPER_POLL_ERROR;
+
+    /* still waiting confirmation */
+    if(data->hyp.exp100_waker)
+      hyper_waker_free(data->hyp.exp100_waker);
+    data->hyp.exp100_waker = hyper_context_waker(ctx);
+    return HYPER_POLL_PENDING;
+  }
+  if(data->req.upload_done)
+    *chunk = NULL; /* nothing more to deliver */
+  else {
+    /* send everything off in a single go */
+    hyper_buf *copy = hyper_buf_copy(data->set.postfields,
+                                     (size_t)data->req.p.http->postsize);
+    if(copy)
+      *chunk = copy;
+    else {
+      data->state.hresult = CURLE_OUT_OF_MEMORY;
+      return HYPER_POLL_ERROR;
+    }
+    /* increasing the writebytecount here is a little premature but we
+       don't know exactly when the body is sent */
+    data->req.writebytecount += (size_t)data->req.p.http->postsize;
+    Curl_pgrsSetUploadCounter(data, data->req.writebytecount);
+    data->req.upload_done = TRUE;
+  }
+  return HYPER_POLL_READY;
+}
+
 static int uploadstreamed(void *userdata, hyper_context *ctx,
                           hyper_buf **chunk)
 {
   size_t fillcount;
   struct Curl_easy *data = (struct Curl_easy *)userdata;
+  struct connectdata *conn = (struct connectdata *)data->conn;
   CURLcode result;
-  char *xfer_ulbuf;
-  size_t xfer_ulblen;
-  bool eos;
-  int rc = HYPER_POLL_ERROR;
   (void)ctx;
 
-  result = Curl_multi_xfer_ulbuf_borrow(data, &xfer_ulbuf, &xfer_ulblen);
-  if(result)
-    goto out;
+  if(data->req.exp100 > EXP100_SEND_DATA) {
+    if(data->req.exp100 == EXP100_FAILED)
+      return HYPER_POLL_ERROR;
 
-  result = Curl_client_read(data, xfer_ulbuf, xfer_ulblen, &fillcount, &eos);
-  if(result)
-    goto out;
+    /* still waiting confirmation */
+    if(data->hyp.exp100_waker)
+      hyper_waker_free(data->hyp.exp100_waker);
+    data->hyp.exp100_waker = hyper_context_waker(ctx);
+    return HYPER_POLL_PENDING;
+  }
 
-  if(fillcount) {
-    hyper_buf *copy = hyper_buf_copy((uint8_t *)xfer_ulbuf, fillcount);
+  if(data->req.upload_chunky && conn->bits.authneg) {
+    fillcount = 0;
+    data->req.upload_chunky = FALSE;
+    result = CURLE_OK;
+  }
+  else {
+    result = Curl_fillreadbuffer(data, data->set.upload_buffer_size,
+                                 &fillcount);
+  }
+  if(result) {
+    data->state.hresult = result;
+    return HYPER_POLL_ERROR;
+  }
+  if(!fillcount) {
+    if((data->req.keepon & KEEP_SEND_PAUSE) != KEEP_SEND_PAUSE)
+      /* done! */
+      *chunk = NULL;
+    else {
+      /* paused, save a waker */
+      if(data->hyp.send_body_waker)
+        hyper_waker_free(data->hyp.send_body_waker);
+      data->hyp.send_body_waker = hyper_context_waker(ctx);
+      return HYPER_POLL_PENDING;
+    }
+  }
+  else {
+    hyper_buf *copy = hyper_buf_copy((uint8_t *)data->state.ulbuf, fillcount);
     if(copy)
       *chunk = copy;
     else {
-      result = CURLE_OUT_OF_MEMORY;
-      goto out;
+      data->state.hresult = CURLE_OUT_OF_MEMORY;
+      return HYPER_POLL_ERROR;
     }
     /* increasing the writebytecount here is a little premature but we
-       do not know exactly when the body is sent */
+       don't know exactly when the body is sent */
     data->req.writebytecount += fillcount;
-    if(eos)
-      data->req.eos_read = TRUE;
     Curl_pgrsSetUploadCounter(data, data->req.writebytecount);
-    rc = HYPER_POLL_READY;
   }
-  else if(eos) {
-    data->req.eos_read = TRUE;
-    *chunk = NULL;
-    rc = HYPER_POLL_READY;
-  }
-  else {
-    /* paused, save a waker */
-    if(data->hyp.send_body_waker)
-      hyper_waker_free(data->hyp.send_body_waker);
-    data->hyp.send_body_waker = hyper_context_waker(ctx);
-    rc = HYPER_POLL_PENDING;
-  }
-
-  if(!data->req.upload_done && data->req.eos_read) {
-    DEBUGF(infof(data, "hyper: uploadstreamed(), upload is done"));
-    result = Curl_req_set_upload_done(data);
-  }
-
-out:
-  Curl_multi_xfer_ulbuf_release(data, xfer_ulbuf);
-  data->state.hresult = result;
-  DEBUGF(infof(data, "hyper: uploadstreamed() -> %d", result));
-  return rc;
+  return HYPER_POLL_READY;
 }
 
 /*
- * finalize_request() sets up last headers and optional body settings
+ * bodysend() sets up headers in the outgoing request for an HTTP transfer that
+ * sends a body
  */
-static CURLcode finalize_request(struct Curl_easy *data,
-                                 hyper_headers *headers,
-                                 hyper_request *hyperreq,
-                                 Curl_HttpReq httpreq)
+
+static CURLcode bodysend(struct Curl_easy *data,
+                         struct connectdata *conn,
+                         hyper_headers *headers,
+                         hyper_request *hyperreq,
+                         Curl_HttpReq httpreq)
 {
+  struct HTTP *http = data->req.p.http;
   CURLcode result = CURLE_OK;
   struct dynbuf req;
-  if((httpreq == HTTPREQ_GET) || (httpreq == HTTPREQ_HEAD)) {
+  if((httpreq == HTTPREQ_GET) || (httpreq == HTTPREQ_HEAD))
     Curl_pgrsSetUploadSize(data, 0); /* no request body */
-  }
   else {
     hyper_body *body;
     Curl_dyn_init(&req, DYN_HTTP_REQUEST);
-    result = Curl_http_req_complete(data, &req, httpreq);
-    if(result)
-      return result;
+    result = Curl_http_bodysend(data, conn, &req, httpreq);
 
-    /* if the "complete" above did produce more than the closing line,
-       parse the added headers */
-    if(Curl_dyn_len(&req) != 2 || strcmp(Curl_dyn_ptr(&req), "\r\n")) {
+    if(!result)
       result = Curl_hyper_header(data, headers, Curl_dyn_ptr(&req));
-      if(result)
-        return result;
-    }
 
     Curl_dyn_free(&req);
 
     body = hyper_body_new();
     hyper_body_set_userdata(body, data);
-    hyper_body_set_data_func(body, uploadstreamed);
-
+    if(data->set.postfields)
+      hyper_body_set_data_func(body, uploadpostfields);
+    else {
+      result = Curl_get_upload_buffer(data);
+      if(result) {
+        hyper_body_free(body);
+        return result;
+      }
+      /* init the "upload from here" pointer */
+      data->req.upload_fromhere = data->state.ulbuf;
+      hyper_body_set_data_func(body, uploadstreamed);
+    }
     if(HYPERE_OK != hyper_request_set_body(hyperreq, body)) {
       /* fail */
       result = CURLE_OUT_OF_MEMORY;
     }
   }
-
-  return cr_hyper_add(data);
+  http->sending = HTTPSEND_BODY;
+  return result;
 }
 
 static CURLcode cookies(struct Curl_easy *data,
@@ -796,7 +835,7 @@ static void http1xx_cb(void *arg, struct hyper_response *resp)
   if(!result) {
     headers = hyper_response_headers(resp);
     if(!headers) {
-      failf(data, "hyperstream: could not get 1xx response headers");
+      failf(data, "hyperstream: couldn't get 1xx response headers");
       result = CURLE_RECV_ERROR;
     }
   }
@@ -843,23 +882,14 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
      may be parts of the request that is not yet sent, since we can deal with
      the rest of the request in the PERFORM phase. */
   *done = TRUE;
-  result = Curl_client_start(data);
-  if(result)
-    goto out;
-
-  /* Add collecting of headers written to client. For a new connection,
-   * we might have done that already, but reuse
-   * or multiplex needs it here as well. */
-  result = Curl_headers_init(data);
-  if(result)
-    goto out;
+  Curl_client_cleanup(data);
 
   infof(data, "Time for the Hyper dance");
   memset(h, 0, sizeof(struct hyptransfer));
 
   result = Curl_http_host(data, conn);
   if(result)
-    goto out;
+    return result;
 
   Curl_http_method(data, conn, &method, &httpreq);
 
@@ -870,40 +900,36 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
     char *pq = NULL;
     if(data->state.up.query) {
       pq = aprintf("%s?%s", data->state.up.path, data->state.up.query);
-      if(!pq) {
-        result = CURLE_OUT_OF_MEMORY;
-        goto out;
-      }
+      if(!pq)
+        return CURLE_OUT_OF_MEMORY;
     }
     result = Curl_http_output_auth(data, conn, method, httpreq,
                                    (pq ? pq : data->state.up.path), FALSE);
     free(pq);
     if(result)
-      goto out;
+      return result;
   }
 
-  result = Curl_http_req_set_reader(data, httpreq, &te);
+  result = Curl_http_resume(data, conn, httpreq);
   if(result)
-    goto out;
+    return result;
 
   result = Curl_http_range(data, httpreq);
   if(result)
-    goto out;
+    return result;
 
   result = Curl_http_useragent(data);
   if(result)
-    goto out;
+    return result;
 
   io = hyper_io_new();
   if(!io) {
     failf(data, "Couldn't create hyper IO");
     result = CURLE_OUT_OF_MEMORY;
-    goto out;
+    goto error;
   }
   /* tell Hyper how to read/write network data */
-  h->io_ctx.data = data;
-  h->io_ctx.sockindex = FIRSTSOCKET;
-  hyper_io_set_userdata(io, &h->io_ctx);
+  hyper_io_set_userdata(io, data);
   hyper_io_set_read(io, Curl_hyper_recv);
   hyper_io_set_write(io, Curl_hyper_send);
 
@@ -913,7 +939,7 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
     if(!h->exec) {
       failf(data, "Couldn't create hyper executor");
       result = CURLE_OUT_OF_MEMORY;
-      goto out;
+      goto error;
     }
   }
 
@@ -921,12 +947,12 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
   if(!options) {
     failf(data, "Couldn't create hyper client options");
     result = CURLE_OUT_OF_MEMORY;
-    goto out;
+    goto error;
   }
   if(conn->alpn == CURL_HTTP_VERSION_2) {
     failf(data, "ALPN protocol h2 not supported with Hyper");
     result = CURLE_UNSUPPORTED_PROTOCOL;
-    goto out;
+    goto error;
   }
   hyper_clientconn_options_set_preserve_header_case(options, 1);
   hyper_clientconn_options_set_preserve_header_order(options, 1);
@@ -939,7 +965,7 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
   if(!handshake) {
     failf(data, "Couldn't create hyper client handshake");
     result = CURLE_OUT_OF_MEMORY;
-    goto out;
+    goto error;
   }
   io = NULL;
   options = NULL;
@@ -947,7 +973,7 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
   if(HYPERE_OK != hyper_executor_push(h->exec, handshake)) {
     failf(data, "Couldn't hyper_executor_push the handshake");
     result = CURLE_OUT_OF_MEMORY;
-    goto out;
+    goto error;
   }
   handshake = NULL; /* ownership passed on */
 
@@ -955,7 +981,7 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
   if(!task) {
     failf(data, "Couldn't hyper_executor_poll the handshake");
     result = CURLE_OUT_OF_MEMORY;
-    goto out;
+    goto error;
   }
 
   client = hyper_task_value(task);
@@ -965,7 +991,7 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
   if(!req) {
     failf(data, "Couldn't hyper_request_new");
     result = CURLE_OUT_OF_MEMORY;
-    goto out;
+    goto error;
   }
 
   if(!Curl_use_http_1_1plus(data, conn)) {
@@ -973,57 +999,64 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
                                               HYPER_HTTP_VERSION_1_0)) {
       failf(data, "error setting HTTP version");
       result = CURLE_OUT_OF_MEMORY;
-      goto out;
+      goto error;
+    }
+  }
+  else {
+    if(!data->state.disableexpect) {
+      data->state.expect100header = TRUE;
     }
   }
 
   if(hyper_request_set_method(req, (uint8_t *)method, strlen(method))) {
     failf(data, "error setting method");
     result = CURLE_OUT_OF_MEMORY;
-    goto out;
+    goto error;
   }
 
   result = request_target(data, conn, method, req);
   if(result)
-    goto out;
+    goto error;
 
   headers = hyper_request_headers(req);
   if(!headers) {
     failf(data, "hyper_request_headers");
     result = CURLE_OUT_OF_MEMORY;
-    goto out;
+    goto error;
   }
 
   rc = hyper_request_on_informational(req, http1xx_cb, data);
   if(rc) {
     result = CURLE_OUT_OF_MEMORY;
-    goto out;
+    goto error;
   }
+
+  result = Curl_http_body(data, conn, httpreq, &te);
+  if(result)
+    goto error;
 
   if(data->state.aptr.host) {
     result = Curl_hyper_header(data, headers, data->state.aptr.host);
     if(result)
-      goto out;
+      goto error;
   }
 
-#ifndef CURL_DISABLE_PROXY
   if(data->state.aptr.proxyuserpwd) {
     result = Curl_hyper_header(data, headers, data->state.aptr.proxyuserpwd);
     if(result)
-      goto out;
+      goto error;
   }
-#endif
 
   if(data->state.aptr.userpwd) {
     result = Curl_hyper_header(data, headers, data->state.aptr.userpwd);
     if(result)
-      goto out;
+      goto error;
   }
 
   if((data->state.use_range && data->state.aptr.rangeline)) {
     result = Curl_hyper_header(data, headers, data->state.aptr.rangeline);
     if(result)
-      goto out;
+      goto error;
   }
 
   if(data->set.str[STRING_USERAGENT] &&
@@ -1031,7 +1064,7 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
      data->state.aptr.uagent) {
     result = Curl_hyper_header(data, headers, data->state.aptr.uagent);
     if(result)
-      goto out;
+      goto error;
   }
 
   p_accept = Curl_checkheaders(data,
@@ -1039,12 +1072,12 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
   if(p_accept) {
     result = Curl_hyper_header(data, headers, p_accept);
     if(result)
-      goto out;
+      goto error;
   }
   if(te) {
     result = Curl_hyper_header(data, headers, te);
     if(result)
-      goto out;
+      goto error;
   }
 
 #ifndef CURL_DISABLE_ALTSVC
@@ -1053,11 +1086,11 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
                             conn->conn_to_host.name, conn->conn_to_port);
     if(!altused) {
       result = CURLE_OUT_OF_MEMORY;
-      goto out;
+      goto error;
     }
     result = Curl_hyper_header(data, headers, altused);
     if(result)
-      goto out;
+      goto error;
     free(altused);
   }
 #endif
@@ -1068,7 +1101,7 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
      !Curl_checkProxyheaders(data, conn, STRCONST("Proxy-Connection"))) {
     result = Curl_hyper_header(data, headers, "Proxy-Connection: Keep-Alive");
     if(result)
-      goto out;
+      goto error;
   }
 #endif
 
@@ -1080,17 +1113,17 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
     else
       result = Curl_hyper_header(data, headers, data->state.aptr.ref);
     if(result)
-      goto out;
+      goto error;
   }
 
 #ifdef HAVE_LIBZ
   /* we only consider transfer-encoding magic if libz support is built-in */
   result = Curl_transferencode(data);
   if(result)
-    goto out;
+    goto error;
   result = Curl_hyper_header(data, headers, data->state.aptr.te);
   if(result)
-    goto out;
+    goto error;
 #endif
 
   if(!Curl_checkheaders(data, STRCONST("Accept-Encoding")) &&
@@ -1104,33 +1137,33 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
       result = Curl_hyper_header(data, headers,
                                  data->state.aptr.accept_encoding);
     if(result)
-      goto out;
+      goto error;
   }
   else
     Curl_safefree(data->state.aptr.accept_encoding);
 
   result = cookies(data, conn, headers);
   if(result)
-    goto out;
+    goto error;
 
   if(!result && conn->handler->protocol&(CURLPROTO_WS|CURLPROTO_WSS))
     result = Curl_ws_request(data, headers);
 
   result = Curl_add_timecondition(data, headers);
   if(result)
-    goto out;
+    goto error;
 
   result = Curl_add_custom_headers(data, FALSE, headers);
   if(result)
-    goto out;
+    goto error;
 
-  result = finalize_request(data, headers, req, httpreq);
+  result = bodysend(data, conn, headers, req, httpreq);
   if(result)
-    goto out;
+    goto error;
 
   Curl_debug(data, CURLINFO_HEADER_OUT, (char *)"\r\n", 2);
 
-  if(data->req.upload_chunky && data->req.authneg) {
+  if(data->req.upload_chunky && conn->bits.authneg) {
     data->req.upload_chunky = TRUE;
   }
   else {
@@ -1140,14 +1173,14 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
   if(!sendtask) {
     failf(data, "hyper_clientconn_send");
     result = CURLE_OUT_OF_MEMORY;
-    goto out;
+    goto error;
   }
   req = NULL;
 
   if(HYPERE_OK != hyper_executor_push(h->exec, sendtask)) {
     failf(data, "Couldn't hyper_executor_push the send");
     result = CURLE_OUT_OF_MEMORY;
-    goto out;
+    goto error;
   }
   sendtask = NULL; /* ownership passed on */
 
@@ -1157,34 +1190,36 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
   if((httpreq == HTTPREQ_GET) || (httpreq == HTTPREQ_HEAD)) {
     /* HTTP GET/HEAD download */
     Curl_pgrsSetUploadSize(data, 0); /* nothing */
-    result = Curl_req_set_upload_done(data);
-    if(result)
-      goto out;
+    Curl_setup_transfer(data, FIRSTSOCKET, -1, TRUE, -1);
   }
-
-  Curl_xfer_setup1(data, CURL_XFER_SENDRECV, -1, TRUE);
   conn->datastream = Curl_hyper_stream;
+  if(data->state.expect100header)
+    /* Timeout count starts now since with Hyper we don't know exactly when
+       the full request has been sent. */
+    data->req.start100 = Curl_now();
 
   /* clear userpwd and proxyuserpwd to avoid reusing old credentials
    * from reused connections */
   Curl_safefree(data->state.aptr.userpwd);
-#ifndef CURL_DISABLE_PROXY
   Curl_safefree(data->state.aptr.proxyuserpwd);
-#endif
+  return CURLE_OK;
+error:
+  DEBUGASSERT(result);
+  if(io)
+    hyper_io_free(io);
 
-out:
-  if(result) {
-    if(io)
-      hyper_io_free(io);
-    if(options)
-      hyper_clientconn_options_free(options);
-    if(handshake)
-      hyper_task_free(handshake);
-    if(client)
-      hyper_clientconn_free(client);
-    if(req)
-      hyper_request_free(req);
-  }
+  if(options)
+    hyper_clientconn_options_free(options);
+
+  if(handshake)
+    hyper_task_free(handshake);
+
+  if(client)
+    hyper_clientconn_free(client);
+
+  if(req)
+    hyper_request_free(req);
+
   return result;
 }
 
@@ -1203,52 +1238,10 @@ void Curl_hyper_done(struct Curl_easy *data)
     hyper_waker_free(h->write_waker);
     h->write_waker = NULL;
   }
-  if(h->send_body_waker) {
-    hyper_waker_free(h->send_body_waker);
-    h->send_body_waker = NULL;
+  if(h->exp100_waker) {
+    hyper_waker_free(h->exp100_waker);
+    h->exp100_waker = NULL;
   }
-}
-
-static CURLcode cr_hyper_unpause(struct Curl_easy *data,
-                                 struct Curl_creader *reader)
-{
-  (void)reader;
-  if(data->hyp.send_body_waker) {
-    hyper_waker_wake(data->hyp.send_body_waker);
-    data->hyp.send_body_waker = NULL;
-  }
-  return CURLE_OK;
-}
-
-/* Hyper client reader, handling unpausing */
-static const struct Curl_crtype cr_hyper_protocol = {
-  "cr-hyper",
-  Curl_creader_def_init,
-  Curl_creader_def_read,
-  Curl_creader_def_close,
-  Curl_creader_def_needs_rewind,
-  Curl_creader_def_total_length,
-  Curl_creader_def_resume_from,
-  Curl_creader_def_rewind,
-  cr_hyper_unpause,
-  Curl_creader_def_is_paused,
-  Curl_creader_def_done,
-  sizeof(struct Curl_creader)
-};
-
-static CURLcode cr_hyper_add(struct Curl_easy *data)
-{
-  struct Curl_creader *reader = NULL;
-  CURLcode result;
-
-  result = Curl_creader_create(&reader, data, &cr_hyper_protocol,
-                               CURL_CR_PROTOCOL);
-  if(!result)
-    result = Curl_creader_add(data, reader);
-
-  if(result && reader)
-    Curl_creader_free(data, reader);
-  return result;
 }
 
 #endif /* !defined(CURL_DISABLE_HTTP) && defined(USE_HYPER) */

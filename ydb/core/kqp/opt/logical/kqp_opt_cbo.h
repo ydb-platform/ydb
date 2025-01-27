@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 #include <ydb/core/kqp/opt/kqp_opt.h>
 
@@ -13,8 +13,8 @@ namespace NKikimr::NKqp::NOpt {
 struct TKqpRelOptimizerNode : public NYql::TRelOptimizerNode {
     const NYql::TExprNode::TPtr Node;
 
-    TKqpRelOptimizerNode(TString label, std::shared_ptr<NYql::TOptimizerStatistics> stats, const NYql::TExprNode::TPtr node) : 
-        TRelOptimizerNode(label, stats), Node(node) { }
+    TKqpRelOptimizerNode(TString label, NYql::TOptimizerStatistics stats, const NYql::TExprNode::TPtr node) : 
+        TRelOptimizerNode(label, std::move(stats)), Node(node) { }
 };
 
 /**

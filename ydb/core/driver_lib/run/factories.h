@@ -15,7 +15,7 @@
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/core/fq/libs/config/protos/audit.pb.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 
 #include <ydb/library/actors/core/actorsystem.h>

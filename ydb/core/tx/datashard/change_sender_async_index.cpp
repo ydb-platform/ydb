@@ -13,7 +13,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <util/generic/maybe.h>
 

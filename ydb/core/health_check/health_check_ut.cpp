@@ -337,11 +337,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     void SetLongHostValue(TEvInterconnect::TEvNodesInfo::TPtr* ev) {
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
         TString host(1000000, 'a');
-        auto& pbRecord = (*ev)->Get()->Nodes;
-        for (auto itIssue = pbRecord.begin(); itIssue != pbRecord.end(); ++itIssue) {
-            itIssue->Host = host;
+        for (auto it = nodes->begin(); it != nodes->end(); ++it) {
+            it->Host = host;
         }
+        auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+            new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
+        );
+        ev->Swap(newEv);
     }
 
     Ydb::Monitoring::SelfCheckResult RequestHc(size_t const groupNumber, size_t const vdiscPerGroupNumber, bool const isMergeRecords = false, bool const largeSizeVdisksIssues = false) {

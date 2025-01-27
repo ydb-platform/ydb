@@ -1,9 +1,9 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_NDARRAY_TOLIST_HPP
 #define PYTHONIC_INCLUDE_NUMPY_NDARRAY_TOLIST_HPP
 
+#include "pythonic/types/ndarray.hpp"
 #include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/numpy_conversion.hpp"
-#include "pythonic/types/ndarray.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -35,8 +35,8 @@ namespace numpy
 
     NUMPY_EXPR_TO_NDARRAY0_DECL(tolist);
     DEFINE_FUNCTOR(pythonic::numpy::ndarray, tolist);
-  }
-}
+  } // namespace ndarray
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

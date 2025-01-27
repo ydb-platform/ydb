@@ -11,14 +11,14 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/types/uuid/uuid.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 static void CheckKind(TTypeParser::ETypeKind actual, TTypeParser::ETypeKind expected, const TString& method)
 {

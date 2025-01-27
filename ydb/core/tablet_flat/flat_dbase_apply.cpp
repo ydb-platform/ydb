@@ -97,6 +97,9 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
         Y_ABORT_UNLESS(ui32(cache) <= 2, "Invalid pages cache policy value");
+        if (family.Cache != cache && cache == ECache::Ever) {
+            ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
+        }
         changes |= ChangeTableSetting(table, family.Cache, cache);
         changes |= ChangeTableSetting(table, family.Codec, codec);
         changes |= ChangeTableSetting(table, family.Small, small);
@@ -113,7 +116,17 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         auto &room = tableInfo.Rooms[delta.GetRoomId()];
 
         ui8 main = delta.HasMain() ? delta.GetMain() : room.Main;
-        ui8 blobs = delta.HasBlobs() ? delta.GetBlobs() : room.Blobs;
+        TVector<ui8> blobs;
+        if (delta.ExternalBlobsSize() > 0) {
+            for (auto blob : delta.GetExternalBlobs()) {
+                blobs.push_back(blob);
+            }
+        } else if (delta.HasBlobs()) {
+            // Fallback to old format
+            blobs = {static_cast<ui8>(delta.GetBlobs())};
+        } else {
+            blobs = room.Blobs;
+        }
         ui8 outer = delta.HasOuter() ? delta.GetOuter() : room.Outer;
 
         changes |= ChangeTableSetting(table, room.Main, main);
@@ -260,7 +273,7 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
 
     NScheme::TTypeInfo typeInfo;
     TString pgTypeMod;
-    Y_ABORT_UNLESS((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));    
+    Y_ABORT_UNLESS((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));
     switch ((NScheme::TTypeId)type) {
     case NScheme::NTypeIds::Pg: {
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
@@ -272,11 +285,11 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
         typeInfo = typeInfoMod.TypeInfo;
         break;
-    } 
+    }
     default: {
         typeInfo = NScheme::TTypeInfo(type);
         break;
-    }   
+    }
     }
 
     // We verify ids and types match when column with the same name already exists
@@ -384,7 +397,7 @@ bool TSchemeModifier::SetExecutorResourceProfile(const TString &name)
     return ChangeExecutorSetting(Scheme.Executor.ResourceProfile, name);
 }
 
-bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrSchemeOp::TCompactionPolicy &proto)
+bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrCompaction::TCompactionPolicy &proto)
 {
     auto *table = Table(tid);
     TIntrusiveConstPtr<TCompactionPolicy> policy(new TCompactionPolicy(proto));

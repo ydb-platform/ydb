@@ -1,18 +1,23 @@
 #include "partition_scale_request.h"
+#include "read_balancer_log.h"
+
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 namespace NKikimr {
 namespace NPQ {
 
 TPartitionScaleRequest::TPartitionScaleRequest(
-    TString topicName,
-    TString databasePath,
+    const TString& topicName,
+    const TString& topicPath,
+    const TString& databasePath,
     ui64 pathId,
     ui64 pathVersion,
-    std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit> splits,
-    const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge> merges,
-    NActors::TActorId parentActorId
+    const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit>& splits,
+    const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge>& merges,
+    const NActors::TActorId& parentActorId
 )
     : Topic(topicName)
+    , TopicPath(topicPath)
     , DatabasePath(databasePath)
     , PathId(pathId)
     , PathVersion(pathVersion)
@@ -30,14 +35,17 @@ void TPartitionScaleRequest::Bootstrap(const NActors::TActorContext &ctx) {
 void TPartitionScaleRequest::SendProposeRequest(const NActors::TActorContext &ctx) {
     auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     proposal->Record.SetDatabaseName(CanonizePath(DatabasePath));
-    FillProposeRequest(*proposal, DatabasePath, Topic, ctx);
+    FillProposeRequest(*proposal, ctx);
     ctx.Send(MakeTxProxyID(), proposal.release());
 }
 
-void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TString& workingDir, const TString& topicName, const NActors::TActorContext &ctx) {
+void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext&) {
+    auto workingDir = TopicPath.substr(0, TopicPath.size() - Topic.size());
+
     auto& modifyScheme = *proposal.Record.MutableTransaction()->MutableModifyScheme();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
     modifyScheme.SetWorkingDir(workingDir);
+    modifyScheme.SetInternal(true);
 
     auto applyIf = modifyScheme.AddApplyIf();
     applyIf->SetPathId(PathId);
@@ -45,15 +53,15 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
     applyIf->SetCheckEntityVersion(true);
 
     NKikimrSchemeOp::TPersQueueGroupDescription groupDescription;
-    groupDescription.SetName(topicName);
+    groupDescription.SetName(Topic);
     TStringBuilder logMessage;
-    logMessage << "TPartitionScaleRequest::FillProposeRequest trying to scale partitions. Spilts: ";
+    logMessage << "TPartitionScaleRequest::FillProposeRequest trying to scale partitions of '" << workingDir << "/" << Topic << "'. Spilts: ";
     for(const auto& split: Splits) {
         auto* newSplit = groupDescription.AddSplit();
         logMessage << "partition: " << split.GetPartition() << " boundary: '" << split.GetSplitBoundary() << "' ";
         *newSplit = split;
     }
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, logMessage);
+    PQ_LOG_D( logMessage);
 
     for(const auto& merge: Merges) {
         auto* newMerge = groupDescription.AddMerge();
@@ -101,8 +109,7 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
         for (auto& issue : ev->Get()->Record.GetIssues()) {
             issues << issue.ShortDebugString() + ", ";
         }
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleRequest "
-            << "SchemaShard error when trying to execute a split request: " << issues);
+        PQ_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a split request: " << issues);
         Send(ParentActorId, scaleRequestResult.release());
         Die(ctx);
     } else {

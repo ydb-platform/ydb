@@ -10,7 +10,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <util/generic/size_literals.h>
 
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 namespace NKikimr {
@@ -817,14 +817,36 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     /* sink writes */
     WriteActorsShardResolve = KqpGroup->GetCounter("SinkWrites/WriteActorShardResolve", true);
     WriteActorsCount = KqpGroup->GetCounter("SinkWrites/WriteActorsCount", false);
+    BufferActorsCount = KqpGroup->GetCounter("SinkWrites/BufferActorsCount", false);
+    ForwardActorsCount = KqpGroup->GetCounter("SinkWrites/ForwardActorsCount", false);
+
     WriteActorImmediateWrites = KqpGroup->GetCounter("SinkWrites/WriteActorImmediateWrites", true);
     WriteActorImmediateWritesRetries = KqpGroup->GetCounter("SinkWrites/WriteActorImmediateWritesRetries", true);
+    WriteActorPrepareWrites = KqpGroup->GetCounter("SinkWrites/WriteActorPrepareWrites", true);
+
+    BufferActorFlushes = KqpGroup->GetCounter("SinkWrites/BufferActorFlushes", true);
+    BufferActorImmediateCommits = KqpGroup->GetCounter("SinkWrites/BufferActorImmediateCommits", true);
+    BufferActorDistributedCommits = KqpGroup->GetCounter("SinkWrites/BufferActorDistributedCommits", true);
+    BufferActorRollbacks = KqpGroup->GetCounter("SinkWrites/BufferActorRollbacks", true);
+
     WriteActorWritesSizeHistogram =
         KqpGroup->GetHistogram("SinkWrites/WriteActorWritesSize", NMonitoring::ExponentialHistogram(28, 2, 1));
     WriteActorWritesOperationsHistogram =
         KqpGroup->GetHistogram("SinkWrites/WriteActorWritesOperations", NMonitoring::ExponentialHistogram(20, 2, 1));
     WriteActorWritesLatencyHistogram =
-        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+
+    BufferActorPrepareLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorPrepareLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+    BufferActorCommitLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorCommitLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+    BufferActorFlushLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorFlushLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+    
+    ForwardActorWritesSizeHistogram =
+        KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesSize", NMonitoring::ExponentialHistogram(28, 2, 1));
+    ForwardActorWritesLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
 
     /* sequencers */
 
@@ -851,6 +873,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     SchedulerDelays = KqpGroup->GetHistogram("NodeScheduler/Delay", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     RowsDuplicationsFound = KqpGroup->GetCounter("RowsDuplicationFound", true);
+
+    TotalSingleNodeReqCount = KqpGroup->GetCounter("TotalSingleNodeReqCount", true);
+    NonLocalSingleNodeReqCount = KqpGroup->GetCounter("NonLocalSingleNodeReqCount", true);
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

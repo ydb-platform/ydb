@@ -144,11 +144,11 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             result = session.ExecuteQuery(Q_(R"(
                 UPDATE `/Root/KV` SET Value = "third" WHERE Key = 4;
             )"), TTxControl::Tx(tx->GetId())).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto commitResult = tx->Commit().ExtractValueSync();
 
-            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
         }
     };
 
@@ -177,6 +177,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
             auto result = session.ExecuteQuery(Q_(R"(
                 INSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "New");
+                SELECT COUNT(*) FROM `/Root/KV`;
             )"), TTxControl::Tx(tx.GetId())).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());

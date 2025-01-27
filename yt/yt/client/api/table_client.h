@@ -135,7 +135,7 @@ struct TAlterTableReplicaOptions
     std::optional<bool> PreserveTimestamps;
     std::optional<NTransactionClient::EAtomicity> Atomicity;
     std::optional<bool> EnableReplicatedTableTracker;
-    std::optional<TString> ReplicaPath;
+    std::optional<NYPath::TYPath> ReplicaPath;
 };
 
 struct TGetTablePivotKeysOptions

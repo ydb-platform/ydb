@@ -1,18 +1,18 @@
 #ifndef PYTHONIC_NUMPY_FFT_C2C_HPP
 #define PYTHONIC_NUMPY_FFT_C2C_HPP
 
-#include "pythonic/include/numpy/fft/c2c.hpp"
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/include/utils/array_helper.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/builtins/None.hpp"
+#include "pythonic/include/numpy/fft/c2c.hpp"
+#include "pythonic/include/utils/array_helper.hpp"
 #include "pythonic/numpy/concatenate.hpp"
-#include "pythonic/numpy/zeros.hpp"
 #include "pythonic/numpy/empty.hpp"
+#include "pythonic/numpy/zeros.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #include <array>
-#include <cstring>
 #include <cmath>
+#include <cstring>
 
 #include "pythonic/numpy/fft/pocketfft.hpp"
 
@@ -22,8 +22,8 @@ namespace numpy
 {
   namespace fft
   {
-    using pocketfft::stride_t;
     using pocketfft::shape_t;
+    using pocketfft::stride_t;
     using ldbl_t =
         typename std::conditional<sizeof(long double) == sizeof(double), double,
                                   long double>::type;
@@ -31,7 +31,7 @@ namespace numpy
     template <class T, class pS>
     types::ndarray<
         typename std::enable_if<std::is_integral<T>::value, double>::type,
-        types::array<long, std::tuple_size<pS>::value>>
+        types::array_tuple<long, std::tuple_size<pS>::value>>
     _copy_to_double(types::ndarray<T, pS> const &in_array)
     {
       auto out_shape = sutils::getshape(in_array);
@@ -44,7 +44,7 @@ namespace numpy
     template <class T, class pS>
     types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
                                            std::complex<T>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     _copy_to_complex(types::ndarray<T, pS> const &in_array)
     {
       auto out_shape = sutils::getshape(in_array);
@@ -58,7 +58,7 @@ namespace numpy
     template <class T, class pS>
     types::ndarray<typename std::enable_if<std::is_integral<T>::value,
                                            std::complex<double>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     _copy_to_complex(types::ndarray<T, pS> const &in_array)
     {
       auto out_shape = sutils::getshape(in_array);
@@ -94,7 +94,7 @@ namespace numpy
       case Inorm::backward:
         return T(1 / ldbl_t(N));
       case Inorm::explicit_forward:
-        return T(1./N);
+        return T(1. / N);
       default:
         assert(false && "unreachable");
         return T(0);
@@ -128,16 +128,17 @@ namespace numpy
     }
 
     template <class T, class pS>
-    types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+    types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
     _pad_in_array(types::ndarray<T, pS> const &in_array, long axis, long n)
     {
-      types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+      types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
           extended_array;
       auto tmp_shape = sutils::getshape(in_array);
       tmp_shape[axis] = n;
       auto tmp_array = zeros(tmp_shape, types::dtype_t<T>());
       types::list<types::ndarray<
-          T, types::array<long, std::tuple_size<pS>::value>>> bi(0);
+          T, types::array_tuple<long, std::tuple_size<pS>::value>>>
+          bi(0);
       bi.push_back(in_array);
       bi.push_back(tmp_array);
       extended_array = concatenate(bi, axis);
@@ -145,7 +146,7 @@ namespace numpy
     }
 
     template <class T, class pS>
-    types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+    types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
     c2r(types::ndarray<std::complex<T>, pS> const &in_array, long n, long axis,
         types::str const &norm, bool forward)
     {
@@ -160,11 +161,11 @@ namespace numpy
       auto out_shape = sutils::getshape(in_array);
       out_shape[axis] = n;
       // Create output array.
-      types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+      types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
           out_array(out_shape, builtins::None);
       std::complex<T> *d_in;
       types::ndarray<std::complex<T>,
-                     types::array<long, std::tuple_size<pS>::value>>
+                     types::array_tuple<long, std::tuple_size<pS>::value>>
           extended_array;
       stride_t in_strides;
       auto out_strides = create_strides(out_array);
@@ -192,7 +193,7 @@ namespace numpy
 
     template <class T, class pS>
     types::ndarray<std::complex<T>,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     c2c(types::ndarray<std::complex<T>, pS> const &in_array, long n, long axis,
         types::str const &norm, bool forward)
     {
@@ -208,11 +209,11 @@ namespace numpy
       out_shape[axis] = n;
       // Create output array.
       types::ndarray<std::complex<T>,
-                     types::array<long, std::tuple_size<pS>::value>>
+                     types::array_tuple<long, std::tuple_size<pS>::value>>
           out_array(out_shape, builtins::None);
       std::complex<T> *d_in;
       types::ndarray<std::complex<T>,
-                     types::array<long, std::tuple_size<pS>::value>>
+                     types::array_tuple<long, std::tuple_size<pS>::value>>
           extended_array;
       stride_t in_strides;
       if (n > npts) {
@@ -242,7 +243,7 @@ namespace numpy
     template <class T, class pS>
     types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
                                            std::complex<T>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     r2c(types::ndarray<T, pS> const &in_array, long n, long axis,
         types::str const &norm, bool forward, bool extend = true)
     {
@@ -262,10 +263,10 @@ namespace numpy
       }
       // Create output array.
       types::ndarray<std::complex<T>,
-                     types::array<long, std::tuple_size<pS>::value>>
+                     types::array_tuple<long, std::tuple_size<pS>::value>>
           out_array(out_shape, builtins::None);
       T *d_in;
-      types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+      types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
           extended_array;
       shape_t shapes = shape_t(size_t(N));
       stride_t in_strides;
@@ -303,8 +304,8 @@ namespace numpy
       }
       return out_array;
     }
-  }
-}
+  } // namespace fft
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

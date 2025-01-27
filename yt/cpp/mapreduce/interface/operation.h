@@ -17,11 +17,12 @@
 #include <library/cpp/type_info/type_info.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/variant.h>
 #include <util/generic/vector.h>
 #include <util/generic/maybe.h>
 #include <util/system/file.h>
 #include <util/system/types.h>
+
+#include <variant>
 
 namespace NYT {
 
@@ -762,6 +763,9 @@ struct TUserJobSpec
 
     /// @brief Porto layers to use in the job. Layers are listed from top to bottom.
     FLUENT_VECTOR_FIELD(TYPath, Layer);
+
+    /// @brief Docker image to use in the job.
+    FLUENT_FIELD_OPTION(TString, DockerImage);
 
     ///
     /// @brief MemoryLimit specifies how much memory job process can use.
@@ -2385,6 +2389,31 @@ enum class EOperationBriefState : int
     Failed        /* "failed" */,
 };
 
+
+///
+/// @brief Operation state.
+enum class EOperationState : int
+{
+    None                /* "none" */,
+    Starting            /* "starting" */,
+    Orphaned            /* "orphaned" */,
+    WaitingForAgent     /* "waiting_for_agent" */,
+    Initializing        /* "initializing" */,
+    Preparing           /* "preparing" */,
+    Materializing       /* "orphaned" */,
+    ReviveInitializing  /* "revive_initializing" */,
+    Reviving            /* "reviving" */,
+    RevivingJobs        /* "reviving_jobs" */,
+    Pending             /* "pending" */,
+    Running             /* "running" */,
+    Completing          /* "completing" */,
+    Completed           /* "completed" */,
+    Aborting            /* "aborting" */,
+    Aborted             /* "aborted" */,
+    Failing             /* "failing" */,
+    Failed              /* "failed" */,
+};
+
 ///
 /// @brief Operation type.
 enum class EOperationType : int
@@ -2596,7 +2625,7 @@ struct TListOperationsOptions
 
     ///
     /// @brief Choose operations with given @ref NYT::TOperationAttributes::State.
-    FLUENT_FIELD_OPTION(TString, State);
+    FLUENT_FIELD_OPTION(EOperationState, State);
 
     ///
     /// @brief Choose operations with given @ref NYT::TOperationAttributes::Type.
@@ -2693,7 +2722,6 @@ enum class EListJobsDataSource : int
 /// @brief Job type.
 enum class EJobType : int
 {
-    SchedulerFirst    /* "scheduler_first" */,
     Map               /* "map" */,
     PartitionMap      /* "partition_map" */,
     SortedMerge       /* "sorted_merge" */,
@@ -2711,13 +2739,10 @@ enum class EJobType : int
     JoinReduce        /* "join_reduce" */,
     Vanilla           /* "vanilla" */,
     SchedulerUnknown  /* "scheduler_unknown" */,
-    SchedulerLast     /* "scheduler_last" */,
-    ReplicatorFirst   /* "replicator_first" */,
     ReplicateChunk    /* "replicate_chunk" */,
     RemoveChunk       /* "remove_chunk" */,
     RepairChunk       /* "repair_chunk" */,
     SealChunk         /* "seal_chunk" */,
-    ReplicatorLast    /* "replicator_last" */,
 };
 
 ///
@@ -2797,6 +2822,7 @@ enum class EJobSortField : int
     Duration   /* "duration" */,
     Progress   /* "progress" */,
     Id         /* "id" */,
+    TaskName   /* "task_name" */,
 };
 
 ///
@@ -2852,6 +2878,18 @@ struct TListJobsOptions
     ///
     /// @brief Return only jobs with monitoring descriptor.
     FLUENT_FIELD_OPTION(bool, WithMonitoringDescriptor);
+
+    ///
+    /// @brief Search for jobs with start time >= `FromTime`.
+    FLUENT_FIELD_OPTION(TInstant, FromTime);
+
+    ///
+    /// @brief Search for jobs with start time <= `ToTime`.
+    FLUENT_FIELD_OPTION(TInstant, ToTime);
+
+    ///
+    /// @brief Search for jobs with filters encoded in token.
+    FLUENT_FIELD_OPTION(TString, ContinuationToken);
 
     /// @}
 
@@ -3043,6 +3081,70 @@ struct TGetFailedJobInfoOptions
     ///
     /// @brief How much of stderr tail should be downloaded.
     FLUENT_FIELD_DEFAULT(ui64, StderrTailSize, 64 * 1024);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+///
+/// @brief Options for @ref NYT::IClient::GetJobTrace.
+struct TGetJobTraceOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TGetJobTraceOptions;
+    /// @endcond
+
+    ///
+    /// @brief Id of the job.
+    FLUENT_FIELD_OPTION(TJobId, JobId);
+
+    ///
+    /// @brief Id of the trace.
+    FLUENT_FIELD_OPTION(TJobTraceId, TraceId);
+
+    ///
+    /// @brief Search for traces with time >= `FromTime`.
+    FLUENT_FIELD_OPTION(i64, FromTime);
+
+    ///
+    /// @brief Search for traces with time <= `ToTime`.
+    FLUENT_FIELD_OPTION(i64, ToTime);
+
+    ///
+    /// @brief Search for traces with event index >= `FromEventIndex`.
+    FLUENT_FIELD_OPTION(i64, FromEventIndex);
+
+    ///
+    /// @brief Search for traces with event index >= `ToEventIndex`.
+    FLUENT_FIELD_OPTION(i64, ToEventIndex);
+};
+
+///
+/// @brief Response for @ref NYT::IOperation::GetJobTrace.
+struct TJobTraceEvent
+{
+    ///
+    /// @brief Id of the operation.
+    TOperationId OperationId;
+
+    ///
+    /// @brief Id of the job.
+    TJobId JobId;
+
+    ///
+    /// @brief Id of the trace.
+    TJobTraceId TraceId;
+
+    ///
+    /// @brief Index of the trace event.
+    i64 EventIndex;
+
+    ///
+    /// @brief Raw evenr in json format.
+    TString Event;
+
+    ///
+    /// @brief Time of the event.
+    TInstant EventTime;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

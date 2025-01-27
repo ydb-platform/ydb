@@ -26,7 +26,7 @@ items:
   href: paging.md
 - name: Таймауты
   href: timeouts.md
-- name: Системные таблицы
+- name: Системные представления
   href: system-views.md
 - name: Change Data Capture
   href: cdc.md

@@ -5,8 +5,8 @@
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_output.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/ptr.h>
 
@@ -198,6 +198,8 @@ struct IDqComputeActorAsyncOutput {
 
     virtual TMaybe<google::protobuf::Any> ExtraData() { return {}; }
 
+    virtual void FillExtraStats(NDqProto::TDqTaskStats* /* stats */, bool /* finalized stats */, const NYql::NDq::TDqMeteringStats*) { }
+
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
     virtual ~IDqComputeActorAsyncOutput() = default;
@@ -266,6 +268,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> KeyTypeHelper;
         NActors::TActorId ParentId;
+        ::NMonitoring::TDynamicCounterPtr TaskCounters;
         google::protobuf::Any LookupSource; //provider specific data source
         const NKikimr::NMiniKQL::TStructType* KeyType;
         const NKikimr::NMiniKQL::TStructType* PayloadType;
@@ -300,6 +303,7 @@ public:
         const THashMap<TString, TString>& SecureParams;
         const THashMap<TString, TString>& TaskParams;
         const NActors::TActorId& ComputeActorId;
+        ::NMonitoring::TDynamicCounterPtr TaskCounters;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;

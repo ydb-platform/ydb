@@ -18,6 +18,7 @@ class TRetryfulWriterV2
 {
 public:
     TRetryfulWriterV2(
+        const IRawClientPtr& rawClient,
         IClientRetryPolicyPtr clientRetryPolicy,
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,
@@ -48,11 +49,11 @@ private:
     const ssize_t BufferSize_;
     const ssize_t SendStep_ = 64_KB;
     ssize_t NextSizeToSend_;
-    THolder<TSender> Sender_;
-    THolder<TPingableTransaction> WriteTransaction_;
+    std::unique_ptr<TSender> Sender_;
+    std::unique_ptr<TPingableTransaction> WriteTransaction_;
 
-    THolder<TSendTask> Current_;
-    THolder<TSendTask> Previous_;
+    std::unique_ptr<TSendTask> Current_;
+    std::unique_ptr<TSendTask> Previous_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

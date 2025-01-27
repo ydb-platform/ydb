@@ -1,6 +1,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
     const Ydb::Topic::DescribeTopicResult& TProtoAccessor::GetProto(const NTopic::TTopicDescription& topicDescription) {
         return topicDescription.GetProto();
     }

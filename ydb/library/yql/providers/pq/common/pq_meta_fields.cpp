@@ -1,5 +1,5 @@
 #include "pq_meta_fields.h"
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <unordered_map>
 

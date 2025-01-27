@@ -47,6 +47,7 @@ struct TSensorWrapper
 using TCounterWrapper = TSensorWrapper<TCounter>::template TImpl<&TProfiler::Counter>;
 using TGaugeWrapper = TSensorWrapper<TGauge>::template TImpl<&TProfiler::Gauge>;
 using TTimeGaugeWrapper = TSensorWrapper<TTimeGauge>::template TImpl<&TProfiler::TimeGauge>;
+using TTimerWrapper = TSensorWrapper<TEventTimer>::template TImpl<&TProfiler::Timer>;
 
 template <typename... Args>
 using TTimeHistogramWrapper = typename TSensorWrapper<TEventTimer, Args...>::template TImpl<&TProfiler::TimeHistogram>;
@@ -54,6 +55,8 @@ template <typename... Args>
 using TGaugeHistogramWrapper = typename TSensorWrapper<TGaugeHistogram, Args...>::template TImpl<&TProfiler::GaugeHistogram>;
 template <typename... Args>
 using TRateHistogramWrapper = typename TSensorWrapper<TRateHistogram, Args...>::template TImpl<&TProfiler::RateHistogram>;
+template <typename... Args>
+using TSummaryWrapper = typename TSensorWrapper<TSummary, Args...>::template TImpl<&TProfiler::Summary>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -155,6 +158,11 @@ const TTimeGauge& TSensorsOwner::GetTimeGauge(const std::string& name) const
     return Get<TTimeGaugeWrapper>(name).Sensor;
 }
 
+const TEventTimer& TSensorsOwner::GetTimer(const std::string& name) const
+{
+    return Get<TTimerWrapper>(name).Sensor;
+}
+
 const TEventTimer& TSensorsOwner::GetTimeHistogram(const std::string& name, std::vector<TDuration> bounds) const
 {
     return Get<TTimeHistogramWrapper<std::vector<TDuration>>>(name, std::move(bounds)).Sensor;
@@ -175,7 +183,12 @@ const TRateHistogram& TSensorsOwner::GetRateHistogram(const std::string& name, s
     return Get<TRateHistogramWrapper<std::vector<double>>>(name, std::move(buckets)).Sensor;
 }
 
-void TSensorsOwner::Inc(const std::string& name, i64 delta) const
+const TSummary& TSensorsOwner::GetSummary(const std::string& name, ESummaryPolicy policy) const
+{
+    return Get<TSummaryWrapper<ESummaryPolicy>>(name, policy).Sensor;
+}
+
+void TSensorsOwner::Increment(const std::string& name, i64 delta) const
 {
     GetCounter(name).Increment(delta);
 }

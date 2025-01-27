@@ -1,16 +1,30 @@
 #include "yql_highlight.h"
 
-#include <contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h>
-#include <regex>
+#include <ydb/public/lib/ydb_cli/commands/interactive/yql_position.h>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
+
+#include <util/charset/utf8.h>
+#include <util/string/strip.h>
+
+#include <regex>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 
 #define TOKEN(NAME) SQLv1Antlr4Lexer::TOKEN_##NAME
 
 namespace NYdb {
     namespace NConsoleClient {
+        using NSQLTranslation::ParseTranslationSettings;
+        using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
+        using NSQLTranslation::TTranslationSettings;
+        using NSQLTranslationV1::IsProbablyKeyword;
+        using NSQLTranslationV1::MakeLexer;
+        using NYql::TIssues;
 
-        using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
+        using std::regex_constants::ECMAScript;
+        using std::regex_constants::icase;
 
         constexpr const char* builtinFunctionPattern = ( //
             "^("
@@ -69,6 +83,14 @@ namespace NYdb {
             "text|bytes"
             ")$");
 
+        // Permits invalid special comments
+        bool IsAnsiQuery(const TString& queryUtf8) {
+            TTranslationSettings settings;
+            TIssues issues;
+            ParseTranslationSettings(queryUtf8, settings, issues);
+            return settings.AnsiLexer;
+        }
+
         YQLHighlight::ColorSchema YQLHighlight::ColorSchema::Monaco() {
             using replxx::color::rgb666;
 
@@ -109,43 +131,51 @@ namespace NYdb {
 
         YQLHighlight::YQLHighlight(ColorSchema color)
             : Coloring(color)
-            , BuiltinFunctionRegex(builtinFunctionPattern, std::regex_constants::ECMAScript | std::regex_constants::icase)
-            , TypeRegex(typePattern, std::regex_constants::ECMAScript | std::regex_constants::icase)
-            , Chars()
-            , Lexer(&Chars)
-            , Tokens(&Lexer)
+            , BuiltinFunctionRegex(builtinFunctionPattern, ECMAScript | icase)
+            , TypeRegex(typePattern, ECMAScript | icase)
+            , CppLexer(MakeLexer(/* ansi = */ false, /* antlr4 = */ true))
+            , ANSILexer(MakeLexer(/* ansi = */ true, /* antlr4 = */ true))
         {
-            Lexer.removeErrorListeners();
         }
 
-        void YQLHighlight::Apply(std::string_view query, Colors& colors) {
-            Reset(query);
+        void YQLHighlight::Apply(TStringBuf queryUtf8, Colors& colors) {
+            Tokens = Tokenize(TString(queryUtf8));
+            auto mapping = YQLPositionMapping::Build(TString(queryUtf8));
 
-            for (std::size_t i = 0; i < Tokens.size(); ++i) {
-                const auto* token = Tokens.get(i);
-                const auto color = ColorOf(token);
+            for (std::size_t i = 0; i < Tokens.size() - 1; ++i) {
+                const auto& token = Tokens.at(i);
+                const auto color = ColorOf(token, i);
 
-                const std::ptrdiff_t start = token->getStartIndex();
-                const std::ptrdiff_t stop = token->getStopIndex() + 1;
+                const std::ptrdiff_t start = mapping.RawPos(token);
+                const std::ptrdiff_t length = GetNumberOfUTF8Chars(token.Content);
+                const std::ptrdiff_t stop = start + length;
 
                 std::fill(std::next(std::begin(colors), start),
                           std::next(std::begin(colors), stop), color);
             }
         }
 
-        void YQLHighlight::Reset(std::string_view query) {
-            Chars.load(query.data(), query.length());
-            Lexer.reset();
-            Tokens.setTokenSource(&Lexer);
+        TParsedTokenList YQLHighlight::Tokenize(const TString& queryUtf8) {
+            ILexer& lexer = *SuitableLexer(queryUtf8);
 
-            Tokens.fill();
+            TParsedTokenList tokens;
+            TIssues issues;
+            NSQLTranslation::Tokenize(lexer, queryUtf8, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS);
+            return tokens;
         }
 
-        YQLHighlight::Color YQLHighlight::ColorOf(const antlr4::Token* token) {
+        ILexer::TPtr& YQLHighlight::SuitableLexer(const TString& queryUtf8) {
+            if (IsAnsiQuery(queryUtf8)) {
+                return ANSILexer;
+            }
+            return CppLexer;
+        }
+
+        YQLHighlight::Color YQLHighlight::ColorOf(const TParsedToken& token, size_t index) {
             if (IsString(token)) {
                 return Coloring.string;
             }
-            if (IsFunctionIdentifier(token)) {
+            if (IsFunctionIdentifier(token, index)) {
                 return Coloring.identifier.function;
             }
             if (IsTypeIdentifier(token)) {
@@ -172,376 +202,86 @@ namespace NYdb {
             return Coloring.unknown;
         }
 
-        bool YQLHighlight::IsKeyword(const antlr4::Token* token) const {
-            switch (token->getType()) {
-                case TOKEN(ABORT):
-                case TOKEN(ACTION):
-                case TOKEN(ADD):
-                case TOKEN(AFTER):
-                case TOKEN(ALL):
-                case TOKEN(ALTER):
-                case TOKEN(ANALYZE):
-                case TOKEN(AND):
-                case TOKEN(ANSI):
-                case TOKEN(ANY):
-                case TOKEN(ARRAY):
-                case TOKEN(AS):
-                case TOKEN(ASC):
-                case TOKEN(ASSUME):
-                case TOKEN(ASYMMETRIC):
-                case TOKEN(ASYNC):
-                case TOKEN(AT):
-                case TOKEN(ATTACH):
-                case TOKEN(ATTRIBUTES):
-                case TOKEN(AUTOINCREMENT):
-                case TOKEN(AUTOMAP):
-                case TOKEN(BEFORE):
-                case TOKEN(BEGIN):
-                case TOKEN(BERNOULLI):
-                case TOKEN(BETWEEN):
-                case TOKEN(BITCAST):
-                case TOKEN(BY):
-                case TOKEN(CALLABLE):
-                case TOKEN(CASCADE):
-                case TOKEN(CASE):
-                case TOKEN(CAST):
-                case TOKEN(CHANGEFEED):
-                case TOKEN(CHECK):
-                case TOKEN(COLLATE):
-                case TOKEN(COLUMN):
-                case TOKEN(COLUMNS):
-                case TOKEN(COMMIT):
-                case TOKEN(COMPACT):
-                case TOKEN(CONDITIONAL):
-                case TOKEN(CONFLICT):
-                case TOKEN(CONNECT):
-                case TOKEN(CONSTRAINT):
-                case TOKEN(CONSUMER):
-                case TOKEN(COVER):
-                case TOKEN(CREATE):
-                case TOKEN(CROSS):
-                case TOKEN(CUBE):
-                case TOKEN(CURRENT):
-                case TOKEN(CURRENT_DATE):
-                case TOKEN(CURRENT_TIME):
-                case TOKEN(CURRENT_TIMESTAMP):
-                case TOKEN(DATA):
-                case TOKEN(DATABASE):
-                case TOKEN(DECIMAL):
-                case TOKEN(DECLARE):
-                case TOKEN(DEFAULT):
-                case TOKEN(DEFERRABLE):
-                case TOKEN(DEFERRED):
-                case TOKEN(DEFINE):
-                case TOKEN(DELETE):
-                case TOKEN(DESC):
-                case TOKEN(DESCRIBE):
-                case TOKEN(DETACH):
-                case TOKEN(DICT):
-                case TOKEN(DIRECTORY):
-                case TOKEN(DISABLE):
-                case TOKEN(DISCARD):
-                case TOKEN(DISTINCT):
-                case TOKEN(DO):
-                case TOKEN(DROP):
-                case TOKEN(EACH):
-                case TOKEN(ELSE):
-                case TOKEN(EMPTY):
-                case TOKEN(EMPTY_ACTION):
-                case TOKEN(ENCRYPTED):
-                case TOKEN(END):
-                case TOKEN(ENUM):
-                case TOKEN(ERASE):
-                case TOKEN(ERROR):
-                case TOKEN(ESCAPE):
-                case TOKEN(EVALUATE):
-                case TOKEN(EXCEPT):
-                case TOKEN(EXCLUDE):
-                case TOKEN(EXCLUSION):
-                case TOKEN(EXCLUSIVE):
-                case TOKEN(EXISTS):
-                case TOKEN(EXPLAIN):
-                case TOKEN(EXPORT):
-                case TOKEN(EXTERNAL):
-                case TOKEN(FAIL):
-                case TOKEN(FALSE):
-                case TOKEN(FAMILY):
-                case TOKEN(FILTER):
-                case TOKEN(FIRST):
-                case TOKEN(FLATTEN):
-                case TOKEN(FLOW):
-                case TOKEN(FOLLOWING):
-                case TOKEN(FOR):
-                case TOKEN(FOREIGN):
-                case TOKEN(FROM):
-                case TOKEN(FULL):
-                case TOKEN(FUNCTION):
-                case TOKEN(GLOB):
-                case TOKEN(GLOBAL):
-                case TOKEN(GRANT):
-                case TOKEN(GROUP):
-                case TOKEN(GROUPING):
-                case TOKEN(GROUPS):
-                case TOKEN(HASH):
-                case TOKEN(HAVING):
-                case TOKEN(HOP):
-                case TOKEN(IF):
-                case TOKEN(IGNORE):
-                case TOKEN(ILIKE):
-                case TOKEN(IMMEDIATE):
-                case TOKEN(IMPORT):
-                case TOKEN(IN):
-                case TOKEN(INDEX):
-                case TOKEN(INDEXED):
-                case TOKEN(INHERITS):
-                case TOKEN(INITIAL):
-                case TOKEN(INITIALLY):
-                case TOKEN(INNER):
-                case TOKEN(INSERT):
-                case TOKEN(INSTEAD):
-                case TOKEN(INTERSECT):
-                case TOKEN(INTO):
-                case TOKEN(IS):
-                case TOKEN(ISNULL):
-                case TOKEN(JOIN):
-                case TOKEN(JSON_EXISTS):
-                case TOKEN(JSON_QUERY):
-                case TOKEN(JSON_VALUE):
-                case TOKEN(KEY):
-                case TOKEN(LAST):
-                case TOKEN(LEFT):
-                case TOKEN(LEGACY):
-                case TOKEN(LIKE):
-                case TOKEN(LIMIT):
-                case TOKEN(LIST):
-                case TOKEN(LOCAL):
-                case TOKEN(MANAGE):
-                case TOKEN(MATCH):
-                case TOKEN(MATCHES):
-                case TOKEN(MATCH_RECOGNIZE):
-                case TOKEN(MEASURES):
-                case TOKEN(MICROSECONDS):
-                case TOKEN(MILLISECONDS):
-                case TOKEN(MODIFY):
-                case TOKEN(NANOSECONDS):
-                case TOKEN(NATURAL):
-                case TOKEN(NEXT):
-                case TOKEN(NO):
-                case TOKEN(NOT):
-                case TOKEN(NOTNULL):
-                case TOKEN(NULL):
-                case TOKEN(NULLS):
-                case TOKEN(OBJECT):
-                case TOKEN(OF):
-                case TOKEN(OFFSET):
-                case TOKEN(OMIT):
-                case TOKEN(ON):
-                case TOKEN(ONE):
-                case TOKEN(ONLY):
-                case TOKEN(OPTION):
-                case TOKEN(OPTIONAL):
-                case TOKEN(OR):
-                case TOKEN(ORDER):
-                case TOKEN(OTHERS):
-                case TOKEN(OUTER):
-                case TOKEN(OVER):
-                case TOKEN(PARALLEL):
-                case TOKEN(PARTITION):
-                case TOKEN(PASSING):
-                case TOKEN(PASSWORD):
-                case TOKEN(PAST):
-                case TOKEN(PATTERN):
-                case TOKEN(PER):
-                case TOKEN(PERMUTE):
-                case TOKEN(PLAN):
-                case TOKEN(PRAGMA):
-                case TOKEN(PRECEDING):
-                case TOKEN(PRESORT):
-                case TOKEN(PRIMARY):
-                case TOKEN(PRIVILEGES):
-                case TOKEN(PROCESS):
-                case TOKEN(QUEUE):
-                case TOKEN(RAISE):
-                case TOKEN(RANGE):
-                case TOKEN(REDUCE):
-                case TOKEN(REFERENCES):
-                case TOKEN(REGEXP):
-                case TOKEN(REINDEX):
-                case TOKEN(RELEASE):
-                case TOKEN(REMOVE):
-                case TOKEN(RENAME):
-                case TOKEN(REPEATABLE):
-                case TOKEN(REPLACE):
-                case TOKEN(REPLICATION):
-                case TOKEN(RESET):
-                case TOKEN(RESOURCE):
-                case TOKEN(RESPECT):
-                case TOKEN(RESTRICT):
-                case TOKEN(RESULT):
-                case TOKEN(RETURN):
-                case TOKEN(RETURNING):
-                case TOKEN(REVERT):
-                case TOKEN(REVOKE):
-                case TOKEN(RIGHT):
-                case TOKEN(RLIKE):
-                case TOKEN(ROLLBACK):
-                case TOKEN(ROLLUP):
-                case TOKEN(ROW):
-                case TOKEN(ROWS):
-                case TOKEN(SAMPLE):
-                case TOKEN(SAVEPOINT):
-                case TOKEN(SCHEMA):
-                case TOKEN(SECONDS):
-                case TOKEN(SEEK):
-                case TOKEN(SELECT):
-                case TOKEN(SEMI):
-                case TOKEN(SET):
-                case TOKEN(SETS):
-                case TOKEN(SHOW):
-                case TOKEN(SOURCE):
-                case TOKEN(STREAM):
-                case TOKEN(STRUCT):
-                case TOKEN(SUBQUERY):
-                case TOKEN(SUBSET):
-                case TOKEN(SYMBOLS):
-                case TOKEN(SYMMETRIC):
-                case TOKEN(SYNC):
-                case TOKEN(SYSTEM):
-                case TOKEN(TABLE):
-                case TOKEN(TABLES):
-                case TOKEN(TABLESAMPLE):
-                case TOKEN(TABLESTORE):
-                case TOKEN(TAGGED):
-                case TOKEN(TEMP):
-                case TOKEN(TEMPORARY):
-                case TOKEN(THEN):
-                case TOKEN(TIES):
-                case TOKEN(TO):
-                case TOKEN(TOPIC):
-                case TOKEN(TRANSACTION):
-                case TOKEN(TRIGGER):
-                case TOKEN(TRUE):
-                case TOKEN(TUPLE):
-                case TOKEN(TYPE):
-                case TOKEN(UNBOUNDED):
-                case TOKEN(UNCONDITIONAL):
-                case TOKEN(UNION):
-                case TOKEN(UNIQUE):
-                case TOKEN(UNKNOWN):
-                case TOKEN(UNMATCHED):
-                case TOKEN(UPDATE):
-                case TOKEN(UPSERT):
-                case TOKEN(USE):
-                case TOKEN(USER):
-                case TOKEN(USING):
-                case TOKEN(VACUUM):
-                case TOKEN(VALUES):
-                case TOKEN(VARIANT):
-                case TOKEN(VIEW):
-                case TOKEN(VIRTUAL):
-                case TOKEN(WHEN):
-                case TOKEN(WHERE):
-                case TOKEN(WINDOW):
-                case TOKEN(WITH):
-                case TOKEN(WITHOUT):
-                case TOKEN(WRAPPER):
-                case TOKEN(XOR):
-                    return true;
-                default:
-                    return false;
-            }
+        bool YQLHighlight::IsKeyword(const TParsedToken& token) const {
+            return IsProbablyKeyword(token);
         }
 
-        bool YQLHighlight::IsOperation(const antlr4::Token* token) const {
-            switch (token->getType()) {
-                case TOKEN(EQUALS):
-                case TOKEN(EQUALS2):
-                case TOKEN(NOT_EQUALS):
-                case TOKEN(NOT_EQUALS2):
-                case TOKEN(LESS):
-                case TOKEN(LESS_OR_EQ):
-                case TOKEN(GREATER):
-                case TOKEN(GREATER_OR_EQ):
-                case TOKEN(SHIFT_LEFT):
-                case TOKEN(ROT_LEFT):
-                case TOKEN(AMPERSAND):
-                case TOKEN(PIPE):
-                case TOKEN(DOUBLE_PIPE):
-                case TOKEN(STRUCT_OPEN):
-                case TOKEN(STRUCT_CLOSE):
-                case TOKEN(PLUS):
-                case TOKEN(MINUS):
-                case TOKEN(TILDA):
-                case TOKEN(ASTERISK):
-                case TOKEN(SLASH):
-                case TOKEN(BACKSLASH):
-                case TOKEN(PERCENT):
-                case TOKEN(SEMICOLON):
-                case TOKEN(DOT):
-                case TOKEN(COMMA):
-                case TOKEN(LPAREN):
-                case TOKEN(RPAREN):
-                case TOKEN(QUESTION):
-                case TOKEN(COLON):
-                case TOKEN(COMMAT):
-                case TOKEN(DOUBLE_COMMAT):
-                case TOKEN(DOLLAR):
-                case TOKEN(QUOTE_DOUBLE):
-                case TOKEN(QUOTE_SINGLE):
-                case TOKEN(BACKTICK):
-                case TOKEN(LBRACE_CURLY):
-                case TOKEN(RBRACE_CURLY):
-                case TOKEN(CARET):
-                case TOKEN(NAMESPACE):
-                case TOKEN(ARROW):
-                case TOKEN(RBRACE_SQUARE):
-                case TOKEN(LBRACE_SQUARE):
-                    return true;
-                default:
-                    return false;
-            }
+        bool YQLHighlight::IsOperation(const TParsedToken& token) const {
+            return (
+                token.Name == "EQUALS" ||
+                token.Name == "EQUALS2" ||
+                token.Name == "NOT_EQUALS" ||
+                token.Name == "NOT_EQUALS2" ||
+                token.Name == "LESS" ||
+                token.Name == "LESS_OR_EQ" ||
+                token.Name == "GREATER" ||
+                token.Name == "GREATER_OR_EQ" ||
+                token.Name == "SHIFT_LEFT" ||
+                token.Name == "ROT_LEFT" ||
+                token.Name == "AMPERSAND" ||
+                token.Name == "PIPE" ||
+                token.Name == "DOUBLE_PIPE" ||
+                token.Name == "STRUCT_OPEN" ||
+                token.Name == "STRUCT_CLOSE" ||
+                token.Name == "PLUS" ||
+                token.Name == "MINUS" ||
+                token.Name == "TILDA" ||
+                token.Name == "ASTERISK" ||
+                token.Name == "SLASH" ||
+                token.Name == "PERCENT" ||
+                token.Name == "SEMICOLON" ||
+                token.Name == "DOT" ||
+                token.Name == "COMMA" ||
+                token.Name == "LPAREN" ||
+                token.Name == "RPAREN" ||
+                token.Name == "QUESTION" ||
+                token.Name == "COLON" ||
+                token.Name == "COMMAT" ||
+                token.Name == "DOUBLE_COMMAT" ||
+                token.Name == "DOLLAR" ||
+                token.Name == "LBRACE_CURLY" ||
+                token.Name == "RBRACE_CURLY" ||
+                token.Name == "CARET" ||
+                token.Name == "NAMESPACE" ||
+                token.Name == "ARROW" ||
+                token.Name == "RBRACE_SQUARE" ||
+                token.Name == "LBRACE_SQUARE");
         }
 
-        bool YQLHighlight::IsFunctionIdentifier(const antlr4::Token* token) {
-            if (token->getType() != TOKEN(ID_PLAIN)) {
+        bool YQLHighlight::IsFunctionIdentifier(const TParsedToken& token, size_t index) {
+            if (token.Name != "ID_PLAIN") {
                 return false;
             }
-            const auto index = token->getTokenIndex();
-            return std::regex_search(token->getText(), BuiltinFunctionRegex) ||
-                   (2 <= index && Tokens.get(index - 1)->getType() == TOKEN(NAMESPACE) && Tokens.get(index - 2)->getType() == TOKEN(ID_PLAIN)) ||
-                   (index < Tokens.size() - 1 && Tokens.get(index + 1)->getType() == TOKEN(NAMESPACE));
+            return std::regex_search(token.Content.begin(), token.Content.end(), BuiltinFunctionRegex) ||
+                   (2 <= index && Tokens.at(index - 1).Name == "NAMESPACE" && Tokens.at(index - 2).Name == "ID_PLAIN") ||
+                   (index < Tokens.size() - 1 && Tokens.at(index + 1).Name == "NAMESPACE");
         }
 
-        bool YQLHighlight::IsTypeIdentifier(const antlr4::Token* token) const {
-            return token->getType() == TOKEN(ID_PLAIN) && std::regex_search(token->getText(), TypeRegex);
+        bool YQLHighlight::IsTypeIdentifier(const TParsedToken& token) const {
+            return token.Name == "ID_PLAIN" && std::regex_search(token.Content.begin(), token.Content.end(), TypeRegex);
         }
 
-        bool YQLHighlight::IsVariableIdentifier(const antlr4::Token* token) const {
-            return token->getType() == TOKEN(ID_PLAIN);
+        bool YQLHighlight::IsVariableIdentifier(const TParsedToken& token) const {
+            return token.Name == "ID_PLAIN";
         }
 
-        bool YQLHighlight::IsQuotedIdentifier(const antlr4::Token* token) const {
-            return token->getType() == TOKEN(ID_QUOTED);
+        bool YQLHighlight::IsQuotedIdentifier(const TParsedToken& token) const {
+            return token.Name == "ID_QUOTED";
         }
 
-        bool YQLHighlight::IsString(const antlr4::Token* token) const {
-            return token->getType() == TOKEN(STRING_VALUE);
+        bool YQLHighlight::IsString(const TParsedToken& token) const {
+            return token.Name == "STRING_VALUE";
         }
 
-        bool YQLHighlight::IsNumber(const antlr4::Token* token) const {
-            switch (token->getType()) {
-                case TOKEN(DIGITS):
-                case TOKEN(INTEGER_VALUE):
-                case TOKEN(REAL):
-                case TOKEN(BLOB):
-                    return true;
-                default:
-                    return false;
-            }
+        bool YQLHighlight::IsNumber(const TParsedToken& token) const {
+            return token.Name == "DIGITS" ||
+                   token.Name == "INTEGER_VALUE" ||
+                   token.Name == "REAL" ||
+                   token.Name == "BLOB";
         }
 
-        bool YQLHighlight::IsComment(const antlr4::Token* token) const {
-            return token->getType() == TOKEN(COMMENT);
+        bool YQLHighlight::IsComment(const TParsedToken& token) const {
+            return token.Name == "COMMENT";
         }
 
     } // namespace NConsoleClient

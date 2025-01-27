@@ -1,9 +1,8 @@
 #pragma once
 
 #include "common.h"
-#include "error_code.h"
 
-#include <library/cpp/yt/misc/concepts.h>
+#include <library/cpp/yt/error/public.h>
 
 // Google Protobuf forward declarations.
 namespace google::protobuf {
@@ -82,6 +81,12 @@ struct TValueBoundSerializer;
 template <class T, class C, class = void>
 struct TSerializerTraits;
 
+DEFINE_ENUM(ESerializationDumpMode,
+    (None)
+    (Content)
+    (Checksum)
+);
+
 template <class TKey, class TComparer>
 class TSkipList;
 
@@ -102,6 +107,9 @@ DECLARE_REFCOUNTED_CLASS(TAsyncExpiringCacheConfig)
 DECLARE_REFCOUNTED_CLASS(TLogDigestConfig)
 DECLARE_REFCOUNTED_CLASS(THistogramDigestConfig)
 
+DECLARE_REFCOUNTED_CLASS(TSingletonsConfig)
+DECLARE_REFCOUNTED_CLASS(TSingletonsDynamicConfig)
+
 class TSignalRegistry;
 
 class TBloomFilterBuilder;
@@ -113,9 +121,6 @@ constexpr TChecksum NullChecksum = 0;
 
 template <class T, size_t N>
 class TCompactVector;
-
-class TRef;
-class TMutableRef;
 
 template <class TProto>
 class TRefCountedProto;
@@ -161,15 +166,6 @@ DECLARE_REFCOUNTED_CLASS(TAdaptiveHedgingManagerConfig)
 DECLARE_REFCOUNTED_STRUCT(IHedgingManager)
 
 ////////////////////////////////////////////////////////////////////////////////
-
-YT_DEFINE_ERROR_ENUM(
-    ((OK)                    (0))
-    ((Generic)               (1))
-    ((Canceled)              (2))
-    ((Timeout)               (3))
-    ((FutureCombinerFailure) (4))
-    ((FutureCombinerShortcut)(5))
-);
 
 DEFINE_ENUM(EProcessErrorCode,
     ((NonZeroExitCode)    (10000))

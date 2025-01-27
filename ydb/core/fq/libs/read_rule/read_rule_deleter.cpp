@@ -4,7 +4,8 @@
 #include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/library/services/services.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -138,7 +139,7 @@ public:
 
             LOG_D("Failed to remove read rule from `" << Topic.topic_path() << "`: " << status.GetIssues().ToString() << ". Status: " << status.GetStatus() << ". Retry after: " << nextRetryDelay);
             if (!nextRetryDelay) { // Not retryable
-                Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleDeleterResult>(status.GetIssues()), 0, Index);
+                Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleDeleterResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
                 PassAway();
             } else {
                 Schedule(*nextRetryDelay, new NActors::TEvents::TEvWakeup());

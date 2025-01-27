@@ -307,7 +307,7 @@ class WriterAsyncIOReconnector:
 
     def _prepare_internal_messages(self, messages: List[PublicMessage]) -> List[InternalMessage]:
         if self._settings.auto_created_at:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now(datetime.timezone.utc)
         else:
             now = None
 
@@ -427,7 +427,7 @@ class WriterAsyncIOReconnector:
 
         for message in messages:
             encoded_data_futures = eventloop.run_in_executor(
-                self._encode_executor, encoder_function, message.get_bytes()
+                self._encode_executor, encoder_function, message.get_data_bytes()
             )
             encode_waiters.append(encoded_data_futures)
 
@@ -493,7 +493,7 @@ class WriterAsyncIOReconnector:
             f = self._codec_functions[codec]
 
             for m in test_messages:
-                encoded = f(m.get_bytes())
+                encoded = f(m.get_data_bytes())
                 s += len(encoded)
 
             return s
@@ -686,7 +686,10 @@ class WriterAsyncIOStream:
     async def _update_token_loop(self):
         while True:
             await asyncio.sleep(self._update_token_interval)
-            await self._update_token(token=self._get_token_function())
+            token = self._get_token_function()
+            if asyncio.iscoroutine(token):
+                token = await token
+            await self._update_token(token=token)
 
     async def _update_token(self, token: str):
         await self._update_token_event.wait()

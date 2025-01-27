@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 
 #include <library/cpp/xml/document/xml-document-decl.h>

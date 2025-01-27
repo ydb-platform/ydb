@@ -90,8 +90,8 @@ struct aws_credentials_provider_environment_options {
 };
 
 /**
- * Configuration options for a provider that sources credentials from the aws profile and credentials files
- * (by default ~/.aws/profile and ~/.aws/credentials)
+ * Configuration options for a provider that sources credentials from the aws config and credentials files
+ * (by default ~/.aws/config and ~/.aws/credentials)
  */
 struct aws_credentials_provider_profile_options {
     struct aws_credentials_provider_shutdown_options shutdown_options;
@@ -114,7 +114,7 @@ struct aws_credentials_provider_profile_options {
     /**
      * (Optional)
      * Use a cached merged profile collection. A merge collection has both config file
-     * (~/.aws/profile) and credentials file based profile collection (~/.aws/credentials) using
+     * (~/.aws/config) and credentials file based profile collection (~/.aws/credentials) using
      * `aws_profile_collection_new_from_merge`.
      * If this option is provided, `config_file_name_override` and `credentials_file_name_override` will be ignored.
      */
@@ -355,6 +355,49 @@ struct aws_credentials_provider_sts_web_identity_options {
     struct aws_auth_http_system_vtable *function_table;
 };
 
+/*
+ * Configuration for the SSOCredentialsProvider that sends a GetRoleCredentialsRequest to the AWS Single
+ * Sign-On Service to maintain short-lived sessions to use for authentication.
+ *
+ * https://docs.aws.amazon.com/sdkref/latest/guide/feature-sso-credentials.html
+ */
+struct aws_credentials_provider_sso_options {
+    struct aws_credentials_provider_shutdown_options shutdown_options;
+
+    /*
+     * Override of what profile to use to source credentials from ('default' by default)
+     */
+    struct aws_byte_cursor profile_name_override;
+
+    /*
+     * Override path to the profile config file (~/.aws/config by default)
+     */
+    struct aws_byte_cursor config_file_name_override;
+
+    /**
+     * (Optional)
+     * Use a cached config profile collection. You can also pass a merged collection.
+     * config_file_name_override will be ignored if this option is provided.
+     */
+    struct aws_profile_collection *config_file_cached;
+
+    /*
+     * Connection bootstrap to use for any network connections made while sourcing credentials
+     * Required.
+     */
+    struct aws_client_bootstrap *bootstrap;
+
+    /*
+     * Client TLS context to use when querying SSO provider.
+     * Required.
+     */
+    struct aws_tls_ctx *tls_ctx;
+
+    /* For mocking, leave NULL otherwise */
+    struct aws_auth_http_system_vtable *function_table;
+    aws_io_clock_fn *system_clock_fn;
+};
+
 /**
  * Configuration options for the STS credentials provider
  */
@@ -457,7 +500,7 @@ struct aws_credentials_provider_chain_default_options {
     /**
      * (Optional)
      * Use a cached merged profile collection. A merge collection has both config file
-     * (~/.aws/profile) and credentials file based profile collection (~/.aws/credentials) using
+     * (~/.aws/config) and credentials file based profile collection (~/.aws/credentials) using
      * `aws_profile_collection_new_from_merge`.
      * If this option is provided, `config_file_name_override` and `credentials_file_name_override` will be ignored.
      */
@@ -733,7 +776,7 @@ struct aws_ecc_key_pair *aws_ecc_key_pair_new_ecdsa_p256_key_from_aws_credential
 /**
  * Release a reference to a credentials provider
  *
- * @param provider provider to increment the ref count on
+ * @param provider provider to decrement the ref count on
  */
 AWS_AUTH_API
 struct aws_credentials_provider *aws_credentials_provider_release(struct aws_credentials_provider *provider);
@@ -741,7 +784,7 @@ struct aws_credentials_provider *aws_credentials_provider_release(struct aws_cre
 /*
  * Add a reference to a credentials provider
  *
- * @param provider provider to decrement the ref count on
+ * @param provider provider to increment the ref count on
  */
 AWS_AUTH_API
 struct aws_credentials_provider *aws_credentials_provider_acquire(struct aws_credentials_provider *provider);
@@ -926,6 +969,19 @@ AWS_AUTH_API
 struct aws_credentials_provider *aws_credentials_provider_new_sts_web_identity(
     struct aws_allocator *allocator,
     const struct aws_credentials_provider_sts_web_identity_options *options);
+
+/**
+ * Creates a provider that sources credentials from SSO using a SSOToken.
+ *
+ * @param allocator memory allocator to use for all memory allocation
+ * @param options provider-specific configuration options
+ *
+ * @return the newly-constructed credentials provider, or NULL if an error occurred.
+ */
+AWS_AUTH_API
+struct aws_credentials_provider *aws_credentials_provider_new_sso(
+    struct aws_allocator *allocator,
+    const struct aws_credentials_provider_sso_options *options);
 
 /*
  * Creates a provider that sources credentials from running an external command or process

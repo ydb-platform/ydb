@@ -1,5 +1,7 @@
 JAVA_CONTRIB()
 
+VERSION(31.1-android)
+
 LICENSE(Apache-2.0)
 
 PEERDIR(

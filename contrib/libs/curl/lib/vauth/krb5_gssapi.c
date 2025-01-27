@@ -65,10 +65,10 @@ bool Curl_auth_is_gssapi_supported(void)
  * Parameters:
  *
  * data        [in]     - The session handle.
- * userp       [in]     - The username.
+ * userp       [in]     - The user name.
  * passwdp     [in]     - The user's password.
  * service     [in]     - The service type such as http, smtp, pop or imap.
- * host        [in[     - The hostname.
+ * host        [in[     - The host name.
  * mutual_auth [in]     - Flag specifying whether or not mutual authentication
  *                        is enabled.
  * chlg        [in]     - Optional challenge message.
@@ -226,8 +226,7 @@ CURLcode Curl_auth_create_gssapi_security_message(struct Curl_easy *data,
   /* Extract the security layer and the maximum message size */
   indata = output_token.value;
   sec_layer = indata[0];
-  max_size = ((unsigned int)indata[1] << 16) |
-             ((unsigned int)indata[2] << 8) | indata[3];
+  max_size = (indata[1] << 16) | (indata[2] << 8) | indata[3];
 
   /* Free the challenge as it is not required anymore */
   gss_release_buffer(&unused_status, &output_token);
@@ -243,7 +242,7 @@ CURLcode Curl_auth_create_gssapi_security_message(struct Curl_easy *data,
   /* Process the maximum message size the server can receive */
   if(max_size > 0) {
     /* The server has told us it supports a maximum receive buffer, however, as
-       we do not require one unless we are encrypting data, we tell the server
+       we don't require one unless we are encrypting data, we tell the server
        our receive buffer is zero. */
     max_size = 0;
   }

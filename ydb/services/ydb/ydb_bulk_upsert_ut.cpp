@@ -1,11 +1,11 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 using namespace NYdb;
 
@@ -962,10 +962,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         for (ui32 i = 0; i < 256; ++i) {
             {
                 auto res = TestUpsertRow(client, "/Root/ui8", i, 42);
-                if (i <= 127)
-                    UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
-                else
-                    UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
             }
 
             {
@@ -1279,7 +1276,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                 auto status = db.RetryOperationSync([&failInjector](NYdb::NTable::TTableClient& db) {
                         EStatus injected = failInjector.GetInjectedStatus();
                         if (injected != EStatus::SUCCESS) {
-                            return NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYql::TIssues()));
+                            return NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYdb::NIssue::TIssues()));
                         }
 
                         NYdb::TValueBuilder rows;
@@ -1330,7 +1327,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                     [&failInjector](NYdb::NTable::TTableClient& db) {
                         EStatus injected = failInjector.GetInjectedStatus();
                         if (injected != EStatus::SUCCESS) {
-                            return NThreading::MakeFuture<NYdb::NTable::TBulkUpsertResult>(NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYql::TIssues())));
+                            return NThreading::MakeFuture<NYdb::NTable::TBulkUpsertResult>(NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYdb::NIssue::TIssues())));
                         }
 
                         NYdb::TValueBuilder rows;

@@ -11,6 +11,7 @@
 #ifndef BOOST_ITERATOR_FUNCTION_OUTPUT_ITERATOR_HPP
 #define BOOST_ITERATOR_FUNCTION_OUTPUT_ITERATOR_HPP
 
+#include <cstddef>
 #include <iterator>
 #include <boost/config.hpp>
 #include <boost/core/enable_if.hpp>
@@ -36,8 +37,8 @@ namespace iterators {
       template <class T>
       typename boost::disable_if_c<
         boost::is_same< typename boost::remove_cv< T >::type, output_proxy >::value,
-        output_proxy&
-      >::type operator=(const T& value) {
+        output_proxy const&
+      >::type operator=(const T& value) const {
         m_f(value);
         return *this;
       }
@@ -45,8 +46,8 @@ namespace iterators {
       template <class T>
       typename boost::disable_if_c<
         boost::is_same< typename boost::remove_cv< typename boost::remove_reference< T >::type >::type, output_proxy >::value,
-        output_proxy&
-      >::type operator=(T&& value) {
+        output_proxy const&
+      >::type operator=(T&& value) const {
         m_f(static_cast< T&& >(value));
         return *this;
       }
@@ -62,7 +63,7 @@ namespace iterators {
   public:
     typedef std::output_iterator_tag iterator_category;
     typedef void                value_type;
-    typedef void                difference_type;
+    typedef std::ptrdiff_t      difference_type;
     typedef void                pointer;
     typedef void                reference;
 

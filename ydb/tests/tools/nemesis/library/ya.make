@@ -15,6 +15,7 @@ PY_SRCS(
 PEERDIR(
     contrib/python/Flask
     ydb/tests/library
+    ydb/tests/library/clients
     library/python/monlib
     ydb/core/protos
 )

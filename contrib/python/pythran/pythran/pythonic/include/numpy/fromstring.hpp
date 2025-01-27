@@ -1,11 +1,11 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_FROMSTRING_HPP
 #define PYTHONIC_INCLUDE_NUMPY_FROMSTRING_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/numpy/float64.hpp"
-#include "pythonic/include/types/ndarray.hpp"
 #include "pythonic/include/types/list.hpp"
+#include "pythonic/include/types/ndarray.hpp"
 #include "pythonic/include/types/str.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 #include <limits>
 #include <sstream>
@@ -20,7 +20,7 @@ namespace numpy
              types::str const &sep = {});
 
   DEFINE_FUNCTOR(pythonic::numpy, fromstring);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

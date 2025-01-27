@@ -5,7 +5,7 @@ import os
 from library.python.testing.recipe import declare_recipe, set_env
 from library.recipes import common as recipes_common
 from yatest.common.network import PortManager
-from ydb.tests.library.common import yatest_common
+import yatest
 
 
 PID_FILENAME = "kqprun_daemon.pid"
@@ -14,7 +14,7 @@ INITIALIZATION_IMEOUT_RATIO = 2
 
 
 def is_kqprun_daemon_ready() -> bool:
-    with open(yatest_common.output_path("kqprun_daemon.out.log"), "r") as outFile:
+    with open(yatest.common.output_path("kqprun_daemon.out.log"), "r") as outFile:
         return "Initialization finished" in outFile.read()
 
 
@@ -26,9 +26,9 @@ def build_start_comand(argv: list[str], grpc_port: int) -> tuple[int, list[str]]
     parsed, _ = parser.parse_known_args(argv)
 
     cmd = [
-        yatest_common.binary_path(KQPRUN_PATH),
-        "--log-file", yatest_common.output_path("kqprun_daemon.ydb.log"),
-        "--app-config", yatest_common.source_path(parsed.config),
+        yatest.common.binary_path(KQPRUN_PATH),
+        "--log-file", yatest.common.output_path("kqprun_daemon.ydb.log"),
+        "--app-config", yatest.common.source_path(parsed.config),
         "--grpc", str(grpc_port),
         "--timeout", str(parsed.timeout_ms)
     ]
@@ -39,7 +39,7 @@ def build_start_comand(argv: list[str], grpc_port: int) -> tuple[int, list[str]]
 
     for query in parsed.query:
         cmd.append("--script-query")
-        cmd.append(yatest_common.source_path(query))
+        cmd.append(yatest.common.source_path(query))
 
     return (parsed.timeout_ms, cmd)
 

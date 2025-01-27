@@ -1,7 +1,7 @@
 #include "utils.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 using namespace NYql;
 

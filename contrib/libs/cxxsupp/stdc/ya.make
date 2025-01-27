@@ -2,14 +2,13 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-LICENSE(YandexOpen)
+VERSION(Service-proxy-version)
 
-VERSION(2024-06-20)
+LICENSE(Service-Sourceless-Library)
 
 SUBSCRIBER(
     g:contrib
     g:cpp-contrib
-    pg
 )
 
 NO_PLATFORM()

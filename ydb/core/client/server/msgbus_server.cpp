@@ -124,7 +124,6 @@ public:
             MTYPE(TBusNodeRegistrationRequest)
             MTYPE(TBusCmsRequest)
             MTYPE(TBusChooseProxy)
-            MTYPE(TBusSqsRequest)
             MTYPE(TBusStreamRequest)
             MTYPE(TBusInterconnectDebug)
             MTYPE(TBusConsoleRequest)
@@ -500,8 +499,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     const ui32 msgType = msg.GetMessage()->GetHeader()->Type;
 
     switch (msgType) {
-    case MTYPE_CLIENT_REQUEST:
-        return ClientProxyRequest<TEvBusProxy::TEvRequest>(msg);
     case MTYPE_CLIENT_SCHEME_INITROOT:
         return ClientProxyRequest<TEvBusProxy::TEvInitRoot>(msg);
     case MTYPE_CLIENT_SCHEME_NAVIGATE:
@@ -548,8 +545,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusResolveNode, msg);
     case MTYPE_CLIENT_CMS_REQUEST:
         return ClientActorRequest(CreateMessageBusCmsRequest, msg);
-    case MTYPE_CLIENT_SQS_REQUEST:
-        return ClientActorRequest(CreateMessageBusSqsRequest, msg);
     case MTYPE_CLIENT_INTERCONNECT_DEBUG:
         return ClientActorRequest(CreateMessageBusInterconnectDebug, msg);
     case MTYPE_CLIENT_CONSOLE_REQUEST:

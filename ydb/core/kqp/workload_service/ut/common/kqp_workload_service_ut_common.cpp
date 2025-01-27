@@ -86,8 +86,7 @@ public:
             SendNotification<TEvQueryRunner::TEvExecutionStarted>();
         }
 
-        auto response = std::make_unique<TEvKqpExecuter::TEvStreamDataAck>();
-        response->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto response = std::make_unique<TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(std::numeric_limits<i64>::max());
 
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
@@ -110,7 +109,7 @@ public:
     void Handle(TEvKqp::TEvQueryResponse::TPtr& ev) {
         SendNotification<TEvQueryRunner::TEvExecutionFinished>();
 
-        Result_.Response = ev->Get()->Record.GetRef();
+        Result_.Response = ev->Get()->Record;
         Promise_.SetValue(Result_);
         PassAway();
     }
@@ -223,6 +222,28 @@ private:
     std::unordered_set<TActorId> RunningRequests;
 };
 
+// The only purpose is to allow BUILTIN_SYSTEM_DOMAIN users
+struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
+    TFakeTicketParserActor()
+        : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StateFunc)
+    {}
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+    )
+
+    void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+        Y_ABORT_UNLESS(ev->Get()->Ticket.EndsWith(BUILTIN_SYSTEM_DOMAIN));
+        NACLib::TUserToken::TUserTokenInitFields args;
+        args.UserSID = ev->Get()->Ticket;
+        TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
+        Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
+    }
+};
+
+IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
+    return new TFakeTicketParserActor();
+}
 // Ydb setup
 
 class TWorkloadServiceYdbSetup : public IYdbSetup {
@@ -267,6 +288,8 @@ private:
         }
 
         SetLoggerSettings(serverSettings);
+
+        serverSettings.CreateTicketParser = CreateFakeTicketParser;
 
         return serverSettings;
     }
@@ -359,7 +382,7 @@ public:
                 new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest(), nodeIndex
             );
             auto response = GetRuntime()->GrabEdgeEvent<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
-            
+
             if (!response->Get()->Record.SystemStateInfoSize()) {
                 errorString = "empty system state info";
                 return false;
@@ -430,6 +453,14 @@ public:
         auto runerActor = GetRuntime()->Register(new TQueryRunnerActor(std::move(event), promise, settings, GetRuntime()->GetNodeId(settings.NodeIndex_)), 0, 0, TMailboxType::Simple, 0, edgeActor);
 
         return {.AsyncResult = promise.GetFuture(), .QueryRunnerActor = runerActor, .EdgeActor = edgeActor};
+    }
+
+    void ExecuteQueryRetry(const TString& retryMessage, const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings(), TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
+        WaitFor(timeout, retryMessage, [this, query, settings](TString& errorString) {
+            auto result = ExecuteQuery(query, settings);
+            errorString = result.GetIssues().ToOneLineString();
+            return result.GetStatus() == EStatus::SUCCESS;
+        });
     }
 
     // Async query execution actions

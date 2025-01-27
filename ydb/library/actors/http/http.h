@@ -21,16 +21,20 @@ inline void Out<NHttp::THttpConfig::SocketAddressType>(IOutputStream& o, const N
 
 namespace NHttp {
 
+struct THeaders;
+
 bool IsIPv6(const TString& host);
 bool IsIPv4(const TString& host);
 bool CrackURL(TStringBuf url, TStringBuf& scheme, TStringBuf& host, TStringBuf& uri);
 void CrackAddress(const TString& address, TString& hostname, TIpPort& port);
-void TrimBegin(TStringBuf& target, char delim);
-void TrimEnd(TStringBuf& target, char delim);
-void Trim(TStringBuf& target, char delim);
+[[nodiscard]] TStringBuf TrimBegin(TStringBuf target, char delim);
+[[nodiscard]] TStringBuf TrimEnd(TStringBuf target, char delim);
+[[nodiscard]] TStringBuf Trim(TStringBuf target, char delim);
 void TrimEnd(TString& target, char delim);
 TString CompressDeflate(TStringBuf source);
 TString DecompressDeflate(TStringBuf source);
+TString GetObfuscatedData(TString data, const THeaders& headers);
+TString ToHex(size_t value);
 
 struct TLessNoCase {
     bool operator()(TStringBuf l, TStringBuf r) const {
@@ -114,6 +118,8 @@ struct THeaders {
     TStringBuf Get(TStringBuf name) const; // raw
     size_t Parse(TStringBuf headers);
     TString Render() const;
+
+    bool IsChunkedEncoding() const;
 };
 
 struct THeadersBuilder : THeaders {
@@ -141,7 +147,7 @@ public:
         return true;
     }
 
-    // non-destructive variant of AsString
+    // non-destructive version of AsString
     TString AsString() const {
         return TString(Data(), Size());
     }
@@ -171,6 +177,8 @@ public:
     static TStringBuf GetName();
     void Clear();
     TString GetURL() const;
+    TString GetURI() const;
+    TUrlParameters GetParameters() const;
 };
 
 class THttpResponse {
@@ -197,59 +205,8 @@ public:
     void Clear();
 };
 
-template <typename HeaderType, typename BufferType>
-class THttpBase : public HeaderType, public BufferType {
-protected:
-    // Returns raw, non-obfuscated data
-    TStringBuf GetRawData() const {
-        return TStringBuf(BufferType::Data(), BufferType::Size());
-    }
-
-public:
-    TString GetObfuscatedData() const {
-        THeaders headers(HeaderType::Headers);
-        TStringBuf authorization(headers["Authorization"]);
-        TStringBuf cookie(headers["Cookie"]);
-        TStringBuf set_cookie(headers["Set-Cookie"]);
-        TStringBuf x_ydb_auth_ticket(headers["x-ydb-auth-ticket"]);
-        TStringBuf x_yacloud_subjecttoken(headers["x-yacloud-subjecttoken"]);
-        TString data(GetRawData());
-        if (!authorization.empty()) {
-            auto pos = data.find(authorization);
-            if (pos != TString::npos) {
-                data.replace(pos, authorization.size(), TString("<obfuscated>"));
-            }
-        }
-        if (!cookie.empty()) {
-            auto pos = data.find(cookie);
-            if (pos != TString::npos) {
-                data.replace(pos, cookie.size(), TString("<obfuscated>"));
-            }
-        }
-        if (!set_cookie.empty()) {
-            auto pos = data.find(set_cookie);
-            if (pos != TString::npos) {
-                data.replace(pos, set_cookie.size(), TString("<obfuscated>"));
-            }
-        }
-        if (!x_ydb_auth_ticket.empty()) {
-            auto pos = data.find(x_ydb_auth_ticket);
-            if (pos != TString::npos) {
-                data.replace(pos, x_ydb_auth_ticket.size(), TString("<obfuscated>"));
-            }
-        }
-        if (!x_yacloud_subjecttoken.empty()) {
-            auto pos = data.find(x_yacloud_subjecttoken);
-            if (pos != TString::npos) {
-                data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
-            }
-        }
-        return data;
-    }
-};
-
-template <typename HeaderType, typename BufferType>
-class THttpParser : public THttpBase<HeaderType, BufferType> {
+template<typename HeaderType>
+class THttpParser : public HeaderType, public TSocketBuffer {
 public:
     enum class EParseStage : ui8 {
         Method,
@@ -287,7 +244,7 @@ public:
     std::optional<size_t> TotalSize;
 
     THttpParser(const THttpParser& src)
-        : THttpBase<HeaderType, BufferType>(src)
+        : TSocketBuffer(src)
         , Stage(src.Stage)
         , LastSuccessStage(src.LastSuccessStage)
         , Line()
@@ -323,7 +280,7 @@ public:
         }
         if (ProcessData(target, source, delim.back(), maxLen + 1)) {
             for (signed i = delim.size() - 2; i >= 0; --i) {
-                TrimEnd(target, delim[i]);
+                target = TrimEnd(target, delim[i]);
             }
             return true;
         }
@@ -348,8 +305,8 @@ public:
         if (!header.TrySplit(':', name, value)) {
             return false;
         }
-        TrimBegin(name, ' ');
-        Trim(value, ' ');
+        name = TrimBegin(name, ' ');
+        value = Trim(value, ' ');
         auto cit = HeaderType::HeadersLocation.find(name);
         if (cit != HeaderType::HeadersLocation.end()) {
             this->*cit->second = value;
@@ -386,11 +343,11 @@ public:
     void ConnectionClosed();
 
     size_t GetBodySizeFromTotalSize() const {
-        return TotalSize.value() - (HeaderType::Headers.end() - BufferType::Data());
+        return TotalSize.value() - (HeaderType::Headers.end() - TSocketBuffer::Data());
     }
 
     void Clear() {
-        BufferType::Clear();
+        TSocketBuffer::Clear();
         HeaderType::Clear();
         Stage = GetInitialStage();
         Line.Clear();
@@ -437,18 +394,46 @@ public:
         return IsReady() || IsError();
     }
 
-    bool HaveBody() const;
+    bool HasBody() const;
+    bool ExpectedBody() const;
 
-    bool EnsureEnoughSpaceAvailable(size_t need = BufferType::BUFFER_MIN_STEP) {
-        bool result = BufferType::EnsureEnoughSpaceAvailable(need);
-        if (!result && !BufferType::Empty()) {
+    bool HasHeaders() const {
+        switch (Stage) {
+        case EParseStage::Header:
+        case EParseStage::Body:
+        case EParseStage::ChunkLength:
+        case EParseStage::ChunkData:
+        case EParseStage::Done:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    bool HasCompletedHeaders() const {
+        switch (Stage) {
+        case EParseStage::Body:
+        case EParseStage::ChunkLength:
+        case EParseStage::ChunkData:
+        case EParseStage::Done:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    bool HaveBody() const { return HasBody(); } // deprecated, use HasBody() instead
+
+    bool EnsureEnoughSpaceAvailable(size_t need = TSocketBuffer::BUFFER_MIN_STEP) {
+        bool result = TSocketBuffer::EnsureEnoughSpaceAvailable(need);
+        if (!result && !TSocketBuffer::Empty()) {
             Reparse();
         }
         return true;
     }
 
     void Reparse() {
-        size_t size = BufferType::Size();
+        size_t size = TSocketBuffer::Size();
         Clear();
         Advance(size);
     }
@@ -464,15 +449,19 @@ public:
         : Stage(GetInitialStage())
         , LastSuccessStage(Stage)
     {
-        BufferType::Assign(data.data(), data.size());
-        BufferType::Clear(); // reset position to 0
+        TSocketBuffer::Assign(data.data(), data.size());
+        TSocketBuffer::Clear(); // reset position to 0
         TotalSize = data.size();
         Advance(data.size());
     }
+
+    TString GetObfuscatedData() const {
+        return NHttp::GetObfuscatedData(AsString(), HeaderType::Headers);
+    }
 };
 
-template <typename HeaderType, typename BufferType>
-class THttpRenderer : public THttpBase<HeaderType, BufferType> {
+template<typename HeaderType>
+class THttpRenderer : public HeaderType, public TSocketBuffer {
 public:
     enum class ERenderStage {
         Init,
@@ -497,7 +486,7 @@ public:
         AppendParsedValue<&THttpRequest::Version>(version);
         Append("\r\n");
         Stage = ERenderStage::Header;
-        HeaderType::Headers = TStringBuf(BufferType::Pos(), size_t(0));
+        HeaderType::Headers = TStringBuf(TSocketBuffer::Pos(), size_t(0));
     }
 
     //THttpRenderer(TStringBuf protocol, TStringBuf version, TStringBuf status, TStringBuf message); // response
@@ -512,23 +501,23 @@ public:
         AppendParsedValue<&THttpResponse::Message>(message);
         Append("\r\n");
         Stage = ERenderStage::Header;
-        HeaderType::Headers = TStringBuf(BufferType::Pos(), size_t(0));
+        HeaderType::Headers = TStringBuf(TSocketBuffer::Pos(), size_t(0));
     }
 
     void Append(TStringBuf text) {
         EnsureEnoughSpaceAvailable(text.size());
-        BufferType::Append(text.data(), text.size());
+        TSocketBuffer::Append(text.data(), text.size());
     }
 
     void Append(char c) {
         EnsureEnoughSpaceAvailable(sizeof(c));
-        BufferType::Append(c);
+        TSocketBuffer::Append(c);
     }
 
     template <TStringBuf HeaderType::* string>
     void AppendParsedValue(TStringBuf value) {
         Append(value);
-        static_cast<HeaderType*>(this)->*string = TStringBuf(BufferType::Pos() - value.size(), value.size());
+        static_cast<HeaderType*>(this)->*string = TStringBuf(TSocketBuffer::Pos() - value.size(), value.size());
     }
 
     template <TStringBuf HeaderType::* name>
@@ -538,21 +527,21 @@ public:
         Append(": ");
         AppendParsedValue<name>(value);
         Append("\r\n");
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), TSocketBuffer::Pos() - HeaderType::Headers.data());
     }
 
     void Set(TStringBuf name, TStringBuf value) {
         Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Header);
         Append(name);
         Append(": ");
-        auto data = BufferType::Pos();
+        auto data = TSocketBuffer::Pos();
         Append(value);
         auto cit = HeaderType::HeadersLocation.find(name);
         if (cit != HeaderType::HeadersLocation.end()) {
-            (this->*cit->second) = TStringBuf(data, BufferType::Pos());
+            (this->*cit->second) = TStringBuf(data, TSocketBuffer::Pos());
         }
         Append("\r\n");
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), TSocketBuffer::Pos() - HeaderType::Headers.data());
     }
 
     void Set(const THeaders& headers) {
@@ -560,7 +549,7 @@ public:
         for (const auto& [name, value] : headers.Headers) {
             Set(name, value);
         }
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), TSocketBuffer::Pos() - HeaderType::Headers.data());
     }
 
     static constexpr TStringBuf ALLOWED_CONTENT_ENCODINGS[] = {"deflate"};
@@ -572,9 +561,13 @@ public:
         }
     }
 
+    bool IsChunkedEncoding() const {
+        return TEqNoCase()(HeaderType::TransferEncoding, "chunked");
+    }
+
     void FinishHeader() {
         Append("\r\n");
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), TSocketBuffer::Pos() - HeaderType::Headers.data());
         Stage = ERenderStage::Body;
     }
 
@@ -584,7 +577,14 @@ public:
             Set<&HeaderType::ContentLength>(ToString(body.size()));
         }
         FinishHeader();
+        bool chunkedEncoding = IsChunkedEncoding();
+        if (chunkedEncoding) {
+            Append(ToHex(body.size()) + "\r\n");
+        }
         AppendParsedValue<&HeaderType::Body>(body);
+        if (chunkedEncoding) {
+            Append("\r\n");
+        }
         Stage = ERenderStage::Done;
     }
 
@@ -596,7 +596,7 @@ public:
         return Stage == ERenderStage::Done;
     }
 
-    void Finish() {
+    void Finish() { // do not use when initiating chunked transfer
         switch (Stage) {
         case ERenderStage::Header:
             FinishHeader();
@@ -610,79 +610,88 @@ public:
         }
     }
 
-    bool EnsureEnoughSpaceAvailable(size_t need = BufferType::BUFFER_MIN_STEP) {
-        bool result = BufferType::EnsureEnoughSpaceAvailable(need);
-        if (!result && !BufferType::Empty()) {
+    bool EnsureEnoughSpaceAvailable(size_t need = TSocketBuffer::BUFFER_MIN_STEP) {
+        bool result = TSocketBuffer::EnsureEnoughSpaceAvailable(need);
+        if (!result && !TSocketBuffer::Empty()) {
             Reparse();
         }
         return true;
     }
 
     void Clear() {
-        BufferType::Clear();
+        TSocketBuffer::Clear();
         HeaderType::Clear();
     }
 
     void Reparse() {
         // move-magic
-        size_t size = BufferType::Size();
-        THttpParser<HeaderType, BufferType> parser;
+        size_t size = TSocketBuffer::Size();
+        THttpParser<HeaderType> parser;
         // move the buffer to parser
-        static_cast<BufferType&>(parser) = std::move(static_cast<BufferType&>(*this));
+        static_cast<TSocketBuffer&>(parser) = std::move(static_cast<TSocketBuffer&>(*this));
         // reparse
         parser.Clear();
         parser.Advance(size);
         // move buffer and result back
         bool needReassignBody = (parser.Body.data() == parser.Content.data());
         static_cast<HeaderType&>(*this) = std::move(static_cast<HeaderType&>(parser));
-        static_cast<BufferType&>(*this) = std::move(static_cast<BufferType&>(parser));
+        static_cast<TSocketBuffer&>(*this) = std::move(static_cast<TSocketBuffer&>(parser));
         if (needReassignBody) {
             Content = std::move(parser.Content);
             HeaderType::Body = Content;
         }
         switch (parser.Stage) {
-        case THttpParser<HeaderType, BufferType>::EParseStage::Method:
-        case THttpParser<HeaderType, BufferType>::EParseStage::URL:
-        case THttpParser<HeaderType, BufferType>::EParseStage::Protocol:
-        case THttpParser<HeaderType, BufferType>::EParseStage::Version:
-        case THttpParser<HeaderType, BufferType>::EParseStage::Status:
-        case THttpParser<HeaderType, BufferType>::EParseStage::Message:
+        case THttpParser<HeaderType>::EParseStage::Method:
+        case THttpParser<HeaderType>::EParseStage::URL:
+        case THttpParser<HeaderType>::EParseStage::Protocol:
+        case THttpParser<HeaderType>::EParseStage::Version:
+        case THttpParser<HeaderType>::EParseStage::Status:
+        case THttpParser<HeaderType>::EParseStage::Message:
             Stage = ERenderStage::Init;
             break;
-        case THttpParser<HeaderType, BufferType>::EParseStage::Header:
+        case THttpParser<HeaderType>::EParseStage::Header:
             Stage = ERenderStage::Header;
             break;
-        case THttpParser<HeaderType, BufferType>::EParseStage::Body:
-        case THttpParser<HeaderType, BufferType>::EParseStage::ChunkLength:
-        case THttpParser<HeaderType, BufferType>::EParseStage::ChunkData:
+        case THttpParser<HeaderType>::EParseStage::Body:
+        case THttpParser<HeaderType>::EParseStage::ChunkLength:
+        case THttpParser<HeaderType>::EParseStage::ChunkData:
             Stage = ERenderStage::Body;
             break;
-        case THttpParser<HeaderType, BufferType>::EParseStage::Done:
+        case THttpParser<HeaderType>::EParseStage::Done:
             Stage = ERenderStage::Done;
             break;
-        case THttpParser<HeaderType, BufferType>::EParseStage::Error:
+        case THttpParser<HeaderType>::EParseStage::Error:
             Stage = ERenderStage::Error;
             break;
         }
-        Y_ABORT_UNLESS(size == BufferType::Size());
+        Y_ABORT_UNLESS(size == TSocketBuffer::Size());
+    }
+
+    TString GetObfuscatedData() const {
+        return NHttp::GetObfuscatedData(AsString(), HeaderType::Headers);
     }
 };
 
+using THttpRequestParser = THttpParser<THttpRequest>;
+using THttpResponseParser = THttpParser<THttpResponse>;
+using THttpRequestRenderer = THttpRenderer<THttpRequest>;
+using THttpResponseRenderer = THttpRenderer<THttpResponse>;
+
 template <>
 template <>
-inline void THttpRenderer<THttpResponse, TSocketBuffer>::Set<&THttpResponse::Body>(TStringBuf value) {
+inline void THttpResponseRenderer::Set<&THttpResponse::Body>(TStringBuf value) {
     SetBody(value);
 }
 
 template <>
 template <>
-inline void THttpRenderer<THttpRequest, TSocketBuffer>::Set<&THttpRequest::Body>(TStringBuf value) {
+inline void THttpRequestRenderer::Set<&THttpRequest::Body>(TStringBuf value) {
     SetBody(value);
 }
 
 template <>
 template <>
-inline void THttpRenderer<THttpResponse, TSocketBuffer>::Set<&THttpResponse::ContentEncoding>(TStringBuf value) {
+inline void THttpResponseRenderer::Set<&THttpResponse::ContentEncoding>(TStringBuf value) {
     SetContentEncoding(value);
 }
 
@@ -699,6 +708,47 @@ protected:
     {}
 };
 
+class THttpDataChunk : public TSocketBuffer {
+public:
+    bool EndOfData = false;
+
+    THttpDataChunk() = default;
+
+    THttpDataChunk(TStringBuf data) {
+        SetData(data);
+    }
+
+    bool EnsureEnoughSpaceAvailable(size_t need = TSocketBuffer::BUFFER_MIN_STEP) {
+        return TSocketBuffer::EnsureEnoughSpaceAvailable(need);
+    }
+
+    void Append(TStringBuf text) {
+        EnsureEnoughSpaceAvailable(text.size());
+        TSocketBuffer::Append(text.data(), text.size());
+    }
+
+    void SetData(TStringBuf data) {
+        EnsureEnoughSpaceAvailable(data.size() + 4/*crlfcrlf*/ + 16);
+        Append(ToHex(data.size()) + "\r\n");
+        Append(TStringBuf(data));
+        Append("\r\n");
+    }
+
+    void SetEndOfData() {
+        if (!IsEndOfData()) {
+            Append("0\r\n\r\n");
+            EndOfData = true;
+        }
+    }
+
+    bool IsEndOfData() const {
+        return EndOfData;
+    }
+};
+
+class THttpOutgoingDataChunk;
+using THttpOutgoingDataChunkPtr = TIntrusivePtr<THttpOutgoingDataChunk>;
+
 class THttpIncomingRequest;
 using THttpIncomingRequestPtr = TIntrusivePtr<THttpIncomingRequest>;
 
@@ -708,8 +758,11 @@ using THttpOutgoingResponsePtr = TIntrusivePtr<THttpOutgoingResponse>;
 class THttpOutgoingRequest;
 using THttpOutgoingRequestPtr = TIntrusivePtr<THttpOutgoingRequest>;
 
+class THttpIncomingResponse;
+using THttpIncomingResponsePtr = TIntrusivePtr<THttpIncomingResponse>;
+
 class THttpIncomingRequest :
-        public THttpParser<THttpRequest, TSocketBuffer>,
+        public THttpRequestParser,
         public TRefCounted<THttpIncomingRequest, TAtomicCounter> {
 public:
     std::shared_ptr<THttpEndpointInfo> Endpoint;
@@ -758,6 +811,7 @@ public:
     THttpOutgoingResponsePtr CreateResponseTooManyRequests(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 429
     THttpOutgoingResponsePtr CreateResponseServiceUnavailable(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 503
     THttpOutgoingResponsePtr CreateResponseGatewayTimeout(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 504
+    THttpOutgoingResponsePtr CreateResponseTemporaryRedirect(TStringBuf location); // 307
     THttpOutgoingResponsePtr CreateResponse(TStringBuf status, TStringBuf message);
     THttpOutgoingResponsePtr CreateResponse(TStringBuf status, TStringBuf message, const THeaders& headers);
     THttpOutgoingResponsePtr CreateResponse(TStringBuf status, TStringBuf message, const THeaders& headers, TStringBuf body);
@@ -779,28 +833,8 @@ private:
     void FinishResponse(THttpOutgoingResponsePtr& response, TStringBuf body = TStringBuf());
 };
 
-class THttpIncomingResponse;
-using THttpIncomingResponsePtr = TIntrusivePtr<THttpIncomingResponse>;
-
-class THttpIncomingResponse :
-        public THttpParser<THttpResponse, TSocketBuffer>,
-        public TRefCounted<THttpIncomingResponse, TAtomicCounter> {
-public:
-    THttpIncomingResponse(THttpOutgoingRequestPtr request);
-
-    THttpOutgoingRequestPtr GetRequest() const {
-        return Request;
-    }
-
-    THttpIncomingResponsePtr Duplicate(THttpOutgoingRequestPtr request);
-    THttpOutgoingResponsePtr Reverse(THttpIncomingRequestPtr request);
-
-protected:
-    THttpOutgoingRequestPtr Request;
-};
-
 class THttpOutgoingRequest :
-        public THttpRenderer<THttpRequest, TSocketBuffer>,
+        public THttpRequestRenderer,
         public TRefCounted<THttpOutgoingRequest, TAtomicCounter> {
 public:
     THPTimer Timer;
@@ -818,10 +852,39 @@ public:
     static THttpOutgoingRequestPtr CreateRequest(TStringBuf method, TStringBuf url, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
     static THttpOutgoingRequestPtr CreateHttpRequest(TStringBuf method, TStringBuf host, TStringBuf uri, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
     THttpOutgoingRequestPtr Duplicate();
+
+    bool IsConnectionClose() const {
+        return TEqNoCase()(Connection, "close");
+    }
+
+    TString GetDestination() {
+        return Secure ? (TStringBuilder() << "https://" << Host) : (TStringBuilder() << "http://" << Host);
+    }
+};
+
+class THttpIncomingResponse :
+        public THttpResponseParser,
+        public TRefCounted<THttpIncomingResponse, TAtomicCounter> {
+public:
+    THttpIncomingResponse(THttpOutgoingRequestPtr request);
+
+    THttpOutgoingRequestPtr GetRequest() const {
+        return Request;
+    }
+
+    THttpIncomingResponsePtr Duplicate(THttpOutgoingRequestPtr request);
+    THttpOutgoingResponsePtr Reverse(THttpIncomingRequestPtr request);
+
+    bool IsConnectionClose() const {
+        return Request->IsConnectionClose() || TEqNoCase()(Connection, "close");
+    }
+
+protected:
+    THttpOutgoingRequestPtr Request;
 };
 
 class THttpOutgoingResponse :
-        public THttpRenderer<THttpResponse, TSocketBuffer>,
+        public THttpResponseRenderer,
         public TRefCounted<THttpOutgoingResponse, TAtomicCounter> {
 public:
     THttpOutgoingResponse(THttpIncomingRequestPtr request);
@@ -844,7 +907,7 @@ public:
         std::vector<TStringBuf> encodings;
         TStringBuf encoding;
         while (acceptEncoding.NextTok(',', encoding)) {
-            Trim(encoding, ' ');
+            encoding = Trim(encoding, ' ');
             if (Count(ALLOWED_CONTENT_ENCODINGS, encoding) != 0) {
                 encodings.push_back(encoding);
             }
@@ -860,20 +923,20 @@ public:
     void SetBody(TStringBuf body) {
         if (ContentEncoding == "deflate") {
             TString compressedBody = CompressDeflate(body);
-            THttpRenderer<THttpResponse, TSocketBuffer>::SetBody(compressedBody);
+            THttpRenderer<THttpResponse>::SetBody(compressedBody);
             Body = Content = body;
         } else {
-            THttpRenderer<THttpResponse, TSocketBuffer>::SetBody(body);
+            THttpRenderer<THttpResponse>::SetBody(body);
         }
     }
 
     void SetBody(const TString& body) {
         if (ContentEncoding == "deflate") {
             TString compressedBody = CompressDeflate(body);
-            THttpRenderer<THttpResponse, TSocketBuffer>::SetBody(compressedBody);
+            THttpRenderer<THttpResponse>::SetBody(compressedBody);
             Body = Content = body;
         } else {
-            THttpRenderer<THttpResponse, TSocketBuffer>::SetBody(body);
+            THttpRenderer<THttpResponse>::SetBody(body);
         }
     }
 
@@ -882,11 +945,36 @@ public:
     }
 
     THttpOutgoingResponsePtr Duplicate(THttpIncomingRequestPtr request);
+    THttpOutgoingDataChunkPtr CreateDataChunk(TStringBuf data = {}); // empty chunk means end of data
+    THttpOutgoingDataChunkPtr CreateIncompleteDataChunk(); // to construct it later
+
+    TSocketBuffer* GetActiveBuffer();
+    void AddDataChunk(THttpOutgoingDataChunkPtr dataChunk);
 
 // it's temporary accessible for cleanup
 //protected:
     THttpIncomingRequestPtr Request;
+    std::deque<THttpOutgoingDataChunkPtr> DataChunks;
     std::unique_ptr<TSensors> Sensors;
+};
+
+class THttpOutgoingDataChunk :
+        public THttpDataChunk,
+        public TRefCounted<THttpOutgoingDataChunk, TAtomicCounter> {
+public:
+    THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data);
+    THttpOutgoingDataChunk(THttpOutgoingResponsePtr response); // incomplete chunk
+
+    THttpOutgoingResponsePtr GetResponse() const {
+        return Response;
+    }
+
+    THttpIncomingRequestPtr GetRequest() const {
+        return Response->GetRequest();
+    }
+
+protected:
+    THttpOutgoingResponsePtr Response;
 };
 
 }

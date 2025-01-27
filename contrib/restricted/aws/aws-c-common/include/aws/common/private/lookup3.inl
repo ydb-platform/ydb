@@ -496,12 +496,13 @@ static uint32_t hashlittle( const void *key, size_t length, uint32_t initval)
  * the key.  *pc is better mixed than *pb, so use *pc first.  If you want
  * a 64-bit value do something like "*pc + (((uint64_t)*pb)<<32)".
  */
-static void hashlittle2(
+/* AddressSanitizer hates this implementation, even though it's innocuous */
+AWS_SUPPRESS_ASAN static void hashlittle2(
   const void *key,       /* the key to hash */
   size_t      length,    /* length of the key */
   uint32_t   *pc,        /* IN: primary initval, OUT: primary hash */
   uint32_t   *pb)        /* IN: secondary initval, OUT: secondary hash */
-  AWS_SUPPRESS_ASAN      /* AddressSanitizer hates this implementation, even though it's innocuous */
+  
 {
   uint32_t a,b,c;                                          /* internal state */
   union { const void *ptr; size_t i; } u;     /* needed for Mac Powerbook G4 */
@@ -534,7 +535,7 @@ static void hashlittle2(
      * does it on word boundaries, so is OK with this. But VALGRIND and CBMC
      * will still catch it and complain. CBMC will ignore this type of error
      * in the code block between the pragmas "CPROVER check push" and
-     * "CPROVER check pop". The masking trick does make the hash noticably
+     * "CPROVER check pop". The masking trick does make the hash noticeably
      * faster for short strings (like English words).
      */
 #ifndef VALGRIND

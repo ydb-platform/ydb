@@ -1,14 +1,30 @@
+import hashlib
+import json
 import os
 import shutil
 
+from .constants import PNPM_PRE_LOCKFILE_FILENAME
 from .lockfile import PnpmLockfile
 from .utils import build_lockfile_path, build_pre_lockfile_path, build_ws_config_path
 from .workspace import PnpmWorkspace
 from ..base import BasePackageManager, PackageManagerError
-from ..base.constants import NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
+from ..base.constants import (
+    NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
+    PACKAGE_JSON_FILENAME,
+    PNPM_LOCKFILE_FILENAME,
+)
 from ..base.node_modules_bundler import bundle_node_modules
+from ..base.package_json import PackageJson
 from ..base.timeit import timeit
-from ..base.utils import b_rooted, build_nm_bundle_path, build_pj_path, home_dir, s_rooted
+from ..base.utils import (
+    b_rooted,
+    build_nm_bundle_path,
+    build_nm_path,
+    build_nm_store_path,
+    build_pj_path,
+    home_dir,
+    s_rooted,
+)
 
 
 class PnpmPackageManager(BasePackageManager):
@@ -36,7 +52,61 @@ class PnpmPackageManager(BasePackageManager):
 
     @staticmethod
     def get_local_pnpm_store():
+        return os.path.join(home_dir(), ".cache", "pnpm-9-store")
+
+    @staticmethod
+    def get_local_old_pnpm_store():
         return os.path.join(home_dir(), ".cache", "pnpm-store")
+
+    @timeit
+    def _get_file_hash(self, path: str):
+        sha256 = hashlib.sha256()
+
+        with open(path, "rb") as f:
+            # Read the file in chunks
+            for chunk in iter(lambda: f.read(4096), b""):
+                sha256.update(chunk)
+
+        return sha256.hexdigest()
+
+    @timeit
+    def _create_local_node_modules(self, nm_store_path: str, store_dir: str, virtual_store_dir: str):
+        """
+        Creates ~/.nots/nm_store/$MODDIR/node_modules folder (with installed packages and .pnpm/virtual-store)
+
+        Should be used after build for local development ($SOURCE_DIR/node_modules should be a symlink to this folder).
+
+        But now it is also a workaround to provide valid node_modules structure in the parent folder of virtual-store
+        It is needed for fixing custom module resolvers (like in tsc, webpack, etc...), which are trying to find modules in the parents directories
+        """
+
+        # provide files required for `pnpm install`
+        pj = PackageJson.load(os.path.join(self.build_path, PACKAGE_JSON_FILENAME))
+        required_files = [
+            PACKAGE_JSON_FILENAME,
+            PNPM_LOCKFILE_FILENAME,
+            *list(pj.bins_iter()),
+            *pj.get_pnpm_patched_dependencies().values(),
+        ]
+
+        for f in required_files:
+            src = os.path.join(self.build_path, f)
+            if os.path.exists(src):
+                dst = os.path.join(nm_store_path, f)
+                try:
+                    os.remove(dst)
+                except FileNotFoundError:
+                    pass
+
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                shutil.copy(src, dst)
+
+        self._run_pnpm_install(store_dir, virtual_store_dir, nm_store_path)
+
+        # Write node_modules.json to prevent extra `pnpm install` running 1
+        with open(os.path.join(nm_store_path, "node_modules.json"), "w") as f:
+            pre_pnpm_lockfile_hash = self._get_file_hash(build_pre_lockfile_path(self.build_path))
+            json.dump({PNPM_PRE_LOCKFILE_FILENAME: {"hash": pre_pnpm_lockfile_hash}}, f)
 
     @timeit
     def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, bundle=True):
@@ -55,10 +125,15 @@ class PnpmPackageManager(BasePackageManager):
         if local_cli:
             # Use single CAS for all the projects built locally
             store_dir = self.get_local_pnpm_store()
-            # It's a default value of pnpm itself. But it should be defined explicitly for not using values from the lockfiles or from the previous installations.
-            virtual_store_dir = self._nm_path('.pnpm')
 
-        self._run_pnpm_install(store_dir, virtual_store_dir)
+            nm_store_path = build_nm_store_path(self.module_path)
+            # Use single virtual-store location in ~/.nots/nm_store/$MODDIR/node_modules/.pnpm/virtual-store
+            virtual_store_dir = os.path.join(build_nm_path(nm_store_path), self._VSTORE_NM_PATH)
+
+            self._create_local_node_modules(nm_store_path, store_dir, virtual_store_dir)
+
+        self._run_pnpm_install(store_dir, virtual_store_dir, self.build_path)
+
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)
         self._replace_internal_lockfile_with_original(virtual_store_dir)
 
@@ -71,7 +146,7 @@ class PnpmPackageManager(BasePackageManager):
             )
 
     @timeit
-    def _run_pnpm_install(self, store_dir: str, virtual_store_dir: str):
+    def _run_pnpm_install(self, store_dir: str, virtual_store_dir: str, cwd: str):
         install_cmd = [
             "install",
             "--frozen-lockfile",
@@ -90,8 +165,9 @@ class PnpmPackageManager(BasePackageManager):
             virtual_store_dir,
         ]
 
-        self._exec_command(install_cmd)
+        self._exec_command(install_cmd, cwd=cwd)
 
+    @timeit
     def calc_prepare_deps_inouts_and_resources(
         self, store_path: str, has_deps: bool
     ) -> tuple[list[str], list[str], list[str]]:
@@ -106,65 +182,31 @@ class PnpmPackageManager(BasePackageManager):
         resources = []
 
         if has_deps:
-            for dep_path in self.get_local_peers_from_package_json():
-                ins.append(b_rooted(build_ws_config_path(dep_path)))
-                ins.append(b_rooted(build_pre_lockfile_path(dep_path)))
-
             for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
                 resources.append(pkg.to_uri())
                 outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
 
         return ins, outs, resources
 
-    # TODO: FBP-1254
-    # def calc_prepare_deps_inouts(self, store_path: str, has_deps: bool) -> (list[str], list[str]):
-    def calc_prepare_deps_inouts(self, store_path, has_deps):
-        ins = [
-            s_rooted(build_pj_path(self.module_path)),
-            s_rooted(build_lockfile_path(self.module_path)),
-        ]
-        outs = [
-            b_rooted(build_ws_config_path(self.module_path)),
-            b_rooted(build_pre_lockfile_path(self.module_path)),
-        ]
-
-        if has_deps:
-            for dep_path in self.get_local_peers_from_package_json():
-                ins.append(b_rooted(build_ws_config_path(dep_path)))
-                ins.append(b_rooted(build_pre_lockfile_path(dep_path)))
-
-            for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
-                ins.append(b_rooted(self._contrib_tarball_path(pkg)))
-                outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
-
-        return ins, outs
-
-    # TODO: FBP-1254
-    # def calc_node_modules_inouts(self, local_cli=False) -> (list[str], list[str]):
-    def calc_node_modules_inouts(self, local_cli=False):
+    @timeit
+    def calc_node_modules_inouts(self, local_cli: bool, has_deps: bool) -> tuple[list[str], list[str]]:
         """
         Returns input and output paths for command that creates `node_modules` bundle.
         It relies on .PEERDIRSELF=TS_PREPARE_DEPS
         Inputs:
             - source package.json
-            - merged pre-lockfiles and workspace configs of TS_PREPARE_DEPS
         Outputs:
             - created node_modules bundle
         """
         ins = [s_rooted(build_pj_path(self.module_path))]
         outs = []
 
-        pj = self.load_package_json_from_dir(self.sources_path)
-        if pj.has_dependencies():
-            ins.append(b_rooted(build_pre_lockfile_path(self.module_path)))
-            ins.append(b_rooted(build_ws_config_path(self.module_path)))
-            if not local_cli:
-                outs.append(b_rooted(build_nm_bundle_path(self.module_path)))
-            for dep_path in self.get_local_peers_from_package_json():
-                ins.append(b_rooted(build_pj_path(dep_path)))
+        if not local_cli and has_deps:
+            outs.append(b_rooted(build_nm_bundle_path(self.module_path)))
 
         return ins, outs
 
+    @timeit
     def extract_packages_meta_from_lockfiles(self, lf_paths):
         """
         :type lf_paths: iterable of BaseLockfile
@@ -193,6 +235,7 @@ class PnpmPackageManager(BasePackageManager):
 
         return PnpmWorkspace.load(build_ws_config_path(self.build_path))
 
+    @timeit
     def build_workspace(self, tarballs_store: str):
         """
         :rtype: PnpmWorkspace
@@ -208,6 +251,7 @@ class PnpmPackageManager(BasePackageManager):
 
         return ws
 
+    @timeit
     def _build_merged_pre_lockfile(self, tarballs_store, dep_paths):
         """
         :type dep_paths: list of str
@@ -225,6 +269,7 @@ class PnpmPackageManager(BasePackageManager):
 
         lf.write()
 
+    @timeit
     def _build_merged_workspace_config(self, ws, dep_paths):
         """
         NOTE: This method mutates `ws`.
@@ -249,10 +294,12 @@ class PnpmPackageManager(BasePackageManager):
                 "--virtual-store",
                 virtual_store_dir,
             ],
+            cwd=self.build_path,
             include_defaults=False,
             script_path=os.path.join(yatool_prebuilder_path, "build", "bin", "prebuilder.js"),
         )
 
+    @timeit
     def _replace_internal_lockfile_with_original(self, virtual_store_dir):
         original_lf_path = build_lockfile_path(self.sources_path)
         vs_lf_path = os.path.join(virtual_store_dir, "lock.yaml")
@@ -262,14 +309,15 @@ class PnpmPackageManager(BasePackageManager):
     @timeit
     def _copy_pnpm_patches(self):
         pj = self.load_package_json_from_dir(self.sources_path)
-        patchedDependencies: dict[str, str] = pj.data.get("pnpm", {}).get("patchedDependencies", {})
+        patched_dependencies: dict[str, str] = pj.data.get("pnpm", {}).get("patchedDependencies", {})
 
-        for p in patchedDependencies.values():
+        for p in patched_dependencies.values():
             patch_source_path = os.path.join(self.sources_path, p)
             patch_build_path = os.path.join(self.build_path, p)
             os.makedirs(os.path.dirname(patch_build_path), exist_ok=True)
             shutil.copyfile(patch_source_path, patch_build_path)
 
+    @timeit
     def _get_default_options(self):
         return super(PnpmPackageManager, self)._get_default_options() + [
             "--stream",
@@ -278,5 +326,6 @@ class PnpmPackageManager(BasePackageManager):
             "--no-color",
         ]
 
+    @timeit
     def _get_debug_log_path(self):
         return self._nm_path(".pnpm-debug.log")

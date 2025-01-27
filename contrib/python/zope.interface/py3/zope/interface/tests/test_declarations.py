@@ -457,15 +457,16 @@ class TestImplements(NameAndModuleComparisonTestsMixin,
 
         self.assertEqual(implementedBy(A), implementedBy(A))
         self.assertEqual(hash(implementedBy(A)), hash(implementedBy(A)))
-        self.assertTrue(implementedBy(A) < None)
-        self.assertTrue(
-            None > implementedBy(A)
-        )  # pylint:disable=misplaced-comparison-constant
-        self.assertTrue(implementedBy(A) < implementedBy(B))
-        self.assertTrue(implementedBy(A) > IFoo)
-        self.assertTrue(implementedBy(A) <= implementedBy(B))
-        self.assertTrue(implementedBy(A) >= IFoo)
-        self.assertTrue(implementedBy(A) != IFoo)
+        self.assertLess(implementedBy(A), None)
+        self.assertGreater(
+            None,
+            implementedBy(A)
+        )
+        self.assertLess(implementedBy(A), implementedBy(B))
+        self.assertGreater(implementedBy(A), IFoo)
+        self.assertLessEqual(implementedBy(A), implementedBy(B))
+        self.assertGreaterEqual(implementedBy(A), IFoo)
+        self.assertNotEqual(implementedBy(A), IFoo)
 
     def test_proxy_equality(self):
         # https://github.com/zopefoundation/zope.interface/issues/55
@@ -496,19 +497,20 @@ class TestImplements(NameAndModuleComparisonTestsMixin,
 
         # The order of arguments to the operators matters,
         # test both
-        self.assertTrue(
-            implementedByA == implementedByA
-        )  # pylint:disable=comparison-with-itself
-        self.assertTrue(implementedByA != implementedByB)
-        self.assertTrue(implementedByB != implementedByA)
+        self.assertEqual(
+            implementedByA,
+            implementedByA
+        )
+        self.assertNotEqual(implementedByA, implementedByB)
+        self.assertNotEqual(implementedByB, implementedByA)
 
-        self.assertTrue(proxy == implementedByA)
-        self.assertTrue(implementedByA == proxy)
-        self.assertFalse(proxy != implementedByA)
-        self.assertFalse(implementedByA != proxy)
+        self.assertEqual(proxy, implementedByA)
+        self.assertEqual(implementedByA, proxy)
+        self.assertEqual(proxy, implementedByA)
+        self.assertEqual(implementedByA, proxy)
 
-        self.assertTrue(proxy != implementedByB)
-        self.assertTrue(implementedByB != proxy)
+        self.assertNotEqual(proxy, implementedByB)
+        self.assertNotEqual(implementedByB, proxy)
 
     def test_changed_deletes_super_cache(self):
         impl = self._makeOne()
@@ -581,7 +583,7 @@ class Test_implementedByFallback(unittest.TestCase):
         with _MonkeyDict(declarations,
                          'BuiltinImplementationSpecifications') as specs:
             specs[foo] = reg
-            self.assertTrue(self._callFUT(foo) is reg)
+            self.assertIs(self._callFUT(foo), reg)
 
     def test_dictless_w_existing_Implements(self):
         from zope.interface.declarations import Implements
@@ -592,7 +594,7 @@ class Test_implementedByFallback(unittest.TestCase):
 
         foo = Foo()
         foo.__implemented__ = impl
-        self.assertTrue(self._callFUT(foo) is impl)
+        self.assertIs(self._callFUT(foo), impl)
 
     def test_dictless_w_existing_not_Implements(self):
         from zope.interface.interface import InterfaceClass
@@ -612,7 +614,7 @@ class Test_implementedByFallback(unittest.TestCase):
         class Foo:
             __implemented__ = impl
 
-        self.assertTrue(self._callFUT(Foo) is impl)
+        self.assertIs(self._callFUT(Foo), impl)
 
     def test_builtins_added_to_cache(self):
         from zope.interface import declarations
@@ -637,9 +639,9 @@ class Test_implementedByFallback(unittest.TestCase):
             specs[tuple] = t_spec
             specs[list] = l_spec
             specs[dict] = d_spec
-            self.assertTrue(self._callFUT(tuple) is t_spec)
-            self.assertTrue(self._callFUT(list) is l_spec)
-            self.assertTrue(self._callFUT(dict) is d_spec)
+            self.assertIs(self._callFUT(tuple), t_spec)
+            self.assertIs(self._callFUT(list), l_spec)
+            self.assertIs(self._callFUT(dict), d_spec)
 
     def test_oldstyle_class_no_assertions(self):
         # TODO: Figure out P3 story
@@ -714,7 +716,7 @@ class Test_implementedByFallback(unittest.TestCase):
         class Foo:
             __implemented__ = impl
 
-        self.assertTrue(self._callFUT(Foo) is impl)
+        self.assertIs(self._callFUT(Foo), impl)
 
     def test_super_when_base_implements_interface(self):
         from zope.interface import Interface
@@ -963,7 +965,7 @@ class Test_classImplementsOnly(_ImplementsTestMixin, unittest.TestCase):
         impl.inherit = Foo
         self._callFUT(Foo, IBar)
         # Same spec, now different values
-        self.assertTrue(Foo.__implemented__ is impl)
+        self.assertIs(Foo.__implemented__, impl)
         self.assertEqual(impl.inherit, None)
         self.assertEqual(impl.declared, (IBar,))
 
@@ -1172,7 +1174,7 @@ class Test_implementer(Test_classImplements):
         foo = Foo()
         decorator = self._makeOne(IFoo)
         returned = decorator(foo)
-        self.assertTrue(returned is foo)
+        self.assertIs(returned, foo)
         spec = foo.__implemented__  # pylint:disable=no-member
         self.assertEqual(
             spec.__name__, '__tests__.tests.test_declarations.?'
@@ -1564,7 +1566,7 @@ class Test_Provides(unittest.TestCase):
         with _Monkey(declarations, InstanceDeclarations=cache):
             spec = self._callFUT(Foo, IFoo)
         self.assertEqual(list(spec), [IFoo])
-        self.assertTrue(cache[(Foo, IFoo)] is spec)
+        self.assertIs(cache[(Foo, IFoo)], spec)
 
     def test_w_cached_spec(self):
         from zope.interface import declarations
@@ -1578,7 +1580,7 @@ class Test_Provides(unittest.TestCase):
         cache = {(Foo, IFoo): prior}
         with _Monkey(declarations, InstanceDeclarations=cache):
             spec = self._callFUT(Foo, IFoo)
-        self.assertTrue(spec is prior)
+        self.assertIs(spec, prior)
 
 
 class Test_directlyProvides(unittest.TestCase):
@@ -1775,7 +1777,7 @@ class ClassProvidesBaseFallbackTests(unittest.TestCase):
             pass
 
         cpbp = Foo.__provides__ = self._makeOne(Foo, IFoo)
-        self.assertTrue(Foo.__provides__ is cpbp)
+        self.assertIs(Foo.__provides__, cpbp)
 
     def test_w_same_class_via_instance(self):
         from zope.interface.interface import InterfaceClass
@@ -1841,7 +1843,7 @@ class ClassProvidesTests(unittest.TestCase):
             pass
 
         cp = Foo.__provides__ = self._makeOne(Foo, type(Foo), IBar)
-        self.assertTrue(Foo.__provides__ is cp)
+        self.assertIs(Foo.__provides__, cp)
         self.assertEqual(list(Foo().__provides__), [IFoo])
 
     def test___reduce__(self):
@@ -2323,7 +2325,7 @@ class Test_providedByFallback(unittest.TestCase):
         foo.__providedBy__ = object()
         expected = foo.__provides__ = object()
         spec = self._callFUT(foo)
-        self.assertTrue(spec is expected)
+        self.assertIs(spec, expected)
 
     def test_w_providedBy_invalid_spec_w_provides_diff_provides_on_class(self):
 
@@ -2335,7 +2337,7 @@ class Test_providedByFallback(unittest.TestCase):
         expected = foo.__provides__ = object()
         Foo.__provides__ = object()
         spec = self._callFUT(foo)
-        self.assertTrue(spec is expected)
+        self.assertIs(spec, expected)
 
     def test_w_providedBy_invalid_spec_w_provides_same_provides_on_class(self):
         from zope.interface.declarations import implementer

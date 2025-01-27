@@ -1,9 +1,9 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_TRIL_HPP
 #define PYTHONIC_INCLUDE_NUMPY_TRIL_HPP
 
+#include "pythonic/include/types/ndarray.hpp"
 #include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/numpy_conversion.hpp"
-#include "pythonic/include/types/ndarray.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -14,7 +14,7 @@ namespace numpy
 
   NUMPY_EXPR_TO_NDARRAY0_DECL(tril)
   DEFINE_FUNCTOR(pythonic::numpy, tril)
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

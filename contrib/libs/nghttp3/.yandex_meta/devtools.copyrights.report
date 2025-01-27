@@ -1,0 +1,348 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0badd8dd1e0fa79a05753bbdaf7b9220
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019 nghttp3 contributors
+         * Copyright (c) 2018 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp3_ksl.c [4:5]
+        lib/nghttp3_ksl.h [4:5]
+        lib/nghttp3_vec.c [4:5]
+        lib/nghttp3_vec.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1050d39974838d9e4a3ebfa807befa85
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/sfparse/sfparse.c [1060:1060]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1c2050c8044ca0184cd622399091074c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019 nghttp3 contributors
+         * Copyright (c) 2015 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp3_http.c [4:5]
+        lib/nghttp3_http.h [4:5]
+        lib/sfparse/sfparse.c [4:6]
+        lib/sfparse/sfparse.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 21d419b06e057fd073eece04d054aff1
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2008-2010 Bjoern Hoehrmann <bjoern@hoehrmann.de>
+         * See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/sfparse/sfparse.c [1057:1058]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3782c9399af9718cb85783105b7784ae
+BELONGS ya.make
+    License text:
+           Copyright (C) 1994-1996, 1999-2002, 2004-2017, 2020-2021 Free
+        Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        INSTALL [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 45c763ee42f330d97a4b988bd6ff227d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022 nghttp3 contributors
+         * Copyright (c) 2022 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp3_balloc.c [4:5]
+        lib/nghttp3_balloc.h [4:5]
+        lib/nghttp3_objalloc.c [4:5]
+        lib/nghttp3_objalloc.h [4:5]
+        lib/nghttp3_opl.c [4:5]
+        lib/nghttp3_opl.h [4:5]
+        lib/nghttp3_unreachable.c [4:5]
+        lib/nghttp3_unreachable.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 58664e40c9f8424ff9aaf888f8b2814d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019 nghttp3 contributors
+         * Copyright (c) 2016 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/includes/nghttp3/version.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ac6c2cf84aa4a7b445ce3d5b1ef80906
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018 nghttp3 contributors
+         * Copyright (c) 2017 ngtcp2 contributors
+         * Copyright (c) 2017 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/includes/nghttp3/nghttp3.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL af63e11b9643762985255709a4a9bb2b
+BELONGS ya.make
+    License text:
+        Copyright (c) 2023 sfparse contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/sfparse/COPYING [3:3]
+        lib/sfparse/sfparse.c [4:6]
+        lib/sfparse/sfparse.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b9bce4a8047145ca716cda7c1ba12739
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018 nghttp3 contributors
+         * Copyright (c) 2017 ngtcp2 contributors
+         * Copyright (c) 2017 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/includes/nghttp3/nghttp3.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc545ae6368aee638646db325e41a41c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019 nghttp3 contributors
+         * Copyright (c) 2017 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/includes/nghttp3/nghttp3.h [4:6]
+        lib/nghttp3_buf.c [4:5]
+        lib/nghttp3_buf.h [4:5]
+        lib/nghttp3_conv.c [4:5]
+        lib/nghttp3_conv.h [4:5]
+        lib/nghttp3_gaptr.c [4:5]
+        lib/nghttp3_gaptr.h [4:5]
+        lib/nghttp3_idtr.c [4:5]
+        lib/nghttp3_idtr.h [4:5]
+        lib/nghttp3_macro.h [4:5]
+        lib/nghttp3_map.c [4:6]
+        lib/nghttp3_map.h [4:6]
+        lib/nghttp3_mem.c [4:6]
+        lib/nghttp3_mem.h [4:6]
+        lib/nghttp3_pq.c [4:6]
+        lib/nghttp3_pq.h [4:6]
+        lib/nghttp3_range.c [4:5]
+        lib/nghttp3_range.h [4:5]
+        lib/nghttp3_ringbuf.c [4:5]
+        lib/nghttp3_ringbuf.h [4:5]
+        lib/nghttp3_str.c [4:6]
+        lib/nghttp3_str.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c063623f476671a53060cbaa3eda1e6b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019 nghttp3 contributors
+         * Copyright (c) 2013 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp3_frame.c [4:5]
+        lib/nghttp3_frame.h [4:5]
+        lib/nghttp3_qpack.c [4:5]
+        lib/nghttp3_qpack.h [4:5]
+        lib/nghttp3_qpack_huffman.c [4:5]
+        lib/nghttp3_qpack_huffman.h [4:5]
+        lib/nghttp3_qpack_huffman_data.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c6a4928114aae275ca6bc55aac9b378e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2019 nghttp3 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:3]
+        README.rst [73:73]
+        lib/includes/nghttp3/version.h [4:5]
+        lib/nghttp3_buf.c [4:5]
+        lib/nghttp3_buf.h [4:5]
+        lib/nghttp3_conn.c [4:4]
+        lib/nghttp3_conn.h [4:4]
+        lib/nghttp3_conv.c [4:5]
+        lib/nghttp3_conv.h [4:5]
+        lib/nghttp3_debug.c [4:5]
+        lib/nghttp3_debug.h [4:5]
+        lib/nghttp3_err.c [4:4]
+        lib/nghttp3_err.h [4:4]
+        lib/nghttp3_frame.c [4:5]
+        lib/nghttp3_frame.h [4:5]
+        lib/nghttp3_gaptr.c [4:5]
+        lib/nghttp3_gaptr.h [4:5]
+        lib/nghttp3_http.c [4:5]
+        lib/nghttp3_http.h [4:5]
+        lib/nghttp3_idtr.c [4:5]
+        lib/nghttp3_idtr.h [4:5]
+        lib/nghttp3_ksl.c [4:5]
+        lib/nghttp3_ksl.h [4:5]
+        lib/nghttp3_macro.h [4:5]
+        lib/nghttp3_map.c [4:6]
+        lib/nghttp3_map.h [4:6]
+        lib/nghttp3_mem.c [4:6]
+        lib/nghttp3_mem.h [4:6]
+        lib/nghttp3_pq.c [4:6]
+        lib/nghttp3_pq.h [4:6]
+        lib/nghttp3_qpack.c [4:5]
+        lib/nghttp3_qpack.h [4:5]
+        lib/nghttp3_qpack_huffman.c [4:5]
+        lib/nghttp3_qpack_huffman.h [4:5]
+        lib/nghttp3_qpack_huffman_data.c [4:5]
+        lib/nghttp3_range.c [4:5]
+        lib/nghttp3_range.h [4:5]
+        lib/nghttp3_rcbuf.c [4:5]
+        lib/nghttp3_rcbuf.h [4:5]
+        lib/nghttp3_ringbuf.c [4:5]
+        lib/nghttp3_ringbuf.h [4:5]
+        lib/nghttp3_str.c [4:6]
+        lib/nghttp3_str.h [4:6]
+        lib/nghttp3_stream.c [4:4]
+        lib/nghttp3_stream.h [4:4]
+        lib/nghttp3_tnode.c [4:4]
+        lib/nghttp3_tnode.h [4:4]
+        lib/nghttp3_vec.c [4:5]
+        lib/nghttp3_vec.h [4:5]
+        lib/nghttp3_version.c [4:4]
+        lib/sfparse/sfparse.c [4:6]
+        lib/sfparse/sfparse.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c812bfe524d8bc74ad8cf40a45902020
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019 nghttp3 contributors
+         * Copyright (c) 2017 ngtcp2 contributors
+         * Copyright (c) 2012 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp3_map.c [4:6]
+        lib/nghttp3_map.h [4:6]
+        lib/nghttp3_pq.c [4:6]
+        lib/nghttp3_pq.h [4:6]
+        lib/nghttp3_str.c [4:6]
+        lib/nghttp3_str.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cb27ea2f3cf1cca44a3fdc2d80ec9197
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019 nghttp3 contributors
+         * Copyright (c) 2016 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp3_debug.c [4:5]
+        lib/nghttp3_debug.h [4:5]
+        lib/nghttp3_rcbuf.c [4:5]
+        lib/nghttp3_rcbuf.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d89f9db9c9889910b44184610d7947e1
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022 nghttp3 contributors
+         * Copyright (c) 2022 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp3_balloc.c [4:5]
+        lib/nghttp3_balloc.h [4:5]
+        lib/nghttp3_objalloc.c [4:5]
+        lib/nghttp3_objalloc.h [4:5]
+        lib/nghttp3_opl.c [4:5]
+        lib/nghttp3_opl.h [4:5]
+        lib/nghttp3_unreachable.c [4:5]
+        lib/nghttp3_unreachable.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d8ca50c11a8cd311a31e6462c4b42555
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019 nghttp3 contributors
+         * Copyright (c) 2017 ngtcp2 contributors
+         * Copyright (c) 2014 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp3_mem.c [4:6]
+        lib/nghttp3_mem.h [4:6]

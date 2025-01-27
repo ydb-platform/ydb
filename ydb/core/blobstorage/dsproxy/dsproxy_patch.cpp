@@ -428,7 +428,7 @@ public:
                 x2Count++;
             }
         }
-        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA23, "VerifyPartPlacement {mirror-3-dc}",
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA00, "VerifyPartPlacement {mirror-3-dc}",
                 (X2Count, x2Count));
         return x2Count >= 2;
     }
@@ -585,6 +585,11 @@ public:
         Become(&TBlobStorageGroupPatchRequest::MovedPatchState);
         IsMovedPatch = true;
         std::optional<ui32> subgroupIdx = 0;
+        ReceivedResponseFlags.resize(VDisks.size(), false);
+        ErrorResponseFlags.resize(VDisks.size(), false);
+        EmptyResponseFlags.resize(VDisks.size(), false);
+        ForceStopFlags.resize(VDisks.size(), false);
+        SlowFlags.resize(VDisks.size(), false);
 
         if (OkVDisksWithParts) {
             ui32 okVDiskIdx = RandomNumber<ui32>(OkVDisksWithParts.size());

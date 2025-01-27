@@ -1,7 +1,7 @@
 #include "flat_executor.h"
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/stream/hex.h>
 #include <util/string/escape.h>
@@ -128,7 +128,10 @@ public:
                     str << "<tr>";
                     for (ui32 column : columns) {
                         const auto &columnInfo = tableInfo->Columns.find(column)->second;
-                        str << "<th>" << column << ":" << columnInfo.Name << "</th>";
+                        str << "<th>" 
+                            << column << ":" << NScheme::TypeName(columnInfo.PType, columnInfo.PTypeMod) 
+                            << " " << columnInfo.Name
+                        << "</th>";
                     }
                     str << "</tr>";
                     str << "</thead>";
@@ -229,12 +232,17 @@ public:
                                             str << "(DyNumber) " << number;
                                             break;
                                         }
+                                        case NScheme::NTypeIds::Decimal: {
+                                            tuple.Types[i].GetDecimalType().CellValueToStream(tuple.Columns[i].AsValue<std::pair<ui64, i64>>(), str);
+                                            break;
+                                        }
                                         case NScheme::NTypeIds::Pg: {
-                                            str << "(Pg) " << NPg::PgTypeNameFromTypeDesc(tuple.Types[i].GetPgTypeDesc());
+                                            auto convert = NPg::PgNativeTextFromNativeBinary(tuple.Columns[i].AsBuf(), tuple.Types[i].GetPgTypeDesc());
+                                            str << EncodeHtmlPcdata(!convert.Error ? convert.Str : *convert.Error);
                                             break;
                                         }
                                         default:
-                                            str << "<i>unknown type " << tuple.Types[i].GetTypeId() << "</i>";
+                                            str << "<i>unknown type " << NScheme::TypeName(tuple.Types[i]) << "</i>";
                                             break;
                                         }
                                     }

@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_RANDOM_RANDRANGE_HPP
 #define PYTHONIC_INCLUDE_RANDOM_RANDRANGE_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/random/random.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 #include <cmath>
 
@@ -15,7 +15,7 @@ namespace random
   long randrange(long start, long stop, long step);
 
   DEFINE_FUNCTOR(pythonic::random, randrange)
-}
+} // namespace random
 PYTHONIC_NS_END
 
 #endif

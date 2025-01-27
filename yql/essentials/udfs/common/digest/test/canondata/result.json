@@ -1,0 +1,12 @@
+{
+    "test.test[Basic]": [
+        {
+            "uri": "file://test.test_Basic_/results.txt"
+        }
+    ],
+    "test.test[Init]": [
+        {
+            "uri": "file://test.test_Init_/results.txt"
+        }
+    ]
+}

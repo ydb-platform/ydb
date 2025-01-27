@@ -317,6 +317,19 @@ const TPath::TChecker& TPath::TChecker::IsReplication(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsTransfer(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsTransfer()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a transfer"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::IsCommonSensePath(EStatus status) const {
     if (Failed) {
         return *this;
@@ -909,6 +922,26 @@ const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    // Warning: scheme objects using YQL backups should only be allowed to be exported
+    // when we can be certain that the database will never be downgraded to a version
+    // which does not support the YQL export process. Otherwise, they will be considered as tables,
+    // and we might cause the process to be aborted.
+    if (Path.Base()->IsTable()
+        || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
+    )  {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path type is not supported in exports"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
+}
+
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
     if (Failed) {
         return *this;
@@ -1307,6 +1340,17 @@ TPath TPath::Child(const TString& name) const {
     return result;
 }
 
+TPath TPath::Child(const TString& name, TSplitChildTag) const {
+    TPath result = *this;
+
+    auto pathParts = SplitPath(name);
+    for (const auto& part : pathParts) {
+        result.Dive(part);
+    }
+
+    return result;
+}
+
 TPath TPath::Resolve(const TString path, TSchemeShard* ss) {
     Y_ABORT_UNLESS(ss);
 
@@ -1573,8 +1617,12 @@ bool TPath::AtLocalSchemeShardPath() const {
     return !(*it)->IsMigrated();
 }
 
-bool TPath::IsInsideTableIndexPath() const {
-    Y_ABORT_UNLESS(IsResolved());
+bool TPath::IsInsideTableIndexPath(bool failOnUnresolved) const {
+    if (failOnUnresolved) {
+        Y_ABORT_UNLESS(IsResolved());
+    } else if (!IsResolved()) {
+        return false;
+    }
 
     // expected /<root>/.../<table>/<table_index>/<private_tables>
     if (Depth() < 3) {
@@ -1634,8 +1682,15 @@ bool TPath::IsInsideCdcStreamPath() const {
     return true;
 }
 
-bool TPath::IsTableIndex(const TMaybe<NKikimrSchemeOp::EIndexType>& type) const {
-    Y_ABORT_UNLESS(IsResolved());
+bool TPath::IsTableIndex(
+    const TMaybe<NKikimrSchemeOp::EIndexType>& type,
+    bool failOnUnresolved) const
+{
+    if (failOnUnresolved) {
+        Y_ABORT_UNLESS(IsResolved());
+    } else if (!IsResolved()) {
+        return false;
+    }
 
     if (!Base()->IsTableIndex()) {
         return false;
@@ -1689,6 +1744,12 @@ bool TPath::IsReplication() const {
     Y_ABORT_UNLESS(IsResolved());
 
     return Base()->IsReplication();
+}
+
+bool TPath::IsTransfer() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->IsTransfer();
 }
 
 ui32 TPath::Depth() const {

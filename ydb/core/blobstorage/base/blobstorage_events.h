@@ -21,10 +21,16 @@ namespace NKikimr {
         TEvControllerUpdateDiskStatus() = default;
 
         TEvControllerUpdateDiskStatus(const TVDiskID& vDiskId, ui32 nodeId, ui32 pdiskId, ui32 vslotId,
-                ui32 satisfactionRankPercent) {
+                std::optional<ui32> satisfactionRankPercent, NKikimrWhiteboard::EVDiskState state, bool replicated,
+                NKikimrWhiteboard::EFlag diskSpace) {
             NKikimrBlobStorage::TVDiskMetrics* metric = Record.AddVDisksMetrics();
             VDiskIDFromVDiskID(vDiskId, metric->MutableVDiskId());
-            metric->SetSatisfactionRank(satisfactionRankPercent);
+            if (satisfactionRankPercent) {
+                metric->SetSatisfactionRank(*satisfactionRankPercent);
+            }
+            metric->SetState(state);
+            metric->SetReplicated(replicated);
+            metric->SetDiskSpace(diskSpace);
             auto *p = metric->MutableVSlotId();
             p->SetNodeId(nodeId);
             p->SetPDiskId(pdiskId);
@@ -374,9 +380,11 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvAskWardenRestartPDisk : TEventLocal<TEvAskWardenRestartPDisk, EvAskWardenRestartPDisk> {
         const ui32 PDiskId;
+        const bool IgnoreChecks;
 
-        TEvAskWardenRestartPDisk(const ui32& pdiskId)
+        TEvAskWardenRestartPDisk(const ui32 pdiskId, const bool ignoreChecks)
             : PDiskId(pdiskId)
+            , IgnoreChecks(ignoreChecks)
         {}
     };
 
@@ -567,9 +575,10 @@ namespace NKikimr {
     {
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> Config;
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> ProposedConfig;
+        bool SelfManagementEnabled;
 
         TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config,
-                const NKikimrBlobStorage::TStorageConfig *proposedConfig);
+                const NKikimrBlobStorage::TStorageConfig *proposedConfig, bool selfManagementEnabled);
         ~TEvNodeWardenStorageConfig();
     };
 

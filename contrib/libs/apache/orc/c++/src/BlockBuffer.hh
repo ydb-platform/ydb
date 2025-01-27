@@ -34,15 +34,15 @@ namespace orc {
    */
   class BlockBuffer {
    private:
-    MemoryPool& memoryPool;
+    MemoryPool& memoryPool_;
     // current buffer size
-    uint64_t currentSize;
+    uint64_t currentSize_;
     // maximal capacity (actual allocated memory)
-    uint64_t currentCapacity;
+    uint64_t currentCapacity_;
     // unit for buffer expansion
-    const uint64_t blockSize;
+    const uint64_t blockSize_;
     // pointers to the start of each block
-    std::vector<char*> blocks;
+    std::vector<char*> blocks_;
 
     // non-copy-constructible
     BlockBuffer(BlockBuffer& buffer) = delete;
@@ -66,7 +66,7 @@ namespace orc {
       uint64_t size;
 
       Block() : data(nullptr), size(0) {}
-      Block(char* _data, uint64_t _size) : data(_data), size(_size) {}
+      Block(char* data, uint64_t size) : data(data), size(size) {}
       Block(const Block& block) = default;
       ~Block() = default;
     };
@@ -94,24 +94,26 @@ namespace orc {
      * Get the number of blocks that are fully or partially occupied
      */
     uint64_t getBlockNumber() const {
-      return (currentSize + blockSize - 1) / blockSize;
+      return (currentSize_ + blockSize_ - 1) / blockSize_;
     }
 
     uint64_t size() const {
-      return currentSize;
+      return currentSize_;
     }
 
     uint64_t capacity() const {
-      return currentCapacity;
+      return currentCapacity_;
     }
 
     void resize(uint64_t size);
+
     /**
      * Requests the BlockBuffer to contain at least newCapacity bytes.
      * Reallocation happens if there is need of more space.
      * @param newCapacity new capacity of BlockBuffer
      */
     void reserve(uint64_t newCapacity);
+
     /**
      * Write the BlockBuffer content into OutputStream
      * @param output the output stream to write to

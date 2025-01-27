@@ -13,6 +13,7 @@ SRCS(
     console.h
     console_audit.cpp
     console_audit.h
+    console_handshake.cpp
     console_configs_manager.cpp
     console_configs_manager.h
     console_configs_provider.cpp
@@ -69,8 +70,6 @@ SRCS(
     modifications_validator.cpp
     modifications_validator.h
     net_classifier_updater.cpp
-    shared_cache_configurator.cpp
-    shared_cache_configurator.h
     tx_processor.cpp
     tx_processor.h
     util.cpp
@@ -98,7 +97,8 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/yaml_config
     ydb/public/api/protos
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id/protos
 )
 
 YQL_LAST_ABI_VERSION()

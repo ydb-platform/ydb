@@ -1,9 +1,9 @@
 #pragma once
 
-#include "range.h"
-#include "shared_range.h"
-
 #include <library/cpp/yt/string/format.h>
+
+#include <library/cpp/yt/memory/range.h>
+#include <library/cpp/yt/memory/shared_range.h>
 
 namespace NYT {
 
@@ -14,6 +14,9 @@ void FormatValue(TStringBuilderBase* builder, const TRange<T>& collection, TStri
 
 template <class T>
 void FormatValue(TStringBuilderBase* builder, const TSharedRange<T>& collection, TStringBuf /*spec*/);
+
+template <std::ranges::view T>
+void FormatValue(TStringBuilderBase* builder, const T& collection, TStringBuf /*spec*/);
 
 ////////////////////////////////////////////////////////////////////////////////
 

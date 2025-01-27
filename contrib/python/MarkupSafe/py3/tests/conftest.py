@@ -1,5 +1,12 @@
+from __future__ import annotations
+
+import sys
+import typing as t
+from types import ModuleType
+
 import pytest
 
+import markupsafe
 from markupsafe import _native
 
 try:
@@ -8,8 +15,17 @@ except ImportError:
     _speedups = None  # type: ignore
 
 
+def pytest_report_header() -> list[str]:
+    """Return a list of strings to be displayed in the header of the report."""
+    if sys.version_info >= (3, 13):
+        return [f"Free-threaded: {not sys._is_gil_enabled()}"]
+
+    return []
+
+
 @pytest.fixture(
     scope="session",
+    autouse=True,
     params=(
         _native,
         pytest.param(
@@ -18,20 +34,6 @@ except ImportError:
         ),
     ),
 )
-def _mod(request):
-    return request.param
-
-
-@pytest.fixture(scope="session")
-def escape(_mod):
-    return _mod.escape
-
-
-@pytest.fixture(scope="session")
-def escape_silent(_mod):
-    return _mod.escape_silent
-
-
-@pytest.fixture(scope="session")
-def soft_str(_mod):
-    return _mod.soft_str
+def _mod(request: pytest.FixtureRequest) -> None:
+    mod = t.cast(ModuleType, request.param)
+    markupsafe._escape_inner = mod._escape_inner  # type: ignore[attr-defined]

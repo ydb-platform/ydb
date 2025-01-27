@@ -10,7 +10,7 @@
 
 #include <yt/yt/core/yson/writer.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
@@ -108,6 +108,9 @@ void Serialize(IInputStream& input, NYson::IYsonConsumer* consumer);
 // Enums
 template <class T>
     requires TEnumTraits<T>::IsEnum
+void Serialize(T value, NYson::IYsonConsumer* consumer);
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
 void Serialize(T value, NYson::IYsonConsumer* consumer);
 
 // std::optional
@@ -217,6 +220,9 @@ void Deserialize(TGuid& value, INodePtr node);
 // Enums
 template <class T>
     requires TEnumTraits<T>::IsEnum
+void Deserialize(T& value, INodePtr node);
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
 void Deserialize(T& value, INodePtr node);
 
 // std::optional

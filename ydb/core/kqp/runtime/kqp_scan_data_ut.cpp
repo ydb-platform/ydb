@@ -1,7 +1,7 @@
 #include "kqp_scan_data.h"
 
-#include <ydb/library/yql/public/udf/udf_ut_helpers.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <yql/essentials/public/udf/udf_ut_helpers.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NMiniKQL {
@@ -39,6 +39,11 @@ struct TDataRow {
             {22, TTypeInfo(NTypeIds::Interval64), ""},
             {23, TTypeInfo(NScheme::TDecimalType(22, 9)), ""},
             {24, TTypeInfo(NScheme::TDecimalType(35, 10)), ""},
+            {25, TTypeInfo(NPg::TypeDescFromPgTypeName("pgint2")), ""},
+            {26, TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), ""},
+            {27, TTypeInfo(NPg::TypeDescFromPgTypeName("pgint8")), ""},
+            {28, TTypeInfo(NPg::TypeDescFromPgTypeName("pgfloat4")), ""},
+            {29, TTypeInfo(NPg::TypeDescFromPgTypeName("pgfloat8")), ""},
         };
     }
 
@@ -67,6 +72,11 @@ struct TDataRow {
     i64 Interval64;
     NYql::NDecimal::TInt128 Decimal;
     NYql::NDecimal::TInt128 Decimal35;
+    i16 PgInt2;
+    i32 PgInt4;
+    i64 PgInt8;
+    float PgFloat4;
+    double PgFloat8;
 
     static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
         std::vector<std::shared_ptr<arrow::Field>> fields = {
@@ -95,6 +105,11 @@ struct TDataRow {
             arrow::field("interval64", arrow::date64()),
             arrow::field("dec", arrow::decimal(22, 9)),
             arrow::field("dec35", arrow::decimal(35, 10)),
+            arrow::field("pgint2", arrow::int16()),
+            arrow::field("pgint4", arrow::int32()),
+            arrow::field("pgint8", arrow::int64()),
+            arrow::field("pgfloat4", arrow::float32()),
+            arrow::field("pgfloat8", arrow::float64()),
         };
 
         return std::make_shared<arrow::Schema>(std::move(fields));
@@ -186,6 +201,21 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
             } else if (colName == "dec35") {
                 auto result = batchBuilder->GetFieldAs<arrow::Decimal128Builder>(colIndex++)->Append(reinterpret_cast<const char*>(&row.Decimal35));
                 UNIT_ASSERT(result.ok());
+            } else if (colName == "pgint2") {
+                auto result = batchBuilder->GetFieldAs<arrow::Int16Builder>(colIndex++)->Append(row.PgInt2);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "pgint4") {
+                auto result = batchBuilder->GetFieldAs<arrow::Int32Builder>(colIndex++)->Append(row.PgInt4);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "pgint8") {
+                auto result = batchBuilder->GetFieldAs<arrow::Int64Builder>(colIndex++)->Append(row.PgInt8);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "pgfloat4") {
+                auto result = batchBuilder->GetFieldAs<arrow::FloatBuilder>(colIndex++)->Append(row.PgFloat4);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "pgfloat8") {
+                auto result = batchBuilder->GetFieldAs<arrow::DoubleBuilder>(colIndex++)->Append(row.PgFloat8);
+                UNIT_ASSERT(result.ok());
             }
         }
     }
@@ -197,11 +227,11 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
 
 TVector<TDataRow> TestRows() {
     TVector<TDataRow> rows = {
-        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1"                       , "u1"                      , "{j:1}", "{y:1}", 0, 0, 0, 0, -1, -1, -1, -1, 111, 1111},
-        {false,  2,  2,  2,  2, 2, 2, 2, 2,  2.0f,  2.0, "s2"                       , "u2"                      , "{j:2}", "{y:2}", 0, 0, 0, 0, -2, -2, -2, -2, 222, 2222},
-        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3"                       , "u3"                      , "{j:3}", "{y:3}", 0, 0, 0, 0, -3, -3, -3, -3, 333, 3333},
-        {false, -4, -4, -4, -4, 4, 4, 4, 4,  4.0f,  4.0, "s4"                       , "u4"                      , "{j:4}", "{y:4}", 0, 0, 0, 0, -4, -4, -4, -4, 444, 4444},
-        {false, -5, -5, -5, -5, 5, 5, 5, 5,  5.0f,  5.0, "long5long5long5long5long5", "utflong5utflong5utflong5", "{j:5}", "{y:5}", 0, 0, 0, 0, -5, -5, -5, -5, 555, 5555},
+        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1"                       , "u1"                      , "{j:1}", "{y:1}", 0, 0, 0, 0, -1, -1, -1, -1, 111, 1111, -21,  210, -2100,  21.3f,  21.6},
+        {false,  2,  2,  2,  2, 2, 2, 2, 2,  2.0f,  2.0, "s2"                       , "u2"                      , "{j:2}", "{y:2}", 0, 0, 0, 0, -2, -2, -2, -2, 222, 2222,  22, -220,  2200, -22.3f,  22.6},
+        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3"                       , "u3"                      , "{j:3}", "{y:3}", 0, 0, 0, 0, -3, -3, -3, -3, 333, 3333,  23,  230, -2300,  23.3f, -23.6},
+        {false, -4, -4, -4, -4, 4, 4, 4, 4,  4.0f,  4.0, "s4"                       , "u4"                      , "{j:4}", "{y:4}", 0, 0, 0, 0, -4, -4, -4, -4, 444, 4444, -24,  240,  2400, -24.3f,  24.6},
+        {false, -5, -5, -5, -5, 5, 5, 5, 5,  5.0f,  5.0, "long5long5long5long5long5", "utflong5utflong5utflong5", "{j:5}", "{y:5}", 0, 0, 0, 0, -5, -5, -5, -5, 555, 5555,  25, -250,  2500,  25.3f, -25.6},
     };
     return rows;
 }
@@ -272,7 +302,17 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod::Embedded("FOOD!"), NTypeIds::Utf8   , {16, 8 } },
             {NUdf::TUnboxedValuePod::Embedded("{j:0}"), NTypeIds::Json   , {16, 8 } },
             {NUdf::TUnboxedValuePod::Embedded("{y:0}"), NTypeIds::Yson   , {16, 8 } },
-            {containsLongString                       , NTypeIds::String, {16 + pattern.size(), pattern.size()}}
+            {containsLongString                       , NTypeIds::String, {16 + pattern.size(), pattern.size()}},
+            {NUdf::TUnboxedValuePod(            ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgint2"  )), {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4"  )), {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgint8"  )), {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgfloat4")), {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgfloat8")), {16, 8 } },
+            {NUdf::TUnboxedValuePod((i16) 2     ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgint2"  )), {16, 2 } },
+            {NUdf::TUnboxedValuePod((i32) 3     ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4"  )), {16, 4 } },
+            {NUdf::TUnboxedValuePod((i64) 4     ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgint8"  )), {16, 8 } },
+            {NUdf::TUnboxedValuePod((float) 1.2 ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgfloat4")), {16, 4 } },
+            {NUdf::TUnboxedValuePod((double) 3.4), TTypeInfo(NPg::TypeDescFromPgTypeName("pgfloat8")), {16, 8 } },
         };
 
         for (auto& testCase: cases) {
@@ -329,6 +369,11 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             UNIT_ASSERT_EQUAL(container[22].Get<i64 >(), row.Interval64 );
             UNIT_ASSERT_EQUAL(container[23].GetInt128(), row.Decimal    );
             UNIT_ASSERT_EQUAL(container[24].GetInt128(), row.Decimal35  );
+            UNIT_ASSERT_EQUAL(container[25].Get<i16 >(), row.PgInt2     );
+            UNIT_ASSERT_EQUAL(container[26].Get<i32 >(), row.PgInt4     );
+            UNIT_ASSERT_EQUAL(container[27].Get<i64 >(), row.PgInt8     );
+            UNIT_ASSERT_EQUAL(container[28].Get<float >(), row.PgFloat4 );
+            UNIT_ASSERT_EQUAL(container[29].Get<double>(), row.PgFloat8 );
         }
 
         UNIT_ASSERT(scanData.IsEmpty());
@@ -408,6 +453,32 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             UNIT_ASSERT(scanData.FillDataValues(containerPtr.data()) == 0);
         }
         UNIT_ASSERT(scanData.IsEmpty());
+    }
+
+    Y_UNIT_TEST(FailOnUnsupportedPgType) {
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        TMemoryUsageInfo memInfo("");
+        THolderFactory factory(alloc.Ref(), memInfo);
+
+        TSmallVec<TKqpComputeContextBase::TColumn> cols{{
+            .Type = TTypeInfo(NPg::TypeDescFromPgTypeName("pgtext"))
+        }};
+        TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), cols, {}, cols);
+
+        std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder = nullptr;
+        auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{arrow::field("pgtext", arrow::utf8())});
+        auto batchBuilderResult = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), &batchBuilder);
+        UNIT_ASSERT(batchBuilderResult.ok());
+
+        TString textData{"some data"};
+        auto appendResult = batchBuilder->GetFieldAs<arrow::StringBuilder>(0)->Append(textData.data(), textData.size());
+        UNIT_ASSERT(appendResult.ok());
+
+        std::shared_ptr<arrow::RecordBatch> batch;
+        auto flushResult = batchBuilder->Flush(&batch);
+        UNIT_ASSERT(flushResult.ok());
+
+        UNIT_ASSERT_EXCEPTION(scanData.AddData(batch, {}, factory), NYql::TYqlPanic);
     }
 }
 

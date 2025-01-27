@@ -120,7 +120,6 @@ namespace NKikimr {
         ui32 HullSstSizeInChunksLevel;
         ui32 HugeBlobsFreeChunkReservation;
         ui32 MinHugeBlobInBytes;
-        ui32 OldMinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
         ui32 HugeBlobOverhead;
         ui32 HullCompLevel0MaxSstsAtOnce;
@@ -128,6 +127,7 @@ namespace NKikimr {
         double HullCompLevelRateThreshold;
         double HullCompFreeSpaceThreshold;
         ui32 FreshCompMaxInFlightWrites;
+        ui32 FreshCompMaxInFlightReads;
         ui32 HullCompMaxInFlightWrites;
         ui32 HullCompMaxInFlightReads;
         double HullCompReadBatchEfficiencyThreshold;
@@ -219,17 +219,16 @@ namespace NKikimr {
         TDuration WhiteboardUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
-        TControlWrapper DefaultHugeGarbagePerMille;
         bool UseActorSystemTimeInBSQueue = false;
 
         ///////////// BALANCING SETTINGS ////////////////////
-        bool BalancingEnableSend;
-        bool BalancingEnableDelete;
+        bool BalancingEnableSend = false;
+        bool BalancingEnableDelete = false;
         TDuration BalancingJobGranularity;
-        bool BalancingBalanceOnlyHugeBlobs;
-        ui64 BalancingBatchSize;
-        ui64 BalancingMaxToSendPerEpoch;
-        ui64 BalancingMaxToDeletePerEpoch;
+        bool BalancingBalanceOnlyHugeBlobs = false;
+        ui64 BalancingBatchSize = 0;
+        ui64 BalancingMaxToSendPerEpoch = 0;
+        ui64 BalancingMaxToDeletePerEpoch = 0;
         TDuration BalancingReadBatchTimeout;
         TDuration BalancingSendBatchTimeout;
         TDuration BalancingRequestBlobsOnMainTimeout;
@@ -237,9 +236,25 @@ namespace NKikimr {
         TDuration BalancingEpochTimeout;
         TDuration BalancingTimeToSleepIfNothingToDo;
 
+        ///////////////// DEFRAG SETTINGS /////////////////
+        TControlWrapper DefaultHugeGarbagePerMille = 300;
+        TControlWrapper HugeDefragFreeSpaceBorderPerMille = 260;
+        TControlWrapper MaxChunksToDefragInflight = 10;
+
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
+
+        ///////////// THROTTLING SETTINGS //////////////////
+        TControlWrapper ThrottlingDeviceSpeed;
+        TControlWrapper ThrottlingMinSstCount;
+        TControlWrapper ThrottlingMaxSstCount;
+        TControlWrapper ThrottlingMinInplacedSize;
+        TControlWrapper ThrottlingMaxInplacedSize;
+        TControlWrapper ThrottlingMinOccupancyPerMille;
+        TControlWrapper ThrottlingMaxOccupancyPerMille;
+        TControlWrapper ThrottlingMinLogChunkCount;
+        TControlWrapper ThrottlingMaxLogChunkCount;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

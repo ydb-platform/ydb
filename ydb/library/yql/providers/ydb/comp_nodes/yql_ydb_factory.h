@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 namespace NYql {
 

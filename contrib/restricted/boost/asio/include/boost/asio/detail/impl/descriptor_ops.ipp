@@ -2,7 +2,7 @@
 // detail/impl/descriptor_ops.ipp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -70,7 +70,25 @@ int close(int d, state_type& state, boost::system::error_code& ec)
         ::fcntl(d, F_SETFL, flags & ~O_NONBLOCK);
 #else // defined(__SYMBIAN32__) || defined(__EMSCRIPTEN__)
       ioctl_arg_type arg = 0;
+# if defined(ENOTTY) || defined(ENOTCAPABLE)
+      result = ::ioctl(d, FIONBIO, &arg);
+      get_last_error(ec, result < 0);
+      if (false
+#  if defined(ENOTTY)
+          || ec.value() == ENOTTY
+#  endif // defined(ENOTTY)
+#  if defined(ENOTCAPABLE)
+          || ec.value() == ENOTCAPABLE
+#  endif // defined(ENOTCAPABLE)
+        )
+      {
+        int flags = ::fcntl(d, F_GETFL, 0);
+        if (flags >= 0)
+          ::fcntl(d, F_SETFL, flags & ~O_NONBLOCK);
+      }
+# else // defined(ENOTTY) || defined(ENOTCAPABLE)
       ::ioctl(d, FIONBIO, &arg);
+# endif // defined(ENOTTY) || defined(ENOTCAPABLE)
 #endif // defined(__SYMBIAN32__) || defined(__EMSCRIPTEN__)
       state &= ~non_blocking;
 
@@ -104,6 +122,26 @@ bool set_user_non_blocking(int d, state_type& state,
   ioctl_arg_type arg = (value ? 1 : 0);
   int result = ::ioctl(d, FIONBIO, &arg);
   get_last_error(ec, result < 0);
+# if defined(ENOTTY) || defined(ENOTCAPABLE)
+  if (false
+#  if defined(ENOTTY)
+      || ec.value() == ENOTTY
+#  endif // defined(ENOTTY)
+#  if defined(ENOTCAPABLE)
+      || ec.value() == ENOTCAPABLE
+#  endif // defined(ENOTCAPABLE)
+    )
+  {
+    result = ::fcntl(d, F_GETFL, 0);
+    get_last_error(ec, result < 0);
+    if (result >= 0)
+    {
+      int flag = (value ? (result | O_NONBLOCK) : (result & ~O_NONBLOCK));
+      result = ::fcntl(d, F_SETFL, flag);
+      get_last_error(ec, result < 0);
+    }
+  }
+# endif // defined(ENOTTY) || defined(ENOTCAPABLE)
 #endif // defined(__SYMBIAN32__) || defined(__EMSCRIPTEN__)
 
   if (result >= 0)
@@ -154,6 +192,26 @@ bool set_internal_non_blocking(int d, state_type& state,
   ioctl_arg_type arg = (value ? 1 : 0);
   int result = ::ioctl(d, FIONBIO, &arg);
   get_last_error(ec, result < 0);
+# if defined(ENOTTY) || defined(ENOTCAPABLE)
+  if (false
+#  if defined(ENOTTY)
+      || ec.value() == ENOTTY
+#  endif // defined(ENOTTY)
+#  if defined(ENOTCAPABLE)
+      || ec.value() == ENOTCAPABLE
+#  endif // defined(ENOTCAPABLE)
+    )
+  {
+    result = ::fcntl(d, F_GETFL, 0);
+    get_last_error(ec, result < 0);
+    if (result >= 0)
+    {
+      int flag = (value ? (result | O_NONBLOCK) : (result & ~O_NONBLOCK));
+      result = ::fcntl(d, F_SETFL, flag);
+      get_last_error(ec, result < 0);
+    }
+  }
+# endif // defined(ENOTTY) || defined(ENOTCAPABLE)
 #endif // defined(__SYMBIAN32__) || defined(__EMSCRIPTEN__)
 
   if (result >= 0)
@@ -180,7 +238,7 @@ std::size_t sync_read(int d, state_type state, buf* bufs,
   // A request to read 0 bytes on a stream is a no-op.
   if (all_empty)
   {
-    ec.assign(0, ec.category());
+    boost::asio::error::clear(ec);
     return 0;
   }
 
@@ -226,7 +284,7 @@ std::size_t sync_read1(int d, state_type state, void* data,
   // A request to read 0 bytes on a stream is a no-op.
   if (size == 0)
   {
-    ec.assign(0, ec.category());
+    boost::asio::error::clear(ec);
     return 0;
   }
 
@@ -348,7 +406,7 @@ std::size_t sync_write(int d, state_type state, const buf* bufs,
   // A request to write 0 bytes on a stream is a no-op.
   if (all_empty)
   {
-    ec.assign(0, ec.category());
+    boost::asio::error::clear(ec);
     return 0;
   }
 
@@ -387,7 +445,7 @@ std::size_t sync_write1(int d, state_type state, const void* data,
   // A request to write 0 bytes on a stream is a no-op.
   if (size == 0)
   {
-    ec.assign(0, ec.category());
+    boost::asio::error::clear(ec);
     return 0;
   }
 
@@ -490,7 +548,7 @@ std::size_t sync_read_at(int d, state_type state, uint64_t offset,
   // A request to read 0 bytes on a stream is a no-op.
   if (all_empty)
   {
-    ec.assign(0, ec.category());
+    boost::asio::error::clear(ec);
     return 0;
   }
 
@@ -536,7 +594,7 @@ std::size_t sync_read_at1(int d, state_type state, uint64_t offset,
   // A request to read 0 bytes on a stream is a no-op.
   if (size == 0)
   {
-    ec.assign(0, ec.category());
+    boost::asio::error::clear(ec);
     return 0;
   }
 
@@ -659,7 +717,7 @@ std::size_t sync_write_at(int d, state_type state, uint64_t offset,
   // A request to write 0 bytes on a stream is a no-op.
   if (all_empty)
   {
-    ec.assign(0, ec.category());
+    boost::asio::error::clear(ec);
     return 0;
   }
 
@@ -699,7 +757,7 @@ std::size_t sync_write_at1(int d, state_type state, uint64_t offset,
   // A request to write 0 bytes on a stream is a no-op.
   if (size == 0)
   {
-    ec.assign(0, ec.category());
+    boost::asio::error::clear(ec);
     return 0;
   }
 

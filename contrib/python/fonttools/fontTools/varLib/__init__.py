@@ -10,9 +10,13 @@ ttf-interpolatable files for the masters and build a variable-font from
 them.  Such ttf-interpolatable and designspace files can be generated from
 a Glyphs source, eg., using noto-source as an example:
 
+    .. code-block:: sh
+
 	$ fontmake -o ttf-interpolatable -g NotoSansArabic-MM.glyphs
 
 Then you can make a variable-font this way:
+
+    .. code-block:: sh
 
 	$ fonttools varLib master_ufo/NotoSansArabic.designspace
 
@@ -81,6 +85,15 @@ def _add_fvar(font, axes, instances: List[InstanceDescriptor]):
     fvar = newTable("fvar")
     nameTable = font["name"]
 
+    # if there are not currently any mac names don't add them here, that's inconsistent
+    # https://github.com/fonttools/fonttools/issues/683
+    macNames = any(nr.platformID == 1 for nr in getattr(nameTable, "names", ()))
+
+    # we have all the best ways to express mac names
+    platforms = ((3, 1, 0x409),)
+    if macNames:
+        platforms = ((1, 0, 0),) + platforms
+
     for a in axes.values():
         axis = Axis()
         axis.axisTag = Tag(a.tag)
@@ -91,7 +104,7 @@ def _add_fvar(font, axes, instances: List[InstanceDescriptor]):
             a.maximum,
         )
         axis.axisNameID = nameTable.addMultilingualName(
-            a.labelNames, font, minNameID=256
+            a.labelNames, font, minNameID=256, mac=macNames
         )
         axis.flags = int(a.hidden)
         fvar.axes.append(axis)
@@ -117,10 +130,12 @@ def _add_fvar(font, axes, instances: List[InstanceDescriptor]):
         psname = instance.postScriptFontName
 
         inst = NamedInstance()
-        inst.subfamilyNameID = nameTable.addMultilingualName(localisedStyleName)
+        inst.subfamilyNameID = nameTable.addMultilingualName(
+            localisedStyleName, mac=macNames
+        )
         if psname is not None:
             psname = tostr(psname)
-            inst.postscriptNameID = nameTable.addName(psname)
+            inst.postscriptNameID = nameTable.addName(psname, platforms=platforms)
         inst.coordinates = {
             axes[k].tag: axes[k].map_backward(v) for k, v in coordinates.items()
         }
@@ -869,7 +884,7 @@ def _add_COLR(font, model, master_fonts, axisTags, colr_layer_reuse=True):
         colr.VarIndexMap = builder.buildDeltaSetIndexMap(varIdxes)
 
 
-def load_designspace(designspace, log_enabled=True):
+def load_designspace(designspace, log_enabled=True, *, require_sources=True):
     # TODO: remove this and always assume 'designspace' is a DesignSpaceDocument,
     # never a file path, as that's already handled by caller
     if hasattr(designspace, "sources"):  # Assume a DesignspaceDocument
@@ -878,7 +893,7 @@ def load_designspace(designspace, log_enabled=True):
         ds = DesignSpaceDocument.fromfile(designspace)
 
     masters = ds.sources
-    if not masters:
+    if require_sources and not masters:
         raise VarLibValidationError("Designspace must have at least one source.")
     instances = ds.instances
 
@@ -978,7 +993,7 @@ def load_designspace(designspace, log_enabled=True):
                     "More than one base master found in Designspace."
                 )
             base_idx = i
-    if base_idx is None:
+    if require_sources and base_idx is None:
         raise VarLibValidationError(
             "Base master not found; no master at default location?"
         )

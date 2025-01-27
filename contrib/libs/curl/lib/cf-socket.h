@@ -33,7 +33,23 @@ struct Curl_cfilter;
 struct Curl_easy;
 struct connectdata;
 struct Curl_sockaddr_ex;
-struct ip_quadruple;
+
+#ifndef SIZEOF_CURL_SOCKET_T
+/* configure and cmake check and set the define */
+# ifdef _WIN64
+#  define SIZEOF_CURL_SOCKET_T 8
+# else
+/* default guess */
+#  define SIZEOF_CURL_SOCKET_T 4
+# endif
+#endif
+
+#if SIZEOF_CURL_SOCKET_T < 8
+# define CURL_FORMAT_SOCKET_T "d"
+#else
+# define CURL_FORMAT_SOCKET_T "qd"
+#endif
+
 
 /*
  * The Curl_sockaddr_ex structure is basically libcurl's external API
@@ -54,11 +70,6 @@ struct Curl_sockaddr_ex {
 };
 #define sa_addr _sa_ex_u.addr
 
-/*
- * Parse interface option, and return the interface name and the host part.
-*/
-CURLcode Curl_parse_interface(const char *input,
-                              char **dev, char **iface, char **host);
 
 /*
  * Create a socket based on info from 'conn' and 'ai'.
@@ -86,9 +97,9 @@ int Curl_socket_close(struct Curl_easy *data, struct connectdata *conn,
    Buffer Size
 
 */
-void Curl_sndbuf_init(curl_socket_t sockfd);
+void Curl_sndbufset(curl_socket_t sockfd);
 #else
-#define Curl_sndbuf_init(y) Curl_nop_stmt
+#define Curl_sndbufset(y) Curl_nop_stmt
 #endif
 
 /**
@@ -159,14 +170,18 @@ CURLcode Curl_conn_tcp_accepted_set(struct Curl_easy *data,
  * The filter owns all returned values.
  * @param psock             pointer to hold socket descriptor or NULL
  * @param paddr             pointer to hold addr reference or NULL
- * @param pip               pointer to get IP quadruple or NULL
+ * @param pr_ip_str         pointer to hold remote addr as string or NULL
+ * @param pr_port           pointer to hold remote port number or NULL
+ * @param pl_ip_str         pointer to hold local addr as string or NULL
+ * @param pl_port           pointer to hold local port number or NULL
  * Returns error if the filter is of invalid type.
  */
 CURLcode Curl_cf_socket_peek(struct Curl_cfilter *cf,
                              struct Curl_easy *data,
                              curl_socket_t *psock,
                              const struct Curl_sockaddr_ex **paddr,
-                             struct ip_quadruple *pip);
+                             const char **pr_ip_str, int *pr_port,
+                             const char **pl_ip_str, int *pl_port);
 
 extern struct Curl_cftype Curl_cft_tcp;
 extern struct Curl_cftype Curl_cft_udp;

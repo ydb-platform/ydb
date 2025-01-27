@@ -1,9 +1,9 @@
 #include "yql_common_dq_transform.h"
 
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <util/stream/file.h>

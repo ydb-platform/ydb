@@ -26,11 +26,11 @@ struct TTestState {
     {
     }
 
-    TTestState(TTestActorRuntime &runtime, const TBlobStorageGroupType &type, ui64 nodeIndex = 0)
+    TTestState(TTestActorRuntime &runtime, const TBlobStorageGroupType &type, ui64 nodeIndex = 0, ui32 failRealms = 1)
         : Runtime(runtime)
         , EdgeActor(runtime.AllocateEdgeActor(nodeIndex))
         , Type(type)
-        , GroupMock(0, Type.GetErasure(), Type.BlobSubgroupSize(), 1)
+        , GroupMock(0, Type.GetErasure(), failRealms, Type.BlobSubgroupSize(), 1)
         , Info(GroupMock.GetInfo())
     {
     }

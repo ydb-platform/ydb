@@ -5,6 +5,7 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -45,8 +46,9 @@ enum class EOperationBehaviour : ui32 {
     NoTxWrite = 6
 };
 
-class TWriteOperation {
+class TWriteOperation: public TMonitoringObjectsCounter<TWriteOperation> {
 private:
+    YDB_READONLY(TString, Identifier, TGUID::CreateTimebased().AsGuidString());
     YDB_READONLY(ui64, PathId, 0);
     YDB_READONLY(EOperationStatus, Status, EOperationStatus::Draft);
     YDB_READONLY_DEF(TInstant, CreatedAt);
@@ -58,22 +60,31 @@ private:
     YDB_READONLY_DEF(std::optional<ui32>, GranuleShardingVersionId);
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
     bool WritePortions = false;
+    const std::shared_ptr<TAtomicCounter> Activity = std::make_shared<TAtomicCounter>(1);
 
 public:
     using TPtr = std::shared_ptr<TWriteOperation>;
+
+    void StopWriting() const {
+        *Activity = 0;
+    }
 
     TWriteOperation(const ui64 pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
         const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType,
         const bool writePortions);
 
-    void Start(TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source,
-        const NOlap::TWritingContext& context);
+    void Start(
+        TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context);
     void OnWriteFinish(
         NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag);
     void CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;
     void CommitOnComplete(TColumnShard& owner, const NOlap::TSnapshot& snapshot) const;
     void AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;
     void AbortOnComplete(TColumnShard& owner) const;
+
+    std::shared_ptr<const TAtomicCounter> GetActivityChecker() const {
+        return Activity;
+    }
 
     void Out(IOutputStream& out) const {
         out << "write_id=" << (ui64)WriteId << ";lock_id=" << LockId;

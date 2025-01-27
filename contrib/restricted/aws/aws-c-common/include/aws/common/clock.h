@@ -9,6 +9,8 @@
 #include <aws/common/common.h>
 #include <aws/common/math.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 enum aws_timestamp_unit {
     AWS_TIMESTAMP_SECS = 1,
     AWS_TIMESTAMP_MILLIS = 1000,
@@ -57,5 +59,6 @@ int aws_sys_clock_get_ticks(uint64_t *timestamp);
 #endif /* AWS_NO_STATIC_IMPL */
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_CLOCK_H */

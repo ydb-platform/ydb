@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/topic_sdk_test_setup.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -46,7 +46,7 @@ TWriteMessage Msg(const TString& data, ui64 seqNo);
 
 TTopicSdkTestSetup CreateSetup();
 
-std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt, TString topic = TEST_TOPIC, bool useCodec = true);
+std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt, TString topic = TString{TEST_TOPIC}, bool useCodec = true);
 
 enum class SdkVersion {
     Topic,
@@ -98,7 +98,8 @@ struct TestReadSessionSettings {
     bool AutoCommit = true;
     std::set<ui32> Partitions = {};
     bool AutoPartitioningSupport = true;
-    std::vector<TString> Topics = {TEST_TOPIC};
+    std::vector<std::string> Topics = {TEST_TOPIC};
+    std::optional<TDuration> ReadLag;
 };
 
 struct ITestReadSession {

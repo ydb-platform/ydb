@@ -70,6 +70,7 @@ public:
 
         virtual const TString& GetStreamName() const = 0;
         virtual void SetStreamName(const TString& value) = 0;
+        virtual TString GetStreamPath() const = 0;
 
         virtual EStreamState GetStreamState() const = 0;
         virtual void SetStreamState(EStreamState value) = 0;
@@ -109,6 +110,7 @@ public:
     const ITarget* FindTarget(ui64 id) const;
     ITarget* FindTarget(ui64 id);
     void RemoveTarget(ui64 id);
+    const TVector<TString>& GetTargetTablePaths() const;
 
     void Progress(const TActorContext& ctx);
     void Shutdown(const TActorContext& ctx);

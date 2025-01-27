@@ -71,7 +71,7 @@ void OutputCreateBranchCommitVersion(TStringBuf branch, TStringStream& out)
     }
 
     out << "~" << commit;
-    if (buildUser != "teamcity") {
+    if (buildUser != "teamcity" && buildUser != "sandbox") {
         out << "+" << buildUser;
     }
 }

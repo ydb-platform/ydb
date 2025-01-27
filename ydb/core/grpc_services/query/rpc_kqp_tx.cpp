@@ -104,6 +104,9 @@ private:
             case Ydb::Query::TransactionSettings::kSnapshotReadOnly:
                 ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_snapshot_read_only();
                 break;
+            case Ydb::Query::TransactionSettings::kSnapshotReadWrite:
+                ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_snapshot_read_write();
+                break;
         }
 
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
@@ -111,7 +114,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
         FillCommonKqpRespFields(record, Request.get());
 
         auto beginTxResult = TEvBeginTransactionRequest::AllocateResult<Ydb::Query::BeginTransactionResponse>(Request);
@@ -218,7 +221,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
         FillCommonKqpRespFields(record, Request.get());
 
         NYql::TIssues issues;

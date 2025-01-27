@@ -21,27 +21,28 @@ void ForEachMatchingRule(TRequestTypeRules<T>& rules, const TMaybe<TString>& dat
 
 } // namespace anonymous
 
-void TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
-    NWilson::TTraceId& traceId, TRequestDiscriminator discriminator) {
+NWilson::TTraceId TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
+        TRequestDiscriminator discriminator, const TMaybe<TString>& traceparent) {
     auto requestType = static_cast<size_t>(discriminator.RequestType);
     auto database = std::move(discriminator.Database);
+    std::optional<ui8> level;
+    NWilson::TTraceId traceId;
 
-    if (traceId) {
-        bool throttle = true;
-
+    if (traceparent) {
         ForEachMatchingRule(
             Setup.ExternalThrottlingRules[requestType], database,
-            [&throttle](auto& throttlingRule) {
-                throttle = throttlingRule.Throttler->Throttle() && throttle;
-            });
-
-        if (throttle) {
-            traceId = {};
-        }
+            [&level](auto& throttlingRule) {
+                if (throttlingRule.Throttler->Throttle()) {
+                    return;
+                }
+                if (!level || throttlingRule.Level > *level) {
+                    level = throttlingRule.Level;
+                }
+            }
+        );
     }
 
-    if (!traceId) {
-        TMaybe<ui8> level;
+    if (!level) {
         ForEachMatchingRule(
             Setup.SamplingRules[requestType], database,
             [&level](auto& samplingRule) {
@@ -51,12 +52,20 @@ void TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
                 if (!level || samplingRule.Level > *level) {
                     level = samplingRule.Level;
                 }
-            });
+            }
+        );
+    }
 
-        if (level) {
+    if (level && !traceId) {
+        if (traceparent) {
+            // trace can be attached to external span
+            traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent.GetRef(), *level);
+        } else {
             traceId = NWilson::TTraceId::NewTraceId(*level, Max<ui32>());
         }
     }
+
+    return traceId;
 }
 
 } // namespace NKikimr::NJaegerTracing

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import enum
 import os
 import allure
 import allure_commons
@@ -9,6 +10,7 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from abc import abstractmethod, ABC
 from typing import Set, List, Dict, Any, Callable, Optional
 from time import sleep
+from ydb.tests.olap.lib.utils import get_external_param
 
 
 class TestContext:
@@ -67,26 +69,72 @@ class ScenarioTestHelper:
         ydb.StatusCode.UNAVAILABLE,
     }
 
+    @enum.unique
+    class Compression(enum.IntEnum):
+        OFF = 1
+        LZ4 = 2
+        ZSTD = 3
+
+    class ColumnFamily:
+        """A class that describes a column family."""
+
+        def __init__(self, name: str, compression: ScenarioTestHelper.Compression, compression_level: Optional[int]):
+            """Constructor.
+
+            Args:
+                name: Column family name.
+                compression: Compression codec.
+                compression_level: Compression codec level.
+            """
+
+            self._name = name
+            self._compression = compression
+            self._compression_level = compression_level
+
+        def to_yql(self) -> str:
+            """Convert to YQL"""
+            return f'FAMILY {self._name} (COMPRESSION = "{self._compression.name}"{", COMPRESSION_LEVEL = " + str(self._compression_level) if self._compression_level is not None else ""})'
+
+        @property
+        def name(self) -> str:
+            """Column family name."""
+
+            return self._name
+
+        @property
+        def compression(self) -> ScenarioTestHelper.Compression:
+            """Compression"""
+
+            return self._compression
+
+        @property
+        def compression_level(self) -> Optional[int]:
+            """Compression level."""
+
+            return self._compression_level
+
     class Column:
         """A class that describes a table column."""
 
-        def __init__(self, name: str, type: ydb.PrimitiveType, not_null: bool = False) -> None:
+        def __init__(self, name: str, type: ydb.PrimitiveType, column_family_name: str = "", not_null: bool = False) -> None:
             """Constructor.
 
             Args:
                 name: Column name.
                 type: Column type.
+                column_family_name: Column Family name.
                 not_null: Whether the entry in the column can be NULL.
             """
 
             self._name = name
             self._type = type
+            self._column_family_name = column_family_name
             self._not_null = not_null
 
         def to_yql(self) -> str:
             """Convert to YQL"""
 
-            return f'{self._name} {self._type}{" NOT NULL" if self._not_null else ""}'
+            return f'{self._name} {self._type}{"" if not self._column_family_name else f" FAMILY {self._column_family_name}"}{" NOT NULL" if self._not_null else ""}'
 
         @property
         def bulk_upsert_type(self) -> ydb.OptionalType | ydb.PrimitiveType:
@@ -108,6 +156,11 @@ class ScenarioTestHelper:
 
             return self._type
 
+        def column_family(self) -> str:
+            """Colum family name"""
+
+            return "default" if not self._column_family_name else self._column_family_name
+
         @property
         def not_null(self) -> bool:
             """Whether the entry in the column can be NULL."""
@@ -121,8 +174,9 @@ class ScenarioTestHelper:
             schema = (
                 ScenarioTestHelper.Schema()
                 .with_column(name='id', type=PrimitiveType.Int32, not_null=True)
-                .with_column(name='level', type=PrimitiveType.Uint32)
+                .with_column(name='level', type=PrimitiveType.Uint32, column_family_name="family1")
                 .with_key_columns('id')
+                .with_column_family(name="family1", compression=ScenarioTestHelper.Compression.LZ4, compression_level=None)
             )
         """
 
@@ -131,6 +185,7 @@ class ScenarioTestHelper:
 
             self.columns = []
             self.key_columns = []
+            self.column_families = []
 
         def with_column(self, *vargs, **kargs) -> ScenarioTestHelper.Schema:
             """Add a column.
@@ -154,6 +209,18 @@ class ScenarioTestHelper:
                 self."""
 
             self.key_columns += vargs
+            return self
+
+        def with_column_family(self, *vargs, **kargs) -> ScenarioTestHelper.Schema:
+            """Add a column family.
+
+            The method arguments are the same as {ScenarioTestHelper.ColumnFamily.__init__}.
+
+            Returns:
+                self.
+            """
+
+            self.column_families.append(ScenarioTestHelper.ColumnFamily(*vargs, **kargs))
             return self
 
         def build_bulk_columns_types(self) -> ydb.BulkUpsertColumns:
@@ -250,7 +317,7 @@ class ScenarioTestHelper:
         result = os.path.join('/', YdbCluster.ydb_database, YdbCluster.tables_path)
         if self.test_context is not None:
             result = _add_not_empty(result, self.test_context.suite)
-            result = _add_not_empty(result, self.test_context.test)
+            result = _add_not_empty(result, self.test_context.test) + get_external_param("table_suffix", "")
         result = _add_not_empty(result, path)
         return result
 
@@ -320,7 +387,7 @@ class ScenarioTestHelper:
             assert sth.check_if_ydb_alive()
         """
 
-        return YdbCluster.check_if_ydb_alive(timeout) is None
+        return YdbCluster.check_if_ydb_alive(timeout)[0] is None
 
     def execute_scheme_query(
         self,
@@ -394,6 +461,26 @@ class ScenarioTestHelper:
                 rows += result_set.result_set.rows
         allure.attach(json.dumps(rows), 'result', allure.attachment_type.JSON)
         return ret
+
+    @allure.step('Execute query')
+    def execute_query(
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0
+    ):
+        """Run a query on the tested database.
+
+        Args:
+            yql: Query text.
+            expected_status: Expected status or set of database response statuses. If the response status is not in the expected set, an exception is thrown.
+
+        Example:
+            tablename = 'testTable'
+            sth = ScenarioTestHelper(ctx)
+            sth.execute_query(f'INSERT INTO `{sth.get_full_path("tablename") }` (key, c) values(1, 100)')
+        """
+
+        allure.attach(yql, 'request', allure.attachment_type.TEXT)
+        with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as pool:
+            self._run_with_expected_status(lambda: pool.execute_with_retries(yql, None, ydb.RetrySettings(max_retries=retries)), expected_status)
 
     def drop_if_exist(self, names: List[str], operation) -> None:
         """Erase entities in the tested database, if it exists.
@@ -567,7 +654,7 @@ class ScenarioTestHelper:
         )
 
     @allure.step('List path {path}')
-    def list_path(self, path: str) -> List[ydb.SchemeEntry]:
+    def list_path(self, path: str, folder: str) -> List[ydb.SchemeEntry]:
         """Recursively describe the path in the database under test.
 
         If the path is a directory or TableStore, then all subpaths are included in the description.
@@ -580,19 +667,22 @@ class ScenarioTestHelper:
             If the path does not exist, an empty list is returned.
         """
 
-        root_path = self.get_full_path('')
-        result = []
-        self_descr = YdbCluster._describe_path_impl(os.path.join(root_path, path))
-        if self_descr is not None:
-            self_descr.name = path
-            if self_descr.is_directory():
-                result = YdbCluster._list_directory_impl(root_path, path)
-            result.append(self_descr)
-        allure.attach('\n'.join([f'{e.name}: {repr(e.type)}' for e in result]), 'result', allure.attachment_type.TEXT)
-        return result
+        root_path = self.get_full_path(folder)
+        try:
+            self_descr = YdbCluster._describe_path_impl(os.path.join(root_path, path))
+        except ydb.issues.SchemeError:
+            return []
+
+        if self_descr is None:
+            return []
+
+        if self_descr.is_directory():
+            return list(reversed(YdbCluster.list_directory(root_path, path))) + [self_descr]
+        else:
+            return self_descr
 
     @allure.step('Remove path {path}')
-    def remove_path(self, path: str) -> None:
+    def remove_path(self, path: str, folder: str = '') -> None:
         """Recursively delete a path in the tested database.
 
         If the path is a directory or TableStore, then all nested paths are removed.
@@ -607,12 +697,12 @@ class ScenarioTestHelper:
 
         import ydb.tests.olap.scenario.helpers.drop_helper as dh
 
-        root_path = self.get_full_path('')
-        for e in self.list_path(path):
+        root_path = self.get_full_path(folder)
+        for e in self.list_path(path, folder):
             if e.is_any_table():
-                self.execute_scheme_query(dh.DropTable(e.name))
+                self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)))
             elif e.is_column_store():
-                self.execute_scheme_query(dh.DropTableStore(e.name))
+                self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)))
             elif e.is_directory():
                 self._run_with_expected_status(
                     lambda: YdbCluster.get_ydb_driver().scheme_client.remove_directory(os.path.join(root_path, e.name)),
@@ -620,3 +710,15 @@ class ScenarioTestHelper:
                 )
             else:
                 pytest.fail(f'Cannot remove type {repr(e.type)} for path {os.path.join(root_path, e.name)}')
+
+    def get_volumes_columns(self, table_name: str, name_column: str) -> tuple[int, int]:
+        query = f'''SELECT * FROM `{ScenarioTestHelper(self.test_context).get_full_path(table_name)}/.sys/primary_index_stats` WHERE Activity == 1'''
+        if (len(name_column)):
+            query += f' AND EntityName = \"{name_column}\"'
+        result_set = self.execute_scan_query(query, {ydb.StatusCode.SUCCESS}).result_set
+        raw_bytes = 0
+        bytes = 0
+        for row in result_set.rows:
+            raw_bytes += row["RawBytes"]
+            bytes += row["BlobRangeSize"]
+        return raw_bytes, bytes

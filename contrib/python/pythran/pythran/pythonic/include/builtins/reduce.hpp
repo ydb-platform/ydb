@@ -20,7 +20,7 @@ namespace builtins
 
   // this convoluted expression computes the fixed-point type of the output
   // it's required because, e.g. static_list<long, 1> + static_list<long, 1>
-  // returns array<long, 2>
+  // returns array_tuple<long, 2>
   // and this widens to list
   template <class Iterable, class Operator, class T>
   using reduce_helper_t = typename __combined<
@@ -36,7 +36,7 @@ namespace builtins
           static_cast<reduce_helper_t<Iterable, Operator, T>>(init), op));
 
   DEFINE_FUNCTOR(pythonic::builtins, reduce);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

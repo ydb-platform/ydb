@@ -6,10 +6,10 @@ import os
 import pytest
 import time
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 
-import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule, list_read_rules
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
@@ -57,7 +57,7 @@ class TestStop(TestYdsBase):
         messages = ["A", "B"]
         self.write_stream(messages)
 
-        deadline = time.time() + yatest_common.plain_or_under_sanitizer(30, 150)
+        deadline = time.time() + plain_or_under_sanitizer(30, 150)
         while True:
             if time.time() > deadline:
                 break

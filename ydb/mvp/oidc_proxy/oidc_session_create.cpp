@@ -1,13 +1,11 @@
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/mvp/core/mvp_log.h>
 #include "openid_connect.h"
 #include "oidc_session_create.h"
 #include "oidc_settings.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
                                              const NHttp::THttpIncomingRequestPtr& request,
@@ -19,7 +17,8 @@ THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
     , Settings(settings)
 {}
 
-void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
+void THandlerSessionCreate::Bootstrap() {
+    BLOG_D("Restore oidc session");
     NHttp::TUrlParameters urlParameters(Request->URL);
     TString code = urlParameters["code"];
     TString state = urlParameters["state"];
@@ -34,67 +33,57 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
     if (checkStateResult.IsSuccess()) {
         if (restoreContextResult.IsSuccess()) {
             if (code.empty()) {
-                LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore oidc session failed: receive empty 'code' parameter");
-                RetryRequestToProtectedResourceAndDie(ctx);
+                BLOG_D("Restore oidc session failed: receive empty 'code' parameter");
+                RetryRequestToProtectedResourceAndDie();
             } else {
-                RequestSessionToken(code, ctx);
+                RequestSessionToken(code);
             }
         } else {
             const auto& restoreSessionStatus = restoreContextResult.Status;
-            LOG_DEBUG_S(ctx, NMVP::EService::MVP, restoreSessionStatus.ErrorMessage);
+            BLOG_D(restoreSessionStatus.ErrorMessage);
             if (restoreSessionStatus.IsErrorRetryable) {
-                RetryRequestToProtectedResourceAndDie(ctx);
+                RetryRequestToProtectedResourceAndDie();
             } else {
-                SendUnknownErrorResponseAndDie(ctx);
+                SendUnknownErrorResponseAndDie();
             }
         }
     } else {
-        LOG_DEBUG_S(ctx, NMVP::EService::MVP, checkStateResult.ErrorMessage);
+        BLOG_D(checkStateResult.ErrorMessage);
         if (restoreContextResult.IsSuccess() || restoreContextResult.Status.IsErrorRetryable) {
-            RetryRequestToProtectedResourceAndDie(ctx);
+            RetryRequestToProtectedResourceAndDie();
         } else {
-            SendUnknownErrorResponseAndDie(ctx);
+            SendUnknownErrorResponseAndDie();
         }
     }
 
 }
 
-void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-    NHttp::THttpOutgoingResponsePtr httpResponse;
+void THandlerSessionCreate::ReplyBadRequestAndPassAway(TString errorMessage) {
+    NHttp::THeadersBuilder responseHeaders;
+    SetCORS(Request, &responseHeaders);
+    responseHeaders.Set("Content-Type", "text/plain");
+    return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage));
+}
+
+void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     if (event->Get()->Error.empty() && event->Get()->Response) {
-        NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-        LOG_DEBUG_S(ctx, EService::MVP, "Incoming response from authorization server: " << response->Status);
+        NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
+        BLOG_D("Incoming response from authorization server: " << response->Status);
         if (response->Status == "200") {
-            TStringBuf jsonError;
             NJson::TJsonValue jsonValue;
             NJson::TJsonReaderConfig jsonConfig;
             if (NJson::ReadJsonTree(response->Body, &jsonConfig, &jsonValue)) {
-                const NJson::TJsonValue* jsonAccessToken;
-                if (jsonValue.GetValuePointer("access_token", &jsonAccessToken)) {
-                    TString sessionToken = jsonAccessToken->GetStringRobust();
-                    ProcessSessionToken(sessionToken, ctx);
-                    return;
-                } else {
-                    jsonError = "Wrong OIDC provider response: access_token not found";
-                }
-            } else {
-                jsonError =  "Wrong OIDC response";
+                return ProcessSessionToken(jsonValue);
             }
-            NHttp::THeadersBuilder responseHeaders;
-            responseHeaders.Set("Content-Type", "text/plain");
-            httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, jsonError);
+            return ReplyBadRequestAndPassAway("Wrong OIDC response");
         } else {
             NHttp::THeadersBuilder responseHeaders;
             responseHeaders.Parse(response->Headers);
-            httpResponse = Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body);
+            return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
         }
-    } else {
-        NHttp::THeadersBuilder responseHeaders;
-        responseHeaders.Set("Content-Type", "text/plain");
-        httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
     }
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
+
+    return ReplyBadRequestAndPassAway(event->Get()->Error);
 }
 
 TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {
@@ -110,19 +99,18 @@ TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString&
     return cookieBuilder;
 }
 
-void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx) {
+void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie() {
     NHttp::THeadersBuilder responseHeaders;
-    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx);
+    RetryRequestToProtectedResourceAndDie(&responseHeaders);
 }
 
-void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx) {
+void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders) {
     SetCORS(Request, responseHeaders);
     responseHeaders->Set("Location", Context.GetRequestedAddress());
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("302", "Found", *responseHeaders)));
-    Die(ctx);
+    ReplyAndPassAway(Request->CreateResponse("302", "Found", *responseHeaders));
 }
 
-void THandlerSessionCreate::SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx) {
+void THandlerSessionCreate::SendUnknownErrorResponseAndDie() {
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Content-Type", "text/html");
     SetCORS(Request, &responseHeaders);
@@ -140,9 +128,12 @@ void THandlerSessionCreate::SendUnknownErrorResponseAndDie(const NActors::TActor
                                                             "</center>"
                                                         "</body>"
                                                     "</html>";
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("400", "Bad Request", responseHeaders, BAD_REQUEST_HTML_PAGE)));
-    Die(ctx);
+    ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, BAD_REQUEST_HTML_PAGE));
 }
 
-} // NOIDC
-} // NMVP
+void THandlerSessionCreate::ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse) {
+    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(std::move(httpResponse)));
+    PassAway();
+}
+
+} // NMVP::NOIDC

@@ -23,8 +23,8 @@ namespace builtins
     {
       return std::forward<D>(d).keys();
     }
-  }
-}
+  } // namespace dict
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

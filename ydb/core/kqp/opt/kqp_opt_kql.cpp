@@ -2,9 +2,9 @@
 
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 
@@ -79,7 +79,7 @@ std::pair<TExprBase, TCoAtomList> CreateRowsToReplace(const TExprBase& input,
 
 bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
     bool hasIndexesToWrite = false;
-    YQL_ENSURE(tableData.Metadata->Indexes.size() == tableData.Metadata->SecondaryGlobalIndexMetadata.size());
+    YQL_ENSURE(tableData.Metadata->Indexes.size() == tableData.Metadata->ImplTables.size());
     for (const auto& index : tableData.Metadata->Indexes) {
         if (index.ItUsedForWrite()) {
             hasIndexesToWrite = true;
@@ -893,7 +893,7 @@ TIntrusivePtr<TKikimrTableMetadata> GetIndexMetadata(const TKqlReadTableIndex& r
     const TKikimrTablesData& tables, TStringBuf cluster)
 {
     const auto& tableDesc = GetTableData(tables, cluster, read.Table().Path());
-    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(read.Index().StringValue());
+    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(read.Index().Value());
     return indexMeta;
 }
 
@@ -1017,7 +1017,7 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                         auto dataSource = typesCtx.DataSourceMap.FindPtr(dataSourceName);
                         YQL_ENSURE(dataSource);
                         if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
-                            auto newRead = dqIntegration->WrapRead(NYql::TDqSettings(), input.Cast().Ptr(), ctx);
+                            auto newRead = dqIntegration->WrapRead(input.Cast().Ptr(), ctx, {});
                             if (newRead.Get() != input.Raw()) {
                                 return newRead;
                             }

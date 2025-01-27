@@ -1,7 +1,7 @@
 #include "yql_generic_provider.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 

@@ -95,13 +95,7 @@ namespace boost { namespace locale { namespace impl_icu {
         try {
             return util::create_simple_codecvt(in, encoding, type);
         } catch(const boost::locale::conv::invalid_charset_error&) {
-            std::unique_ptr<util::base_converter> cvt;
-            try {
-                cvt = create_uconv_converter(encoding);
-            } catch(const std::exception& /*e*/) {
-                cvt.reset(new util::base_converter());
-            }
-            return util::create_codecvt(in, std::move(cvt), type);
+            return util::create_codecvt(in, create_uconv_converter(encoding), type);
         }
     }
 

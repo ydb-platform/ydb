@@ -27,7 +27,7 @@ with wss as
   from wss,{{store}},{{date_dim}} d
   where d.d_week_seq = wss.d_week_seq and
         ss_store_sk = s_store_sk and
-        d_month_seq between 1205 and 1205 + 11) y,
+        d_month_seq between 1212 and 1212 + 11) y,
  (select s_store_name s_store_name2,wss.d_week_seq d_week_seq2
         ,s_store_id s_store_id2,sun_sales sun_sales2
         ,mon_sales mon_sales2,tue_sales tue_sales2
@@ -36,7 +36,7 @@ with wss as
   from wss,{{store}},{{date_dim}} d
   where d.d_week_seq = wss.d_week_seq and
         ss_store_sk = s_store_sk and
-        d_month_seq between 1205+ 12 and 1205 + 23) x
+        d_month_seq between 1212+ 12 and 1212 + 23) x
  where s_store_id1=s_store_id2
    and d_week_seq1=d_week_seq2-52
  order by s_store_name1,s_store_id1,d_week_seq1

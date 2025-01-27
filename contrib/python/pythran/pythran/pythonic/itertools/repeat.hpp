@@ -2,8 +2,8 @@
 #define PYTHONIC_ITERTOOLS_REPEAT_HPP
 
 #include "pythonic/include/itertools/repeat.hpp"
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/list.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -30,20 +30,20 @@ namespace itertools
   }
 
   template <class T, bool Endless>
-  bool repeat_iterator<T, Endless>::
-  operator!=(repeat_iterator<T, Endless> const &other) const
+  bool repeat_iterator<T, Endless>::operator!=(
+      repeat_iterator<T, Endless> const &other) const
   {
     return Endless || count_ != other.count_;
   }
   template <class T, bool Endless>
-  bool repeat_iterator<T, Endless>::
-  operator==(repeat_iterator<T, Endless> const &other) const
+  bool repeat_iterator<T, Endless>::operator==(
+      repeat_iterator<T, Endless> const &other) const
   {
     return !Endless && count_ == other.count_;
   }
   template <class T, bool Endless>
-  bool repeat_iterator<T, Endless>::
-  operator<(repeat_iterator<T, Endless> const &other) const
+  bool repeat_iterator<T, Endless>::operator<(
+      repeat_iterator<T, Endless> const &other) const
   {
     return !Endless && count_ < other.count_;
   }
@@ -76,7 +76,7 @@ namespace itertools
   {
     return {value, -1};
   }
-}
+} // namespace itertools
 PYTHONIC_NS_END
 
 #endif

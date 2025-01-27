@@ -11,7 +11,7 @@ namespace math
   long trunc(T x);
 
   DEFINE_FUNCTOR(pythonic::math, trunc);
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

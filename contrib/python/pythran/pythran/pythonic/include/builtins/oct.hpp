@@ -12,7 +12,7 @@ namespace builtins
   types::str oct(T const &v);
 
   DEFINE_FUNCTOR(pythonic::builtins, oct);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

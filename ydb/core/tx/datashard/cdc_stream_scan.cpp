@@ -425,8 +425,8 @@ class TCdcStreamScan: public IActorCallback, public IScan {
         auto response = MakeHolder<TEvDataShard::TEvCdcStreamScanResponse>();
 
         response->Record.SetTabletId(DataShard.TabletId);
-        PathIdFromPathId(TablePathId, response->Record.MutableTablePathId());
-        PathIdFromPathId(StreamPathId, response->Record.MutableStreamPathId());
+        TablePathId.ToProto(response->Record.MutableTablePathId());
+        StreamPathId.ToProto(response->Record.MutableStreamPathId());
         response->Record.SetStatus(status);
         response->Record.SetErrorDescription(error);
         Stats.Serialize(*response->Record.MutableStats());
@@ -570,7 +570,7 @@ public:
         LOG_D("Run"
             << ": ev# " << record.ShortDebugString());
 
-        const auto tablePathId = PathIdFromPathId(record.GetTablePathId());
+        const auto tablePathId = TPathId::FromProto(record.GetTablePathId());
         if (!Self->GetUserTables().contains(tablePathId.LocalPathId)) {
             Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::BAD_REQUEST,
                 TStringBuilder() << "Unknown table"
@@ -588,7 +588,7 @@ public:
             return true;
         }
 
-        const auto streamPathId = PathIdFromPathId(record.GetStreamPathId());
+        const auto streamPathId = TPathId::FromProto(record.GetStreamPathId());
         auto it = table->CdcStreams.find(streamPathId);
         if (it == table->CdcStreams.end()) {
             Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::SCHEME_ERROR,
@@ -661,6 +661,16 @@ public:
         const auto& taskName = appData->DataShardConfig.GetCdcInitialScanTaskName();
         const auto taskPrio = appData->DataShardConfig.GetCdcInitialScanTaskPriority();
 
+        ui64 readAheadLo = appData->DataShardConfig.GetCdcInitialScanReadAheadLo();
+        if (ui64 readAheadLoOverride = Self->GetCdcInitialScanReadAheadLoOverride(); readAheadLoOverride > 0) {
+            readAheadLo = readAheadLoOverride;
+        }
+
+        ui64 readAheadHi = appData->DataShardConfig.GetCdcInitialScanReadAheadHi();
+        if (ui64 readAheadHiOverride = Self->GetCdcInitialScanReadAheadHiOverride(); readAheadHiOverride > 0) {
+            readAheadHi = readAheadHiOverride;
+        }
+
         const auto snapshotVersion = TRowVersion(snapshotKey.Step, snapshotKey.TxId);
         Y_ABORT_UNLESS(info->SnapshotVersion == snapshotVersion);
 
@@ -673,6 +683,7 @@ public:
         const ui64 scanId = Self->QueueScan(table->LocalTid, scan.Release(), localTxId,
             TScanOptions()
                 .SetResourceBroker(taskName, taskPrio)
+                .SetReadAhead(readAheadLo, readAheadHi)
                 .SetSnapshotRowVersion(snapshotVersion)
         );
         Self->CdcStreamScanManager.Enqueue(streamPathId, localTxId, scanId);

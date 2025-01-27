@@ -188,6 +188,8 @@ namespace NKikimr::NStorage {
         vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
         vdiskConfig->EnableVPatch = EnableVPatch;
         vdiskConfig->DefaultHugeGarbagePerMille = DefaultHugeGarbagePerMille;
+        vdiskConfig->HugeDefragFreeSpaceBorderPerMille = HugeDefragFreeSpaceBorderPerMille;
+        vdiskConfig->MaxChunksToDefragInflight = MaxChunksToDefragInflight;
 
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
@@ -197,6 +199,16 @@ namespace NKikimr::NStorage {
             vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionSSD;
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
         }
+
+        vdiskConfig->ThrottlingDeviceSpeed = ThrottlingDeviceSpeed;
+        vdiskConfig->ThrottlingMinSstCount = ThrottlingMinSstCount;
+        vdiskConfig->ThrottlingMaxSstCount = ThrottlingMaxSstCount;
+        vdiskConfig->ThrottlingMinInplacedSize = ThrottlingMinInplacedSize;
+        vdiskConfig->ThrottlingMaxInplacedSize = ThrottlingMaxInplacedSize;
+        vdiskConfig->ThrottlingMinOccupancyPerMille = ThrottlingMinOccupancyPerMille;
+        vdiskConfig->ThrottlingMaxOccupancyPerMille = ThrottlingMaxOccupancyPerMille;
+        vdiskConfig->ThrottlingMinLogChunkCount = ThrottlingMinLogChunkCount;
+        vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
 
         vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 

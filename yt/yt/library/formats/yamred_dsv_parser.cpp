@@ -17,39 +17,39 @@ class TYamredDsvParserConsumer
 public:
     TYamredDsvParserConsumer(IYsonConsumer* consumer, TYamredDsvFormatConfigPtr config)
         : TYamrConsumerBase(consumer)
-        , Config(config)
-        , DsvParser(CreateParserForDsv(consumer, ConvertTo<TDsvFormatConfigPtr>(Config), /*wrapWithMap*/ false))
+        , Config_(config)
+        , DsvParser_(CreateParserForDsv(consumer, ConvertTo<TDsvFormatConfigPtr>(Config_), /*wrapWithMap*/ false))
     { }
 
     void ConsumeKey(TStringBuf key) override
     {
         Consumer->OnListItem();
         Consumer->OnBeginMap();
-        ConsumeFields(Config->KeyColumnNames, key);
+        ConsumeFields(Config_->KeyColumnNames, key);
     }
 
     void ConsumeSubkey(TStringBuf subkey) override
     {
-        ConsumeFields(Config->SubkeyColumnNames, subkey);
+        ConsumeFields(Config_->SubkeyColumnNames, subkey);
     }
 
     void ConsumeValue(TStringBuf value) override
     {
-        DsvParser->Read(value);
-        DsvParser->Finish();
+        DsvParser_->Read(value);
+        DsvParser_->Finish();
         Consumer->OnEndMap();
     }
 
 private:
-    TYamredDsvFormatConfigPtr Config;
-    std::unique_ptr<IParser> DsvParser;
+    const TYamredDsvFormatConfigPtr Config_;
+    const std::unique_ptr<IParser> DsvParser_;
 
     void ConsumeFields(
-        const std::vector<TString>& fieldNames,
+        const std::vector<std::string>& fieldNames,
         TStringBuf wholeField)
     {
         static const char* emptyString = "";
-        char delimiter = Config->YamrKeysSeparator;
+        char delimiter = Config_->YamrKeysSeparator;
 
         std::vector<TStringBuf> fields;
         if (wholeField.length() == 0) {
@@ -71,7 +71,7 @@ private:
                 fields.size());
         }
 
-        for (int i = 0; i < static_cast<int>(fields.size()); ++i) {
+        for (int i = 0; i < std::ssize(fields); ++i) {
             Consumer->OnKeyedItem(fieldNames[i]);
             Consumer->OnStringScalar(fields[i]);
         }

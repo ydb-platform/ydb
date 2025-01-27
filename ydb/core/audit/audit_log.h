@@ -7,6 +7,7 @@
 #include <util/generic/vector.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/executor_thread.h>
 
 #define AUDIT_LOG_S(sys, expr)                                                                                                  \
     do {                                                                                                                        \
@@ -36,8 +37,10 @@ namespace NActors {
 
 namespace NKikimr::NAudit {
 
+using TAuditLogParts = TVector<std::pair<TString, TString>>;
+
 extern std::atomic<bool> AUDIT_LOG_ENABLED;
 
-void SendAuditLog(const NActors::TActorSystem* sys, TVector<std::pair<TString, TString>>&& parts);
+void SendAuditLog(const NActors::TActorSystem* sys, TAuditLogParts&& parts);
 
 }   // namespace NKikimr::NAudit

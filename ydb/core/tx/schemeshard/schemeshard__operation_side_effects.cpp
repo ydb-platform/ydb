@@ -165,6 +165,7 @@ void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransa
     DoDoneParts(ss, ctx);
     DoSetBarriers(ss, ctx);
     DoCheckBarriers(ss, txc, ctx);
+    DoDoneParts(ss, ctx);
 
     DoWaitShardCreated(ss, ctx);
     DoActivateShardCreated(ss, ctx);

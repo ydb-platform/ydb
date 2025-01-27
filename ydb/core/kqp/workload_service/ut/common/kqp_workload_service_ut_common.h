@@ -8,8 +8,8 @@
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
@@ -104,6 +104,7 @@ public:
     // Generic query helpers
     virtual TQueryRunnerResult ExecuteQuery(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const = 0;
     virtual TQueryRunnerResultAsync ExecuteQueryAsync(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const = 0;
+    virtual void ExecuteQueryRetry(const TString& retryMessage, const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings(), TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
 
     // Async query execution actions
     virtual void WaitQueryExecution(const TQueryRunnerResultAsync& query, TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;

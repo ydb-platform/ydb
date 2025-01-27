@@ -46,7 +46,7 @@ private:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvStatistics::TEvAnalyzeStatusResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            hFunc(TEvStatistics::TEvLoadStatisticsQueryResponse, Handle);
+            hFunc(TEvStatistics::TEvGetStatisticsResult, Handle);
             IgnoreFunc(TEvStatistics::TEvAnalyzeResponse);
             default:
                 LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -57,7 +57,7 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
-    void Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& ev);
+    void Handle(TEvStatistics::TEvGetStatisticsResult::TPtr& ev);
 
     void DoRequest(const TNavigate::TEntry& entry);
     void DoAnalyze(const TNavigate::TEntry& entry);

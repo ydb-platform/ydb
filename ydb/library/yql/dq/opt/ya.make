@@ -1,11 +1,12 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/ast
-    ydb/library/yql/core
+    yql/essentials/ast
+    yql/essentials/core
     ydb/library/yql/dq/common
     ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/dq/integration
+    yql/essentials/core/dq_integration
+    yql/essentials/parser/pg_wrapper/interface
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/dq/expr_nodes
@@ -16,6 +17,7 @@ SRCS(
     dq_opt_build.cpp
     dq_opt_conflict_rules_collector.cpp
     dq_opt_join.cpp
+    dq_opt_join_cbo_factory.cpp
     dq_opt_join_cost_based.cpp
     dq_opt_join_tree_node.cpp
     dq_opt_hopping.cpp

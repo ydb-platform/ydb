@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fwd.h"
+#include "iterator.h"
 #include "strbase.h"
 #include "utility.h"
 #include "typetraits.h"
@@ -98,6 +99,8 @@ public:
      *  to generate compilation error instead.
      */
     constexpr inline TBasicStringBuf(std::nullptr_t begin, size_t size) = delete;
+    // TODO: Uncomment.
+    // constexpr TBasicStringBuf(std::nullptr_t) = delete;
 
     constexpr inline TBasicStringBuf(const TCharType* data Y_LIFETIME_BOUND, size_t size) noexcept
         : TStringView(data, size)
@@ -114,7 +117,11 @@ public:
     }
 
     constexpr inline TBasicStringBuf(const TCharType* beg Y_LIFETIME_BOUND, const TCharType* end Y_LIFETIME_BOUND) noexcept
-        : TStringView(beg, end - beg)
+#if __cplusplus >= 202002L && __cpp_lib_string_view >= 201803L && !defined(_LIBCPP_HAS_NO_CONCEPTS)
+        : TStringView(beg, end)
+#else
+        : TStringView(beg, NonNegativeDistance(beg, end))
+#endif
     {
     }
 
@@ -282,8 +289,9 @@ public:
     // s.TrySplitOn(s.find('z'), ...) is false, but s.TrySplitOn(100500, ...) is true.
 
     bool TrySplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len = 1) const noexcept {
-        if (TBase::npos == pos)
+        if (TBase::npos == pos) {
             return false;
+        }
 
         DoSplitOn(pos, l, r, len);
         return true;

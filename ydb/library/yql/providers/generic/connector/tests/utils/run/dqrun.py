@@ -6,7 +6,7 @@ import jinja2
 
 from yt import yson
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
@@ -76,10 +76,10 @@ Generic {
 
 {% for cluster in generic_settings.clickhouse_clusters %}
 
-{% if cluster.protocol == EProtocol.NATIVE %}
+{% if cluster.protocol == EGenericProtocol.NATIVE %}
 {% set CLICKHOUSE_PORT = settings.clickhouse.native_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = NATIVE %}
-{% elif cluster.protocol == EProtocol.HTTP %}
+{% elif cluster.protocol == EGenericProtocol.HTTP %}
 {% set CLICKHOUSE_PORT = settings.clickhouse.http_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = HTTP %}
 {% endif %}
@@ -244,7 +244,7 @@ Dq {
         self.template = jinja2.Environment(loader=jinja2.BaseLoader, undefined=jinja2.DebugUndefined).from_string(
             self._template
         )
-        self.template.globals['EProtocol'] = EProtocol
+        self.template.globals['EGenericProtocol'] = EGenericProtocol
         self.template.globals['EDateTimeFormat'] = EDateTimeFormat
 
     def render(self, file_path: Path, settings: Settings, generic_settings: GenericSettings) -> None:

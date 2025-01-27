@@ -23,30 +23,6 @@
 
 static struct iovec *vecs;
 
-static unsigned long long utime_since(const struct timeval *s,
-				      const struct timeval *e)
-{
-	long long sec, usec;
-
-	sec = e->tv_sec - s->tv_sec;
-	usec = (e->tv_usec - s->tv_usec);
-	if (sec > 0 && usec < 0) {
-		sec--;
-		usec += 1000000;
-	}
-
-	sec *= 1000000;
-	return sec + usec;
-}
-
-static unsigned long long utime_since_now(struct timeval *tv)
-{
-	struct timeval end;
-
-	gettimeofday(&end, NULL);
-	return utime_since(tv, &end);
-}
-
 static int start_io(struct io_uring *ring, int fd, int do_write)
 {
 	struct io_uring_sqe *sqe;

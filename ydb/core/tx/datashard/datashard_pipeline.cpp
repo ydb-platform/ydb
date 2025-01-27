@@ -42,6 +42,34 @@ TPipeline::~TPipeline()
     }
 }
 
+void TPipeline::Reset() {
+    ImmediateOps.clear();
+    ActiveOps.clear();
+    ActivePlannedOps.clear();
+    DataTxCache.clear();
+    DelayedAcks.clear();
+    LastPlannedTx = {0, 0};
+    LastCompleteTx = {0, 0};
+    UtmostCompleteTx = {0, 0};
+    KeepSchemaStep = 0;
+    LastCleanupTime = 0;
+    SchemaTx = nullptr;
+    ExecuteBlockers.clear();
+    CandidateOps.clear();
+    CandidateUnits.clear();
+    NextActiveOp = {};
+    SlowOpProfiles.clear();
+    ActiveStreamingTxs.clear();
+    PredictedPlan.clear();
+    WaitingSchemeOpsOrder.clear();
+    WaitingSchemeOps.clear();
+    WaitingDataTxOps.clear();
+    CommittingOps.Reset();
+    CompletingOps.clear();
+    WaitingDataReadIterators.clear();
+    WaitingReadIteratorsById.clear();
+}
+
 bool TPipeline::Load(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 

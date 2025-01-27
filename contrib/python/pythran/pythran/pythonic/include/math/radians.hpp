@@ -11,7 +11,7 @@ namespace math
   template <class T>
   double radians(T x);
   DEFINE_FUNCTOR(pythonic::math, radians);
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

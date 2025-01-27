@@ -236,6 +236,7 @@ message TSchemaPresetVersionInfo {
     optional uint64 SinceStep = 2;
     optional uint64 SinceTxId = 3;
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 4;
+    optional NKikimrSchemeOp.TColumnTableSchemaDiff Diff = 5;
 }
 
 message TTtlSettingsPresetVersionInfo {
@@ -249,7 +250,6 @@ message TTableVersionInfo {
     optional uint64 PathId = 1;
     optional uint64 SinceStep = 2;
     optional uint64 SinceTxId = 3;
-    optional NKikimrSchemeOp.TColumnTableSchema Schema = 4;
     optional uint32 SchemaPresetId = 5;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 6;
     optional uint32 TtlSettingsPresetId = 7;

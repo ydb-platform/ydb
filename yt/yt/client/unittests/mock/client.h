@@ -2,7 +2,7 @@
 
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/client.h>
-#include <yt/yt/client/api/distributed_table_sessions.h>
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
@@ -361,6 +361,11 @@ public:
         const TRemoveMaintenanceOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TCollectCoverageResult>, CollectCoverage, (
+        const std::string& address,
+        const TCollectCoverageOptions& options),
+        (override));
+
     MOCK_METHOD(void, Terminate, (),
         (override));
     MOCK_METHOD(const NChaosClient::IReplicationCardCachePtr&, GetReplicationCardCache, (),
@@ -626,6 +631,11 @@ public:
         const TGetJobStderrOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TGetJobTraceOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<TSharedRef>, GetJobFailContext, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
@@ -826,30 +836,26 @@ public:
         const TGetFlowViewOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (
+    MOCK_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, FinishDistributedWriteSession, (
-        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<ITableWriterPtr>, CreateParticipantTableWriter, (
-        const TDistributedWriteCookiePtr& cookie,
-        const TParticipantTableWriterOptions& options),
+    MOCK_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (
+        const TSignedWriteFragmentCookiePtr& cookie,
+        const TTableFragmentWriterOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (
-        const TString& account,
+        const std::string& account,
         int partitionCount,
+        NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options),
-        (override));
-
-    MOCK_METHOD(TFuture<void>, FinishShuffle, (
-        const TShuffleHandlePtr& shuffleHandle,
-        const TFinishShuffleOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
@@ -860,7 +866,7 @@ public:
 
     MOCK_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TShuffleHandlePtr& shuffleHandle,
-        const TString& partitionColumn,
+        const std::string& partitionColumn,
         const NTableClient::TTableWriterConfigPtr& config),
         (override));
 

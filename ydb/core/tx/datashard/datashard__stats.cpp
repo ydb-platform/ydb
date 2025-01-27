@@ -13,9 +13,27 @@ namespace NKikimr {
 namespace NDataShard {
 
 using namespace NResourceBroker;
+using namespace NSharedCache;
 using namespace NTable;
 
-class TTableStatsCoroBuilder : public TActorCoroImpl, private IPages {
+struct TTableStatsCoroBuilderArgs {
+    TActorId ReplyTo;
+    ui64 TabletId;
+    ui64 TableId;
+    TActorId ExecutorId;
+    ui64 IndexSize;
+    TAutoPtr<TSubset> Subset;
+    ui64 MemRowCount;
+    ui64 MemDataSize;
+    ui64 RowCountResolution;
+    ui64 DataSizeResolution;
+    ui32 HistogramBucketsCount;
+    ui64 SearchHeight;
+    bool HasSchemaChanges;
+    TInstant StatsUpdateTime;
+};
+
+class TTableStatsCoroBuilder : public TActorCoroImpl, private IPages, TTableStatsCoroBuilderArgs {
 private:
     using ECode = TDataShard::TEvPrivate::TEvTableStatsError::ECode;
 
@@ -40,23 +58,9 @@ private:
     };
 
 public:
-    TTableStatsCoroBuilder(TActorId replyTo, ui64 tabletId, ui64 tableId, TActorId executorId, ui64 indexSize,
-                            const TAutoPtr<TSubset> subset, ui64 memRowCount, ui64 memDataSize,
-                            ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, ui64 searchHeight, TInstant statsUpdateTime)
+    TTableStatsCoroBuilder(TTableStatsCoroBuilderArgs args)
         : TActorCoroImpl(/* stackSize */ 64_KB, /* allowUnhandledDtor */ true)
-        , ReplyTo(replyTo)
-        , TabletId(tabletId)
-        , TableId(tableId)
-        , ExecutorId(executorId)
-        , IndexSize(indexSize)
-        , StatsUpdateTime(statsUpdateTime)
-        , Subset(subset)
-        , MemRowCount(memRowCount)
-        , MemDataSize(memDataSize)
-        , RowCountResolution(rowCountResolution)
-        , DataSizeResolution(dataSizeResolution)
-        , HistogramBucketsCount(histogramBucketsCount)
-        , SearchHeight(searchHeight)
+        , TTableStatsCoroBuilderArgs(args)
     {}
 
     void Run() override {
@@ -119,6 +123,7 @@ public:
         
         for (auto& loaded : msg->Loaded) {
             partPages.emplace(pageId, TPinnedPageRef(loaded.Page).GetData());
+            PageRefs.emplace_back(std::move(loaded.Page));
         }
 
         page = partPages.FindPtr(pageId);
@@ -138,6 +143,7 @@ private:
         ev->MemRowCount = MemRowCount;
         ev->MemDataSize = MemDataSize;
         ev->SearchHeight = SearchHeight;
+        ev->HasSchemaChanges = HasSchemaChanges;
 
         GetPartOwners(*Subset, ev->PartOwners);
 
@@ -166,6 +172,7 @@ private:
         LOG_DEBUG_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "BuildStats result at datashard " << TabletId << ", for tableId " << TableId
             << ": RowCount " << ev->Stats.RowCount << ", DataSize " << ev->Stats.DataSize.Size << ", IndexSize " << ev->Stats.IndexSize.Size << ", PartCount " << ev->PartCount
             << (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")
+            << (ev->HasSchemaChanges ? ", with schema changes" : "")
             << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent) << ", HistogramKeys " << ev->Stats.DataSizeHistogram.size());
 
         Send(ReplyTo, ev.Release());
@@ -223,20 +230,8 @@ private:
         Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(/* task id */ 1, /* cancelled */ false));
     }
 
-    TActorId ReplyTo;
-    ui64 TabletId;
-    ui64 TableId;
-    TActorId ExecutorId;
-    ui64 IndexSize;
-    TInstant StatsUpdateTime;
-    TAutoPtr<TSubset> Subset;
-    ui64 MemRowCount;
-    ui64 MemDataSize;
-    ui64 RowCountResolution;
-    ui64 DataSizeResolution;
-    ui32 HistogramBucketsCount;
-    ui64 SearchHeight;
     THashMap<const TPart*, THashMap<TPageId, TSharedData>> Pages;
+    TVector<TSharedPageRef> PageRefs;
     ui64 PagesSize = 0;
     ui64 CoroutineDeadline;
     TAutoPtr<TSpent> Spent;
@@ -308,6 +303,7 @@ public:
 
         Result->Record.MutableTableStats()->SetPartCount(tableInfo.Stats.PartCount);
         Result->Record.MutableTableStats()->SetSearchHeight(tableInfo.Stats.SearchHeight);
+        Result->Record.MutableTableStats()->SetHasSchemaChanges(tableInfo.Stats.HasSchemaChanges);
         Result->Record.MutableTableStats()->SetLastFullCompactionTs(tableInfo.Stats.LastFullCompaction.Seconds());
         Result->Record.MutableTableStats()->SetHasLoanedParts(Self->Executor()->HasLoanedParts());
 
@@ -363,38 +359,36 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     Actors.erase(ev->Sender);
 
     ui64 tableId = ev->Get()->TableId;
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "BuildStats result received at datashard " << TabletID() << ", for tableId " << tableId);
 
-    i64 dataSize = 0;
-    if (TableInfos.contains(tableId)) {
-        const TUserTable& tableInfo = *TableInfos[tableId];
-
-        if (!tableInfo.StatsUpdateInProgress) {
-            // How can this happen?
-            LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
-                      "Unexpected async stats update at datashard %" PRIu64, TabletID());
-        }
-        tableInfo.Stats.DataStats = std::move(ev->Get()->Stats);
-        tableInfo.Stats.PartOwners = std::move(ev->Get()->PartOwners);
-        tableInfo.Stats.PartCount = ev->Get()->PartCount;
-        tableInfo.Stats.StatsUpdateTime = ev->Get()->StatsUpdateTime;
-        tableInfo.Stats.MemRowCount = ev->Get()->MemRowCount;
-        tableInfo.Stats.MemDataSize = ev->Get()->MemDataSize;
-
-        dataSize += tableInfo.Stats.DataStats.DataSize.Size;
-
-        tableInfo.Stats.SearchHeight = ev->Get()->SearchHeight;
-
-        tableInfo.StatsUpdateInProgress = false;
-
-        SendPeriodicTableStats(ctx);
-
-    } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Drop stats at datashard " << TabletID()
-                    << ", built for tableId " << tableId << ", but table is gone (moved ot dropped)");
+    if (!TableInfos.contains(tableId)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "BuildStats result dropped at datashard " << TabletID()
+            << ", built for tableId " << tableId << ", but table is gone (moved ot dropped)");
+        return;
     }
 
-    if (dataSize > HighDataSizeReportThreshlodBytes) {
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "BuildStats result received at datashard " << TabletID() 
+        << ", for tableId " << tableId);
+
+    const TUserTable& tableInfo = *TableInfos[tableId];
+
+    if (!tableInfo.StatsUpdateInProgress) { // how can this happen?
+        LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD, "Unexpected async stats update at datashard %" PRIu64, TabletID());
+    }
+
+    tableInfo.Stats.DataStats = std::move(ev->Get()->Stats);
+    tableInfo.Stats.PartOwners = std::move(ev->Get()->PartOwners);
+    tableInfo.Stats.PartCount = ev->Get()->PartCount;
+    tableInfo.Stats.StatsUpdateTime = ev->Get()->StatsUpdateTime;
+    tableInfo.Stats.MemRowCount = ev->Get()->MemRowCount;
+    tableInfo.Stats.MemDataSize = ev->Get()->MemDataSize;
+    tableInfo.Stats.SearchHeight = ev->Get()->SearchHeight;
+    tableInfo.Stats.HasSchemaChanges = ev->Get()->HasSchemaChanges;
+
+    tableInfo.StatsUpdateInProgress = false;
+
+    SendPeriodicTableStats(ctx);
+
+    if (static_cast<i64>(tableInfo.Stats.DataStats.DataSize.Size) > HighDataSizeReportThresholdBytes) {
         TInstant now = AppData(ctx)->TimeProvider->Now();
 
         if (LastDataSizeWarnTime + TDuration::Seconds(HighDataSizeReportIntervalSeconds) > now)
@@ -405,11 +399,11 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
         TStringBuilder names;
         ListTableNames(GetUserTables(), names);
 
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Data size " << dataSize
-                    << " is higher than threshold of " << (i64)HighDataSizeReportThreshlodBytes
-                    << " at datashard: " << TabletID()
-                    << " table: " << names
-                    << " consider reconfiguring table partitioning settings");
+        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Data size " << tableInfo.Stats.DataStats.DataSize.Size
+            << " is higher than threshold of " << (i64)HighDataSizeReportThresholdBytes
+            << " at datashard: " << TabletID()
+            << " table: " << names
+            << " consider reconfiguring table partitioning settings");
     }
 }
 
@@ -470,6 +464,7 @@ public:
         for (auto& ti : Self->TableInfos) {
             const ui32 localTableId = ti.second->LocalTid;
             const ui32 shadowTableId = ti.second->ShadowTid;
+            const ui64 tableId = ti.first;
 
             CheckIdleMemCompaction(*ti.second, txc, ctx);
 
@@ -488,20 +483,27 @@ public:
                 searchHeight = 0;
             }
 
+            // Note: ignore shadow table for simplicity
+            bool hasSchemaChanges = Self->Executor()->HasSchemaChanges(localTableId);
+
             if (!ti.second->StatsNeedUpdate) {
-                ti.second->Stats.MemRowCount = memRowCount;
-                ti.second->Stats.MemDataSize = memDataSize;
-                ti.second->Stats.SearchHeight = searchHeight;
+                auto& stats = ti.second->Stats;
+                stats.MemRowCount = memRowCount;
+                stats.MemDataSize = memDataSize;
+                stats.SearchHeight = searchHeight;
+                stats.HasSchemaChanges = hasSchemaChanges;
+
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "BuildStats skipped at datashard " << Self->TabletID() << ", for tableId " << tableId
+                    << ": RowCount " << stats.DataStats.RowCount << ", DataSize " << stats.DataStats.DataSize.Size << ", IndexSize " << stats.DataStats.IndexSize.Size << ", PartCount " << stats.PartCount
+                    << (stats.HasSchemaChanges ? ", with schema changes" : ""));
+
                 continue;
             }
 
             const ui32 MaxBuckets = 500;
-
-            ui64 tableId = ti.first;
             ui64 rowCountResolution = gDbStatsRowCountResolution;
             ui64 dataSizeResolution = gDbStatsDataSizeResolution;
             ui32 histogramBucketsCount = gDbStatsHistogramBucketsCount;
-
 
             if (ti.second->Stats.DataSizeResolution &&
                 ti.second->Stats.DataStats.DataSize.Size / ti.second->Stats.DataSizeResolution <= MaxBuckets)
@@ -547,19 +549,23 @@ public:
                     shadowSubset->ColdParts.end());
             }
 
-            auto builder = new TActorCoro(MakeHolder<TTableStatsCoroBuilder>(ctx.SelfID,
-                Self->TabletID(),
-                tableId,
-                Self->ExecutorID(),
-                indexSize,
-                subsetForStats,
-                memRowCount,
-                memDataSize,
-                rowCountResolution,
-                dataSizeResolution,
-                histogramBucketsCount,
-                searchHeight,
-                AppData(ctx)->TimeProvider->Now()), NKikimrServices::TActivity::DATASHARD_STATS_BUILDER);
+            auto builder = new TActorCoro(MakeHolder<TTableStatsCoroBuilder>(
+                TTableStatsCoroBuilderArgs{
+                    .ReplyTo = ctx.SelfID,
+                    .TabletId = Self->TabletID(),
+                    .TableId = tableId,
+                    .ExecutorId = Self->ExecutorID(),
+                    .IndexSize = indexSize,
+                    .Subset = subsetForStats,
+                    .MemRowCount = memRowCount,
+                    .MemDataSize = memDataSize,
+                    .RowCountResolution = rowCountResolution,
+                    .DataSizeResolution = dataSizeResolution,
+                    .HistogramBucketsCount = histogramBucketsCount,
+                    .SearchHeight = searchHeight,
+                    .HasSchemaChanges = hasSchemaChanges,
+                    .StatsUpdateTime = AppData(ctx)->TimeProvider->Now()
+                }), NKikimrServices::TActivity::DATASHARD_STATS_BUILDER);
 
             TActorId actorId = ctx.Register(builder, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
             Self->Actors.insert(actorId);
@@ -589,7 +595,7 @@ void TDataShard::UpdateTableStats(const TActorContext &ctx) {
     if (LastDbStatsUpdateTime + gDbStatsReportInterval > now)
         return;
 
-    if (State != TShardState::Ready)
+    if (State != TShardState::Ready && State != TShardState::Readonly)
         return;
 
     LastDbStatsUpdateTime = now;
@@ -614,7 +620,7 @@ void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
     ui64 cpuUsec = metrics->CPU.GetValue();
     float cpuPercent = cpuUsec / 10000.0;
 
-    if (cpuPercent > CpuUsageReportThreshlodPercent) {
+    if (cpuPercent > CpuUsageReportThresholdPercent) {
         if (LastCpuWarnTime + TDuration::Seconds(CpuUsageReportIntervalSeconds) > now)
             return;
 
@@ -624,7 +630,7 @@ void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
         ListTableNames(GetUserTables(), names);
 
         LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "CPU usage " << cpuPercent
-                    << "% is higher than threshold of " << (i64)CpuUsageReportThreshlodPercent
+                    << "% is higher than threshold of " << (i64)CpuUsageReportThresholdPercent
                     << "% in-flight Tx: " << TxInFly()
                     << " immediate Tx: " << ImmediateInFly()
                     << " readIterators: " << ReadIteratorsInFly()

@@ -3,6 +3,7 @@
 #include "node_warden_impl.h"
 
 #include <google/protobuf/util/message_differencer.h>
+#include <ydb/core/blobstorage/common/immediate_control_defaults.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
@@ -28,6 +29,17 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
     , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
     , DefaultHugeGarbagePerMille(300, 1, 1000)
+    , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
+    , MaxChunksToDefragInflight(10, 1, 50)
+    , ThrottlingDeviceSpeed(50 << 20, 1 << 20, 10ull << 30)
+    , ThrottlingMinSstCount(100, 1, 1000)
+    , ThrottlingMaxSstCount(250, 1, 1000)
+    , ThrottlingMinInplacedSize(20ull << 30, 1 << 20, 500ull < 30)
+    , ThrottlingMaxInplacedSize(60ull << 30, 1 << 20, 500ull < 30)
+    , ThrottlingMinOccupancyPerMille(900, 1, 1000)
+    , ThrottlingMaxOccupancyPerMille(950, 1, 1000)
+    , ThrottlingMinLogChunkCount(100, 1, 1000)
+    , ThrottlingMaxLogChunkCount(130, 1, 1000)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
     , CostMetricsParametersByMedia({
@@ -35,11 +47,19 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
         TCostMetricsParameters{50},
         TCostMetricsParameters{32},
     })
-    , SlowDiskThreshold(2'000, 1, 1'000'000)
-    , PredictedDelayMultiplier(1'000, 1, 1000)
+    , SlowDiskThreshold(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+    , SlowDiskThresholdHDD(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+    , SlowDiskThresholdSSD(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+    , PredictedDelayMultiplier(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+    , PredictedDelayMultiplierHDD(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+    , PredictedDelayMultiplierSSD(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+    , MaxNumOfSlowDisks(DefaultMaxNumOfSlowDisks, 1, 2)
+    , MaxNumOfSlowDisksHDD(DefaultMaxNumOfSlowDisks, 1, 2)
+    , MaxNumOfSlowDisksSSD(DefaultMaxNumOfSlowDisks, 1, 2)
     , LongRequestThresholdMs(50'000, 1, 1'000'000)
-    , LongRequestReportingDelayMs(60'000, 1, 1'000'000)
-    , MaxNumOfSlowDisks(2, 1, 2)
+    , ReportingControllerBucketSize(1, 1, 100'000)
+    , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
+    , ReportingControllerLeakRate(1, 1, 100'000)
 {
     Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
     AvailDomainId = 1;
@@ -58,6 +78,7 @@ STATEFN(TNodeWarden::StateOnline) {
     switch (ev->GetTypeRewrite()) {
         fFunc(TEvBlobStorage::TEvPut::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvGet::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvGetBlock::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvBlock::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvPatch::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvDiscover::EventType, HandleForwarded);
@@ -73,6 +94,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(NIncrHuge::TEvIncrHugeInit, HandleIncrHugeInit);
 
         hFunc(TEvInterconnect::TEvNodeInfo, Handle);
+        hFunc(TEvInterconnect::TEvNodesInfo, Handle);
 
         hFunc(TEvTabletPipe::TEvClientConnected, Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -226,6 +248,10 @@ void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData
 }
 
 TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
+    if (!AppData()->FeatureFlags.GetEnableDriveSerialsDiscovery()) {
+        return {};
+    }
+
     TStringStream details;
     TVector<NPDisk::TDriveData> drives = ListDevicesWithPartlabel(details);
 
@@ -267,8 +293,8 @@ void TNodeWarden::StopInvalidGroupProxy() {
 }
 
 void TNodeWarden::StartRequestReportingThrottler() {
-    STLOG(PRI_DEBUG, BS_NODE, NW27, "StartRequestReportingThrottler");
-    Register(CreateRequestReportingThrottler(LongRequestReportingDelayMs));
+    STLOG(PRI_DEBUG, BS_NODE, NW62, "StartRequestReportingThrottler");
+    Register(CreateRequestReportingThrottler(ReportingControllerBucketSize, ReportingControllerLeakDurationMs, ReportingControllerLeakRate));
 }
 
 void TNodeWarden::PassAway() {
@@ -321,6 +347,19 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControls.MaxSyncLogChunksInFlightHDD");
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
         icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
+        icb->RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, "VDiskControls.HugeDefragFreeSpaceBorderPerMille");
+        icb->RegisterSharedControl(MaxChunksToDefragInflight, "VDiskControls.MaxChunksToDefragInflight");
+
+        icb->RegisterSharedControl(ThrottlingDeviceSpeed, "VDiskControls.ThrottlingDeviceSpeed");
+        icb->RegisterSharedControl(ThrottlingMinSstCount, "VDiskControls.ThrottlingMinSstCount");
+        icb->RegisterSharedControl(ThrottlingMaxSstCount, "VDiskControls.ThrottlingMaxSstCount");
+        icb->RegisterSharedControl(ThrottlingMinInplacedSize, "VDiskControls.ThrottlingMinInplacedSize");
+        icb->RegisterSharedControl(ThrottlingMaxInplacedSize, "VDiskControls.ThrottlingMaxInplacedSize");
+        icb->RegisterSharedControl(ThrottlingMinOccupancyPerMille, "VDiskControls.ThrottlingMinOccupancyPerMille");
+        icb->RegisterSharedControl(ThrottlingMaxOccupancyPerMille, "VDiskControls.ThrottlingMaxOccupancyPerMille");
+        icb->RegisterSharedControl(ThrottlingMinLogChunkCount, "VDiskControls.ThrottlingMinLogChunkCount");
+        icb->RegisterSharedControl(ThrottlingMaxLogChunkCount, "VDiskControls.ThrottlingMaxLogChunkCount");
+
         icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
         icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
 
@@ -338,10 +377,21 @@ void TNodeWarden::Bootstrap() {
                 "VDiskControls.DiskTimeAvailableScaleNVME");
 
         icb->RegisterSharedControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
+        icb->RegisterSharedControl(SlowDiskThresholdHDD, "DSProxyControls.SlowDiskThresholdHDD");
+        icb->RegisterSharedControl(SlowDiskThresholdSSD, "DSProxyControls.SlowDiskThresholdSSD");
+
         icb->RegisterSharedControl(PredictedDelayMultiplier, "DSProxyControls.PredictedDelayMultiplier");
-        icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
-        icb->RegisterSharedControl(LongRequestReportingDelayMs, "DSProxyControls.LongRequestReportingDelayMs");
+        icb->RegisterSharedControl(PredictedDelayMultiplierHDD, "DSProxyControls.PredictedDelayMultiplierHDD");
+        icb->RegisterSharedControl(PredictedDelayMultiplierSSD, "DSProxyControls.PredictedDelayMultiplierSSD");
+
         icb->RegisterSharedControl(MaxNumOfSlowDisks, "DSProxyControls.MaxNumOfSlowDisks");
+        icb->RegisterSharedControl(MaxNumOfSlowDisksHDD, "DSProxyControls.MaxNumOfSlowDisksHDD");
+        icb->RegisterSharedControl(MaxNumOfSlowDisksSSD, "DSProxyControls.MaxNumOfSlowDisksSSD");
+
+        icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
+        icb->RegisterSharedControl(ReportingControllerBucketSize, "DSProxyControls.RequestReportingSettings.BucketSize");
+        icb->RegisterSharedControl(ReportingControllerLeakDurationMs, "DSProxyControls.RequestReportingSettings.LeakDurationMs");
+        icb->RegisterSharedControl(ReportingControllerLeakRate, "DSProxyControls.RequestReportingSettings.LeakRate");
     }
 
     // start replication broker
@@ -371,6 +421,12 @@ void TNodeWarden::Bootstrap() {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
     appConfig.MutableNameserviceConfig()->CopyFrom(Cfg->NameserviceConfig);
+    if (Cfg->DomainsConfig) {
+        appConfig.MutableDomainsConfig()->CopyFrom(*Cfg->DomainsConfig);
+    }
+    if (Cfg->SelfManagementConfig) {
+        appConfig.MutableSelfManagementConfig()->CopyFrom(*Cfg->SelfManagementConfig);
+    }
     TString errorReason;
     const bool success = DeriveStorageConfig(appConfig, &StorageConfig, &errorReason);
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
@@ -388,6 +444,7 @@ void TNodeWarden::Bootstrap() {
     EstablishPipe();
 
     Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(LocalNodeId));
+    Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
 
     if (Cfg->IsCacheEnabled()) {
         TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvReadCache, 0, SelfId(), {}, nullptr, 0));
@@ -452,6 +509,21 @@ void TNodeWarden::HandleReadCache() {
 void TNodeWarden::Handle(TEvInterconnect::TEvNodeInfo::TPtr ev) {
     if (const auto& node = ev->Get()->Node) {
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(node->Location));
+    }
+}
+
+void TNodeWarden::Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {
+    NodeLocationMap.clear();
+    for (const auto& info : ev->Get()->Nodes) {
+        NodeLocationMap.emplace(info.NodeId, std::move(info.Location));
+    }
+    for (auto& [groupId, group] : Groups) {
+        if (group.Info && group.Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+            group.NodeLayoutInfo = MakeIntrusive<TNodeLayoutInfo>(NodeLocationMap[LocalNodeId], group.Info, NodeLocationMap);
+            if (group.ProxyId) {
+                Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(group.Info, group.NodeLayoutInfo));
+            }
+        }
     }
 }
 
@@ -657,7 +729,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvAskWardenRestartPDisk::TPtr ev) {
 
     PDiskRestartRequests[requestCookie] = pdiskId;
 
-    AskBSCToRestartPDisk(pdiskId, requestCookie);
+    AskBSCToRestartPDisk(pdiskId, ev->Get()->IgnoreChecks, requestCookie);
 }
 
 void TNodeWarden::Handle(TEvBlobStorage::TEvNotifyWardenPDiskRestarted::TPtr ev) {
@@ -966,35 +1038,48 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         *errorReason = "original config missing mandatory BlobStorageConfig section";
         return false;
     }
+
+    if (appConfig.HasSelfManagementConfig()) {
+        const auto& smFrom = appConfig.GetSelfManagementConfig();
+        auto *smTo = config->MutableSelfManagementConfig();
+        if (smFrom.HasGeneration() && smTo->HasGeneration() && smFrom.GetGeneration() != smTo->GetGeneration() + 1) {
+            *errorReason = TStringBuilder() << "generation mismatch for SelfManagementConfig section existing Generation# "
+                << smTo->GetGeneration() << " newly provided Generation# " << smFrom.GetGeneration();
+            return false;
+        }
+        smTo->CopyFrom(smFrom);
+        smTo->ClearInitialConfigYaml(); // do not let this section into final StorageConfig
+    } else {
+        config->ClearSelfManagementConfig();
+    }
     
     const auto& bsFrom = appConfig.GetBlobStorageConfig();
     auto *bsTo = config->MutableBlobStorageConfig();
-    if (bsFrom.HasAutoconfigSettings()) {
-        const auto& acFrom = bsFrom.GetAutoconfigSettings();
-        auto *acTo = bsTo->MutableAutoconfigSettings();
-        if (acFrom.HasGeneration() && acTo->HasGeneration() && acTo->GetGeneration() + 1 != acFrom.GetGeneration()) {
-            *errorReason = TStringBuilder() << "generation mismatch for AutoconfigSettings section existing Generation# "
-                << acTo->GetGeneration() << " newly provided Generation# " << acFrom.GetGeneration();
-            return false;
-        } else if (acTo->HasGeneration() && !acFrom.HasGeneration()) {
-            *errorReason = "existing AutoconfigSettings has set generation, but newly provided one doesn't have it";
-            return false;
-        }
-
-        acTo->CopyFrom(acFrom);
-    } else {
-        bsTo->ClearAutoconfigSettings();
-    }
 
     if (bsFrom.HasServiceSet()) {
         const auto& ssFrom = bsFrom.GetServiceSet();
         auto *ssTo = bsTo->MutableServiceSet();
 
-        ssTo->MutableAvailabilityDomains()->CopyFrom(ssFrom.GetAvailabilityDomains());
+        // update availability domains if set
+        if (ssFrom.AvailabilityDomainsSize()) {
+            ssTo->MutableAvailabilityDomains()->CopyFrom(ssFrom.GetAvailabilityDomains());
+        }
+
+        // replace replication broker configuration
         if (ssFrom.HasReplBrokerConfig()) {
             ssTo->MutableReplBrokerConfig()->CopyFrom(ssFrom.GetReplBrokerConfig());
+        } else {
+            ssTo->ClearReplBrokerConfig();
         }
-        if (!ssTo->PDisksSize() && !ssTo->VDisksSize() && !ssTo->GroupsSize()) {
+
+        const auto hasStaticGroupInfo = [](const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
+            return ss.PDisksSize() && ss.VDisksSize() && ss.GroupsSize();
+        };
+
+        // update static group information unless distconf is enabled
+        if (!hasStaticGroupInfo(ssFrom) && config->GetSelfManagementConfig().GetEnabled()) {
+            // distconf enabled, keep it as is
+        } else if (!hasStaticGroupInfo(*ssTo)) {
             ssTo->MutablePDisks()->CopyFrom(ssFrom.GetPDisks());
             ssTo->MutableVDisks()->CopyFrom(ssFrom.GetVDisks());
             ssTo->MutableGroups()->CopyFrom(ssFrom.GetGroups());
@@ -1007,16 +1092,16 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
             };
 
             auto pdiskKey = [](const auto *item) {
-                return TStringBuilder() << "PDisk NodeId# " << item->GetNodeID() << " PDiskId# " << item->GetPDiskID();
+                return TStringBuilder() << "PDisk [" << item->GetNodeID() << ':' << item->GetPDiskID() << ']';
             };
 
             auto vdiskKey = [](const auto *item) {
-                return TStringBuilder() << "VDisk NodeId# " << item->GetNodeID() << " PDiskId# " << item->GetPDiskID()
-                    << " VDiskSlotId# " << item->GetVDiskSlotID();
+                return TStringBuilder() << "VSlot [" << item->GetNodeID() << ':' << item->GetPDiskID() << ':'
+                    << item->GetVDiskSlotID() << ']';
             };
 
             auto groupKey = [](const auto *item) {
-                return TStringBuilder() << "group GroupId# " << item->GetGroupID();
+                return TStringBuilder() << "group " << item->GetGroupID();
             };
 
             auto duplicateKey = [&](auto&& key) { return error(std::move(key), "duplicate key in existing StorageConfig"); };
@@ -1040,7 +1125,13 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 }
             }
             if (!pdiskMap.empty()) {
-                *errorReason = "some PDisks were added in newly provided configuration";
+                TStringStream err;
+                err << "some static PDisks were removed in newly provided configuration:";
+                for (const auto& [id, _] : pdiskMap) {
+                    const auto& [nodeId, pdiskId] = id;
+                    err << " [" << nodeId << ':' << pdiskId << ']';
+                }
+                *errorReason = std::move(err.Str());
                 return false;
             }
 
@@ -1072,7 +1163,13 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 }
             }
             if (!vdiskMap.empty()) {
-                *errorReason = "some VDisks were added in newly provided configuration";
+                TStringStream err;
+                err << "some static VDisks were removed in newly provided configuration:";
+                for (const auto& [id, _] : vdiskMap) {
+                    const auto& [nodeId, pdiskId, vdiskSlotId] = id;
+                    err << " [" << nodeId << ':' << pdiskId << ':' << vdiskSlotId << ']';
+                }
+                *errorReason = std::move(err.Str());
                 return false;
             }
 
@@ -1092,11 +1189,19 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 }
             }
             if (!groupMap.empty()) {
-                *errorReason = "some groups were added in newly provided configuration";
+                *errorReason = "some static groups were removed in newly provided configuration";
                 return false;
             }
         }
     }
+
+    // copy define box
+    if (bsFrom.HasDefineBox()) {
+        bsTo->MutableDefineBox()->CopyFrom(bsFrom.GetDefineBox());
+    } else {
+        bsTo->ClearDefineBox();
+    }
+    bsTo->MutableDefineHostConfig()->CopyFrom(bsFrom.GetDefineHostConfig());
 
     // copy nameservice-related things
     if (!appConfig.HasNameserviceConfig()) {
@@ -1124,7 +1229,47 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     // and copy ClusterUUID from there too
     config->SetClusterUUID(nsFrom.GetClusterUUID());
 
-    // TODO(alexvru): apply SS, SSB, SB configs from there too
+    if (appConfig.HasDomainsConfig()) {
+        const auto& domains = appConfig.GetDomainsConfig();
+
+        // we expect strictly one domain
+        if (domains.DomainSize() == 1) {
+            const auto& domain = domains.GetDomain(0);
+
+            auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
+                if (needMerge) {
+                    char toPrefix[TActorId::MaxServiceIDLength] = {0};
+                    char fromPrefix[TActorId::MaxServiceIDLength] = {0};
+                    auto toInfo = BuildStateStorageInfo(toPrefix, *to);
+                    auto fromInfo = BuildStateStorageInfo(fromPrefix, from);
+                    if (toInfo->NToSelect != fromInfo->NToSelect || toInfo->SelectAllReplicas() != fromInfo->SelectAllReplicas()) {
+                        *errorReason = TStringBuilder() << entity << " NToSelect/rings differs"
+                            << " from# " << SingleLineProto(from)
+                            << " to# " << SingleLineProto(*to);
+                        return false;
+                    }
+                }
+
+                to->CopyFrom(from);
+                return true;
+            };
+
+            // find state storage setup for that domain
+            for (const auto& ss : domains.GetStateStorage()) {
+                if (domain.SSIdSize() == 1 && ss.GetSSId() == domain.GetSSId(0)) {
+                    const bool hadStateStorageConfig = config->HasStateStorageConfig();
+                    const bool hadStateStorageBoardConfig = config->HasStateStorageBoardConfig();
+                    const bool hadSchemeBoardConfig = config->HasSchemeBoardConfig();
+                    if (!updateConfig(hadStateStorageConfig, config->MutableStateStorageConfig(), ss, "StateStorage") ||
+                            !updateConfig(hadStateStorageBoardConfig, config->MutableStateStorageBoardConfig(), ss, "StateStorageBoard") ||
+                            !updateConfig(hadSchemeBoardConfig, config->MutableSchemeBoardConfig(), ss, "SchemeBoard")) {
+                        return false;
+                    }
+                    break;
+                }
+            }
+        }
+    }
 
     return true;
 }

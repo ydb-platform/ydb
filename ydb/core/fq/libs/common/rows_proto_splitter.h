@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NFq {
 

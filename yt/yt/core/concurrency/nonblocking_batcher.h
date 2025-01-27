@@ -8,7 +8,7 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(ETNonblockingBatcherTimerState,
+DEFINE_ENUM(ENonblockingBatcherTimerState,
     (Initial)
     (Started)
     (Finished)
@@ -97,7 +97,7 @@ public:
     std::vector<TBatch> Drain();
 
 private:
-    using ETimerState = ETNonblockingBatcherTimerState;
+    using ETimerState = ENonblockingBatcherTimerState;
 
     TBatchLimiter BatchLimiter_;
     TDuration BatchDuration_;

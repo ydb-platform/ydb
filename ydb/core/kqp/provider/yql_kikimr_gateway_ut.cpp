@@ -1,5 +1,4 @@
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
-#include <ydb/core/client/minikql_result_lib/converter.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
@@ -12,7 +11,6 @@ namespace NYql {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NMiniKQL;
-using namespace NResultLib;
 using namespace NYdb::NTable;
 
 namespace {

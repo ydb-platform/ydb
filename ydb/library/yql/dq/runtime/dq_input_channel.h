@@ -2,9 +2,9 @@
 #include "dq_input.h"
 #include "dq_transport.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NDq {
 

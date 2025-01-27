@@ -1,10 +1,9 @@
-PY3_PROGRAM()
+PROGRAM(ydb-core-base-generated-codegen)
 
-PY_SRCS(__main__.py)
+SRCS(main.cpp)
 
 PEERDIR(
-    contrib/python/MarkupSafe
-    contrib/python/Jinja2
+    contrib/libs/jinja2cpp
     ydb/core/protos
 )
 

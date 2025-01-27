@@ -5,8 +5,11 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/protos/key_range.pb.h>
-#include <ydb/core/scheme_types/scheme_types.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>  // for NScheme::TTypeInfo
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>  // for NScheme::NTypeIds
+
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>  // for NPg::TypeDescIsComparable
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
@@ -15,12 +18,27 @@
 
 namespace NKikimr {
 
-using TSchemaVersion = ui64;
-
 enum class EColumnTypeConstraint {
     Nullable,
     NotNull,
 };
+
+inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
+    switch (typeInfo.GetTypeId()) {
+        case NScheme::NTypeIds::Json:
+        case NScheme::NTypeIds::Yson:
+        case NScheme::NTypeIds::Float:
+        case NScheme::NTypeIds::Double:
+        case NScheme::NTypeIds::JsonDocument:
+            return false;
+        case NScheme::NTypeIds::Pg:
+            return NPg::TypeDescIsComparable(typeInfo.GetPgTypeDesc());
+        default:
+            return true;
+    }
+}
+
+using TSchemaVersion = ui64;
 
 // ident for table, must be unique in selected scope
 // for global transactions ownerid is tabletid of owning schemeshard and tableid is counter designated by schemeshard
@@ -356,12 +374,12 @@ inline int CompareRanges(const TTableRange& rangeX, const TTableRange& rangeY,
     Y_ABORT_UNLESS(!rangeX.Point);
     Y_ABORT_UNLESS(!rangeY.Point);
 
-    int xStart_yEnd = CompareBorders<true, false>(
+    int xStart_yEnd = CompareBorders<false, true>(
         rangeX.From, rangeY.To, rangeX.InclusiveFrom, rangeY.InclusiveTo, types);
     if (xStart_yEnd > 0)
         return 1;
 
-    int xEnd_yStart = CompareBorders<false, true>(
+    int xEnd_yStart = CompareBorders<true, false>(
         rangeX.To, rangeY.From, rangeX.InclusiveTo, rangeY.InclusiveFrom, types);
     if (xEnd_yStart < 0)
         return -1;

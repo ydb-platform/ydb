@@ -1,7 +1,7 @@
 #include "scheme_types_proto.h"
 
 #include <util/string/printf.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 
 namespace NKikimr::NScheme {
@@ -92,8 +92,9 @@ NScheme::TTypeInfo TypeInfoFromProto(NScheme::TTypeId typeId, const ::NKikimrPro
         return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(typeInfoProto.GetPgTypeId()));
     }
     case NScheme::NTypeIds::Decimal: {
-        Y_ABORT_UNLESS(typeInfoProto.HasDecimalPrecision());
-        Y_ABORT_UNLESS(typeInfoProto.HasDecimalScale());
+        if (!typeInfoProto.HasDecimalPrecision() || !typeInfoProto.HasDecimalScale()) {
+            return NScheme::TTypeInfo(NScheme::TDecimalType::Default());
+        }
         NScheme::TDecimalType decimal(typeInfoProto.GetDecimalPrecision(), typeInfoProto.GetDecimalScale());
         return NScheme::TTypeInfo(decimal);
     }

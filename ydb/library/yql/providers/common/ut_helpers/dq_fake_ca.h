@@ -1,12 +1,12 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-#include <ydb/library/yql/minikql/computation/mkql_value_builder.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/computation/mkql_value_builder.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
 

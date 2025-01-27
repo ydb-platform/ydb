@@ -7,7 +7,6 @@ IF (NOT OS_WINDOWS AND NOT ARCH_ARM64)
         crypto.h
         poly1305.cpp
         chacha_vec.cpp
-        chacha_512.cpp
         poly1305_vec.cpp
         secured_block.cpp
     )
@@ -24,10 +23,15 @@ ENDIF()
 PEERDIR(
     contrib/libs/t1ha
     library/cpp/sse
+    ydb/core/blobstorage/crypto/chacha_512
     ydb/library/actors/util
 )
 
 END()
+
+RECURSE(
+    chacha_512
+)
 
 RECURSE_FOR_TESTS(
     ut

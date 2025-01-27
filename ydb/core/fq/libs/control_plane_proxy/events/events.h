@@ -3,7 +3,7 @@
 #include "type_traits.h"
 
 #include <util/generic/maybe.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 
@@ -13,7 +13,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <memory>
 
 namespace NFq {

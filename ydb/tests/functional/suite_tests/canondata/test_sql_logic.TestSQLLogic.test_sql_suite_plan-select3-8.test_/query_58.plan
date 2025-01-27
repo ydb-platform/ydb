@@ -126,7 +126,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.col6,row.col7,row.col4,row.col5,row.col2,row.col3,row.col1]"
                                             },
                                             {
                                                 "Inputs": [
@@ -176,7 +176,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Filter",
-                                                                "Predicate": "item.d > item.e Or item.a > item.b Or item.e + item.d >= item.a + item.b - 10 And item.e + item.d <= item.c + 130"
+                                                                "Predicate": "item.d > item.e OR item.a > item.b OR item.e + item.d >= item.a + item.b - 10 AND item.e + item.d <= item.c + 130"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10,
@@ -187,6 +187,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/sqllogictest_select3-8.test_plan/t1",
                                                                         "ReadColumns": [
                                                                             "a",
                                                                             "b",
@@ -239,7 +240,7 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Aggregate-Limit",
+                        "Node Type": "Aggregate-Limit-Aggregate",
                         "Operators": [
                             {
                                 "Inputs": [
@@ -247,7 +248,17 @@
                                         "InternalOperatorId": 1
                                     }
                                 ],
-                                "Name": "Aggregate"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
+                            },
+                            {
+                                "Inputs": [
+                                    {
+                                        "InternalOperatorId": 2
+                                    }
+                                ],
+                                "Limit": "1",
+                                "Name": "Limit"
                             },
                             {
                                 "Inputs": [
@@ -255,8 +266,8 @@
                                         "ExternalPlanNodeId": 3
                                     }
                                 ],
-                                "Limit": "1",
-                                "Name": "Limit"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
                             }
                         ],
                         "PlanNodeId": 4,
@@ -275,7 +286,8 @@
                                                         "ExternalPlanNodeId": 1
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
+                                                "Name": "Aggregate",
+                                                "Phase": "Intermediate"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -286,6 +298,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/sqllogictest_select3-8.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

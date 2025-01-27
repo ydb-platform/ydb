@@ -4,14 +4,14 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
-std::vector<std::shared_ptr<NKikimr::NOlap::TPortionInfo>> TOneHeadLogic::GetPortionsForMerge(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket, std::vector<NArrow::TReplaceKey>* stopPoints, TInstant* stopInstant) const {
-    std::vector<std::shared_ptr<TPortionInfo>> result;
+std::vector<TPortionInfo::TConstPtr> TOneHeadLogic::GetPortionsForMerge(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket, std::vector<NArrow::TReplaceKey>* stopPoints, TInstant* stopInstant) const {
+    std::vector<TPortionInfo::TConstPtr> result;
     std::vector<NArrow::TReplaceKey> splitKeys;
     ui64 memUsage = 0;
     ui64 txSizeLimit = 0;
     std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
     {
-        THashMap<ui64, std::shared_ptr<TPortionInfo>> currentCompactedPortions;
+        THashMap<ui64, TPortionInfo::TConstPtr> currentCompactedPortions;
         bool compactedFinished = false;
         bool finished = false;
         for (auto&& [pk, portions] : bucket.GetPKPortions()) {
@@ -40,7 +40,7 @@ std::vector<std::shared_ptr<NKikimr::NOlap::TPortionInfo>> TOneHeadLogic::GetPor
                     compactedFinished = currentCompactedPortions.empty();
                 } else {
                     result.emplace_back(p.GetPortionInfo());
-                    memUsage = predictor->AddPortion(*p.GetPortionInfo());
+                    memUsage = predictor->AddPortion(p.GetPortionInfo());
                     txSizeLimit += p->GetTxVolume();
                 }
             }

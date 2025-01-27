@@ -3,9 +3,10 @@
 #include "console_audit.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 namespace NKikimr::NConsole {
 
@@ -20,7 +21,7 @@ class TConfigsManager::TTxReplaceYamlConfig : public TTransactionBase<TConfigsMa
         , Config(ev->Get()->Record.GetRequest().config())
         , Peer(ev->Get()->Record.GetPeerName())
         , Sender(ev->Sender)
-        , UserSID(NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID())
+        , UserToken(ev->Get()->Record.GetUserToken())
         , Force(force)
         , AllowUnknownFields(ev->Get()->Record.GetRequest().allow_unknown_fields())
         , DryRun(ev->Get()->Record.GetRequest().dry_run())
@@ -57,70 +58,26 @@ public:
             oldVolatileConfig.SetConfig(config);
         }
 
-        Self->Logger.DbLogData(UserSID, logData, txc, ctx);
+        Self->Logger.DbLogData(UserToken.GetUserSID(), logData, txc, ctx);
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         NIceDb::TNiceDb db(txc.DB);
-
+        TValidateConfigResult result = Self->ValidateConfigAndReplaceMetadata(Config, Force, AllowUnknownFields);
+        if (result.ErrorReason) {
+            HandleError(result.ErrorReason.value(), ctx);
+            return true;
+        }
         try {
-            if (!Force) {
-                auto metadata = NYamlConfig::GetMetadata(Config);
-                Cluster = metadata.Cluster.value_or(TString("unknown"));
-                Version = metadata.Version.value_or(0);
-            } else {
-               Cluster = Self->ClusterName;
-               Version = Self->YamlVersion;
-            }
 
-            UpdatedConfig = NYamlConfig::ReplaceMetadata(Config, NYamlConfig::TMetadata{
-                    .Version = Version + 1,
-                    .Cluster = Cluster,
-                });
+            Version = result.Version;
+            UpdatedConfig = result.UpdatedConfig;
+            Cluster = result.Cluster;
+            Modify = result.Modify;
 
-            bool hasForbiddenUnknown = false;
-
-            TMap<TString, std::pair<TString, TString>> deprecatedFields;
-            TMap<TString, std::pair<TString, TString>> unknownFields;
-
-            if (UpdatedConfig != Self->YamlConfig || Self->YamlDropped) {
-                Modify = true;
-
-                auto tree = NFyaml::TDocument::Parse(UpdatedConfig);
-                auto resolved = NYamlConfig::ResolveAll(tree);
-
-                if (Self->ClusterName != Cluster) {
-                    ythrow yexception() << "ClusterName mismatch";
-                }
-
-                if (Version != Self->YamlVersion) {
-                    ythrow yexception() << "Version mismatch";
-                }
-
-                UnknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
-
-                for (auto& [_, config] : resolved.Configs) {
-                    auto cfg = NYamlConfig::YamlToProto(
-                        config.second,
-                        true,
-                        true,
-                        UnknownFieldsCollector);
-                }
-
-                const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
-
-                for (const auto& [path, info] : UnknownFieldsCollector->GetUnknownKeys()) {
-                    if (deprecatedPaths.contains(path)) {
-                        deprecatedFields[path] = info;
-                    } else {
-                        unknownFields[path] = info;
-                    }
-                }
-
-                hasForbiddenUnknown = !unknownFields.empty() && !AllowUnknownFields;
-
-                if (!DryRun && !hasForbiddenUnknown) {
+            if (result.ValidationFinished) {
+                if (!DryRun && !result.HasForbiddenUnknown) {
                     DoInternalAudit(txc, ctx);
 
                     db.Table<Schema::YamlConfig>().Key(Version + 1)
@@ -137,13 +94,13 @@ public:
             }
 
             auto fillResponse = [&](auto& ev, auto errorLevel){
-                for (auto& [path, info] : unknownFields) {
+                for (auto& [path, info] : result.UnknownFields) {
                     auto *issue = ev->Record.AddIssues();
                         issue->set_severity(errorLevel);
                         issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
                 }
 
-                for (auto& [path, info] : deprecatedFields) {
+                for (auto& [path, info] : result.DeprecatedFields) {
                     auto *issue = ev->Record.AddIssues();
                         issue->set_severity(NYql::TSeverityIds::S_WARNING);
                         issue->set_message(TStringBuilder{} << "Deprecated key# " << info.first << " in proto# " << info.second << " found in path# " << path);
@@ -152,8 +109,7 @@ public:
                 Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
             };
 
-
-            if (hasForbiddenUnknown) {
+            if (result.HasForbiddenUnknown) {
                 Error = true;
                 auto ev = MakeHolder<TEvConsole::TEvGenericError>();
                 ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
@@ -166,18 +122,10 @@ public:
                 auto ev = MakeHolder<TEvConsole::TEvSetYamlConfigResponse>();
                 fillResponse(ev, NYql::TSeverityIds::S_WARNING);
             }
-        } catch (const yexception& ex) {
-            Error = true;
-
-            auto ev = MakeHolder<TEvConsole::TEvGenericError>();
-            ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-            auto *issue = ev->Record.AddIssues();
-            issue->set_severity(NYql::TSeverityIds::S_ERROR);
-            issue->set_message(ex.what());
-            ErrorReason = ex.what();
-            Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
         }
-
+        catch (const yexception& ex) {
+            HandleError(ex.what(), ctx);
+        }
         return true;
     }
 
@@ -190,7 +138,8 @@ public:
         if (!Error && Modify && !DryRun) {
             AuditLogReplaceConfigTransaction(
                 /* peer = */ Peer,
-                /* userSID = */ UserSID,
+                /* userSID = */ UserToken.GetUserSID(),
+                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
                 /* oldConfig = */ Self->YamlConfig,
                 /* newConfig = */ Config,
                 /* reason = */ {},
@@ -207,7 +156,8 @@ public:
         } else if (Error && !DryRun) {
             AuditLogReplaceConfigTransaction(
                 /* peer = */ Peer,
-                /* userSID = */ UserSID,
+                /* userSID = */ UserToken.GetUserSID(),
+                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
                 /* oldConfig = */ Self->YamlConfig,
                 /* newConfig = */ Config,
                 /* reason = */ ErrorReason,
@@ -217,11 +167,22 @@ public:
         Self->TxProcessor->TxCompleted(this, ctx);
     }
 
+    void HandleError(const TString& error, const TActorContext& ctx) {
+        Error = true;
+        auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+        ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        auto *issue = ev->Record.AddIssues();
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        issue->set_message(error);
+        ErrorReason = error;
+        Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+    }
+
 private:
     const TString Config;
     const TString Peer;
     const TActorId Sender;
-    const TString UserSID;
+    const NACLib::TUserToken UserToken;
     const bool Force = false;
     const bool AllowUnknownFields = false;
     const bool DryRun = false;

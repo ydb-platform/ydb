@@ -6,7 +6,7 @@
 
 ## Примеры работы с топиками
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -29,7 +29,7 @@
 
 ## Инициализация соединения с топиками
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -51,7 +51,7 @@
   TDriver driver(driverConfig);
   ```
 
-  В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
+  В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Фрагмент кода приложения для создания клиента:
 
@@ -77,7 +77,7 @@
 
   В этом примере используется вспомогательный метод `CloudAuthHelper.getAuthProviderFromEnviron()`, получающий токен из переменных окружения.
   Например, `YDB_ACCESS_TOKEN_CREDENTIALS`.
-  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
+  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) работает поверх транспорта {{ ydb-short-name }} и отвечает как за управляющие операции с топиками, так и за создание писателей и читателей.
 
@@ -102,7 +102,7 @@
 
 Единственный обязательный параметр для создания топика - это его путь, остальные параметры опциональны.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -171,7 +171,7 @@
 
 ### Изменение топика {#alter-topic}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -242,7 +242,7 @@
 
 ### Получение информации о топике {#describe-topic}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -300,7 +300,7 @@
 
 Для удаления топика достаточно указать путь к нему.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -334,7 +334,7 @@
 
 На данный момент поддерживается подключение только с совпадающими идентификаторами [источника и группы сообщений](../../concepts/topic#producer-id) (`producer_id` и `message_group_id`), в будущем это ограничение будет снято.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -442,7 +442,7 @@
 
 ### Запись сообщений {#writing-messages}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -580,7 +580,7 @@
 
 ### Запись сообщений с подтверждением о сохранении на сервере
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -694,7 +694,7 @@
 
 Подробнее о [сжатии данных в топиках](../../concepts/topic#message-codec).
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -756,7 +756,7 @@
 
 Подробнее о записи без дедупликации — в [соответствующем разделе концепций](../../concepts/topic#no-dedup).
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -779,7 +779,7 @@
 При записи сообщения можно дополнительно указать метаданные как список пар "ключ-значение". Эти данные будут доступны при вычитывании сообщения.
 Ограничение на размер метаданных — не более 1000 ключей.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -840,11 +840,28 @@
   List<MetadataItem> metadata = message.getMetadataItems();
   ```
 
+- Python
+
+  Для использования функции передачи метаданных создайте объект `TopicWriterMessage` с аргументом `metadata_items`, как показано ниже:
+
+  ```python
+  message = ydb.TopicWriterMessage(data=f"message-data", metadata_items={"meta-key": "meta-value"})
+  writer.write(message)
+  ```
+
+  Во время чтения метаданные можно получить из поля `metadata_items` объекта `PublicMessage`:
+
+  ```python
+  message = reader.receive_message()
+  for meta_key, meta_value in message.metadata_items.items():
+      print(f"{meta_key}: {meta_value}")
+  ```
+
 {% endlist %}
 
 ### Запись в транзакции {#write-tx}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1012,7 +1029,7 @@
 Создать Consumer можно при [создании](#create-topic) или [изменении](#alter-topic) топика.
 У топика может быть несколько Consumer'ов и для каждого из них сервер хранит свой прогресс чтения.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1152,7 +1169,7 @@
 
 Вы также можете использовать расширенный вариант создания подключения, чтобы указать несколько топиков и задать параметры чтения. Следующий код создаст подключение к топикам `my-topic` и `my-specific-topic` через читателя `my-consumer`:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1220,7 +1237,7 @@
 
 Можно использовать [транзакции](#read-tx). В этом случае позиция чтения изменится при подтверждении транзакции. При новом подключении будут прочитаны все неподтверждённые сообщения.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1249,7 +1266,7 @@
 
 #### Чтение сообщений по одному
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1296,7 +1313,7 @@
 
 #### Чтение сообщений пакетом
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1372,7 +1389,7 @@
 
 #### Чтение сообщений по одному с подтверждением
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1428,7 +1445,7 @@
 
 #### Чтение сообщений пакетом с подтверждением
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1507,7 +1524,7 @@
 Вместо коммитов сообщений на сервер можно хранить прогресс чтения самостоятельно. В этом случае нужно передать в SDK обработчик, который будет вызываться при старте чтения каждой партиции. В этом обработчике нужно будет
 указать позицию, с которой нужно начинать чтение этой партиции.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1601,7 +1618,7 @@
 
 Обычно прогресс чтения топика сохраняется на сервере в каждом `Consumer`е. Но можно не хранить такой прогресс на сервере и при создании читателя явно указать, что чтение будет происходить без `Consumer`а.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 
@@ -1631,7 +1648,7 @@
 
 ### Чтение в транзакции {#read-tx}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1783,7 +1800,7 @@
 
 #### Мягкое прерывание чтения {#soft-stop}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1856,7 +1873,7 @@
 
 #### Жесткое прерывание чтения {#hard-stop}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -1928,7 +1945,7 @@
 
 ### Поддержка автомасштабирования топиков {#autoscaling}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 

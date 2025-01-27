@@ -1,7 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/resource/resource.h>
 #include "shared_cache_s3fifo.h"
 
-namespace NKikimr::NCache {
+namespace NKikimr::NSharedCache {
 
 namespace {
 
@@ -35,11 +36,7 @@ namespace {
         }
 
         static size_t GetHash(const TPageKey& key) {
-            return std::hash<ui32>()(key.Id);
-        }
-
-        static bool Equals(const TPageKey& left, const TPageKey& right) {
-            return left.Id == right.Id;
+            return key.Id;
         }
 
         static TString ToString(const TPageKey& key) {
@@ -74,87 +71,38 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TS3FIFOGhostQueue) {
     
-    Y_UNIT_TEST(Add) {
-        TS3FIFOGhostPageQueue<TPageTraits> queue(100);
+    Y_UNIT_TEST(Basics) {
+        TS3FIFOGhostPageQueue<TPageTraits> queue;
         UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
 
-        queue.Add(1, 10);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{1 10b}");
+        // TODO: test Add, Limit, Contains
 
-        queue.Add(2, 30);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{1 10b}, {2 30b}");
+        UNIT_ASSERT(queue.Add(1));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "1");
 
-        queue.Add(3, 60);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{1 10b}, {2 30b}, {3 60b}");
+        UNIT_ASSERT(queue.Add(2));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "1, 2");
 
-        queue.Add(4, 1);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{2 30b}, {3 60b}, {4 1b}");
+        UNIT_ASSERT(queue.Add(3));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "1, 2, 3");
+        UNIT_ASSERT(queue.Contains(1));
+        UNIT_ASSERT(queue.Contains(2));
+        UNIT_ASSERT(queue.Contains(3));
+        UNIT_ASSERT(!queue.Contains(4));
 
-        queue.Add(1, 3);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{2 30b}, {3 60b}, {4 1b}, {1 3b}");
-    }
+        queue.Limit(2);
+        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "2, 3");
+        UNIT_ASSERT(!queue.Contains(1));
+        UNIT_ASSERT(queue.Contains(2));
+        UNIT_ASSERT(queue.Contains(3));
+        UNIT_ASSERT(!queue.Contains(4));
 
-    Y_UNIT_TEST(Erase) {
-        TS3FIFOGhostPageQueue<TPageTraits> queue(100);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
-
-        queue.Add(1, 10);
-        queue.Add(2, 30);
-        queue.Add(3, 60);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{1 10b}, {2 30b}, {3 60b}");
-
-        UNIT_ASSERT_VALUES_EQUAL(queue.Erase(5, 42), false);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{1 10b}, {2 30b}, {3 60b}");
-
-        UNIT_ASSERT_VALUES_EQUAL(queue.Erase(2, 30), true);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{1 10b}, {3 60b}");
-
-        queue.Add(4, 30);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{1 10b}, {3 60b}, {4 30b}");
-
-        queue.Add(5, 1);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{3 60b}, {4 30b}, {5 1b}");
-    }
-
-    Y_UNIT_TEST(Erase_Add) {
-        TS3FIFOGhostPageQueue<TPageTraits> queue(100);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
-
-        queue.Add(1, 10);
-        queue.Add(2, 30);
-        queue.Add(3, 60);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{1 10b}, {2 30b}, {3 60b}");
-
-        UNIT_ASSERT_VALUES_EQUAL(queue.Erase(2, 30), true);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{1 10b}, {3 60b}");
-
-        queue.Add(2, 30);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{1 10b}, {3 60b}, {2 30b}");
-
-        queue.Add(4, 70);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{2 30b}, {4 70b}");
-    }
-
-    Y_UNIT_TEST(Add_Big) {
-        TS3FIFOGhostPageQueue<TPageTraits> queue(100);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
-
-        queue.Add(1, 101);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
-    }
-
-    Y_UNIT_TEST(UpdateLimit) {
-        TS3FIFOGhostPageQueue<TPageTraits> queue(100);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "");
-
-        queue.Add(1, 10);
-        queue.Add(2, 20);
-        queue.Add(3, 30);
-        queue.Add(4, 40);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{1 10b}, {2 20b}, {3 30b}, {4 40b}");
-
-        queue.UpdateLimit(80);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "{3 30b}, {4 40b}");
+        UNIT_ASSERT(!queue.Add(2));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Dump(), "2, 3");
+        UNIT_ASSERT(!queue.Contains(1));
+        UNIT_ASSERT(queue.Contains(2));
+        UNIT_ASSERT(queue.Contains(3));
+        UNIT_ASSERT(!queue.Contains(4));
     }
 
 }
@@ -183,8 +131,14 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
         return result;
     }
 
+    void Erase(auto& cache, TPage& page) {
+        cache.Erase(&page);
+        UNIT_ASSERT_VALUES_EQUAL(page.CacheFlags1, 0);
+        UNIT_ASSERT_VALUES_EQUAL(page.CacheFlags2, 0);
+    }
+
     Y_UNIT_TEST(Touch) {
-        TS3FIFOCache<TPage, TPageTraits> cache(100);
+        TS3FIFOCache<TPage, TPageTraits> cache(20);
 
         TPage page1{1, 2};
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
@@ -219,253 +173,169 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: {1 2f 2b}, {2 1f 3b}, {3 2f 4b}, {4 0f 1b}" << Endl
+            << "SmallQueue: {1 2f 2b}, {2 1f 3b}, {3 2f 4b}, {4 1f 1b}" << Endl
             << "MainQueue: " << Endl
             << "GhostQueue: "));
 
-        TPage page5{5, 8};
+        TPage page5{5, 12};
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), TVector<ui32>{2});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: {4 0f 1b}, {5 0f 8b}" << Endl
-            << "MainQueue: {1 2f 2b}, {3 2f 4b}" << Endl
-            << "GhostQueue: {2 3b}"));
+            << "SmallQueue: {3 2f 4b}, {4 1f 1b}, {5 0f 12b}" << Endl
+            << "MainQueue: {1 0f 2b}" << Endl
+            << "GhostQueue: 2"));
 
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), (TVector<ui32>{4, 5}));
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: {4 0f 1b}, {5 0f 8b}" << Endl
-            << "MainQueue: {1 2f 2b}, {3 3f 4b}" << Endl
-            << "GhostQueue: {2 3b}"));
+            << "SmallQueue: " << Endl
+            << "MainQueue: {1 0f 2b}, {2 0f 3b}, {3 0f 4b}" << Endl
+            << "GhostQueue: 2, 4, 5"));
         
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        TPage page6{6, 2};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page6), (TVector<ui32>{}));
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: {4 0f 1b}, {5 0f 8b}" << Endl
-            << "MainQueue: {1 2f 2b}, {3 3f 4b}, {2 0f 3b}" << Endl
-            << "GhostQueue: "));
+            << "SmallQueue: {6 0f 2b}" << Endl
+            << "MainQueue: {1 0f 2b}, {2 0f 3b}, {3 0f 4b}" << Endl
+            << "GhostQueue: 2, 4, 5"));
     }
 
     Y_UNIT_TEST(Touch_MainQueue) {
-        TS3FIFOCache<TPage, TPageTraits> cache(100);
+        TS3FIFOCache<TPage, TPageTraits> cache(10);
 
-        TPage page1{1, 20};
-        TPage page2{2, 30};
-        TPage page3{3, 40};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{1});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{2});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{3});
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(20)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+        }
+
+        for (ui32 pageId : xrange(10)) {
+            for (ui32 times = 0; times <= pageId % 4; times++) {
+                Touch(cache, *pages[pageId]);
+            }
+        }
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
+            << "SmallQueue: {0 0f 1b}, {1 1f 1b}, {2 2f 1b}, {3 3f 1b}, {4 0f 1b}, {5 1f 1b}, {6 2f 1b}, {7 3f 1b}, {8 0f 1b}, {9 1f 1b}" << Endl
             << "MainQueue: " << Endl
-            << "GhostQueue: {1 20b}, {2 30b}, {3 40b}"));
-
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: {2 0f 30b}, {1 0f 20b}, {3 0f 40b}" << Endl
             << "GhostQueue: "));
         
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        for (ui32 pageId : xrange(10)) {
+            Touch(cache, *pages[10 + pageId]);
+        }
+        Touch(cache, *pages[3]);
+        Touch(cache, *pages[6]);
+        Touch(cache, *pages[6]);
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: {2 2f 30b}, {1 1f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: "));
+            << "SmallQueue: {14 0f 1b}, {15 0f 1b}, {16 0f 1b}, {17 0f 1b}, {18 0f 1b}, {19 0f 1b}" << Endl
+            << "MainQueue: {2 0f 1b}, {3 1f 1b}, {6 2f 1b}, {7 0f 1b}" << Endl
+            << "GhostQueue: 0, 1, 4, 5, 8, 9, 10, 11, 12, 13"));
         
-        TPage page4{4, 20};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{4});
+        for (ui32 pageId : xrange(10)) {
+            Touch(cache, *pages[pageId]);
+        }
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: {2 2f 30b}, {1 1f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: {4 20b}"));
+            << "SmallQueue: {19 0f 1b}" << Endl
+            << "MainQueue: {1 0f 1b}, {4 0f 1b}, {5 0f 1b}, {8 0f 1b}, {9 0f 1b}, {2 0f 1b}, {3 1f 1b}, {6 2f 1b}, {7 0f 1b}" << Endl
+            << "GhostQueue: 9, 10, 11, 12, 13, 14, 15, 16, 17, 18"));
         
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{3});
-        // MainQueue: {2 2f 30b}, {1 1f 20b}, {3 0f 40b}, {4 0f 20b}
-        // MainQueue: {1 1f 20b}, {3 0f 40b}, {4 0f 20b}, {2 1f 30b}
-        // MainQueue: {3 0f 40b}, {4 0f 20b}, {2 1f 30b}, {1 0f 20b}
-        // MainQueue: {4 0f 20b}, {2 1f 30b}, {1 0f 20b}
+        for (ui32 pageId : xrange(10)) {
+            Touch(cache, *pages[10 + pageId]);
+        }
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: {4 0f 20b}, {2 1f 30b}, {1 0f 20b}" << Endl
-            << "GhostQueue: "));
+            << "SmallQueue: {19 1f 1b}" << Endl
+            << "MainQueue: {12 0f 1b}, {13 0f 1b}, {14 0f 1b}, {15 0f 1b}, {16 0f 1b}, {3 0f 1b}, {6 1f 1b}, {17 0f 1b}, {18 0f 1b}" << Endl
+            << "GhostQueue: 9, 10, 11, 12, 13, 14, 15, 16, 17, 18"));
     }
 
     Y_UNIT_TEST(EvictNext) {
-        TS3FIFOCache<TPage, TPageTraits> cache(100);
+        TS3FIFOCache<TPage, TPageTraits> cache(10);
 
-        TPage page1{1, 20};
-        TPage page2{2, 30};
-        TPage page3{3, 40};
-        TPage page4{4, 10};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{1});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{2});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{3});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: " << Endl
-            << "GhostQueue: {1 20b}, {2 30b}, {3 40b}"));
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(30)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+        }
 
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        for (ui32 pageId : xrange(30)) {
+            for (ui32 times = 0; times <= pageId % 4; times++) {
+                Touch(cache, *pages[pageId]);
+            }
+        }
+        Touch(cache, *pages[14]);
+        Touch(cache, *pages[15]);
+        Touch(cache, *pages[15]);
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: {2 0f 30b}, {1 1f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: "));
-        
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: {4 0f 10b}" << Endl
-            << "MainQueue: {2 0f 30b}, {1 1f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: "));
-        
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{4});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: {2 0f 30b}, {1 1f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: {4 10b}"));
-        
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{2});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: {1 1f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: {4 10b}"));
-        
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{3});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: {1 0f 20b}" << Endl
-            << "GhostQueue: {4 10b}"));
+            << "SmallQueue: {29 1f 1b}" << Endl
+            << "MainQueue: {11 0f 1b}, {14 1f 1b}, {15 2f 1b}, {18 0f 1b}, {19 0f 1b}, {22 0f 1b}, {23 0f 1b}, {26 0f 1b}, {27 0f 1b}" << Endl
+            << "GhostQueue: 9, 12, 13, 16, 17, 20, 21, 24, 25, 28"));
 
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{1});
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{29});
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{11});
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{18});
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{19});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
-            << "MainQueue: " << Endl
-            << "GhostQueue: {4 10b}"));
-
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: " << Endl
-            << "GhostQueue: {4 10b}"));
+            << "MainQueue: {22 0f 1b}, {23 0f 1b}, {26 0f 1b}, {27 0f 1b}, {14 0f 1b}, {15 1f 1b}" << Endl
+            << "GhostQueue: 13, 16, 17, 20, 21, 24, 25, 28, 29"));
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TS3FIFOCache<TPage, TPageTraits> cache(100);
+        TS3FIFOCache<TPage, TPageTraits> cache(10);
 
-        TPage page1{1, 20};
-        TPage page2{2, 30};
-        TPage page3{3, 40};
-        TPage page4{4, 10};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{1});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{2});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{3});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: " << Endl
-            << "GhostQueue: {1 20b}, {2 30b}, {3 40b}"));
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(30)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+        }
 
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        for (ui32 pageId : xrange(30)) {
+            for (ui32 times = 0; times <= pageId % 4; times++) {
+                Touch(cache, *pages[pageId]);
+            }
+        }
+        Touch(cache, *pages[14]);
+        Touch(cache, *pages[15]);
+        Touch(cache, *pages[15]);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {29 1f 1b}" << Endl
+            << "MainQueue: {11 0f 1b}, {14 1f 1b}, {15 2f 1b}, {18 0f 1b}, {19 0f 1b}, {22 0f 1b}, {23 0f 1b}, {26 0f 1b}, {27 0f 1b}" << Endl
+            << "GhostQueue: 9, 12, 13, 16, 17, 20, 21, 24, 25, 28"));
+        
+        cache.UpdateLimit(6);
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages[0]), (TVector<ui32>{29, 0, 11, 18, 19}));
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
-            << "MainQueue: {2 0f 30b}, {1 0f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: "));
-        
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: {4 0f 10b}" << Endl
-            << "MainQueue: {2 0f 30b}, {1 0f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: "));
-        
-        cache.UpdateLimit(45);
-        TPage page5{5, 1};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), (TVector<ui32>{4, 2, 1}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: {5 0f 1b}" << Endl
-            << "MainQueue: {3 0f 40b}" << Endl
-            << "GhostQueue: {4 10b}"));
-        
-        cache.UpdateLimit(0);
-        TPage page6{6, 1};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page6), (TVector<ui32>{5, 6, 3}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: " << Endl
-            << "GhostQueue: "));
+            << "MainQueue: {22 0f 1b}, {23 0f 1b}, {26 0f 1b}, {27 0f 1b}, {14 0f 1b}, {15 1f 1b}" << Endl
+            << "GhostQueue: 16, 17, 20, 21, 24, 25, 28, 29, 0"));
     }
 
     Y_UNIT_TEST(Erase) {
-        TS3FIFOCache<TPage, TPageTraits> cache(100);
+        TS3FIFOCache<TPage, TPageTraits> cache(10);
 
-        TPage page1{1, 20};
-        TPage page2{2, 30};
-        TPage page3{3, 40};
-        TPage page4{4, 10};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{1});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{2});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{3});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: " << Endl
-            << "GhostQueue: {1 20b}, {2 30b}, {3 40b}"));
-        
-        // Erase from Ghost Queue:
-        cache.Erase(&page2);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: " << Endl
-            << "GhostQueue: {1 20b}, {3 40b}"));
-        
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{2});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: " << Endl
-            << "GhostQueue: {1 20b}, {3 40b}, {2 30b}"));
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(30)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+        }
 
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        for (ui32 pageId : xrange(30)) {
+            for (ui32 times = 0; times <= pageId % 4; times++) {
+                Touch(cache, *pages[pageId]);
+            }
+        }
+        Touch(cache, *pages[14]);
+        Touch(cache, *pages[15]);
+        Touch(cache, *pages[15]);
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: {1 0f 20b}, {2 0f 30b}, {3 0f 40b}" << Endl
-            << "GhostQueue: "));
+            << "SmallQueue: {29 1f 1b}" << Endl
+            << "MainQueue: {11 0f 1b}, {14 1f 1b}, {15 2f 1b}, {18 0f 1b}, {19 0f 1b}, {22 0f 1b}, {23 0f 1b}, {26 0f 1b}, {27 0f 1b}" << Endl
+            << "GhostQueue: 9, 12, 13, 16, 17, 20, 21, 24, 25, 28"));
         
-        // Erase from Main Queue:
-        cache.Erase(&page2);
+        Erase(cache, *pages[29]);
+        Erase(cache, *pages[22]);
+        Erase(cache, *pages[26]);
+        Erase(cache, *pages[17]);
+        Cerr << cache.Dump() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
-            << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: "));
-
-        page2.Size = 6;  
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: {2 0f 6b}" << Endl
-            << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: "));
-        
-        // Erase non-existing:
-        TPage page42{42, 1};
-        cache.Erase(&page42);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: {2 0f 6b}" << Endl
-            << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: "));
-
-        // Erase from Small Queue:
-        cache.Erase(&page2);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-            << "SmallQueue: " << Endl
-            << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
-            << "GhostQueue: "));
+            << "MainQueue: {11 0f 1b}, {14 1f 1b}, {15 2f 1b}, {18 0f 1b}, {19 0f 1b}, {23 0f 1b}, {27 0f 1b}" << Endl
+            << "GhostQueue: 9, 12, 13, 16, 17, 20, 21, 24, 25, 28"));
     }
 
     Y_UNIT_TEST(Random) {

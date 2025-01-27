@@ -49,7 +49,7 @@ The information about each operation is saved to the audit log as a separate eve
 
 ## Enabling audit log {#enabling-audit-log}
 
-Delivering events to the audit log stream is enabled for the entire {{ ydb-short-name }} cluster. To enable it, add, to the [cluster configuration](../deploy/configuration/config.md), the `audit_config` section, and specify in it one of the stream destinations (`file_backend`, `unified_agent_backend`, `stderr_backend`) or their combination:
+Delivering events to the audit log stream is enabled for the entire {{ ydb-short-name }} cluster. To enable it, add, to the [cluster configuration](../reference/configuration/index.md), the `audit_config` section, and specify in it one of the stream destinations (`file_backend`, `unified_agent_backend`, `stderr_backend`) or their combination:
 
 ```yaml
 audit_config:
@@ -68,7 +68,7 @@ audit_config:
 | `file_backend` | Write the audit log to a file at each cluster node.</ul>Optional. |
 | `format` | Audit log format. The default value is `JSON`.<br/>Acceptable values:<ul><li>`JSON`: Serialized [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}.</li><li>`TXT`: Text format.</ul>Optional. |
 | `file_path` | Path to the file that the audit log will be streamed to. If the path and the file are missing, they will be created on each node at cluster startup. If the file exists, the data will be appended to it.<br/>This parameter is required if you use `file_backend`. |
-| `unified_agent_backend` | Stream the audit log to the Unified Agent. In addition, you need to define the `uaclient_config` section in the [cluster configuration](../deploy/configuration/config.md).</ul>Optional. |
+| `unified_agent_backend` | Stream the audit log to the Unified Agent. In addition, you need to define the `uaclient_config` section in the [cluster configuration](../reference/configuration/index.md).</ul>Optional. |
 | `log_name` | The session metadata delivered with the message. Using the metadata, you can redirect the log stream to one or more child channels based on the condition: `_log_name: "session_meta_log_name"`.<br/>Optional. |
 | `stderr_backend` | Forward the audit log to the standard error stream (`stderr`).</ul>Optional. |
 

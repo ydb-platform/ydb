@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:14:30: Info: Cannot execute self join in DQ
-        	select b.y as fff from $i as a right only join $j as b on a.x = b.y;
-	                             ^

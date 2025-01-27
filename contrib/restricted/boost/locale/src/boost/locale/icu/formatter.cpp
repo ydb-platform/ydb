@@ -448,7 +448,7 @@ namespace boost { namespace locale { namespace impl_icu {
     }
 
 #define BOOST_LOCALE_INSTANTIATE(CHAR) template class formatter<CHAR>;
-    BOOST_LOCALE_FOREACH_CHAR(BOOST_LOCALE_INSTANTIATE)
+    BOOST_LOCALE_FOREACH_CHAR_STRING(BOOST_LOCALE_INSTANTIATE)
 
 }}} // namespace boost::locale::impl_icu
 

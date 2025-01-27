@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/allclose.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/numpy/abs.hpp"
 #include "pythonic/numpy/isfinite.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -40,7 +40,7 @@ namespace numpy
           return false;
       return true;
     }
-  }
+  } // namespace
 
   template <class U, class V>
   bool allclose(U const &u, V const &v, double rtol, double atol)
@@ -48,7 +48,7 @@ namespace numpy
     return _allclose(u.begin(), u.end(), v.begin(), rtol, atol,
                      utils::int_<U::value>());
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

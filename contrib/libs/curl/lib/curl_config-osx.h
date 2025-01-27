@@ -488,13 +488,13 @@
 #define HAVE_NGHTTP2_NGHTTP2_H 1
 
 /* Define to 1 if you have the <nghttp3/nghttp3.h> header file. */
-/* #undef HAVE_NGHTTP3_NGHTTP3_H */
+#define HAVE_NGHTTP3_NGHTTP3_H 1
 
 /* Define to 1 if you have the <ngtcp2/ngtcp2_crypto.h> header file. */
-/* #undef HAVE_NGTCP2_NGTCP2_CRYPTO_H */
+#define HAVE_NGTCP2_NGTCP2_CRYPTO_H 1
 
 /* Define to 1 if you have the <ngtcp2/ngtcp2.h> header file. */
-/* #undef HAVE_NGTCP2_NGTCP2_H */
+#define HAVE_NGTCP2_NGTCP2_H 1
 
 /* if you have an old MIT Kerberos version, lacking GSS_C_NT_HOSTBASED_SERVICE
    */
@@ -990,13 +990,16 @@
 #define USE_NGHTTP2 1
 
 /* if nghttp3 is in use */
-/* #undef USE_NGHTTP3 */
+#define USE_NGHTTP3 1
 
 /* if ngtcp2 is in use */
-/* #undef USE_NGTCP2 */
+#define USE_NGTCP2 1
 
 /* if ngtcp2_crypto_openssl is in use */
 /* #undef USE_NGTCP2_CRYPTO_OPENSSL */
+
+/* if ngtcp2_crypto_quictls is in use */
+#define USE_NGTCP2_CRYPTO_QUICTLS 1
 
 /* if NSS is enabled */
 /* #undef USE_NSS */

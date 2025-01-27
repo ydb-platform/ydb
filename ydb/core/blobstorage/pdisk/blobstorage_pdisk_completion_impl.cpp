@@ -100,8 +100,8 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
 
 void TCompletionLogWrite::Release(TActorSystem *actorSystem) {
     for (TLogWrite *logWrite : LogWriteQueue) {
-        auto res = MakeHolder<TEvLogResult>(NKikimrProto::CORRUPTED, NKikimrBlobStorage::StatusIsValid,
-                ErrorReason);
+        auto res = MakeHolder<TEvLogResult>(NKikimrProto::CORRUPTED,
+            NKikimrBlobStorage::StatusIsValid, ErrorReason, PDisk->Keeper.GetLogChunkCount());
         logWrite->Replied = true;
         actorSystem->Send(logWrite->Sender, res.Release());
         PDisk->Mon.WriteLog.CountResponse();
@@ -319,7 +319,7 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
     result->Data.Commit();
 
     Y_ABORT_UNLESS(Read);
-    LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId << " ReqId# " << Read->ReqId.Id
+    LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "Reply from TCompletionChunkRead, PDiskId# " << PDisk->PCtx->PDiskId << " ReqId# " << Read->ReqId.Id
             << " " << result->ToString() << " To# " << Read->Sender.LocalId());
 
     double responseTimeMs = HPMilliSecondsFloat(HPNow() - Read->CreationTime);
@@ -329,6 +329,7 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
 
     actorSystem->Send(Read->Sender, result.Release());
     Read->IsReplied = true;
+
     PDisk->Mon.GetReadCounter(Read->PriorityClass)->CountResponse();
     execSpan.EndOk();
     Span.EndOk();
@@ -340,7 +341,7 @@ void TCompletionChunkRead::ReplyError(TActorSystem *actorSystem, TString reason)
     CommonBuffer.Clear();
 
     TStringStream error;
-    error << "PDiskId# " << PDisk->PCtx->PDiskId << " ReqId# " << Read->ReqId << " reason# " << reason;
+    error << "Reply Error from TCompletionChunkRead PDiskId# " << PDisk->PCtx->PDiskId << " ReqId# " << Read->ReqId << " reason# " << reason;
     auto result = MakeHolder<TEvChunkReadResult>(NKikimrProto::CORRUPTED,
             Read->ChunkIdx, Read->Offset, Read->Cookie,
             PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), error.Str());

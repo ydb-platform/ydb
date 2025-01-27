@@ -8,11 +8,11 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>

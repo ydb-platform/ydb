@@ -2,7 +2,7 @@ from typing import Optional, Sequence, Dict, Any
 
 from clickhouse_connect.driver import Client
 from clickhouse_connect.driver.summary import QuerySummary
-from clickhouse_connect.driver.query import quote_identifier
+from clickhouse_connect.driver.binding import quote_identifier
 
 
 def insert_file(client: Client,

@@ -14,13 +14,20 @@ private:
 protected:
     virtual bool AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, TGranuleMetaView& granule) const = 0;
     virtual ui32 PredictRecordsCount(const TGranuleMetaView& granule) const = 0;
+    std::shared_ptr<NReader::TReadContext> Context;
     TReadStatsMetadata::TConstPtr ReadMetadata;
     const bool Reverse = false;
     std::shared_ptr<arrow::Schema> KeySchema;
     std::shared_ptr<arrow::Schema> ResultSchema;
 
     std::deque<TGranuleMetaView> IndexGranules;
+    mutable THashMap<ui64, TPortionDataAccessor> FetchedAccessors;
+
 public:
+    virtual bool IsReadyForBatch() const {
+        return true;
+    }
+
     virtual TConclusionStatus Start() override {
         return TConclusionStatus::Success();
     }
@@ -31,8 +38,13 @@ public:
 
     virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() override {
         while (!Finished()) {
+            if (!IsReadyForBatch()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_not_ready");
+                return std::shared_ptr<TPartialReadResult>();
+            }
             auto batchOpt = ExtractStatsBatch();
             if (!batchOpt) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "no_batch_on_finished");
                 AFL_VERIFY(Finished());
                 return std::shared_ptr<TPartialReadResult>();
             }
@@ -50,13 +62,17 @@ public:
 
             // Leave only requested columns
             auto resultBatch = NArrow::TColumnOperator().Adapt(originalBatch, ResultSchema).DetachResult();
-            NArrow::TStatusValidator::Validate(ReadMetadata->GetProgram().ApplyProgram(resultBatch));
+            auto applyConclusion = ReadMetadata->GetProgram().ApplyProgram(resultBatch);
+            if (!applyConclusion.ok()) {
+                return TConclusionStatus::Fail(applyConclusion.ToString());
+            }
             if (resultBatch->num_rows() == 0) {
                 continue;
             }
             auto table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({resultBatch}));
-            return std::make_shared<TPartialReadResult>(table, lastKey, std::nullopt);
+            return std::make_shared<TPartialReadResult>(table, std::make_shared<TPlainScanCursor>(lastKey), Context, std::nullopt);
         }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "finished_iterator");
         return std::shared_ptr<TPartialReadResult>();
     }
 
@@ -76,32 +92,13 @@ public:
                     AFL_VERIFY(*count == i->length());
                 }
             }
-            auto result = arrow::RecordBatch::Make(DataSchema, columns.front()->length(), columns);
-            if (result->num_rows()) {
-                return result;
-            }
+            return arrow::RecordBatch::Make(DataSchema, columns.front()->length(), columns);
         }
         return std::nullopt;
     }
 
 
-    TStatsIteratorBase(const NAbstract::TReadStatsMetadata::TConstPtr& readMetadata, const NTable::TScheme::TTableSchema& statsSchema)
-        : StatsSchema(statsSchema)
-        , ReadMetadata(readMetadata)
-        , KeySchema(MakeArrowSchema(StatsSchema.Columns, StatsSchema.KeyColumns))
-        , ResultSchema(MakeArrowSchema(StatsSchema.Columns, ReadMetadata->ResultColumnIds))
-        , IndexGranules(ReadMetadata->IndexGranules)
-    {
-        if (ResultSchema->num_fields() == 0) {
-            ResultSchema = KeySchema;
-        }
-        std::vector<ui32> allColumnIds;
-        for (const auto& c : StatsSchema.Columns) {
-            allColumnIds.push_back(c.second.Id);
-        }
-        std::sort(allColumnIds.begin(), allColumnIds.end());
-        DataSchema = MakeArrowSchema(StatsSchema.Columns, allColumnIds);
-    }
+    TStatsIteratorBase(const std::shared_ptr<NReader::TReadContext>& context, const NTable::TScheme::TTableSchema& statsSchema);
 };
 
 template <class TSysViewSchema>
@@ -140,8 +137,8 @@ public:
         }
     };
 
-    TStatsIterator(const NAbstract::TReadStatsMetadata::TConstPtr& readMetadata)
-        : TBase(readMetadata, StatsSchema)
+    TStatsIterator(const std::shared_ptr<NReader::TReadContext>& context)
+        : TBase(context, StatsSchema)
     {
     }
 

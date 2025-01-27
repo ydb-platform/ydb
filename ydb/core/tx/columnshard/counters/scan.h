@@ -141,7 +141,23 @@ private:
     NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredOnFail;
     NMonitoring::THistogramPtr HistogramIntervalMemoryReduceSize;
     NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredAfterReduce;
+    NMonitoring::TDynamicCounters::TCounterPtr NotIndexBlobs;
+    NMonitoring::TDynamicCounters::TCounterPtr RecordsAcceptedByIndex;
+    NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByIndex;
+
 public:
+    void OnNotIndexBlobs() const {
+        NotIndexBlobs->Add(1);
+    }
+    void OnAcceptedByIndex(const ui32 recordsCount) const {
+        RecordsAcceptedByIndex->Add(recordsCount);
+    }
+    void OnDeniedByIndex(const ui32 recordsCount) const {
+        RecordsDeniedByIndex->Add(recordsCount);
+    }
+    NMonitoring::TDynamicCounters::TCounterPtr AcceptedByIndex;
+    NMonitoring::TDynamicCounters::TCounterPtr DeniedByIndex;
+
 
     TScanIntervalStateGuard CreateIntervalStateGuard() const {
         return TScanIntervalStateGuard(ScanIntervalState);
@@ -185,7 +201,23 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedCount;
     NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceCount;
+    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRawBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRecords;
+    NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceEmptyCount;
+    NMonitoring::THistogramPtr HistogramFilteredResultCount;
+
     TScanCounters(const TString& module = "Scan");
+
+    void OnSourceFinished(const ui32 recordsCount, const ui64 rawBytes, const ui32 filteredRecordsCount) const {
+        ProcessedSourceCount->Add(1);
+        ProcessedSourceRawBytes->Add(rawBytes);
+        ProcessedSourceRecords->Add(recordsCount);
+        HistogramFilteredResultCount->Collect(filteredRecordsCount);
+        if (!filteredRecordsCount) {
+            ProcessedSourceEmptyCount->Add(1);
+        }
+    }
 
     void OnOptimizedIntervalMemoryFailed(const ui64 memoryRequired) const {
         HistogramIntervalMemoryRequiredOnFail->Collect(memoryRequired / (1024.0 * 1024.0 * 1024.0));
@@ -264,7 +296,7 @@ public:
     void FillStats(::NKikimrTableStats::TTableStats& output) const;
 };
 
-class TCounterGuard: TNonCopyable {
+class TCounterGuard: TMoveOnly {
 private:
     std::shared_ptr<TAtomicCounter> Counter;
 public:
@@ -290,12 +322,44 @@ public:
 class TConcreteScanCounters: public TScanCounters {
 private:
     using TBase = TScanCounters;
+    std::shared_ptr<TAtomicCounter> FetchAccessorsCount;
+    std::shared_ptr<TAtomicCounter> FetchBlobsCount;
     std::shared_ptr<TAtomicCounter> MergeTasksCount;
     std::shared_ptr<TAtomicCounter> AssembleTasksCount;
     std::shared_ptr<TAtomicCounter> ReadTasksCount;
     std::shared_ptr<TAtomicCounter> ResourcesAllocationTasksCount;
+    std::shared_ptr<TAtomicCounter> ResultsForSourceCount;
+    std::shared_ptr<TAtomicCounter> ResultsForReplyGuard;
+
 public:
     TScanAggregations Aggregations;
+
+    TString DebugString() const {
+        return TStringBuilder() << "FetchAccessorsCount:" << FetchAccessorsCount->Val() << ";"
+                                << "FetchBlobsCount:" << FetchBlobsCount->Val() << ";"
+                                << "MergeTasksCount:" << MergeTasksCount->Val() << ";"
+                                << "AssembleTasksCount:" << AssembleTasksCount->Val() << ";"
+                                << "ReadTasksCount:" << ReadTasksCount->Val() << ";"
+                                << "ResourcesAllocationTasksCount:" << ResourcesAllocationTasksCount->Val() << ";"
+                                << "ResultsForSourceCount:" << ResultsForSourceCount->Val() << ";"
+                                << "ResultsForReplyGuard:" << ResultsForReplyGuard->Val() << ";";
+    }
+
+    TCounterGuard GetResultsForReplyGuard() const {
+        return TCounterGuard(ResultsForReplyGuard);
+    }
+
+    TCounterGuard GetFetcherAcessorsGuard() const {
+        return TCounterGuard(FetchAccessorsCount);
+    }
+
+    TCounterGuard GetFetchBlobsGuard() const {
+        return TCounterGuard(FetchBlobsCount);
+    }
+
+    TCounterGuard GetResultsForSourceGuard() const {
+        return TCounterGuard(ResultsForSourceCount);
+    }
 
     TCounterGuard GetMergeTasksGuard() const {
         return TCounterGuard(MergeTasksCount);
@@ -314,7 +378,8 @@ public:
     }
 
     bool InWaiting() const {
-        return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val();
+        return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val() ||
+               FetchAccessorsCount->Val() || ResultsForSourceCount->Val() || FetchBlobsCount->Val() || ResultsForReplyGuard->Val();
     }
 
     void OnBlobsWaitDuration(const TDuration d, const TDuration fullScanDuration) const {
@@ -324,10 +389,14 @@ public:
 
     TConcreteScanCounters(const TScanCounters& counters)
         : TBase(counters)
+        , FetchAccessorsCount(std::make_shared<TAtomicCounter>())
+        , FetchBlobsCount(std::make_shared<TAtomicCounter>())
         , MergeTasksCount(std::make_shared<TAtomicCounter>())
         , AssembleTasksCount(std::make_shared<TAtomicCounter>())
         , ReadTasksCount(std::make_shared<TAtomicCounter>())
         , ResourcesAllocationTasksCount(std::make_shared<TAtomicCounter>())
+        , ResultsForSourceCount(std::make_shared<TAtomicCounter>())
+        , ResultsForReplyGuard(std::make_shared<TAtomicCounter>())
         , Aggregations(TBase::BuildAggregations())
     {
 

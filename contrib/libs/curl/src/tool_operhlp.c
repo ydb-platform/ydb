@@ -26,12 +26,13 @@
 
 #include "strcase.h"
 
+#define ENABLE_CURLX_PRINTF
+/* use our own printf() functions */
 #include "curlx.h"
 
 #include "tool_cfgable.h"
 #include "tool_doswin.h"
 #include "tool_operhlp.h"
-#include "tool_msgs.h"
 
 #include "memdebug.h" /* keep this as LAST include */
 
@@ -85,7 +86,7 @@ CURLcode urlerr_cvt(CURLUcode ucode)
 }
 
 /*
- * Adds the filename to the URL if it does not already have one.
+ * Adds the file name to the URL if it doesn't already have one.
  * url will be freed before return if the returned pointer is different
  */
 CURLcode add_file_name_to_url(CURL *curl, char **inurlp, const char *filename)
@@ -117,7 +118,7 @@ CURLcode add_file_name_to_url(CURL *curl, char **inurlp, const char *filename)
     }
     ptr = strrchr(path, '/');
     if(!ptr || !*++ptr) {
-      /* The URL path has no filename part, add the local filename. In order
+      /* The URL path has no file name part, add the local file name. In order
          to be able to do so, we have to create a new URL in another buffer.*/
 
       /* We only want the part of the local path that is on the right
@@ -133,7 +134,7 @@ CURLcode add_file_name_to_url(CURL *curl, char **inurlp, const char *filename)
       else
         filep = filename;
 
-      /* URL encode the filename */
+      /* URL encode the file name */
       encfile = curl_easy_escape(curl, filep, 0 /* use strlen */);
       if(encfile) {
         char *newpath;
@@ -179,9 +180,9 @@ fail:
  * Returns a pointer to a heap-allocated string or NULL if
  * no name part, at location indicated by first argument.
  */
-CURLcode get_url_file_name(struct GlobalConfig *global,
-                           char **filename, const char *url)
+CURLcode get_url_file_name(char **filename, const char *url)
 {
+  const char *pc, *pc2;
   CURLU *uh = curl_url();
   char *path = NULL;
   CURLUcode uerr;
@@ -194,31 +195,20 @@ CURLcode get_url_file_name(struct GlobalConfig *global,
   uerr = curl_url_set(uh, CURLUPART_URL, url, CURLU_GUESS_SCHEME);
   if(!uerr) {
     uerr = curl_url_get(uh, CURLUPART_PATH, &path, 0);
-    curl_url_cleanup(uh);
-    uh = NULL;
     if(!uerr) {
-      int i;
-      char *pc = NULL, *pc2 = NULL;
-      for(i = 0; i < 2; i++) {
-        pc = strrchr(path, '/');
-        pc2 = strrchr(pc ? pc + 1 : path, '\\');
-        if(pc2)
-          pc = pc2;
-        if(pc && !pc[1] && !i) {
-          /* if the path ends with slash, try removing the trailing one
-             and get the last directory part */
-          *pc = 0;
-        }
-      }
+      curl_url_cleanup(uh);
+
+      pc = strrchr(path, '/');
+      pc2 = strrchr(pc ? pc + 1 : path, '\\');
+      if(pc2)
+        pc = pc2;
 
       if(pc)
         /* duplicate the string beyond the slash */
         pc++;
-      else {
-        /* no slash => empty string, use default */
-        pc = (char *)"curl_response";
-        warnf(global, "No remote file name, uses \"%s\"", pc);
-      }
+      else
+        /* no slash => empty string */
+        pc = "";
 
       *filename = strdup(pc);
       curl_free(path);
@@ -240,12 +230,12 @@ CURLcode get_url_file_name(struct GlobalConfig *global,
 #endif /* _WIN32 || MSDOS */
 
       /* in case we built debug enabled, we allow an environment variable
-       * named CURL_TESTDIR to prefix the given filename to put it into a
+       * named CURL_TESTDIR to prefix the given file name to put it into a
        * specific directory
        */
 #ifdef DEBUGBUILD
       {
-        char *tdir = curl_getenv("CURL_TESTDIR");
+        char *tdir = curlx_getenv("CURL_TESTDIR");
         if(tdir) {
           char *alt = aprintf("%s/%s", tdir, *filename);
           Curl_safefree(*filename);

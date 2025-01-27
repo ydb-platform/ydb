@@ -1,21 +1,24 @@
 #pragma once
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
+#include <yql/essentials/parser/lexer_common/lexer.h>
 
-#include <contrib/libs/antlr4_cpp_runtime/src/Token.h>
-#include <contrib/libs/antlr4_cpp_runtime/src/BufferedTokenStream.h>
-#include <contrib/libs/antlr4_cpp_runtime/src/ANTLRInputStream.h>
-
-#include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <util/generic/fwd.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 
 #include <regex>
 
 namespace NYdb {
     namespace NConsoleClient {
+        using NSQLTranslation::ILexer;
+        using NSQLTranslation::TParsedToken;
+        using NSQLTranslation::TParsedTokenList;
 
         class YQLHighlight final {
         public:
             using Color = replxx::Replxx::Color;
+
+            // Colors are provided as for a UTF32 string
             using Colors = replxx::Replxx::colors_t;
 
             struct ColorSchema {
@@ -40,30 +43,31 @@ namespace NYdb {
             explicit YQLHighlight(ColorSchema color);
 
         public:
-            void Apply(std::string_view query, Colors& colors);
+            void Apply(TStringBuf queryUtf8, Colors& colors);
 
         private:
-            void Reset(std::string_view query);
-
-            YQLHighlight::Color ColorOf(const antlr4::Token* token);
-            bool IsKeyword(const antlr4::Token* token) const;
-            bool IsOperation(const antlr4::Token* token) const;
-            bool IsFunctionIdentifier(const antlr4::Token* token);
-            bool IsTypeIdentifier(const antlr4::Token* token) const;
-            bool IsVariableIdentifier(const antlr4::Token* token) const;
-            bool IsQuotedIdentifier(const antlr4::Token* token) const;
-            bool IsString(const antlr4::Token* token) const;
-            bool IsNumber(const antlr4::Token* token) const;
-            bool IsComment(const antlr4::Token* token) const;
+            TParsedTokenList Tokenize(const TString& queryUtf8);
+            ILexer::TPtr& SuitableLexer(const TString& queryUtf8);
+            YQLHighlight::Color ColorOf(const TParsedToken& token, size_t index);
+            bool IsKeyword(const TParsedToken& token) const;
+            bool IsOperation(const TParsedToken& token) const;
+            bool IsFunctionIdentifier(const TParsedToken& token, size_t index);
+            bool IsTypeIdentifier(const TParsedToken& token) const;
+            bool IsVariableIdentifier(const TParsedToken& token) const;
+            bool IsQuotedIdentifier(const TParsedToken& token) const;
+            bool IsString(const TParsedToken& token) const;
+            bool IsNumber(const TParsedToken& token) const;
+            bool IsComment(const TParsedToken& token) const;
 
         private:
             ColorSchema Coloring;
             std::regex BuiltinFunctionRegex;
             std::regex TypeRegex;
 
-            antlr4::ANTLRInputStream Chars;
-            NALPDefaultAntlr4::SQLv1Antlr4Lexer Lexer;
-            antlr4::BufferedTokenStream Tokens;
+            ILexer::TPtr CppLexer;
+            ILexer::TPtr ANSILexer;
+
+            TParsedTokenList Tokens;
         };
 
     }

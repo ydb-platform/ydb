@@ -1,6 +1,0 @@
-266,270d265
-< %ifidn __OUTPUT_FORMAT__, macho64
-< global _gf_3vect_dot_prod_sse:ISAL_SYM_TYPE_FUNCTION
-< func(_gf_3vect_dot_prod_sse)
-< %endif
-< 

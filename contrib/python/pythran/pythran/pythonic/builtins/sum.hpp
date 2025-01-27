@@ -5,8 +5,8 @@
 
 #include "pythonic/types/assignable.hpp"
 #include "pythonic/types/tuple.hpp"
-#include "pythonic/utils/int_.hpp"
 #include "pythonic/utils/functor.hpp"
+#include "pythonic/utils/int_.hpp"
 
 #include <algorithm>
 
@@ -25,25 +25,26 @@ namespace builtins
     }
 
     template <class Tuple>
-    auto tuple_sum<Tuple, 0>::operator()(Tuple const &t)
-        -> decltype(std::get<0>(t))
+    auto
+    tuple_sum<Tuple, 0>::operator()(Tuple const &t) -> decltype(std::get<0>(t))
     {
       return std::get<0>(t);
     }
-  }
+  } // namespace details
 
   template <class Iterable, class T>
-  auto sum(Iterable s, T start) -> decltype(std::accumulate(
-      s.begin(), s.end(),
-      static_cast<typename assignable<decltype(start + *s.begin())>::type>(
-          start)))
+  auto sum(Iterable s, T start)
+      -> decltype(std::accumulate(
+          s.begin(), s.end(),
+          static_cast<typename assignable<decltype(start + *s.begin())>::type>(
+              start)))
   {
     return std::accumulate(
         s.begin(), s.end(),
         static_cast<typename assignable<decltype(start + *s.begin())>::type>(
             start));
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

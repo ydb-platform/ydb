@@ -31,7 +31,7 @@ select  item.i_item_id
      cross join {{date_dim}} d3
      cross join {{store}} as store
      cross join {{item}} as item
- where d1.d_quarter_name = '2000Q1'
+ where d1.d_quarter_name = '2001Q1'
    and d1.d_date_sk = ss_sold_date_sk
    and i_item_sk = ss_item_sk
    and s_store_sk = ss_store_sk
@@ -39,11 +39,11 @@ select  item.i_item_id
    and ss_item_sk = sr_item_sk
    and ss_ticket_number = sr_ticket_number
    and sr_returned_date_sk = d2.d_date_sk
-   and d2.d_quarter_name in ('2000Q1','2000Q2','2000Q3')
+   and d2.d_quarter_name in ('2001Q1','2001Q2','2001Q3')
    and sr_customer_sk = cs_bill_customer_sk
    and sr_item_sk = cs_item_sk
    and cs_sold_date_sk = d3.d_date_sk
-   and d3.d_quarter_name in ('2000Q1','2000Q2','2000Q3')
+   and d3.d_quarter_name in ('2001Q1','2001Q2','2001Q3')
  group by item.i_item_id
          ,item.i_item_desc
          ,store.s_state

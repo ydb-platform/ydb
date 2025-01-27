@@ -12,10 +12,10 @@ As {{ ydb-short-name }} is a distributed system typically running on a cluster, 
 
 * {{ ydb-short-name }} as a client:
 
-  * [LDAP](../../concepts/auth.md#ldap) for user authentication.
+  * [LDAP](../../security/authentication.md#ldap) for user authentication.
   * [Federated queries](../../concepts/federated_query/index.md), a feature that allows {{ ydb-short-name }} to query various external data sources. Some sources are queried directly from the `ydbd` process, while others are proxied via a separate connector process.
   * [Tracing](../../reference/observability/tracing/setup.md) data sent to an external collector via gRPC.
 
 * In [asynchronous replication](../../concepts/async-replication.md) between two {{ ydb-short-name }} databases, one serves as a client to the other.
 
-By default, data in transit encryption is disabled and must be enabled separately for each protocol. They can either share the same set of TLS certificates or use dedicated ones. For instructions on how to enable TLS, refer to the [{#T}](../../deploy/configuration/config.md) section.
+By default, data in transit encryption is disabled and must be enabled separately for each protocol. They can either share the same set of TLS certificates or use dedicated ones. For instructions on how to enable TLS, refer to the [{#T}](../../reference/configuration/tls.md) section.

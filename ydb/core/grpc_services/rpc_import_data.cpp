@@ -15,7 +15,7 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
-#include <ydb/library/yql/public/udf/udf_types.h>
+#include <yql/essentials/public/udf/udf_types.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>

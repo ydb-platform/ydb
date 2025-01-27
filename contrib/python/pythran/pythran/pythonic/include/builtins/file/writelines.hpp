@@ -16,7 +16,7 @@ namespace builtins
     void writelines(F &&f, T const &sequence);
 
     DEFINE_FUNCTOR(pythonic::builtins::file, writelines);
-  }
-}
+  } // namespace file
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

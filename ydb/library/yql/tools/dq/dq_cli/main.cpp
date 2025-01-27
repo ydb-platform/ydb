@@ -1,11 +1,11 @@
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/getopt/last_getopt.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
@@ -299,7 +299,7 @@ void OpenSession(TServiceConnection<DqService>& service, const TString& sessionI
         if (status.Ok()) {
             promise.SetValue();
         } else {
-            promise.SetException(status.Msg);
+            promise.SetException(TString{status.Msg});
         }
     };
 
@@ -333,7 +333,7 @@ Yql::DqsProto::RoutesResponse Routes(TServiceConnection<DqService>& service, con
         if (status.Ok()) {
             promise.SetValue(resp);
         } else {
-            promise.SetException(status.Msg);
+            promise.SetException(TString{status.Msg});
         }
     };
 
@@ -361,7 +361,7 @@ Yql::DqsProto::BenchmarkResponse Bench(TServiceConnection<DqService>& service, c
         if (status.Ok()) {
             promise.SetValue(resp);
         } else {
-            promise.SetException(status.Msg);
+            promise.SetException(TString{status.Msg});
         }
     };
 

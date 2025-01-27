@@ -1,13 +1,12 @@
 #include "meta.h"
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
 std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex(
-    const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
+    const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
     AFL_VERIFY(Serializer);
     AFL_VERIFY(data.size());
     std::vector<TChunkedColumnReader> columnReaders;
@@ -16,12 +15,8 @@ std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex
         AFL_VERIFY(it != data.end());
         columnReaders.emplace_back(it->second, indexInfo.GetColumnLoaderVerified(i));
     }
-    ui32 recordsCount = 0;
-    for (auto&& i : data.begin()->second) {
-        recordsCount += i->GetRecordsCountVerified();
-    }
     TChunkedBatchReader reader(std::move(columnReaders));
-    const TString indexData = DoBuildIndexImpl(reader);
+    const TString indexData = DoBuildIndexImpl(reader, recordsCount);
     return std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData);
 }
 

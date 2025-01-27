@@ -2,12 +2,13 @@
 
 PY3_LIBRARY()
 
-VERSION(0.7.6)
+VERSION(0.7.7)
 
 LICENSE(MIT)
 
 PEERDIR(
     contrib/python/aiohttp
+    contrib/python/packaging
 )
 
 NO_LINT()

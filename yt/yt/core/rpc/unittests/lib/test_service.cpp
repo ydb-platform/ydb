@@ -18,9 +18,12 @@ namespace NYT::NRpc {
 
 using namespace NConcurrency;
 
+using NYT::FromProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch_);
+static YT_DEFINE_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
+static YT_DEFINE_GLOBAL(std::atomic<int>, ConcurrentCalls);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -108,6 +111,9 @@ public:
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, AllocationCall)
     {
         context->SetRequestInfo();
+        if (request->wait_on_latch()) {
+            Latch()->Wait();
+        }
         response->set_allocated_string(TString("r", request->size()));
         context->Reply();
     }
@@ -136,7 +142,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, Compression)
     {
-        auto requestCodecId = CheckedEnumCast<NCompression::ECodec>(request->request_codec());
+        auto requestCodecId = FromProto<NCompression::ECodec>(request->request_codec());
         auto serializedRequestBody = SerializeProtoToRefWithCompression(*request, requestCodecId);
         const auto& compressedRequestBody = context->GetRequestBody();
         EXPECT_TRUE(TRef::AreBitwiseEqual(serializedRequestBody, compressedRequestBody));
@@ -178,7 +184,7 @@ public:
     {
         context->SetRequestInfo();
         if (request->wait_on_latch()) {
-            Latch_()->Wait();
+            Latch()->Wait();
         }
         context->Reply();
     }
@@ -187,7 +193,7 @@ public:
     {
         try {
             context->SetRequestInfo();
-            TDelayedExecutor::WaitForDuration(TDuration::Seconds(2));
+            TDelayedExecutor::WaitForDuration(TDuration::Max());
             context->Reply();
         } catch (const TFiberCanceledException&) {
             SlowCallCanceled_.Set();
@@ -202,6 +208,10 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, RequestBytesThrottledCall)
     {
+        THROW_ERROR_EXCEPTION_UNLESS(ConcurrentCalls().fetch_add(1) == 0, "Too many concurrent calls on entry!");
+        Sleep(TDuration::MilliSeconds(100));
+        THROW_ERROR_EXCEPTION_UNLESS(ConcurrentCalls().fetch_sub(1) == 1, "Too many concurrent calls on exit!");
+
         context->Reply();
     }
 
@@ -329,7 +339,7 @@ public:
         if (callCount.fetch_add(1) % 2) {
             context->Reply();
         } else {
-            context->Reply(TError(EErrorCode::TransportError, "Flaky call iteration"));
+            context->Reply(TError(NRpc::EErrorCode::TransportError, "Flaky call iteration"));
         }
     }
 
@@ -415,24 +425,24 @@ ITestServicePtr CreateTestService(
 
 void ReleaseLatchedCalls()
 {
-    if (!Latch_()) {
+    if (!Latch()) {
         return;
     }
 
-    Latch_()->NotifyAll();
+    Latch()->NotifyAll();
 }
 
 void MaybeInitLatch()
 {
-    if (!Latch_()) {
-        Latch_() = std::make_unique<NThreading::TEvent>();
+    if (!Latch()) {
+        Latch() = std::make_unique<NThreading::TEvent>();
     }
 }
 
 void ResetLatch()
 {
-    if (Latch_()) {
-        Latch_().reset();
+    if (Latch()) {
+        Latch().reset();
     }
 }
 

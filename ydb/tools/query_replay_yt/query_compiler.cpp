@@ -105,8 +105,13 @@ struct TMetadataInfoHolder {
         : TableMetadata(tableMetadata)
     {
         for (auto& [name, ptr] : TableMetadata) {
-            for (auto& secondary : ptr->SecondaryGlobalIndexMetadata) {
-                Indexes.emplace(secondary->Name, secondary);
+            for (auto implTable : ptr->ImplTables) {
+                YQL_ENSURE(implTable);
+                do {
+                    auto nextImplTable = implTable->Next;
+                    Indexes.emplace(implTable->Name, std::move(implTable));
+                    implTable = std::move(nextImplTable);
+                } while (implTable);
             }
         }
     }
@@ -634,7 +639,7 @@ private:
         StartCompilation();
         Continue();
 
-        Schedule(TDuration::Seconds(300), new TEvents::TEvWakeup());
+        Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
         Become(&TThis::StateCompile);
     }
 

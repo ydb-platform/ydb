@@ -13,7 +13,7 @@ SRCS(
     api/client_cache.cpp
     api/delegating_client.cpp
     api/delegating_transaction.cpp
-    api/distributed_table_sessions.cpp
+    api/distributed_table_session.cpp
     api/etc_client.cpp
     api/journal_client.cpp
     api/operation_client.cpp
@@ -101,9 +101,14 @@ SRCS(
     security_client/public.cpp
     security_client/helpers.cpp
 
+    signature/signature.cpp
+    signature/validator.cpp
+    signature/generator.cpp
+
     table_client/public.cpp
     table_client/adapters.cpp
     table_client/table_output.cpp
+    table_client/timestamped_schema_helpers.cpp
     table_client/blob_reader.cpp
     table_client/check_schema_compatibility.cpp
     table_client/chunk_stripe_statistics.cpp
@@ -127,6 +132,7 @@ SRCS(
     table_client/schemaless_buffered_dynamic_table_writer.cpp
     table_client/schemaless_dynamic_table_writer.cpp
     table_client/serialize.cpp
+    table_client/table_upload_options.cpp
     table_client/logical_type.cpp
     table_client/merge_table_schemas.cpp
     table_client/name_table.cpp
@@ -188,18 +194,18 @@ SRCS(
     complex_types/uuid_text.cpp
     complex_types/yson_format_conversion.cpp
 
-    zookeeper/packet.cpp
-    zookeeper/protocol.cpp
-    zookeeper/requests.cpp
-
     kafka/packet.cpp
     kafka/protocol.cpp
     kafka/requests.cpp
 )
 
+CONFIGURE_FILE(
+    api/rpc_proxy/protocol_version_variables.h.in
+    api/rpc_proxy/protocol_version_variables.h
+)
+
 SRCS(
     ${YT_SRCS}
-    yt/yt/client/api/rpc_proxy/protocol_version_variables.h.in
 )
 
 PEERDIR(
@@ -215,6 +221,7 @@ PEERDIR(
     yt/yt/library/quantile_digest
     yt/yt_proto/yt/client
     library/cpp/json
+    library/cpp/string_utils/base64
     contrib/libs/pfr
 )
 
@@ -231,6 +238,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     api/unittests
+    signature/unittests
     table_client/unittests
     unittests
 )

@@ -22,6 +22,9 @@ public:
     //! How often cluster liveness should be checked on the background.
     TDuration ClusterHealthCheckPeriod;
 
+    //! Checks Cypress root availability in liveness check.
+    bool CheckCypressRoot;
+
     //! Maximum number of retry attempts to make.
     int ClusterRetryAttempts;
 

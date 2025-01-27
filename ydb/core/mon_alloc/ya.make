@@ -1,11 +1,5 @@
 LIBRARY()
 
-IF (PROFILE_MEMORY_ALLOCATIONS)
-    CFLAGS(
-        -DPROFILE_MEMORY_ALLOCATIONS
-    )
-ENDIF()
-
 SRCS(
     memory_info.cpp
     monitor.cpp
@@ -35,6 +29,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/prof
     ydb/library/services
+    yql/essentials/utils/memory_profiling
 )
 
 END()

@@ -19,7 +19,7 @@ namespace NBalancing {
             : BatchSize(batchSize)
         {}
 
-        TConstArrayRef<T> GetNextBatch() {
+        TVector<T> GetNextBatch() {
             if (Empty()) {
                 return {};
             }
@@ -27,7 +27,8 @@ namespace NBalancing {
             ui32 begin = CurPos;
             ui32 end = Min(begin + BatchSize, static_cast<ui32>(Data.size()));
             CurPos = end;
-            return TConstArrayRef<T>(Data.data() + begin, end - begin);
+
+            return TVector<T>(std::make_move_iterator(Data.begin() + begin), std::make_move_iterator(Data.begin() + end));
         }
 
         bool Empty() const {
@@ -60,9 +61,9 @@ namespace NBalancing {
         }
 
         TBatchManager() = default;
-        TBatchManager(IActor* sender, IActor* deleter)
-            : SenderId(TlsActivationContext->Register(sender))
-            , DeleterId(TlsActivationContext->Register(deleter))
+        TBatchManager(const TActorId& sender, const TActorId& deleter)
+            : SenderId(sender)
+            , DeleterId(deleter)
         {}
     };
 
@@ -142,7 +143,7 @@ namespace NBalancing {
 
                 const auto& key = It.GetCurKey().LogoBlobID();
 
-                if (Ctx->Cfg.BalanceOnlyHugeBlobs && !Ctx->HugeBlobCtx->IsHugeBlob(GInfo->Type, key, Ctx->MinREALHugeBlobInBytes)) {
+                if (Ctx->Cfg.BalanceOnlyHugeBlobs && !Ctx->HugeBlobCtx->IsHugeBlob(GInfo->Type, key, Ctx->MinHugeBlobInBytes)) {
                     // skip non huge blobs
                     continue;
                 }
@@ -204,13 +205,13 @@ namespace NBalancing {
         ///////////////////////////////////////////////////////////////////////////////////////////
 
         void ContinueBalancing() {
-            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Data.size();
-            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Data.size();
+            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Size();
+            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Size();
 
             if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
                 // no more parts to send or delete
                 STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
-                bool hasSomeWorkForNextEpoch = SendOnMainParts.Data.size() >= Ctx->Cfg.MaxToSendPerEpoch || TryDeleteParts.Data.size() >= Ctx->Cfg.MaxToDeletePerEpoch;
+                bool hasSomeWorkForNextEpoch = SendOnMainParts.Size() >= Ctx->Cfg.MaxToSendPerEpoch || TryDeleteParts.Size() >= Ctx->Cfg.MaxToDeletePerEpoch;
                 Stop(hasSomeWorkForNextEpoch ? TDuration::Seconds(0) : Ctx->Cfg.TimeToSleepIfNothingToDo);
                 return;
             }
@@ -231,9 +232,12 @@ namespace NBalancing {
                 (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisks, GInfo->GetTotalVDisksNum()));
 
             // register sender and deleter actors
+            IActor* sender = CreateSenderActor(SelfId(), SendOnMainParts.GetNextBatch(), QueueActorMapPtr, Ctx);
+            IActor* deleter = CreateDeleterActor(SelfId(), TryDeleteParts.GetNextBatch(), QueueActorMapPtr, Ctx);
+
             BatchManager = TBatchManager(
-                CreateSenderActor(SelfId(), SendOnMainParts.GetNextBatch(), QueueActorMapPtr, Ctx),
-                CreateDeleterActor(SelfId(), TryDeleteParts.GetNextBatch(), QueueActorMapPtr, Ctx)
+                RegisterWithSameMailbox(sender),
+                RegisterWithSameMailbox(deleter)
             );
         }
 

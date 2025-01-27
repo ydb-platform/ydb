@@ -1,17 +1,29 @@
 #pragma once
 #include "abstract/abstract.h"
-#include <util/generic/hash.h>
+#include "abstract/move_portions.h"
+#include "abstract/remove_portions.h"
+
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/tier_info.h>
+
+#include <util/generic/hash.h>
 
 namespace NKikimr::NOlap {
 
 class TChangesWithAppend: public TColumnEngineChanges {
 private:
     using TBase = TColumnEngineChanges;
-    THashMap<TPortionAddress, TPortionInfo> PortionsToRemove;
+    TRemovePortionsChange PortionsToRemove;
+    TMovePortionsChange PortionsToMove;
+
 protected:
+    std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;
     TSaverContext SaverContext;
+    bool NoAppendIsCorrect = false;
+
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
+    }
+
     virtual void DoCompile(TFinalizationContext& context) override;
     virtual void DoOnAfterCompile() override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
@@ -19,47 +31,58 @@ protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
 
     virtual void DoDebugString(TStringOutput& out) const override {
-        out << "remove=" << PortionsToRemove.size() << ";append=" << AppendedPortions.size() << ";";
+        out << "remove=" << PortionsToRemove.GetSize() << ";append=" << AppendedPortions.size() << ";move=" << PortionsToMove.GetSize();
     }
 
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const = 0;
 
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override final {
         auto actLock = DoBuildDataLockImpl();
-        if (actLock) {
-            auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier() + "::REMOVE", PortionsToRemove);
-            return std::make_shared<NDataLocks::TCompositeLock>(TypeString() + "::" + GetTaskIdentifier(), std::vector<std::shared_ptr<NDataLocks::ILock>>({actLock, selfLock}));
-        } else {
-            auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), PortionsToRemove);
-            return selfLock;
-        }
+        auto removePortionsLock = PortionsToRemove.BuildDataLock(TypeString() + "::" + GetTaskIdentifier() + "::REMOVE", GetLockCategory());
+        auto movePortionsLock = PortionsToMove.BuildDataLock(TypeString() + "::" + GetTaskIdentifier() + "::MOVE", GetLockCategory());
+        return NDataLocks::TCompositeLock::Build(TypeString() + "::" + GetTaskIdentifier(), {actLock, removePortionsLock, movePortionsLock});
     }
+
 public:
     TChangesWithAppend(const TSaverContext& saverContext, const NBlobOperations::EConsumer consumerId)
         : TBase(saverContext.GetStoragesManager(), consumerId)
-        , SaverContext(saverContext)
-    {
-
+        , SaverContext(saverContext) {
     }
 
-    const THashMap<TPortionAddress, TPortionInfo>& GetPortionsToRemove() const {
+    const TRemovePortionsChange& GetPortionsToRemove() const {
         return PortionsToRemove;
     }
 
-    ui32 GetPortionsToRemoveSize() const {
-        return PortionsToRemove.size();
+    const TMovePortionsChange& GetPortionsToMove() const {
+        return PortionsToMove;
     }
 
-    bool HasPortionsToRemove() const {
-        return PortionsToRemove.size();
+    void SetTargetCompactionLevel(const ui32 level) {
+        PortionsToMove.SetTargetCompactionLevel(level);
     }
 
-    void AddPortionToRemove(const TPortionInfo& info) {
-        AFL_VERIFY(!info.HasRemoveSnapshot());
-        AFL_VERIFY(PortionsToRemove.emplace(info.GetAddress(), info).second);
+    const std::vector<TWritePortionInfoWithBlobsResult>& GetAppendedPortions() const {
+        return AppendedPortions;
     }
 
-    std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;
+    std::vector<TWritePortionInfoWithBlobsResult>& MutableAppendedPortions() {
+        return AppendedPortions;
+    }
+
+    void AddMovePortions(const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
+        PortionsToMove.AddPortions(portions);
+        for (auto&& i : portions) {
+            PortionsToAccess->AddPortion(i);
+        }
+    }
+
+    void AddPortionToRemove(const TPortionInfo::TConstPtr& info, const bool addIntoDataAccessRequest = true) {
+        AFL_VERIFY(PortionsToRemove.AddPortion(info));
+        if (addIntoDataAccessRequest) {
+            PortionsToAccess->AddPortion(info);
+        }
+    }
+
     virtual ui32 GetWritePortionsCount() const override {
         return AppendedPortions.size();
     }
@@ -72,4 +95,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

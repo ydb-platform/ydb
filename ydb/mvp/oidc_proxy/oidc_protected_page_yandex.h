@@ -3,8 +3,7 @@
 #include "openid_connect.h"
 #include "oidc_protected_page.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 class THandlerSessionServiceCheckYandex : public THandlerSessionServiceCheck {
 private:
@@ -19,14 +18,14 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx) override;
 
-    void Handle(TEvPrivate::TEvCheckSessionResponse::TPtr event, const NActors::TActorContext& ctx);
-    void Handle(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCheckSessionResponse::TPtr event);
+    void Handle(TEvPrivate::TEvErrorResponse::TPtr event);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
-            HFunc(TEvPrivate::TEvCheckSessionResponse, Handle);
-            HFunc(TEvPrivate::TEvErrorResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
+            hFunc(TEvPrivate::TEvCheckSessionResponse, Handle);
+            hFunc(TEvPrivate::TEvErrorResponse, Handle);
         }
     }
 
@@ -35,5 +34,4 @@ private:
     bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const override;
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

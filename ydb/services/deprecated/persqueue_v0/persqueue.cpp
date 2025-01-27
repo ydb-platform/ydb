@@ -42,18 +42,6 @@ void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrp
     }
 }
 
-void TGRpcPersQueueService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
-    Limiter = limiter;
-}
-
-bool TGRpcPersQueueService::IncRequest() {
-    return Limiter->Inc();
-}
-
-void TGRpcPersQueueService::DecRequest() {
-    Limiter->Dec();
-}
-
 void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr /*logger*/) {
     WriteService->SetupIncomingRequests();
     ReadService->SetupIncomingRequests();

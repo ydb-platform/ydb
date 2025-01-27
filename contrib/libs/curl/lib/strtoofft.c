@@ -31,7 +31,7 @@
  * NOTE:
  *
  * In the ISO C standard (IEEE Std 1003.1), there is a strtoimax() function we
- * could use in case strtoll() does not exist... See
+ * could use in case strtoll() doesn't exist...  See
  * https://www.opengroup.org/onlinepubs/009695399/functions/strtoimax.html
  */
 
@@ -73,16 +73,17 @@ static const char valchars[] =
 static int get_char(char c, int base);
 
 /**
- * Custom version of the strtooff function. This extracts a curl_off_t
+ * Custom version of the strtooff function.  This extracts a curl_off_t
  * value from the given input string and returns it.
  */
 static curl_off_t strtooff(const char *nptr, char **endptr, int base)
 {
   char *end;
-  bool is_negative = FALSE;
-  bool overflow = FALSE;
+  int is_negative = 0;
+  int overflow;
   int i;
   curl_off_t value = 0;
+  curl_off_t newval;
 
   /* Skip leading whitespace. */
   end = (char *)nptr;
@@ -92,7 +93,7 @@ static curl_off_t strtooff(const char *nptr, char **endptr, int base)
 
   /* Handle the sign, if any. */
   if(end[0] == '-') {
-    is_negative = TRUE;
+    is_negative = 1;
     end++;
   }
   else if(end[0] == '+') {
@@ -120,23 +121,27 @@ static curl_off_t strtooff(const char *nptr, char **endptr, int base)
     }
   }
 
-  /* Matching strtol, if the base is 0 and it does not look like
-   * the number is octal or hex, we assume it is base 10.
+  /* Matching strtol, if the base is 0 and it doesn't look like
+   * the number is octal or hex, we assume it's base 10.
    */
   if(base == 0) {
     base = 10;
   }
 
   /* Loop handling digits. */
+  value = 0;
+  overflow = 0;
   for(i = get_char(end[0], base);
       i != -1;
       end++, i = get_char(end[0], base)) {
-
-    if(value > (CURL_OFF_T_MAX - i) / base) {
-      overflow = TRUE;
+    newval = base * value + i;
+    if(newval < value) {
+      /* We've overflowed. */
+      overflow = 1;
       break;
     }
-    value = base * value + i;
+    else
+      value = newval;
   }
 
   if(!overflow) {
@@ -168,7 +173,7 @@ static curl_off_t strtooff(const char *nptr, char **endptr, int base)
  * @param c     the character to interpret according to base
  * @param base  the base in which to interpret c
  *
- * @return  the value of c in base, or -1 if c is not in range
+ * @return  the value of c in base, or -1 if c isn't in range
  */
 static int get_char(char c, int base)
 {
@@ -204,15 +209,15 @@ static int get_char(char c, int base)
 
   return value;
 }
-#endif  /* Only present if we need strtoll, but do not have it. */
+#endif  /* Only present if we need strtoll, but don't have it. */
 
 /*
- * Parse a *positive* up to 64-bit number written in ASCII.
+ * Parse a *positive* up to 64 bit number written in ascii.
  */
 CURLofft curlx_strtoofft(const char *str, char **endp, int base,
                          curl_off_t *num)
 {
-  char *end = NULL;
+  char *end;
   curl_off_t number;
   errno = 0;
   *num = 0; /* clear by default */
@@ -222,7 +227,7 @@ CURLofft curlx_strtoofft(const char *str, char **endp, int base,
     str++;
   if(('-' == *str) || (ISSPACE(*str))) {
     if(endp)
-      *endp = (char *)str; /* did not actually move */
+      *endp = (char *)str; /* didn't actually move */
     return CURL_OFFT_INVAL; /* nothing parsed */
   }
   number = strtooff(str, &end, base);

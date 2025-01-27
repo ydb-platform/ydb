@@ -28,58 +28,9 @@
 #define CURL_NO_OLDIES
 #endif
 
-/* Tell "curl/curl.h" not to include "curl/mprintf.h" */
-#define CURL_SKIP_INCLUDE_MPRINTF
-
-/* FIXME: Delete this once the warnings have been fixed. */
-#if !defined(CURL_WARN_SIGN_CONVERSION)
-#ifdef __GNUC__
-#pragma GCC diagnostic ignored "-Wsign-conversion"
-#endif
-#endif
-
 /* Set default _WIN32_WINNT */
 #ifdef __MINGW32__
 #include <_mingw.h>
-#endif
-
-/* Workaround for Homebrew gcc 12.4.0, 13.3.0, 14.1.0 and newer (as of 14.1.0)
-   that started advertising the `availability` attribute, which then gets used
-   by Apple SDK, but, in a way incompatible with gcc, resulting in a misc
-   errors inside SDK headers, e.g.:
-     error: attributes should be specified before the declarator in a function
-            definition
-     error: expected ',' or '}' before
-   Followed by missing declarations.
-   Fix it by overriding the built-in feature-check macro used by the headers
-   to enable the problematic attributes. This makes the feature check fail. */
-#if defined(__APPLE__) &&                \
-  !defined(__clang__) &&                 \
-  defined(__GNUC__) && __GNUC__ >= 12 && \
-  defined(__has_attribute)
-#define availability curl_pp_attribute_disabled
-#endif
-
-#if defined(__APPLE__)
-#include <sys/types.h>
-#include <TargetConditionals.h>
-/* Fixup faulty target macro initialization in macOS SDK since v14.4 (as of
-   15.0 beta). The SDK target detection in `TargetConditionals.h` correctly
-   detects macOS, but fails to set the macro's old name `TARGET_OS_OSX`, then
-   continues to set it to a default value of 0. Other parts of the SDK still
-   rely on the old name, and with this inconsistency our builds fail due to
-   missing declarations. It happens when using mainline llvm older than v18.
-   Later versions fixed it by predefining these target macros, avoiding the
-   faulty dynamic detection. gcc is not affected (for now) because it lacks
-   the necessary dynamic detection features, so the SDK falls back to
-   a codepath that sets both the old and new macro to 1. */
-#if defined(TARGET_OS_MAC) && TARGET_OS_MAC && \
-  defined(TARGET_OS_OSX) && !TARGET_OS_OSX && \
-  (!defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE) && \
-  (!defined(TARGET_OS_SIMULATOR) || !TARGET_OS_SIMULATOR)
-#undef TARGET_OS_OSX
-#define TARGET_OS_OSX TARGET_OS_MAC
-#endif
 #endif
 
 /*
@@ -92,7 +43,7 @@
 
 #ifdef _WIN32
 /*
- * Do not include unneeded stuff in Windows headers to avoid compiler
+ * Don't include unneeded stuff in Windows headers to avoid compiler
  * warnings and macro clashes.
  * Make sure to define this macro before including any Windows headers.
  */
@@ -112,11 +63,6 @@
 #    define CURL_WINDOWS_APP
 #  endif
 # endif
-#endif
-
-/* Compatibility */
-#if defined(ENABLE_IPV6)
-#  define USE_IPV6 1
 #endif
 
 /*
@@ -307,72 +253,22 @@
  * Windows setup file includes some system headers.
  */
 
-#ifdef _WIN32
+#ifdef HAVE_WINDOWS_H
 #  include "setup-win32.h"
 #endif
 
 #include <curl/system.h>
 
-/* Helper macro to expand and concatenate two macros.
- * Direct macros concatenation does not work because macros
- * are not expanded before direct concatenation.
- */
-#define CURL_CONC_MACROS_(A,B) A ## B
-#define CURL_CONC_MACROS(A,B) CURL_CONC_MACROS_(A,B)
-
-/* curl uses its own printf() function internally. It understands the GNU
- * format. Use this format, so that is matches the GNU format attribute we
- * use with the MinGW compiler, allowing it to verify them at compile-time.
- */
-#ifdef  __MINGW32__
-#  undef CURL_FORMAT_CURL_OFF_T
-#  undef CURL_FORMAT_CURL_OFF_TU
-#  define CURL_FORMAT_CURL_OFF_T   "lld"
-#  define CURL_FORMAT_CURL_OFF_TU  "llu"
-#endif
-
-/* based on logic in "curl/mprintf.h" */
-
-#if (defined(__GNUC__) || defined(__clang__) ||                         \
-  defined(__IAR_SYSTEMS_ICC__)) &&                                      \
-  defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) &&         \
-  !defined(CURL_NO_FMT_CHECKS)
-#if defined(__MINGW32__) && !defined(__clang__)
-#define CURL_PRINTF(fmt, arg) \
-  __attribute__((format(gnu_printf, fmt, arg)))
-#else
-#define CURL_PRINTF(fmt, arg) \
-  __attribute__((format(__printf__, fmt, arg)))
-#endif
-#else
-#define CURL_PRINTF(fmt, arg)
-#endif
-
-/* Override default printf mask check rules in "curl/mprintf.h" */
-#define CURL_TEMP_PRINTF CURL_PRINTF
-
-/* Workaround for mainline llvm v16 and earlier missing a built-in macro
-   expected by macOS SDK v14 / Xcode v15 (2023) and newer.
-   gcc (as of v14) is also missing it. */
-#if defined(__APPLE__) &&                                   \
-  ((!defined(__apple_build_version__) &&                    \
-    defined(__clang__) && __clang_major__ < 17) ||          \
-   (defined(__GNUC__) && __GNUC__ <= 14)) &&                \
-  defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && \
-  !defined(__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__)
-#define __ENVIRONMENT_OS_VERSION_MIN_REQUIRED__             \
-  __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__
-#endif
-
 /*
  * Use getaddrinfo to resolve the IPv4 address literal. If the current network
- * interface does not support IPv4, but supports IPv6, NAT64, and DNS64,
+ * interface doesn't support IPv4, but supports IPv6, NAT64, and DNS64,
  * performing this task will result in a synthesized IPv6 address.
  */
 #if defined(__APPLE__) && !defined(USE_ARES)
+#include <TargetConditionals.h>
 #define USE_RESOLVE_ON_IPS 1
 #  if TARGET_OS_MAC && !(defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) && \
-     defined(USE_IPV6)
+     defined(ENABLE_IPV6)
 #    define CURL_MACOS_CALL_COPYPROXIES 1
 #  endif
 #endif
@@ -450,7 +346,7 @@
 #endif
 
 /*
- * Large file (>2Gb) support using Win32 functions.
+ * Large file (>2Gb) support using WIN32 functions.
  */
 
 #ifdef USE_WIN32_LARGE_FILES
@@ -467,13 +363,15 @@
 #  define LSEEK_ERROR                (__int64)-1
 #  define open                       curlx_win32_open
 #  define fopen(fname,mode)          curlx_win32_fopen(fname, mode)
+#  define access(fname,mode)         curlx_win32_access(fname, mode)
    int curlx_win32_open(const char *filename, int oflag, ...);
    int curlx_win32_stat(const char *path, struct_stat *buffer);
    FILE *curlx_win32_fopen(const char *filename, const char *mode);
+   int curlx_win32_access(const char *path, int mode);
 #endif
 
 /*
- * Small file (<2Gb) support using Win32 functions.
+ * Small file (<2Gb) support using WIN32 functions.
  */
 
 #ifdef USE_WIN32_SMALL_FILES
@@ -488,9 +386,11 @@
 #    define struct_stat                struct _stat
 #    define open                       curlx_win32_open
 #    define fopen(fname,mode)          curlx_win32_fopen(fname, mode)
+#    define access(fname,mode)         curlx_win32_access(fname, mode)
      int curlx_win32_stat(const char *path, struct_stat *buffer);
      int curlx_win32_open(const char *filename, int oflag, ...);
      FILE *curlx_win32_fopen(const char *filename, const char *mode);
+     int curlx_win32_access(const char *path, int mode);
 #  endif
 #  define LSEEK_ERROR                (long)-1
 #endif
@@ -504,30 +404,12 @@
 #endif
 
 #ifndef SIZEOF_TIME_T
-/* assume default size of time_t to be 32 bits */
+/* assume default size of time_t to be 32 bit */
 #define SIZEOF_TIME_T 4
 #endif
 
-#ifndef SIZEOF_CURL_SOCKET_T
-/* configure and cmake check and set the define */
-#  ifdef _WIN64
-#    define SIZEOF_CURL_SOCKET_T 8
-#  else
-/* default guess */
-#    define SIZEOF_CURL_SOCKET_T 4
-#  endif
-#endif
-
-#if SIZEOF_CURL_SOCKET_T < 8
-#  define FMT_SOCKET_T "d"
-#elif defined(__MINGW32__)
-#  define FMT_SOCKET_T "zd"
-#else
-#  define FMT_SOCKET_T "qd"
-#endif
-
 /*
- * Default sizeof(off_t) in case it has not been defined in config file.
+ * Default sizeof(off_t) in case it hasn't been defined in config file.
  */
 
 #ifndef SIZEOF_OFF_T
@@ -561,23 +443,6 @@
 #endif
 #define CURL_OFF_T_MIN (-CURL_OFF_T_MAX - CURL_OFF_T_C(1))
 
-#if (SIZEOF_CURL_OFF_T != 8)
-#  error "curl_off_t must be exactly 64 bits"
-#else
-  typedef unsigned CURL_TYPEOF_CURL_OFF_T curl_uint64_t;
-  typedef CURL_TYPEOF_CURL_OFF_T  curl_int64_t;
-#  ifndef CURL_SUFFIX_CURL_OFF_TU
-#    error "CURL_SUFFIX_CURL_OFF_TU must be defined"
-#  endif
-#  define CURL_UINT64_SUFFIX  CURL_SUFFIX_CURL_OFF_TU
-#  define CURL_UINT64_C(val)  CURL_CONC_MACROS(val,CURL_UINT64_SUFFIX)
-# define FMT_PRId64  CURL_FORMAT_CURL_OFF_T
-# define FMT_PRIu64  CURL_FORMAT_CURL_OFF_TU
-#endif
-
-#define FMT_OFF_T CURL_FORMAT_CURL_OFF_T
-#define FMT_OFF_TU CURL_FORMAT_CURL_OFF_TU
-
 #if (SIZEOF_TIME_T == 4)
 #  ifdef HAVE_TIME_T_UNSIGNED
 #  define TIME_T_MAX UINT_MAX
@@ -597,7 +462,7 @@
 #endif
 
 #ifndef SIZE_T_MAX
-/* some limits.h headers have this defined, some do not */
+/* some limits.h headers have this defined, some don't */
 #if defined(SIZEOF_SIZE_T) && (SIZEOF_SIZE_T > 4)
 #define SIZE_T_MAX 18446744073709551615U
 #else
@@ -606,7 +471,7 @@
 #endif
 
 #ifndef SSIZE_T_MAX
-/* some limits.h headers have this defined, some do not */
+/* some limits.h headers have this defined, some don't */
 #if defined(SIZEOF_SIZE_T) && (SIZEOF_SIZE_T > 4)
 #define SSIZE_T_MAX 9223372036854775807
 #else
@@ -615,7 +480,7 @@
 #endif
 
 /*
- * Arg 2 type for gethostname in case it has not been defined in config file.
+ * Arg 2 type for gethostname in case it hasn't been defined in config file.
  */
 
 #ifndef GETHOSTNAME_TYPE_ARG2
@@ -682,9 +547,9 @@
  * Mutually exclusive CURLRES_* definitions.
  */
 
-#if defined(USE_IPV6) && defined(HAVE_GETADDRINFO)
+#if defined(ENABLE_IPV6) && defined(HAVE_GETADDRINFO)
 #  define CURLRES_IPV6
-#elif defined(USE_IPV6) && (defined(_WIN32) || defined(__CYGWIN__))
+#elif defined(ENABLE_IPV6) && (defined(_WIN32) || defined(__CYGWIN__))
 /* assume on Windows that IPv6 without getaddrinfo is a broken build */
 #  error "Unexpected build: IPv6 is enabled but getaddrinfo was not found."
 #else
@@ -706,14 +571,13 @@
 
 /* ---------------------------------------------------------------- */
 
-#if defined(HAVE_LIBIDN2) && defined(HAVE_IDN2_H) && \
-  !defined(USE_WIN32_IDN) && !defined(USE_APPLE_IDN)
+#if defined(HAVE_LIBIDN2) && defined(HAVE_IDN2_H) && !defined(USE_WIN32_IDN)
 /* The lib and header are present */
 #define USE_LIBIDN2
 #endif
 
-#if defined(USE_LIBIDN2) && (defined(USE_WIN32_IDN) || defined(USE_APPLE_IDN))
-#error "libidn2 cannot be enabled with WinIDN or AppleIDN, choose one."
+#if defined(USE_LIBIDN2) && defined(USE_WIN32_IDN)
+#error "Both libidn2 and WinIDN are enabled, choose one."
 #endif
 
 #define LIBIDN_REQUIRED_VERSION "0.4.1"
@@ -722,11 +586,6 @@
   defined(USE_WOLFSSL) || defined(USE_SCHANNEL) || defined(USE_SECTRANSP) || \
   defined(USE_BEARSSL) || defined(USE_RUSTLS)
 #define USE_SSL    /* SSL support has been enabled */
-#endif
-
-#if defined(USE_WOLFSSL) && defined(USE_GNUTLS)
-/* Avoid defining unprefixed wolfSSL SHA macros colliding with nettle ones */
-#define NO_OLD_WC_NAMES
 #endif
 
 /* Single point where USE_SPNEGO definition might be defined */
@@ -772,13 +631,6 @@
   ((__GNUC__ == 2) && defined(__GNUC_MINOR__) && (__GNUC_MINOR__ >= 7)))
 #  define UNUSED_PARAM __attribute__((__unused__))
 #  define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
-#elif defined(__IAR_SYSTEMS_ICC__)
-#  define UNUSED_PARAM __attribute__((__unused__))
-#  if (__VER__ >= 9040001)
-#    define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
-#  else
-#    define WARN_UNUSED_RESULT
-#  endif
 #else
 #  define UNUSED_PARAM /* NOTHING */
 #  define WARN_UNUSED_RESULT
@@ -787,24 +639,12 @@
 /* noreturn attribute */
 
 #if !defined(CURL_NORETURN)
-#if (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) || \
-  defined(__IAR_SYSTEMS_ICC__)
+#if (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__)
 #  define CURL_NORETURN  __attribute__((__noreturn__))
 #elif defined(_MSC_VER) && (_MSC_VER >= 1200)
 #  define CURL_NORETURN  __declspec(noreturn)
 #else
 #  define CURL_NORETURN
-#endif
-#endif
-
-/* fallthrough attribute */
-
-#if !defined(FALLTHROUGH)
-#if (defined(__GNUC__) && __GNUC__ >= 7) || \
-    (defined(__clang__) && __clang_major__ >= 10)
-#  define FALLTHROUGH()  __attribute__((fallthrough))
-#else
-#  define FALLTHROUGH()  do {} while (0)
 #endif
 #endif
 
@@ -829,13 +669,16 @@
  */
 
 #if defined(__LWIP_OPT_H__) || defined(LWIP_HDR_OPT_H)
-#  if defined(SOCKET) || defined(USE_WINSOCK)
-#    error "Winsock and lwIP TCP/IP stack definitions shall not coexist!"
+#  if defined(SOCKET) || \
+     defined(USE_WINSOCK) || \
+     defined(HAVE_WINSOCK2_H) || \
+     defined(HAVE_WS2TCPIP_H)
+#    error "WinSock and lwIP TCP/IP stack definitions shall not coexist!"
 #  endif
 #endif
 
 /*
- * shutdown() flags for systems that do not define them
+ * shutdown() flags for systems that don't define them
  */
 
 #ifndef SHUT_RD
@@ -868,7 +711,7 @@ Therefore we specify it explicitly. https://github.com/curl/curl/pull/258
 #define FOPEN_WRITETEXT "wt"
 #define FOPEN_APPENDTEXT "at"
 #elif defined(__CYGWIN__)
-/* Cygwin has specific behavior we need to address when _WIN32 is not defined.
+/* Cygwin has specific behavior we need to address when WIN32 is not defined.
 https://cygwin.com/cygwin-ug-net/using-textbinary.html
 For write we want our output to have line endings of LF and be compatible with
 other Cygwin utilities. For read we want to handle input that may have line
@@ -883,7 +726,7 @@ endings either CRLF or LF so 't' is appropriate.
 #define FOPEN_APPENDTEXT "a"
 #endif
 
-/* for systems that do not detect this in configure */
+/* for systems that don't detect this in configure */
 #ifndef CURL_SA_FAMILY_T
 #  if defined(HAVE_SA_FAMILY_T)
 #    define CURL_SA_FAMILY_T sa_family_t
@@ -912,7 +755,7 @@ int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf,
                size_t buflen, struct passwd **result);
 #endif
 
-#ifdef UNITTESTS
+#ifdef DEBUGBUILD
 #define UNITTEST
 #else
 #define UNITTEST static
@@ -924,13 +767,8 @@ int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf,
 #endif
 
 #if (defined(USE_NGTCP2) && defined(USE_NGHTTP3)) || \
-    (defined(USE_OPENSSL_QUIC) && defined(USE_NGHTTP3)) || \
     defined(USE_QUICHE) || defined(USE_MSH3)
-
-#ifdef CURL_WITH_MULTI_SSL
-#error "Multi-SSL combined with QUIC is not supported"
-#endif
-
+#define ENABLE_QUIC
 #define USE_HTTP3
 #endif
 
@@ -959,28 +797,6 @@ int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf,
    replacements (yet) so tell the compiler to not warn for them. */
 #ifdef USE_OPENSSL
 #define OPENSSL_SUPPRESS_DEPRECATED
-#endif
-
-#if defined(inline)
-  /* 'inline' is defined as macro and assumed to be correct */
-  /* No need for 'inline' replacement */
-#elif defined(__cplusplus)
-  /* The code is compiled with C++ compiler.
-     C++ always supports 'inline'. */
-  /* No need for 'inline' replacement */
-#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901
-  /* C99 (and later) supports 'inline' keyword */
-  /* No need for 'inline' replacement */
-#elif defined(__GNUC__) && __GNUC__ >= 3
-  /* GCC supports '__inline__' as an extension */
-#  define inline __inline__
-#elif defined(_MSC_VER) && _MSC_VER >= 1400
-  /* MSC supports '__inline' from VS 2005 (or even earlier) */
-#  define inline __inline
-#else
-  /* Probably 'inline' is not supported by compiler.
-     Define to the empty string to be on the safe side. */
-#  define inline /* empty */
 #endif
 
 #endif /* HEADER_CURL_SETUP_H */

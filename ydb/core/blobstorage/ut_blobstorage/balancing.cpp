@@ -1,8 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/util/random.h>
 
 #include <library/cpp/iterator/enumerate.h>
 
-#include <util/random/entropy.h>
 
 
 using TPartsLocations = TVector<TVector<ui8>>;
@@ -214,14 +214,6 @@ TLogoBlobID MakeLogoBlobId(ui32 step, ui32 dataSize) {
     return TLogoBlobID(1, 1, step, 0, dataSize, 0);
 }
 
-
-TString GenData(ui32 len) {
-    TString res = TString::Uninitialized(len);
-    EntropyPool().Read(res.Detach(), res.size());
-    return res;
-}
-
-
 struct TStopOneNodeTest {
     TTestEnv Env;
     TString data;
@@ -323,7 +315,7 @@ struct TRandomTest {
 
         for (ui32 step = 0; step < NumIters; ++step) {
             Cerr << "Step = " << step << Endl;
-            data.push_back(GenData(16 + random() % MaxBlobSize));
+            data.push_back(GenRandomBuffer(16 + random() % MaxBlobSize));
 
             if (Env.SendPut(step, data.back()) == NKikimrProto::OK) {
                 successfulSteps.push_back(step);
@@ -471,16 +463,16 @@ struct TTwoPartsOnOneNodeTest {
 Y_UNIT_TEST_SUITE(VDiskBalancing) {
 
     Y_UNIT_TEST(TestStopOneNode_Block42) {
-        TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(100)}.RunTest();
+        TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(100)}.RunTest();
     }
     Y_UNIT_TEST(TestStopOneNode_Mirror3dc) {
-        TStopOneNodeTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), GenData(100)}.RunTest();
+        TStopOneNodeTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), GenRandomBuffer(100)}.RunTest();
     }
     Y_UNIT_TEST(TestStopOneNode_Block42_HugeBlob) {
-        TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(521_KB * 6)}.RunTest();
+        TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(521_KB * 6)}.RunTest();
     }
     Y_UNIT_TEST(TestStopOneNode_Mirror3dc_HugeBlob) {
-        TStopOneNodeTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), GenData(521_KB)}.RunTest();
+        TStopOneNodeTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), GenRandomBuffer(521_KB)}.RunTest();
     }
 
     Y_UNIT_TEST(TestRandom_Block42) {
@@ -491,13 +483,13 @@ Y_UNIT_TEST_SUITE(VDiskBalancing) {
     }
 
     Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block42) {
-        TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(100)}.RunTest();
+        TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(100)}.RunTest();
     }
     Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block42_HugeBlob) {
-        TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(521_KB * 6)}.RunTest();
+        TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(521_KB * 6)}.RunTest();
     }
 
     Y_UNIT_TEST(TestDontSendToReadOnlyTest_Block42) {
-        TDontSendToReadOnlyTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(100)}.RunTest();
+        TDontSendToReadOnlyTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(100)}.RunTest();
     }
 }

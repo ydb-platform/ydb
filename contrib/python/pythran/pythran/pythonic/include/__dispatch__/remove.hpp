@@ -11,7 +11,7 @@ namespace __dispatch__
   auto remove(Any &any, Arg0 const &arg0) -> decltype(any.remove(arg0));
 
   DEFINE_FUNCTOR(pythonic::__dispatch__, remove);
-}
+} // namespace __dispatch__
 PYTHONIC_NS_END
 
 #endif

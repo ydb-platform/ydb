@@ -9,20 +9,43 @@ ui64 TChangeRecord::GetGroup() const {
     return 0;
 }
 
-ui64 TChangeRecord::GetStep() const {
-    if (const auto* step = JsonBody.GetValueByPath("ts.[0]")) {
+ui64 GetVitualTsComponent(const NJson::TJsonValue& json, TStringBuf key, size_t index) {
+    static constexpr TStringBuf paths[] = {"[0]", "[1]"};
+    Y_ABORT_UNLESS(index < std::size(paths));
+
+    if (!json.Has(key)) {
+        return 0;
+    }
+
+    if (const auto* step = json[key].GetValueByPath(paths[index])) {
         return step->GetUIntegerRobust();
     }
 
     return 0;
 }
 
-ui64 TChangeRecord::GetTxId() const {
-    if (const auto* txId = JsonBody.GetValueByPath("ts.[1]")) {
-        return txId->GetUIntegerRobust();
-    }
+ui64 GetStep(const NJson::TJsonValue& json, TStringBuf key) {
+    return GetVitualTsComponent(json, key, 0);
+}
 
-    return 0;
+ui64 GetTxId(const NJson::TJsonValue& json, TStringBuf key) {
+    return GetVitualTsComponent(json, key, 1);
+}
+
+ui64 TChangeRecord::GetStep() const {
+    switch (GetKind()) {
+        case EKind::CdcDataChange: return NService::GetStep(JsonBody, "ts");
+        case EKind::CdcHeartbeat: return NService::GetStep(JsonBody, "resolved");
+        default: Y_ABORT("unreachable");
+    }
+}
+
+ui64 TChangeRecord::GetTxId() const {
+    switch (GetKind()) {
+        case EKind::CdcDataChange: return NService::GetTxId(JsonBody, "ts");
+        case EKind::CdcHeartbeat: return NService::GetTxId(JsonBody, "resolved");
+        default: Y_ABORT("unreachable");
+    }
 }
 
 NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
@@ -68,7 +91,9 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
 void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TMemoryPool& pool) const {
     pool.Clear();
     record.SetSourceOffset(GetOrder());
-    // TODO: fill WriteTxId
+    if (WriteTxId) {
+        record.SetWriteTxId(WriteTxId);
+    }
 
     TString error;
 
@@ -130,6 +155,10 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
 
 void TChangeRecord::Accept(NChangeExchange::IVisitor& visitor) const {
     return visitor.Visit(*this);
+}
+
+void TChangeRecord::RewriteTxId(ui64 value) {
+    WriteTxId = value;
 }
 
 }

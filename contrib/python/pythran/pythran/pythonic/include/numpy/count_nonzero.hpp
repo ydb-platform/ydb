@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_COUNT_NONZERO_HPP
 #define PYTHONIC_INCLUDE_NUMPY_COUNT_NONZERO_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -24,7 +24,7 @@ namespace numpy
   long count_nonzero(E const &array);
 
   DEFINE_FUNCTOR(pythonic::numpy, count_nonzero);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

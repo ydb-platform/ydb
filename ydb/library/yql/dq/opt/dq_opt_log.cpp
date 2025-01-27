@@ -2,15 +2,15 @@
 
 #include "dq_opt.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_aggregate_expander.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_window.h>
-#include <ydb/library/yql/core/yql_opt_match_recognize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
-#include <ydb/library/yql/dq/integration/yql_dq_optimization.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_aggregate_expander.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_window.h>
+#include <yql/essentials/core/yql_opt_match_recognize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
 
 using namespace NYql::NNodes;
 
@@ -184,32 +184,18 @@ static void CollectSinkStages(const NNodes::TDqQuery& dqQuery, THashSet<TExprNod
 }
 
 NNodes::TExprBase DqMergeQueriesWithSinks(NNodes::TExprBase dqQueryNode, TExprContext& ctx) {
-    NNodes::TDqQuery dqQuery = dqQueryNode.Cast<NNodes::TDqQuery>();
+    auto maybeDqQuery = dqQueryNode.Maybe<NNodes::TDqQuery>();
+    YQL_ENSURE(maybeDqQuery, "Expected DqQuery!");
+    auto dqQuery = maybeDqQuery.Cast();
 
-    THashSet<TExprNode::TPtr, TExprNode::TPtrHash> sinkStages;
-    CollectSinkStages(dqQuery, sinkStages);
-    TOptimizeExprSettings settings{nullptr};
-    settings.VisitLambdas = false;
-    bool deletedDqQueryChild = false;
-    TExprNode::TPtr newDqQueryNode;
-    auto status = OptimizeExpr(dqQueryNode.Ptr(), newDqQueryNode, [&sinkStages, &deletedDqQueryChild](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        for (ui32 childIndex = 0; childIndex < node->ChildrenSize(); ++childIndex) {
-            TExprNode* child = node->Child(childIndex);
-            if (child->IsCallable(NNodes::TDqQuery::CallableName())) {
-                NNodes::TDqQuery dqQueryChild(child);
-                CollectSinkStages(dqQueryChild, sinkStages);
-                deletedDqQueryChild = true;
-                return ctx.ChangeChild(*node, childIndex, dqQueryChild.World().Ptr());
-            }
-        }
-        return node;
-    }, ctx, settings);
-    YQL_ENSURE(status != IGraphTransformer::TStatus::Error, "Failed to merge DqQuery nodes: " << status);
+    if (auto maybeDqQueryChild = dqQuery.World().Maybe<NNodes::TDqQuery>()) {
+        auto dqQueryChild = maybeDqQueryChild.Cast();
+        auto dqQueryBuilder = Build<TDqQuery>(ctx, dqQuery.Pos())
+            .World(dqQueryChild.World());
 
-    if (deletedDqQueryChild) {
-        auto dqQueryBuilder = Build<TDqQuery>(ctx, dqQuery.Pos());
-        dqQueryBuilder.World(newDqQueryNode->ChildPtr(TDqQuery::idx_World));
-
+        THashSet<TExprNode::TPtr, TExprNode::TPtrHash> sinkStages;
+        CollectSinkStages(dqQuery, sinkStages);
+        CollectSinkStages(maybeDqQueryChild.Cast(), sinkStages);
         auto sinkStagesBuilder = dqQueryBuilder.SinkStages();
         for (const TExprNode::TPtr& stage : sinkStages) {
             sinkStagesBuilder.Add(stage);
@@ -350,7 +336,7 @@ NNodes::TExprBase DqReplicateFieldSubset(NNodes::TExprBase node, TExprContext& c
     return node;
 }
 
-IGraphTransformer::TStatus DqWrapIO(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TDqSettings& config) {
+IGraphTransformer::TStatus DqWrapIO(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const IDqIntegration::TWrapReadSettings& wrSettings) {
     TOptimizeExprSettings settings{&typesCtx};
     auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
         if (auto maybeRead = TMaybeNode<TCoRight>(node).Input()) {
@@ -359,7 +345,7 @@ IGraphTransformer::TStatus DqWrapIO(const TExprNode::TPtr& input, TExprNode::TPt
                 auto dataSource = typesCtx.DataSourceMap.FindPtr(dataSourceName);
                 YQL_ENSURE(dataSource);
                 if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
-                    auto newRead = dqIntegration->WrapRead(config, maybeRead.Cast().Ptr(), ctx);
+                    auto newRead = dqIntegration->WrapRead(maybeRead.Cast().Ptr(), ctx, wrSettings);
                     if (newRead.Get() != maybeRead.Raw()) {
                         return newRead;
                     }

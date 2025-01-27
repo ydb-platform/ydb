@@ -2,7 +2,7 @@ import datetime
 import itertools
 from typing import Sequence
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.utils.types.ydb as types_ydb
@@ -167,8 +167,8 @@ class Factory:
                     '{ "TODO" : "unicode" }',
                 ],
             ],
-            data_source_kind=EDataSourceKind.YDB,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.YDB,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -341,8 +341,8 @@ class Factory:
                     None,
                 ],
             ],
-            data_source_kind=EDataSourceKind.YDB,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.YDB,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -383,8 +383,8 @@ class Factory:
                     42,
                 ],
             ],
-            data_source_kind=EDataSourceKind.YDB,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.YDB,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -418,8 +418,8 @@ class Factory:
                     4,
                 ],
             ],
-            protocol=EProtocol.NATIVE,
-            data_source_kind=EDataSourceKind.YDB,
+            protocol=EGenericProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.YDB,
             pragmas=dict(),
         )
 
@@ -453,8 +453,8 @@ class Factory:
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
                 select_what=SelectWhat(SelectWhat.Item(name='col_01_string')),
                 select_where=SelectWhere('col_00_id = 1'),
-                data_source_kind=EDataSourceKind.YDB,
-                protocol=EProtocol.NATIVE,
+                data_source_kind=EGenericDataSourceKind.YDB,
+                protocol=EGenericProtocol.NATIVE,
                 schema=schema,
             )
         ]
@@ -469,7 +469,7 @@ class Factory:
                 ),
                 Column(
                     name='col_01_interval',
-                    ydb_type=makeYdbTypeFromTypeID(Type.BOOL),
+                    ydb_type=makeYdbTypeFromTypeID(Type.INTERVAL),
                     data_source_type=DataSourceType(ydb=types_ydb.Interval()),
                 ),
             ),
@@ -492,8 +492,8 @@ class Factory:
                     2,
                 ],
             ],
-            data_source_kind=EDataSourceKind.YDB,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.YDB,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -539,7 +539,7 @@ class Factory:
             [None],
         ]
 
-        data_source_kind = EDataSourceKind.YDB
+        data_source_kind = EGenericDataSourceKind.YDB
 
         test_case_name = 'json'
 
@@ -548,13 +548,49 @@ class Factory:
                 name_=test_case_name,
                 data_in=data_in,
                 data_out_=data_out_1,
-                protocol=EProtocol.NATIVE,
+                protocol=EGenericProtocol.NATIVE,
                 select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_01_json, "$.friends[0]")', kind='expr')),
                 select_where=None,
                 data_source_kind=data_source_kind,
                 pragmas=dict(),
                 schema=schema,
             ),
+        ]
+
+    def _json_document(self) -> TestCase:
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='col_00_id',
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ydb=types_ydb.Int32().to_non_nullable()),
+                ),
+                Column(
+                    name='col_01_data',
+                    ydb_type=makeYdbTypeFromTypeID(Type.JSON_DOCUMENT),
+                    data_source_type=DataSourceType(ydb=types_ydb.JsonDocument()),
+                ),
+            ),
+        )
+
+        data_out = [
+            ['{"key1": "value1"}'],
+            ['{"key2": "value2"}'],
+        ]
+
+        return [
+            TestCase(
+                name_='json_document',
+                data_in=None,
+                data_out_=data_out,
+                select_where=None,
+                select_what=SelectWhat(SelectWhat.Item(name='col_01_data')),
+                data_source_kind=EGenericDataSourceKind.YDB,
+                pragmas=dict(),
+                protocol=EGenericProtocol.NATIVE,
+                schema=schema,
+                # check_output_schema=True,
+            )
         ]
 
     def make_test_cases(self) -> Sequence[TestCase]:
@@ -567,5 +603,6 @@ class Factory:
                 self._pushdown(),
                 self._unsupported_types(),
                 self._json(),
+                self._json_document(),
             )
         )

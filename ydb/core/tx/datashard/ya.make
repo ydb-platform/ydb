@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     alter_cdc_stream_unit.cpp
     alter_table_unit.cpp
-    backup_restore_common.cpp
     backup_restore_traits.cpp
     backup_unit.cpp
     build_and_wait_dependencies_unit.cpp
@@ -51,10 +50,12 @@ SRCS(
     datashard__cleanup_borrowed.cpp
     datashard__cleanup_in_rs.cpp
     datashard__cleanup_tx.cpp
+    datashard__cleanup_uncommitted.cpp
     datashard__column_stats.cpp
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp
     datashard__conditional_erase_rows.cpp
+    datashard__data_cleanup.cpp
     datashard__engine_host.cpp
     datashard__engine_host.h
     datashard__get_state_tx.cpp
@@ -174,6 +175,7 @@ SRCS(
     local_kmeans.cpp
     make_scan_snapshot_unit.cpp
     make_snapshot_unit.cpp
+    memory_state_migration.cpp
     move_index_unit.cpp
     move_table_unit.cpp
     operation.cpp
@@ -215,6 +217,7 @@ SRCS(
     type_serialization.cpp
     upload_stats.cpp
     volatile_tx.cpp
+    volatile_tx_mon.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
 )
@@ -227,9 +230,10 @@ GENERATE_ENUM_SERIALIZATION(datashard_s3_upload.h)
 GENERATE_ENUM_SERIALIZATION(execution_unit.h)
 GENERATE_ENUM_SERIALIZATION(execution_unit_kind.h)
 GENERATE_ENUM_SERIALIZATION(operation.h)
+GENERATE_ENUM_SERIALIZATION(volatile_tx.h)
 
 RESOURCE(
-    index.html datashard/index.html
+    ui/index.html datashard/index.html
 )
 
 PEERDIR(
@@ -251,6 +255,7 @@ PEERDIR(
     library/cpp/l1_distance
     library/cpp/l2_distance
     ydb/core/actorlib_impl
+    ydb/core/backup/common
     ydb/core/base
     ydb/core/change_exchange
     ydb/core/engine
@@ -268,16 +273,16 @@ PEERDIR(
     ydb/core/wrappers
     ydb/core/ydb_convert
     ydb/library/aclib
-    ydb/library/binary_json
-    ydb/library/dynumber
-    ydb/library/minsketch
-    ydb/library/yql/parser/pg_wrapper/interface
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
+    yql/essentials/core/minsketch
+    yql/essentials/parser/pg_wrapper/interface
     ydb/public/api/protos
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/parser/pg_wrapper/interface
+    yql/essentials/parser/pg_wrapper/interface
     ydb/services/lib/sharding
     ydb/library/chunks_limiter
-    ydb/library/uuid
+    yql/essentials/types/uuid
 )
 
 YQL_LAST_ABI_VERSION()
@@ -305,7 +310,9 @@ RECURSE_FOR_TESTS(
     ut_change_exchange
     ut_column_stats
     ut_compaction
+    ut_data_cleanup
     ut_erase_rows
+    ut_external_blobs
     ut_followers
     ut_incremental_backup
     ut_incremental_restore_scan

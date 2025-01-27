@@ -292,7 +292,7 @@ TMessageWithAttachments ByteBufferToMessageWithAttachments(
         fixedHeader.MessageSize = *messageBodySize;
 
         size_t totalMessageSize =
-            sizeof (TEnvelopeFixedHeader) +
+            sizeof(TEnvelopeFixedHeader) +
             fixedHeader.EnvelopeSize +
             fixedHeader.MessageSize;
 
@@ -301,10 +301,10 @@ TMessageWithAttachments ByteBufferToMessageWithAttachments(
             {.InitializeStorage = false});
 
         char* targetFixedHeader = data.Begin();
-        char* targetHeader = targetFixedHeader + sizeof (TEnvelopeFixedHeader);
+        char* targetHeader = targetFixedHeader + sizeof(TEnvelopeFixedHeader);
         targetMessage = targetHeader + fixedHeader.EnvelopeSize;
 
-        memcpy(targetFixedHeader, &fixedHeader, sizeof (fixedHeader));
+        memcpy(targetFixedHeader, &fixedHeader, sizeof(fixedHeader));
         YT_VERIFY(envelope.SerializeToArray(targetHeader, fixedHeader.EnvelopeSize));
     } else {
         data = TSharedMutableRef::Allocate<TMessageTag>(
@@ -413,7 +413,7 @@ TSharedRef ExtractMessageFromEnvelopedMessage(const TSharedRef& data)
 
     auto compressedMessage = data.Slice(sourceMessage, sourceMessage + fixedHeader->MessageSize);
 
-    auto codecId = CheckedEnumCast<NCompression::ECodec>(envelope.codec());
+    auto codecId = FromProto<NCompression::ECodec>(envelope.codec());
     auto* codec = NCompression::GetCodec(codecId);
     return codec->Decompress(compressedMessage);
 }

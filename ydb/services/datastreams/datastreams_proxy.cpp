@@ -950,7 +950,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         if (this->Request_->GetSerializedToken().empty()) {
-            if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+            if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                 return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, NYds::EErrorCodes::BAD_REQUEST,
                                           "Unauthenticated access is forbidden, please provide credentials", ctx);
             }
@@ -1434,7 +1434,7 @@ namespace NKikimr::NDataStreams::V1 {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
         StreamName = NKikimr::CanonizePath(topicInfo->Path);
-        if (AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1601,7 +1601,7 @@ namespace NKikimr::NDataStreams::V1 {
         const auto &result = ev->Get()->Request.Get();
         const auto response = result->ResultSet.front();
 
-        if (AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1660,7 +1660,14 @@ namespace NKikimr::NDataStreams::V1 {
         TShardIterator shardIterator(ShardIterator);
         const auto& response = record.GetPartitionResponse();
         if (response.HasCmdReadResult()) {
-            const auto& results = response.GetCmdReadResult().GetResult();
+            const auto& readResult = response.GetCmdReadResult();
+            if (readResult.GetReadingFinished()) {
+                return ReplyWithError(Ydb::StatusIds::StatusCode::StatusIds_StatusCode_NOT_FOUND,
+                        Ydb::PersQueue::ErrorCode::ErrorCode::WRONG_PARTITION_NUMBER,
+                        "Partition ended");
+            }
+
+            const auto& results = readResult.GetResult();
             for (auto& r : results) {
                 auto proto(NKikimr::GetDeserializedData(r.GetData()));
                 auto record = Result.add_records();
@@ -1854,7 +1861,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.front();
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,

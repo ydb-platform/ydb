@@ -80,6 +80,7 @@ union TBasicKikimrServicesMask {
         bool EnableCompDiskLimiter:1;
         bool EnableGroupedMemoryLimiter:1;
         bool EnableAwsService:1;
+        bool EnableCompPriorities : 1;
     };
 
     struct {

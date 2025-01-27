@@ -48,17 +48,13 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 01a2263079db6c047536246d78a1333b
 BELONGS ya.make
-    License text:
-        //  (C) Copyright John Maddock 2006.
-        //  (C) Copyright Paul A. Bristow 2006.
-        //  Use, modification and distribution are subject to the
-        //  Boost Software License, Version 1.0. (See accompanying file
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/distributions/complement.hpp [1:4]
+        include/boost/math/distributions/complement.hpp [1:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 02cd524bdb42667b1b164094ec9971ea
 BELONGS ya.make
@@ -138,6 +134,7 @@ KEEP     COPYRIGHT_SERVICE_LABEL 05fd399cf249e99987c204a65eb75fba
 BELONGS ya.make
     License text:
         //  (C) Copyright Bruno Lalande 2008.
+        //  (C) Copyright Matt Borland 2024.
         //  Distributed under the Boost Software License, Version 1.0.
         //  (See accompanying file LICENSE_1_0.txt or copy at
     Scancode info:
@@ -145,7 +142,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/pow.hpp [4:6]
+        include/boost/math/special_functions/pow.hpp [4:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 0b6f371227c9898f1ce2ae1a4a259a75
 BELONGS ya.make
@@ -219,17 +216,13 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 190342424801597afe0e19a4020a4dc9
 BELONGS ya.make
-    License text:
-        //  Copyright John Maddock 2005-2008.
-        //  Copyright (c) 2006-2008 Johan Rade
-        //  Use, modification and distribution are subject to the
-        //  Boost Software License, Version 1.0. (See accompanying file
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/fpclassify.hpp [1:4]
+        include/boost/math/special_functions/fpclassify.hpp [1:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1965cc773d008553e4b1a97f92e47cf7
 BELONGS ya.make
@@ -259,12 +252,12 @@ BELONGS ya.make
         include/boost/math/bindings/mpreal.hpp [1:3]
         include/boost/math/distributions/detail/generic_mode.hpp [1:1]
         include/boost/math/distributions/detail/generic_quantile.hpp [1:3]
-        include/boost/math/distributions/laplace.hpp [1:3]
-        include/boost/math/distributions/non_central_beta.hpp [3:3]
-        include/boost/math/distributions/non_central_chi_squared.hpp [3:3]
-        include/boost/math/distributions/non_central_f.hpp [3:3]
+        include/boost/math/distributions/laplace.hpp [1:4]
+        include/boost/math/distributions/non_central_beta.hpp [3:6]
+        include/boost/math/distributions/non_central_chi_squared.hpp [3:6]
+        include/boost/math/distributions/non_central_f.hpp [3:6]
         include/boost/math/distributions/non_central_t.hpp [3:3]
-        include/boost/math/special_functions/detail/round_fwd.hpp [1:1]
+        include/boost/math/special_functions/detail/round_fwd.hpp [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1c03bc5dd84750a354e472dd50319748
 BELONGS ya.make
@@ -274,7 +267,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/constants/constants.hpp [1:4]
+        include/boost/math/constants/constants.hpp [1:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1e3104d56778b7989559e5088ca2e41b
 BELONGS ya.make
@@ -324,12 +317,13 @@ BELONGS ya.make
     License text:
         // Copyright John Maddock 2014.
         // Copyright Paul A. Bristow 2014.
+        // Copyright Matt Borland 2024.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/distributions/arcsine.hpp [3:4]
+        include/boost/math/distributions/arcsine.hpp [3:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 247fe2ad75be8bac969ffad2665e4296
 BELONGS ya.make
@@ -385,7 +379,7 @@ BELONGS ya.make
         include/boost/math/interpolators/cardinal_trigonometric.hpp [1:3]
         include/boost/math/interpolators/detail/cardinal_trigonometric_detail.hpp [1:3]
         include/boost/math/special_functions/cardinal_b_spline.hpp [1:3]
-        include/boost/math/special_functions/gegenbauer.hpp [1:3]
+        include/boost/math/special_functions/gegenbauer.hpp [1:4]
         include/boost/math/special_functions/jacobi.hpp [1:3]
         include/boost/math/statistics/ljung_box.hpp [1:3]
         include/boost/math/statistics/t_test.hpp [1:4]
@@ -408,17 +402,13 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2c5e6ecdaaeaf631f770d746903c293a
 BELONGS ya.make
-    License text:
-        //  Copyright John Maddock 2006-7, 2013-20.
-        //  Copyright Paul A. Bristow 2007, 2013-14.
-        //  Copyright Nikhar Agrawal 2013-14
-        //  Copyright Christopher Kormanyos 2013-14, 2020, 2024
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/gamma.hpp [1:4]
+        include/boost/math/special_functions/gamma.hpp [1:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2c88da1eba82b7c18508f07d9fe9961e
 BELONGS ya.make
@@ -426,12 +416,13 @@ BELONGS ya.make
         //  Copyright Thijs van den Berg, 2008.
         //  Copyright John Maddock 2008.
         //  Copyright Paul A. Bristow 2008, 2014.
+        //  Copyright Matt Borland 2024.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/distributions/laplace.hpp [1:3]
+        include/boost/math/distributions/laplace.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2d0a4d158ee66816dad13709fa303e85
 BELONGS ya.make
@@ -450,6 +441,7 @@ KEEP     COPYRIGHT_SERVICE_LABEL 2d5f4cfed3e5b32b63312a117e31a283
 BELONGS ya.make
     License text:
         //  (C) Copyright John Maddock 2010.
+        //  (C) Copyright Matt Borland 2024.
         //  Use, modification and distribution are subject to the
         //  Boost Software License, Version 1.0. (See accompanying file
     Scancode info:
@@ -457,7 +449,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/tools/tuple.hpp [1:3]
+        include/boost/math/tools/tuple.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2e8dcaf45cebf21faa7919fcd5f00014
 BELONGS ya.make
@@ -472,20 +464,16 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2fed25b670c142362976d681e20983d0
 BELONGS ya.make
-    License text:
-        //  Copyright (c) 2006 Xiaogang Zhang
-        //  Copyright (c) 2006 John Maddock
-        //  Use, modification and distribution are subject to the
-        //  Boost Software License, Version 1.0. (See accompanying file
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/ellint_1.hpp [1:4]
-        include/boost/math/special_functions/ellint_2.hpp [1:4]
+        include/boost/math/special_functions/ellint_1.hpp [1:5]
+        include/boost/math/special_functions/ellint_2.hpp [1:5]
         include/boost/math/special_functions/ellint_3.hpp [1:4]
-        include/boost/math/special_functions/ellint_d.hpp [1:4]
+        include/boost/math/special_functions/ellint_d.hpp [1:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 318bb438497d2ba56543f1344417bbec
 BELONGS ya.make
@@ -500,9 +488,9 @@ BELONGS ya.make
     Files with this license:
         include/boost/math/constants/info.hpp [1:3]
         include/boost/math/distributions/geometric.hpp [3:4]
-        include/boost/math/distributions/inverse_chi_squared.hpp [1:2]
-        include/boost/math/distributions/inverse_gamma.hpp [3:6]
-        include/boost/math/distributions/inverse_gaussian.hpp [1:2]
+        include/boost/math/distributions/inverse_chi_squared.hpp [1:5]
+        include/boost/math/distributions/inverse_gamma.hpp [3:7]
+        include/boost/math/distributions/inverse_gaussian.hpp [1:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 34013dca86747a3a65bb554862882175
 BELONGS ya.make
@@ -516,36 +504,34 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 356e94e4f4ffdf79ede13b61da73d082
 BELONGS ya.make
-    License text:
-        //  Copyright John Maddock 2006.
-        //  Copyright Paul A. Bristow 2006, 2012, 2017.
-        //  Copyright Thomas Mang 2012.
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/distributions/students_t.hpp [1:3]
+        include/boost/math/distributions/students_t.hpp [1:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3790b2f380ed5746f91d9f6f8e6a50b2
 BELONGS ya.make
     License text:
         // Copyright John Maddock 2006.
         // Copyright Paul A. Bristow 2007.
+        // Copyright Matt Borland 2024.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/distributions/bernoulli.hpp [3:4]
+        include/boost/math/distributions/bernoulli.hpp [3:5]
         include/boost/math/distributions/binomial.hpp [3:4]
-        include/boost/math/distributions/cauchy.hpp [1:2]
+        include/boost/math/distributions/cauchy.hpp [1:3]
         include/boost/math/distributions/find_location.hpp [1:2]
         include/boost/math/distributions/find_scale.hpp [1:2]
         include/boost/math/distributions/negative_binomial.hpp [3:4]
-        include/boost/math/distributions/poisson.hpp [3:4]
+        include/boost/math/distributions/poisson.hpp [3:5]
         include/boost/math/distributions/rayleigh.hpp [1:4]
-        include/boost/math/policies/error_handling.hpp [1:2]
+        include/boost/math/policies/error_handling.hpp [1:5]
         include/boost/math/special_functions/detail/ibeta_inverse.hpp [1:4]
         include/boost/math/special_functions/detail/t_distribution_inv.hpp [1:4]
         include/boost/math/tools/user.hpp [1:2]
@@ -630,9 +616,9 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/math/distributions/geometric.hpp [3:4]
-        include/boost/math/distributions/inverse_chi_squared.hpp [1:2]
-        include/boost/math/distributions/inverse_gamma.hpp [3:6]
-        include/boost/math/distributions/inverse_gaussian.hpp [1:2]
+        include/boost/math/distributions/inverse_chi_squared.hpp [1:5]
+        include/boost/math/distributions/inverse_gamma.hpp [3:7]
+        include/boost/math/distributions/inverse_gaussian.hpp [1:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4915b20164f09b341694cc223cf83586
 BELONGS ya.make
@@ -776,7 +762,7 @@ BELONGS ya.make
     Files with this license:
         include/boost/math/special_functions/hypot.hpp [1:3]
         include/boost/math/special_functions/log1p.hpp [1:3]
-        include/boost/math/tools/fraction.hpp [1:3]
+        include/boost/math/tools/fraction.hpp [1:4]
         include/boost/math/tools/series.hpp [1:3]
         include/boost/math/tools/stats.hpp [1:3]
 
@@ -806,6 +792,20 @@ BELONGS ya.make
     Files with this license:
         include/boost/math/tools/mp.hpp [1:4]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 5bea22e8da8464acc8d9ab38156e45ce
+BELONGS ya.make
+    License text:
+        // Copyright 2008 Gautam Sewani
+        // Copyright 2024 Matt Borland
+        // Use, modification and distribution are subject to the
+        // Boost Software License, Version 1.0.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/math/distributions/logistic.hpp [1:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 5c0bcf73a23cf834c8fb841b9833fd22
 BELONGS ya.make
     License text:
@@ -834,15 +834,13 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 5dd53ee811abc83b9190c778f5f47298
 BELONGS ya.make
-    License text:
-        //  Copyright John Maddock 2006, 2007.
-        //  Copyright Paul A. Bristow 2006, 2007.
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/distributions/normal.hpp [1:2]
+        include/boost/math/distributions/normal.hpp [1:5]
         include/boost/math/distributions/triangular.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 60255b91bbc9fe1a1a0ae1cc9a978c65
@@ -883,6 +881,21 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/math/special_functions/relative_difference.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6ca996db688fe3bfd4030f0f78d09f4c
+BELONGS ya.make
+    License text:
+        // Copyright Nick Thompson, 2017
+        // Copyright Matt Borland, 2024
+        // Use, modification and distribution are subject to the
+        // Boost Software License, Version 1.0.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/math/quadrature/detail/sinh_sinh_detail.hpp [1:4]
+        include/boost/math/quadrature/sinh_sinh.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 6f522c25b81fd9005f9f0cdd69d03b25
 BELONGS ya.make
@@ -942,9 +955,9 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/math/distributions/beta.hpp [3:5]
-        include/boost/math/distributions/uniform.hpp [1:4]
-        include/boost/math/special_functions/math_fwd.hpp [5:6]
-        include/boost/math/tools/promotion.hpp [3:5]
+        include/boost/math/distributions/uniform.hpp [1:5]
+        include/boost/math/special_functions/math_fwd.hpp [5:7]
+        include/boost/math/tools/promotion.hpp [3:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 76a1c769b376aa61fdabeb44dad769b9
 BELONGS ya.make
@@ -962,18 +975,14 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 774dfa6dd9adb18e5d17bc88b05266a7
 BELONGS ya.make
-    License text:
-        //  Copyright (c) 2006 Xiaogang Zhang
-        //  Copyright (c) 2017 John Maddock
-        //  Use, modification and distribution are subject to the
-        //  Boost Software License, Version 1.0. (See accompanying file
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/detail/bessel_i0.hpp [1:4]
-        include/boost/math/special_functions/detail/bessel_i1.hpp [1:3]
+        include/boost/math/special_functions/detail/bessel_i0.hpp [1:5]
+        include/boost/math/special_functions/detail/bessel_i1.hpp [1:4]
         include/boost/math/special_functions/detail/bessel_k0.hpp [1:4]
         include/boost/math/special_functions/detail/bessel_k1.hpp [1:4]
 
@@ -1016,42 +1025,38 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7d17bb2579336b337d87a036e9ce244b
 BELONGS ya.make
-    License text:
-        //  (C) Copyright John Maddock 2006.
-        //  (C) Copyright Paul A. Bristow 2006.
-        //  Use, modification and distribution are subject to the
-        //  Boost Software License, Version 1.0. (See accompanying file
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/distributions/complement.hpp [1:4]
-        include/boost/math/special_functions/beta.hpp [1:3]
-        include/boost/math/special_functions/cbrt.hpp [1:3]
-        include/boost/math/special_functions/detail/erf_inv.hpp [1:3]
-        include/boost/math/special_functions/detail/gamma_inva.hpp [1:3]
+        include/boost/math/distributions/complement.hpp [1:5]
+        include/boost/math/special_functions/beta.hpp [1:4]
+        include/boost/math/special_functions/cbrt.hpp [1:4]
+        include/boost/math/special_functions/detail/erf_inv.hpp [1:4]
+        include/boost/math/special_functions/detail/gamma_inva.hpp [1:4]
         include/boost/math/special_functions/detail/ibeta_inv_ab.hpp [1:3]
-        include/boost/math/special_functions/detail/igamma_inverse.hpp [1:3]
+        include/boost/math/special_functions/detail/igamma_inverse.hpp [1:4]
         include/boost/math/special_functions/detail/lanczos_sse2.hpp [1:3]
-        include/boost/math/special_functions/detail/lgamma_small.hpp [1:3]
-        include/boost/math/special_functions/digamma.hpp [1:3]
-        include/boost/math/special_functions/erf.hpp [1:3]
-        include/boost/math/special_functions/expm1.hpp [1:3]
-        include/boost/math/special_functions/hermite.hpp [2:4]
+        include/boost/math/special_functions/detail/lgamma_small.hpp [1:4]
+        include/boost/math/special_functions/digamma.hpp [1:4]
+        include/boost/math/special_functions/erf.hpp [1:4]
+        include/boost/math/special_functions/expm1.hpp [1:4]
+        include/boost/math/special_functions/hermite.hpp [2:5]
         include/boost/math/special_functions/laguerre.hpp [2:4]
         include/boost/math/special_functions/lanczos.hpp [1:3]
         include/boost/math/special_functions/legendre.hpp [1:3]
-        include/boost/math/special_functions/powm1.hpp [1:3]
-        include/boost/math/special_functions/sign.hpp [1:3]
+        include/boost/math/special_functions/powm1.hpp [1:4]
+        include/boost/math/special_functions/sign.hpp [1:4]
         include/boost/math/special_functions/spherical_harmonic.hpp [2:4]
         include/boost/math/special_functions/sqrt1pm1.hpp [1:3]
-        include/boost/math/special_functions/trigamma.hpp [1:3]
+        include/boost/math/special_functions/trigamma.hpp [1:4]
         include/boost/math/tools/minima.hpp [1:3]
         include/boost/math/tools/polynomial.hpp [1:2]
         include/boost/math/tools/rational.hpp [1:3]
-        include/boost/math/tools/roots.hpp [1:3]
-        include/boost/math/tools/toms748_solve.hpp [1:3]
+        include/boost/math/tools/roots.hpp [1:4]
+        include/boost/math/tools/toms748_solve.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7ee360b4e286bb266367da5faf97ebd7
 BELONGS ya.make
@@ -1063,7 +1068,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/distributions/detail/common_error_handling.hpp [1:2]
+        include/boost/math/distributions/detail/common_error_handling.hpp [1:3]
         include/boost/math/special_functions.hpp [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7fe63dbfc34a676863979ab818e17142
@@ -1095,7 +1100,7 @@ BELONGS ya.make
         include/boost/math/special_functions/round.hpp [1:4]
         include/boost/math/special_functions/trunc.hpp [1:4]
         include/boost/math/tools/convert_from_string.hpp [1:4]
-        include/boost/math/tools/promotion.hpp [3:5]
+        include/boost/math/tools/promotion.hpp [3:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 821d5dbb10517b78a129c5a569511c66
 BELONGS ya.make
@@ -1114,6 +1119,7 @@ KEEP     COPYRIGHT_SERVICE_LABEL 84aa8f0944ff081c273a32083375f310
 BELONGS ya.make
     License text:
         //  Copyright (c) 2007 John Maddock
+        //  Copyright (c) 2024 Matt Borland
         //  Use, modification and distribution are subject to the
         //  Boost Software License, Version 1.0. (See accompanying file
     Scancode info:
@@ -1121,9 +1127,9 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/cos_pi.hpp [1:3]
+        include/boost/math/special_functions/cos_pi.hpp [1:4]
         include/boost/math/special_functions/detail/bessel_jy_asym.hpp [1:3]
-        include/boost/math/special_functions/sin_pi.hpp [1:3]
+        include/boost/math/special_functions/sin_pi.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 89b3485003c056716426df85610db0f2
 BELONGS ya.make
@@ -1172,7 +1178,7 @@ BELONGS ya.make
     Files with this license:
         include/boost/math/distributions/detail/hypergeometric_pdf.hpp [1:2]
         include/boost/math/distributions/hypergeometric.hpp [1:3]
-        include/boost/math/distributions/logistic.hpp [1:1]
+        include/boost/math/distributions/logistic.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8bc414876d610225acf7d931e3e8a898
 BELONGS ya.make
@@ -1223,6 +1229,7 @@ KEEP     COPYRIGHT_SERVICE_LABEL 8df3b48da7b43c15c1ba96354d5fbec1
 BELONGS ya.make
     License text:
         // Copyright John Maddock 2012.
+        // Copyright Matt Borland 2024.
         // Use, modification and distribution are subject to the
         // Boost Software License, Version 1.0.
     Scancode info:
@@ -1230,8 +1237,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/airy.hpp [1:3]
-        include/boost/math/special_functions/hankel.hpp [1:3]
+        include/boost/math/special_functions/airy.hpp [1:4]
+        include/boost/math/special_functions/hankel.hpp [1:4]
         include/boost/math/special_functions/jacobi_elliptic.hpp [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 927231b9edc8d25ca05d8eacec531b3d
@@ -1252,17 +1259,13 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 95ac45e399e1397a35020312987ecbb7
 BELONGS ya.make
-    License text:
-        //  Copyright John Maddock 2005-2008.
-        //  Copyright (c) 2006-2008 Johan Rade
-        //  Use, modification and distribution are subject to the
-        //  Boost Software License, Version 1.0. (See accompanying file
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/fpclassify.hpp [1:4]
+        include/boost/math/special_functions/fpclassify.hpp [1:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 96bb94109504cce2eeda2591c76eb477
 BELONGS ya.make
@@ -1338,16 +1341,13 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL a25eff9ab0b3a407f0a3f23d36b9b9a8
 BELONGS ya.make
-    License text:
-        //  Copyright John Maddock 2006.
-        //  Copyright Paul A. Bristow 2006, 2012, 2017.
-        //  Copyright Thomas Mang 2012.
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/distributions/students_t.hpp [1:3]
+        include/boost/math/distributions/students_t.hpp [1:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a8b3a4297e61473986978ae0e07bca11
 BELONGS ya.make
@@ -1365,17 +1365,13 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL a9c8a7c9fcd186be6ad7d96495fef966
 BELONGS ya.make
-    License text:
-        //  Copyright John Maddock 2006-7, 2013-20.
-        //  Copyright Paul A. Bristow 2007, 2013-14.
-        //  Copyright Nikhar Agrawal 2013-14
-        //  Copyright Christopher Kormanyos 2013-14, 2020, 2024
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/gamma.hpp [1:4]
+        include/boost/math/special_functions/gamma.hpp [1:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a9eb6f13fc57f56c47d8459914a5a52e
 BELONGS ya.make
@@ -1415,25 +1411,25 @@ BELONGS ya.make
         include/boost/math/concepts/distributions.hpp [1:3]
         include/boost/math/concepts/real_concept.hpp [1:3]
         include/boost/math/concepts/std_real_concept.hpp [1:3]
-        include/boost/math/distributions/bernoulli.hpp [3:4]
+        include/boost/math/distributions/bernoulli.hpp [3:5]
         include/boost/math/distributions/beta.hpp [3:5]
         include/boost/math/distributions/binomial.hpp [3:4]
-        include/boost/math/distributions/detail/derived_accessors.hpp [1:3]
-        include/boost/math/distributions/exponential.hpp [1:3]
-        include/boost/math/distributions/extreme_value.hpp [1:3]
-        include/boost/math/distributions/fisher_f.hpp [1:1]
-        include/boost/math/distributions/gamma.hpp [1:3]
-        include/boost/math/distributions/lognormal.hpp [1:3]
-        include/boost/math/distributions/poisson.hpp [3:4]
-        include/boost/math/distributions/students_t.hpp [1:3]
-        include/boost/math/distributions/uniform.hpp [1:4]
-        include/boost/math/distributions/weibull.hpp [1:3]
+        include/boost/math/distributions/detail/derived_accessors.hpp [1:4]
+        include/boost/math/distributions/exponential.hpp [1:4]
+        include/boost/math/distributions/extreme_value.hpp [1:4]
+        include/boost/math/distributions/fisher_f.hpp [1:4]
+        include/boost/math/distributions/gamma.hpp [1:4]
+        include/boost/math/distributions/lognormal.hpp [1:4]
+        include/boost/math/distributions/poisson.hpp [3:5]
+        include/boost/math/distributions/students_t.hpp [1:6]
+        include/boost/math/distributions/uniform.hpp [1:5]
+        include/boost/math/distributions/weibull.hpp [1:4]
         include/boost/math/special_functions/binomial.hpp [1:3]
         include/boost/math/special_functions/detail/ibeta_inverse.hpp [1:4]
-        include/boost/math/special_functions/detail/igamma_large.hpp [1:3]
+        include/boost/math/special_functions/detail/igamma_large.hpp [1:4]
         include/boost/math/special_functions/detail/unchecked_factorial.hpp [1:3]
-        include/boost/math/special_functions/math_fwd.hpp [5:6]
-        include/boost/math/tools/promotion.hpp [3:5]
+        include/boost/math/special_functions/math_fwd.hpp [5:7]
+        include/boost/math/tools/promotion.hpp [3:6]
         include/boost/math/tools/real_cast.hpp [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL adccd417789bfad3e5ed6df22fec8ed2
@@ -1474,7 +1470,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/math/special_functions/ellint_rg.hpp [1:3]
-        include/boost/math/special_functions/heuman_lambda.hpp [1:3]
+        include/boost/math/special_functions/heuman_lambda.hpp [1:4]
         include/boost/math/special_functions/jacobi_zeta.hpp [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b3ae8d5fa08389df2a8eb4a5184974c9
@@ -1493,12 +1489,13 @@ BELONGS ya.make
         //  (C) Copyright John Maddock 2006.
         //  (C) Copyright Johan Rade 2006.
         //  (C) Copyright Paul A. Bristow 2011 (added changesign).
+        //  (C) Copyright Matt Borland 2024
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/sign.hpp [1:3]
+        include/boost/math/special_functions/sign.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b654d39cc24bd85e1a4c2f2b222fa917
 BELONGS ya.make
@@ -1543,11 +1540,11 @@ BELONGS ya.make
         include/boost/math/distributions/fwd.hpp [3:4]
         include/boost/math/distributions/negative_binomial.hpp [3:4]
         include/boost/math/distributions/pareto.hpp [1:5]
-        include/boost/math/policies/error_handling.hpp [1:2]
+        include/boost/math/policies/error_handling.hpp [1:5]
         include/boost/math/policies/policy.hpp [1:4]
         include/boost/math/special_functions/detail/t_distribution_inv.hpp [1:4]
-        include/boost/math/special_functions/expint.hpp [1:3]
-        include/boost/math/special_functions/modf.hpp [1:3]
+        include/boost/math/special_functions/expint.hpp [1:4]
+        include/boost/math/special_functions/modf.hpp [1:4]
         include/boost/math/special_functions/round.hpp [1:4]
         include/boost/math/special_functions/trunc.hpp [1:4]
         include/boost/math/tools/traits.hpp [1:4]
@@ -1571,12 +1568,13 @@ KEEP     COPYRIGHT_SERVICE_LABEL bb17343149a36c684ba9e6f67a8113f6
 BELONGS ya.make
     License text:
         // Copyright (c) 2006 Johan Rade
+        // Copyright (c) 2024 Matt Borland
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/detail/fp_traits.hpp [6:6]
+        include/boost/math/special_functions/detail/fp_traits.hpp [6:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL bb285e04f3efb99a65f4d13aa790d2cb
 BELONGS ya.make
@@ -1649,6 +1647,20 @@ BELONGS ya.make
     Files with this license:
         include/boost/math/distributions.hpp [1:2]
 
+KEEP     COPYRIGHT_SERVICE_LABEL c15b26cde1aa3b2c16a44263a48bf4d5
+BELONGS ya.make
+    License text:
+        // Copyright John Maddock 2006.
+        // Copyright Paul A. Bristow 2006.
+        // Copyright Matt Borland 2023.
+        // Copyright Ryan Elandt 2023.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/math/tools/promotion.hpp [3:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL c2c5f360273c75026e91b3e8329e2a4d
 BELONGS ya.make
     License text:
@@ -1662,6 +1674,51 @@ BELONGS ya.make
     Files with this license:
         include/boost/math/tools/detail/is_const_iterable.hpp [1:3]
 
+KEEP     COPYRIGHT_SERVICE_LABEL c3c62d9be0a092178551b0d6edb696f2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/math/constants/constants.hpp [1:5]
+        include/boost/math/distributions/arcsine.hpp [3:5]
+        include/boost/math/distributions/bernoulli.hpp [3:5]
+        include/boost/math/distributions/cauchy.hpp [1:3]
+        include/boost/math/distributions/detail/common_error_handling.hpp [1:3]
+        include/boost/math/distributions/detail/derived_accessors.hpp [1:4]
+        include/boost/math/distributions/exponential.hpp [1:4]
+        include/boost/math/distributions/extreme_value.hpp [1:4]
+        include/boost/math/distributions/fisher_f.hpp [1:4]
+        include/boost/math/distributions/gamma.hpp [1:4]
+        include/boost/math/distributions/holtsmark.hpp [1:4]
+        include/boost/math/distributions/inverse_chi_squared.hpp [1:5]
+        include/boost/math/distributions/inverse_gamma.hpp [3:7]
+        include/boost/math/distributions/inverse_gaussian.hpp [1:5]
+        include/boost/math/distributions/landau.hpp [1:4]
+        include/boost/math/distributions/laplace.hpp [1:4]
+        include/boost/math/distributions/lognormal.hpp [1:4]
+        include/boost/math/distributions/mapairy.hpp [1:4]
+        include/boost/math/distributions/non_central_beta.hpp [3:6]
+        include/boost/math/distributions/non_central_chi_squared.hpp [3:6]
+        include/boost/math/distributions/non_central_f.hpp [3:6]
+        include/boost/math/distributions/normal.hpp [1:5]
+        include/boost/math/distributions/poisson.hpp [3:5]
+        include/boost/math/distributions/saspoint5.hpp [1:4]
+        include/boost/math/distributions/students_t.hpp [1:6]
+        include/boost/math/distributions/uniform.hpp [1:5]
+        include/boost/math/distributions/weibull.hpp [1:4]
+        include/boost/math/policies/error_handling.hpp [1:5]
+        include/boost/math/special_functions/airy.hpp [1:4]
+        include/boost/math/special_functions/detail/igamma_large.hpp [1:4]
+        include/boost/math/special_functions/detail/round_fwd.hpp [1:2]
+        include/boost/math/special_functions/expint.hpp [1:4]
+        include/boost/math/special_functions/gamma.hpp [1:7]
+        include/boost/math/special_functions/hankel.hpp [1:4]
+        include/boost/math/special_functions/math_fwd.hpp [5:7]
+        include/boost/math/special_functions/modf.hpp [1:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL c60de0ab1b87180baa8dac7f813ae3b4
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -1670,7 +1727,24 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/constants/constants.hpp [1:4]
+        include/boost/math/constants/constants.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca07de1cfde711eafaf54863333b9dc0
+BELONGS ya.make
+    License text:
+        //  Copyright Takuma Yoshimura 2024.
+        //  Copyright Matt Borland 2024.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/math/distributions/holtsmark.hpp [1:4]
+        include/boost/math/distributions/landau.hpp [1:4]
+        include/boost/math/distributions/mapairy.hpp [1:4]
+        include/boost/math/distributions/saspoint5.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL cd59a9b17dba1f12cc9f24d0e732702a
 BELONGS ya.make
@@ -1753,25 +1827,50 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/math/distributions.hpp [1:2]
-        include/boost/math/distributions/cauchy.hpp [1:2]
+        include/boost/math/distributions/cauchy.hpp [1:3]
         include/boost/math/distributions/chi_squared.hpp [1:2]
-        include/boost/math/distributions/detail/common_error_handling.hpp [1:2]
-        include/boost/math/distributions/normal.hpp [1:2]
+        include/boost/math/distributions/detail/common_error_handling.hpp [1:3]
+        include/boost/math/distributions/normal.hpp [1:5]
         include/boost/math/distributions/triangular.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d75225060f193b9147dad5e0d7d42983
 BELONGS ya.make
-    License text:
-        //  Copyright John Maddock 2006-7, 2013-20.
-        //  Copyright Paul A. Bristow 2007, 2013-14.
-        //  Copyright Nikhar Agrawal 2013-14
-        //  Copyright Christopher Kormanyos 2013-14, 2020, 2024
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/gamma.hpp [1:4]
+        include/boost/math/special_functions/gamma.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d901828beb72ead5a630812e0dcbb583
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/math/distributions/complement.hpp [1:5]
+        include/boost/math/special_functions/beta.hpp [1:4]
+        include/boost/math/special_functions/cbrt.hpp [1:4]
+        include/boost/math/special_functions/detail/erf_inv.hpp [1:4]
+        include/boost/math/special_functions/detail/gamma_inva.hpp [1:4]
+        include/boost/math/special_functions/detail/igamma_inverse.hpp [1:4]
+        include/boost/math/special_functions/detail/lgamma_small.hpp [1:4]
+        include/boost/math/special_functions/digamma.hpp [1:4]
+        include/boost/math/special_functions/erf.hpp [1:4]
+        include/boost/math/special_functions/expm1.hpp [1:4]
+        include/boost/math/special_functions/gegenbauer.hpp [1:4]
+        include/boost/math/special_functions/hermite.hpp [2:5]
+        include/boost/math/special_functions/pow.hpp [4:7]
+        include/boost/math/special_functions/powm1.hpp [1:4]
+        include/boost/math/special_functions/sign.hpp [1:4]
+        include/boost/math/special_functions/trigamma.hpp [1:4]
+        include/boost/math/tools/fraction.hpp [1:4]
+        include/boost/math/tools/roots.hpp [1:4]
+        include/boost/math/tools/toms748_solve.hpp [1:4]
+        include/boost/math/tools/tuple.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d9b034219784147e9de3ba70c9964f7f
 BELONGS ya.make
@@ -1815,7 +1914,7 @@ BELONGS ya.make
         include/boost/math/cstdfloat/cstdfloat_iostream.hpp [2:6]
         include/boost/math/cstdfloat/cstdfloat_limits.hpp [2:6]
         include/boost/math/cstdfloat/cstdfloat_types.hpp [2:6]
-        include/boost/math/distributions/arcsine.hpp [3:4]
+        include/boost/math/distributions/arcsine.hpp [3:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL df1e1917ea78d5c023a860126cce98fb
 BELONGS ya.make
@@ -2019,12 +2118,13 @@ BELONGS ya.make
         //  (C) Copyright John Maddock 2006.
         //  (C) Copyright Johan Rade 2006.
         //  (C) Copyright Paul A. Bristow 2011 (added changesign).
+        //  (C) Copyright Matt Borland 2024
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/sign.hpp [1:3]
+        include/boost/math/special_functions/sign.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e96cb88f0e61b70a27c80d50f101304a
 BELONGS ya.make
@@ -2042,6 +2142,39 @@ BELONGS ya.make
         include/boost/math/distributions/detail/hypergeometric_quantile.hpp [1:1]
         include/boost/math/distributions/hypergeometric.hpp [1:3]
         include/boost/math/special_functions/prime.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ed1f66aaed3ca7c8e37b076a711300de
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2007 John Maddock
+        //  Copyright (c) 2024 Matt Borland
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/math/special_functions/cos_pi.hpp [1:4]
+        include/boost/math/special_functions/detail/bessel_i0.hpp [1:5]
+        include/boost/math/special_functions/detail/bessel_i1.hpp [1:4]
+        include/boost/math/special_functions/detail/bessel_ik.hpp [1:4]
+        include/boost/math/special_functions/detail/fp_traits.hpp [6:7]
+        include/boost/math/special_functions/ellint_1.hpp [1:5]
+        include/boost/math/special_functions/ellint_2.hpp [1:5]
+        include/boost/math/special_functions/ellint_d.hpp [1:5]
+        include/boost/math/special_functions/ellint_rc.hpp [1:4]
+        include/boost/math/special_functions/ellint_rd.hpp [1:4]
+        include/boost/math/special_functions/ellint_rf.hpp [1:4]
+        include/boost/math/special_functions/ellint_rj.hpp [1:4]
+        include/boost/math/special_functions/fpclassify.hpp [1:5]
+        include/boost/math/special_functions/heuman_lambda.hpp [1:4]
+        include/boost/math/special_functions/sin_pi.hpp [1:4]
+        include/boost/math/tools/array.hpp [1:3]
+        include/boost/math/tools/cstdint.hpp [1:3]
+        include/boost/math/tools/numeric_limits.hpp [1:3]
+        include/boost/math/tools/type_traits.hpp [1:3]
+        include/boost/math/tools/utility.hpp [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ef37991a88747715e1ff7b3779b8d1a6
 BELONGS ya.make
@@ -2080,18 +2213,14 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL f30d746d8ccdc43f8396322bb683a3c5
 BELONGS ya.make
-    License text:
-        //  Copyright (c) 2006 Xiaogang Zhang
-        //  Copyright (c) 2006 John Maddock
-        //  Use, modification and distribution are subject to the
-        //  Boost Software License, Version 1.0. (See accompanying file
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/detail/bessel_i0.hpp [1:4]
-        include/boost/math/special_functions/detail/bessel_ik.hpp [1:3]
+        include/boost/math/special_functions/detail/bessel_i0.hpp [1:5]
+        include/boost/math/special_functions/detail/bessel_ik.hpp [1:4]
         include/boost/math/special_functions/detail/bessel_j0.hpp [1:3]
         include/boost/math/special_functions/detail/bessel_j1.hpp [1:3]
         include/boost/math/special_functions/detail/bessel_jn.hpp [1:3]
@@ -2102,10 +2231,10 @@ BELONGS ya.make
         include/boost/math/special_functions/detail/bessel_y0.hpp [1:3]
         include/boost/math/special_functions/detail/bessel_y1.hpp [1:3]
         include/boost/math/special_functions/detail/bessel_yn.hpp [1:3]
-        include/boost/math/special_functions/ellint_1.hpp [1:4]
-        include/boost/math/special_functions/ellint_2.hpp [1:4]
+        include/boost/math/special_functions/ellint_1.hpp [1:5]
+        include/boost/math/special_functions/ellint_2.hpp [1:5]
         include/boost/math/special_functions/ellint_3.hpp [1:4]
-        include/boost/math/special_functions/ellint_d.hpp [1:4]
+        include/boost/math/special_functions/ellint_d.hpp [1:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f38ca055640371bbcd1b424bd86c7d04
 BELONGS ya.make
@@ -2113,12 +2242,13 @@ BELONGS ya.make
         //  Copyright Thijs van den Berg, 2008.
         //  Copyright John Maddock 2008.
         //  Copyright Paul A. Bristow 2008, 2014.
+        //  Copyright Matt Borland 2024.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/distributions/laplace.hpp [1:3]
+        include/boost/math/distributions/laplace.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f4a325f0484c0bb7a3c17c3f81fb8c89
 BELONGS ya.make
@@ -2152,26 +2282,22 @@ BELONGS ya.make
         include/boost/math/interpolators/detail/cardinal_cubic_b_spline_detail.hpp [1:3]
         include/boost/math/interpolators/detail/cubic_b_spline_detail.hpp [1:3]
         include/boost/math/quadrature/detail/exp_sinh_detail.hpp [1:3]
-        include/boost/math/quadrature/detail/sinh_sinh_detail.hpp [1:3]
+        include/boost/math/quadrature/detail/sinh_sinh_detail.hpp [1:4]
         include/boost/math/quadrature/detail/tanh_sinh_detail.hpp [1:3]
         include/boost/math/quadrature/exp_sinh.hpp [1:3]
-        include/boost/math/quadrature/sinh_sinh.hpp [1:3]
+        include/boost/math/quadrature/sinh_sinh.hpp [1:4]
         include/boost/math/quadrature/tanh_sinh.hpp [1:3]
         include/boost/math/quadrature/trapezoidal.hpp [2:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f8d730bfd55763c6f923894ca911f166
 BELONGS ya.make
-    License text:
-        //  Copyright John Maddock 2006-7, 2013-20.
-        //  Copyright Paul A. Bristow 2007, 2013-14.
-        //  Copyright Nikhar Agrawal 2013-14
-        //  Copyright Christopher Kormanyos 2013-14, 2020, 2024
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/gamma.hpp [1:4]
+        include/boost/math/special_functions/gamma.hpp [1:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL fac2acbeb5b5ff0e22a994c8b805305c
 BELONGS ya.make
@@ -2251,19 +2377,16 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL ffb359d2e5030fecfe6707e998ce6117
 BELONGS ya.make
-    License text:
-        //  Copyright (c) 2006 Xiaogang Zhang, 2015 John Maddock
-        //  Use, modification and distribution are subject to the
-        //  Boost Software License, Version 1.0. (See accompanying file
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/special_functions/ellint_rc.hpp [1:3]
-        include/boost/math/special_functions/ellint_rd.hpp [1:3]
-        include/boost/math/special_functions/ellint_rf.hpp [1:3]
-        include/boost/math/special_functions/ellint_rj.hpp [1:3]
+        include/boost/math/special_functions/ellint_rc.hpp [1:4]
+        include/boost/math/special_functions/ellint_rd.hpp [1:4]
+        include/boost/math/special_functions/ellint_rf.hpp [1:4]
+        include/boost/math/special_functions/ellint_rj.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ffe09f50dfc31ebb85e7621230882e54
 BELONGS ya.make

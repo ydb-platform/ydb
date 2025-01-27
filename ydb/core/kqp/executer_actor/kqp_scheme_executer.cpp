@@ -1,12 +1,13 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 
-#include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/actors/analyze_actor.h>
+#include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 
 namespace NKikimr::NKqp {
@@ -306,6 +307,24 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCreateTransfer: {
+                const auto& modifyScheme = schemeOp.GetCreateTransfer();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterTransfer: {
+                const auto& modifyScheme = schemeOp.GetAlterTransfer();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropTransfer: {
+                const auto& modifyScheme = schemeOp.GetDropTransfer();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             case NKqpProto::TKqpSchemeOperation::kAlterSequence: {
                 const auto& modifyScheme = schemeOp.GetAlterSequence();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
@@ -352,6 +371,42 @@ public:
                 Become(&TKqpSchemeExecuter::ExecuteState);
                 return;
 
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kCreateBackupCollection: {
+                const auto& modifyScheme = schemeOp.GetCreateBackupCollection();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterBackupCollection: {
+                const auto& modifyScheme = schemeOp.GetAlterBackupCollection();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropBackupCollection: {
+                const auto& modifyScheme = schemeOp.GetDropBackupCollection();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kBackup: {
+                const auto& modifyScheme = schemeOp.GetBackup();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kBackupIncremental: {
+                const auto& modifyScheme = schemeOp.GetBackupIncremental();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kRestore: {
+                const auto& modifyScheme = schemeOp.GetRestore();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
             }
 
             default:

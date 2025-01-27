@@ -74,7 +74,7 @@ private:
         // without extra serializing/deserializing.
         TYamrFormatConfigPtr config(static_cast<TYamrFormatConfig*>(Config_.Get()));
 
-        int rowCount = static_cast<int>(rows.Size());
+        int rowCount = std::ssize(rows);
         for (int index = 0; index < rowCount; index++) {
             auto row = rows[index];
             if (CheckKeySwitch(row, index + 1 == rowCount /* isLastRow */)) {
@@ -202,7 +202,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForYamr(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& exc) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for YAMR format") << exc;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for YAMR format") << exc;
     }
 }
 

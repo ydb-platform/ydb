@@ -2276,8 +2276,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )").GetValueSync();
 
                 auto expected = R"([
-                    [["user2"]];
                     [["user1rootadmin"]];
+                    [["user2"]];
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -2568,7 +2568,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST(AuthMembers) {
+    Y_UNIT_TEST(AuthGroupMembers) {
         TTestEnv env;
         SetupAuthEnvironment(env);
         TTableClient client(env.GetDriver());
@@ -2627,18 +2627,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )").GetValueSync();
 
             auto expected = R"([
-                [["group4"];["group4"]];
-                [["group4"];["group3"]];
-                [["group4"];["user4"]];
-                [["group4"];["user3"]];
                 [["group3"];["user4"]];
+                [["group4"];["group3"]];
+                [["group4"];["group4"]];
+                [["group4"];["user3"]];
+                [["group4"];["user4"]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }
 
-    Y_UNIT_TEST(AuthMembers_Access) {
+    Y_UNIT_TEST(AuthGroupMembers_Access) {
         TTestEnv env;
         SetupAuthAccessEnvironment(env);
         TTableClient client(env.GetDriver());
@@ -2684,8 +2684,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )").GetValueSync();
 
                 auto expected = R"([
-                    [["group2"];["user2"]];
                     [["group1"];["user1rootadmin"]];
+                    [["group2"];["user2"]];
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -2697,8 +2697,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )").GetValueSync();
 
                 auto expected = R"([
-                    [["group4"];["user4"]];
                     [["group3"];["user3"]];
+                    [["group4"];["user4"]];
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -3054,13 +3054,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             auto expected = R"([
                 [["/Root"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
                 [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user1"]];
                 [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user1"]];
+                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user1"]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -3140,10 +3140,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 [["/Root"];["ydb.generic.use"];["user2"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
                 [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]]
             ])";
@@ -3171,10 +3171,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     [["/Root"];["ydb.generic.use"];["user2"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
                     [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
                     [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]]
                 ])";
@@ -3188,8 +3188,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )").GetValueSync();
 
                 auto expected = R"([
+                    [["/Root/Tenant1/Dir3"];["ydb.granular.erase_row"];["user4"]];
                     [["/Root/Tenant1/Dir3"];["ydb.granular.select_row"];["user3"]];
-                    [["/Root/Tenant1/Dir3"];["ydb.granular.erase_row"];["user4"]]
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -3219,10 +3219,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 [["/Root"];["ydb.generic.use"];["user2"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
             ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -3268,10 +3268,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 [["/Root/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
                 [["/Root/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
                 [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
                 [["/Root/Table0"];["ydb.generic.use"];["user1"]]
             ])";
@@ -3363,8 +3363,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             auto expected = R"([
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user2"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
                 [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user2"]];
+                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -3380,9 +3380,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
             // TODO: make result unique
             auto expected = R"([
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user2"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
                 [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user2"]];
+                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
+                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
                 [["/Root/Dir1/SubDir2"];["ydb.granular.select_row"];["user2"]];
             ])";
 

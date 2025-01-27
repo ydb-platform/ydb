@@ -6,6 +6,7 @@
 
 - [{#T}](authentication.md)
 - [{#T}](authorization.md)
+- [{#T}](builtin-security.md)
 - [{#T}](audit-log.md)
 - Шифрование:
 

@@ -84,7 +84,13 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
             " Options: scan, generic\n"
             "scan - use scan queries;\n"
             "generic - use generic queries.")
-        .DefaultValue("generic").StoreResult(&QueryExecuterType);
+        .DefaultValue(QueryExecuterType)
+        .Handler1T<TStringBuf>([this](TStringBuf arg) {
+                const auto l = to_lower(TString(arg));
+                if (!TryFromString(arg, QueryExecuterType)) {
+                    throw yexception() << "Ivalid query executer type: " << arg;
+                }
+            });
     config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().StoreValue(&VerboseLevel, 1);
 
     config.Opts->AddLongOption("global-timeout", "Global timeout for all requests")
@@ -287,7 +293,7 @@ void CollectStats(TPrettyTable& table, IOutputStream* csv, NJson::TJsonValue* js
 }
 
 template <typename TClient>
-bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen) {
+int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen) {
     using namespace BenchmarkUtils;
     TOFStream outFStream{OutFilePath};
     TPrettyTable statTable(ColumnNames);
@@ -356,8 +362,12 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
             SavePlans(res, queryN, "explain");
         }
 
-        for (ui32 i = 0; i < IterationsCount && Now() < GlobalDeadline; ++i) {
+        for (ui32 i = 0; i < IterationsCount; ++i) {
             auto t1 = TInstant::Now();
+            if (t1 >= GlobalDeadline) {
+                Cerr << "Global timeout (" << GlobalTimeout << ") expiried, global deadline was " << GlobalDeadline << Endl;
+                break;
+            }
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
 
             TQueryBenchmarkSettings settings;
@@ -476,7 +486,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloa
         Cout << "Summary table saved in CSV format to " << CsvReportFileName << Endl;
     }
 
-    return !someFailQueries;
+    return someFailQueries ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const {
@@ -543,13 +553,12 @@ BenchmarkUtils::TQueryBenchmarkDeadline TWorkloadCommandBenchmark::GetDeadline()
 }
 
 int TWorkloadCommandBenchmark::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& /*config*/) {
-    if (QueryExecuterType == "scan") {
-        return !RunBench(TableClient.Get(), workloadGen);
+    switch (QueryExecuterType) {
+    case EQueryExecutor::Scan:
+        return RunBench(TableClient.Get(), workloadGen);
+    case EQueryExecutor::Generic:
+        return RunBench(QueryClient.Get(), workloadGen);
     }
-    if (QueryExecuterType == "generic") {
-        return !RunBench(QueryClient.Get(), workloadGen);
-    }
-    ythrow yexception() << "Incorrect executer type. Available options: \"scan\", \"generic\"." << Endl;
 }
 
 }

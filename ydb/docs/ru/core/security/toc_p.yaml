@@ -5,6 +5,13 @@ items:
   href: authorization.md
 - name: Встроенная настройка безопасности
   href: builtin-security.md
+- name: Привилегированные пользователи
+  expanded: true
+  items:
+  - name: Администратор кластера
+    href: configure-cluster-admins.md
+  - name: Администратор баз данных
+    href: configure-database-admins.md
 - name: Права доступа
   expanded: true
   items:

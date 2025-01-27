@@ -10,6 +10,8 @@
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 
+// test
+
 using namespace NYdb;
 
 namespace {

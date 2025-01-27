@@ -36,6 +36,11 @@ bool IsDoneOrWaiting(const TImportInfo::TItem& item) {
     return TImportInfo::TItem::IsDone(item) || IsWaiting(item);
 }
 
+// the item is to be created by query, i.e. it is not a table
+bool IsCreatedByQuery(const TImportInfo::TItem& item) {
+    return !item.CreationQuery.empty();
+}
+
 TString GetDatabase(TSchemeShard& ss) {
     return CanonizePath(ss.RootPathElements);
 }
@@ -386,7 +391,7 @@ private:
         auto& record = propose->Record;
 
         auto& modifyScheme = *record.AddTransaction();
-        modifyScheme = item.PreparedCreationQuery;
+        modifyScheme = *item.PreparedCreationQuery;
         modifyScheme.SetInternal(true);
 
         if (importInfo->UserSID) {
@@ -407,7 +412,7 @@ private:
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo->Items.size())) {
             auto& item = importInfo->Items[itemIdx];
-            if (!item.CreationQuery.empty() && item.ViewCreationRetries == 0) {
+            if (IsCreatedByQuery(item) && item.ViewCreationRetries == 0) {
                 item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                     Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery, database
                 ));
@@ -733,7 +738,7 @@ private:
                 case EState::Transferring:
                 case EState::BuildIndexes:
                     if (item.WaitTxId == InvalidTxId) {
-                        if (item.CreationQuery.empty() || item.PreparedCreationQuery.HasOperationType()) {
+                        if (!IsCreatedByQuery(item) || item.PreparedCreationQuery) {
                             AllocateTxId(importInfo, itemIdx);
                         } else {
                             const auto database = GetDatabase(*Self);
@@ -831,7 +836,7 @@ private:
         if (!msg.Success) {
             return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
         }
-        if (item.CreationQuery.empty()) {
+        if (!IsCreatedByQuery(item)) {
             TString error;
             if (!CreateTablePropose(Self, TTxId(), importInfo, msg.ItemIdx, error)) {
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid scheme");
@@ -856,7 +861,7 @@ private:
 
         item.State = EState::CreateTable;
         Self->PersistImportItemState(db, importInfo, msg.ItemIdx);
-        if (item.CreationQuery.empty()) {
+        if (!IsCreatedByQuery(item)) {
             AllocateTxId(importInfo, msg.ItemIdx);
         }
     }
@@ -950,14 +955,14 @@ private:
 
             switch (item.State) {
             case EState::CreateTable:
-                if (item.PreparedCreationQuery.HasOperationType()) {
+                if (item.PreparedCreationQuery) {
                     ExecutePreparedQuery(txc, importInfo, i, txId);
                     itemIdx = i;
                     break;
                 }
-                if (!item.CreationQuery.empty()) {
+                if (IsCreatedByQuery(item)) {
                     // We only need a txId for modify scheme transactions.
-                    // If an object’s CreationQuery has not been prepared, it does not need a txId at this point.
+                    // If an object’s CreationQuery has not been prepared yet, it does not need a txId at this point.
                     break;
                 }
                 if (!Self->TableProfilesLoaded) {
@@ -1173,7 +1178,7 @@ private:
 
         switch (item.State) {
         case EState::CreateTable:
-            if (!item.CreationQuery.empty()) {
+            if (IsCreatedByQuery(item)) {
                 item.State = EState::Done;
                 break;
             }

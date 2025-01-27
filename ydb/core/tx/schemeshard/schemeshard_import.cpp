@@ -195,10 +195,9 @@ void TSchemeShard::PersistImportItemPreparedCreationQuery(NIceDb::TNiceDb& db, c
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items[itemIdx];
 
-    // persist the prepared modify scheme if it is non-empty (has operation type is interpreted as non-empty)
-    if (item.PreparedCreationQuery.HasOperationType()) {
+    if (item.PreparedCreationQuery) {
         db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
-            NIceDb::TUpdate<Schema::ImportItems::PreparedCreationQuery>(item.PreparedCreationQuery.SerializeAsString())
+            NIceDb::TUpdate<Schema::ImportItems::PreparedCreationQuery>(item.PreparedCreationQuery->SerializeAsString())
         );
     }
 }

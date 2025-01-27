@@ -2848,7 +2848,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
         TString CreationQuery;
-        NKikimrSchemeOp::TModifyScheme PreparedCreationQuery;
+        TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
 

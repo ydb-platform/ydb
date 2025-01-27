@@ -4446,10 +4446,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::PreparedCreationQuery>()) {
+                        NKikimrSchemeOp::TModifyScheme preparedQuery;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(
-                            item.PreparedCreationQuery,
+                            preparedQuery,
                             rowset.GetValue<Schema::ImportItems::PreparedCreationQuery>()
                         ));
+                        item.PreparedCreationQuery = std::move(preparedQuery);
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Permissions>()) {

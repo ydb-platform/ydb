@@ -2527,6 +2527,47 @@ Y_UNIT_TEST_SUITE(SystemView) {
         // and test tenant user and tenant admin
     }
 
+    Y_UNIT_TEST(AuthGroups_ResultOrder) {
+        TTestEnv env;
+        SetupAuthEnvironment(env);
+        TTableClient client(env.GetDriver());
+
+        for (auto group : {
+            "group3",
+            "group1",
+            "group2",
+            "group",
+            "group33",
+            "group21",
+            "group22",
+            "grouprr",
+            "g",
+            "asdf",
+        }) {
+            env.GetClient().CreateGroup("/Root", group);
+        }
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT *
+            FROM `Root/.sys/auth_groups`
+        )").GetValueSync();
+
+        auto expected = R"([
+            [["asdf"]];
+            [["g"]];
+            [["group"]];
+            [["group1"]];
+            [["group2"]];
+            [["group21"]];
+            [["group22"]];
+            [["group3"]];
+            [["group33"]];
+            [["grouprr"]];
+        ])";
+
+        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+    }
+
     Y_UNIT_TEST(AuthMembers) {
         TTestEnv env;
         SetupAuthEnvironment(env);

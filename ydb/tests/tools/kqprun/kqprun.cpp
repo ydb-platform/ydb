@@ -967,6 +967,16 @@ void SegmentationFaultHandler(int) {
     abort();
 }
 
+void FloatingPointExceptionHandler(int) {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+
+    Cerr << colors.Red() << "======= floating point exception call stack ========" << colors.Default() << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << colors.Red() << "==============================================" << colors.Default() << Endl;
+
+    abort();
+}
+
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 void InterruptHandler(int) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
@@ -985,6 +995,7 @@ void InterruptHandler(int) {
 int main(int argc, const char* argv[]) {
     std::set_terminate(NKqpRun::KqprunTerminateHandler);
     signal(SIGSEGV, &NKqpRun::SegmentationFaultHandler);
+    signal(SIGFPE, &NKqpRun::FloatingPointExceptionHandler);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     signal(SIGINT, &NKqpRun::InterruptHandler);

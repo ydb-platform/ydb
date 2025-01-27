@@ -63,6 +63,10 @@ public:
 
     virtual std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) = 0;
 
+    virtual void SerializeState(void* state, NUdf::TOutputBuffer& buffer) = 0;
+
+    virtual void DeserializeState(void* state, NUdf::TInputBuffer& buffer) = 0;
+
     explicit IBlockAggregatorFinalizeKeys(ui32 stateSize)
         : IBlockAggregatorBase(stateSize)
     {}

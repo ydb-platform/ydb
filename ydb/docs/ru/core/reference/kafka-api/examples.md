@@ -12,19 +12,27 @@
 
 ### В Docker {#how-to-try-kafka-api-in-docker}
 
-Запустите Docker по [этой](../../quickstart#install) инструкции и Kafka API будет доступен на 9092 порту.
+Запустите Docker по [этой](../../quickstart#install) инструкции. Kafka API будет доступен на 9092 порте.
 
 ### В Yandex Cloud {#how-to-try-kafka-api-in-cloud}
 
 Попробовать работу с топиками YDB по Kafka API можно без тарификации ([в небольших месячных объемах](https://yandex.cloud/ru/docs/data-streams/pricing?from=int-console-help-center-or-nav#prices)) в Yandex Cloud.
 Для этого в своей [консоли Yandex Cloud](https://console.yandex.cloud):
 
-1. Создайте [базу данных YDB](https://yandex.cloud/ru/docs/ydb/quickstart), если у вас ее еще нет
-2. Создайте [очередь Yandex Data Streams](https://yandex.cloud/ru/docs/data-streams/quickstart)
-3. Создайте [сервисный аккаунт](https://yandex.cloud/ru/docs/iam/operations/sa/create), если у вас его еще нет
-и добавьте этому сервисному аккаунту роли ydb.viewer (для чтения данных из потока), ydb.editor (для записи данных в поток) и ydb.kafkaApi.client (для доступа к потоку данных по Kafka API)
+1. Создайте [базу данных YDB](https://yandex.cloud/ru/docs/ydb/quickstart), если у вас ее еще нет.
+2. Создайте [очередь Yandex Data Streams](https://yandex.cloud/ru/docs/data-streams/quickstart).
+3. Создайте [сервисный аккаунт](https://yandex.cloud/ru/docs/iam/operations/sa/create), если у вас его еще нет.
+4. Добавьте этому сервисному аккаунту следующие роли:
+
+    - ydb.viewer (для чтения данных из потока);
+    - ydb.editor (для записи данных в поток);
+    - ydb.kafkaApi.client (для доступа к потоку данных по Kafka API).
+
 4. Создайте [API ключ](https://yandex.cloud/ru/docs/iam/operations/sa/create-access-key) для этого сервисного аккаунта.
-   Для ключа нужно выбрать Область действия - yc.ydb.topics.manage, можно также задать описание и срок действия.
+
+   - В поле **Описание** введите описание ключа.
+   - В поле **Область действия** выберите `yc.ydb.topics.manage`.
+   - В поле **Срок действия** укажите срок действия ключа.
 
 Для работы с Yandex Cloud требуется аутентификация, см примеры аутентификации [ниже](#authentication-in-cloud-examples).
 
@@ -36,15 +44,15 @@
 
 - отсутствие поддержки опции [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs);
 - только одна стратегия назначения партиция - roundrobin;
-- отсутствие возможности читать без предварительно созданной консьюмер группы
+- отсутствие возможности читать без предварительно созданной группы читателей.
 
-Поэтому в конфигурации читателя всегда нужно указывать **имя консьюмер группы** и параметры:
+Поэтому в конфигурации читателя всегда нужно указывать **имя группы читателей** и параметры:
 
 - `check.crc=false`
 - `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
 
 Ниже даны примеры чтения по Kafka протоколу для разных приложений, языков программирования и фреймворков подключения без аутентификации.
-Для примеров того, как настроить аутентификацию, смотри раздел [Примеры с аутентификацией](#authentication-examples)
+Примеры того, как настроить аутентификацию, смотри в разделе [Примеры с аутентификацией](#authentication-examples)
 
 {% list tabs %}
 
@@ -54,7 +62,7 @@
 
   При использовании консольных утилит Kafka с Java 23 и получении ошибки
   `java.lang.UnsupportedOperationException: getSubject is supported only if a security manager is allowed`
-  , либо запустите команду, используя другую версию Java ([как сменить версию Java на macos](https://stackoverflow.com/questions/21964709/how-to-set-or-change-the-default-java-jdk-version-on-macos))
+  либо запустите команду, используя другую версию Java ([как сменить версию Java на macos](https://stackoverflow.com/questions/21964709/how-to-set-or-change-the-default-java-jdk-version-on-macos))
   , либо запустите команду, указав для java флаг `-Djava.security.manager=allow`.
   Например: `KAFKA_OPTS=-Djava.security.manager=allow kafka-topics --boostratp-servers localhost:9092 --list`
 
@@ -111,7 +119,7 @@
 - Spark
 
   Apache Spark при работе с Kafka не использует ничего из [существующих ограничений](./constraints.md) Kafka API в YDB Topics.
-  Благодаря этому использование Spark с Ydb topics возможно в полном объеме.
+  Благодаря этому использование Spark с {{ ydb-short-name }} topics возможно в полном объеме.
 
   ```java
   public class ExampleReadApp {
@@ -143,7 +151,7 @@
   }
   ```
 
-  В примере выше использовался apache spark 2.12:3.5.3 с зависимостью на `org.apache.spark:spark-streaming-kafka-0-10_2.12:3.5.3`
+  В примере выше использовался Apache Spark 2.12:3.5.3 с зависимостью на `org.apache.spark:spark-streaming-kafka-0-10_2.12:3.5.3`.
 
 - Flink
 
@@ -151,7 +159,7 @@
 
   Сейчас поддержана не вся функциональность Flink при чтении и записи. Существуют следующие ограничения:
 
-    - Exactly once работа по Kafka API сейчас не поддержана, так как поддержка транзакций в Kafka API сейчас в разработке;
+    - Работа exactly-once по Kafka API сейчас не поддержана, так как поддержка транзакций в Kafka API сейчас в разработке;
     - Подписка на топики через паттерн сейчас недоступна;
     - Использование CreateTime сообщения в качестве watermark сейчас недоступно, так как вместо CreateTime используется текущее время вычитки.
 
@@ -223,7 +231,7 @@ Unexpected error in join group response: This most likely occurs because of a re
 
   При использовании консольных утилит Kafka с Java 23 и получении ошибки
   `java.lang.UnsupportedOperationException: getSubject is supported only if a security manager is allowed`
-  , либо запустите команду, используя другую версию Java ([как сменить версию Java на macos](https://stackoverflow.com/questions/21964709/how-to-set-or-change-the-default-java-jdk-version-on-macos))
+  либо запустите команду, используя другую версию Java ([как сменить версию Java на macos](https://stackoverflow.com/questions/21964709/how-to-set-or-change-the-default-java-jdk-version-on-macos))
   , либо запустите команду, указав для java флаг `-Djava.security.manager=allow`.
   Например: `JAVA_OPTS=-Djava.security.manager=allow && kafka-topics --boostratp-servers localhost:9092 --list`
 
@@ -268,7 +276,7 @@ Unexpected error in join group response: This most likely occurs because of a re
 - Spark
 
   Apache Spark при работе с Kafka не использует ничего из [существующих ограничений](./constraints.md) Kafka API в YDB Topics.
-  Благодаря этому использование Spark с Ydb topics возможно в полном объеме.
+  Благодаря этому использование Spark с {{ ydb-short-name }} Topics возможно в полном объеме.
 
   ```java
   public class ExampleWriteApp {
@@ -295,7 +303,7 @@ Unexpected error in join group response: This most likely occurs because of a re
   }
   ```
 
-  В примере выше использовался apache spark 2.12:3.5.3 с зависимостью на `org.apache.spark:spark-streaming-kafka-0-10_2.12:3.5.3`
+  В примере выше использовался Apache Spark 2.12:3.5.3 с зависимостью на `org.apache.spark:spark-streaming-kafka-0-10_2.12:3.5.3`.
 
 - Flink
 
@@ -371,34 +379,38 @@ Unexpected error in join group response: This most likely occurs because of a re
 
 ### Примеры с аутентификацией {#authentication-examples}
 
-Подробнее про аутентификацию, смотри в разделе [Аутентификация](./auth.md). Ниже есть примеры аутентификации в облачной базе
+Подробнее про аутентификацию смотри в разделе [Аутентификация](./auth.md). Ниже есть примеры аутентификации в облачной базе
 и в локальной базе.
 
 {% note info %}
 
-Сейчас единственным доступным механизмом аутентификации с Kafka API в YDB Topics является `SASL_PLAIN`
+Сейчас единственным доступным механизмом аутентификации с Kafka API в YDB Topics является `SASL_PLAIN`.
 
 {% endnote %}
 
 #### Примеры с аутентификацией в Yandex Cloud {#authentication-in-cloud-examples}
 
-Инструкция, как попробовать работу с Kafka API поверх YDB Topics в Яндекс облаке есть [выше](#how-to-try-kafka-api-in-cloud)
+Инструкцию, как попробовать работу с Kafka API поверх YDB Topics в Яндекс облаке, смотри [выше](#how-to-try-kafka-api-in-cloud).
 
-Для аутентификации, добавьте в параметры подключения кафки следующие значения:
+Для аутентификации добавьте в параметры подключения Apache Kafka следующие значения:
 
-- `security.protocol` со значением `SASL_SSL`
-- `sasl.mechanism` со значением `PLAIN`
-- `sasl.jaas.config` со значением `org.apache.kafka.common.security.plain.PlainLoginModule required username="@<path_to_database>" password="<API Key сервисного аккаунта>";`
+- `security.protocol` со значением `SASL_SSL`;
+- `sasl.mechanism` со значением `PLAIN`;
+- `sasl.jaas.config` со значением `org.apache.kafka.common.security.plain.PlainLoginModule required username="@<path_to_database>" password="<API Key сервисного аккаунта>";`.
 
 Ниже приведены примеры чтения из топика облака, в которых:
 
-- <path_to_database> - это путь к базе данных со страницы топика в YDS Yandex Cloud
+- <path_to_database> - это путь к базе данных со страницы топика в YDS Yandex Cloud;
   ![path_to_database_example](./_assets/path_to_db_in_yds_cloud_ui.png)
-- <kafka_api_endpoint> - это Kafka API Endpoint со страницы описания YDS Yandex Cloud. Его нужно использовать в качестве `bootstrap.servers`
+- <kafka_api_endpoint> - это Kafka API Endpoint со страницы описания YDS Yandex Cloud. Его нужно использовать в качестве `bootstrap.servers`;
   ![kafka_endpoint_example](./_assets/kafka_api_endpoint_in_cloud_ui.png)
-- <api_key> - API Key сервисного аккаунта, у которого есть доступ к YDS
+- <api_key> - API Key сервисного аккаунта, у которого есть доступ к YDS.
 
-**Обратите внимание:** Username не указывается, указывается только `@`, а затем путь до вашей базы данных.
+{% note warning %}
+
+Username не указывается. Указывается только `@`, а затем путь до вашей базы данных.
+
+{% endnote %}
 
 {% list tabs %}
 
@@ -469,9 +481,9 @@ Unexpected error in join group response: This most likely occurs because of a re
 1. Создайте пользователя. [Как это сделать в YQL](../../yql/reference/syntax/create-user.md). [Как выполнить YQL из CLI](../ydb-cli/yql.md).
 2. Подключитесь к Kafka API, как в примерах ниже. Во всех примерах предполагается, что:
 
-  - YDB запущен локально с переменной окружения YDB_KAFKA_PROXY_PORT=9092 - то есть Kafka API доступен по адресу localhost:9092. Например можно поднять YDB в докере, как указано [здесь](../../quickstart.md#install)
-  - <username> - это имя пользователя, которое вы указали при создании пользователя
-  - <password> - это пароль пользователя, которsq вы указали при создании пользователя
+  - YDB запущен локально с переменной окружения YDB_KAFKA_PROXY_PORT=9092 - то есть Kafka API доступен по адресу localhost:9092. Например можно поднять YDB в докере, как указано [здесь](../../quickstart.md#install).
+  - <username> - это имя пользователя, которое вы указали при создании пользователя.
+  - <password> - это пароль пользователя, который вы указали при создании пользователя.
 
 Примеры показаны для чтения, но те же самые параметры конфигурации работают и для записи в топик.
 

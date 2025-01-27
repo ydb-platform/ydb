@@ -1,4 +1,5 @@
-# Kafka API Usage examples
+# Kafka API usage examples
+
 
 This example shows a code snippet for reading data from a topic via Kafka API without a consumer group (Manual Partition Assignment).
 You don't need to create a consumer for this reading mode.
@@ -9,7 +10,8 @@ Before proceeding with the examples:
 2. [Add a consumer](../ydb-cli/topic-consumer-add.md).
 3. If authentication is enabled, [create a user](../../security/authorization.md#user).
 
-## How to Try the Kafka API {#how-to-try-kafka-api}
+## How to try the Kafka API {#how-to-try-kafka-api}
+
 
 ### In Docker {#how-to-try-kafka-api-in-docker}
 
@@ -20,12 +22,13 @@ Run Docker following [this guide](../../quickstart#install) and the Kafka API wi
 You can try working with YDB topics via the Kafka API for free ([in small volumes](https://yandex.cloud/en/docs/data-streams/pricing?from=int-console-help-center-or-nav#prices)) in Yandex Cloud.
 To do this in your [Yandex Cloud console](https://console.yandex.cloud):
 
-1. Create a [YDB database](https://yandex.cloud/en/docs/ydb/quickstart) if you don't have one yet
-2. Create a [Yandex Data Streams queue](https://yandex.cloud/en/docs/data-streams/quickstart)
-3. Create a [service account](https://yandex.cloud/en/docs/iam/operations/sa/create) if you don't have one yet
-   and assign this service account the roles of ydb.viewer (to read data from the stream), ydb.editor (to write data to the stream), and ydb.kafkaApi.client (to access the data stream via the Kafka API)
+1. Create a [YDB database](https://yandex.cloud/en/docs/ydb/quickstart) if you don't have one yet.
+2. Create a [Yandex Data Streams queue](https://yandex.cloud/en/docs/data-streams/quickstart).
+3. Create a [service account](https://yandex.cloud/en/docs/iam/operations/sa/create) if you don't have one yet,
+   and assign this service account the roles of ydb.viewer (to read data from the stream), ydb.editor (to write data to the stream), and ydb.kafkaApi.client (to access the data stream via the Kafka API).
 4. Create an [API key](https://yandex.cloud/en/docs/iam/operations/sa/create-access-key) for this service account.
-   For the key, select Scope - yc.ydb.topics.manage, you can also set a description and expiration date.
+   For the key, select `yc.ydb.topics.manage` in the **Scope** field. You can also set a description and an expiration date.
+
 
 Authentication is required to work with Yandex Cloud, see authentication examples [below](#authentication-in-cloud-examples).
 
@@ -53,11 +56,13 @@ For examples of how to set up authentication, see the section [Authentication Ex
 
   {% note info %}
 
-  When using Kafka CLI tools with Java 23 and encountering the error
+  If you get the following error when using Kafka CLI tools with Java 23:
+
   `java.lang.UnsupportedOperationException: getSubject is supported only if a security manager is allowed`,
   either run the command using a different version of Java ([how to change the Java version on macOS](https://stackoverflow.com/questions/21964709/how-to-set-or-change-the-default-java-jdk-version-on-macos)),
   or run the command specifying the java flag `-Djava.security.manager=allow`.
-  For example: `KAFKA_OPTS=-Djava.security.manager=allow kafka-topics --bootstrap-servers localhost:9092 --list`
+  For example: `KAFKA_OPTS=-Djava.security.manager=allow kafka-topics --bootstrap-servers localhost:9092 --list`.
+
 
   {% endnote %}
 
@@ -111,7 +116,8 @@ For examples of how to set up authentication, see the section [Authentication Ex
 
 - Spark
 
-   Apache Spark when working with Kafka does not use any of the [existing limitations](./constraints.md) of the Kafka API in YDB Topics. Due to this,
+   When working with Kafka, Apache Spark does not use any of the [Kafka API features that are currently not supported](./constraints.md) in YDB Topics. So
+
    all features of Spark-Kafka integrations should work through YDB Topics Kafka API.
 
   ```java
@@ -151,8 +157,10 @@ For examples of how to set up authentication, see the section [Authentication Ex
   {% note info %}
 
    Currently, not all functionality of Flink is supported for reading and writing. The following limitations exist:
-  - Exactly once functionality via Kafka API is not supported at the moment, as transaction support in Kafka API is still under development;
-  - Subscription to topics using a pattern is currently unavailable;
+  - Exactly-once functionality via Kafka API is not supported at the moment, as transaction support in Kafka API is still under development.
+
+  - Subscription to topics using a pattern is currently unavailable.
+
   - Using message CreateTime as a watermark is not available at the moment, as the current read time is used instead of CreateTime (will be fixed in future versions).
 
   {% endnote %}
@@ -186,7 +194,8 @@ For examples of how to set up authentication, see the section [Authentication Ex
     }
   ```
 
-  In the example above, Apache Flink 1.20 is used along with [flink datastream connector](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/connectors/datastream/kafka/) to Kafka.
+  In the example above, Apache Flink 1.20 is used along with the [Flink datastream connector](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/connectors/datastream/kafka/) to Kafka.
+
 
 {% endlist %}
 
@@ -200,15 +209,18 @@ Full text of an exception:
 Unexpected error in join group response: This most likely occurs because of a request being malformed by the client library or the message was sent to an incompatible broker. See the broker logs for more details.
 ```
 
-Most likely it means that consumer group is not specified or if specified it does not exist in YDB cluster.
+Most likely it means that a consumer group is not specified or, if specified, it does not exist in the YDB cluster.
 
-Solution: create consumer group in YDB using [CLI](../ydb-cli/topic-consumer-add) or [SDK](../ydb-sdk/topic#alter-topic)
+
+Solution: create a consumer group in YDB using [CLI](../ydb-cli/topic-consumer-add) or [SDK](../ydb-sdk/topic#alter-topic).
+
 
 ### Запись
 
 {% note info %}
 
-Currently, writing via Kafka API using Kafka transactions is not supported. Transactions are only available when using the [YDB Topic API](https://ydb.tech/docs/ru/reference/ydb-sdk/topic#write-tx).
+Using Kafka transactions when writing via Kafka API is currently not supported. Transactions are only available when using the [YDB Topic API](https://ydb.tech/docs/ru/reference/ydb-sdk/topic#write-tx).
+
 
 Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no different.
 
@@ -220,11 +232,13 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
 
   {% note info %}
 
-  When using Kafka CLI tools with Java 23 and encountering the error
+  If you get the following error when using Kafka CLI tools with Java 23:
+
   `java.lang.UnsupportedOperationException: getSubject is supported only if a security manager is allowed`,
   either run the command using a different version of Java ([how to change the Java version on macOS](https://stackoverflow.com/questions/21964709/how-to-set-or-change-the-default-java-jdk-version-on-macos)),
   or run the command specifying the java flag `-Djava.security.manager=allow`.
-  For example: `KAFKA_OPTS=-Djava.security.manager=allow kafka-topics --bootstrap-servers localhost:9092 --list`
+  For example: `KAFKA_OPTS=-Djava.security.manager=allow kafka-topics --bootstrap-servers localhost:9092 --list`.
+
 
   {% endnote %}
 
@@ -266,7 +280,8 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
 
 - Spark
 
-  Apache Spark when working with Kafka does not use any of the [existing limitations](./constraints.md) of the Kafka API in YDB Topics. Due to this,
+  When working with Kafka, Apache Spark does not use any of the [Kafka API features that are currently not supported](./constraints.md) in YDB Topics. So
+
   all features of Spark-Kafka integrations should work through YDB Topics Kafka API.
 
   ```java
@@ -301,8 +316,10 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
   {% note info %}
 
   Currently, not all functionality of Flink is supported for reading and writing. The following limitations exist:
-   - Exactly once functionality via Kafka API is not supported at the moment, as transaction support in Kafka API is still under development;
-   - Subscription to topics using a pattern is currently unavailable;
+   - Exactly-once functionality via Kafka API is not supported at the moment, as transaction support in Kafka API is still under development.
+
+   - Subscription to topics using a pattern is currently unavailable.
+
    - Using message CreateTime as a watermark is not available at the moment, as the current read time is used instead of CreateTime (this bug will be fixed in future versions).
 
   {% endnote %}
@@ -336,7 +353,8 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
   }
   ```
 
-  In the example above, Apache Flink 1.20 is used along with [flink datastream connector](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/connectors/datastream/kafka/) to Kafka.
+  In the example above, Apache Flink 1.20 is used along with the [Flink datastream connector](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/connectors/datastream/kafka/) to Kafka.
+
 
 - Logstash
 
@@ -373,7 +391,8 @@ For more details on authentication, see the section [Authentication](./auth.md).
 
 {% note info %}
 
-Currently, the only available authentication mechanism with Kafka API in YDB Topics is `SASL_PLAIN`
+Currently, the only available authentication mechanism with Kafka API in YDB Topics is `SASL_PLAIN`.
+
 
 {% endnote %}
 
@@ -389,13 +408,18 @@ For authentication, add the following values to the Kafka connection parameters:
 
 Below are examples of reading from a cloud topic, where:
 
-- <path_to_database> is the path to the database from the topic page in YDS Yandex Cloud
+- <path_to_database> is the path to the database from the topic page in YDS Yandex Cloud.
   ![path_to_database_example](./_assets/path_to_db_in_yds_cloud_ui.png)
-- <kafka_api_endpoint> is the Kafka API Endpoint from the description page of YDS Yandex Cloud. It should be used as `bootstrap.servers`
+- <kafka_api_endpoint> is the Kafka API Endpoint from the description page of YDS Yandex Cloud. It should be used as `bootstrap.servers`.
   ![kafka_endpoint_example](./_assets/kafka_api_endpoint_in_cloud_ui.png)
-- <api_key> is the API Key of the service account that has access to YDS
+- <api_key> is the API Key of the service account that has access to YDS.
 
-Note: in path_to_database the username is not specified, only @ is indicated, followed by the path to your database.
+
+{% note info %}
+
+The username is not specified in <path_to_database>. Only `@` is added, followed by the path to your database.
+
+{% endnote %}
 
 {% list tabs %}
 
@@ -461,7 +485,8 @@ Note: in path_to_database the username is not specified, only @ is indicated, fo
 
 #### Examples with Authentication in on-prem YDB
 
-To test working with authentication in a on-prem database:
+To use authentication in a on-prem database:
+
 
 1. Create a user. [How to do this in YQL](../../yql/reference/syntax/create-user.md). [How to execute YQL from CLI](../ydb-cli/yql.md).
 2. Connect to the Kafka API as shown in the examples below. In all examples, it is assumed that:

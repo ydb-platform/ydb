@@ -145,6 +145,7 @@ public:
         , AllowOlapDataQuery(tableServiceConfig.GetAllowOlapDataQuery())
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(tableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
+        , MinTimeToWaitCAStats(TDuration::MilliSeconds(tableServiceConfig.GetQueryLimits().GetMinTimeToWaitCAStatsMs()))
         , VerboseMemoryLimitException(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException())
     {
         if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
@@ -2886,7 +2887,8 @@ private:
     }
 
     void Shutdown() override {
-        if (Planner) {
+        const auto totalTime = TInstant::Now() - StartTime;
+        if (Planner && (totalTime > MinTimeToWaitCAStats || HasOlapTable)) {
             if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
                 LOG_I("Shutdown immediately - nothing to wait");
                 PassAway();
@@ -3068,6 +3070,7 @@ private:
 
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TDuration WaitCAStatsTimeout;
+    const TDuration MinTimeToWaitCAStats;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
     const bool VerboseMemoryLimitException;
 };

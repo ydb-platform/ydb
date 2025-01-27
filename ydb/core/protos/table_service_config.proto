@@ -91,6 +91,7 @@ message TTableServiceConfig {
         optional uint32 ScanQueryTimeoutMs = 4 [default = 600000];
         optional uint32 ResultRowsLimit = 5;
         optional uint32 WaitCAStatsTimeoutMs = 6 [default = 1000];
+        optional uint32 MinTimeToWaitCAStatsMs = 7 [default = 10000];
     }
 
     message TShutdownSettings {

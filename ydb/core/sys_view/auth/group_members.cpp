@@ -20,8 +20,9 @@ public:
     using TAuthBase = TAuthScanBase<TGroupMembersScan>;
 
     TGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns)
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), true)
     {
     }
 
@@ -31,8 +32,6 @@ protected:
         Y_ABORT_UNLESS(CanonizePath(entry.Path) == TBase::TenantName);
         
         TVector<TCell> cells(::Reserve(Columns.size()));
-
-        // TODO: add rows according to request's sender user rights
 
         for (const auto& group : entry.DomainInfo->Groups) {
             for (const auto& member : group.Members) {
@@ -60,9 +59,10 @@ protected:
 };
 
 THolder<NActors::IActor> CreateGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TGroupMembersScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TGroupMembersScan>(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
 }
 
 }

@@ -1836,6 +1836,8 @@ namespace Tests {
     NBus::EMessageStatus TClient::SendAndWaitCompletion(TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request,
                                                         TAutoPtr<NBus::TBusMessage>& reply,
                                                         TDuration timeout) {
+        PrepareRequest(request);
+
         NBus::EMessageStatus status = SendWhenReady(request, reply, timeout.MilliSeconds());
 
         if (status != NBus::MESSAGE_OK) {
@@ -1849,7 +1851,7 @@ namespace Tests {
         const NKikimrClient::TResponse* response = &flatResponse->Record;
 
         if (response->HasErrorReason()) {
-            Cerr << "reason: " << response->GetErrorReason() << Endl;
+            Cerr << "Error " << response->GetStatus() << ": " << response->GetErrorReason() << Endl;
         }
 
         if (response->GetStatus() != NMsgBusProxy::MSTATUS_INPROGRESS) {

@@ -1692,6 +1692,7 @@ public:
         TComputationContext& ctx,
         NUdf::TUnboxedValue*const* output) const
     {
+        Cerr << "MISHA DoCalculate" << Endl;
         auto& s = GetState(state, ctx);
         if (!s.Count) {
             if (s.IsFinished_)

@@ -2335,6 +2335,47 @@ Y_UNIT_TEST_SUITE(SystemView) {
         // and test tenant user and tenant admin
     }
 
+    Y_UNIT_TEST(AuthUsers_ResultOrder) {
+        TTestEnv env;
+        SetupAuthEnvironment(env);
+        TTableClient client(env.GetDriver());
+
+        for (auto user : {
+            "user3",
+            "user1",
+            "user2",
+            "user",
+            "user33",
+            "user21",
+            "user22",
+            "userrr",
+            "u",
+            "asdf",
+        }) {
+            env.GetClient().CreateUser("/Root", user, "password");
+        }
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT Sid
+            FROM `Root/.sys/auth_users`
+        )").GetValueSync();
+
+        auto expected = R"([
+            [["asdf"]];
+            [["u"]];
+            [["user"]];
+            [["user1"]];
+            [["user2"]];
+            [["user21"]];
+            [["user22"]];
+            [["user3"]];
+            [["user33"]];
+            [["userrr"]];
+        ])";
+
+        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+    }
+
     Y_UNIT_TEST(AuthGroups) {
         TTestEnv env;
         SetupAuthEnvironment(env);

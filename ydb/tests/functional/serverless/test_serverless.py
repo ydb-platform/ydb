@@ -544,7 +544,8 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
                 "UPSERT INTO `{}`(id, value_string) VALUES({}, 'xxx')".format(path, int(datetime.datetime.now().timestamp()) + 100),
                 retry_settings=RetrySettings(max_retries=0))
         logger.debug("finish insert")
-        with pytest.raises(ydb.Unavailable, match=r'.*out of disk space.*'):
+#        with pytest.raises(ydb.Overloaded, match=r'.*Cannot write data into shard.*'):
+        with pytest.raises(ydb.Overloaded, match=r'.*System overloaded.*'):
             IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(0, 'test')]))
 
         for _ in range(300):

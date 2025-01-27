@@ -164,19 +164,20 @@ TFacadeRunOptions::~TFacadeRunOptions() {
 }
 
 void TFacadeRunOptions::InitLogger() {
-    if (Verbosity != LOG_DEF_PRIORITY) {
-        NYql::NLog::ELevel level = NYql::NLog::ELevelHelpers::FromInt(Verbosity);
-        NYql::NLog::EComponentHelpers::ForEach([level](NYql::NLog::EComponent c) {
+    if (Verbosity != LOG_DEF_PRIORITY || ShowLog) {
+        NLog::ELevel level = NLog::ELevelHelpers::FromInt(Verbosity);
+        if (ShowLog) {
+            level = Max(level, NLog::ELevel::DEBUG);
+        }
+        NLog::EComponentHelpers::ForEach([level](NLog::EComponent c) {
             NYql::NLog::YqlLogger().SetComponentLevel(c, level);
         });
     }
 
     if (TraceOptStream) {
-        NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::Core, NYql::NLog::ELevel::TRACE);
-        NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::CoreEval, NYql::NLog::ELevel::TRACE);
-        NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::CorePeepHole, NYql::NLog::ELevel::TRACE);
-    } else if (ShowLog) {
-        NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::Core, NYql::NLog::ELevel::DEBUG);
+        NLog::YqlLogger().SetComponentLevel(NLog::EComponent::Core, NLog::ELevel::TRACE);
+        NLog::YqlLogger().SetComponentLevel(NLog::EComponent::CoreEval, NLog::ELevel::TRACE);
+        NLog::YqlLogger().SetComponentLevel(NLog::EComponent::CorePeepHole, NLog::ELevel::TRACE);
     }
 }
 

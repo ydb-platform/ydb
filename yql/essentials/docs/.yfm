@@ -1,9 +1,10 @@
 allowHTML: true
-langs: ['en','ru']
+langs: ['ru','en']
 singlePage: true
 docs-viewer:
   project-name: yql-core
   abc-slug: yql
+  langs: ['ru','en']
   index-page:
     hidden:
       testing: false

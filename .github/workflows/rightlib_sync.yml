@@ -1,33 +1,23 @@
 name: Rightlib sync
 on:
   schedule:
-    - cron: "0 0 * * *"  # At 00:00 -- for PR creation
-    - cron: "0 5 * * *"  # At 05:00 -- for PR completion
+    - cron: "30 0 * * *"   # At 00:30 -- for PR creation
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
 jobs:
-  sync:
+  create-pr:
     runs-on: ubuntu-latest
     steps:
-      - name: install packages
-        run: |
-          pip install PyGithub==2.5.0
-      - name: checkout main
+      - name: checkout
         uses: actions/checkout@v4
         with:
           sparse-checkout: |
-            ydb/ci/rightlib
-      - name: configure
-        run: |
-          git config --global user.email "alex@ydb.tech"
-          git config --global user.name "Alexander Smirnov"
-          
-      - name: run sync
-        env:
-          REPO: ${{ github.repository }}
-          TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-        run: |
-          cd ./ydb/ci/rightlib
-          ./sync-rightlib.py
+            .github
+            ydb/ci/
+      - uses: ./.github/actions/rightlib_sync
+        with:
+          command: create-pr
+          repository: ${{ github.repository }}
+          gh_personal_access_token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}

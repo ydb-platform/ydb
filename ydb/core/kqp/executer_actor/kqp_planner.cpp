@@ -275,6 +275,10 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         }
     }
 
+    if (UserToken) {
+        request.SetUserToken(UserToken->SerializeAsString());
+    }
+
     return result;
 }
 
@@ -508,7 +512,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .Deadline = Deadline,
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
-        .BlockTrackingMode = BlockTrackingMode
+        .BlockTrackingMode = BlockTrackingMode,
+        .UserToken = UserToken
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {

@@ -212,6 +212,9 @@ struct TTransformStage {
 
     IGraphTransformer& GetTransformer() const
     {
+        if (!RawTransformer_) {
+            Cerr << "We have a problem!";
+        }
         return *RawTransformer_;
     }
 private:

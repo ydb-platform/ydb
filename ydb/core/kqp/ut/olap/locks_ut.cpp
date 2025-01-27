@@ -151,12 +151,20 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
             const auto resultSets = resultSelect.GetResultSets();
             UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
             const auto resultSet = resultSets[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
+            if (shardCount > 1 && reboot) {
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1); // locks broken
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0); // not need locks
+            }
         }
         //DELETE 0 rows from every shard
         const auto resultDelete2 =
             client.ExecuteQuery("DELETE from `/Root/ttt` WHERE id < 100", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_C(resultDelete2.IsSuccess(), result.GetIssues().ToString());
+        if (shardCount > 1 && reboot) {
+            UNIT_ASSERT_C(!resultDelete2.IsSuccess(), result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_C(resultDelete2.IsSuccess(), result.GetIssues().ToString());
+        }
     }
     Y_UNIT_TEST_TWIN(DeleteAbsentSingleShard, Reboot) {
         TestDeleteAbsent(1, Reboot);

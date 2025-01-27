@@ -877,7 +877,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
         lambda.Ptr());
     res = ctx.ChangeChild(*res, TYtWithUserJobsOpBase::idx_Output, outerMap.Output().Ptr());
 
-    auto mergedSettings = NYql::RemoveSettings(outerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::Sharded | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockOutputReady, ctx);
+    EYtSettingTypes toRemove = EYtSettingType::Ordered | EYtSettingType::Sharded | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockOutputReady;
+    if (inner.Maybe<TYtMapReduce>()) {
+        // Can be safely removed, because outer map has no sorted outputs (checked below)
+        toRemove |= EYtSettingType::KeepSorted;
+    }
+    auto mergedSettings = NYql::RemoveSettings(outerMap.Settings().Ref(), toRemove, ctx);
     mergedSettings = MergeSettings(inner.Settings().Ref(), *mergedSettings, ctx);
     res = ctx.ChangeChild(*res, TYtWithUserJobsOpBase::idx_Settings, std::move(mergedSettings));
     res = ctx.ChangeChild(*res, TYtWithUserJobsOpBase::idx_World,

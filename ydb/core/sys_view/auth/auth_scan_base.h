@@ -136,8 +136,8 @@ protected:
         FillBatch(*batch, entry);
 
         if (!RequireUserAdministratorAccess 
-            && UserToken && !UserToken->GetSerializedToken().empty()
-            && entry.SecurityObject && !entry.SecurityObject->CheckAccess(NACLib::DescribeSchema, *UserToken)) {
+                && UserToken && !UserToken->GetSerializedToken().empty()
+                && entry.SecurityObject && !entry.SecurityObject->CheckAccess(NACLib::DescribeSchema, *UserToken)) {
             batch->Rows.clear();
         }
 

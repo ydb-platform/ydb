@@ -93,7 +93,10 @@ class TllTieringTestBase(object):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
-            extra_feature_flags={"enable_external_data_sources": True, "enable_tiering_in_column_shard": True},
+            extra_feature_flags={
+                "enable_external_data_sources": True,
+                "enable_tiering_in_column_shard": True
+            },
             column_shard_config={
                 "lag_for_compaction_before_tierings_ms": 0,
                 "compaction_actualization_lag_ms": 0,

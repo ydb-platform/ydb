@@ -94,53 +94,63 @@ protected:
     }
 
     void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const NKikimrScheme::TEvListUsersResult& result) {
-        TVector<TCell> cells(::Reserve(Columns.size()));
-
+        TVector<const ::NKikimrScheme::TEvListUsersResult_TUser*> users(::Reserve(result.UsersSize()));
         for (const auto& user : result.GetUsers()) {
             if (!user.HasName() || !CanAccessUser(user.GetName())) {
                 continue;
             }
-
+            users.push_back(&user);
+        }
+        std::sort(users.begin(), users.end(), [](const auto* left, const auto* right) {
+            return left->GetName() < right->GetName();
+        });
+        Y_DEBUG_ABORT_UNLESS(users.end() == std::unique(users.begin(), users.end(), [](const auto* left, const auto* right) {
+            return left->GetName() == right->GetName();
+        }));
+        
+        TVector<TCell> cells(::Reserve(Columns.size()));
+        
+        for (const auto* user : users) {
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthUsers::Sid::ColumnId:
-                    cells.push_back(user.HasName()
-                        ? TCell(user.GetName().data(), user.GetName().size())
+                    cells.push_back(user->HasName()
+                        ? TCell(user->GetName().data(), user->GetName().size())
                         : TCell());
                     break;
                 case Schema::AuthUsers::IsEnabled::ColumnId:
-                    cells.push_back(user.HasIsEnabled()
-                        ? TCell::Make(user.GetIsEnabled())
+                    cells.push_back(user->HasIsEnabled()
+                        ? TCell::Make(user->GetIsEnabled())
                         : TCell());
                     break;
                 case Schema::AuthUsers::IsLockedOut::ColumnId:
-                    cells.push_back(user.HasIsLockedOut()
-                        ? TCell::Make(user.GetIsLockedOut())
+                    cells.push_back(user->HasIsLockedOut()
+                        ? TCell::Make(user->GetIsLockedOut())
                         : TCell());
                     break;
                 case Schema::AuthUsers::CreatedAt::ColumnId:
-                    cells.push_back(user.HasCreatedAt()
-                        ? TCell::Make(user.GetCreatedAt())
+                    cells.push_back(user->HasCreatedAt()
+                        ? TCell::Make(user->GetCreatedAt())
                         : TCell());
                     break;
                 case Schema::AuthUsers::LastSuccessfulAttemptAt::ColumnId:
-                    cells.push_back(user.HasLastSuccessfulAttemptAt()
-                        ? TCell::Make(user.GetLastSuccessfulAttemptAt())
+                    cells.push_back(user->HasLastSuccessfulAttemptAt()
+                        ? TCell::Make(user->GetLastSuccessfulAttemptAt())
                         : TCell());
                     break;
                 case Schema::AuthUsers::LastFailedAttemptAt::ColumnId:
-                    cells.push_back(user.HasLastFailedAttemptAt()
-                        ? TCell::Make(user.GetLastFailedAttemptAt())
+                    cells.push_back(user->HasLastFailedAttemptAt()
+                        ? TCell::Make(user->GetLastFailedAttemptAt())
                         : TCell());
                     break;
                 case Schema::AuthUsers::FailedAttemptCount::ColumnId:
-                    cells.push_back(user.HasFailedAttemptCount()
-                        ? TCell::Make(user.GetFailedAttemptCount())
+                    cells.push_back(user->HasFailedAttemptCount()
+                        ? TCell::Make(user->GetFailedAttemptCount())
                         : TCell());
                     break;
                 case Schema::AuthUsers::PasswordHash::ColumnId:
-                    cells.push_back(user.HasPasswordHash()
-                        ? TCell(user.GetPasswordHash().data(), user.GetPasswordHash().size())
+                    cells.push_back(user->HasPasswordHash()
+                        ? TCell(user->GetPasswordHash().data(), user->GetPasswordHash().size())
                         : TCell());
                     break;
                 default:

@@ -1192,6 +1192,14 @@ public:
     typename TFixedMapImpl::const_iterator HashFixedMapIt_;
     TPagedArena Arena_;
 
+    ISpiller::TPtr Spiller_;
+    typename TDynMapImpl::const_iterator SpillingHashMapIt_;
+    typename TFixedMapImpl::const_iterator SpillingHashFixedMapIt_;
+    size_t SpillingOutputBlockSize_ = 0;
+    std::optional<NThreading::TFuture<ISpiller::TKey>> SpillingOperation_ = std::nullopt;
+    bool IsExtractingFinished = false;
+    std::vector<ISpiller::TKey> SpillingKeys_;
+
     THashedWrapperBaseState(TMemoryUsageInfo* memInfo, ui32 keyLength, ui32 streamIndex, size_t width, size_t outputWidth, std::optional<ui32> filterColumn, const std::vector<TAggParams<TAggregator>>& params,
         const std::vector<std::vector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
         : TBlockState(memInfo, outputWidth)
@@ -1240,6 +1248,118 @@ public:
                 HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(TotalStateSize_, hasher, equal);
             }
         }
+        Spiller_ = ctx.SpillerFactory->CreateSpiller();
+    }
+
+
+    template <typename THash>
+    bool SpillingIterate(THash& hash, typename THash::const_iterator& iter, TOutputBuffer& buf) {
+        MKQL_ENSURE(WritingOutput_, "Supposed to be called at the end");
+        std::array<typename THash::const_iterator, PrefetchBatchSize> iters;
+        ui32 itersLen = 0;
+
+        auto iterateBatch = [&]() {
+            for (ui32 i = 0; i < itersLen; ++i) {
+                auto iter = iters[i];
+                const TKey& key = hash.GetKey(iter);
+                auto payload = (char*)hash.GetPayload(iter);
+                char* ptr;
+                if constexpr (UseArena) {
+                    ptr = *(char**)payload;
+                } else {
+                    ptr = payload;
+                }
+
+                TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
+                for (auto& kb : Builders_) {
+                    kb->Add(in);
+                }
+
+                if constexpr (Many) {
+                    for (ui32 i = 0; i < Streams_.size(); ++i) {
+                        MKQL_ENSURE(ptr[i], "Missing partial aggregation state for stream #" << i);
+                    }
+
+                    ptr += Streams_.size();
+                }
+
+                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                    Aggs_[i]->SerializeState(ptr, buf);
+                    Aggs_[i]->DestroyState(ptr);
+
+
+                    ptr += Aggs_[i]->StateSize;
+                }
+            }
+        };
+
+        for (; iter != hash.End(); hash.Advance(iter)) {
+            if (!hash.IsValid(iter)) {
+                continue;
+            }
+
+
+            buf.Resize(0);
+            if (SpillingOutputBlockSize_ == MaxBlockLen_) {
+                iterateBatch();
+                return false;
+            }
+
+            if (itersLen == iters.size()) {
+                iterateBatch();
+                itersLen = 0;
+            }
+
+            iters[itersLen] = iter;
+            ++itersLen;
+            ++SpillingOutputBlockSize_;
+            if constexpr (UseArena) {
+                auto payload = (char*)hash.GetPayload(iter);
+                auto ptr = *(char**)payload;
+                NYql::PrefetchForWrite(ptr);
+            }
+
+            if constexpr (std::is_same<TKey, TSSOKey>::value) {
+                const auto& key = hash.GetKey(iter);
+                if (!key.IsInplace()) {
+                    NYql::PrefetchForRead(key.AsView().Data());
+                }
+            } else if constexpr (std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                const auto& key = hash.GetKey(iter);
+                NYql::PrefetchForRead(key.Data);
+            }
+        }
+
+        iterateBatch();
+        return true;
+    }
+
+    bool SpillEverything() {
+        if (SpillingOperation_.has_value() && !SpillingOperation_->HasValue()) return false;
+
+        if (SpillingOperation_.has_value()) {
+            SpillingKeys_.push_back(SpillingOperation_->ExtractValue());
+            SpillingOperation_ = std::nullopt;
+        }
+
+        while (!IsExtractingFinished) {
+            TOutputBuffer spillingBuffer;
+            IsExtractingFinished = InlineAggState ?
+                SpillingIterate(*HashMap_, SpillingHashMapIt_, spillingBuffer) :
+                SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_, spillingBuffer);
+            auto sb = spillingBuffer.Finish();
+            TString s = TString(sb.begin(), sb.size());
+            NYql::TChunkedBuffer cb = NYql::TChunkedBuffer(std::move(s));
+            SpillingOperation_ = Spiller_->Put(std::move(cb));
+        }
+        return !SpillingOperation_.has_value();
+
+    }
+
+    bool LoadEverything() {
+
+        return true;
+
     }
 
     void ProcessInput(const THolderFactory& holderFactory) {
@@ -1692,7 +1812,6 @@ public:
         TComputationContext& ctx,
         NUdf::TUnboxedValue*const* output) const
     {
-        Cerr << "MISHA DoCalculate" << Endl;
         auto& s = GetState(state, ctx);
         if (!s.Count) {
             if (s.IsFinished_)
@@ -1832,6 +1951,7 @@ private:
         {
         }
 
+
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             TState& state = *static_cast<TState*>(State_.AsBoxed().Get());
@@ -1839,6 +1959,8 @@ private:
             const size_t inputWidth = state.Width_;
             const size_t outputWidth = state.OutputWidth_;
             MKQL_ENSURE(outputWidth == width, "The given width doesn't equal to the result type size");
+
+            std::cerr << "MISHA HERE. Final? " << Finalize << std::endl;
 
             if (!state.Count) {
                 if (state.IsFinished_)
@@ -1852,6 +1974,10 @@ private:
                             state.ProcessInput(HolderFactory_);
                             continue;
                         case NUdf::EFetchStatus::Finish:
+                            if constexpr(Finalize) {
+                                if (!state.SpillEverything()) return NUdf::EFetchStatus::Yield;
+                                if (!state.LoadEverything()) return NUdf::EFetchStatus::Yield;
+                            }
                             break;
                     }
 

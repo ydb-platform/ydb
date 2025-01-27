@@ -1897,7 +1897,7 @@ TString TPlanVisualizer::PrintSvg() {
             << "</g>" << Endl;
 
         offsetY += TIME_HEIGHT;
-        if (!p.TotalCpuTime.Deriv.empty()) {
+        if (!p.TotalCpuTime.Deriv.empty() && p.TotalCpuTime.MaxTime > p.TotalCpuTime.MinTime) {
 
             auto tx0 = Config.TimelineLeft;
             auto tw = Config.TimelineWidth;

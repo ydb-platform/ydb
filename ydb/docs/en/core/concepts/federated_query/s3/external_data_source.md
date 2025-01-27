@@ -61,11 +61,11 @@ For example, the data schema below describes a schema field named `Year` of type
 Year Int32 NOT NULL
 ```
 
-If a data field is marked as required (`NOT NULL`) but this field is missing in the processed file, the processing of such a file will result in an error. If a field is marked as optional (`NULL`), no error will occur in the absence of the field in the processed file, but the field will take the value `NULL`. Keyword `NULL` is optional in this context.
+If a data field is marked as required (`NOT NULL`) but is missing in the processed file, processing such a file will result in an error. If a field is marked as optional (`NULL`), no error will occur the field is absent in the processed file, but the field will take the value `NULL`. The keyword `NULL` is optional in this context.
 
-### Schema inference {#inferring}
+### Schema inference {#inference}
 
-Schema inference is available for all [data formats](formats.md#formats) except `raw` and `json_as_string`. It can be useful when the schema contains a large number of fields. In order not to enter those fields manually, use the `WITH_INFER` parameter.:
+Schema inference is available for all [data formats](formats.md#formats) except `raw` and `json_as_string`. It can be helpful when the schema contains a large number of fields. To avoid entering those fields manually, use the `WITH_INFER` parameter.:
 
 ```yql
 SELECT
@@ -83,8 +83,8 @@ WHERE
 Where:
 
 * `object_storage_connection_name` — the name of the external data source leading to the S3 bucket ({{ objstorage-full-name }}).
-* `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported; more details [in the section](#path_format).
-* `file_format` — the [data format](formats.md#formats) in the files. All formats except for `raw` and `json_as_string` are supported.
+* `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported; more details are available [below](#path_format).
+* `file_format` — the [data format](formats.md#formats) in the files. All formats except `raw` and `json_as_string` are supported.
 * `compression` — the [compression format](formats.md#compression_formats) of the files.
 
 As a result of executing such a query, the names and types of fields will be inferred.

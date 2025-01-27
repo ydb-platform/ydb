@@ -37,7 +37,8 @@ def oncopy(unit, *args):
         if save_in_var:
             targets.append(target_path)
         unit.oncopy_file(
-            [source_path, target_path]
+            ([] if with_context else ['TEXT'])
+            + [source_path, target_path]
             + (['OUTPUT_INCLUDES'] + output_includes if output_includes else [])
             + (['OUTPUT_INCLUDES', source_path] if with_context else [])
             + (['AUTO'] if auto else [])

@@ -6,10 +6,10 @@
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/json/json_reader.h>
@@ -98,6 +98,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         exchangerSettings->SetStartDelayMs(10);
         exchangerSettings->SetMaxDelayMs(10);
         AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
         FeatureFlags.SetEnableSparsedColumns(true);
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
@@ -120,6 +121,10 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
+    TKikimrSettings& SetColumnShardAlterObjectEnabled(bool enable) {
+            AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
+            return *this;
+    }
 };
 
 class TKikimrRunner {
@@ -300,6 +305,9 @@ void CreateManyShardsTable(TKikimrRunner& kikimr, ui32 totalRows = 1000, ui32 sh
 
 bool HasIssue(const NYql::TIssues& issues, ui32 code,
     std::function<bool(const NYql::TIssue& issue)> predicate = {});
+
+bool HasIssue(const NYdb::NIssue::TIssues& issues, ui32 code,
+    std::function<bool(const NYdb::NIssue::TIssue& issue)> predicate = {});
 
 void PrintQueryStats(const NYdb::NTable::TDataQueryResult& result);
 

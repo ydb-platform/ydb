@@ -185,7 +185,7 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
 }
 
 TString TWorkloadBaseParams::GetFullTableName(const char* table) const {
-    return TFsPath(DbPath) / Path / table;
+    return DbPath + "/" + Path + (TStringBuf(table) ? "/" + TString(table) : TString());
 }
 
 TWorkloadGeneratorBase::TWorkloadGeneratorBase(const TWorkloadBaseParams& params)

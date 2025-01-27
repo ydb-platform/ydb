@@ -227,6 +227,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui64, false> MapJoinShardMinRows;
     NCommon::TConfSetting<ui64, false> MapJoinShardCount; // [1-10]
     NCommon::TConfSetting<bool, false> MapJoinUseFlow;
+    NCommon::TConfSetting<bool, false> BlockMapJoin;
     NCommon::TConfSetting<NSize::TSize, false> LookupJoinLimit;
     NCommon::TConfSetting<ui64, false> LookupJoinMaxRows;
     NCommon::TConfSetting<NSize::TSize, false> EvaluationTableSizeLimit;
@@ -273,6 +274,8 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> UseNewPredicateExtraction;
     NCommon::TConfSetting<bool, false> PruneKeyFilterLambda;
     NCommon::TConfSetting<bool, false> DqPruneKeyFilterLambda;
+    NCommon::TConfSetting<bool, false> UseQLFilter;
+    NCommon::TConfSetting<bool, false> PruneQLFilterLambda;
     NCommon::TConfSetting<bool, false> MergeAdjacentPointRanges;
     NCommon::TConfSetting<bool, false> KeyFilterForStartsWith;
     NCommon::TConfSetting<ui64, false> MaxKeyRangeCount;

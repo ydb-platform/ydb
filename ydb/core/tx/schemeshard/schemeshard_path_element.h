@@ -101,10 +101,9 @@ private:
 public:
     TPathElement(TPathId pathId, TPathId parentPathId, TPathId domainPathId, const TString& name, const TString& owner);
     ui64 GetAliveChildren() const;
-    void SetAliveChildren(ui64 val);
+    void IncAliveChildrenPrivate(bool isBackup = false);
+    void DecAliveChildrenPrivate(bool isBackup = false);
     ui64 GetBackupChildren() const;
-    void IncAliveChildren(ui64 delta = 1, bool isBackup = false);
-    void DecAliveChildren(ui64 delta = 1, bool isBackup = false);
     ui64 GetShardsInside() const;
     void SetShardsInside(ui64 val);
     void IncShardsInside(ui64 delta = 1);

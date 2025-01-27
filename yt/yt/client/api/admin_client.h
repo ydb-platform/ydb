@@ -199,6 +199,15 @@ struct TRequestRestartOptions
 struct TRequestRestartResult
 { };
 
+struct TCollectCoverageOptions
+    : public TTimeoutOptions
+{ };
+
+struct TCollectCoverageResult
+{
+    TString CoverageMap;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IAdminClient
@@ -317,6 +326,10 @@ struct IAdminClient
     virtual TFuture<TRequestRestartResult> RequestRestart(
         const std::string& nodeAddress,
         const TRequestRestartOptions& options = {}) = 0;
+
+    virtual TFuture<TCollectCoverageResult> CollectCoverage(
+        const std::string& address,
+        const TCollectCoverageOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

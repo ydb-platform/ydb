@@ -2,10 +2,11 @@
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 
-#include <ydb/core/sys_view/auth/owners.h>
-#include <ydb/core/sys_view/auth/users.h>
-#include <ydb/core/sys_view/auth/groups.h>
 #include <ydb/core/sys_view/auth/group_members.h>
+#include <ydb/core/sys_view/auth/groups.h>
+#include <ydb/core/sys_view/auth/owners.h>
+#include <ydb/core/sys_view/auth/permissions.h>
+#include <ydb/core/sys_view/auth/users.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/sys_view/nodes/nodes.h>
@@ -255,6 +256,10 @@ THolder<NActors::IActor> CreateSystemViewScan(
         }
         if (tableId.SysViewInfo == OwnersName) {
             return NAuth::CreateOwnersScan(ownerId, scanId, tableId, tableRange, columns);
+        }
+        if (tableId.SysViewInfo == PermissionsName || tableId.SysViewInfo == EffectivePermissionsName) {
+            return NAuth::CreatePermissionsScan(tableId.SysViewInfo == EffectivePermissionsName,
+                ownerId, scanId, tableId, tableRange, columns);
         }
     }
 

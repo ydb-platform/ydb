@@ -3,6 +3,7 @@ SUBSCRIBER(g:yql)
 RECURSE(
     ast
     core
+    docs
     minikql
     parser
     protos

@@ -13,7 +13,7 @@
 #include <google/protobuf/util/time_util.h>
 #include <google/protobuf/repeated_field.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NReplication {
 
 TConnectionParams::TConnectionParams(const Ydb::Replication::ConnectionParams& params) {

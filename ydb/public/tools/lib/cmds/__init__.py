@@ -66,19 +66,9 @@ def parse_erasure(args):
 
 
 def driver_path_packages(package_path):
-    return yatest.common.build_path(
-        "{}/Berkanavt/kikimr/bin/kikimr".format(
-            package_path
-        )
-    )
-
-
-def udfs_path_packages(package_path):
-    return yatest.common.build_path(
-        "{}/Berkanavt/kikimr/libs".format(
-            package_path
-        )
-    )
+    if os.getenv('YDB_DRIVER_BINARY') is not None:
+        return os.getenv('YDB_DRIVER_BINARY')
+    return yatest.common.build_path("{}/ydbd".format(package_path))
 
 
 def wrap_path(path):
@@ -222,6 +212,9 @@ class Recipe(object):
 
     def write_certificates_path(self, certificates_path):
         self.setenv('YDB_SSL_ROOT_CERTIFICATES_FILE', certificates_path)
+
+    def write_mon_port(self, mon_port):
+        self.setenv('YDB_MON_PORT', str(mon_port))
 
     def read_metafile(self):
         return json.loads(self.read(self.metafile_path()))
@@ -388,6 +381,7 @@ def deploy(arguments):
 
     info = {'nodes': {}}
     endpoints = []
+    mon_port = None
     for node_id, node in cluster.nodes.items():
         info['nodes'][node_id] = {
             'pid': node.pid,
@@ -405,6 +399,9 @@ def deploy(arguments):
             ]
         }
 
+        if mon_port is None:
+            mon_port = node.mon_port
+
         endpoints.append("localhost:%d" % node.grpc_port)
 
     endpoint = endpoints[0]
@@ -413,6 +410,7 @@ def deploy(arguments):
     recipe.write_endpoint(endpoint)
     recipe.write_database(cluster.domain_name)
     recipe.write_connection_string(("grpcs://" if enable_tls() else "grpc://") + endpoint + "?database=/" + cluster.domain_name)
+    recipe.write_mon_port(mon_port)
     if enable_tls():
         recipe.write_certificates_path(configuration.grpc_tls_ca.decode("utf-8"))
     return endpoint, database

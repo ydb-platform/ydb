@@ -74,6 +74,10 @@ private:
     // <cmpItem> := '(<cmpOp> <value>)
     NNodes::TMaybeNode<NNodes::TExprBase> ExtractKeyRangeLegacy(NNodes::TExprBase node, TExprContext& ctx) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> ExtractQLFilters(NNodes::TExprBase node, TExprContext& ctx) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> OptimizeQLFilterType(NNodes::TExprBase node, TExprContext& ctx) const;
+
     NNodes::TMaybeNode<NNodes::TExprBase> FuseReduce(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> FuseReduceWithTrivialMap(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;

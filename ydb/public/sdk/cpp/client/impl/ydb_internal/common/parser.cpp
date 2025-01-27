@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/string_helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 TConnectionInfo ParseConnectionString(const TString& connectionString) {
     if (connectionString.length() == 0) {

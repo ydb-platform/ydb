@@ -9,7 +9,7 @@
 #include <util/stream/buffer.h>
 
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 

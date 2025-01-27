@@ -53,7 +53,7 @@ void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::Log
         // Login
         AUDIT_PART("login_user", (!request.user().empty() ? request.user() : EmptyValue))
         AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
-        AUDIT_PART("account_type", AdminAccountType, (isAdmin && status == Ydb::StatusIds::SUCCESS))
+        AUDIT_PART("login_user_level", AdminAccountType, (isAdmin && status == Ydb::StatusIds::SUCCESS))
 
         //TODO: (?) it is possible to show masked version of the resulting token here
     );

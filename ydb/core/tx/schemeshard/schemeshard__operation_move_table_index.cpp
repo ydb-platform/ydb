@@ -21,8 +21,8 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
     context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
     context.SS->PersistUserAttributes(db, srcPath->PathId, srcPath->UserAttrs, nullptr);
 
-    srcPath.Parent()->DecAliveChildren();
-    srcPath.DomainInfo()->DecPathsInside();
+    DecAliveChildrenDirect(operationId, srcPath.Parent().Base(), context);
+    srcPath.DomainInfo()->DecPathsInside(context.SS);
 
     IncParentDirAlterVersionWithRepublish(operationId, srcPath, context);
 }
@@ -72,7 +72,7 @@ public:
 
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, dstPath.Base()->PathId, step);
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
 
         dstPath.Activate();
         IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);
@@ -502,7 +502,7 @@ public:
         dstPath.Base()->UserAttrs->AlterData = srcPath.Base()->UserAttrs;
         dstPath.Base()->ACL = srcPath.Base()->ACL;
 
-        dstParentPath.Base()->IncAliveChildren();
+        IncAliveChildrenSafeWithUndo(OperationId, dstParentPath, context); // for correct discard of ChildrenExist prop
 
         // create tx state, do not catch shards right now
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxMoveTableIndex,  dstPath.Base()->PathId, srcPath.Base()->PathId);

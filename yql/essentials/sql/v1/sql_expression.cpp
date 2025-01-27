@@ -34,6 +34,31 @@ TNodePtr TSqlExpression::Build(const TRule_expr& node) {
         }
     }
 
+TNodePtr TSqlExpression::Build(const TRule_lambda_or_parameter& node) {
+        // lambda_or_parameter:
+        //    lambda
+        //  | bind_parameter
+        switch (node.Alt_case()) {
+            case TRule_lambda_or_parameter::kAltLambdaOrParameter1: {
+                return LambdaRule(node.alt_lambda_or_parameter1().GetRule_lambda1());
+            }
+            case TRule_lambda_or_parameter::kAltLambdaOrParameter2: {
+                TString named;
+                if (!NamedNodeImpl(node.GetAlt_lambda_or_parameter2().GetRule_bind_parameter1(), named, *this)) {
+                    return nullptr;
+                }
+                auto namedNode = GetNamedNode(named);
+                if (!namedNode) {
+                    return nullptr;
+                }
+
+                return namedNode;
+            }
+            case TRule_lambda_or_parameter::ALT_NOT_SET:
+                Y_ABORT("You should change implementation according to grammar changes");
+        }
+    }
+
 TNodePtr TSqlExpression::SubExpr(const TRule_mul_subexpr& node, const TTrailingQuestions& tail) {
         // mul_subexpr: con_subexpr (DOUBLE_PIPE con_subexpr)*;
         auto getNode = [](const TRule_mul_subexpr::TBlock2& b) -> const TRule_con_subexpr& { return b.GetRule_con_subexpr2(); };

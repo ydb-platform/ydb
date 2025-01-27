@@ -8685,6 +8685,70 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus DynamicVariantWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(*input->Child(0), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureType(*input->Child(2), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto type = input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureVariantType(input->Child(2)->Pos(), *type, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto variantType = type->Cast<TVariantExprType>();
+
+        const TTypeAnnotationNode* firstType;
+        if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+            if (!EnsureSpecificDataType(*input->Child(1), EDataSlot::Uint32, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto tupleType = variantType->GetUnderlyingType()->Cast<TTupleExprType>();
+            firstType = tupleType->GetItems()[0];
+            for (size_t i = 1; i < tupleType->GetSize(); ++i) {
+                if (firstType != tupleType->GetItems()[i]) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                        << "All Variant item types should be equal: " << GetTypeDiff(*firstType, *tupleType->GetItems()[i])));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+
+        } else {
+            if (!EnsureSpecificDataType(*input->Child(1), EDataSlot::Utf8, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto structType = variantType->GetUnderlyingType()->Cast<TStructExprType>();
+            firstType = structType->GetItems()[0]->GetItemType();
+            for (size_t i = 1; i < structType->GetSize(); ++i) {
+                if (firstType != structType->GetItems()[i]->GetItemType()) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                        << "All Variant item types should be equal: " << GetTypeDiff(*firstType, *structType->GetItems()[i]->GetItemType())));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+
+        const auto convertStatus = TryConvertTo(input->ChildRef(0), *firstType, ctx.Expr);
+        if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
+                TStringBuilder() << "Mismatch item type, expected: " << *firstType << ", got: " << *input->Child(0)->GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(variantType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus SqlVisitWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -9151,6 +9215,36 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         return IGraphTransformer::TStatus::Repeat;
+    }
+
+    IGraphTransformer::TStatus TableSourceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool isWide = input->Content().StartsWith("Wide");
+        if (isWide) {
+            if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList) {
+                ;
+            } else {
+                if (!EnsureListType(input->Head(), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                auto inputItemType = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+                if (!EnsureStructType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus SqlProcessWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -12484,6 +12578,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Dict"] = &DictWrapper;
         Functions["Variant"] = &VariantWrapper;
         Functions["Enum"] = &EnumWrapper;
+        Functions["DynamicVariant"] = &DynamicVariantWrapper;
         Functions["AsVariant"] = &AsVariantWrapper;
         Functions["AsEnum"] = &AsEnumWrapper;
         Functions["Contains"] = &ContainsLookupWrapper<true>;
@@ -12623,6 +12718,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SqlVisit"] = &SqlVisitWrapper;
         Functions["Visit"] = &VisitWrapper;
         Functions["Way"] = &WayWrapper;
+        Functions["TableSource"] = &TableSourceWrapper;
+        Functions["WideTableSource"] = &TableSourceWrapper;
         Functions["SqlAccess"] = &SqlAccessWrapper;
         Functions["SqlProcess"] = &SqlProcessWrapper;
         Functions["SqlReduce"] = &SqlReduceWrapper;
@@ -12849,6 +12946,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
+
+        Functions["BlockMapJoinCore"] = &BlockMapJoinCoreWrapper;
 
         ExtFunctions["AsScalar"] = &AsScalarWrapper;
         ExtFunctions["WideToBlocks"] = &WideToBlocksWrapper;

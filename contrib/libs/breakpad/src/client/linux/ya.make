@@ -16,6 +16,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 VERSION(2022.07.12)
 
 PEERDIR(
+    contrib/libs/libc_compat
     library/cpp/sanitizer/include
 )
 

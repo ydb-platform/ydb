@@ -2,7 +2,10 @@
 
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/public/udf/arrow/defs.h>
 #include <yql/essentials/utils/yql_panic.h>
+
+#include <arrow/compute/cast.h>
 
 namespace NYql {
 

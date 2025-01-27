@@ -428,10 +428,10 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
     context.SS->ClearDescribePathCaches(dstPath.Base());
     context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
-    dstPath.DomainInfo()->IncPathsInside();
-    dstPath.DomainInfo()->AddInternalShards(txState);
+    dstPath.DomainInfo()->IncPathsInside(context.SS);
+    dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
     dstPath.Base()->IncShardsInside(shardsToCreate);
-    parentPath.Base()->IncAliveChildren();
+    IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
     SetState(NextState());
     return result;

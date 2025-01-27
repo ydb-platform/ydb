@@ -552,6 +552,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     if (options.SequenceNumber) {
         req->set_sequence_number(options.SequenceNumber->Underlying());
     }
+    req->set_require_sync_replica(options.RequireSyncReplica);
 
     if (NTracing::IsCurrentTraceContextRecorded()) {
         req->TracingTags().emplace_back("yt.producer_path", ToString(producerPath));

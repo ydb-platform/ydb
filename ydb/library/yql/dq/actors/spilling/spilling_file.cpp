@@ -369,6 +369,8 @@ private:
             return;
         }
 
+        Counters_->SpillingFileDescriptors->Sub(it->second.PartsList.size());
+
         ui64 blobs = 0;
         for (auto& fp : it->second.PartsList) {
             blobs += fp.Blobs.size();
@@ -502,6 +504,7 @@ private:
             Counters_->SpillingTotalSpaceUsed->Add(blobDesc.Size);
 
             if (msg.NewFileHandle) {
+                Counters_->SpillingFileDescriptors->Inc();
                 fp->FileHandle.Swap(msg.NewFileHandle);
             }
         } else {
@@ -636,6 +639,7 @@ private:
 
                 Counters_->SpillingTotalSpaceUsed->Sub(fp->Size);
                 Counters_->SpillingStoredBlobs->Sub(fp->Blobs.size());
+                Counters_->SpillingFileDescriptors->Dec();
 
                 fd.Parts.erase(msg.BlobId);
                 fd.PartsList.remove_if([fp](const auto& x) { return &x == fp; });
@@ -681,6 +685,7 @@ private:
 
             TAG(TH2) { s << "Active files"; }
             PRE() { s << "Used space: " << TotalSize_ << Endl; }
+            PRE() { s << "Used file descriptors: " << Counters_->SpillingFileDescriptors->Val() << Endl; }
 
             for (const auto& tx : byTx) {
                 TAG(TH2) { s << "Transaction " << tx.first; }

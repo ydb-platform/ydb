@@ -4,11 +4,11 @@
 
 #include <yt/yt/core/actions/callback.h>
 
-#include <yt/yt/core/misc/range.h>
-
 #include <yt/yt/core/profiling/public.h>
 
 #include <yt/yt/core/threading/thread.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 namespace NYT::NConcurrency {
 

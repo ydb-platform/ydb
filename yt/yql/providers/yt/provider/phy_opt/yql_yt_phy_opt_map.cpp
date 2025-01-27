@@ -70,6 +70,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FlatMap(TExprBase node,
     if (!outItemType || !outItemType->IsPersistable()) {
         return node;
     }
+    if (!EnsurePersistableYsonTypes(node.Pos(), *outItemType, ctx, State_)) {
+        return {};
+    }
 
     auto cleanup = CleanupWorld(flatMap.Lambda(), ctx);
     if (!cleanup) {
@@ -146,6 +149,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LMap(TExprBase node, TE
     const auto outItemType = SilentGetSequenceItemType(lmap.Lambda().Body().Ref(), true);
     if (!outItemType || !outItemType->IsPersistable()) {
         return node;
+    }
+    if (!EnsurePersistableYsonTypes(node.Pos(), *outItemType, ctx, State_)) {
+        return {};
     }
 
     auto cluster = TString{GetClusterName(lmap.Input())};
@@ -224,6 +230,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
         outItemType = type->Cast<TStructExprType>();
     } else {
         return node;
+    }
+    if (!EnsurePersistableYsonTypes(node.Pos(), *outItemType, ctx, State_)) {
+        return {};
     }
 
     auto cluster = TString{GetClusterName(input)};

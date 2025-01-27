@@ -13,7 +13,7 @@
 namespace NKikimr::NOlap::NWritingPortions {
 
 class TPortionWriteController: public NColumnShard::IWriteController,
-                               public NColumnShard::TMonitoringObjectsCounter<TIndexedWriteController, true> {
+                               public NColumnShard::TMonitoringObjectsCounter<TPortionWriteController, true> {
 public:
     class TInsertPortion {
     private:
@@ -175,14 +175,14 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
     for (auto&& unit : WriteUnits) {
         const auto& originalBatch = unit.GetBatch();
         if (originalBatch->num_rows() == 0) {
-            writeResults.emplace_back(unit.GetData()->GetWriteMeta(), unit.GetData()->GetSize(), nullptr, true, 0);
+            writeResults.emplace_back(unit.GetData()->GetWriteMetaPtr(), unit.GetData()->GetSize(), nullptr, true, 0);
             continue;
         }
         auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(
             originalBatch.GetContainer(), Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), splitPositions);
         std::shared_ptr<arrow::RecordBatch> pkBatch =
             NArrow::TColumnOperator().Extract(originalBatch.GetContainer(), Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
-        writeResults.emplace_back(unit.GetData()->GetWriteMeta(), unit.GetData()->GetSize(), pkBatch, false, originalBatch->num_rows());
+        writeResults.emplace_back(unit.GetData()->GetWriteMetaPtr(), unit.GetData()->GetSize(), pkBatch, false, originalBatch->num_rows());
         ui32 idx = 0;
         for (auto&& batch : batches) {
             if (!!batch) {

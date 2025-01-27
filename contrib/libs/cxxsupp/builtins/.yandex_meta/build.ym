@@ -1,6 +1,6 @@
 {% extends '//builtin/bag.ym' %}
 
-{% block current_version %}19.1.6{% endblock %}
+{% block current_version %}19.1.7{% endblock %}
 
 {% block current_url %}
 https://github.com/llvm/llvm-project/releases/download/llvmorg-{{self.version().strip()}}/compiler-rt-{{self.version().strip()}}.src.tar.xz
@@ -20,8 +20,6 @@ sed -e 's|.*#include.*zircon/features.h.*||' -i cpu_model/aarch64/lse_atomics/fu
 
 {% block ya_make %}
 SUBSCRIBER(
-    pg
-    somov
     g:contrib
     g:cpp-contrib
 )

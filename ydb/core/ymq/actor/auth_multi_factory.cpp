@@ -5,7 +5,7 @@
 #include <ydb/core/ymq/actor/error.h>
 #include <ydb/core/ymq/actor/proxy_actor.h>
 #include <ydb/core/ymq/actor/serviceid.h>
-#include <ydb/public/sdk/cpp/client/iam/common/iam.h>
+#include <ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/folder_service/events.h>
 #include <ydb/library/ycloud/api/access_service.h>
@@ -588,7 +588,7 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
     const ui32 poolID = data.ExecutorPoolID;
 
     // token needed only for ResourceManager
-    const auto token = UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : "";
+    const TString token = UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : "";
 
     if (data.RequestFormat == NSQS::TAuthActorData::Json) {
         system.Register(

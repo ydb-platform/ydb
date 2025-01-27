@@ -109,7 +109,7 @@ namespace NKikimr::NStorage {
             ev->Record.SetNoQuorum(true);
         } else if (!StorageConfig) {
             // no storage configuration -- no nothing
-        } else if (auto *target = record.MutableConfig(); StorageConfig->GetSelfManagementConfig().GetEnabled()) {
+        } else if (auto *target = record.MutableConfig(); SelfManagementEnabled) {
             target->CopyFrom(*StorageConfig);
         } else {
             target->CopyFrom(BaseConfig);

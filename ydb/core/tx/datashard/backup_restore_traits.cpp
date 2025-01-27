@@ -76,6 +76,14 @@ TString PermissionsKeySuffix() {
     return "permissions.pb";
 }
 
+TString TopicKeySuffix() {
+    return "topic_description.pb";
+}
+
+TString ChangefeedKeySuffix() {
+    return "changefeed_description.pb";
+}
+
 TString SchemeKeySuffix() {
     return "scheme.pb";
 }

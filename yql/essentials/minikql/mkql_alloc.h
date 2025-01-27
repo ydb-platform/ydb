@@ -164,7 +164,7 @@ struct TMkqlPAllocHeader {
     ui64 Self; // should be placed right before pointer to allocated area, see GetMemoryChunkContext
 };
 
-static_assert(sizeof(TMkqlPAllocHeader) == 
+static_assert(sizeof(TMkqlPAllocHeader) ==
     sizeof(size_t) +
     sizeof(TAllocState::TListEntry) +
     sizeof(void*), "Padding is not allowed");
@@ -496,6 +496,38 @@ struct TMKQLAllocator
 
 using TWithDefaultMiniKQLAlloc = TWithMiniKQLAlloc<EMemorySubPool::Default>;
 using TWithTemporaryMiniKQLAlloc = TWithMiniKQLAlloc<EMemorySubPool::Temporary>;
+
+template <typename Type>
+struct TMKQLHugeAllocator
+{
+    typedef Type value_type;
+    typedef Type* pointer;
+    typedef const Type* const_pointer;
+    typedef Type& reference;
+    typedef const Type& const_reference;
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+
+    TMKQLHugeAllocator() noexcept = default;
+    ~TMKQLHugeAllocator() noexcept = default;
+
+    template<typename U> TMKQLHugeAllocator(const TMKQLHugeAllocator<U>&) noexcept {}
+    template<typename U> struct rebind { typedef TMKQLHugeAllocator<U> other; };
+    template<typename U> bool operator==(const TMKQLHugeAllocator<U>&) const { return true; }
+    template<typename U> bool operator!=(const TMKQLHugeAllocator<U>&) const { return false; }
+
+    static pointer allocate(size_type n, const void* = nullptr)
+    {
+        size_t size = Max(n * sizeof(value_type), TAllocState::POOL_PAGE_SIZE);
+        return static_cast<pointer>(TlsAllocState->GetBlock(size));
+    }
+
+    static void deallocate(const_pointer p, size_type n) noexcept
+    {
+        size_t size = Max(n * sizeof(value_type), TAllocState::POOL_PAGE_SIZE);
+        TlsAllocState->ReturnBlock(const_cast<pointer>(p), size);
+    }
+};
 
 template <typename T>
 class TPagedList

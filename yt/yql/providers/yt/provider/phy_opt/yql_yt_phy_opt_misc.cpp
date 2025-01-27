@@ -253,6 +253,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
                 if (!EnsurePersistableType(child.Pos(), *type, ctx)) {
                     return {};
                 }
+                if (!EnsurePersistableYsonTypes(child.Pos(), *type, ctx, State_)) {
+                    return {};
+                }
                 outItemType = type->Cast<TStructExprType>();
             } else {
                 return {};
@@ -565,6 +568,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
             const TStructExprType* outItemType = nullptr;
             if (auto type = GetSequenceItemType(child, false, ctx)) {
                 if (!EnsurePersistableType(child.Pos(), *type, ctx)) {
+                    return {};
+                }
+                if (!EnsurePersistableYsonTypes(child.Pos(), *type, ctx, State_)) {
                     return {};
                 }
                 outItemType = type->Cast<TStructExprType>();

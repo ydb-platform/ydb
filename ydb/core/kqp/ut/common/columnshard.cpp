@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/testlib/cs_helper.h>
+#include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 
 extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
@@ -26,6 +27,8 @@ namespace NKqp {
         TableClient =
             std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));
         Session = std::make_unique<NYdb::NTable::TSession>(TableClient->CreateSession().GetValueSync().GetSession());
+
+        NOlap::TSchemaCachesManager::DropCaches();
     }
 
     NKikimr::NKqp::TKikimrRunner& TTestHelper::GetKikimr() {

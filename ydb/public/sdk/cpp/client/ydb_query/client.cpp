@@ -420,7 +420,7 @@ public:
             }
 
             void ReplyError(TStatus status) override {
-                TSession session(Client);
+                TSession session;
                 ScheduleReply(TCreateSessionResult(std::move(status), std::move(session)));
             }
 
@@ -624,6 +624,9 @@ TSession TCreateSessionResult::GetSession() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TSession::TSession()
+{}
 
 TSession::TSession(std::shared_ptr<TQueryClient::TImpl> client)
     : Client_(client)

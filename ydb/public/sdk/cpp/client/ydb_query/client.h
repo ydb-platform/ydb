@@ -156,6 +156,7 @@ public:
 
     class TImpl;
 private:
+    TSession();
     TSession(std::shared_ptr<TQueryClient::TImpl> client); // Create broken session
     TSession(std::shared_ptr<TQueryClient::TImpl> client, TSession::TImpl* sessionImpl);
 

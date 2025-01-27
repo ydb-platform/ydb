@@ -4796,9 +4796,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
 
-            AsyncImport(runtime, ++t.TxId, "/MyRoot", Sprintf(importSettings.data(), port));
-            t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            const ui64 importId = t.TxId;
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", Sprintf(importSettings.data(), port));
 
             t.TestEnv->ReliablePropose(runtime, CancelImportRequest(++t.TxId, "/MyRoot", importId), {
                 Ydb::StatusIds::SUCCESS,
@@ -4808,11 +4807,15 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestGetImport(runtime, importId, "/MyRoot", {
+                const auto response = TestGetImport(runtime, importId, "/MyRoot", {
                     Ydb::StatusIds::SUCCESS,
                     Ydb::StatusIds::CANCELLED,
                     Ydb::StatusIds::NOT_FOUND
                 });
+                const auto& entry = response.GetResponse().GetEntry();
+                if (entry.GetStatus() == Ydb::StatusIds::CANCELLED) {
+                    UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(entry.GetIssues()), "Cancelled manually");
+                }
             }
         });
     }

@@ -90,10 +90,15 @@ inline void FillSpec(NYT::TNode& spec,
 }
 
 template <class TDerived, class TExecParamsPtr>
-inline void FillOperationSpec(NYT::TUserOperationSpecBase<TDerived>& spec, const TExecParamsPtr& execCtx) {
+inline void FillOperationSpec(NYT::TOperationSpecBase<TDerived>& spec, const TExecParamsPtr& execCtx) {
     if (auto val = execCtx->Options_.Config()->DefaultMaxJobFails.Get()) {
         spec.MaxFailedJobCount(*val);
     }
+}
+
+template <class TDerived, class TExecParamsPtr>
+inline void FillUserOperationSpec(NYT::TUserOperationSpecBase<TDerived>& spec, const TExecParamsPtr& execCtx) {
+    FillOperationSpec(spec, execCtx);
     if (auto val = execCtx->Options_.Config()->CoreDumpPath.Get()) {
         spec.CoreTablePath(*val);
     }

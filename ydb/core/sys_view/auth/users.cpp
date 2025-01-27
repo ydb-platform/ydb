@@ -162,7 +162,7 @@ private:
             return true;
         }
 
-        return UserToken && UserToken->IsExist(user);
+        return UserToken && UserToken->GetUserSID() == user;
     }
 
 private:

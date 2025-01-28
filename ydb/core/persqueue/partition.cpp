@@ -2290,7 +2290,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
     if (!t.WriteInfo->BlobsFromHead.empty()) {
         auto& first = t.WriteInfo->BlobsFromHead.front();
-        NewHead.PartNo = first.GetPartNo();
+        NewHead.PartNo += first.GetPartNo();
 
         Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
 

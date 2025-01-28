@@ -1635,8 +1635,4 @@ const NKikimr::NColumnShard::NTiers::TManager* TColumnShard::GetTierManagerPoint
     return Tiers->GetManagerOptional(tierId);
 }
 
-TDuration TColumnShard::GetMaxReadStaleness() {
-    return NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean();
-}
-
 } // namespace NKikimr::NColumnShard

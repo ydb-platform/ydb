@@ -61,8 +61,9 @@ Y_UNIT_TEST_SUITE(S3Inset) {
         TString path = TStringBuilder() << "exp_folder/some_" << EscapeC(GetSymbolsString(' ', '~', "*?{}`;")) << "\\`";
 
         {
+            // NB: AtomicUploadCommit = "false" because in minio ListMultipartUploads by prefix is not supported
             auto scriptExecutionOperation = db.ExecuteScript(fmt::format(R"(
-                PRAGMA s3.AtomicUploadCommit = "true";
+                PRAGMA s3.AtomicUploadCommit = "false";
                 INSERT INTO `{external_source}`.`{path}/` WITH (FORMAT = "csv_with_names")
                 SELECT * FROM `{external_source}`.`/a/` WITH (
                     format="json_each_row",

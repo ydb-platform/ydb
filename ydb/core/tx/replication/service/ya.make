@@ -14,6 +14,8 @@ PEERDIR(
     ydb/library/services
     ydb/core/wrappers
     library/cpp/json
+
+    ydb/core/fq/libs/row_dispatcher/events
 )
 
 SRCS(
@@ -22,6 +24,7 @@ SRCS(
     service.cpp
     table_writer.cpp
     topic_reader.cpp
+    transfer_writer.cpp
     worker.cpp
 )
 

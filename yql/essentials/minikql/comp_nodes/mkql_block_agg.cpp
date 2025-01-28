@@ -1270,11 +1270,7 @@ public:
                     ptr = payload;
                 }
 
-                TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
-                Y_UNUSED(in);
-                // for (auto& kb : Builders_) {
-                //     kb->Add(in);
-                // }
+                buf.PushString(GetKeyView<TKey>(key, KeyLength_));
 
                 if constexpr (Many) {
                     for (ui32 i = 0; i < Streams_.size(); ++i) {

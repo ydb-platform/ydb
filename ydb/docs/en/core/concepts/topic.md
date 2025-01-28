@@ -208,12 +208,12 @@ Kafka API version 3.4.0 is also supported with some restrictions (see [Work with
 
 Topic data does not change during a read operation. Therefore, within transactional reads from a topic, only the offset commit is a true transactional operation. The postponed offset commit occurs automatically at the transaction commit, and the SDK handles this transparently for the user.
 
-### Write into a topic within transaction {#topic-transactions-write}
+### Write into a topic within a transaction {#topic-transactions-write}
 
-During transactional writing into a topic data are stored outside a partition until transaction commit, and then published in a partition at transaction commit. At this moment data are added into the end of the partition with sequential offsets. There is no visibility of own changes in transaction with topics in {{ ydb-short-name }}.
+During transactional writes to a topic, data is stored outside the partition until the transaction is committed. At the transaction commit, the data is published to the partition and appended to the end of the partition with sequential offsets. Changes made within the transaction are not visible in transactions with topics in {{ ydb-short-name }}.
 
-### Topic transactions constraints {#topic-transactions-constraints}
+### Topic transaction constraints {#topic-transactions-constraints}
 
-There are no additional constraints when working with topics within a transaction. Writing large amounts of data into a topic, writing to several partitions, reading by multiple consumers are possible.
+There are no additional constraints when working with topics within a transaction. It is possible to write large amounts of data to a topic, write to multiple partitions, and read with multiple consumers.
 
-However it is recommended to take into account that data are published at a transaction commit. So if transaction is long, data will become visible only after a considerable time.
+However, it is recommended to consider that data is published only at transaction commit. Therefore, if a transaction is long-running, the data will become visible only after a significant delay.

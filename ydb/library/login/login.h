@@ -140,11 +140,6 @@ public:
         std::vector<TString> TouchedGroups;
     };
 
-    struct TRemoveGroupRequest : TBasicRequest {
-        TString Group;
-        bool MissingOk;
-    };
-
     struct TRemoveGroupResponse : TBasicResponse {
         std::vector<TString> TouchedGroups;
     };
@@ -202,7 +197,8 @@ public:
     TBasicResponse AddGroupMembership(const TAddGroupMembershipRequest& request);
     TBasicResponse RemoveGroupMembership(const TRemoveGroupMembershipRequest& request);
     TRenameGroupResponse RenameGroup(const TRenameGroupRequest& request);
-    TRemoveGroupResponse RemoveGroup(const TRemoveGroupRequest& request);
+    TRemoveGroupResponse RemoveGroup(const TString& group);
+    bool CheckGroupExists(const TString& group);
 
     void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
     void UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer);

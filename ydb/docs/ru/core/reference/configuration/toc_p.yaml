@@ -1,5 +1,5 @@
 items:
 - name: Настройка TLS
   href: tls.md
-- name: Авторизация узлов баз данных
-  href: node_authorization.md
+- name: Аутентификация узлов баз данных
+  href: node-authentication.md

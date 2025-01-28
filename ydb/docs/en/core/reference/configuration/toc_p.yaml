@@ -1,5 +1,5 @@
 items:
 - name: TLS
   href: tls.md
-- name: Database node authorization
-  href: node_authorization.md
+- name: Database node authentication
+  href: node-authentication.md

@@ -260,9 +260,8 @@ domains_config:
     viewer_allowed_sids: <список SID'ов с правами просмотра состояния кластера>
     monitoring_allowed_sids: <список SID'ов с правами просмотра и изменения состояния кластера>
     administration_allowed_sids: <список SID'ов с доступом администратора кластера>
+    register_dynamic_node_allowed_sids: <список SID'ов с правами регистрации узлов баз данных в кластере>
 ```
-
-[//]: # (TODO: wait for pull/9387, dynamic_node_registration to add info about "register_dynamic_node_allowed_sids: <список SID'ов с правами подключения динамических нод в кластер>")
 
 #### Настройки режима аутентификации {#security-auth}
 
@@ -418,9 +417,11 @@ default_access:
 
 Даёт право на выполнение административных действий с базами или кластером.
     ||
-|#
+|| `register_dynamic_node_allowed_sids` | Список [SID](../../concepts/glossary.md#access-sid)'ов , для которых разрешена регистрация узлов баз данных.
 
-[//]: # (TODO: wait for pull/9387, dinamic_node_registration to add info about `register_dynamic_node_allowed_sids`)
+По техническим причинам в этом списке также должен присутствовать субъект доступа `root@builtin`.
+    ||
+|#
 
 {% note warning %}
 

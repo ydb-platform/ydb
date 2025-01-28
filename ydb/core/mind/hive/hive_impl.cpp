@@ -170,7 +170,12 @@ void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvDeleteTablet::TPtr& ev) {
-    Execute(CreateDeleteTablet(ev));
+    if (DeleteTabletInProgress < MAX_DELETE_TABLET_IN_PROGRESS) {
+        ++DeleteTabletInProgress;
+        Execute(CreateDeleteTablet(ev));
+    } else {
+        DeleteTabletQueue.push(std::move(ev));
+    }
 }
 
 void THive::Handle(TEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
@@ -183,6 +188,7 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet) {
 
     // Tablet has no storage, so there's nothing to block or delete
     // Simulate a response from CreateTabletReqDelete as if all steps have been completed
+    ++DeleteTabletInProgress;
     Send(SelfId(), new TEvTabletBase::TEvDeleteTabletResult(NKikimrProto::OK, tablet->Id));
 }
 
@@ -192,6 +198,7 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& 
 
     // Tablet has no storage, so there's nothing to block or delete
     // Simulate a response from CreateTabletReqDelete as if all steps have been completed
+    ++DeleteTabletInProgress;
     sideEffects.Send(SelfId(), new TEvTabletBase::TEvDeleteTabletResult(NKikimrProto::OK, tablet->Id));
 }
 
@@ -1119,6 +1126,11 @@ void THive::Handle(TEvTabletBase::TEvBlockBlobStorageResult::TPtr &ev) {
 
 void THive::Handle(TEvTabletBase::TEvDeleteTabletResult::TPtr &ev) {
     Execute(CreateDeleteTabletResult(ev));
+    --DeleteTabletInProgress;
+    while (!DeleteTabletQueue.empty() && DeleteTabletInProgress < MAX_DELETE_TABLET_IN_PROGRESS) {
+        Handle(DeleteTabletQueue.front());
+        DeleteTabletQueue.pop();
+    }
 }
 
 template <>

@@ -412,7 +412,7 @@ private:
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo->Items.size())) {
             auto& item = importInfo->Items[itemIdx];
-            if (IsCreatedByQuery(item) && item.ViewCreationRetries == 0) {
+            if (IsWaiting(item) && IsCreatedByQuery(item) && item.ViewCreationRetries == 0) {
                 item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                     Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery, database
                 ));

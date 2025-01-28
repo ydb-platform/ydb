@@ -46,7 +46,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto indexValue = Index->GetValue(ctx);
-        if (indexValue.Get<ui32>() >= AltCounts) {
+        if (!indexValue || indexValue.Get<ui32>() >= AltCounts) {
             return {};
         }
 
@@ -71,6 +71,10 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto indexValue = Index->GetValue(ctx);
+        if (!indexValue) {
+            return {};
+        }
+
         TStringBuf indexStr = indexValue.AsStringRef();
         auto ptr = Fields.FindPtr(indexStr);
         if (!ptr) {

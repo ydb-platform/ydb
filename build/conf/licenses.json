@@ -159,7 +159,8 @@
             "AGPL-3.0-only",
             "AGPL-3.0-or-later",
             "Artistic-1.0",
-            "confluent-community-1.0"
+            "confluent-community-1.0",
+            "Moderne-Source-Available-License"
         ]
     },
     "NDA": {

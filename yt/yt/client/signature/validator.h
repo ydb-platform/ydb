@@ -2,8 +2,9 @@
 
 #include "public.h"
 
-#include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/actions/public.h>
+
+#include <yt/yt/core/yson/public.h>
 
 namespace NYT::NSignature {
 
@@ -14,8 +15,6 @@ class TSignatureValidatorBase
 {
 public:
     virtual TFuture<bool> Validate(const TSignaturePtr& signature) = 0;
-
-    virtual ~TSignatureValidatorBase() = default;
 
 protected:
     const NYson::TYsonString& GetHeader(const TSignaturePtr& signature);

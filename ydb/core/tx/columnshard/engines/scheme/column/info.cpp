@@ -92,14 +92,17 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> result;
     for (auto&& s : source) {
-        std::shared_ptr<arrow::RecordBatch> data;
+        TString data;
         if (!DataAccessorConstructor.IsEqualTo(sourceColumnFeatures.DataAccessorConstructor)) {
             auto chunkedArray = sourceColumnFeatures.Loader->ApplyVerified(s->GetData(), s->GetRecordsCountVerified());
-            data = DataAccessorConstructor.Construct(chunkedArray, Loader->BuildAccessorContext(s->GetRecordsCountVerified()));
+            data = DataAccessorConstructor.SerializeToString(chunkedArray, Loader->BuildAccessorContext(s->GetRecordsCountVerified()));
         } else {
-            data = sourceColumnFeatures.Loader->ApplyRawVerified(s->GetData());
+            data = DataAccessorConstructor.SerializeToString(
+                DataAccessorConstructor.DeserializeFromString(s->GetData(), Loader->BuildAccessorContext(s->GetRecordsCountVerified()))
+                    .DetachResult(),
+                Loader->BuildAccessorContext(s->GetRecordsCountVerified()));
         }
-        result.emplace_back(s->CopyWithAnotherBlob(GetColumnSaver().Apply(data), *this));
+        result.emplace_back(s->CopyWithAnotherBlob(std::move(data), *this));
     }
     return result;
 }

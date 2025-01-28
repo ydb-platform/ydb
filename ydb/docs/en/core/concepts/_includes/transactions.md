@@ -57,6 +57,6 @@ A [topic](../topic.md) in {{ ydb-short-name }} can be sharded into several parti
 
 ## Transactions with topics and tables {#topic-table-transactions}
 
-{{ ydb-short-name }} supports transactions involving [row tables](../glossary.md#row-oriented-table) and/or [topics](../glossary.md#topic). Thus, it is possible to transactionally transfer data from tables to topics and in the opposite direction, as well as between topics. So data is not lost or duplicated in case of network outage or other problems. It allows to realize transactional outbox pattern within {{ ydb-short-name }}.
+{{ ydb-short-name }} supports transactions involving [row-oriented tables](../glossary.md#row-oriented-table) and/or [topics](../glossary.md#topic). This makes it possible to transactionally transfer data from tables to topics and vice versa, as well as between topics. This ensures that data is neither lost nor duplicated in case of a network outage or other issues. This enables the implementation of the transactional outbox pattern within {{ ydb-short-name }}.
 
-For more information about transactions with tables and topics in {{ ydb-short-name }} see [{#T}](../topic.md#topic-transactions) и [{#T}](../../reference/ydb-sdk/topic.md).
+For more information about transactions with tables and topics in {{ ydb-short-name }}, see [{#T}](../topic.md#topic-transactions) and [{#T}](../../reference/ydb-sdk/topic.md).

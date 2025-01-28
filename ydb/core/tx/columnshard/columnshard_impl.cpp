@@ -1152,6 +1152,7 @@ void TColumnShard::SetupCleanupInsertTable() {
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "tablet_die");
     AFL_VERIFY(TabletActivityImpl->Dec() == 0);
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);

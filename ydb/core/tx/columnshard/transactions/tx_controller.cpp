@@ -135,14 +135,15 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_p
 
 bool TTxController::AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecutor::TTransactionContext& txc) {
     auto opIt = Operators.find(planQueueItem.TxId);
-    Y_ABORT_UNLESS(opIt != Operators.end());
-    Y_ABORT_UNLESS(opIt->second->GetTxInfo().PlanStep == 0);
+    AFL_VERIFY(opIt != Operators.end())("tx_id", planQueueItem.TxId);
+    AFL_VERIFY(opIt->second->GetTxInfo().PlanStep == 0)("tx_id", planQueueItem.TxId)("plan_step", opIt->second->GetTxInfo().PlanStep);
     opIt->second->ExecuteOnAbort(Owner, txc);
     opIt->second->CompleteOnAbort(Owner, NActors::TActivationContext::AsActorContext());
     Counters.OnAbortTx(opIt->second->GetOpType());
 
-    AFL_VERIFY(Operators.erase(planQueueItem.TxId));
-    AFL_VERIFY(DeadlineQueue.erase(planQueueItem));
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "abort_tx")("tx_id", planQueueItem.TxId);
+    AFL_VERIFY(Operators.erase(planQueueItem.TxId))("tx_id", planQueueItem.TxId);
+    AFL_VERIFY(DeadlineQueue.erase(planQueueItem))("tx_id", planQueueItem.TxId);
     NIceDb::TNiceDb db(txc.DB);
     Schema::EraseTxInfo(db, planQueueItem.TxId);
     return true;
@@ -153,7 +154,7 @@ bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) 
     if (opIt == Operators.end()) {
         return true;
     }
-    Y_ABORT_UNLESS(opIt != Operators.end());
+    AFL_VERIFY(opIt != Operators.end())("tx_id", txId);
     if (opIt->second->GetTxInfo().PlanStep != 0) {
         return false;
     }
@@ -162,6 +163,7 @@ bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) 
     if (opIt->second->GetTxInfo().MaxStep != Max<ui64>()) {
         DeadlineQueue.erase(TPlanQueueItem(opIt->second->GetTxInfo().MaxStep, txId));
     }
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "cancel_tx")("tx_id", txId);
     Operators.erase(txId);
     return true;
 }
@@ -206,6 +208,7 @@ void TTxController::ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTra
     auto opIt = Operators.find(txId);
     AFL_VERIFY(opIt != Operators.end())("tx_id", txId);
     Counters.OnFinishPlannedTx(opIt->second->GetOpType());
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "finished_tx")("tx_id", txId);
     AFL_VERIFY(Operators.erase(txId));
     Schema::EraseTxInfo(db, txId);
 }

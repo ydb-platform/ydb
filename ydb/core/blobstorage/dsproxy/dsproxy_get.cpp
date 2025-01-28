@@ -130,6 +130,15 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 DiskCounters.resize(orderNumber + 1);
             }
             DiskCounters[orderNumber].Sent++;
+
+            if (LWPROBE_ENABLED(DSProxyVGetSent) || Orbit.HasShuttles()) {
+                LWTRACK(
+                    DSProxyVGetSent, Orbit,
+                    vDiskId.ToStringWOGeneration(),
+                    orderNumber,
+                    vGets.size()
+                );
+            }
         }
         for (size_t i = 0; i < vPuts.size(); ++i) {
             if (RootCauseTrack.IsOn) {
@@ -143,6 +152,18 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 DiskCounters.resize(orderNumber + 1);
             }
             DiskCounters[orderNumber].Sent++;
+
+            if (LWPROBE_ENABLED(DSProxyVPutSent) || Orbit.HasShuttles()) {
+                LWTRACK(
+                    DSProxyVPutSent, Orbit,
+                    vPuts[i]->Type(),
+                    vDiskId.ToStringWOGeneration(),
+                    Info->GetFailDomainOrderNumber(vDiskId),
+                    1,
+                    vPuts[i]->GetBufferBytes(),
+                    true
+                );
+            }
         }
         for (auto& ev : vGets) {
             const ui64 cookie = ev->Record.GetCookie();
@@ -202,7 +223,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vdisk);
 
-        LWPROBE(DSProxyVDiskRequestDuration, TEvBlobStorage::EvVGet, totalSize, tabletId, vdisk.GroupID.GetRawId(), channel,
+        LWTRACK(DSProxyVDiskRequestDuration, Orbit, TEvBlobStorage::EvVGet, totalSize, tabletId, vdisk.GroupID.GetRawId(), channel,
                 Info->GetFailDomainOrderNumber(shortId),
                 GetStartTime(record.GetTimestamps()),
                 GetTotalTimeMs(record.GetTimestamps()),
@@ -285,7 +306,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
         const TLogoBlobID blob = GetFirstBlobId(ev);
         ui64 sumBlobSize = SumBlobSize(ev);
-        LWPROBE(DSProxyVDiskRequestDuration, TEvBlobStorage::EvVPut, sumBlobSize, blob.TabletID(),
+        LWTRACK(DSProxyVDiskRequestDuration, Orbit, TEvBlobStorage::EvVPut, sumBlobSize, blob.TabletID(),
                 Info->GroupID.GetRawId(), blob.Channel(), Info->GetFailDomainOrderNumber(shortId),
                 GetStartTime(record.GetTimestamps()),
                 GetTotalTimeMs(record.GetTimestamps()),
@@ -333,6 +354,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
                 TMonotonic now = TActivationContext::Monotonic();
                 TMonotonic nextAcceleration = RequestStartTime + timeToAccelerate;
+                LWTRACK(DSProxyScheduleAccelerate, Orbit, nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0);
                 if (nextAcceleration > now) {
                     ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
                     Schedule(nextAcceleration - now, new TEvAccelerateGet(causeIdx));
@@ -468,6 +490,12 @@ public:
         TryScheduleGetAcceleration();
 
         Y_ABORT_UNLESS(RequestsSent > ResponsesReceived);
+        LWTRACK(
+            DSProxyGetRequest, Orbit,
+            Info->GroupID.GetRawId(),
+            DeviceTypeStr(Info->GetDeviceType(), true),
+            NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass())
+        );
         Become(&TBlobStorageGroupGetRequest::StateWait);
         SanityCheck(); // May Die
     }

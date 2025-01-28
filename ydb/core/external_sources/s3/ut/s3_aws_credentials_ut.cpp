@@ -283,8 +283,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
 
         auto db = kikimr->GetQueryClient();
 
-        // TODO YQ-4059: remove ';' from skip list
-        TString path = TStringBuilder() << "exp_folder/some_" << EscapeC(GetSymbolsString(' ', '~', "*?{}`;")) << "\\`";
+        TString path = TStringBuilder() << "exp_folder/some_" << EscapeC(GetSymbolsString(' ', '~', "*?{}`")) << "\\`";
 
         {
             // NB: AtomicUploadCommit = "false" because in minio ListMultipartUploads by prefix is not supported

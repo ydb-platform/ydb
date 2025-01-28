@@ -338,4 +338,35 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
         UNIT_ASSERT_VALUES_EQUAL(label.GetName(), "sensor");
         UNIT_ASSERT_VALUES_EQUAL(label.GetValue(), "something_anything_max");
     }
+
+    Y_UNIT_TEST(AllowClientAggregations) {
+        constexpr auto input = TStringBuf(R"(
+                [
+                    ["signal_dmmm", 1],
+                    ["signal_ammm", 1],
+                    ["signal_xmmm", 1],
+                    ["signal_emmm", 1],
+                    ["signal_tmmm", 1]
+                ])");
+        NProto::TMultiSamplesList samples;
+        auto encoder = EncoderProtobuf(&samples);
+        DecodeUnistat(input, encoder.Get());
+
+        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 5);
+        UNIT_ASSERT_EQUAL(samples.GetSamples(0).GetMetricType(), NProto::RATE);
+        for (size_t i = 1; i < samples.SamplesSize(); ++i) {
+            UNIT_ASSERT_EQUAL(samples.GetSamples(i).GetMetricType(), NProto::GAUGE);
+        }
+    }
+
+    Y_UNIT_TEST(AllowClientHistAggregation) {
+        constexpr auto input = TStringBuf(R"([["something_hhhh", 1]])");
+        NProto::TMultiSamplesList samples;
+        auto encoder = EncoderProtobuf(&samples);
+        DecodeUnistat(input, encoder.Get());
+
+        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 1);
+        UNIT_ASSERT_EQUAL(samples.GetSamples(0).GetMetricType(), NProto::HISTOGRAM);
+        UNIT_ASSERT_EQUAL(samples.GetSamples(0).PointsSize(), 1);
+    }
 }

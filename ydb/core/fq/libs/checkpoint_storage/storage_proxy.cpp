@@ -163,11 +163,11 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvCreateCheckpointRequest")
 
     CheckpointStorage->GetTotalCheckpointsStateSize(event->CoordinatorId.GraphId)
-        .Apply([totalGraphCheckpointsSizeLimit = Config.GetStateStorageLimits().GetMaxGraphCheckpointsSizeBytes(),
-                checkpointId = event->CheckpointId,
+        .Apply([checkpointId = event->CheckpointId,
                 coordinatorId = event->CoordinatorId,
                 cookie = ev->Cookie,
                 sender = ev->Sender,
+                totalGraphCheckpointsSizeLimit = Config.GetStateStorageLimits().GetMaxGraphCheckpointsSizeBytes(),
                 graphDesc = std::move(event->GraphDescription),
                 storage = CheckpointStorage]
                (const NThreading::TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult>& resultFuture) {

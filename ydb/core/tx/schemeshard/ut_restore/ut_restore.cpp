@@ -15,6 +15,7 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -248,18 +249,29 @@ namespace {
     }
 
     TTestDataWithScheme GenerateTestData(
-        const TString& scheme,
-        const TVector<std::pair<TString, ui64>>& shardsConfig,
+        const TTypedScheme& typedScheme,
+        const TVector<std::pair<TString, ui64>>& shardsConfig = {{"a", 1}},
         const TString& permissions = "",
-        const TString& metadata = "")
-    {
+        const TString& metadata = ""
+    ) {
         TTestDataWithScheme result;
-        result.Scheme = scheme;
+        result.Type = typedScheme.Type;
         result.Permissions = permissions;
         result.Metadata = metadata;
 
-        for (const auto& [keyPrefix, count] : shardsConfig) {
-            result.Data.push_back(GenerateTestData(keyPrefix, count));
+        switch (typedScheme.Type) {
+        case EPathTypeTable:
+            result.Scheme = typedScheme.Scheme;
+            for (const auto& [keyPrefix, count] : shardsConfig) {
+                result.Data.emplace_back(GenerateTestData(keyPrefix, count));
+            }
+            break;
+        case EPathTypeView:
+            result.CreationQuery = typedScheme.Scheme;
+            break;
+        default:
+            UNIT_FAIL("cannot create sample test data for the scheme object type: " << typedScheme.Type);
+            return {};
         }
 
         return result;
@@ -4650,29 +4662,107 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", TTestTxConfig::FakeHiveTablets));
         env.TestWaitNotification(runtime, txId);
     }
+
+    Y_UNIT_TEST(ViewCreationRetry) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(2);
+        bucketContent.emplace("/table", GenerateTestData(R"(
+            columns {
+                name: "key"
+                type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+                name: "value"
+                type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )"));
+        bucketContent.emplace("/view", GenerateTestData(
+            {
+                EPathTypeView,
+                R"(
+                    -- backup root: "/MyRoot"
+                    CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT * FROM `table`;
+                )"
+            }
+        ));
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        ui64 tableCreationTxId = 0;
+        TActorId schemeshardActorId;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> tableCreationBlocker(runtime,
+            [&](const TEvSchemeShard::TEvModifySchemeTransaction::TPtr& event) {
+                const auto& record = event->Get()->Record;
+                if (record.GetTransaction(0).GetOperationType() == ESchemeOpCreateIndexedTable) {
+                    tableCreationTxId = record.GetTxId();
+                    schemeshardActorId = event->Recipient;
+                    return true;
+                }
+                return false;
+            }
+        );
+
+        TBlockEvents<TEvPrivate::TEvImportSchemeQueryResult> queryResultBlocker(runtime,
+            [&](const TEvPrivate::TEvImportSchemeQueryResult::TPtr& event) {
+                // When we receive the scheme query result message, we can be sure that the SchemeShard actor ID is set,
+                // because the table is the first item on the import list.
+                if (!schemeshardActorId || event->Recipient != schemeshardActorId) {
+                    return false;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(event->Get()->Status, Ydb::StatusIds::SCHEME_ERROR);
+                const auto* error = std::get_if<TString>(&event->Get()->Result);
+                UNIT_ASSERT(error);
+                UNIT_ASSERT_STRING_CONTAINS(*error, "Cannot find table");
+                return true;
+            }
+        );
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "table"
+                destination_path: "/MyRoot/table"
+              }
+              items {
+                source_prefix: "view"
+                destination_path: "/MyRoot/view"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("table creation attempt", [&]{ return !tableCreationBlocker.empty(); });
+        runtime.WaitFor("query result", [&]{ return !queryResultBlocker.empty(); });
+        tableCreationBlocker.Unblock().Stop();
+        queryResultBlocker.Unblock().Stop();
+        env.TestWaitNotification(runtime, tableCreationTxId);
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/view"), {
+            NLs::Finished,
+            NLs::IsView
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
-
-    TTestDataWithScheme GenerateTestData(const TTypedScheme& typedScheme) {
-        TTestDataWithScheme result;
-        result.Type = typedScheme.Type;
-
-        switch (typedScheme.Type) {
-        case EPathTypeTable:
-            result.Scheme = typedScheme.Scheme;
-            result.Data.emplace_back(::GenerateTestData("a", 1));
-            break;
-        case EPathTypeView:
-            result.CreationQuery = typedScheme.Scheme;
-            break;
-        default:
-            UNIT_FAIL("cannot create sample test data for the scheme object type: " << typedScheme.Type);
-            return {};
-        }
-
-        return result;
-    }
 
     constexpr TStringBuf DefaultImportSettings = R"(
         ImportFromS3Settings {

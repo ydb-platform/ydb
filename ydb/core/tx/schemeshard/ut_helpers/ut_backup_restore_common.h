@@ -25,6 +25,11 @@ struct TTypedScheme {
         , Scheme(scheme)
     {}
 
+    TTypedScheme(const TString& scheme)
+        : Type(NKikimrSchemeOp::EPathTypeTable)
+        , Scheme(scheme)
+    {}
+
     TTypedScheme(NKikimrSchemeOp::EPathType type, TString scheme)
         : Type(type)
         , Scheme(std::move(scheme))

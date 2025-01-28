@@ -126,7 +126,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         auto &vDiskInstance = HmCtx->Conf->VDisks->Get(0);
         HmCtx->Config = vDiskInstance.Cfg;
         HmCtx->VCtx.Reset(new TVDiskContext(ctx.SelfID, HmCtx->Conf->GroupInfo->PickTopology(), HmCtx->Counters,
-                vDiskInstance.VDiskID, ctx.ExecutorThread.ActorSystem, NPDisk::DEVICE_TYPE_UNKNOWN));
+                vDiskInstance.VDiskID, ctx.ActorSystem(), NPDisk::DEVICE_TYPE_UNKNOWN));
 
         TVDiskID selfVDiskID = HmCtx->Conf->GroupInfo->GetVDiskId(HmCtx->VCtx->ShortSelfVDisk);
         ctx.Send(HmCtx->Config->BaseInfo.PDiskActorID,

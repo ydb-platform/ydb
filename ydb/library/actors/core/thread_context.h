@@ -19,6 +19,8 @@ namespace NActors {
     template <typename T>
     struct TWaitingStats;
 
+    constexpr ui32 SleepActivity = Max<ui32>();
+
     struct TThreadContext {
         IExecutorPool *Pool = nullptr;
         TMailbox* CapturedActivation = nullptr;
@@ -35,7 +37,7 @@ namespace NActors {
 
         std::atomic<i64> StartOfProcessingEventTS = GetCycleCountFast();
         std::atomic<i64> ActivationStartTS = 0;
-        std::atomic<ui64> ElapsingActorActivity = Max<ui64>();
+        std::atomic<ui32> ElapsingActorActivity = SleepActivity;
         TWorkerContext *WorkerCtx = nullptr;
         ui32 ActorSystemIndex = 0;
 

@@ -18,7 +18,8 @@ namespace NActors {
     class TExecutorPoolBaseMailboxed;
     class TMailboxTable;
     class TMailboxCache;
-    class TGenericExecutorThread: public ISimpleThread {
+    struct TThreadContext;
+    class TExecutorThread: public ISimpleThread {
     protected:
         struct TProcessingResult {
             bool IsPreempted = false;
@@ -30,8 +31,8 @@ namespace NActors {
             TDuration::MilliSeconds(10);
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = 100;
 
-        TGenericExecutorThread(TWorkerId workerId,
-                        TWorkerId cpuId,
+        // common thread ctor
+        TExecutorThread(TWorkerId workerId,
                         TActorSystem* actorSystem,
                         IExecutorPool* executorPool,
                         TMailboxTable* mailboxTable,
@@ -39,8 +40,10 @@ namespace NActors {
                         TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
                         ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX);
 
-        TGenericExecutorThread(TWorkerId workerId,
+        // shared thread ctor
+        TExecutorThread(TWorkerId workerId,
                     TActorSystem* actorSystem,
+                    IExecutorPool* sharedPool,
                     IExecutorPool* executorPool,
                     i16 poolCount,
                     const TString& threadName,
@@ -48,7 +51,7 @@ namespace NActors {
                     TDuration timePerMailbox,
                     ui32 eventsPerMailbox);
 
-        virtual ~TGenericExecutorThread();
+        virtual ~TExecutorThread();
 
         template <ESendingType SendingType = ESendingType::Common>
         TActorId RegisterActor(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>(),
@@ -96,12 +99,15 @@ namespace NActors {
         std::atomic<bool> StopFlag = false;
 
         void SwitchPool(TExecutorPoolBaseMailboxed* pool);
+
+    private:
+        void* ThreadProc();
+
     protected:
         // Pool-specific
         IExecutorPool* ExecutorPool;
         TStackVec<TExecutorThreadStats, 8> SharedStats;
         
-        ui64 CurrentPoolId = MaxPools;
 
         // Event-specific (currently executing)
         TVector<THolder<IActor>> DyingActors;
@@ -109,7 +115,7 @@ namespace NActors {
         ui64 CurrentActorScheduledEventsCounter = 0;
 
         // Thread-specific
-        mutable TThreadContext TlsThreadCtx;
+        mutable TThreadContext *TlsThreadCtx = nullptr;
         mutable TWorkerContext Ctx;
         ui64 RevolvingReadCounter = 0;
         ui64 RevolvingWriteCounter = 0;
@@ -122,35 +128,6 @@ namespace NActors {
         ui64 SoftProcessingDurationTs;
 
         const ui32 ActorSystemIndex;
-    };
-
-    class TExecutorThread: public TGenericExecutorThread {
-    public:
-        TExecutorThread(TWorkerId workerId,
-                        TWorkerId cpuId,
-                        TActorSystem* actorSystem,
-                        IExecutorPool* executorPool,
-                        TMailboxTable* mailboxTable,
-                        const TString& threadName,
-                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
-                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
-            : TGenericExecutorThread(workerId, cpuId, actorSystem, executorPool, mailboxTable, threadName, timePerMailbox, eventsPerMailbox)
-        {}
-
-        TExecutorThread(TWorkerId workerId,
-                        TActorSystem* actorSystem,
-                        IExecutorPool* executorPool,
-                        TMailboxTable* mailboxTable,
-                        const TString& threadName,
-                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
-                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
-            : TGenericExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, threadName, timePerMailbox, eventsPerMailbox)
-        {}
-
-        virtual ~TExecutorThread();
-
-    private:
-        void* ThreadProc();
     };
 
 }

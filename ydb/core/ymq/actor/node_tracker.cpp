@@ -84,7 +84,7 @@ namespace NKikimr::NSQS {
         navigateRequest->ResultSet.resize(2);
         navigateRequest->ResultSet.front().Path = TablePathSTD;
         navigateRequest->ResultSet.back().Path = TablePathFIFO;
-        ctx.ExecutorThread.ActorSystem->Schedule(
+        ctx.ActorSystem()->Schedule(
             runAfter,
             new IEventHandle(
                 SchemeCacheActor,

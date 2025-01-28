@@ -14,6 +14,7 @@ IF (ALLOCATOR == "B" OR ALLOCATOR == "BS" OR ALLOCATOR == "C")
 ENDIF()
 
 SRCS(
+    activity_guard.cpp
     actor_bootstrapped.cpp
     actor_coroutine.cpp
     actor_coroutine.h
@@ -34,7 +35,6 @@ SRCS(
     config.h
     cpu_manager.cpp
     cpu_manager.h
-    cpu_state.h
     defs.h
     event.cpp
     event.h
@@ -54,6 +54,7 @@ SRCS(
     executor_pool_io.h
     executor_pool_shared.cpp
     executor_pool_shared.h
+    executor_thread_ctx.cpp
     executor_thread.cpp
     executor_thread.h
     hfunc.h

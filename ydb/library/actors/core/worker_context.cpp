@@ -5,16 +5,14 @@
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
-    TWorkerContext::TWorkerContext(TWorkerId workerId, TCpuId cpuId)
+    TWorkerContext::TWorkerContext(TWorkerId workerId)
         : WorkerId(workerId)
-        , CpuId(cpuId)
-        , Lease(WorkerId, NeverExpire)
     {
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TWorkerContext::ctor ", WorkerId, ' ', cpuId);
+        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TWorkerContext::ctor ", WorkerId);
     }
 
     TWorkerContext::~TWorkerContext() {
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TWorkerContext::dtor ", WorkerId, ' ', CpuId);
+        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TWorkerContext::dtor ", WorkerId);
     }
 
 }

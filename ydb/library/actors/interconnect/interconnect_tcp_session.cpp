@@ -4,6 +4,7 @@
 
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
@@ -1373,6 +1374,16 @@ namespace NActors {
             h->Rewrite(h->Type, ReceiverId);
         }
         TActivationContext::Send(h.release());
+    }
+
+    void TInterconnectSessionKiller::Bootstrap() {
+        auto sender = SelfId();
+        const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* {
+            auto ev = new TEvSessionBufferSizeRequest();
+            return new IEventHandle(recp, sender, ev, IEventHandle::FlagTrackDelivery);
+        };
+        RepliesNumber = TlsActivationContext->ExecutorThread.ActorSystem->BroadcastToProxies(eventFabric);
+        Become(&TInterconnectSessionKiller::StateFunc);
     }
 
     void CreateSessionKillingActor(TInterconnectProxyCommon::TPtr common) {

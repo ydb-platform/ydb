@@ -31,11 +31,10 @@
 LWTRACE_USING(ACTORLIB_PROVIDER)
 
 namespace NActors {
-    constexpr TDuration TGenericExecutorThread::DEFAULT_TIME_PER_MAILBOX;
+    constexpr TDuration TExecutorThread::DEFAULT_TIME_PER_MAILBOX;
 
-    TGenericExecutorThread::TGenericExecutorThread(
+    TExecutorThread::TExecutorThread(
             TWorkerId workerId,
-            TWorkerId cpuId,
             TActorSystem* actorSystem,
             IExecutorPool* executorPool,
             TMailboxTable* mailboxTable,
@@ -45,7 +44,7 @@ namespace NActors {
         : ActorSystem(actorSystem)
         , ExecutorPool(executorPool)
         , SharedStats(8)
-        , Ctx(workerId, cpuId)
+        , Ctx(workerId)
         , ThreadName(threadName)
         , TimePerMailbox(timePerMailbox)
         , EventsPerMailbox(eventsPerMailbox)
@@ -58,11 +57,11 @@ namespace NActors {
             eventsPerMailbox,
             ui64(-1), // infinite soft deadline
             &SharedStats[ExecutorPool->PoolId]);
-        CurrentPoolId = ExecutorPool->PoolId;
     }
 
-    TGenericExecutorThread::TGenericExecutorThread(TWorkerId workerId,
+    TExecutorThread::TExecutorThread(TWorkerId workerId,
             TActorSystem* actorSystem,
+            IExecutorPool* sharedPool,
             IExecutorPool* executorPool,
             i16 poolCount,
             const TString& threadName,
@@ -72,13 +71,15 @@ namespace NActors {
         : ActorSystem(actorSystem)
         , ExecutorPool(executorPool)
         , SharedStats(poolCount)
-        , Ctx(workerId, 0)
+        , Ctx(workerId)
         , ThreadName(threadName)
         , TimePerMailbox(timePerMailbox)
         , EventsPerMailbox(eventsPerMailbox)
         , SoftProcessingDurationTs(softProcessingDurationTs)
         , ActorSystemIndex(TActorTypeOperator::GetActorSystemIndex())
     {
+        SharedStats.resize(poolCount);
+        Ctx.SharedExecutor = sharedPool;
         Ctx.Switch(
             ExecutorPool,
             static_cast<TExecutorPoolBaseMailboxed*>(executorPool)->GetMailboxTable(),
@@ -86,12 +87,10 @@ namespace NActors {
             eventsPerMailbox,
             ui64(-1), // infinite soft deadline
             &SharedStats[ExecutorPool->PoolId]);
-        CurrentPoolId = ExecutorPool->PoolId;
     }
 
-    void TGenericExecutorThread::SwitchPool(TExecutorPoolBaseMailboxed* pool) {
+    void TExecutorThread::SwitchPool(TExecutorPoolBaseMailboxed* pool) {
         ExecutorPool = pool;
-        CurrentPoolId = pool->PoolId;
         if (SharedStats.size() < pool->PoolId + 1) {
             SharedStats.resize(pool->PoolId + 1);
         }
@@ -99,17 +98,18 @@ namespace NActors {
         Ctx.MailboxTable = pool->GetMailboxTable();
         Ctx.MailboxCache.Switch(Ctx.MailboxTable);
         Ctx.Executor = pool;
-        TlsThreadContext->Pool = pool;
+        TlsThreadCtx->Pool = pool;
     }
 
-    void TGenericExecutorThread::UnregisterActor(TMailbox* mailbox, TActorId actorId) {
+    void TExecutorThread::UnregisterActor(TMailbox* mailbox, TActorId actorId) {
         Y_DEBUG_ABORT_UNLESS(actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
+        ACTORLIB_VERIFY(actorId.PoolID() == ExecutorPool->PoolId, "Worker_", TlsThreadContext->WorkerId, " ", (Ctx.SharedExecutor ? "Shared" : ExecutorPool->GetName()), " UnregisterActor PoolId mismatch: ", (i64)actorId.PoolID(), " PoolId: ", (i64)ExecutorPool->PoolId, " ActorId: ", actorId.ToString());
         IActor* actor = mailbox->DetachActor(actorId.LocalId());
         Ctx.DecrementActorsAliveByActivity(actor->GetActivityType());
         DyingActors.push_back(THolder(actor));
     }
 
-    void TGenericExecutorThread::DropUnregistered() {
+    void TExecutorThread::DropUnregistered() {
 #if defined(ACTORSLIB_COLLECT_EXEC_STATS)
         if (ActorSystem->MonitorStuckActors()) {
             if (auto *pool = dynamic_cast<TExecutorPoolBaseMailboxed*>(ExecutorPool)) {
@@ -126,21 +126,21 @@ namespace NActors {
             }
         }
 #endif
-        ACTORLIB_DEBUG(EDebugLevel::Executor, "TGenericExecutorThread::DropUnregistered: DyingActors.clear()");
+        ACTORLIB_DEBUG(EDebugLevel::Executor, "TExecutorThread::DropUnregistered: DyingActors.clear()");
         DyingActors.clear(); // here is actual destruction of actors
     }
 
-    void TGenericExecutorThread::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
+    void TExecutorThread::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
         ++CurrentActorScheduledEventsCounter;
         Ctx.Executor->Schedule(deadline, ev, cookie, Ctx.WorkerId);
     }
 
-    void TGenericExecutorThread::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
+    void TExecutorThread::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
         ++CurrentActorScheduledEventsCounter;
         Ctx.Executor->Schedule(deadline, ev, cookie, Ctx.WorkerId);
     }
 
-    void TGenericExecutorThread::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
+    void TExecutorThread::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
         ++CurrentActorScheduledEventsCounter;
         Ctx.Executor->Schedule(delta, ev, cookie, Ctx.WorkerId);
     }
@@ -180,28 +180,28 @@ namespace NActors {
                 SafeTypeName(actorType));
     }
 
-    ui32 TGenericExecutorThread::GetOverwrittenEventsPerMailbox() const {
+    ui32 TExecutorThread::GetOverwrittenEventsPerMailbox() const {
         return Ctx.OverwrittenEventsPerMailbox;
     }
 
-    void TGenericExecutorThread::SetOverwrittenEventsPerMailbox(ui32 value) {
+    void TExecutorThread::SetOverwrittenEventsPerMailbox(ui32 value) {
         Ctx.OverwrittenEventsPerMailbox = Max(value, Ctx.EventsPerMailbox);
     }
 
-    ui64 TGenericExecutorThread::GetOverwrittenTimePerMailboxTs() const {
+    ui64 TExecutorThread::GetOverwrittenTimePerMailboxTs() const {
         return Ctx.OverwrittenTimePerMailboxTs;
     }
 
-    void TGenericExecutorThread::SetOverwrittenTimePerMailboxTs(ui64 value) {
+    void TExecutorThread::SetOverwrittenTimePerMailboxTs(ui64 value) {
         Ctx.OverwrittenTimePerMailboxTs = Max(value, Ctx.TimePerMailboxTs);
     }
 
-    void TGenericExecutorThread::SubscribeToPreemption(TActorId actorId) {
+    void TExecutorThread::SubscribeToPreemption(TActorId actorId) {
         Ctx.PreemptionSubscribed.push_back(actorId);
     }
 
-    TGenericExecutorThread::TProcessingResult TGenericExecutorThread::Execute(TMailbox* mailbox, bool isTailExecution) {
-        ACTORLIB_DEBUG(EDebugLevel::Activation, "TGenericExecutorThread::Execute: Execute mailbox");
+    TExecutorThread::TProcessingResult TExecutorThread::Execute(TMailbox* mailbox, bool isTailExecution) {
+        ACTORLIB_DEBUG(EDebugLevel::Activation, "TExecutorThread::Execute: Execute mailbox");
         Y_ABORT_UNLESS(mailbox, "mailbox must be not null");
         Y_DEBUG_ABORT_UNLESS(DyingActors.empty());
 
@@ -230,7 +230,7 @@ namespace NActors {
         bool drained = false;
         for (; Ctx.ExecutedEvents < Ctx.OverwrittenEventsPerMailbox; ++Ctx.ExecutedEvents) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
-                ACTORLIB_DEBUG(EDebugLevel::Event, "TGenericExecutorThread::Execute: mailbox->Pop()");
+                ACTORLIB_DEBUG(EDebugLevel::Event, "TExecutorThread::Execute: mailbox->Pop()");
                 recipient = evExt->GetRecipientRewrite();
                 actor = mailbox->FindActor(recipient.LocalId());
                 if (!actor) {
@@ -246,7 +246,7 @@ namespace NActors {
                 // move for destruct before ctx;
                 auto ev = std::move(evExt);
                 if (actor) {
-                    ACTORLIB_DEBUG(EDebugLevel::Event, "TGenericExecutorThread::Execute: actor is not null");
+                    ACTORLIB_DEBUG(EDebugLevel::Event, "TExecutorThread::Execute: actor is not null");
                     wasWorking = true;
                     // Since actor is not null there should be no exceptions
                     actorType = &typeid(*actor);
@@ -289,7 +289,7 @@ namespace NActors {
                     actor->OnDequeueEvent();
 
                     size_t dyingActorsCnt = DyingActors.size();
-                    ACTORLIB_DEBUG(EDebugLevel::Event, "TGenericExecutorThread::Execute: dyingActorsCnt ", dyingActorsCnt);
+                    ACTORLIB_DEBUG(EDebugLevel::Event, "TExecutorThread::Execute: dyingActorsCnt ", dyingActorsCnt);
                     Ctx.UpdateActorsStats(dyingActorsCnt);
                     if (dyingActorsCnt) {
                         DropUnregistered();
@@ -314,7 +314,7 @@ namespace NActors {
 
                     CurrentRecipient = TActorId();
                 } else {
-                    ACTORLIB_DEBUG(EDebugLevel::Event, "TGenericExecutorThread::Execute: actor is null");
+                    ACTORLIB_DEBUG(EDebugLevel::Event, "TExecutorThread::Execute: actor is null");
                     actorType = nullptr;
 
                     TAutoPtr<IEventHandle> nonDelivered = IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown);
@@ -435,7 +435,7 @@ namespace NActors {
         return {preemptedByEventCount || preemptedByCycles, wasWorking};
     }
 
-    TThreadId TGenericExecutorThread::GetThreadId() const {
+    TThreadId TExecutorThread::GetThreadId() const {
 #ifdef _linux_
         while (AtomicLoad(&ThreadId) == UnknownThreadId) {
             NanoSleep(1000);
@@ -444,17 +444,16 @@ namespace NActors {
         return ThreadId;
     }
 
-    TWorkerId TGenericExecutorThread::GetWorkerId() const {
+    TWorkerId TExecutorThread::GetWorkerId() const {
         return Ctx.WorkerId;
     }
 
-    void TGenericExecutorThread::ProcessExecutorPool(IExecutorPool *pool) {
-        ACTORLIB_DEBUG(EDebugLevel::Executor, "TGenericExecutorThread::ProcessExecutorPool: start");
+    void TExecutorThread::ProcessExecutorPool(IExecutorPool *pool) {
+        ACTORLIB_DEBUG(EDebugLevel::Executor, "TExecutorThread::ProcessExecutorPool: start");
         ExecutorPool = pool;
         TlsThreadContext->Pool = ExecutorPool;
         TlsThreadContext->WorkerId = Ctx.WorkerId;
         pool->Initialize(Ctx);
-        CurrentPoolId = pool->PoolId;
 
         ExecutorPool->SetRealTimeMode();
         TAffinityGuard affinity(ExecutorPool->Affinity());
@@ -467,8 +466,8 @@ namespace NActors {
         i64 nonExecCycles = 0;
 
         auto executeActivation = [&](TMailbox* mailbox, bool isTailExecution) {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, "TGenericExecutorThread::ExecuteActivation");
-            LWTRACK(ActivationBegin, Ctx.Orbit, Ctx.CpuId, Ctx.PoolId, Ctx.WorkerId, NHPTimer::GetSeconds(Ctx.Lease.GetPreciseExpireTs()) * 1e3);
+            ACTORLIB_DEBUG(EDebugLevel::Activation, "TExecutorThread::ExecuteActivation");
+            LWTRACK(ActivationBegin, Ctx.Orbit, Ctx.PoolId, Ctx.WorkerId);
             readyActivationCount++;
             if (true /* already have pointer TMailbox* mailbox = Ctx.MailboxTable->Get(activation) */) {
                 if (true /* already locked header->LockForExecution() */) {
@@ -503,7 +502,7 @@ namespace NActors {
                     }
                 }
             }
-            LWTRACK(ActivationEnd, Ctx.Orbit, Ctx.CpuId, Ctx.PoolId, Ctx.WorkerId);
+            LWTRACK(ActivationEnd, Ctx.Orbit, Ctx.PoolId, Ctx.WorkerId);
             Ctx.Orbit.Reset();
         };
 
@@ -526,7 +525,7 @@ namespace NActors {
                 ExecutorPool->ScheduleActivation(capturedActivation);
             }
             if (!activation) {
-                ACTORLIB_DEBUG(EDebugLevel::Activation, "TGenericExecutorThread::ProcessExecutorPool: no activation");
+                ACTORLIB_DEBUG(EDebugLevel::Activation, "TExecutorThread::ProcessExecutorPool: no activation");
                 break;
             }
             executeActivation(activation, false);
@@ -544,69 +543,68 @@ namespace NActors {
 #endif
 
         ACTORLIB_DEBUG(EDebugLevel::Executor, "TExecutorThread::ThreadProc: start ", ThreadName, ' ', Ctx.WorkerId);
-        TlsThreadCtx.WorkerCtx = &Ctx;
-        TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
-        TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
+        TThreadContext threadContext;
+        TlsThreadCtx = &threadContext;
+        TlsThreadCtx->WorkerCtx = &Ctx;
+        TlsThreadCtx->ActorSystemIndex = ActorSystemIndex;
+        TlsThreadCtx->ElapsingActorActivity = ActorSystemIndex;
         NHPTimer::STime now = GetCycleCountFast();
-        TlsThreadCtx.StartOfProcessingEventTS = now;
-        TlsThreadCtx.ActivationStartTS = now;
-        TlsThreadContext = &TlsThreadCtx;
+        TlsThreadCtx->StartOfProcessingEventTS = now;
+        TlsThreadCtx->ActivationStartTS = now;
+        TlsThreadContext = TlsThreadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
         }
 
         ProcessExecutorPool(ExecutorPool);
         ACTORLIB_DEBUG(EDebugLevel::Executor, "TExecutorThread::ThreadProc: end ", ThreadName, ' ', Ctx.WorkerId);
+        TlsThreadCtx = nullptr;
+        TlsThreadContext = nullptr;
         return nullptr;
     }
 
-    void TGenericExecutorThread::UpdateThreadStats() {
+    void TExecutorThread::UpdateThreadStats() {
         NHPTimer::STime hpnow = GetCycleCountFast();
-        ui64 activityType = TlsThreadCtx.ElapsingActorActivity.load(std::memory_order_acquire);
-        NHPTimer::STime hpprev = TlsThreadCtx.UpdateStartOfProcessingEventTS(hpnow);
-        if (activityType == Max<ui64>()) {
+        if (!TlsThreadCtx) {
+            return;
+        }
+
+        ui32 activityType = TlsThreadCtx->ElapsingActorActivity.load(std::memory_order_acquire);
+        NHPTimer::STime hpprev = TlsThreadCtx->UpdateStartOfProcessingEventTS(hpnow);
+        if (activityType == SleepActivity) {
             Ctx.AddParkedCycles(hpnow - hpprev);
+            Ctx.SetCurrentActivationTime(0, 0);
         } else {
             Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
-        }
-        if (activityType != Max<ui64>()) {
-            NHPTimer::STime activationStart = TlsThreadCtx.ActivationStartTS.load(std::memory_order_acquire);
+            NHPTimer::STime activationStart = TlsThreadCtx->ActivationStartTS.load(std::memory_order_acquire);
             NHPTimer::STime passedTime = Max<i64>(hpnow - activationStart, 0);
             Ctx.SetCurrentActivationTime(activityType, Ts2Us(passedTime));
-        } else {
-            Ctx.SetCurrentActivationTime(0, 0);
         }
     }
 
-    void TGenericExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) {
+    void TExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) {
         UpdateThreadStats();
         Ctx.GetCurrentStats(statsCopy);
     }
 
-    void TGenericExecutorThread::GetSharedStats(i16 poolId, TExecutorThreadStats &statsCopy) {
+    void TExecutorThread::GetSharedStats(i16 poolId, TExecutorThreadStats &statsCopy) {
         UpdateThreadStats();
         statsCopy = TExecutorThreadStats();
         statsCopy.Aggregate(SharedStats[poolId]);
     }
 
-    void TGenericExecutorThread::GetCurrentStatsForHarmonizer(TExecutorThreadStats& statsCopy) {
+    void TExecutorThread::GetCurrentStatsForHarmonizer(TExecutorThreadStats& statsCopy) {
         statsCopy.SafeElapsedTicks = RelaxedLoad(&Ctx.Stats->SafeElapsedTicks);
         statsCopy.SafeParkedTicks = RelaxedLoad(&Ctx.Stats->SafeParkedTicks);
         statsCopy.CpuUs = RelaxedLoad(&Ctx.Stats->CpuUs);
         statsCopy.NotEnoughCpuExecutions = RelaxedLoad(&Ctx.Stats->NotEnoughCpuExecutions);
     }
 
-    void TGenericExecutorThread::GetSharedStatsForHarmonizer(i16 poolId, TExecutorThreadStats &stats) {
+    void TExecutorThread::GetSharedStatsForHarmonizer(i16 poolId, TExecutorThreadStats &stats) {
         stats.SafeElapsedTicks = RelaxedLoad(&SharedStats[poolId].SafeElapsedTicks);
         stats.SafeParkedTicks = RelaxedLoad(&SharedStats[poolId].SafeParkedTicks);
         stats.CpuUs = RelaxedLoad(&SharedStats[poolId].CpuUs);
         stats.NotEnoughCpuExecutions = RelaxedLoad(&SharedStats[poolId].NotEnoughCpuExecutions);
-    }
-
-
-    TGenericExecutorThread::~TGenericExecutorThread() {
-        ACTORLIB_DEBUG(EDebugLevel::Executor, "TGenericExecutorThread::dtor start ", ThreadName, ' ', Ctx.WorkerId);
-        ACTORLIB_DEBUG(EDebugLevel::Executor, "TGenericExecutorThread::dtor end ", ThreadName, ' ', Ctx.WorkerId);
     }
 
     TExecutorThread::~TExecutorThread() {

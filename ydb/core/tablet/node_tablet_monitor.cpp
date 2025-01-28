@@ -407,7 +407,7 @@ public:
         NActors::TMon* mon = AppData(ctx)->Mon;
 
         if (mon) {
-            mon->RegisterActorPage(nullptr, "nodetabmon", "Node Tablet Monitor", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+            mon->RegisterActorPage(nullptr, "nodetabmon", "Node Tablet Monitor", false, ctx.ActorSystem(), ctx.SelfID);
         }
     }
 

@@ -41,7 +41,7 @@ public:
         Become(&TThis::StateWork);
         NActors::TMon *mon = AppData(ctx)->Mon;
         if (mon) {
-            mon->RegisterActorPage(nullptr, "cms", "Cluster Management System", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+            mon->RegisterActorPage(nullptr, "cms", "Cluster Management System", false, ctx.ActorSystem(), ctx.SelfID);
 
             ApiHandlers["/api/clusterstaterequest"] = new TApiMethodHandler<TJsonProxyCms<TEvCms::TEvClusterStateRequest,
                                                                                           TEvCms::TEvClusterStateResponse>>;

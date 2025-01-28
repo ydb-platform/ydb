@@ -39,11 +39,11 @@
           TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \
           NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \
     PROBE(ActivationBegin, GROUPS(),                                                                                                  \
-          TYPES(ui32, ui32, ui32, double),                                                                                            \
-          NAMES("cpu", "poolId", "workerId", "expireMs"))                                                                             \
+          TYPES(ui32, ui32),                                                                                            \
+          NAMES("poolId", "workerId"))                                                                             \
     PROBE(ActivationEnd, GROUPS(),                                                                                                    \
-          TYPES(ui32, ui32, ui32),                                                                                                    \
-          NAMES("cpu", "poolId", "workerId"))                                                                                         \
+          TYPES(ui32, ui32),                                                                                                    \
+          NAMES("poolId", "workerId"))                                                                                         \
     PROBE(ExecutorThreadStats, GROUPS("ActorLibStats"),                                                                               \
           TYPES(ui32, TString, ui64, ui64, ui64, double, double),                                                                     \
           NAMES("poolId", "pool", "workerId", "execCount", "readyActivationCount", "execMs", "nonExecMs"))                            \

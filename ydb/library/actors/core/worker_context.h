@@ -29,9 +29,7 @@ namespace NActors {
     };
     
     struct TWorkerContext {
-        TWorkerId WorkerId;
-        const TCpuId CpuId;
-        TLease Lease;
+        const TWorkerId WorkerId;
         IExecutorPool* Executor = nullptr;
         IExecutorPool* SharedExecutor = nullptr;
         TMailboxTable* MailboxTable = nullptr;
@@ -52,7 +50,7 @@ namespace NActors {
 
         TMailboxCache MailboxCache;
 
-        TWorkerContext(TWorkerId workerId, TCpuId cpuId);
+        TWorkerContext(TWorkerId workerId);
 
         ~TWorkerContext();
 
@@ -68,7 +66,7 @@ namespace NActors {
         }
 
         void AddElapsedCycles(ui32 activityType, i64 elapsed) {
-            if (Y_LIKELY(elapsed > 0)) {
+            if (Y_LIKELY(elapsed > 0) && activityType != Max<ui32>()) {
                 Y_DEBUG_ABORT_UNLESS(activityType < Stats->MaxActivityType());
                 RelaxedStore(&Stats->ElapsedTicks, RelaxedLoad(&Stats->ElapsedTicks) + elapsed);
                 RelaxedStore(&Stats->ElapsedTicksByActivity[activityType], RelaxedLoad(&Stats->ElapsedTicksByActivity[activityType]) + elapsed);

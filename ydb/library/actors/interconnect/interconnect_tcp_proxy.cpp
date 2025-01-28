@@ -2,6 +2,7 @@
 #include "interconnect_handshake.h"
 #include "interconnect_tcp_session.h"
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/system/getpid.h>
@@ -973,6 +974,13 @@ namespace NActors {
             }
         }
         FirstDisconnectWindowMinutes = currentMinutes;
+    }
+
+    TActorId TInterconnectProxyTCP::GenerateSessionVirtualId() {
+        ICPROXY_PROFILED;
+
+        const ui64 localId = TlsActivationContext->ExecutorThread.ActorSystem->AllocateIDSpace(1);
+        return NActors::TActorId(SelfId().NodeId(), 0, localId, 0);
     }
 
 }

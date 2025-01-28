@@ -75,7 +75,7 @@ namespace NActors {
         }
         for (ui64 i = 0; i < PoolManager.PoolInfos.size(); ++i) {
             ForeignThreadsAllowedByPool[i].store(0, std::memory_order_release);
-            ForeignThreadSlots[i].store(0, std::memory_order_release);
+            ForeignThreadSlots[i].store(PoolManager.PoolInfos.size(), std::memory_order_release);
             LocalThreads[i].store(PoolManager.PoolInfos[i].SharedThreadCount, std::memory_order_release);
             LocalNotifications[i].store(0, std::memory_order_release);
         }
@@ -242,10 +242,12 @@ namespace NActors {
                     }
                 }
                 if (allowedToSleep) {
-                    SwitchToPool(wctx, thread.OwnerPoolId, hpnow);
+                    SwitchToPool(wctx, thread.OwnerPoolId, hpnow); // already switched, needless
                     LocalThreads[thread.OwnerPoolId].fetch_sub(1, std::memory_order_acq_rel);
                     ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: going to sleep; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
-                    if (thread.Wait(SpinThresholdCycles.load(std::memory_order_relaxed), &StopFlag, &LocalNotifications[thread.OwnerPoolId], &ThreadsState)) {
+                    ACTORLIB_VERIFY(thread.OwnerPoolId < static_cast<i16>(Pools.size()), "thread.OwnerPoolId == ", thread.OwnerPoolId, " Pools.size() == ", Pools.size());
+                    ACTORLIB_VERIFY(Pools[thread.OwnerPoolId] != nullptr, "Pools[thread.OwnerPoolId] is nullptr");
+                    if (thread.Wait(Pools[thread.OwnerPoolId]->SpinThresholdCycles.load(std::memory_order_relaxed), &StopFlag, &LocalNotifications[thread.OwnerPoolId], &ThreadsState)) {
                         ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: interrupted; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                         return nullptr; // interrupted
                     }
@@ -308,11 +310,12 @@ namespace NActors {
             Threads[i].Thread.reset(    
                 new TExecutorThread(
                     i,
-                    0, // CpuId is not used in BASIC pool
                     actorSystem,
                     this,
-                    MailboxTable,
+                    Pools[Threads[i].OwnerPoolId],
+                    static_cast<i16>(Pools.size()),
                     PoolName,
+                    SoftProcessingDurationTs,
                     TimePerMailbox,
                     EventsPerMailbox));
             ScheduleWriters[i].Init(ScheduleReaders[i]);
@@ -406,7 +409,6 @@ namespace NActors {
 
     void TSharedExecutorPool::Initialize(TWorkerContext& wctx) {
         ACTORLIB_DEBUG(EDebugLevel::Executor, "TSharedExecutorPool::Initialize: start");
-        wctx.SharedExecutor = this;
         wctx.Executor = Pools[Threads[wctx.WorkerId].OwnerPoolId];
         Threads[wctx.WorkerId].Thread->SwitchPool(Pools[Threads[wctx.WorkerId].OwnerPoolId]);
         ACTORLIB_DEBUG(EDebugLevel::Executor, "TSharedExecutorPool::Initialize: end");
@@ -489,61 +491,7 @@ namespace NActors {
         return false;
     }
 
-    bool TSharedExecutorThreadCtx::Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag, std::atomic<ui64> *localNotifications, std::atomic<ui64> *threadsState) {
-        NHPTimer::STime start = GetCycleCountFast();
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SPIN> activityGuard(start);
-        while (true) {
-            for (ui32 j = 0;j < 12; ++j) {
-                NHPTimer::STime hpnow = GetCycleCountFast();
-                if (hpnow >= i64(start + spinThresholdCycles)) {
-                    return false;
-                }
-                for (ui32 i = 0; i < 12; ++i) {
-                    EThreadState state = GetState<EThreadState>();
-                    if (state == EThreadState::Spin) {
-                        TSharedExecutorPool::TThreadsState threadsStateValue = TSharedExecutorPool::TThreadsState::GetThreadsState(threadsState->load(std::memory_order_acquire));
-                        ui64 localNotificationsValue = localNotifications->load(std::memory_order_acquire);
-                        if (threadsStateValue.Notifications == 0 && localNotificationsValue == 0) {
-                            SpinLockPause();
-                        } else {
-                            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerId, " TSharedExecutorPool::Spin: wake up from notifications; ownerPoolId == ", OwnerPoolId, " notifications == ", threadsStateValue.Notifications, " localNotifications == ", localNotificationsValue);
-                            ExchangeState(EThreadState::None);
-                            return true;
-                        }
-                    } else {
-                        return true;
-                    }
-                }
-            }
-            if (stopFlag->load(std::memory_order_relaxed)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
-
-    bool TSharedExecutorThreadCtx::Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag, std::atomic<ui64> *localNotifications, std::atomic<ui64> *threadsState) {
-        EThreadState state = ExchangeState<EThreadState>(EThreadState::Spin);
-        Y_ABORT_UNLESS(state == EThreadState::None, "WaitingFlag# %d", int(state));
-        if (spinThresholdCycles > 0) {
-            // spin configured period
-            if (Spin(spinThresholdCycles, stopFlag, localNotifications, threadsState)) {
-                return false;
-            }
-        }
-        TSharedExecutorPool::TThreadsState threadsStateValue = TSharedExecutorPool::TThreadsState::GetThreadsState(threadsState->load(std::memory_order_acquire));
-        ui64 localNotificationsValue = localNotifications->load(std::memory_order_acquire);
-        if (threadsStateValue.Notifications != 0 || localNotificationsValue != 0)
-        {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerId, " TSharedExecutorPool::Wait: wake up from notifications; ownerPoolId == ", OwnerPoolId, " notifications == ", threadsStateValue.Notifications, " localNotifications == ", localNotificationsValue);
-            ExchangeState(EThreadState::None);
-            return false;
-        } else {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerId, " TSharedExecutorPool::Wait: going to sleep after checking notifications; ownerPoolId == ", OwnerPoolId);
-        }
-        return Sleep(stopFlag);
-    }
     
     void TSharedExecutorPool::FillForeignThreadsAllowed(std::vector<i16>& foreignThreadsAllowed) const {
         foreignThreadsAllowed.resize(PoolManager.PoolInfos.size());
@@ -574,6 +522,7 @@ namespace NActors {
     }
 
     void TSharedExecutorPool::SetForeignThreadSlots(i16 poolId, i16 slots) {
+        slots = PoolManager.PoolInfos.size();
         i16 current = ForeignThreadsAllowedByPool[poolId].load(std::memory_order_acquire);
         if (current == slots) {
             return;

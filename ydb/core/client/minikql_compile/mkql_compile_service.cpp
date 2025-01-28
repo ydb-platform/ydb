@@ -84,7 +84,7 @@ public:
     NYql::IDbSchemeResolver* MakeDbSchemeResolver(const TActorContext& ctx) {
         auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), Counters);
         SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
-        return NSchCache::CreateDbSchemeResolver(ctx.ExecutorThread.ActorSystem, SchemeCache);
+        return NSchCache::CreateDbSchemeResolver(ctx.ActorSystem(), SchemeCache);
     }
 
     STFUNC(StateWork) {

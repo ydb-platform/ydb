@@ -138,7 +138,7 @@ namespace NTabletPipe {
 
         bool IsLocalNode(const TActorContext& ctx) const {
             auto leader = GetTabletLeader();
-            return leader.NodeId() == 0 || ctx.ExecutorThread.ActorSystem->NodeId == leader.NodeId();
+            return leader.NodeId() == 0 || ctx.ActorSystem()->NodeId == leader.NodeId();
         }
 
         TActorId GetTabletLeader() const {

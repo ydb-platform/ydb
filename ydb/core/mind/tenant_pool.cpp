@@ -828,7 +828,7 @@ public:
         NActors::TMon *mon = AppData(ctx)->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, "tenant_pool", "Tenant Pool", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+            mon->RegisterActorPage(actorsMonPage, "tenant_pool", "Tenant Pool", false, ctx.ActorSystem(), ctx.SelfID);
         }
 
         if (!Config->IsEnabled) {
@@ -838,7 +838,7 @@ public:
 
         auto *local = CreateLocal(Config->LocalConfig.Get());
         LocalID = ctx.ExecutorThread.RegisterActor(local, TMailboxType::ReadAsFilled, 0);
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(MakeLocalID(SelfId().NodeId()), LocalID);
+        ctx.ActorSystem()->RegisterLocalService(MakeLocalID(SelfId().NodeId()), LocalID);
 
         THashMap<TString, TTenantPoolConfig::TPtr> domainConfigs;
 
@@ -857,7 +857,7 @@ public:
             auto aid = ctx.RegisterWithSameMailbox(new TDomainTenantPool(pr.first, LocalID, pr.second));
             DomainTenantPools[pr.first] = aid;
             auto serviceId = MakeTenantPoolID(SelfId().NodeId());
-            ctx.ExecutorThread.ActorSystem->RegisterLocalService(serviceId, aid);
+            ctx.ActorSystem()->RegisterLocalService(serviceId, aid);
         }
 
         Become(&TThis::StateWork);

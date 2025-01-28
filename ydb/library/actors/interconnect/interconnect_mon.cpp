@@ -1,6 +1,8 @@
 #include "interconnect_mon.h"
 #include "interconnect_tcp_proxy.h"
 
+#include <ydb/library/actors/core/executor_thread.h>
+
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -35,7 +37,7 @@ namespace NInterconnect {
             }
 
             void Handle(TEvInterconnect::TEvNodesInfo::TPtr ev, const TActorContext& ctx) {
-                TActorSystem* const as = ctx.ExecutorThread.ActorSystem;
+                TActorSystem* const as = ctx.ActorSystem();
                 for (const auto& node : ev->Get()->Nodes) {
                     Send(as->InterconnectProxy(node.NodeId), new TInterconnectProxyTCP::TEvQueryStats, IEventHandle::FlagTrackDelivery);
                     ++PendingReplies;

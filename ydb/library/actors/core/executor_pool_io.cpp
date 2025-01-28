@@ -41,7 +41,7 @@ namespace NActors {
 
             NHPTimer::STime hpnow = GetCycleCountFast();
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            TlsThreadContext->ElapsingActorActivity.store(Max<ui64>(), std::memory_order_release);
+            TlsThreadContext->ElapsingActorActivity.store(SleepActivity, std::memory_order_release);
             wctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
 
             if (threadCtx.WaitingPad.Park())
@@ -111,7 +111,7 @@ namespace NActors {
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
 
         for (i16 i = 0; i != PoolThreads; ++i) {
-            Threads[i].Thread.reset(new TExecutorThread(i, 0, actorSystem, this, MailboxTable, PoolName));
+            Threads[i].Thread.reset(new TExecutorThread(i, actorSystem, this, MailboxTable, PoolName));
         }
 
         *scheduleReaders = &ScheduleQueue->Reader;

@@ -1885,7 +1885,7 @@ TSyncTestBase::TSyncTestBase(TConfiguration *conf)
 {}
 
 void TSyncTestBase::Bootstrap(const TActorContext &ctx) {
-    SyncRunner.Reset(new TSyncRunner(ctx.ExecutorThread.ActorSystem, Conf));
+    SyncRunner.Reset(new TSyncRunner(ctx.ActorSystem(), Conf));
     Scenario(ctx);
     AtomicIncrement(Conf->SuccessCount);
     Conf->SignalDoneEvent();

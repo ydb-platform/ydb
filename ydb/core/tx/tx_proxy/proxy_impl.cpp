@@ -439,7 +439,7 @@ public:
 
         auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), CacheCounters);
         Services.SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(MakeSchemeCacheID(), Services.SchemeCache);
+        ctx.ActorSystem()->RegisterLocalService(MakeSchemeCacheID(), Services.SchemeCache);
 
         // PipePerNodeCaches are an external dependency
         Services.LeaderPipeCache = MakePipePerNodeCacheID(false);

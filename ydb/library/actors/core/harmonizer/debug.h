@@ -12,7 +12,7 @@ enum class EDebugHarmonizerLevel {
     History = 3,
 };
 
-constexpr EDebugHarmonizerLevel DebugHarmonizerLevel = EDebugHarmonizerLevel::Debug;
+constexpr EDebugHarmonizerLevel DebugHarmonizerLevel = EDebugHarmonizerLevel::None;
 
 
 #define HARMONIZER_DEBUG_PRINT(...) \

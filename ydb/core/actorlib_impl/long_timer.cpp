@@ -1,5 +1,6 @@
 #include "long_timer.h"
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/services/services.pb.h>
@@ -73,7 +74,7 @@ public:
         TMonotonic now = ctx.Monotonic();
         TMonotonic signalTime = now + delta;
         ui64 semirandomNumber = parentId.LocalId();
-        const TActorId timerActorID = ctx.ExecutorThread.ActorSystem->Register(new TLongTimer(now, signalTime, ev, cookie), TMailboxType::HTSwap, poolId, semirandomNumber, parentId);
+        const TActorId timerActorID = ctx.ActorSystem()->Register(new TLongTimer(now, signalTime, ev, cookie), TMailboxType::HTSwap, poolId, semirandomNumber, parentId);
         ctx.ExecutorThread.Schedule(TDuration::Seconds(ThresholdSec), new IEventHandle(timerActorID, timerActorID, new TEvents::TEvWakeup()));
 
         return timerActorID;

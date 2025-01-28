@@ -377,7 +377,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         TAutoPtr<TEntry>* entryPtr;
         if (!ResolvedTablets.Find(tabletId, entryPtr)) {
             if (!UnresolvedTablets.Find(tabletId, entryPtr)) {
-                ActorSystem = ctx.ExecutorThread.ActorSystem;
+                ActorSystem = ctx.ActorSystem();
                 UnresolvedTablets.Insert(tabletId, TAutoPtr<TEntry>(new TEntry()), entryPtr);
             }
         }

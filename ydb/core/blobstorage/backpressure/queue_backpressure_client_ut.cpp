@@ -94,7 +94,7 @@ public:
                 Counters, bsCtx, NBackpressure::TQueueClientId(), "PutTabletLog", 0, false, TDuration::Minutes(1),
                 flowRecord, NMonitoring::TCountableBase::EVisibility::Public));
 
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(QueueActorId, actorId);
+        ctx.ActorSystem()->RegisterLocalService(QueueActorId, actorId);
     }
 
     void Handle(TEvProxyQueueState::TPtr& ev, const TActorContext& /*ctx*/) {

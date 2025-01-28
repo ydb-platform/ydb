@@ -211,7 +211,7 @@ namespace NActors {
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
 
         TWorkerId workerId = wctx.WorkerId;
-        Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
+        ACTORLIB_VERIFY(workerId < MaxFullThreadCount && workerId >= 0, "workerId == ", workerId, " MaxFullThreadCount == ", MaxFullThreadCount);
 
         Threads[workerId].UnsetWork();
         if (Harmonizer) {
@@ -447,15 +447,14 @@ namespace NActors {
 
         ActorSystem = actorSystem;
 
-        ScheduleReaders.Reset(new NSchedulerQueue::TReader[MaxFullThreadCount + 2]);
-        ScheduleWriters.Reset(new NSchedulerQueue::TWriter[MaxFullThreadCount + 2]);
+        ScheduleReaders.Reset(new NSchedulerQueue::TReader[MaxFullThreadCount]);
+        ScheduleWriters.Reset(new NSchedulerQueue::TWriter[MaxFullThreadCount]);
 
 
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
             Threads[i].Thread.reset(
                 new TExecutorThread(
                     i,
-                    0, // CpuId is not used in BASIC pool
                     actorSystem,
                     this,
                     MailboxTable,
@@ -465,11 +464,9 @@ namespace NActors {
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 
-        ScheduleWriters[MaxFullThreadCount].Init(ScheduleReaders[MaxFullThreadCount]);
-        ScheduleWriters[MaxFullThreadCount + 1].Init(ScheduleReaders[MaxFullThreadCount + 1]);
 
         *scheduleReaders = ScheduleReaders.Get();
-        *scheduleSz = MaxFullThreadCount + 2;
+        *scheduleSz = MaxFullThreadCount;
         ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::Prepare: end");
     }
 
@@ -644,9 +641,7 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::Initialize(TWorkerContext& wctx) {
-        if (wctx.WorkerId >= 0) {
-            TlsThreadContext->WaitingStats = &WaitingStats[wctx.WorkerId];
-        }
+        TlsThreadContext->WaitingStats = &WaitingStats[wctx.WorkerId];
     }
 
     void TBasicExecutorPool::SetSpinThresholdCycles(ui32 cycles) {
@@ -707,45 +702,6 @@ namespace NActors {
             ui32 bucketIdx = newSpinThreshold / TWaitingStatsConstants::HistogramResolution;
             LWPROBE(ChangeSpinThresholdPerThread, PoolId, PoolName, threadIdx, newSpinThreshold, resolutionUs * bucketIdx, bucketIdx);
         }
-    }
-
-    bool TExecutorThreadCtx::Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
-        EThreadState state = ExchangeState<EThreadState>(EThreadState::Spin);
-        Y_ABORT_UNLESS(state == EThreadState::None, "WaitingFlag# %d", int(state));
-        if (spinThresholdCycles > 0) {
-            // spin configured period
-            Spin(spinThresholdCycles, stopFlag);
-        }
-        return Sleep(stopFlag);
-    }
-
-    bool TExecutorThreadCtx::WakeUp() {
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_WAKE_UP, false> activityGuard;
-        for (ui32 i = 0; i < 2; ++i) {
-            EThreadState state = GetState<EThreadState>();
-            switch (state) {
-                case EThreadState::None:
-                case EThreadState::Work:
-                    return false;
-                case EThreadState::Spin:
-                case EThreadState::Sleep:
-                    if (ReplaceState<EThreadState>(state, EThreadState::None)) {
-                        if (state == EThreadState::Sleep) {
-                            ui64 beforeUnpark = GetCycleCountFast();
-                            StartWakingTs = beforeUnpark;
-                            WaitingPad.Unpark();
-                            if (TlsThreadContext && TlsThreadContext->WaitingStats) {
-                                TlsThreadContext->WaitingStats->AddWakingUp(GetCycleCountFast() - beforeUnpark);
-                            }
-                        }
-                        return true;
-                    }
-                    break;
-                default:
-                    Y_ABORT();
-            }
-        }
-        return false;
     }
 
     TBasicExecutorPool::TSemaphore TBasicExecutorPool::GetSemaphore() const {

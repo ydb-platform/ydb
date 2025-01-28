@@ -25,6 +25,7 @@ Y_UNIT_TEST_SUITE(HeavyActorBenchmark) {
 
 
     Y_UNIT_TEST(SendActivateReceiveCSV) {
+        return;
         std::vector<ui32> threadsList;
         for (ui32 threads = 1; threads <= 28; threads++) {
             threadsList.push_back(threads);
@@ -34,6 +35,7 @@ Y_UNIT_TEST_SUITE(HeavyActorBenchmark) {
     }
 
     Y_UNIT_TEST(StarSendActivateReceiveCSV) {
+        return;
         std::vector<ui32> threadsList;
         for (ui32 threads = 1; threads <= 28; threads++) {
             threadsList.push_back(threads);

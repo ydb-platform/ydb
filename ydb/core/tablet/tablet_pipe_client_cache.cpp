@@ -86,7 +86,7 @@ namespace NTabletPipe {
                 }
             }
 
-            ActorSystem = ctx.ExecutorThread.ActorSystem;
+            ActorSystem = ctx.ActorSystem();
             TActorId clientId;
             if (PipeFactory) {
                 clientId = PipeFactory->CreateClient(ctx, tabletId, PipeClientConfig);

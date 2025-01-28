@@ -672,7 +672,7 @@ void TTabletInfoActor::Bootstrap(const TActorContext &ctx) {
     TMon* mon = AppData(ctx)->Mon;
 
     if (mon) {
-        mon->RegisterActorPage(nullptr, "tablet", "Tablet boot tracing", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        mon->RegisterActorPage(nullptr, "tablet", "Tablet boot tracing", false, ctx.ActorSystem(), ctx.SelfID);
     }
 }
 

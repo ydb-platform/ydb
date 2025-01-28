@@ -1,5 +1,6 @@
 #include "io_dispatcher.h"
 #include "actor_bootstrapped.h"
+#include "executor_thread.h"
 #include "hfunc.h"
 #include <util/system/mutex.h>
 #include <util/system/condvar.h>

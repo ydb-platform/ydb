@@ -177,7 +177,7 @@ void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
     PqMetaCache = CreatePersQueueMetaCacheV2Id();
 
     if (Server) {
-        Server->InitSession(ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        Server->InitSession(ctx.ActorSystem(), ctx.SelfID);
     }
 
     Become(&TThis::StateFunc);

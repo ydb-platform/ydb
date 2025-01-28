@@ -226,7 +226,7 @@ TTabletMonitoringProxyActor::Bootstrap(const TActorContext &ctx) {
     NActors::TMon* mon = AppData(ctx)->Mon;
 
     if (mon) {
-        mon->RegisterActorPage(nullptr, "tablets", "Tablets", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        mon->RegisterActorPage(nullptr, "tablets", "Tablets", false, ctx.ActorSystem(), ctx.SelfID);
     }
 }
 

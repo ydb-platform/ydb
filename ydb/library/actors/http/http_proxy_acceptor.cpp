@@ -2,6 +2,8 @@
 #include "http_proxy.h"
 #include "http_proxy_ssl.h"
 
+#include <ydb/library/actors/core/executor_thread.h>
+
 namespace NHttp {
 
 class TAcceptorActor : public NActors::TActor<TAcceptorActor>, public THttpConfig {

@@ -2425,8 +2425,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )").GetValueSync();
 
             auto expected = R"([
-                [["group4"]];
                 [["group3"]];
+                [["group4"]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -2474,8 +2474,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )").GetValueSync();
 
                 auto expected = R"([
-                    [["group2"]];
                     [["group1"]];
+                    [["group2"]];
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -2487,8 +2487,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )").GetValueSync();
 
                 auto expected = R"([
-                    [["group4"]];
                     [["group3"]];
+                    [["group4"]];
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -2735,6 +2735,56 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
         // and test tenant user and tenant admin
+    }
+
+    Y_UNIT_TEST(AuthGroupMembers_ResultOrder) {
+        TTestEnv env;
+        SetupAuthEnvironment(env);
+        TTableClient client(env.GetDriver());
+
+        for (auto group : {
+            "group3",
+            "group1",
+            "group2",
+            "group",
+        }) {
+            env.GetClient().CreateGroup("/Root", group);
+        }
+
+        for (auto user : {
+            "user1",
+            "user2",
+            "user"
+        }) {
+            env.GetClient().CreateUser("/Root", user, "password");
+        }
+
+        for (auto membership : TVector<std::pair<TString, TString>>{
+            {"group3", "user1"},
+            {"group3", "user2"},
+            {"group2", "user"},
+            {"group2", "user1"},
+            {"group2", "user2"},
+            {"group", "user2"},
+        }) {
+            env.GetClient().AddGroupMembership("/Root", membership.first, membership.second);
+        }
+        
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT *
+            FROM `Root/.sys/auth_group_members`
+        )").GetValueSync();
+
+        auto expected = R"([
+            [["group"];["user2"]];
+            [["group2"];["user"]];
+            [["group2"];["user1"]];
+            [["group2"];["user2"]];
+            [["group3"];["user1"]];
+            [["group3"];["user2"]];
+        ])";
+
+        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(AuthOwners) {
@@ -3055,8 +3105,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto expected = R"([
                 [["/Root"];["ydb.generic.use"];["user1"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
                 [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
                 [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user1"]];
@@ -3138,14 +3188,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto expected = R"([
                 [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
                 [["/Root"];["ydb.generic.use"];["user2"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
-                [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]]
+                [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]];
             ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
@@ -3169,14 +3219,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 auto expected = R"([
                     [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
                     [["/Root"];["ydb.generic.use"];["user2"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
                     [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
-                    [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]]
+                    [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]];
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -3188,8 +3238,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )").GetValueSync();
 
                 auto expected = R"([
-                    [["/Root/Tenant1/Dir3"];["ydb.granular.erase_row"];["user4"]];
                     [["/Root/Tenant1/Dir3"];["ydb.granular.select_row"];["user3"]];
+                    [["/Root/Tenant1/Dir3"];["ydb.granular.erase_row"];["user4"]];
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -3217,12 +3267,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto expected = R"([
                 [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
                 [["/Root"];["ydb.generic.use"];["user2"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
             ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -3230,6 +3280,76 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
         // and test tenant user and tenant admin
+    }
+
+    Y_UNIT_TEST(AuthPermissions_ResultOrder) {
+        TTestEnv env;
+        SetupAuthEnvironment(env);
+        TTableClient client(env.GetDriver());
+
+        for (auto user : {
+            "user1",
+            "user2",
+            "user"
+        }) {
+            env.GetClient().CreateUser("/Root", user, "password");
+        }
+
+        for (auto dir : {
+            "Dir",
+            "Dir1",
+            "Dir2",
+            "Dir/SubDir1",
+            "Dir/SubDir2"
+        }) {
+            env.GetClient().MkDir("/Root", dir);
+        }
+        
+        for (auto acl : TVector<std::tuple<TString, TString, TString, NACLib::EAccessRights>>{
+            {"/", "Root", "user1", NACLib::SelectRow},
+            {"/", "Root", "user1", NACLib::EraseRow},
+            {"/", "Root", "user1", NACLib::AlterSchema},
+            {"/", "Root", "user2", NACLib::GenericUse},
+            {"/Root", "Dir1", "user2", NACLib::GenericUse},
+            {"/Root", "Dir1", "user1", NACLib::GenericUse},
+            {"/Root", "Dir2", "user2", NACLib::GenericUse},
+            {"/Root", "Dir2", "user", NACLib::GenericUse},
+            {"/Root", "Dir2", "user1", NACLib::GenericUse},
+            {"/Root", "Dir", "user1", NACLib::GenericUse},
+            {"/Root", "Dir1", "user1", NACLib::AlterSchema},
+            {"/Root/Dir1", "SubDir1", "user1", NACLib::AlterSchema},
+            {"/Root/Dir1", "SubDir2", "user2", NACLib::AlterSchema},
+            {"/Root/Dir1", "SubDir2", "user1", NACLib::AlterSchema}
+        }) {
+            NACLib::TDiffACL diffAcl;
+            diffAcl.AddAccess(NACLib::EAccessType::Allow, std::get<3>(acl), std::get<2>(acl));
+            env.GetClient().ModifyACL(std::get<0>(acl), std::get<1>(acl), diffAcl.SerializeAsString());
+        }
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT Path, Sid, Permission
+            FROM `Root/.sys/auth_permissions`
+        )").GetValueSync();
+
+        auto expected = R"([
+            [["/Root"];["user1"];["ydb.granular.alter_schema"]];
+            [["/Root"];["user1"];["ydb.granular.erase_row"]];
+            [["/Root"];["user1"];["ydb.granular.select_row"]];
+            [["/Root"];["user2"];["ydb.generic.use"]];
+            [["/Root/.metadata/workload_manager/pools/default"];["all-users@well-known"];["ydb.granular.describe_schema"]];
+            [["/Root/.metadata/workload_manager/pools/default"];["all-users@well-known"];["ydb.granular.select_row"]];
+            [["/Root/.metadata/workload_manager/pools/default"];["root@builtin"];["ydb.granular.describe_schema"]];
+            [["/Root/.metadata/workload_manager/pools/default"];["root@builtin"];["ydb.granular.select_row"]];
+            [["/Root/Dir"];["user1"];["ydb.generic.use"]];
+            [["/Root/Dir1"];["user1"];["ydb.generic.use"]];
+            [["/Root/Dir1"];["user1"];["ydb.granular.alter_schema"]];
+            [["/Root/Dir1"];["user2"];["ydb.generic.use"]];
+            [["/Root/Dir2"];["user"];["ydb.generic.use"]];
+            [["/Root/Dir2"];["user1"];["ydb.generic.use"]];
+            [["/Root/Dir2"];["user2"];["ydb.generic.use"]];
+        ])";
+
+        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(AuthEffectivePermissions) {
@@ -3267,11 +3387,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 [["/Root/.metadata"];["ydb.generic.use"];["user1"]];
                 [["/Root/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
                 [["/Root/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
                 [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
                 [["/Root/Table0"];["ydb.generic.use"];["user1"]]
             ])";
@@ -3377,11 +3497,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 WHERE Sid = "user2"
             )").GetValueSync();
 
-            // TODO: make result unique
             auto expected = R"([
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user2"]];
                 [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user2"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
                 [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
                 [["/Root/Dir1/SubDir2"];["ydb.granular.select_row"];["user2"]];
             ])";

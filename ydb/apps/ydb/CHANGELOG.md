@@ -1,3 +1,4 @@
+* Added message query text if query fails in `ydb workload run` comamnd.
 * Added message if global timeout expiried in `ydb workload run` comamnd.
 * Fixed return code of `ydb workload run` comamnd.
 * Added statistics output on the current progress of the query in `ydb workload` command

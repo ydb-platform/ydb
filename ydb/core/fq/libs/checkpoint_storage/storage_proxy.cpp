@@ -163,31 +163,23 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvCreateCheckpointRequest")
 
     CheckpointStorage->GetTotalCheckpointsStateSize(event->CoordinatorId.GraphId)
-        .Apply([totalGraphCheckpointsSizeLimit = Config.GetStateStorageLimits().GetMaxGraphCheckpointsSizeBytes()]
-               (const NThreading::TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult>& resultFuture) {
-            auto [totalGraphCheckpointsSize, issues] = resultFuture.GetValue();
-
-            if (issues) {
-                return issues;
-            }
-
-            if (totalGraphCheckpointsSize > totalGraphCheckpointsSizeLimit) {
-                TStringStream ss;
-                ss << "Graph checkpoints size limit exceeded: limit " << totalGraphCheckpointsSizeLimit << ", current checkpoints size: " << totalGraphCheckpointsSize;
-                issues.AddIssue(ss.Str());
-                return issues;
-            }
-            return NYql::TIssues {};
-        })
-        .Apply([checkpointId = event->CheckpointId,
+        .Apply([totalGraphCheckpointsSizeLimit = Config.GetStateStorageLimits().GetMaxGraphCheckpointsSizeBytes(),
+                checkpointId = event->CheckpointId,
                 coordinatorId = event->CoordinatorId,
                 cookie = ev->Cookie,
                 sender = ev->Sender,
-                graphDesc = event->GraphDescription,
+                graphDesc = std::move(event->GraphDescription),
                 storage = CheckpointStorage]
-                   (const NThreading::TFuture<NYql::TIssues>& issues) {
-            if (issues.GetValue()) {
-                return NThreading::MakeFuture(ICheckpointStorage::TCreateCheckpointResult {TString(), issues.GetValue() } );
+               (const NThreading::TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult>& resultFuture) {
+            auto [totalGraphCheckpointsSize, issues] = resultFuture.GetValue();
+
+            if (!issues && totalGraphCheckpointsSize > totalGraphCheckpointsSizeLimit) {
+                TStringStream ss;
+                ss << "Graph checkpoints size limit exceeded: limit " << totalGraphCheckpointsSizeLimit << ", current checkpoints size: " << totalGraphCheckpointsSize;
+                issues.AddIssue(std::move(ss.Str()));
+            }
+            if (issues) {
+                return NThreading::MakeFuture(ICheckpointStorage::TCreateCheckpointResult {TString(), std::move(issues) } );
             }
             if (std::holds_alternative<TString>(graphDesc)) {
                 return storage->CreateCheckpoint(coordinatorId, checkpointId, std::get<TString>(graphDesc), ECheckpointStatus::Pending);

@@ -1244,7 +1244,6 @@ class StaticConfigGenerator(object):
                 self.__cluster_details.log_config,
             )
 
-
     def __generate_names_txt(self):
         self.__proto_configs["names.txt"] = config_pb2.TStaticNameserviceConfig()
         if self.__cluster_details.nameservice_config is not None:

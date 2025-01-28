@@ -683,7 +683,6 @@ class ClusterDetailsProvider(object):
             utils.wrap_parse_dict(log_config_dict, log_config)
             return log_config
 
-
         # Old, `template.yaml` style
         log_config = copy.deepcopy(self.__cluster_description.get("log", {}))
 

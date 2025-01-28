@@ -48,7 +48,6 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << "serializer=" << (Serializer ? Serializer->DebugString() : "NO") << ";";
-        sb << "encoding=" << (DictionaryEncoding ? DictionaryEncoding->DebugString() : "NO") << ";";
         sb << "loader=" << (Loader ? Loader->DebugString() : "NO") << ";";
         return sb;
     }

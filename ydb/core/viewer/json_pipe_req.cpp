@@ -803,9 +803,13 @@ void TViewerPipeClient::RequestDone(ui32 requests) {
     if (!DelayedRequests.empty()) {
         SendDelayedRequests();
     }
-    if (Requests == 0) {
+    if (Requests == 0 && !PassedAway) {
         ReplyAndPassAway();
     }
+}
+
+void TViewerPipeClient::CancelAllRequests() {
+    DelayedRequests.clear();
 }
 
 void TViewerPipeClient::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
@@ -826,12 +830,14 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
                 Bootstrap(); // retry bootstrap without redirect this time
             } else {
                 DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
+                --Requests; // don't count this request
             }
         } else {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"));
+            AddEvent("Failed to resolve database - shared database not found");
+            Direct = true;
+            Bootstrap(); // retry bootstrap without redirect this time
         }
     }
-    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -841,15 +847,18 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
             TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
             if (entry.DomainInfo && entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                 ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(TPathId(entry.DomainInfo->ResourcesDomainKey));
+                --Requests; // don't count this request
                 Become(&TViewerPipeClient::StateResolveResource);
             } else {
                 DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
+                --Requests; // don't count this request
             }
         } else {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"));
+            AddEvent("Failed to resolve database - not found");
+            Direct = true;
+            Bootstrap(); // retry bootstrap without redirect this time
         }
     }
-    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
@@ -858,11 +867,11 @@ void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         if (DatabaseBoardInfoResponse->IsOk()) {
             return ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
         } else {
+            AddEvent("Failed to resolve database nodes");
             Direct = true;
             Bootstrap(); // retry bootstrap without redirect this time
         }
     }
-    RequestDone();
 }
 
 void TViewerPipeClient::HandleTimeout() {
@@ -887,6 +896,7 @@ STATEFN(TViewerPipeClient::StateResolveResource) {
 
 void TViewerPipeClient::RedirectToDatabase(const TString& database) {
     DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(database);
+    --Requests; // don't count this request
     Become(&TViewerPipeClient::StateResolveDatabase);
 }
 
@@ -913,6 +923,8 @@ void TViewerPipeClient::PassAway() {
         Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
     }
     ClosePipes();
+    CancelAllRequests();
+    PassedAway = true;
     TBase::PassAway();
 }
 

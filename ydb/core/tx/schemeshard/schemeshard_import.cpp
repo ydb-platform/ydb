@@ -189,6 +189,17 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.Metadata.Serialize())
     );
+    const ui64 count = item.Changefeeds.size();
+    TVector<TString> jsonChangefeeds;
+    jsonChangefeeds.reserve(count);
+
+    for (const auto& changefeed : item.Changefeeds) {
+        jsonChangefeeds.push_back(changefeed.SerializeAsString());
+    }
+
+    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+        NIceDb::TUpdate<Schema::ImportItems::Changefeeds>(jsonChangefeeds)
+    );
 }
 
 void TSchemeShard::PersistImportItemPreparedCreationQuery(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {

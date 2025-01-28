@@ -2851,6 +2851,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
+        TVector<Ydb::Table::ChangefeedDescription> Changefeeds;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;

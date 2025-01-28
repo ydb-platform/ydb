@@ -65,7 +65,15 @@ If a data field is marked as required (`NOT NULL`) but is missing in the process
 
 ### Schema inference {#inference}
 
-Schema inference is available for all [data formats](formats.md#formats) except `raw` and `json_as_string`. It can be helpful when the schema contains a large number of fields. To avoid entering those fields manually, use the `WITH_INFER` parameter.:
+{{ ydb-short-name }} can determine the data schema of the files inside the bucket so that you do not have to specify these fields manually.
+
+{% note info %}
+
+Schema inference is available for all [data formats](formats.md#formats) except `raw` and `json_as_string`. For these formats you must [describe the schema manually](#schema).
+
+{% endnote %}
+
+To enable schema inference, use the `WITH_INFER` parameter:
 
 ```yql
 SELECT
@@ -83,7 +91,7 @@ WHERE
 Where:
 
 * `object_storage_connection_name` — the name of the external data source leading to the S3 bucket ({{ objstorage-full-name }}).
-* `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported; more details are available [below](#path_format).
+* `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported; For more information, see [{#T}](#path_format).
 * `file_format` — the [data format](formats.md#formats) in the files. All formats except `raw` and `json_as_string` are supported.
 * `compression` — the [compression format](formats.md#compression_formats) of the files.
 

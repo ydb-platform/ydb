@@ -575,5 +575,5 @@ enum ETxTypes {
 
     TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT = 86    [(TxTypeOpts) = {Name: "TxSequenceShardGetSequenceResult"}];
 
-    TXTYPE_UNMARK_RESTORE_TABLES = 91                     [(TxTypeOpts) = {Name: "TxUnmarkRestoreTables"}];
+    TXTYPE_UNMARK_RESTORE_TABLES = 87                     [(TxTypeOpts) = {Name: "TxUnmarkRestoreTables"}];
 }

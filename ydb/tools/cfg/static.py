@@ -555,7 +555,6 @@ class StaticConfigGenerator(object):
             if 'channel_profile_config' in normalized_config:
                 for profile in normalized_config['channel_profile_config']['profile']:
                     for channel in profile['channel']:
-                        print(channel)
                         channel['pdisk_category'] = int(channel['pdisk_category'])
         if 'system_tablets' in normalized_config:
             for tablets in normalized_config['system_tablets'].values():
@@ -1037,7 +1036,6 @@ class StaticConfigGenerator(object):
         self.__configure_security_config(domains_config)
 
         tablet_types = self.__tablet_types
-
         for domain_description in self.__cluster_details.domains:
             domain_id = domain_description.domain_id
             domain_name = domain_description.domain_name

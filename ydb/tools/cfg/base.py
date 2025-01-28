@@ -290,10 +290,6 @@ class ClusterDetailsProvider(object):
             self._host_info_provider = walle.NopHostsInformationProvider
 
         self.__translated_storage_pools_deprecated = None
-        self.__translated_hosts = None
-        self.__racks = {}
-        self.__bodies = {}
-        self.__dcs = {}
         self.use_new_style_kikimr_cfg = self.__cluster_description.get("use_new_style_kikimr_cfg", use_new_style_cfg)
         self.need_generate_app_config = self.__cluster_description.get("need_generate_app_config", False)
         self.need_txt_files = self.__cluster_description.get("need_txt_files", True)

@@ -1252,6 +1252,21 @@ public:
         Spiller_ = ctx.SpillerFactory->CreateSpiller();
     }
 
+    void Clear() {
+        auto equal = MakeEqual<TKey>(KeyLength_);
+        auto hasher = MakeHash<TKey>(KeyLength_);
+        if constexpr (UseSet) {
+            HashSet_ = std::make_unique<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
+        } else {
+            if (!InlineAggState) {
+                HashFixedMap_ = std::make_unique<TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
+            } else {
+                HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(TotalStateSize_, hasher, equal);
+            }
+        }
+
+    }
+
 
     template <typename THash>
     bool SpillingIterate(THash& hash, typename THash::const_iterator& iter, TOutputBuffer& buf) {
@@ -1991,6 +2006,7 @@ private:
                                     std::cerr << blobId << " ";
                                 }
                                 std::cerr << std::endl;
+                                state.Clear();
                                 if (!state.LoadEverything()) return NUdf::EFetchStatus::Yield;
                             }
                             break;

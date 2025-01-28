@@ -577,13 +577,13 @@ private:
     }
 
     void KillChildActors(TImportInfo::TItem& item) {
-        if (item.SchemeGetter) {
-            Send(item.SchemeGetter, new TEvents::TEvPoisonPill());
-            Self->RunningImportSchemeGetters.erase(std::exchange(item.SchemeGetter, TActorId()));
+        if (auto schemeGetter = std::exchange(item.SchemeGetter, {})) {
+            Send(schemeGetter, new TEvents::TEvPoisonPill());
+            Self->RunningImportSchemeGetters.erase(schemeGetter);
         }
-        if (item.SchemeQueryExecutor) {
-            Send(item.SchemeQueryExecutor, new TEvents::TEvPoisonPill());
-            Self->RunningImportSchemeQueryExecutors.erase(std::exchange(item.SchemeQueryExecutor, TActorId()));
+        if (auto schemeQueryExecutor = std::exchange(item.SchemeQueryExecutor, {})) {
+            Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
+            Self->RunningImportSchemeQueryExecutors.erase(schemeQueryExecutor);
         }
     }
 
@@ -831,7 +831,7 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         auto& item = importInfo->Items.at(msg.ItemIdx);
-        Self->RunningImportSchemeGetters.erase(std::exchange(item.SchemeGetter, TActorId()));
+        Self->RunningImportSchemeGetters.erase(std::exchange(item.SchemeGetter, {}));
 
         if (!msg.Success) {
             return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
@@ -897,7 +897,7 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         auto& item = importInfo->Items[message.ItemIdx];
-        Self->RunningImportSchemeQueryExecutors.erase(std::exchange(item.SchemeQueryExecutor, TActorId()));
+        Self->RunningImportSchemeQueryExecutors.erase(std::exchange(item.SchemeQueryExecutor, {}));
 
         if (message.Status == Ydb::StatusIds::SCHEME_ERROR && item.ViewCreationRetries == 0) {
             // Scheme error happens when the view depends on a table (or a view) that is not yet imported.

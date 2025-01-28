@@ -2068,7 +2068,7 @@ void TPartition::TryAddDeleteHeadKeysToPersistRequest()
 {
     while (!DeletedHeadKeys.empty()) {
         auto& k = DeletedHeadKeys.back();
-        if (*k.RefCount > 0) {
+        if (k.RefCount && *k.RefCount > 0) {
             // the blob has already been repackaged and is still being read
             break;
         }

@@ -2431,6 +2431,70 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
     });
 }
 
+Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
+{
+    const TString firstMessageKey = "d0000000000_00000000000000000000_00000_0000000001_00000|";
+
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+
+    bool needDropCmdDeleteFirstMessage = true;
+    bool foundCmdDeleteFirstMessage = false;
+
+    PQTabletPrepare({.partitions = 1}, {}, tc);
+
+    auto observe = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* event = ev->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            foundCmdDeleteFirstMessage = false;
+            const auto& record = event->Record;
+            for (size_t i = 0; i < record.CmdDeleteRangeSize(); ++i) {
+                const auto& cmd = record.GetCmdDeleteRange(i);
+                const auto& range = cmd.GetRange();
+                if (range.GetFrom() == firstMessageKey) {
+                    foundCmdDeleteFirstMessage = true;
+                    return needDropCmdDeleteFirstMessage ?
+                        TTestActorRuntimeBase::EEventAction::DROP : TTestActorRuntimeBase::EEventAction::PROCESS;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observe);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.resize(1);
+
+    data[0].first = 1;
+    data[0].second = TString(1_KB, 'x');
+    CmdWrite(0, "sourceid1", data, tc, false, {}, true);
+    CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 0);
+
+    ++data[0].first;
+    data[0].second = TString(1_MB, 'x');
+    CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 1);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return foundCmdDeleteFirstMessage; };
+    tc.Runtime->DispatchEvents(options);
+
+    auto keys = GetTabletKeys(tc);
+    UNIT_ASSERT_C(keys.contains(firstMessageKey),
+                  "not found key '" << firstMessageKey << "'");
+
+    needDropCmdDeleteFirstMessage = false;
+
+    PQTabletRestart(tc);
+
+    ++data[0].first;
+    data[0].second = TString(1_KB, 'x');
+    CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 2);
+
+    keys = GetTabletKeys(tc);
+    UNIT_ASSERT_C(!keys.contains(firstMessageKey),
+                  "the PQ tablet did not delete the '" << firstMessageKey << "' key during startup");
+}
 
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

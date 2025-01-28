@@ -300,6 +300,46 @@ void PQTabletRestart(TTestActorRuntime& runtime, ui64 tabletId, TActorId edge) {
     runtime.DispatchEvents(rebootOptions);
 }
 
+THashSet<TString> GetTabletKeys(TTestContext& tc)
+{
+    return GetTabletKeys(*tc.Runtime, tc.TabletId, tc.Edge);
+}
+
+THashSet<TString> GetTabletKeys(TTestActorRuntime& runtime,
+                                ui64 tabletId,
+                                const TActorId& edge)
+{
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto* cmd = request->Record.AddCmdReadRange();
+    auto* range = cmd->MutableRange();
+    range->SetFrom(TString(1, '\x00'));
+    range->SetIncludeFrom(false);
+    range->SetTo(TString(1, '\xFF'));
+    range->SetIncludeTo(false);
+
+    runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    THashSet<TString> keys;
+
+    for (size_t i = 0; i < response->Record.ReadRangeResultSize(); ++i) {
+        const auto &result = response->Record.GetReadRangeResult(i);
+        UNIT_ASSERT(result.HasStatus());
+        UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
+        for (size_t j = 0; j < result.PairSize(); ++j) {
+            const auto& pair = result.GetPair(j);
+            keys.insert(pair.GetKey());
+        }
+    }
+
+    return keys;
+}
+
 TActorId SetOwner(const ui32 partition, TTestContext& tc, const TString& owner, bool force) {
     return SetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition, owner, force);
 }

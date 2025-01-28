@@ -593,10 +593,11 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         const auto& pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+        TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
         if (!actualKeys.contains(pair.GetKey())) {
+            Partition()->DeletedHeadKeys.emplace_back(k, 0, TInstant(), 0, nullptr);
             continue;
         }
-        TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
         if (dataKeysBody.empty()) { //no data - this is first pair of first range
             head.Offset = endOffset = startOffset = k.GetOffset();
             if (k.GetPartNo() > 0) ++startOffset;

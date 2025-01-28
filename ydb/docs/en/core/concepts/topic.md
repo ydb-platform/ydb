@@ -196,17 +196,17 @@ As a long timeout of an important consumer may result in full use of all availab
 
 ## Topic protocols {#topic-protocols}
 
-For work with topics {{ ydb-short-name }} SDK is used (see also in [Reference](../reference/ydb-sdk/topic.md)).
+To work with topics, the {{ ydb-short-name }} SDK is used (see also [Reference](../reference/ydb-sdk/topic.md)).
 
-Kafka API version 3.4.0. is also supported with some restrictions (see [Work with Kafka API](../reference/kafka-api/index.md)).
+Kafka API version 3.4.0 is also supported with some restrictions (see [Work with Kafka API](../reference/kafka-api/index.md)).
 
 ## Transactions with topics {#topic-transactions}
 
-{{ ydb-short-name }} supports work with topics within [transactions](./transactions.md).
+{{ ydb-short-name }} supports working with topics within [transactions](./transactions.md).
 
-### Read from a topic within transaction {#topic-transactions-read}
+### Read from a topic within a transaction {#topic-transactions-read}
 
-Topic data are not changed during reading from topic. So within transactional reading from topic only offset commit is a real transactional operation. Postponed offset commit occurs automatically at transaction commit, SDK makes it transparent for user.
+Topic data does not change during a read operation. Therefore, within transactional reads from a topic, only the offset commit is a true transactional operation. The postponed offset commit occurs automatically at the transaction commit, and the SDK handles this transparently for the user.
 
 ### Write into a topic within transaction {#topic-transactions-write}
 

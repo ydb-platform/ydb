@@ -30,13 +30,13 @@ The format of data files is `.csv`, where each row corresponds to a record in th
 
 {% note info %}
 
-Checksums of exported files are only available for export to S3-compatible object storage at this moment.
+File checksums are only generated when exporting to S3-compatible object storage.
 
 {% endnote %}
 
-For each export file there is a paired file with the extension `.sha256`, which stores its checksum.
+{{ ydb-short-name }} generates a checksum for each export file and saves it to a corresponding file with the `.sha256` suffix.
 
-File checksum can be validated using the `sha256sum` console utility:
+The file checksum can be validated using the `sha256sum` console utility:
 
 ```sh
 $ sha256sum -c scheme.pb.sha256

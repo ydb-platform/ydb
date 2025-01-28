@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     static const TString& Request() const {
-        return request;
+        return Request;
     }
 
     private:
@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         EPathTypeCdcStream
     };
 
-    static const TString request = R"(
+    static const TString Request = R"(
         ExportToS3Settings {
             endpoint: "localhost:%d"
             scheme: HTTP

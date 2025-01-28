@@ -53,7 +53,7 @@ struct TContext {
 
     bool Authenticated() {
         
-        return !RequireAuthentication || !RequireAuthentication || AuthenticationStep == SUCCESS;
+        return !RequireAuthentication || AuthenticationStep == SUCCESS;
     
     }
 

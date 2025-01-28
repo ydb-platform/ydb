@@ -1066,7 +1066,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         CreateTopic(pqClient, topicName, minActivePartitions, {});
-        CreateTopic(pqClient, topicName, minActivePartitions, {});
 
         TTestClient client(testServer.Port);
 
@@ -1482,7 +1481,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             topics.push_back(topicName);
 
             auto joinResponse = clientA.JoinGroup(topics, notExistsGroup);
-            UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::INVALID_REQUEST)); // because TReadInitAndAuthActor returns BAD_REQUEST on failed readRule check
+            UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
         }
 
         {
@@ -1649,7 +1648,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.back().Partitions.size(), minActivePartitions);
             for (const auto& topic : msg->Topics) {
                 for (const auto& partition : topic.Partitions) {
-                   UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::INVALID_REQUEST));
+                   UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
                 }
             }
         }
@@ -1681,7 +1680,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.back().Partitions.size(), minActivePartitions);
             for (const auto& topic : msg->Topics) {
                 for (const auto& partition : topic.Partitions) {
-                   UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::INVALID_REQUEST));
+                   UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
                 }
             }
         }

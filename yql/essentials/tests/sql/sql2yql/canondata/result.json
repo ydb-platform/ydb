@@ -2241,9 +2241,9 @@
     ],
     "test_sql2yql.test[expr-dynamic_variant]": [
         {
-            "checksum": "c0dd45838e1cda5e62cbaf4f58dec539",
-            "size": 2580,
-            "uri": "https://{canondata_backend}/1784826/ecc162c375c469538d674dae8f86c275cd2659b6/resource.tar.gz#test_sql2yql.test_expr-dynamic_variant_/sql.yql"
+            "checksum": "b534c0c8d7dad33526d7a35c9ccf13d6",
+            "size": 2636,
+            "uri": "https://{canondata_backend}/1900335/93ec4bc464b5921b7051bf9856e19ce5fcbe0569/resource.tar.gz#test_sql2yql.test_expr-dynamic_variant_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-empty_dict_ops]": [

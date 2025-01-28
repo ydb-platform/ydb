@@ -61,6 +61,7 @@ public:
         Cleanup,
         GC
     };
+    YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
 
 protected:
     virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {

@@ -1839,7 +1839,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
-                tableInfo->IsRestore = std::get<13>(rec);
+                tableInfo->IsRestore = std::get<12>(rec);
 
                 Self->Tables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);

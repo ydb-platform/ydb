@@ -418,7 +418,7 @@ private:
                 ));
                 Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
 
-                item.State = EState::CreateTable;
+                item.State = EState::CreateSchemeObject;
                 item.ViewCreationRetries++;
                 Self->PersistImportItemState(db, importInfo, itemIdx);
 
@@ -734,7 +734,7 @@ private:
                     }
                     break;
 
-                case EState::CreateTable:
+                case EState::CreateSchemeObject:
                 case EState::Transferring:
                 case EState::BuildIndexes:
                     if (item.WaitTxId == InvalidTxId) {
@@ -859,7 +859,7 @@ private:
 
         Self->PersistImportItemScheme(db, importInfo, msg.ItemIdx);
 
-        item.State = EState::CreateTable;
+        item.State = EState::CreateSchemeObject;
         Self->PersistImportItemState(db, importInfo, msg.ItemIdx);
         if (!IsCreatedByQuery(item)) {
             AllocateTxId(importInfo, msg.ItemIdx);
@@ -917,7 +917,7 @@ private:
             return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
         }
 
-        if (item.State == EState::CreateTable) {
+        if (item.State == EState::CreateSchemeObject) {
             item.PreparedCreationQuery = std::get<NKikimrSchemeOp::TModifyScheme>(message.Result);
             PersistImportItemPreparedCreationQuery(db, importInfo, message.ItemIdx);
             AllocateTxId(importInfo, message.ItemIdx);
@@ -954,7 +954,7 @@ private:
             }
 
             switch (item.State) {
-            case EState::CreateTable:
+            case EState::CreateSchemeObject:
                 if (item.PreparedCreationQuery) {
                     ExecutePreparedQuery(txc, importInfo, i, txId);
                     itemIdx = i;
@@ -1060,7 +1060,7 @@ private:
             return;
         }
 
-        if (item.State == EState::CreateTable) {
+        if (item.State == EState::CreateSchemeObject) {
             auto createPath = TPath::Resolve(item.DstPathName, Self);
             Y_ABORT_UNLESS(createPath);
 
@@ -1177,7 +1177,7 @@ private:
         }
 
         switch (item.State) {
-        case EState::CreateTable:
+        case EState::CreateSchemeObject:
             if (IsCreatedByQuery(item)) {
                 item.State = EState::Done;
                 break;

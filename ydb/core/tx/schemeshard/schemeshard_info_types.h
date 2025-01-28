@@ -2825,7 +2825,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         Invalid = 0,
         Waiting,
         GetScheme,
-        CreateTable,
+        CreateSchemeObject,
         Transferring,
         BuildIndexes,
         Done = 240,

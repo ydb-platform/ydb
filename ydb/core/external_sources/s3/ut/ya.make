@@ -52,7 +52,9 @@ IF (OPENSOURCE)
 ENDIF()
 
 SRCS(
+    common.cpp
     s3_aws_credentials_ut.cpp
+    s3_insert_ut.cpp
 )
 
 PEERDIR(

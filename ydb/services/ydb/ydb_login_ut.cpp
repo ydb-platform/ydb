@@ -93,7 +93,7 @@ public:
         }
     }
 
-    TString CreateUserAndGetToken(const TString& user, const TString& password) {
+    TString GetToken(const TString& user, const TString& password) {
         auto factory = CreateLoginCredentialsProviderFactory({.User = user, .Password = password});
         auto loginProvider = factory->CreateProvider(this->GetCoreFacility());
         TString token;
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         loginConnection.CreateUser(User, Password);
         loginConnection.ModifyACL(true, User, NACLib::EAccessRights::ConnectDatabase | NACLib::EAccessRights::DescribeSchema);
 
-        auto token = loginConnection.CreateUserAndGetToken(User, Password);
+        auto token = loginConnection.GetToken(User, Password);
 
         loginConnection.TestConnectRight(token, "");
         loginConnection.TestDescribeRight(token, "");
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         TLoginClientConnection loginConnection;
         loginConnection.CreateUser(User, Password);
 
-        auto token = loginConnection.CreateUserAndGetToken(User, Password);
+        auto token = loginConnection.GetToken(User, Password);
         
         loginConnection.TestConnectRight(token, "No permission to connect to the database");
 
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         loginConnection.CreateUser(User, Password);
         loginConnection.ModifyACL(true, User, NACLib::EAccessRights::ConnectDatabase);
 
-        auto token = loginConnection.CreateUserAndGetToken(User, Password);
+        auto token = loginConnection.GetToken(User, Password);
         
         loginConnection.TestConnectRight(token, "");
         loginConnection.TestDescribeRight(token, "Access denied");
@@ -214,13 +214,17 @@ Y_UNIT_TEST_SUITE(TAuthenticationWithSqlExecution) {
         loginConnection.CreateUser(adminName, adminPassword);
         loginConnection.ModifyACL(true, adminName, NACLib::EAccessRights::GenericFull);
 
-        auto token = loginConnection.CreateUserAndGetToken(adminName, adminPassword);
+        auto adminToken = loginConnection.GetToken(adminName, adminPassword);
 
         auto query = std::format("CREATE USER {0:}; ALTER USER {0:} HASH '{1:}';", user, hash);
-        auto result = loginConnection.ExecuteSql(token, TString(query));
+        auto result = loginConnection.ExecuteSql(adminToken, TString(query));
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        loginConnection.TestConnectRight(token, "");
+        loginConnection.ModifyACL(true, TString(user), NACLib::EAccessRights::ConnectDatabase);
+        auto userToken = loginConnection.GetToken(TString(user), TString(password));
+        loginConnection.TestConnectRight(userToken, "");
+
+        loginConnection.Stop();
     }
 }
 

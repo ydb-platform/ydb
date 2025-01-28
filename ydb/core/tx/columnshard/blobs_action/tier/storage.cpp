@@ -59,7 +59,10 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
     NWrappers::NExternalStorage::IExternalStorageOperator::TPtr extStorageOperator;
     std::optional<NKikimrSchemeOp::TS3Settings> settings;
 
-    if (tierManager && tierManager->IsReady()) {
+    if (auto op = NYDBTest::TControllers::GetColumnShardController()->GetStorageOperatorOverride(GetStorageId())) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "override_external_operator")("storage", GetStorageId());
+        extStorageOperator = op;
+    } else if (tierManager && tierManager->IsReady()) {
         settings = tierManager->GetS3Settings();
         {
             TGuard<TSpinLock> changeLock(ChangeOperatorLock);

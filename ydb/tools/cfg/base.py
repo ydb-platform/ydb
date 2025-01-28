@@ -370,6 +370,10 @@ class ClusterDetailsProvider(object):
         return self.__cluster_description.get("security_settings", {})
 
     @property
+    def security_config(self):
+        return self.__cluster_description.get("security_config", {})
+
+    @property
     def forbid_implicit_storage_pools(self):
         return self.__cluster_description.get("forbid_implicit_storage_pools", False)
 
@@ -623,6 +627,16 @@ class ClusterDetailsProvider(object):
                 )
             )
         return domains
+
+    @property
+    def domains_config(self):
+        domains_config_dict = self.__cluster_description.get("domains_config", {})
+        if domains_config_dict == {}:
+            return None
+
+        domains_config = config_pb2.TDomainsConfig()
+        utils.wrap_parse_dict(domains_config_dict, domains_config)
+        return domains_config
 
     @staticmethod
     def _get_domain_tenants(domain_description):

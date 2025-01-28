@@ -1001,13 +1001,32 @@ class StaticConfigGenerator(object):
 
         return min(5, n_to_select_candidate)
 
-    def __configure_security_settings(self, domains_config):
-        utils.apply_config_changes(
-            domains_config.SecurityConfig,
-            self.__cluster_details.security_settings,
-        )
+    def __configure_security_config(self, domains_config):
+        if self.__cluster_details.security_config != {}:  # consistent with `config.yaml`
+            utils.apply_config_changes(
+                domains_config.SecurityConfig,
+                self.__cluster_details.security_config,
+            )
+        else:
+            utils.apply_config_changes(  # backward compatibility for old templates
+                domains_config.SecurityConfig,
+                self.__cluster_details.security_settings,
+            )
 
     def __generate_domains_txt(self):
+        domains_config = self.__cluster_details.domains_config
+        if domains_config is None:
+            self.__generate_domains_from_old_domains_key()
+        else:
+            self.__generate_domains_from_proto(domains_config)
+
+    def __generate_domains_from_proto(self, domains_config):
+        self.__configure_security_config(domains_config)
+        if self.__cluster_details.forbid_implicit_storage_pools:
+            domains_config.ForbidImplicitStoragePools = True
+        self.__proto_configs["domains.txt"] = domains_config
+
+    def __generate_domains_from_old_domains_key(self):
         self.__proto_configs["domains.txt"] = config_pb2.TDomainsConfig()
 
         domains_config = self.__proto_configs["domains.txt"]
@@ -1015,7 +1034,7 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.forbid_implicit_storage_pools:
             domains_config.ForbidImplicitStoragePools = True
 
-        self.__configure_security_settings(domains_config)
+        self.__configure_security_config(domains_config)
 
         tablet_types = self.__tablet_types
 

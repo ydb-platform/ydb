@@ -18,8 +18,6 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-const char* VersionResourceName = "version.txt";
-
 TString GetOsArchitecture() {
 #if defined(_win32_)
     return "amd64";

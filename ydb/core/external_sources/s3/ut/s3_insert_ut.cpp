@@ -62,6 +62,7 @@ Y_UNIT_TEST_SUITE(S3Inset) {
 
         {
             auto scriptExecutionOperation = db.ExecuteScript(fmt::format(R"(
+                PRAGMA s3.AtomicUploadCommit = "true";
                 INSERT INTO `{external_source}`.`{path}/` WITH (FORMAT = "csv_with_names")
                 SELECT * FROM `{external_source}`.`/a/` WITH (
                     format="json_each_row",

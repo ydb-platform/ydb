@@ -83,7 +83,7 @@ Detailed configuration parameters are described on the [{#T}](../../reference/co
 
 By default, the cluster configuration is assigned version 1. When applying a new configuration, the system compares the uploaded configuration's version with the value specified in the YAML file. If the versions match, the current version number is automatically incremented by one.
 
-Below is a more comprehensive example of a dynamic configuration that defines typical global parameters, as well as parameters specific to a particular database:
+Below is a more comprehensive example of a dynamic configuration that defines typical global parameters as well as parameters specific to a particular database:
 
 ```yaml
 ---

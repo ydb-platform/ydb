@@ -5,15 +5,15 @@
     ```
 2) build library
     ```
-    ./ya make -r /ydb/tests/stability/library
+    ./ya make -r /ydb/tests/stability/tool
     ```
 3) deploy ydb
     ```
-    cd ydb/tests/stability/library; ./library deploy_ydb --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+    cd ydb/tests/stability/tool; ./tool deploy_ydb --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
     ```
 4) deploy tools 
     ```
-    ./library deploy_tools --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+    ./tool deploy_tools --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
     ```
 5) start workload:
     - `start_all_workloads` - start all listed below workloads 
@@ -25,7 +25,7 @@
     - `start_workload_log`
 
     ```
-    ./library start_all_workloads --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+    ./tool start_all_workloads --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
     ```
     to stop workload, use command `stop_workloads`
     
@@ -39,13 +39,13 @@
 
 6) start nemesis:
     ```
-    ./library start_nemesis --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+    ./tool start_nemesis --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
     ```
     to stop, use the command `stop_nemesis`
 
 7) check states of workloads and nemesis
     ```
-    ./library get_state --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+    ./tool get_state --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
     ```
     
 8) check cluster stability
@@ -62,11 +62,11 @@
         ```
         to run:
         ```
-        ./library perform_checks --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+        ./tool perform_checks --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
         ``` 
     2) get unique traces
 
         ```
-         ./library get_errors --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+         ./tool get_errors --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
         ```
 9) create issue in github about new traces

@@ -237,7 +237,7 @@ class StabilityCluster:
         print("SAFETY WARDEN:")
         for i, violation in enumerate(safety_violations):
             print("[{}]".format(i))
-            print(violation.replace('\n\n','\n'))
+            print(violation.replace('\n\n', '\n'))
 
         print("LIVENESS WARDEN:")
         for i, violation in enumerate(liveness_violations):
@@ -445,8 +445,7 @@ def main():
             elif action == 'start_workload_log_row':
                 store_type_list.append('row')
             else:
-                store_type_list = ['column','row']
-            
+                store_type_list = ['column', 'row']
             first_node = stability_cluster.kikimr_cluster.nodes[1]
             for store_type in store_type_list:
                 first_node.ssh_command([

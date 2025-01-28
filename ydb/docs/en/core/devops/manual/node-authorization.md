@@ -84,3 +84,9 @@ To enable mandatory database node authorization, add the following configuration
     ```
 
     For more detailed information on configuring cluster authentication parameters, see the [relevant documentation section](../../reference/configuration/index.md#security-access-levels).
+
+1. Deploy the static configuration files on all cluster nodes either manually, or [using the Ansible playbook action](../ansible/update-config.md).
+
+1. Perform the rolling restart of storage nodes by [using ydbops](../../reference/ydbops/scenarios.md) or [Ansible playbook action](../ansible/restart.md).
+
+1. Perform the rolling restart of database nodes through ydbops or Ansible playbooks.

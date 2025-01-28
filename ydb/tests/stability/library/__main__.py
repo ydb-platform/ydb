@@ -227,7 +227,7 @@ class StabilityCluster:
 
     def perform_checks(self):
 
-        safety_violations = safety_warden_factory(self.kikimr_cluster, self.ssh_username).list_of_safety_violations()
+        safety_violations = safety_warden_factory(self.kikimr_cluster, self.ssh_username, lines_after=20, cut=False).list_of_safety_violations()
         liveness_violations = liveness_warden_factory(self.kikimr_cluster, self.ssh_username).list_of_liveness_violations
         coredumps_search_results = {}
         for node in self.kikimr_cluster.nodes.values():
@@ -237,14 +237,12 @@ class StabilityCluster:
         print("SAFETY WARDEN:")
         for i, violation in enumerate(safety_violations):
             print("[{}]".format(i))
-            print(violation)
-            print()
+            print(violation.replace('\n\n','\n'))
 
         print("LIVENESS WARDEN:")
         for i, violation in enumerate(liveness_violations):
             print("[{}]".format(i))
             print(violation)
-            print()
 
         print("SAFETY WARDEN (total: {})".format(len(safety_violations)))
         print("LIVENESS WARDEN (total: {})".format(len(liveness_violations)))
@@ -391,6 +389,8 @@ def parse_args():
             "start_workload_simple_queue_column",
             "start_workload_olap_workload",
             "start_workload_log",
+            "start_workload_log_column",
+            "start_workload_log_row",
             "stop_workloads",
             "perform_checks",
         ],
@@ -426,27 +426,27 @@ def main():
         if action == "start_all_workloads":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(
-                    'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
+                    'screen -s simple_queue_row -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
                     raise_on_error=True
                 )
                 node.ssh_command(
-                    'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
+                    'screen -s simple_queue_column -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
                     raise_on_error=True
                 )
                 node.ssh_command(
-                    'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
+                    'screen -s olap_workload -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()
-        if action == "start_workload_simple_queue_row":
-            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
-                node.ssh_command(
-                    'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
-                    raise_on_error=True
-                )
-            stability_cluster.get_state()
-        if action == "start_workload_log":
-            store_type_list = ['column']
+        if "start_workload_log" in action:
+            store_type_list = []
+            if action == 'start_workload_log_column':
+                store_type_list.append('column')
+            elif action == 'start_workload_log_row':
+                store_type_list.append('row')
+            else:
+                store_type_list = ['column','row']
+            
             first_node = stability_cluster.kikimr_cluster.nodes[1]
             for store_type in store_type_list:
                 first_node.ssh_command([
@@ -485,7 +485,7 @@ def main():
                         '--len', '1000',
                         '--int-cols', '20',
                         '--key-cols', '20',
-                        '--threads', '2000',
+                        '--threads', '20',
                         '--timestamp_deviation', '180',
                         '--seconds', '86400',
                         '--path', f'log_workload_{store_type}',
@@ -494,17 +494,24 @@ def main():
                         raise_on_error=True
                     )
             stability_cluster.get_state()
+        if action == "start_workload_simple_queue_row":
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                node.ssh_command(
+                    'screen -s simple_queue_row -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
+                    raise_on_error=True
+                )
+            stability_cluster.get_state()
         if action == "start_workload_simple_queue_column":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(
-                    'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
+                    'screen -s simple_queue_column -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()
         if action == "start_workload_olap_workload":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(
-                    'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
+                    'screen -s olap_workload -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
                     raise_on_error=True
                 )
 

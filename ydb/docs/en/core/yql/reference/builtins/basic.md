@@ -590,7 +590,30 @@ SELECT Way($vr);  -- 0
 SELECT Way($vrs); -- "a"
 ```
 
+## DynamicVariant {#dynamic_variant}
 
+Creates a homogeneous variant instance (i.e. containing fields/elements of the same type), where the variant index or field can be set dynamically. If the index or field name does not exist, `NULL` will be returned.
+The inverse function is [VariantItem](#variantitem).
+
+### Signature
+
+```yql
+DynamicVariant(item:T,index:Uint32?,Variant<T, T, ...>)->Optional<Variant<T, T, ...>>
+DynamicVariant(item:T,index:Utf8?,Variant<key1: T, key2: T, ...>)->Optional<Variant<key1: T, key2: T, ...>>
+```
+
+### Example
+
+```yql
+$dt = Int32;
+$tvt = Variant<$dt,$dt>;
+SELECT ListMap([(10,0u),(20,2u),(30,NULL)],($x)->(DynamicVariant($x.0,$x.1,$tvt))); -- [0: 10,NULL,NULL]
+
+$dt = Int32;
+$svt = Variant<x:$dt,y:$dt>;
+SELECT ListMap([(10,'x'u),(20,'z'u),(30,NULL)],($x)->(DynamicVariant($x.0,$x.1,$svt))); -- [x: 10,NULL,NULL]
+
+```
 
 ## Enum {#enum}
 
@@ -648,7 +671,7 @@ Examples of use cases:
 
 {% if feature_bulk_tables %}
 
-  ## TablePath {#tablepath}
+## TablePath {#tablepath}
 
 Access to the current table name, which might be needed when you use [CONCAT](../syntax/select/concat.md#concat), [RANGE](../syntax/select/concat.md#range), and other related functions.
 
@@ -723,7 +746,7 @@ SELECT TableRow() FROM my_table;
 
 {% if feature_mapreduce %}
 
-  ## FileContent and FilePath {#file-content-path}
+## FileContent and FilePath {#file-content-path}
 
 Both the [console](../interfaces/cli.md) and [web](../interfaces/web.md) interfaces let you "attach" arbitrary named files to your query. With these functions, you can use the name of the attached file to get its contents or the path in the sandbox, and then use it as you like in the query.
 
@@ -787,7 +810,7 @@ WHERE int_column IN ParseFile("Int64", "my_file.txt");
 
 
 
-  ## WeakField {#weakfield}
+## WeakField {#weakfield}
 
 Fetches a table column from a strong schema, if it is in a strong schema, or from the `_other` and `_rest` fields. If the value is missing, it returns `NULL`.
 
@@ -860,7 +883,7 @@ SELECT EnsureConvertibleTo(
 
 {% if feature_codegen %}
 
-  ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
+## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
 
 Evaluate an expression before the start of the main calculation and input its result to the query as a literal (constant). In many contexts, where only a constant would be expected in standard SQL (for example, in table names, in the number of rows in [LIMIT](../syntax/select/limit_offset.md), and so on), this functionality is implicitly enabled automatically.
 
@@ -951,7 +974,7 @@ SELECT
 
 {% if feature_webui %}
 
-  ## Access to the metadata of the current operation {#metadata}
+## Access to the metadata of the current operation {#metadata}
 
 When you run YQL operations via the web interface or HTTP API, you get access to the following data:
 
@@ -1302,7 +1325,7 @@ SELECT AggregateBy(x, $j) from (
 
 {% if tech %}
 
-  ## YQL::, s-expressions {#s-expressions}
+## YQL::, s-expressions {#s-expressions}
 
 For the full list of internal YQL functions, see the [documentation for s-expressions](/docs/s_expressions/functions), an alternative low-level YQL syntax. Any of the functions listed there can also be called from the SQL syntax by adding the `YQL::` prefix to its name. However, we don't recommend doing this, because this mechanism is primarily intended to temporarily bypass possible issues and for internal testing purposes.
 

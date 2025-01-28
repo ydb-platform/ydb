@@ -739,6 +739,30 @@ SELECT Way($vrs); -- "a"
 
 ```
 
+## DynamicVariant {#dynamic_variant}
+
+Создает экзмепляр гомогенного варианта (т.е. содержащего поля/элементы одного типа), причем индекс или поле варианта можно задавать динамически. При несуществующем индексе или имени поля будет возвращен `NULL`.
+Обратная функция - [VariantItem](#variantitem).
+
+### Сигнатура
+
+```yql
+DynamicVariant(item:T,index:Uint32?,Variant<T, T, ...>)->Optional<Variant<T, T, ...>>
+DynamicVariant(item:T,index:Utf8?,Variant<key1: T, key2: T, ...>)->Optional<Variant<key1: T, key2: T, ...>>
+```
+
+### Пример
+
+```yql
+$dt = Int32;
+$tvt = Variant<$dt,$dt>;
+SELECT ListMap([(10,0u),(20,2u),(30,NULL)],($x)->(DynamicVariant($x.0,$x.1,$tvt))); -- [0: 10,NULL,NULL]
+
+$dt = Int32;
+$svt = Variant<x:$dt,y:$dt>;
+SELECT ListMap([(10,'x'u),(20,'z'u),(30,NULL)],($x)->(DynamicVariant($x.0,$x.1,$svt))); -- [x: 10,NULL,NULL]
+
+```
 
 ## Enum {#enum}
 
@@ -921,7 +945,7 @@ SELECT TableRow() FROM my_table;
 
 {% if feature_mapreduce %}
 
-  ## FileContent и FilePath {#file-content-path}
+## FileContent и FilePath {#file-content-path}
 
 {% if oss != true %}
 
@@ -1006,7 +1030,7 @@ WHERE int_column IN ParseFile("Int64", "my_file.txt");
 ```
 
 
-  ## WeakField {#weakfield}
+## WeakField {#weakfield}
 
 Вытаскивает колонку таблицы из строгой схемы, если оно там есть, либо из полей `_other` и `_rest`. В случае отсутствия значения возвращается `NULL`.
 
@@ -1132,7 +1156,7 @@ WHERE Likely(a.amount > 0)  -- почти всегда верно
 
 {% if feature_codegen %}
 
-  ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
+## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
 
 Возможность выполнить выражение до начала основного расчета и подставить его результат в запрос как литерал (константу). Во многих контекстах, где в стандартном SQL ожидалась бы только константа (например, в именах таблиц, количестве строк в [LIMIT](../syntax/select/limit_offset.md) и т.п.) этот функционал активируется неявным образом автоматически.
 
@@ -1220,7 +1244,7 @@ SELECT
 
 {% if feature_webui %}
 
-  ## Доступ к метаданным текущей операции {#metadata}
+## Доступ к метаданным текущей операции {#metadata}
 
 При запуске YQL операций через веб-интерфейс или HTTP API, предоставляется доступ к следующей информации:
 
@@ -1657,7 +1681,7 @@ SELECT AggregateBy(x, $j) from (
 
 {% if tech %}
 
-  ## YQL::, s-expressions {#s-expressions}
+## YQL::, s-expressions {#s-expressions}
 
 Полный список внутренних функций YQL находится в [документации к s-expressions](/docs/s_expressions/functions), альтернативному низкоуровневому синтаксису YQL. Любую из перечисленных там функций можно вызвать и из SQL синтаксиса, добавив к её имени префикс `YQL::`, но это не рекомендуется делать, т.к. данный механизм предназначен в первую очередь для временного обхода возможных проблем, а также для нужд внутреннего тестирования.
 

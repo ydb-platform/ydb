@@ -109,6 +109,7 @@ class StaticConfigGenerator(object):
             "failure_injection.txt": None,
             "pdisk_key.txt": None,
             "immediate_controls_config.txt": None,
+            "cms_config.txt": None,
         }
         self.__optional_config_files = set(
             (
@@ -126,7 +127,6 @@ class StaticConfigGenerator(object):
             self.__tracing = tracing
         else:
             self.__tracing = None
-        self.__write_mbus_settings_to_kikimr_cfg = False
 
     @property
     def auth_txt(self):
@@ -223,10 +223,6 @@ class StaticConfigGenerator(object):
         return self.__proto_config("sqs.txt", config_pb2.TSqsConfig, self.__cluster_details.get_service("sqs"))
 
     @property
-    def cms_txt(self):
-        return self.__proto_config("cms.txt", cms_pb2.TCmsConfig, self.__cluster_details.get_service("cms"))
-
-    @property
     def rb_txt(self):
         return self.__proto_config(
             "rb.txt", resource_broker_pb2.TResourceBrokerConfig, self.__cluster_details.get_service("resource_broker")
@@ -275,6 +271,20 @@ class StaticConfigGenerator(object):
     @property
     def immediate_controls_config_txt_enabled(self):
         return self.__proto_config("immediate_controls_config.txt").ByteSize() > 0
+
+    # Old `template.yaml` CMS style
+    @property
+    def cms_txt(self):
+        return self.__proto_config("cms.txt", cms_pb2.TCmsConfig, self.__cluster_details.get_service("cms"))
+
+    # New `config.yaml` CMS style
+    @property
+    def cms_config_txt(self):
+        return self.__proto_config("cms_config.txt", cms_pb2.TCmsConfig, self.__cluster_details.cms_config)
+
+    @property
+    def cms_config_txt_enabled(self):
+        return self.__proto_config("cms_config.txt").ByteSize() > 0
 
     @property
     def mbus_enabled(self):
@@ -655,6 +665,8 @@ class StaticConfigGenerator(object):
             app_config.PDiskKeyConfig.CopyFrom(self.pdisk_key_txt)
         if self.immediate_controls_config_txt_enabled:
             app_config.ImmediateControlsConfig.CopyFrom(self.immediate_controls_config_txt)
+        if self.cms_config_txt_enabled:
+            app_config.CmsConfig.CopyFrom(self.cms_config_txt)
         return app_config
 
     def __proto_config(self, config_file, config_class=None, cluster_details_for_field=None):

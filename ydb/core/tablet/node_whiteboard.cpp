@@ -681,6 +681,8 @@ protected:
         // Note: copy stats to sys info fields for backward compatibility
         if (memoryStats.HasAnonRss()) {
             SystemStateInfo.SetMemoryUsed(memoryStats.GetAnonRss());
+        } else if (memoryStats.HasAllocatedMemory()) {
+            SystemStateInfo.SetMemoryUsed(memoryStats.GetAllocatedMemory());
         } else {
             SystemStateInfo.ClearMemoryUsed();
         }

@@ -17,6 +17,7 @@ private:
     YDB_READONLY(TMonotonic, CreateInstant, TMonotonic::Now());
     YDB_READONLY_DEF(std::shared_ptr<TTaskSignals>, TaskSignals);
     std::optional<TMonotonic> StartInstant;
+    YDB_READONLY(ui64, ProcessId, 0);
 public:
     void OnBeforeStart() {
         StartInstant = TMonotonic::Now();
@@ -27,9 +28,10 @@ public:
         return *StartInstant;
     }
 
-    TWorkerTask(ITask::TPtr task, std::shared_ptr<TTaskSignals> taskSignals)
+    TWorkerTask(const ITask::TPtr& task, const std::shared_ptr<TTaskSignals>& taskSignals, const ui64 processId)
         : Task(task)
         , TaskSignals(taskSignals)
+        , ProcessId(processId)
     {
         Y_ABORT_UNLESS(task);
     }
@@ -68,9 +70,12 @@ struct TEvInternal {
     private:
         using TBase = TConclusion<ITask::TPtr>;
         YDB_READONLY_DEF(TMonotonic, StartInstant);
+        YDB_READONLY(ui64, ProcessId, 0);
     public:
         TEvTaskProcessedResult(const TWorkerTask& originalTask)
-            : StartInstant(originalTask.GetStartInstant()) {
+            : StartInstant(originalTask.GetStartInstant())
+            , ProcessId(originalTask.GetProcessId())
+        {
 
         }
     };

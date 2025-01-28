@@ -166,7 +166,7 @@ public:
         bool IsEnabled;
         std::unordered_set<TString> Members;
         std::chrono::system_clock::time_point CreatedAt;
-        size_t FailedLoginAttemptCount = 0;
+        ui32 FailedLoginAttemptCount = 0;
         std::chrono::system_clock::time_point LastFailedLogin;
         std::chrono::system_clock::time_point LastSuccessfulLogin;
     };
@@ -188,6 +188,7 @@ public:
     NLoginProto::TSecurityState GetSecurityState() const;
     void UpdateSecurityState(const NLoginProto::TSecurityState& state);
 
+    bool IsLockedOut(const TSidRecord& user) const;
     TCheckLockOutResponse CheckLockOutUser(const TCheckLockOutRequest& request);
     TLoginUserResponse LoginUser(const TLoginUserRequest& request);
     TValidateTokenResponse ValidateToken(const TValidateTokenRequest& request);

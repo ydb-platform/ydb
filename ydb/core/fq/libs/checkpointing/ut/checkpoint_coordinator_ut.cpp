@@ -423,7 +423,6 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
             ExpectEvent(StorageProxy, 
                TEvCheckpointStorage::TEvAbortCheckpointRequest( CoordinatorId, checkpointId, "Can't save node state"));
             MockAbortCheckpointResponse(checkpointId);
-            MockRunGraph();
         }
 
         void ScheduleCheckpointing() {

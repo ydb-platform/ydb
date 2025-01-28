@@ -27,7 +27,7 @@ public:
             const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = context.SS->GetDomainsConfig().GetSecurityConfig();
             const NKikimrSchemeOp::TAlterLogin& alterLogin = Transaction.GetAlterLogin();
 
-            TParts additionalParts;
+            TAuditLogParts auditLogParts;
 
             switch (alterLogin.GetAlterCase()) {
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
@@ -60,7 +60,7 @@ public:
                         }
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
-                        AddIsUserAdmin(createUser.GetUser(), context.SS->LoginProvider, additionalParts);
+                        AddAuditLogIsUserAdminPart(createUser.GetUser(), context.SS->LoginProvider, auditLogParts);
                     }
                     break;
                 }
@@ -89,8 +89,8 @@ public:
                                                                            Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, sid.IsEnabled);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
-                        AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);
-                        AddLastSuccessfulLogin(sid, additionalParts);
+                        AddAuditLogIsUserAdminPart(modifyUser.GetUser(), context.SS->LoginProvider, auditLogParts);
+                        AddAuditLogLastSuccessfulLoginPart(sid, auditLogParts);
                     }
                     break;
                 }
@@ -99,7 +99,7 @@ public:
 
                     auto sid = context.SS->LoginProvider.Sids.find(removeUser.GetUser());
                     if (context.SS->LoginProvider.Sids.end() != sid) {
-                        AddLastSuccessfulLogin(sid->second, additionalParts);
+                        AddAuditLogLastSuccessfulLoginPart(sid->second, auditLogParts);
                     }
 
                     auto response = RemoveUser(context, removeUser, db);
@@ -108,7 +108,7 @@ public:
                     } else {
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
-                        AddIsUserAdmin(removeUser.GetUser(), context.SS->LoginProvider, additionalParts);
+                        AddAuditLogIsUserAdminPart(removeUser.GetUser(), context.SS->LoginProvider, auditLogParts);
                     }
                     break;
                 }
@@ -203,7 +203,7 @@ public:
             }
             const auto status = result->Record.GetStatus();
             const auto reason = result->Record.HasReason() ? result->Record.GetReason() : TString();
-            AuditLogModifySchemeOperation(Transaction, status, reason, context.SS, context.PeerName, userSID, sanitizedToken, ui64(txId), additionalParts);
+            AuditLogModifySchemeOperation(Transaction, status, reason, context.SS, context.PeerName, userSID, sanitizedToken, ui64(txId), auditLogParts);
         }
 
         if (result->Record.GetStatus() == NKikimrScheme::StatusSuccess) {
@@ -305,7 +305,7 @@ public:
         return {}; // success
     }
 
-    void AddIsUserAdmin(const TString& user, NLogin::TLoginProvider& loginProvider, TParts& additionalParts) {
+    void AddAuditLogIsUserAdminPart(const TString& user, NLogin::TLoginProvider& loginProvider, TAuditLogParts& auditLogParts) {
         const auto& adminSids = AppData()->AdministrationAllowedSIDs;
         bool isAdmin = adminSids.empty();
         if (!isAdmin) {
@@ -319,15 +319,15 @@ public:
         }
 
         if (isAdmin) {
-            additionalParts.emplace_back("login_user_level", "admin");
+            auditLogParts.emplace_back("login_user_level", "admin");
         }
     }
 
-    void AddLastSuccessfulLogin(NLogin::TLoginProvider::TSidRecord& sid, TParts& additionalParts) {
+    void AddAuditLogLastSuccessfulLoginPart(NLogin::TLoginProvider::TSidRecord& sid, TAuditLogParts& auditLogParts) {
         const auto duration = sid.LastSuccessfulLogin.time_since_epoch();
         const auto time = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
         if (time) {
-            additionalParts.emplace_back("last_login", TInstant::MicroSeconds(time).ToString());
+            auditLogParts.emplace_back("last_login", TInstant::MicroSeconds(time).ToString());
         }
     }
 };

@@ -434,8 +434,8 @@ void TPathElement::SetAsyncReplica(bool value) {
     IsAsyncReplica = value;
 }
 
-void TPathElement::SetRestoreTable() {
-    IsRestoreTable = true;
+void TPathElement::SetIncrementalRestoreTable() {
+    IsIncrementalRestoreTable = true;
 }
 
 bool TPathElement::HasRuntimeAttrs() const {

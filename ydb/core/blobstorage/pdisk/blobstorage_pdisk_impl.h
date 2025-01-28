@@ -157,7 +157,7 @@ public:
     };
     EShredState ShredState = EShredStateDefault;
     ui64 ShredGeneration = 0;
-    std::deque<TActorId> ShredRequesters;
+    std::deque<std::tuple<TActorId, ui64>> ShredRequesters;
 
     // Chunks that are owned by killed owner, but have operations InFlight
     TVector<TChunkIdx> QuarantineChunks;

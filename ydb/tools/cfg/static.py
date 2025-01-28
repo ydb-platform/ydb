@@ -1021,17 +1021,12 @@ class StaticConfigGenerator(object):
 
     def __generate_domains_from_proto(self, domains_config):
         self.__configure_security_config(domains_config)
-        if self.__cluster_details.forbid_implicit_storage_pools:
-            domains_config.ForbidImplicitStoragePools = True
         self.__proto_configs["domains.txt"] = domains_config
 
     def __generate_domains_from_old_domains_key(self):
         self.__proto_configs["domains.txt"] = config_pb2.TDomainsConfig()
 
         domains_config = self.__proto_configs["domains.txt"]
-
-        if self.__cluster_details.forbid_implicit_storage_pools:
-            domains_config.ForbidImplicitStoragePools = True
 
         self.__configure_security_config(domains_config)
 

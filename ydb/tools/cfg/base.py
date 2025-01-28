@@ -369,10 +369,6 @@ class ClusterDetailsProvider(object):
     def security_config(self):
         return self.__cluster_description.get("security_config", {})
 
-    @property
-    def forbid_implicit_storage_pools(self):
-        return self.__cluster_description.get("forbid_implicit_storage_pools", False)
-
     def _get_datacenter(self, host_description):
         if host_description.get("datacenter") is not None:
             return str(host_description.get("datacenter"))

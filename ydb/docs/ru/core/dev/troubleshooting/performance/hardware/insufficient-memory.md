@@ -26,8 +26,10 @@
 
         Ищите подобные строки:
 
-            [ 2203.393223] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=user.slice,mems_allowed=0,global_oom,task_memcg=/user.slice/user-1000.slice/session-1.scope,task=ydb,pid=1332,uid=1000
-            [ 2203.393263] Out of memory: Killed process 1332 (ydb) total-vm:14219904kB, anon-rss:1771156kB, file-rss:0kB, shmem-rss:0kB, UID:1000 pgtables:4736kB oom_score_adj:0
+        ```plaintext
+        [ 2203.393223] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=user.slice,mems_allowed=0,global_oom,task_memcg=/user.slice/user-1000.slice/session-1.scope,task=ydb,pid=1332,uid=1000
+        [ 2203.393263] Out of memory: Killed process 1332 (ydb) total-vm:14219904kB, anon-rss:1771156kB, file-rss:0kB, shmem-rss:0kB, UID:1000 pgtables:4736kB oom_score_adj:0
+        ```
 
     Кроме того, изучите логи `ydbd` для получения более подробной информации.
 

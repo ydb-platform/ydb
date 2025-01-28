@@ -1269,7 +1269,7 @@ void TSchemeShard::DescribeTable(
     }
 
     entry->SetIsBackup(tableInfo->IsBackup);
-    entry->SetIsRestore(tableInfo.IsRestore);
+    entry->SetIsRestore(tableInfo->IsRestore);
 }
 
 void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name,

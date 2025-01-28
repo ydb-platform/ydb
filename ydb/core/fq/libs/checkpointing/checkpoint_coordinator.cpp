@@ -386,13 +386,17 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
     const auto& issues = ev->Get()->Issues;
     CC_LOG_D("[" << checkpointId << "] Got TEvCreateCheckpointResponse");
 
-    if (issues) {
-        CC_LOG_E("[" << checkpointId << "] StorageError: can't create checkpoint: " << issues.ToOneLineString());
+    auto cancelCheckpoint = [&](const TString& str) {
+        CC_LOG_E("[" << checkpointId << "] " << str);
         PendingCheckpoints.erase(checkpointId);
         UpdateInProgressMetric();
         ++*Metrics.FailedToCreate;
         ++*Metrics.StorageError;
         CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod; // Next checkpoint is snapshot.
+    };
+
+    if (issues) {
+        cancelCheckpoint("StorageError: can't create checkpoint: " + issues.ToOneLineString());
         return;
     }
 
@@ -400,7 +404,10 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
         Y_ABORT_UNLESS(GraphDescId == ev->Get()->GraphDescId);
     } else {
         GraphDescId = ev->Get()->GraphDescId;
-        Y_ABORT_UNLESS(GraphDescId);
+        if (!GraphDescId) {
+            cancelCheckpoint("StorageError (internal error), empty GraphDescId");
+            return;
+        }
     }
 
     if (PendingInit) {

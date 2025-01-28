@@ -3609,6 +3609,7 @@
                 "ColumnId": 13,
                 "ColumnName": "OwnerActorId",
                 "ColumnType": "String"
+            },
             {
                 "ColumnId": 15,
                 "ColumnName": "IsRestore",

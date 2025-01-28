@@ -3305,6 +3305,7 @@ message TRspGetQueryResult
     optional TTableSchema schema = 4;
     required NYT.NChunkClient.NProto.TDataStatistics data_statistics = 5;
     required bool is_truncated = 6;
+    optional bytes full_result = 7; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////

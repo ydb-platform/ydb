@@ -2924,8 +2924,8 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
 
     CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
 
-    TVector<NTable::TSession> sessions;
-    TVector<NTable::TTransaction> transactions;
+    std::vector<NTable::TSession> sessions;
+    std::vector<NTable::TTransaction> transactions;
 
     // We open TXS_COUNT transactions and write messages to the topic.
     for (size_t i = 0; i < TXS_COUNT; ++i) {
@@ -2950,7 +2950,7 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
     }
 
     // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
-    TVector<NTable::TAsyncCommitTransactionResult> futures;
+    std::vector<NTable::TAsyncCommitTransactionResult> futures;
 
     for (size_t i = 0; i < TXS_COUNT; ++i) {
         futures.push_back(transactions[i].Commit());

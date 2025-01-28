@@ -1,6 +1,6 @@
 1. Используйте Встроенный UI или Grafana, чтобы проверить, не перегружены ли узлы {{ ydb-short-name }}:
 
-    - На панели мониторинга Grafana **[DB overview](../../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)**, проанализируйте диаграмму **Overloaded shard count**.
+    - На панели мониторинга Grafana **[DB overview](../../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** проанализируйте диаграмму **Overloaded shard count**.
 
         ![](../_assets/overloaded-shards-dashboard.png)
 
@@ -12,18 +12,17 @@
 
         {% endnote %}
 
-
     - Во [Встроенном UI](../../../../../reference/embedded-ui/index.md):
 
         1. Перейдите на вкладку **Databases** и выберите базу данных.
 
-        1. На вкладке **Navigation**, убедитесь, что база данных выбрана.
+        1. На вкладке **Navigation** убедитесь, что база данных выбрана.
 
         1. Откройте вкладку **Diagnostics**.
 
         1. Откройте вкладку **Top shards**.
 
-        1. На вкладках **Immediate** и **Historical**, отсортируйте таблетки по колонке **CPUCores** и проанализируйте информацию.
+        1. На вкладках **Immediate** и **Historical** отсортируйте таблетки по колонке **CPUCores** и проанализируйте информацию.
 
         ![](../_assets/partitions-by-cpu.png)
 
@@ -35,7 +34,7 @@
 
         1. На вкладке **Databases** нажмите на базу данных.
 
-        1. На вкладке **Navigation**, выберите требуемую базу данных.
+        1. На вкладке **Navigation** выберите требуемую базу данных.
 
         1. Откройте вкладку **Diagnostics**.
 

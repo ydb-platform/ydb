@@ -1,6 +1,6 @@
-1. Откройте панель мониторига Grafana **[DB overview](../../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)**.
+1. Откройте панель мониторинга Grafana **[DB overview](../../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)**.
 
-1. В разделе **API details**, проверьте, есть ли всплески частоты запросов со статусом `OVERLOADED` на диаграмме **Soft errors (retriable)**.
+1. В разделе **API details** проверьте, есть ли всплески частоты запросов со статусом `OVERLOADED` на диаграмме **Soft errors (retriable)**.
 
     ![](../_assets/soft-errors.png)
 

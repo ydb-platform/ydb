@@ -868,7 +868,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 - C++
 
-  To write to a topic within a transaction it is necessary to pass a transaction object reference to the `Write` method of writing session.
+  To write to a topic within a transaction, it is necessary to pass a transaction object reference to the `Write` method of the writing session.
 
   ```c++
     auto tableSession = tableClient.GetSession().GetValueSync().GetSession();

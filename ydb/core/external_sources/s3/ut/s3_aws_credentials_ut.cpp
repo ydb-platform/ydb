@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
 
         auto db = kikimr->GetQueryClient();
 
-        // TODO: remove ';' from skip list
+        // TODO YQ-4059: remove ';' from skip list
         TString path = TStringBuilder() << "exp_folder/some_" << EscapeC(GetSymbolsString(' ', '~', "*?{}`;")) << "\\`";
 
         {

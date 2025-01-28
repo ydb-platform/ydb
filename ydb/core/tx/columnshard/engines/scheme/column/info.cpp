@@ -3,22 +3,6 @@
 
 namespace NKikimr::NOlap {
 
-NArrow::NTransformation::ITransformer::TPtr TSimpleColumnInfo::GetSaveTransformer() const {
-    NArrow::NTransformation::ITransformer::TPtr transformer;
-    if (DictionaryEncoding) {
-        transformer = DictionaryEncoding->BuildEncoder();
-    }
-    return transformer;
-}
-
-NArrow::NTransformation::ITransformer::TPtr TSimpleColumnInfo::GetLoadTransformer() const {
-    NArrow::NTransformation::ITransformer::TPtr transformer;
-    if (DictionaryEncoding) {
-        transformer = DictionaryEncoding->BuildDecoder();
-    }
-    return transformer;
-}
-
 TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo) {
     AFL_VERIFY(columnInfo.GetId() == ColumnId);
     if (columnInfo.HasSerializer()) {

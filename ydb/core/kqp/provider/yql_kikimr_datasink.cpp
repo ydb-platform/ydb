@@ -88,9 +88,17 @@ TCoLambda RewriteBatchFilter(const TCoLambda& node, const TKikimrTableDescriptio
 
     TExprNode::TPtr newFilter = ctx.ChangeChild(*filter, 0, ctx.NewCallable(pos, "And", {
         ctx.NewCallable(pos, "And", {
-            ctx.NewCallable(pos, ">=", {
-                primaryNodeMember,
-                beginNodeParams
+            ctx.NewCallable(pos, "Or", {
+                ctx.NewCallable(pos, "Parameter", {
+                    ctx.NewAtom(pos, "_kqp_batch_is_first_query"),
+                    ctx.NewCallable(pos, "DataType", {
+                        ctx.NewAtom(pos, "Bool")
+                    })
+                }),
+                ctx.NewCallable(pos, ">=", {
+                    primaryNodeMember,
+                    beginNodeParams
+                })
             }),
             ctx.NewCallable(pos, "<", {
                 primaryNodeMember,

@@ -534,7 +534,7 @@ Y_UNIT_TEST_SUITE(Login) {
         }
     }
 
-    Y_UNIT_TEST(CreateUserWithHash) {
+    Y_UNIT_TEST(CreateAlterUserWithHash) {
         TLoginProvider provider;
         provider.RotateKeys();
 
@@ -595,6 +595,52 @@ Y_UNIT_TEST_SUITE(Login) {
 
                 auto sids = provider.Sids;
                 UNIT_ASSERT(!sids.contains(user));
+            }
+        }
+
+        {
+            TString user = "user3";
+            TString tempPassword = "password0";
+            TString password = "password1";
+            TString hash = R"(
+                {
+                    "hash":"ZO37rNB37kP9hzmKRGfwc4aYrboDt4OBDsF1TBn5oLw=",
+                    "salt":"HTkpQjtVJgBoA0CZu+i3zg==",
+                    "type":"argon2id"
+                }
+            )";
+
+            {
+                TLoginProvider::TCreateUserRequest createRequest;
+                createRequest.User = user;
+                createRequest.Password = tempPassword;
+                auto createResponse = provider.CreateUser(createRequest);
+                UNIT_ASSERT(!createResponse.Error);
+            }
+
+            {
+                TLoginProvider::TModifyUserRequest alterRequest;
+                alterRequest.User = user;
+                alterRequest.Password = hash;
+                alterRequest.IsHashedPassword = true;
+                auto alterResponse = provider.ModifyUser(alterRequest);
+                UNIT_ASSERT(!alterResponse.Error);
+            }
+
+            {
+                TLoginProvider::TLoginUserRequest loginRequest;
+                loginRequest.User = user;
+                loginRequest.Password = password;
+                auto loginResponse = provider.LoginUser(loginRequest);
+                UNIT_ASSERT(!loginResponse.Error);
+            }
+
+            {
+                TLoginProvider::TLoginUserRequest loginRequest;
+                loginRequest.User = user;
+                loginRequest.Password = tempPassword;
+                auto loginResponse = provider.LoginUser(loginRequest);
+                UNIT_ASSERT_STRING_CONTAINS(loginResponse.Error, "Invalid password");
             }
         }
     }

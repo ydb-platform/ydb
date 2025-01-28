@@ -621,6 +621,8 @@ void TCheckpointCoordinator::Handle(NActors::TEvents::TEvPoison::TPtr& ev) {
 }
 
 void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&) {
+    Y_DEBUG_ABORT_UNLESS(InitingZeroCheckpoint);
+    Y_DEBUG_ABORT_UNLESS(!FailedZeroCheckpoint);
     InitingZeroCheckpoint = false;
     // TODO: run graph only now, not before zero checkpoint inited
 }

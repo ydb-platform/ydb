@@ -142,8 +142,14 @@ TString TAwsSignature::UriEncode(const TStringBuf input, bool encodeSlash, bool 
     TStringStream result;
     for (const char ch : input) {
         if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' ||
-            ch == '-' || ch == '~' || ch == '.' || (ch == '/' && !encodeSlash) || (ch == '%' && !encodePercent)) {
+            ch == '-' || ch == '~' || ch == '.' || (ch == '%' && !encodePercent)) {
             result << ch;
+        } else if (ch == '/') {
+            if (encodeSlash) {
+                result << "%2F";
+            } else {
+                result << ch;
+            }
         } else {
             result << "%" << HexEncode(&ch, 1);
         }

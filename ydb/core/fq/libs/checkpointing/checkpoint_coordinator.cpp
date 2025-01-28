@@ -390,6 +390,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
     if (issues) {
         CC_LOG_E("[" << checkpointId << "] StorageError: can't create checkpoint: " << issues.ToOneLineString());
         PendingCheckpoints.erase(checkpointId);
+        FailedZeroCheckpoint = InitingZeroCheckpoint;
         UpdateInProgressMetric();
         ++*Metrics.FailedToCreate;
         ++*Metrics.StorageError;
@@ -496,6 +497,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvSetCheckpoint
         CC_LOG_E("[" << checkpointId << "] StorageError: can't change checkpoint status to 'PendingCommit': " << issues.ToString());
         ++*Metrics.StorageError;
         PendingCheckpoints.erase(it);
+        FailedZeroCheckpoint = InitingZeroCheckpoint;
         return;
     }
 
@@ -573,6 +575,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvAbortCheckpoi
         ++*Metrics.Aborted;
     }
     PendingCheckpoints.erase(checkpointId);
+    FailedZeroCheckpoint = InitingZeroCheckpoint;
     PendingCommitCheckpoints.erase(checkpointId);
     UpdateInProgressMetric();
 }

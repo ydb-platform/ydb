@@ -9,8 +9,6 @@
 
 #include <yt/cpp/mapreduce/interface/io.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////

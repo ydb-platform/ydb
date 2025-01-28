@@ -40,6 +40,28 @@ public:
         return pingPromise;
     }
 
+    auto PingActorChain(const TActorChainPingSettings& settings) {
+        auto pingPromise = NewPromise<TActorChainPingResult>();
+        auto responseCb = [pingPromise] (Debug::ActorChainResponse*, TPlainStatus status) mutable {
+            TActorChainPingResult val(TStatus(std::move(status)));
+            pingPromise.SetValue(std::move(val));
+        };
+
+        Debug::ActorChainRequest request;
+        request.SetChainLength(settings.ChainLength_);
+        request.SetWorkUsec(settings.WorkUsec_);
+        request.SetNoTailChain(settings.NoTailChain_);
+
+        Connections_->Run<Debug::V1::DebugService, Debug::ActorChainRequest, Debug::ActorChainResponse>(
+            std::move(request),
+            responseCb,
+            &Debug::V1::DebugService::Stub::AsyncPingActorChain,
+            DbDriverState_,
+            TRpcRequestSettings::Make(settings));
+
+        return pingPromise;
+    }
+
     ~TImpl() = default;
 };
 
@@ -73,4 +95,8 @@ TAsyncTxProxyPingResult TDebugClient::PingTxProxy(const TTxProxyPingSettings& se
         settings, &Debug::V1::DebugService::Stub::AsyncPingTxProxy);
 }
 
-} // namespace NYdb::NDebug
+TAsyncActorChainPingResult TDebugClient::PingActorChain(const TActorChainPingSettings& settings) {
+    return Impl_->PingActorChain(settings);
+}
+
+} // namespace NYdb::V3::NDebug

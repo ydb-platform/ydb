@@ -2234,6 +2234,13 @@ TFuture<TRequestRestartResult> TClient::RequestRestart(
     }));
 }
 
+TFuture<TCollectCoverageResult> TClient::CollectCoverage(
+    const std::string& /*address*/,
+    const NApi::TCollectCoverageOptions& /*options*/)
+{
+    ThrowUnimplemented("CollectCoverage");
+}
+
 TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
     NQueryTrackerClient::EQueryEngine engine,
     const TString& query,

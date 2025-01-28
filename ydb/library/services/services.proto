@@ -29,6 +29,7 @@ enum EServiceKikimr {
     BS_REPL = 273;
     BS_PDISK = 274;
     BS_PDISK_TEST = 1102;
+    BS_PDISK_SHRED = 1103;
     BS_YARD = 275;
     BS_PROXY = 276;
     BS_NODE = 277;

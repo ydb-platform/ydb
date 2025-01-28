@@ -12,6 +12,8 @@
 #include <yt/cpp/mapreduce/http/helpers.h>
 #include <yt/cpp/mapreduce/http/http.h>
 
+#include <yt/cpp/mapreduce/interface/raw_client.h>
+
 #include <util/system/condvar.h>
 
 #include <queue>

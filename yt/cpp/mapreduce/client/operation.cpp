@@ -36,8 +36,7 @@
 #include <yt/cpp/mapreduce/io/proto_helpers.h>
 #include <yt/cpp/mapreduce/io/skiff_table_reader.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <library/cpp/yson/node/serialize.h>
 
@@ -879,14 +878,14 @@ void BuildCommonOperationPart(
     if (baseSpec.Title_.Defined()) {
         (*specNode)["title"] = *baseSpec.Title_;
     }
+    if (baseSpec.MaxFailedJobCount_.Defined()) {
+        (*specNode)["max_failed_job_count"] = *baseSpec.MaxFailedJobCount_;
+    }
 }
 
 template <typename TSpec>
 void BuildCommonUserOperationPart(const TSpec& baseSpec, TNode* spec)
 {
-    if (baseSpec.MaxFailedJobCount_.Defined()) {
-        (*spec)["max_failed_job_count"] = *baseSpec.MaxFailedJobCount_;
-    }
     if (baseSpec.FailOnJobRestart_.Defined()) {
         (*spec)["fail_on_job_restart"] = *baseSpec.FailOnJobRestart_;
     }

@@ -39,6 +39,13 @@ static constexpr const char* testShardingVariants[] = {
     R"(["timestamp", "uid"])",
     R"(["timestamp", "resource_type", "resource_id", "uid"])"
 };
+
+NKikimrConfig::TAppConfig GetAppConfig() {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableFeatureFlags()->SetEnableColumnStore(true);
+    return appConfig;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(YdbOlapStore) {
@@ -321,8 +328,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     template<bool NotNull>
     void TestBulkUpsert(EPrimitiveType pkFirstType) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         TClient annoyingClient(*server.ServerSettings);
@@ -383,8 +389,8 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     template<bool NotNull>
     void TestManyTables(const TString& sharding) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -421,8 +427,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     template<bool NotNull>
     void TestDuplicateRows(const TString& sharding) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -474,8 +479,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     template<bool NotNull>
     void TestQuery(const TString& query, const TString& sharding) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig, {}, {}, false, nullptr);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig(), {}, {}, false, nullptr);
 
         auto connection = ConnectToServer(server);
 

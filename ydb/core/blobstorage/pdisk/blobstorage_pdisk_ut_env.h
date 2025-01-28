@@ -103,6 +103,7 @@ public:
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_SYSLOG, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_TEST, NLog::PRI_DEBUG);
+        Runtime->SetLogPriority(NKikimrServices::BS_PDISK_SHRED, NLog::PRI_DEBUG);
         Sender = Runtime->AllocateEdgeActor();
 
         auto cfg = DefaultPDiskConfig(Settings.IsBad);
@@ -346,6 +347,12 @@ struct TVDiskMock {
 
     ui64 OwnedLogRecords() const {
         return LastUsedLsn + 1 - FirstLsnToKeep;
+    }
+
+    void PerformHarakiri() {
+        TestCtx->TestResponse<NPDisk::TEvHarakiriResult>(
+            new NPDisk::TEvHarakiri(PDiskParams->Owner, PDiskParams->OwnerRound),
+            NKikimrProto::OK);
     }
 
     void RespondToPreShredCompact(ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString& errorReason) {

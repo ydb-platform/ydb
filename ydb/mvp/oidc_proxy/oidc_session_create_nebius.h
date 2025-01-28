@@ -15,12 +15,12 @@ public:
                                 const TOpenIdConnectSettings& settings);
 
     void RequestSessionToken(const TString& code) override;
-    void ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) override;
+    void ProcessSessionToken(const NJson::TJsonValue& jsonValue) override;
 
 private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
         }
     }
 };

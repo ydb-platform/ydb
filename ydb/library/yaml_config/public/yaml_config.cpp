@@ -682,7 +682,7 @@ TString ReplaceMetadata(const TString& config, const std::function<void(TStringS
             auto end = pair.Value().EndMark().InputPos;
             sstr << config.substr(0, begin);
             serializeMetadata(sstr);
-            if (end < config.length() && config[end] == ':') {
+            if (end < config.length() && (config[end] == ':' || config[end] == '"')) {
                 end = end + 1;
             }
             sstr << config.substr(end, TString::npos);
@@ -698,8 +698,8 @@ TString ReplaceMetadata(const TString& config, const std::function<void(TStringS
             }
         }
     }
-    return sstr.Str();
 
+    return sstr.Str();
 }
 
 TString ReplaceMetadata(const TString& config, const TMetadata& metadata) {

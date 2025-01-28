@@ -31,7 +31,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             auto operation = std::make_shared<TWriteOperation>(0, writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec),
                 granuleShardingVersionId, NEvWrite::EModificationType::Upsert, false);
             operation->FromProto(metaProto);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "register_operation_on_load")("operation_id", operation->GetWriteId());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "register_operation_on_load")("operation_id", operation->GetWriteId());
             AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
             AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
             LinkInsertWriteIdToOperationWriteId(operation->GetInsertWriteIds(), operation->GetWriteId());
@@ -75,7 +75,7 @@ void TOperationsManager::CommitTransactionOnExecute(
     TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) {
     auto& lock = GetLockFeaturesForTxVerified(txId);
     TLogContextGuard gLogging(
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
     TVector<TWriteOperation::TPtr> commited;
     for (auto&& opPtr : lock.GetWriteOperations()) {
         opPtr->CommitOnExecute(owner, txc, snapshot);
@@ -88,10 +88,10 @@ void TOperationsManager::CommitTransactionOnComplete(
     TColumnShard& owner, const ui64 txId, const NOlap::TSnapshot& snapshot) {
     auto& lock = GetLockFeaturesForTxVerified(txId);
     TLogContextGuard gLogging(
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
     for (auto&& i : lock.GetBrokeOnCommit()) {
         if (auto lockNotify = GetLockOptional(i)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("broken_lock_id", i);
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
             lockNotify->SetBroken();
         }
     }
@@ -113,10 +113,11 @@ void TOperationsManager::CommitTransactionOnComplete(
 void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     auto* lock = GetLockFeaturesForTxOptional(txId);
     if (!lock) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort")("tx_id", txId)("problem", "finished");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "abort")("tx_id", txId)("problem", "finished");
         return;
     }
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tx_id", txId)("lock_id", lock->GetLockId()));
+    TLogContextGuard gLogging(
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tx_id", txId)("lock_id", lock->GetLockId()));
 
     TVector<TWriteOperation::TPtr> aborted;
     for (auto&& opPtr : lock->GetWriteOperations()) {
@@ -130,10 +131,11 @@ void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui
 void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId) {
     auto* lock = GetLockFeaturesForTxOptional(txId);
     if (!lock) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort")("tx_id", txId)("problem", "finished");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "abort")("tx_id", txId)("problem", "finished");
         return;
     }
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tx_id", txId)("lock_id", lock->GetLockId()));
+    TLogContextGuard gLogging(
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tx_id", txId)("lock_id", lock->GetLockId()));
 
     TVector<TWriteOperation::TPtr> aborted;
     for (auto&& opPtr : lock->GetWriteOperations()) {
@@ -216,21 +218,21 @@ TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 pathId, c
 TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
     if (evWrite.Record.HasTxId() && evWrite.Record.HasLocks()) {
         if (evWrite.Record.GetLocks().GetLocks().size() < 1) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
             return TConclusionStatus::Fail("no locks in case tx/locks");
         }
         auto& baseLock = evWrite.Record.GetLocks().GetLocks()[0];
         for (auto&& i : evWrite.Record.GetLocks().GetLocks()) {
             if (i.GetLockId() != baseLock.GetLockId()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
                 return TConclusionStatus::Fail("different lock ids in operation");
             }
             if (i.GetGeneration() != baseLock.GetGeneration()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
                 return TConclusionStatus::Fail("different lock generations in operation");
             }
             if (i.GetCounter() != baseLock.GetCounter()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
                 return TConclusionStatus::Fail("different lock generation counters in operation");
             }
         }
@@ -247,7 +249,7 @@ TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents:
             return EOperationBehaviour::WriteWithLock;
         }
 
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
         return TConclusionStatus::Fail("mode not IMMEDIATE for LockTxId + LockNodeId");
     }
 
@@ -256,7 +258,7 @@ TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents:
         return EOperationBehaviour::NoTxWrite;
     }
 
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
     return TConclusionStatus::Fail("undefined request for detect tx type");
 }
 

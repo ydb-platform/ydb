@@ -96,7 +96,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     }
 
     Y_UNIT_TEST(CountMinSketchIndex) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();

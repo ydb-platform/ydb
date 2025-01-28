@@ -104,6 +104,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         FeatureFlags.SetEnableParameterizedDecimal(true);
         FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
         FeatureFlags.SetEnableFollowerStats(true);
+        FeatureFlags.SetEnableColumnStore(true);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
@@ -121,6 +122,10 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
+    TKikimrSettings& SetColumnShardAlterObjectEnabled(bool enable) {
+            AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
+            return *this;
+    }
 };
 
 class TKikimrRunner {

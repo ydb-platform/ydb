@@ -3447,6 +3447,26 @@ TRuntimeNode TProgramBuilder::VariantItem(TRuntimeNode variant) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::DynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType) {
+    if constexpr (RuntimeVersion < 56U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    auto type = AS_TYPE(TVariantType, variantType);
+    auto expectedIndexSlot = type->GetUnderlyingType()->IsTuple() ? NUdf::EDataSlot::Uint32 : NUdf::EDataSlot::Utf8;
+    bool isOptional;
+    auto indexType = UnpackOptionalData(index.GetStaticType(), isOptional);
+    MKQL_ENSURE(indexType->GetDataSlot() == expectedIndexSlot, "Mismatch type of index");
+
+    auto resType = TOptionalType::Create(type, Env);
+
+    TCallableBuilder callableBuilder(Env, __func__, resType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(index);
+    callableBuilder.Add(TRuntimeNode(variantType, true));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::VisitAll(TRuntimeNode variant, std::function<TRuntimeNode(ui32, TRuntimeNode)> handler) {
     const auto type = AS_TYPE(TVariantType, variant);
     std::vector<TRuntimeNode> items;
@@ -5992,11 +6012,19 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
     if constexpr (RuntimeVersion < 53U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
+    if (RuntimeVersion < 57U && joinKind == EJoinKind::Cross) {
+        THROW yexception() << __func__ << " does not support cross join in runtime version (" << RuntimeVersion << ")";
+    }
+
     MKQL_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
-                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
+                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly || joinKind == EJoinKind::Cross,
                 "Unsupported join kind");
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
+    if (joinKind == EJoinKind::Cross) {
+        MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
+    } else {
+        MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    }
 
     ValidateBlockStreamType(leftStream.GetStaticType());
     ValidateBlockStreamType(rightStream.GetStaticType());

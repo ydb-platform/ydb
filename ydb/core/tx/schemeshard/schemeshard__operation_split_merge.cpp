@@ -785,6 +785,13 @@ public:
             return result;
         }
 
+        if (tableInfo->IsRestore) {
+            TString errMsg = TStringBuilder()
+                << "cannot split/merge restore table " << info.GetTablePath();
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
+            return result;
+        }
+
         const THashMap<TShardIdx, ui64>& shardIdx2partition = tableInfo->GetShard2PartitionIdx();
 
         TVector<ui64> srcPartitionIdxs;
@@ -967,7 +974,7 @@ public:
             }
         }
 
-        path.DomainInfo()->AddInternalShards(op); //allow over commit for merge
+        path.DomainInfo()->AddInternalShards(op, context.SS); //allow over commit for merge
         path->IncShardsInside(dstCount);
 
         SetState(NextState());

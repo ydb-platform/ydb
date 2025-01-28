@@ -143,10 +143,6 @@ namespace NSQLTranslation {
         }
     }
 
-    NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings) {
-        return SqlASTToYql("", protoAst, hints, settings);
-    }
-
     NYql::TAstParseResult SqlASTToYql(const TString& query, const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings) {
         NYql::TAstParseResult result;
         switch (settings.SyntaxVersion) {

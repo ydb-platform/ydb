@@ -1833,7 +1833,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         NNodes::TCoCombineCore core(&node);
 
         const auto stream = MkqlBuildExpr(core.Input().Ref(), ctx);
-        const auto memLimit = FromString<ui64>(core.MemLimit().Cast().Value());
+        const auto memLimit = NNodes::TCoCombineCore::idx_MemLimit < node.ChildrenSize() ?
+                FromString<ui64>(core.MemLimit().Cast().Value()) : 0;
 
         const auto keyExtractor = [&](TRuntimeNode item) {
             return MkqlBuildLambda(core.KeyExtractor().Ref(), ctx, {item});
@@ -2129,6 +2130,13 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return varType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple ?
                 ctx.ProgramBuilder.NewVariant(item, FromString<ui32>(node.Child(1)->Content()), type) :
                 ctx.ProgramBuilder.NewVariant(item, node.Child(1)->Content(), type);
+    });
+
+    AddCallable("DynamicVariant", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto varType = ctx.BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+        const auto item = MkqlBuildExpr(node.Head(), ctx);
+        const auto index = MkqlBuildExpr(*node.Child(1), ctx);
+        return ctx.ProgramBuilder.DynamicVariant(item, index, varType);
     });
 
     AddCallable("AsStruct", [](const TExprNode& node, TMkqlBuildContext& ctx) {

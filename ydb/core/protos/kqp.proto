@@ -446,7 +446,6 @@ message TExecuterTxResult {
     reserved 5; // (deprecated) Stats
     optional NYql.NDqProto.TDqExecutionStats Stats = 6;
     reserved 7;
-    repeated uint32 ParticipantNodes = 8;
 };
 
 message TExecuterTxResponse {
@@ -566,6 +565,8 @@ message TEvStartKqpTasksRequest {
     optional double ResourceWeight = 18;
 
     optional NKikimrDataEvents.ELockMode LockMode = 19;
+
+    optional string UserToken = 20;
 }
 
 message TEvStartKqpTasksResponse {

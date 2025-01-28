@@ -113,7 +113,7 @@ struct TEvPrivate {
 class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase {
 
     const ui64 PrintStatePeriodSec = 300;
-    const ui64 SleepPeriodSec = 2;
+    const ui64 ProcessStatePeriodSec = 1;
 
     struct TReadyBatch {
     public:
@@ -305,7 +305,7 @@ public:
     void NotifyCA();
     void SendStartSession(TSession& sessionInfo);
     void Init();
-    void Sleep();
+    void ScheduleProcessState();
     void ProcessGlobalState();
     void ProcessSessionsState();
     void UpdateSessions();
@@ -390,7 +390,7 @@ void TDqPqRdReadActor::ProcessGlobalState() {
         if (!CoordinatorActorId) {
             SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local row dispatcher, self id " << SelfId());
             Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
-            State = EState::WAIT_COORDINATOR_ID; 
+            State = EState::WAIT_COORDINATOR_ID;
         }
         [[fallthrough]];
     case EState::WAIT_COORDINATOR_ID: {
@@ -634,7 +634,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
-    SRC_LOG_T("TEvRetry, EventQueueId " << ev->Get()->EventQueueId);
+    SRC_LOG_T("Received TEvRetry, EventQueueId " << ev->Get()->EventQueueId);
     Counters.Retry++;
 
     auto readActorIt = ReadActorByEventQueueId.find(ev->Get()->EventQueueId);
@@ -669,7 +669,7 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartb
     bool needSend = sessionInfo.EventsQueue.Heartbeat();
     if (needSend) {
         SRC_LOG_T("Send TEvEvHeartbeat");
-        Send(sessionInfo.RowDispatcherActorId, new NFq::TEvRowDispatcher::TEvHeartbeat(), sessionInfo.Generation);
+        Send(sessionInfo.RowDispatcherActorId, new NFq::TEvRowDispatcher::TEvHeartbeat(), IEventHandle::FlagTrackDelivery, sessionInfo.Generation);
     }
 }
 
@@ -705,15 +705,15 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr
 
     CoordinatorActorId = ev->Get()->CoordinatorActorId;
     ReInit("Coordinator is changed");
-    Sleep();
+    ScheduleProcessState();
 }
 
-void TDqPqRdReadActor::Sleep() {
+void TDqPqRdReadActor::ScheduleProcessState() {
     if (ProcessStateScheduled) {
         return;
     }
     ProcessStateScheduled = true;
-    Schedule(TDuration::Seconds(SleepPeriodSec), new TEvPrivate::TEvProcessState());
+    Schedule(TDuration::Seconds(ProcessStatePeriodSec), new TEvPrivate::TEvProcessState());
 }
 
 void TDqPqRdReadActor::ReInit(const TString& reason) {
@@ -769,7 +769,7 @@ void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    SRC_LOG_D("Received TEvUndelivered, " << ev->Get()->ToString() << " from " << ev->Sender.ToString() << ", reason " << ev->Get()->Reason);
+    SRC_LOG_D("Received TEvUndelivered, " << ev->Get()->ToString() << " from " << ev->Sender.ToString() << ", reason " << ev->Get()->Reason << ", cookie " << ev->Cookie);
     Counters.Undelivered++;
     
     auto sessionIt = Sessions.find(ev->Sender);
@@ -781,16 +781,16 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
                 ReadActorByEventQueueId.erase(sessionInfo.EventQueueId);
                 Sessions.erase(sessionIt);
                 ReInit("Reset session state (by TEvUndelivered)");
+                ScheduleProcessState();
             }
         }
     }
 
     if (CoordinatorActorId && *CoordinatorActorId == ev->Sender) {
         ReInit("TEvUndelivered to coordinator");
-        Sleep();
+        ScheduleProcessState();
         return;
     }
-    ProcessState();
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {

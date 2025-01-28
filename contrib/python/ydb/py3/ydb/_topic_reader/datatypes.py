@@ -40,6 +40,7 @@ class PublicMessage(ICommittable, ISessionAlive):
     written_at: datetime.datetime
     producer_id: str
     data: Union[bytes, Any]  # set as original decompressed bytes or deserialized object if deserializer set in reader
+    metadata_items: Dict[str, bytes]
     _partition_session: PartitionSession
     _commit_start_offset: int
     _commit_end_offset: int

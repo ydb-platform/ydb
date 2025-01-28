@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    auth.h
+    auth.cpp
     actor_activity_names.cpp
     appdata.h
     appdata.cpp
@@ -82,6 +84,7 @@ PEERDIR(
     ydb/library/actors/interconnect
     ydb/library/actors/protos
     ydb/library/actors/wilson
+    ydb/library/aclib
     library/cpp/deprecated/enum_codegen
     library/cpp/logger
     library/cpp/lwtrace

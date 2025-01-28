@@ -379,7 +379,6 @@ ILocalMessageHandlerPtr TTcpDispatcher::TImpl::FindLocalBypassMessageHandler(con
     }
 
     if (!Config_.Acquire()->EnableLocalBypass) {
-        YT_LOG_INFO("XXX disabled %v", address);
         return nullptr;
     }
 

@@ -75,13 +75,6 @@ void SqlASTsToYqlsImpl(NYql::TAstParseResult& res, const std::vector<::NSQLv1Gen
     }
 }
 
-NYql::TAstParseResult SqlASTToYql(
-    const google::protobuf::Message& protoAst,
-    const NSQLTranslation::TSQLHints& hints,
-    const NSQLTranslation::TTranslationSettings& settings) {
-    return SqlASTToYql("", protoAst, hints, settings);
-}
-
 NYql::TAstParseResult SqlASTToYql(const TString& query,
     const google::protobuf::Message& protoAst,
     const NSQLTranslation::TSQLHints& hints,
@@ -206,7 +199,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& queryText, cons
         return result;
     }
 
-    TContext ctx(settings, hints, issues);
+    TContext ctx(settings, hints, issues, queryText);
     NSQLTranslation::TErrorCollectorOverIssues collector(issues, settings.MaxErrors, settings.File);
 
     google::protobuf::Message* astProto(SqlAST(queryText, queryName, collector, settings.AnsiLexer, settings.Antlr4Parser, settings.TestAntlr4, settings.Arena));

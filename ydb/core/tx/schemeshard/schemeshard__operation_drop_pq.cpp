@@ -189,7 +189,7 @@ public:
         const PQGroupReserve reserve(config, pqGroup->ActivePartitionCount);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
+        domainInfo->DecPathsInside(context.SS);
         domainInfo->DecPQPartitionsInside(pqGroup->TotalPartitionCount);
         domainInfo->DecPQReservedStorage(reserve.Storage);
         domainInfo->AggrDiskSpaceUsage({}, pqGroup->Stats);

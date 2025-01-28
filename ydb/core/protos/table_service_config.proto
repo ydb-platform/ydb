@@ -241,7 +241,7 @@ message TTableServiceConfig {
     reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
     optional bool EnablePublishKqpProxyByRM = 34 [default = true];
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
-    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = true];
+    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = false];
     reserved 36; //optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     reserved 37; //optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
     reserved 38; // optional bool EnableKqpImmediateEffects = 38 [default = true];
@@ -306,7 +306,7 @@ message TTableServiceConfig {
 
     optional bool EnableQueryServiceSpilling = 63 [ default = true ];
 
-    optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 4];
+    optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 2];
 
     optional bool EnableConstantFolding = 65 [ default = true ];
 

@@ -1,16 +1,8 @@
 #include "log.h"
 #include <util/generic/serialized_enum.h>
+#include <util/random/normal.h>
 #include <util/random/random.h>
 #include <util/datetime/base.h>
-
-#include <cmath>
-#include <iomanip>
-#include <string>
-#include <thread>
-#include <random>
-#include <sstream>
-#include <chrono>
-#include <format>
 
 namespace NYdbWorkload {
 
@@ -22,8 +14,6 @@ using TRow = TLogGenerator::TRow;
 TLogGenerator::TLogGenerator(const TLogWorkloadParams* params)
     : TBase(params)
     , TotalColumnsCnt(1 + Params.IntColumnsCnt + Params.StrColumnsCnt)
-    , RandomDevice()
-    , Mt19937(RandomDevice())
 {
     Y_ABORT_UNLESS(TotalColumnsCnt >= Params.KeyColumnsCnt);
 }
@@ -209,10 +199,9 @@ TVector<std::string> TLogGenerator::GetCleanPaths() const {
 TVector<TRow> TLogGenerator::GenerateRandomRows() {
     TVector<TRow> result(Params.RowsCnt);
 
-    std::normal_distribution<double> normal_distribution_generator(0, static_cast<double>(Params.TimestampStandardDeviationMinutes));
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
         result[row].Ts = TInstant::Now();
-        i64 millisecondsDiff = 60*1000*normal_distribution_generator(Mt19937);
+        i64 millisecondsDiff = 60 * 1000 * NormalRandom(0., static_cast<double>(Params.TimestampStandardDeviationMinutes));
         if (millisecondsDiff >= 0) { // TDuration::MilliSeconds can't be negative for some reason...
             result[row].Ts = result[row].Ts + TDuration::MilliSeconds(millisecondsDiff);
         } else {

@@ -8685,6 +8685,78 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus DynamicVariantWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(*input->Child(0), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureType(*input->Child(2), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto type = input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureVariantType(input->Child(2)->Pos(), *type, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto variantType = type->Cast<TVariantExprType>();
+
+        const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TOptionalExprType>(
+            ctx.Expr.MakeType<TDataExprType>(
+                variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple ?
+                    EDataSlot::Uint32 :
+                    EDataSlot::Utf8));
+
+        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+        if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
+            return convertStatus;
+        }
+
+        const TTypeAnnotationNode* firstType;
+        if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+            auto tupleType = variantType->GetUnderlyingType()->Cast<TTupleExprType>();
+            firstType = tupleType->GetItems()[0];
+            for (size_t i = 1; i < tupleType->GetSize(); ++i) {
+                if (firstType != tupleType->GetItems()[i]) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                        << "All Variant item types should be equal: " << GetTypeDiff(*firstType, *tupleType->GetItems()[i])));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+
+        } else {
+            auto structType = variantType->GetUnderlyingType()->Cast<TStructExprType>();
+            firstType = structType->GetItems()[0]->GetItemType();
+            for (size_t i = 1; i < structType->GetSize(); ++i) {
+                if (firstType != structType->GetItems()[i]->GetItemType()) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                        << "All Variant item types should be equal: " << GetTypeDiff(*firstType, *structType->GetItems()[i]->GetItemType())));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+
+        convertStatus = TryConvertTo(input->ChildRef(0), *firstType, ctx.Expr);
+        if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
+                TStringBuilder() << "Mismatch item type, expected: " << *firstType << ", got: " << *input->Child(0)->GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(variantType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus SqlVisitWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -12514,6 +12586,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Dict"] = &DictWrapper;
         Functions["Variant"] = &VariantWrapper;
         Functions["Enum"] = &EnumWrapper;
+        Functions["DynamicVariant"] = &DynamicVariantWrapper;
         Functions["AsVariant"] = &AsVariantWrapper;
         Functions["AsEnum"] = &AsEnumWrapper;
         Functions["Contains"] = &ContainsLookupWrapper<true>;

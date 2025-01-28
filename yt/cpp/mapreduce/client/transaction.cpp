@@ -12,8 +12,6 @@
 #include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-
 #include <util/datetime/base.h>
 
 #include <util/generic/scope.h>

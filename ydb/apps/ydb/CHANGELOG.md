@@ -1,8 +1,14 @@
+* Added message if global timeout expiried in `ydb workload run` comamnd.
+* Fixed return code of `ydb workload run` comamnd.
+* Added statistics output on the current progress of the query in `ydb workload` command
+* Fixed a bug where arm64 YDB CLI binary was downloading amd64 binary to replace itself during `ydb update`. To update already installed binaries to the latest arm64 version, YDB CLI should be re-installed
 * Fixed a bug where `ydb workload tpch import generator` and `ydb workload tpcds import generator` commands were failing due to not all tables were created
 * Fixed a bug with backslashes in `ydb workload` benchmark paths on Windows
 * Added CREATE TABLE text suggestion on scheme error during `ydb import file csv`
 * Backup and restore of changefeeds has been added to `ydb tools dump` and `ydb tools restore`. As a result, there are changes in the backup file structure: for tables with changefeeds, a subdirectory is created for each changefeed, named after the changefeed. This subdirectory contains two files: `changefeed_description.pb`, which contains the changefeed description, and `topic_description.pb`, which contains information about the underlying topic.
 * Added `--skip-checksum-validation` option to `ydb import s3` command to skip server-side checksum validation.
+* Added new experimental options for `ydb debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
+
 
 ## 2.18.0 ##
 

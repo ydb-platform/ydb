@@ -827,8 +827,8 @@ alter_table_alter_index_action:
 
 drop_table_stmt: DROP (TABLE | TABLESTORE | EXTERNAL TABLE) (IF EXISTS)? simple_table_ref;
 
-create_user_stmt: CREATE USER role_name create_user_option*;
-alter_user_stmt: ALTER USER role_name (WITH? create_user_option+ | RENAME TO role_name);
+create_user_stmt: CREATE USER role_name user_option*;
+alter_user_stmt: ALTER USER role_name (WITH? user_option+ | RENAME TO role_name);
 
 create_group_stmt: CREATE GROUP role_name (WITH USER role_name (COMMA role_name)* COMMA?)?;
 alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_name)* COMMA? | RENAME TO role_name);
@@ -836,8 +836,12 @@ alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_n
 drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?;
 
 role_name: an_id_or_type | bind_parameter;
-create_user_option: password_option | login_option;
+
+user_option: authentication_option | login_option;
+
+authentication_option: password_option | hash_option;
 password_option: ENCRYPTED? PASSWORD expr;
+hash_option: HASH expr;
 login_option: LOGIN | NOLOGIN;
 
 grant_permissions_stmt: GRANT permission_name_target ON an_id_schema (COMMA an_id_schema)* TO role_name (COMMA role_name)* COMMA? (WITH GRANT OPTION)?;

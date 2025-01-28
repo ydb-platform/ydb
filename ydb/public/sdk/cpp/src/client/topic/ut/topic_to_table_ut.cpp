@@ -2916,7 +2916,8 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
     // The test verifies the simultaneous execution of several transactions. There is a topic
     // with PARTITIONS_COUNT partitions. In each transaction, the test writes to all the partitions.
     // The size of the messages is random. Such that both large blobs in the body and small ones in
-    // the head of the partition are obtained.
+    // the head of the partition are obtained. Message sizes are multiples of 500 KB. This way we
+    // will make sure that when committing transactions, the division into blocks is taken into account.
 
     const size_t PARTITIONS_COUNT = 20;
     const size_t TXS_COUNT = 100;

@@ -614,4 +614,5 @@ enum ETxTypes {
     TXTYPE_DROP_BACKUP_COLLECTION_RESULT = 89                   [(TxTypeOpts) = {Name: "TxDropBackupCollectionResult"}];
 
     TXTYPE_LIST_USERS = 90                                       [(TxTypeOpts) = {Name: "TxListUsers"}];
+    TXTYPE_UNMARK_RESTORE_TABLES = 91                     [(TxTypeOpts) = {Name: "TxUnmarkRestoreTables"}];
 }

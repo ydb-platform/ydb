@@ -6233,7 +6233,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         TRowsModel rows;
 
         auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.HasEnableLocalDBBtreeIndex(), false);
+        UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.HasEnableLocalDBFlatIndex(), false);
+        UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.GetEnableLocalDBBtreeIndex(), true);
+        UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.GetEnableLocalDBFlatIndex(), true);
         auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
         int readRows = 0, failedAttempts = 0;
 

@@ -142,16 +142,6 @@ public:
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
-            mon->RegisterActorHandler({
-                .Path = "/viewer/simple_counter",
-                .Handler = ctx.SelfID,
-                .UseAuth = true,
-            });
-            mon->RegisterActorHandler({
-                .Path = "/viewer/multipart_counter",
-                .Handler = ctx.SelfID,
-                .UseAuth = true,
-            });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
                 "http-mon", Sprintf(":%d", KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort())));
@@ -183,6 +173,18 @@ public:
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodelist"] = JsonHandlers.JsonHandlersIndex["/viewer/nodelist"];
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/tabletinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/tabletinfo"];
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodeinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/nodeinfo"];
+
+            for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
+                // temporary handling of new handlers
+                if (handler->IsHttpEvent()) {
+                    mon->RegisterActorHandler({
+                        .Path = name,
+                        .Handler = ctx.SelfID,
+                        .UseAuth = true,
+                        .AllowedSIDs = viewerAllowedSIDs,
+                    });
+                }
+            }
         }
     }
 

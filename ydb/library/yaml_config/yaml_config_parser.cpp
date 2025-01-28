@@ -206,7 +206,9 @@ namespace NKikimr::NYaml {
         });
         EraseMultipleByPath(json, GROUP_PATH, ERASURE_SPECIES_FIELD);
         // for security config
-        ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, DISABLE_BUILTIN_SECURITY_PATH).value_or(false);
+        if (!ctx.DisableBuiltinSecurity) {
+            ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, DISABLE_BUILTIN_SECURITY_PATH).value_or(false);
+        }
         EraseByPath(json, DISABLE_BUILTIN_SECURITY_PATH);
         ctx.ExplicitEmptyDefaultGroups = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_GROUPS_PATH).value_or(false);
         ctx.ExplicitEmptyDefaultAccess = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_ACCESS_PATH).value_or(false);
@@ -424,7 +426,7 @@ namespace NKikimr::NYaml {
 
         auto* domainsConfig = config.MutableDomainsConfig();
 
-        bool disabledDefaultSecurity = ctx.DisableBuiltinSecurity;
+        bool disabledDefaultSecurity = ctx.DisableBuiltinSecurity ? *ctx.DisableBuiltinSecurity : false;
 
         NKikimrConfig::TDomainsConfig::TSecurityConfig* securityConfig = nullptr;
         if (domainsConfig->HasSecurityConfig()) {
@@ -513,7 +515,7 @@ namespace NKikimr::NYaml {
             securityConfig->AddDefaultAccess("+(DS|RA):METADATA-READERS"); // DescribeSchema | ReadAttributes
             securityConfig->AddDefaultAccess("+(SR):DATA-READERS"); // SelectRow
             securityConfig->AddDefaultAccess("+(UR|ER):DATA-WRITERS"); // UpdateRow | EraseRow
-            securityConfig->AddDefaultAccess("+(CD|CT|WA|AS|RS):DDL-ADMINS"); // CreateDirectory | CreateTable | WriteAttributes | AlterSchema | RemoveSchema
+            securityConfig->AddDefaultAccess("+(CD|CT|CQ|WA|AS|RS):DDL-ADMINS"); // CreateDirectory | CreateTable | CreateQueue | WriteAttributes | AlterSchema | RemoveSchema
             securityConfig->AddDefaultAccess("+(GAR):ACCESS-ADMINS"); // GrantAccessRights
             securityConfig->AddDefaultAccess("+(CDB|DDB):DATABASE-ADMINS"); // CreateDatabase | DropDatabase
         }
@@ -1390,8 +1392,19 @@ namespace NKikimr::NYaml {
         }
     }
 
+    void MoveFields(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        if (ephemeralConfig.HasSecurityConfig()) {
+            config.MutableDomainsConfig()->MutableSecurityConfig()->CopyFrom(ephemeralConfig.GetSecurityConfig());
+        }
+
+        if (ephemeralConfig.HasDisableBuiltinSecurity()) {
+            ctx.DisableBuiltinSecurity = ephemeralConfig.GetDisableBuiltinSecurity();
+        }
+    }
+
     void TransformProtoConfig(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
         PrepareHosts(ephemeralConfig);
+        MoveFields(ctx, config, ephemeralConfig);
         ApplyDefaultConfigs(ctx, config, ephemeralConfig);
         PrepareNameserviceConfig(config, ephemeralConfig);
         PrepareStaticGroup(ctx, config, ephemeralConfig);

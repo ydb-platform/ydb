@@ -9,7 +9,7 @@
 #include <yt/yql/providers/yt/codec/yt_codec_io.h>
 #include <yql/essentials/minikql/codegen/codegen.h>
 
-#include <llvm/IR/Module.h>
+#include <llvm/IR/Module.h> // Y_IGNORE
 
 #include <library/cpp/testing/unittest/registar.h>
 

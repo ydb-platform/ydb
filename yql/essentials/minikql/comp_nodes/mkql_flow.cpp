@@ -45,7 +45,7 @@ public:
         const auto state = PHINode::Create(load->getType(), 2U, "state", main);
         state->addIncoming(load, block);
 
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
+        BranchInst::Create(init, main, IsInvalid(load, block, context), block);
 
         block = init;
 
@@ -142,7 +142,7 @@ public:
         const auto result = PHINode::Create(valueType, 2U, "state", done);
 
         result->addIncoming(load, block);
-        BranchInst::Create(done, main, IsFinish(load, block), block);
+        BranchInst::Create(done, main, IsFinish(load, block, context), block);
 
         block = main;
 
@@ -151,7 +151,7 @@ public:
 
         const auto optional = GetNodeValue(Optional, ctx, block);
         const auto value = IsItemOptional ? GetOptionalValue(context, optional, block) : optional;
-        const auto output = SelectInst::Create(IsEmpty(optional, block), finish, value, "output", block);
+        const auto output = SelectInst::Create(IsEmpty(optional, block, context), finish, value, "output", block);
 
         result->addIncoming(output, block);
         BranchInst::Create(done, block);
@@ -256,7 +256,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -266,13 +265,13 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        SafeUnRefUnboxed(valuePtr, ctx, block);
+        SafeUnRefUnboxedOne(valuePtr, ctx, block);
         GetNodeValue(valuePtr, Flow, ctx, block);
 
         const auto value = new LoadInst(valueType, valuePtr, "value", block);
 
-        const auto second = SelectInst::Create(IsYield(value, block), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "second", block);
-        const auto first = SelectInst::Create(IsFinish(value, block), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), second, "second", block);
+        const auto second = SelectInst::Create(IsYield(value, block, context), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "second", block);
+        const auto first = SelectInst::Create(IsFinish(value, block, context), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), second, "second", block);
 
         ReturnInst::Create(context, first, block);
         return ctx.Func;
@@ -330,7 +329,7 @@ public:
         const auto state = PHINode::Create(load->getType(), 2U, "state", main);
         state->addIncoming(load, block);
 
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
+        BranchInst::Create(init, main, IsInvalid(load, block, context), block);
 
         block = init;
 
@@ -484,7 +483,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -507,7 +505,7 @@ private:
         std::vector<Value*> pointers(Representations.size());
         for (auto i = 0U; i < pointers.size(); ++i) {
             pointers[i] = GetElementPtrInst::CreateInBounds(valueType, valuesPtr, {ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
-            SafeUnRefUnboxed(pointers[i], ctx, block);
+            SafeUnRefUnboxedOne(pointers[i], ctx, block);
         }
 
         const auto getres = GetNodeValues(WideFlow, ctx, block);

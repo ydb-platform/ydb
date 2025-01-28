@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideTakeSkipBlocks) {
         const auto flow = MakeFlow(setup);
 
         const auto part = pb.WideSkipBlocks(flow, pb.NewDataLiteral<ui64>(7));
-        const auto plain = pb.WideFromBlocks(part);
+        const auto plain = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(part)));
 
         const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
             return pb.Add(items[0], items[1]);
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideTakeSkipBlocks) {
         const auto flow = MakeFlow(setup);
 
         const auto part = pb.WideTakeBlocks(flow, pb.NewDataLiteral<ui64>(4));
-        const auto plain = pb.WideFromBlocks(part);
+        const auto plain = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(part)));
 
         const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
             return pb.Add(items[0], items[1]);
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideTakeSkipBlocks) {
         const auto flow = MakeFlow(setup);
 
         const auto part = pb.WideTakeBlocks(pb.WideSkipBlocks(flow, pb.NewDataLiteral<ui64>(3)), pb.NewDataLiteral<ui64>(5));
-        const auto plain = pb.WideFromBlocks(part);
+        const auto plain = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(part)));
 
         const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
             // 0,  0;

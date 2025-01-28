@@ -8,7 +8,7 @@ namespace NKikimr::NKqp {
 
 class TTableStoreManager: public NMetadata::NModifications::IOperationsManager {
     using TBase = NMetadata::NModifications::IOperationsManager;
-    bool IsStandalone = false;
+    const bool IsStandalone;
 protected:
     NThreading::TFuture<TYqlConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
         const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const override;

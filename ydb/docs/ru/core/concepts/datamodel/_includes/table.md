@@ -135,16 +135,9 @@ CREATE TABLE article (
 
 | Имя параметра | Тип | Допустимые значения | Возможность<br/>изменения | Возможность<br/>сброса |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
-| `TTL` | Expression | `Interval("<literal>") ON <column> [AS <unit>]` | Да | Да |
+| `TTL` | Expression | `Interval("<literal>") ON <column> [AS <unit>]` или `Interval("literal1") action1, ..., Interval("literal1") action1 ON <column> [AS <unit>]` | Да | Да |
 
-Где `<unit>` — единица измерения, указывается только для колонок с [числовым типом](../../../concepts/ttl.md#restrictions):
-
-* `SECONDS`;
-* `MILLISECONDS`;
-* `MICROSECONDS`;
-* `NANOSECONDS`.
-
-Подробнее об удалении устаревших данных читайте в разделе [Time to Live (TTL)](../../../concepts/ttl.md).
+Синтаксис значения TTL описан в статье [{#T}](../../../yql/reference/syntax/create_table/with.md#time-to-live). Подробнее об удалении устаревших данных читайте в разделе [Time to Live (TTL)](../../../concepts/ttl.md).
 
 ### Переименование {#rename}
 
@@ -221,6 +214,7 @@ CREATE TABLE article (
   + Доступно и в первичном ключе и в остальных колонках: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
   + Доступно только в колонках, не входящих в первичный ключ: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
 
+* В колоночных таблицах поддерживаются группы колонок, но пока это используется только для задания сжатия на колонках.
 
 Повторим создание таблицы `article`, на этот раз в колоночной форме, с помощью следующей YQL-команды:
 

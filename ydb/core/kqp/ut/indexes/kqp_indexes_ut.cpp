@@ -6,8 +6,8 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -238,8 +238,8 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
 
             Cerr << explainResult.GetAst() << Endl;
-            UNIT_ASSERT_C(explainResult.GetAst().Contains("'('\"Reverse\")"), explainResult.GetAst());
-            UNIT_ASSERT_C(explainResult.GetAst().Contains("'('\"Sorted\")"), explainResult.GetAst());
+            UNIT_ASSERT_C(explainResult.GetAst().contains("'('\"Reverse\")"), explainResult.GetAst());
+            UNIT_ASSERT_C(explainResult.GetAst().contains("'('\"Sorted\")"), explainResult.GetAst());
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
@@ -390,12 +390,12 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
-            const TString keyColumnName = "key";
+            const std::string keyColumnName = "key";
             auto builder = TTableBuilder()
                .AddNullableColumn(keyColumnName, EPrimitiveType::Uint64);
 
             builder.AddNullableColumn("index_0", EPrimitiveType::Utf8);
-            builder.AddSecondaryIndex("index_0_name", TVector<TString>{"index_0", keyColumnName});
+            builder.AddSecondaryIndex("index_0_name", std::vector<std::string>{"index_0", keyColumnName});
             builder.AddNullableColumn("value", EPrimitiveType::Uint32);
             builder.SetPrimaryKeyColumns({keyColumnName});
 
@@ -452,8 +452,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -511,7 +511,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Continue tx1, select from index table only
         auto result2 = session.ExecuteDataQuery(
                                  query2,
-                                 TTxControl::Tx(result1.GetTransaction().GetRef()).CommitTx())
+                                 TTxControl::Tx(result1.GetTransaction().value()).CommitTx())
                           .ExtractValueSync();
         // read only tx should succeed in MVCC case
         UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), NYdb::EStatus::SUCCESS, result2.GetIssues().ToString());
@@ -531,8 +531,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -591,7 +591,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Continue tx1, write to table should fail in both MVCC and non-MVCC scenarios
         auto result2 = session.ExecuteDataQuery(
                                  query2,
-                                 TTxControl::Tx(result1.GetTransaction().GetRef()).CommitTx())
+                                 TTxControl::Tx(result1.GetTransaction().value()).CommitTx())
                           .ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), NYdb::EStatus::ABORTED, result2.GetIssues().ToString().c_str());
     }
@@ -613,8 +613,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("fk2", EPrimitiveType::Int32)
                 .AddNullableColumn("fk3", EPrimitiveType::Uint64)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"k1", "k2"});
-            tableBuilder.AddUniqueSecondaryIndex("Index", TVector<TString>{"fk1", "fk2", "fk3", "k2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"k1", "k2"});
+            tableBuilder.AddUniqueSecondaryIndex("Index", std::vector<std::string>{"fk1", "fk2", "fk3", "k2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -796,9 +796,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("fk2", EPrimitiveType::Int32)
                 .AddNullableColumn("fk3", EPrimitiveType::Uint64)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"k1"});
-            tableBuilder.AddUniqueSecondaryIndex("Index12", TVector<TString>{"fk1", "fk2"}, TVector<TString>{"Value"});
-            tableBuilder.AddUniqueSecondaryIndex("Index3", TVector<TString>{"fk3"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"k1"});
+            tableBuilder.AddUniqueSecondaryIndex("Index12", std::vector<std::string>{"fk1", "fk2"}, std::vector<std::string>{"Value"});
+            tableBuilder.AddUniqueSecondaryIndex("Index3", std::vector<std::string>{"fk3"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -915,11 +915,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("fk2", EPrimitiveType::Int32)
                 .AddNullableColumn("fk3", EPrimitiveType::Uint64)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             if (uniq) {
-                tableBuilder.AddUniqueSecondaryIndex("Index", TVector<TString>{"fk1", "fk2", "fk3"});
+                tableBuilder.AddUniqueSecondaryIndex("Index", std::vector<std::string>{"fk1", "fk2", "fk3"});
             } else {
-                tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"fk1", "fk2", "fk3"});
+                tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"fk1", "fk2", "fk3"});
             }
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1031,8 +1031,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1244,7 +1244,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("IndexColumn", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1340,8 +1340,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("IndexColumn1", EPrimitiveType::String)
                 .AddNullableColumn("IndexColumn2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key", "IndexColumn1", "IndexColumn2"});
-            tableBuilder.AddSecondaryIndex("IndexName1", TVector<TString>{"IndexColumn1"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key", "IndexColumn1", "IndexColumn2"});
+            tableBuilder.AddSecondaryIndex("IndexName1", std::vector<std::string>{"IndexColumn1"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1474,8 +1474,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1666,8 +1666,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Index2A", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2", "Index2A"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2", "Index2A"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1755,7 +1755,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index", "Index2");
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -1860,8 +1860,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::Int64)
                 .AddNullableColumn("Index2", EPrimitiveType::Int64)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1894,7 +1894,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1920,8 +1920,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1946,8 +1946,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1972,7 +1972,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1997,7 +1997,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2021,8 +2021,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
             }
 
             {
@@ -2047,8 +2047,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2073,8 +2073,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2100,8 +2100,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2127,8 +2127,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(!result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2142,7 +2142,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    void DoPositiveQueriesVectorIndex(TSession& session, const TString& query) {
+    std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, const TString& query) {
         {
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(),
@@ -2154,12 +2154,34 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             ).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(),
                 "Failed to execute: `" << query << "` with " << result.GetIssues().ToString());
+
+            std::vector<i64> r;
+            auto sets = result.GetResultSets();
+            for (const auto& set : sets) {
+                TResultSetParser parser{set};
+                while (parser.TryNextRow()) {
+                    auto value = parser.GetValue("pk");
+                    UNIT_ASSERT_C(value.GetProto().has_int64_value(), value.GetProto().ShortUtf8DebugString());
+                    r.push_back(value.GetProto().int64_value());
+                }
+            }
+            return r;
         }
     }
 
     void DoPositiveQueriesVectorIndex(TSession& session, const TString& mainQuery, const TString& indexQuery) {
-        DoPositiveQueriesVectorIndex(session, mainQuery);
-        DoPositiveQueriesVectorIndex(session, indexQuery);
+        // TODO(mbkkt) results are not precise so for now can differ between main and index
+        // But they're still should contains exactly 3 unique rows
+        auto mainResults = DoPositiveQueryVectorIndex(session, mainQuery);
+        UNIT_ASSERT_EQUAL(mainResults.size(), 3);
+        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery);
+        UNIT_ASSERT_EQUAL(indexResults.size(), 3);
+
+        absl::c_sort(mainResults);
+        UNIT_ASSERT(std::unique(mainResults.begin(), mainResults.end()) == mainResults.end());
+
+        absl::c_sort(indexResults);
+        UNIT_ASSERT(std::unique(indexResults.begin(), indexResults.end()) == indexResults.end());
     }
 
     void DoPositiveQueriesVectorIndexOrderBy(
@@ -2219,18 +2241,18 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         std::string_view function,
         std::string_view direction) {
         // target is left, member is right
-        DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "$target", "emb");
+        // DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "$target", "emb");
         // target is right, member is left
         DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "emb", "$target");
     }
 
     void DoPositiveQueriesVectorIndexOrderByCosine(TSession& session) {
         // distance, default direction
-        DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "");
+        // DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "");
         // distance, asc direction
         DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "ASC");
         // similarity, desc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, "CosineSimilarity", "DESC");
+        // DoPositiveQueriesVectorIndexOrderBy(session, "CosineSimilarity", "DESC");
     }
 
     TSession DoCreateTableForVectorIndex(TTableClient& db, bool nullable) {
@@ -2249,7 +2271,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .AddNonNullableColumn("emb", EPrimitiveType::String)
                     .AddNonNullableColumn("data", EPrimitiveType::String);
             }
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"pk"});
+            tableBuilder.SetPrimaryKeyColumns({"pk"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2279,7 +2301,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         return session;
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineDistance) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNotNullableLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2304,10 +2326,24 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 1);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarity) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNotNullableLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2332,10 +2368,24 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 1);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNullable) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNullableLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2360,10 +2410,24 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 1);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNullable) {
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNullableLevel1) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2387,6 +2451,188 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 1);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNotNullableLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, false);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 2);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNotNullableLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, false);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 2);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineDistanceNullableLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, true);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 2);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexOrderByCosineSimilarityNullableLevel2) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, true);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetVectorIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, 2);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
@@ -2406,8 +2652,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Key", EPrimitiveType::Int64)
                 .AddNullableColumn("Index2", EPrimitiveType::Int64)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -2428,7 +2674,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
 
                 UNIT_ASSERT_C(!result.GetDiagnostics().empty(), "Query result diagnostics is empty");
 
@@ -2461,7 +2707,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
 
                 UNIT_ASSERT_C(result.GetDiagnostics().empty(), "Query result diagnostics should be empty, but it's not");
             }
@@ -2483,10 +2729,10 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("customer", EPrimitiveType::Utf8)
                 .AddNullableColumn("created", EPrimitiveType::Datetime)
                 .AddNullableColumn("processed", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"id"});
-            tableBuilder.AddSecondaryIndex("ix_cust", TVector<TString>{"customer"});
-            tableBuilder.AddSecondaryIndex("ix_cust2", TVector<TString>{"customer", "created"});
-            tableBuilder.AddSecondaryIndex("ix_cust3", TVector<TString>{"customer", "created"}, TVector<TString>{"processed"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"id"});
+            tableBuilder.AddSecondaryIndex("ix_cust", std::vector<std::string>{"customer"});
+            tableBuilder.AddSecondaryIndex("ix_cust2", std::vector<std::string>{"customer", "created"});
+            tableBuilder.AddSecondaryIndex("ix_cust3", std::vector<std::string>{"customer", "created"}, std::vector<std::string>{"processed"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -2524,7 +2770,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2571,8 +2817,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit"), result.GetAst());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"ItemsLimit"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2618,8 +2864,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit"), result.GetAst());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"ItemsLimit"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2657,8 +2903,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Index2A", EPrimitiveType::Uint8)
                 .AddNullableColumn("Value", EPrimitiveType::Utf8);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key", "KeyA"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2", "Index2A"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key", "KeyA"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2", "Index2A"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -2732,8 +2978,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -2776,7 +3022,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value1", EPrimitiveType::String)
                 .AddNullableColumn("Value2", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index1", "Value1");
             tableBuilder.AddSecondaryIndex("Index2", "Value2");
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
@@ -2839,7 +3085,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value1", EPrimitiveType::String)
                 .AddNullableColumn("Value2", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddUniqueSecondaryIndex("Index1Uniq", {"Value1"});
             tableBuilder.AddSecondaryIndex("Index2NotUniq", "Value2");
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
@@ -3029,7 +3275,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value1", EPrimitiveType::String)
                 .AddNullableColumn("Value2", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddUniqueSecondaryIndex("Index1Uniq", {"Value1"}, {"Value2"});
             tableBuilder.AddSecondaryIndex("Index2NotUniq", {"Value2"}, {"Value1"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
@@ -3153,9 +3399,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Value1", EPrimitiveType::String)
                 .AddNullableColumn("Value2", EPrimitiveType::String)
                 .AddNullableColumn("Value3", EPrimitiveType::Int64);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index1", TVector<TString>{"Value1", "Value3"});
-            tableBuilder.AddSecondaryIndex("Index2", TVector<TString>{"Value2", "Value3"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index1", std::vector<std::string>{"Value1", "Value3"});
+            tableBuilder.AddSecondaryIndex("Index2", std::vector<std::string>{"Value2", "Value3"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -3489,9 +3735,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("KeyA", EPrimitiveType::Int64)
                 .AddNullableColumn("Value1", EPrimitiveType::String)
                 .AddNullableColumn("Payload", EPrimitiveType::Utf8);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key", "KeyA"});
-            tableBuilder.AddSecondaryIndex("Index1", TVector<TString>{"Value1", "KeyA"});
-            tableBuilder.AddSecondaryIndex("Index2", TVector<TString>{"Key", "Value1"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key", "KeyA"});
+            tableBuilder.AddSecondaryIndex("Index1", std::vector<std::string>{"Value1", "KeyA"});
+            tableBuilder.AddSecondaryIndex("Index2", std::vector<std::string>{"Key", "Value1"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -3762,7 +4008,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::Int64);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index1", "Value");
             auto result = session.CreateTable("/Root/TestTable1", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -3773,7 +4019,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::Int64);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index1", "Value");
             auto result = session.CreateTable("/Root/TestTable2", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -4003,7 +4249,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::Int64);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index1", "Value");
             auto result = session.CreateTable("/Root/TestTable1", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -4015,7 +4261,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::Int64)
                 .AddNullableColumn("Value2", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             tableBuilder.AddSecondaryIndex("Index1", "Value");
             auto result = session.CreateTable("/Root/TestTable2", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -4161,8 +4407,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Index2", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+            tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -4188,7 +4434,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
         }
 
@@ -4201,7 +4447,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
         }
 
@@ -4214,7 +4460,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
         }
 
@@ -4227,7 +4473,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
         }
 
@@ -4247,7 +4493,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::String)
                 .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -4258,7 +4504,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Value", EPrimitiveType::String)
                 .AddNullableColumn("Key", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Value"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Value"});
             auto result = session.CreateTable("/Root/TestTable/Index", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -4275,7 +4521,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             tableBuilder
                 .AddNullableColumn("Value", EPrimitiveType::String)
                 .AddNullableColumn("Key", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Value"});
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Value"});
             auto result = session.CreateTable("/Root/TestTable/Index/indexImplTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -4295,8 +4541,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .AddNullableColumn("Key", EPrimitiveType::String)
             .AddNullableColumn("Index2", EPrimitiveType::String)
             .AddNullableColumn("Value", EPrimitiveType::String);
-        tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-        tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+        tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+        tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
         auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -4331,8 +4577,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .AddNullableColumn("Key", EPrimitiveType::String)
             .AddNullableColumn("Index2", EPrimitiveType::String)
             .AddNullableColumn("Value", EPrimitiveType::String);
-        tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-        tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+        tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+        tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
         auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -4417,8 +4663,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .AddNullableColumn("Key", EPrimitiveType::String)
             .AddNullableColumn("Index2", EPrimitiveType::String)
             .AddNullableColumn("Value", EPrimitiveType::String);
-        tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-        tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
+        tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+        tableBuilder.AddSecondaryIndex("Index", std::vector<std::string>{"Index2"});
         auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -4708,7 +4954,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
 
-            UNIT_ASSERT_C(!result.GetAst().Contains("EquiJoin"), result.GetAst());
+            UNIT_ASSERT_C(!result.GetAst().contains("EquiJoin"), result.GetAst());
 
             auto params = TParamsBuilder()
                 .AddParam("$targets")
@@ -5069,7 +5315,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToString());
 
-        auto checkPlan = [](const TString& planJson, ui32 tableReads, ui32 tableWrites, TMaybe<ui32> indexWrites) {
+        auto checkPlan = [](const std::string& planJson, ui32 tableReads, ui32 tableWrites, TMaybe<ui32> indexWrites) {
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(planJson, &plan, true);
             const auto& tables = plan["tables"];

@@ -2,7 +2,7 @@
 #include "mkql_block_builder.h"
 
 #include <yql/essentials/minikql/mkql_type_builder.h>
-#include <yql/essentials/public/udf/arrow/block_reader.h>
+#include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -633,6 +633,7 @@ struct TSerializerTraits {
     template<typename TTzDateType, bool Nullable>
     using TTzDate = TTzDateBlockSerializer<TTzDateType, Nullable>;
 
+    constexpr static bool PassType = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -670,6 +671,8 @@ struct TDeserializerTraits {
     template<typename TTzDateType, bool Nullable>
     using TTzDate = TTzDateBlockDeserializer<TTzDateType, Nullable>;
 
+    constexpr static bool PassType = false;
+
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
         if (desc.PassByValue) {
@@ -698,11 +701,11 @@ struct TDeserializerTraits {
 
 
 std::unique_ptr<IBlockSerializer> MakeBlockSerializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type) {
-    return NYql::NUdf::MakeBlockReaderImpl<TSerializerTraits>(typeInfoHelper, type, nullptr);
+    return NYql::NUdf::DispatchByArrowTraits<TSerializerTraits>(typeInfoHelper, type, nullptr);
 }
 
 std::unique_ptr<IBlockDeserializer> MakeBlockDeserializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type) {
-    std::unique_ptr<TBlockDeserializerBase> result =  NYql::NUdf::MakeBlockReaderImpl<TDeserializerTraits>(typeInfoHelper, type, nullptr);
+    std::unique_ptr<TBlockDeserializerBase> result =  NYql::NUdf::DispatchByArrowTraits<TDeserializerTraits>(typeInfoHelper, type, nullptr);
     result->SetArrowType(NYql::NUdf::GetArrowType(typeInfoHelper, type));
     return std::move(result);
 }

@@ -561,7 +561,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
             return;
         }
 
-        CancelScan(userTable.LocalTid, recCard->ScanId);
+        for (auto scanId : recCard->ScanIds) {
+            CancelScan(userTable.LocalTid, scanId);
+        }
         ScanManager.Drop(buildIndexId);
     }
 
@@ -629,9 +631,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                                   0,
                                   scanOpts);
 
-    TScanRecord recCard = {scanId, seqNo};
-
-    ScanManager.Set(buildIndexId, recCard);
+    ScanManager.Set(buildIndexId, seqNo).push_back(scanId);
 }
 
 }

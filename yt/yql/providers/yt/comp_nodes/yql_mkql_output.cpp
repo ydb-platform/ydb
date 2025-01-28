@@ -27,7 +27,7 @@ public:
         if (true /*|| TODO: !Writer.GenAddRow(item, ctx, block)*/) {
             const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TYtOutputWrapper::AddRowImpl));
             const auto selfArg = ConstantInt::get(Type::getInt64Ty(context), ui64(this));
-            const auto arg = WrapArgumentForWindows(item, ctx, block);
+            const auto arg = item;
             const auto addType = FunctionType::get(Type::getVoidTy(context), {selfArg->getType(), arg->getType()}, false);
             const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "write", block);
             CallInst::Create(addType, addPtr, {selfArg, arg}, "", block);
@@ -71,13 +71,13 @@ public:
         const auto result = PHINode::Create(item->getType(), 2U, "result", pass);
         result->addIncoming(item, block);
 
-        BranchInst::Create(pass, work, IsSpecial(item, block), block);
+        BranchInst::Create(pass, work, IsSpecial(item, block, context), block);
 
         block = work;
 
         const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TYtFlowOutputWrapper::AddRowImpl));
         const auto selfArg = ConstantInt::get(Type::getInt64Ty(context), ui64(this));
-        const auto arg = WrapArgumentForWindows(item, ctx, block);
+        const auto arg = item;
         const auto addType = FunctionType::get(Type::getVoidTy(context), {selfArg->getType(), arg->getType()}, false);
         const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "write", block);
         CallInst::Create(addType, addPtr, {selfArg, arg}, "", block);

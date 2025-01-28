@@ -11,3 +11,7 @@ ALTER GROUP role_name DROP USER user_name [, ... ]
 
 * `role_name` — имя группы.
 * `user_name` — имя пользователя.
+
+## Встроенные группы
+
+{% include [!](_includes/initial_groups_and_users.md) %}

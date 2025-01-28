@@ -917,6 +917,17 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             return true;
         }
+        case EYtSettingType::QLFilter: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+            const auto qlFilter = setting->Child(1);
+            if (!qlFilter->IsCallable("YtQLFilter")) {
+                ctx.AddError(TIssue(ctx.GetPosition(qlFilter->Pos()), TStringBuilder()
+                    << "Expected YtQLFilter node, got: " << qlFilter->Content()));
+            }
+            break;
+        }
         case EYtSettingType::LAST: {
             YQL_ENSURE(false, "Unexpected EYtSettingType");
         }
@@ -994,6 +1005,9 @@ bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowTy
 TString NormalizeColumnGroupSpec(const TStringBuf spec) {
     try {
         auto columnGroups = NYT::NodeFromYsonString(spec);
+        if (columnGroups.AsMap().empty()) {
+            return {};
+        }
         for (auto& grp: columnGroups.AsMap()) {
             if (!grp.second.IsEntity()) {
                 std::stable_sort(grp.second.AsList().begin(), grp.second.AsList().end(), [](const auto& l, const auto& r) { return l.AsString() < r.AsString(); });

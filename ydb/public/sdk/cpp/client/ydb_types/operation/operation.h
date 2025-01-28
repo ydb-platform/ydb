@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/client/ydb_types/fwd.h>
+
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <library/cpp/threading/future/future.h>
@@ -16,7 +18,7 @@ class Operation;
 } // namespace Operations
 } // namespace Ydb
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TStatus;
 

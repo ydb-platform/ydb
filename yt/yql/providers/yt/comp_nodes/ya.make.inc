@@ -36,10 +36,10 @@ COPY(
     AUTO
     FROM ${ORIG_SRC_DIR}
     ${ORIG_SOURCES}
-    OUTPUT_INCLUDES 
-    ${BINDIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
-    ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_codegen.h
-    ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h
+    OUTPUT_INCLUDES
+        ${BINDIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
+        ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_codegen.h
+        ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h
 )
 
 PROVIDES(YT_COMP_NODES)

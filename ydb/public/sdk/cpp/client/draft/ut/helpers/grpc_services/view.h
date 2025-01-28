@@ -2,7 +2,7 @@
 
 #include <ydb/public/api/grpc/draft/ydb_view_v1.grpc.pb.h>
 
-namespace NYdb::NView {
+namespace NYdb::inline V2::NView {
 
 constexpr const char* DummyQueryText = "select 42";
 

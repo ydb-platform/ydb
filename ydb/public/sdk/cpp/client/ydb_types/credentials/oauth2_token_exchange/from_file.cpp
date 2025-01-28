@@ -12,7 +12,7 @@
 
 #include <jwt-cpp/jwt.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace {
 
@@ -147,15 +147,15 @@ bool IsAsciiEqualUpper(const TString& jsonParam, const TStringBuf& constantInUpp
 struct TFixedTokenSourceParamsForParsing {
     using TSelf = TFixedTokenSourceParamsForParsing;
 
-    FLUENT_SETTING(TString, Token);
-    FLUENT_SETTING(TString, TokenType);
+    FLUENT_SETTING_DEPRECATED(TString, Token);
+    FLUENT_SETTING_DEPRECATED(TString, TokenType);
 };
 
 // special struct to apply macros
 struct TJwtTokenSourceParamsForParsing : public TJwtTokenSourceParams {
-    FLUENT_SETTING(TString, AlgStr);
-    FLUENT_SETTING(TString, PrivateKeyStr);
-    FLUENT_SETTING(TString, TtlStr);
+    FLUENT_SETTING_DEPRECATED(TString, AlgStr);
+    FLUENT_SETTING_DEPRECATED(TString, PrivateKeyStr);
+    FLUENT_SETTING_DEPRECATED(TString, TtlStr);
 };
 
 std::shared_ptr<ITokenSource> ParseFixedTokenSource(const NJson::TJsonValue& cfg) {

@@ -50,6 +50,8 @@ public:
     //! Used to store TLS/SSL certificate files.
     std::optional<TString> BusCertsDirectoryPath;
 
+    bool EnableLocalBypass;
+
     TTcpDispatcherConfigPtr ApplyDynamic(const TTcpDispatcherDynamicConfigPtr& dynamicConfig) const;
 
     REGISTER_YSON_STRUCT(TTcpDispatcherConfig);
@@ -78,7 +80,7 @@ public:
     //! Used to store TLS/SSL certificate files.
     std::optional<TString> BusCertsDirectoryPath;
 
-    static void Setup(auto&& registrar);
+    std::optional<bool> EnableLocalBypass;
 
     REGISTER_YSON_STRUCT(TTcpDispatcherDynamicConfig);
 
@@ -106,6 +108,8 @@ public:
 
     bool VerifyChecksums;
     bool GenerateChecksums;
+
+    bool EnableLocalBypass;
 
     // Ssl options.
     EEncryptionMode EncryptionMode;

@@ -559,6 +559,7 @@ int RunMain(int argc, const char* argv[])
     clusterMapping["information_schema"] = PgProviderName;
 
     TString pgExtConfig;
+    TString gwPatch;
     TString mountConfig;
     TString mestricsPusherConfig;
     TString udfResolver;
@@ -765,6 +766,7 @@ int RunMain(int argc, const char* argv[])
         .StoreResult(&tokenAccessorEndpoint);
     opts.AddLongOption("yson-attrs", "Provide operation yson attribues").StoreResult(&ysonAttrs);
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
+    opts.AddLongOption("gateways-patch", "patch for gateways conf").StoreResult(&gwPatch);
     opts.AddLongOption("with-final-issues").NoArgument();
     opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument();
     opts.AddHelpOption('h');
@@ -940,7 +942,7 @@ int RunMain(int argc, const char* argv[])
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
-    const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
+    const auto driverConfig = NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(driverConfig);
 
     Y_DEFER {
@@ -1193,8 +1195,17 @@ int RunMain(int argc, const char* argv[])
         return 1;
     }
 
+    TMaybe<TString> gatewaysPatch;
+    if (res.Has("gateways-patch")) {
+        if (!res.Has("replay")) {
+            YQL_LOG(ERROR) << "gateways-patch only can be used with replay option";
+            return 1;
+        }
+        gatewaysPatch = TFileInput(gwPatch).ReadAll();
+    }
+
     if (res.Has("replay")) {
-        program = progFactory.Create("-replay-", "", opId, EHiddenMode::Disable, qContext);
+        program = progFactory.Create("-replay-", "", opId, EHiddenMode::Disable, qContext, gatewaysPatch);
     } else if (progFile == TStringBuf("-")) {
         program = progFactory.Create("-stdin-", Cin.ReadAll(), opId, EHiddenMode::Disable, qContext);
     } else {

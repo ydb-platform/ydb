@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
@@ -138,6 +139,7 @@ namespace {
     };
 
     struct TTestDataWithScheme {
+        TString Metadata;
         TString Scheme;
         TString Permissions;
         TVector<TTestData> Data;
@@ -245,11 +247,13 @@ namespace {
     TTestDataWithScheme GenerateTestData(
         const TString& scheme,
         const TVector<std::pair<TString, ui64>>& shardsConfig,
-        const TString& permissions = "")
+        const TString& permissions = "",
+        const TString& metadata = "")
     {
         TTestDataWithScheme result;
         result.Scheme = scheme;
         result.Permissions = permissions;
+        result.Metadata = metadata;
 
         for (const auto& [keyPrefix, count] : shardsConfig) {
             result.Data.push_back(GenerateTestData(keyPrefix, count));
@@ -263,6 +267,12 @@ namespace {
 
         for (const auto& [prefix, item] : data) {
             result.emplace(prefix + "/scheme.pb", item.Scheme);
+            if (item.Metadata) {
+                result.emplace(prefix + "/metadata.json", item.Metadata);
+            } else {
+                result.emplace(prefix + "/metadata.json", R"({"version": 0})"); // without checksums
+            }
+            
             if (item.Permissions) {
                 result.emplace(prefix + "/permissions.pb", item.Permissions);
             }
@@ -1199,28 +1209,19 @@ value {
         UpdateRow(runtime, "Original", 2, "valueB", secondTablet);
         
         // Add delay after copying tables
-        bool dropNotification = false;
-        THolder<IEventHandle> delayed;
+        ui64 copyTablesTxId;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-            case TEvSchemeShard::EvModifySchemeTransaction:
-                break;
-            case TEvSchemeShard::EvNotifyTxCompletionResult:
-                if (dropNotification) {
-                    delayed.Reset(ev.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
+                const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+                if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+                    copyTablesTxId = msg->Record.GetTxId();
                 }
-                return TTestActorRuntime::EEventAction::PROCESS;
-            default:
-                return TTestActorRuntime::EEventAction::PROCESS;
             }
-
-            const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
-            if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
-                dropNotification = true;
-            }
-
             return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> delay(runtime, [&](auto& ev) {
+            return ev->Get()->Record.GetTxId() == copyTablesTxId;
         });
 
         // Start exporting table
@@ -1237,14 +1238,7 @@ value {
         const ui64 exportId = txId;
 
         // Wait for delay after copying tables
-        if (!delayed) {
-            TDispatchOptions opts;
-            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
-                return bool(delayed);
-            });
-            runtime.DispatchEvents(opts);
-        }
-        runtime.SetObserverFunc(prevObserver);
+        runtime.WaitFor("delay after copying tables", [&]{ return delay.size() >= 1; });
 
         // Merge 2 tablets in 1 during the delay
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -1265,7 +1259,7 @@ value {
         env.TestWaitNotification(runtime, txId);
 
         // Finish the delay and continue exporting
-        runtime.Send(delayed.Release(), 0, true);
+        delay.Unblock();
         env.TestWaitNotification(runtime, exportId);
 
         // Check export
@@ -1364,28 +1358,19 @@ value {
         UpdateRow(runtime, "Original", 2, "valueB", firstTablet);
 
         // Add delay after copying tables
-        bool dropNotification = false;
-        THolder<IEventHandle> delayed;
+        ui64 copyTablesTxId;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-            case TEvSchemeShard::EvModifySchemeTransaction:
-                break;
-            case TEvSchemeShard::EvNotifyTxCompletionResult:
-                if (dropNotification) {
-                    delayed.Reset(ev.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
+                const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+                if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+                    copyTablesTxId = msg->Record.GetTxId();
                 }
-                return TTestActorRuntime::EEventAction::PROCESS;
-            default:
-                return TTestActorRuntime::EEventAction::PROCESS;
             }
-
-            const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
-            if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
-                dropNotification = true;
-            }
-
             return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> delay(runtime, [&](auto& ev) {
+            return ev->Get()->Record.GetTxId() == copyTablesTxId;
         });
 
         // Start exporting table
@@ -1401,15 +1386,8 @@ value {
         )", port));
         const ui64 exportId = txId;
 
-         // Wait for delay after copying tables
-        if (!delayed) {
-            TDispatchOptions opts;
-            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
-                return bool(delayed);
-            });
-            runtime.DispatchEvents(opts);
-        }
-        runtime.SetObserverFunc(prevObserver);
+        // Wait for delay after copying tables
+        runtime.WaitFor("delay after copying tables", [&]{ return delay.size() >= 1; });
 
         // Split 2 tablets in 3 during the delay
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -1434,7 +1412,7 @@ value {
         env.TestWaitNotification(runtime, txId);
 
         // Finish the delay and continue exporting
-        runtime.Send(delayed.Release(), 0, true);
+        delay.Unblock();
         env.TestWaitNotification(runtime, exportId);
 
         // Check export
@@ -4340,6 +4318,323 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::HasNoRight("+W:alice"),
             NLs::HasNoRight("+R:bob")
         });
+    }
+
+    Y_UNIT_TEST(CorruptedMetadata) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto metadata = R"(
+            corrupted
+        )";
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, "", metadata);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        auto entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_CANCELLED);
+    }
+
+    Y_UNIT_TEST(NoDataChecksums) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto metadata = R"({
+            "version": 1
+        })";
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, "", metadata);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        auto entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_CANCELLED);
+    }
+
+    Y_UNIT_TEST(SkipChecksumValidation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto metadata = R"(
+            corrupted
+        )";
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, "", metadata);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+              skip_checksum_validation: true
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        auto entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_CANCELLED);
+    }
+
+    Y_UNIT_TEST(ShouldBlockMerge) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+            partitioning_settings {
+              min_partitions_count: 1
+            }
+            partition_at_keys {
+              split_points {
+                type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                value { items { text_value: "b" } }
+              }
+              split_points {
+                type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                value { items { text_value: "c" } }
+              }
+            }
+        )", {{"a", 1}, {"b", 1}, {"c", 1}});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        // Add delay after creating table
+        ui64 createTableTxId;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
+                const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+                if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexedTable) {
+                    createTableTxId = msg->Record.GetTxId();
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> delay(runtime, [&](auto& ev) {
+            return ev->Get()->Record.GetTxId() == createTableTxId;
+        });
+
+        // Start importing table
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        const ui64 importId = txId;
+
+        // Wait for delay after creating table
+        runtime.WaitFor("delay after creating table", [&]{ return delay.size() >= 1; });
+
+        // Merge tablets during the delay should be blocked
+        const TVector<TExpectedResult> expectedError = {{ NKikimrScheme::StatusInvalidParameter }};
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %lu
+            SourceTabletId: %lu
+        )", TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1), expectedError);
+
+        // Finish the delay and continue importing
+        delay.Unblock();
+        env.TestWaitNotification(runtime, importId);
+
+        // Check import
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        // Merge tablets after import
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %lu
+            SourceTabletId: %lu
+        )", TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1));
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(ShouldBlockSplit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+            partitioning_settings {
+              min_partitions_count: 1
+            }
+            partition_at_keys {
+              split_points {
+                type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                value { items { text_value: "c" } }
+              }
+            }
+        )", {{"a", 1}, {"c", 1}});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        // Add delay after creating table
+        ui64 createTableTxId;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
+                const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+                if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexedTable) {
+                    createTableTxId = msg->Record.GetTxId();
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> delay(runtime, [&](auto& ev) {
+            return ev->Get()->Record.GetTxId() == createTableTxId;
+        });
+
+        // Start importing table
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        const ui64 importId = txId;
+
+        // Wait for delay after creating table
+        runtime.WaitFor("delay after creating table", [&]{ return delay.size() >= 1; });
+
+        // Split tablet during the delay should be blocked
+        const TVector<TExpectedResult> expectedError = {{ NKikimrScheme::StatusInvalidParameter }};
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Text: "b" } }
+                }
+            }
+        )", TTestTxConfig::FakeHiveTablets), expectedError);
+
+        // Finish the delay and continue importing
+        delay.Unblock();
+        env.TestWaitNotification(runtime, importId);
+
+        // Check import
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        // Split table after import
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Text: "b" } }
+                }
+            }
+        )", TTestTxConfig::FakeHiveTablets));
+        env.TestWaitNotification(runtime, txId);
     }
 }
 

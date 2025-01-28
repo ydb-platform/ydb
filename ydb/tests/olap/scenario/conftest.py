@@ -31,7 +31,7 @@ class YdbClusterInstance():
             self._database = database
             self._mon_port = 8765
         else:
-            config = KikimrConfigGenerator()
+            config = KikimrConfigGenerator(extra_feature_flags=["enable_column_store"])
             cluster = KiKiMR(configurator=config)
             cluster.start()
             node = cluster.nodes[1]
@@ -77,6 +77,8 @@ class BaseTestSet:
         cls._ydb_instance.stop()
 
     def test(self, ctx: TestContext):
+        test_path = ctx.test + get_external_param("table_suffix", "")
+        ScenarioTestHelper(None).remove_path(test_path, ctx.suite)
         start_time = time.time()
         try:
             ctx.executable(self, ctx)
@@ -103,6 +105,7 @@ class BaseTestSet:
             allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
             raise
         allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
+        ScenarioTestHelper(None).remove_path(test_path, ctx.suite)
 
 
 def pytest_generate_tests(metafunc):

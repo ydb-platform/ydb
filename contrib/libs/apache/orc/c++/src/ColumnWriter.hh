@@ -53,14 +53,14 @@ namespace orc {
    public:
     virtual ~RowIndexPositionRecorder() override;
 
-    RowIndexPositionRecorder(proto::RowIndexEntry& entry) : rowIndexEntry(entry) {}
+    RowIndexPositionRecorder(proto::RowIndexEntry& entry) : rowIndexEntry_(entry) {}
 
     virtual void add(uint64_t pos) override {
-      rowIndexEntry.add_positions(pos);
+      rowIndexEntry_.add_positions(pos);
     }
 
    private:
-    proto::RowIndexEntry& rowIndexEntry;
+    proto::RowIndexEntry& rowIndexEntry_;
   };
 
   /**
@@ -178,6 +178,18 @@ namespace orc {
      * Write dictionary to streams for string columns
      */
     virtual void writeDictionary();
+
+    /**
+     * Finalize the encoding and compressing process. This function should be
+     * called after all data required for encoding has been added. It ensures
+     * that any remaining data is processed and the final state of the streams
+     * is set.
+     * Note: boolean type cannot cut off the current byte if it is not filled
+     * with 8 bits, otherwise Boolean RLE may incorrectly read the unfilled
+     * trailing bits. In this case, the last byte will be the head of the next
+     * compression block.
+     */
+    virtual void finishStreams();
 
    protected:
     /**

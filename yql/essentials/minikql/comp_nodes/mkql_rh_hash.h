@@ -6,6 +6,7 @@
 #include <vector>
 #include <span>
 
+#include <yql/essentials/minikql/mkql_rh_hash_utils.h>
 #include <yql/essentials/utils/prefetch.h>
 
 #include <util/digest/city.h>
@@ -109,7 +110,7 @@ public:
 
     // should be called after Insert if isNew is true
     Y_FORCE_INLINE void CheckGrow() {
-        if (Size * 2 >= Capacity) {
+        if (RHHashTableNeedsGrow(Size, Capacity)) {
             Grow();
         }
     }
@@ -124,7 +125,7 @@ public:
 
     template <typename TSink>
     Y_NO_INLINE void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
-        while (2 * (Size + batchRequest.size()) >= Capacity) {
+        while (RHHashTableNeedsGrow(Size + batchRequest.size(), Capacity)) {
             Grow();
         }
 
@@ -331,15 +332,7 @@ private:
     }
 
     Y_NO_INLINE void Grow() {
-        ui64 growFactor;
-        if (Capacity < 100'000) {
-            growFactor = 8;
-        } else if (Capacity < 1'000'000) {
-            growFactor = 4;
-        } else {
-            growFactor = 2;
-        }
-        auto newCapacity = Capacity * growFactor;
+        auto newCapacity = Capacity * CalculateRHHashTableGrowFactor(Capacity);
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
@@ -522,8 +515,7 @@ public:
         TBase::Init();
     }
 
-
-    ui32 GetCellSize() const {
+    static constexpr ui32 GetCellSize() {
         return sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + sizeof(TPayload);
     }
 
@@ -569,7 +561,7 @@ public:
         TBase::Init();
     }
 
-    ui32 GetCellSize() const {
+    static constexpr ui32 GetCellSize() {
         return sizeof(typename TBase::TPSLStorage) + sizeof(TKey);
     }
 

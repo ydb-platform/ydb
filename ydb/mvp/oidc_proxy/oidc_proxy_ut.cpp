@@ -1170,7 +1170,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/oauth2/impersonation/impersonate");
         UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, true);
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
-        TString okResponseBody {"{\"impersonation\": \"impersonation_token\"}"};
+        TString okResponseBody {"{\"impersonation\": \"impersonation_token\", \"expires_in\": 43200}"};
         EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\n"
                                          "Connection: close\r\n"
                                          "Content-Type: text/html\r\n"
@@ -1182,7 +1182,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const NHttp::THeaders impersonatePageHeaders(outgoingResponseEv->Response->Headers);
         UNIT_ASSERT(impersonatePageHeaders.Has("Set-Cookie"));
         TStringBuf impersonatedCookie = impersonatePageHeaders.Get("Set-Cookie");
-        TString expectedCookie = CreateSecureCookie(CreateNameImpersonatedCookie(settings.ClientId), Base64Encode("impersonation_token"));
+        TString expectedCookie = CreateSecureCookie(CreateNameImpersonatedCookie(settings.ClientId), Base64Encode("impersonation_token"), 43200);
         UNIT_ASSERT_STRINGS_EQUAL(impersonatedCookie, expectedCookie);
     }
 

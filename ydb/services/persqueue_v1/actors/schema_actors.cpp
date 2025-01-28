@@ -4,8 +4,9 @@
 
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/core/persqueue/utils.h>
+#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -1022,37 +1023,6 @@ bool TDescribeConsumerActor::ApplyResponse(
 }
 
 
-bool FillConsumerProto(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
-                        const NActors::TActorContext& ctx, Ydb::StatusIds::StatusCode& status, TString& error)
-{
-    const auto& pqConfig = AppData(ctx)->PQConfig;
-
-    auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx);
-    rr->set_name(consumerName);
-    rr->mutable_read_from()->set_seconds(consumer.GetReadFromTimestampsMs() / 1000);
-    auto version = consumer.GetVersion();
-    if (version != 0)
-        (*rr->mutable_attributes())["_version"] = TStringBuilder() << version;
-    for (const auto &codec : consumer.GetCodec().GetIds()) {
-        rr->mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec) (codec + 1));
-    }
-
-    rr->set_important(consumer.GetImportant());
-    TString serviceType = "";
-    if (consumer.HasServiceType()) {
-        serviceType = consumer.GetServiceType();
-    } else {
-        if (pqConfig.GetDisallowDefaultClientServiceType()) {
-            error = "service type must be set for all read rules";
-            status = Ydb::StatusIds::INTERNAL_ERROR;
-            return false;
-        }
-        serviceType = pqConfig.GetDefaultClientServiceType().GetName();
-    }
-    (*rr->mutable_attributes())["_service_type"] = serviceType;
-    return true;
-}
-
 void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     Y_ABORT_UNLESS(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
@@ -1063,134 +1033,21 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
     const TString path = JoinSeq("/", response.Path);
 
-    Ydb::Scheme::Entry *selfEntry = Result.mutable_self();
-    ConvertDirectoryEntry(response.Self->Info, selfEntry, true);
-    if (const auto& name = GetCdcStreamName()) {
-        selfEntry->set_name(*name);
-    }
-
     if (response.PQGroupInfo) {
         const auto& pqDescr = response.PQGroupInfo->Description;
-        for (auto& sourcePart: pqDescr.GetPartitions()) {
-            auto destPart = Result.add_partitions();
-            destPart->set_partition_id(sourcePart.GetPartitionId());
-            destPart->set_active(sourcePart.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
-            if (sourcePart.HasKeyRange()) {
-                if (sourcePart.GetKeyRange().HasFromBound()) {
-                    destPart->mutable_key_range()->set_from_bound(sourcePart.GetKeyRange().GetFromBound());
-                }
-                if (sourcePart.GetKeyRange().HasToBound()) {
-                    destPart->mutable_key_range()->set_to_bound(sourcePart.GetKeyRange().GetToBound());
-                }
-            }
-
-            for (size_t i = 0; i < sourcePart.ChildPartitionIdsSize(); ++i) {
-                destPart->add_child_partition_ids(static_cast<int64_t>(sourcePart.GetChildPartitionIds(i)));
-            }
-
-            for (size_t i = 0; i < sourcePart.ParentPartitionIdsSize(); ++i) {
-                destPart->add_parent_partition_ids(static_cast<int64_t>(sourcePart.GetParentPartitionIds(i)));
-            }
+        Ydb::StatusIds::StatusCode status;
+        TString error;
+        if (!FillTopicDescription(Result, pqDescr, response.Self->Info, GetCdcStreamName(), status, error)) {
+            return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
         }
 
         const auto &config = pqDescr.GetPQTabletConfig();
-        if (AppData(TActivationContext::ActorContextFor(SelfId()))->FeatureFlags.GetEnableTopicSplitMerge() && NPQ::SplitMergeEnabled(config)) {
-            Result.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
-        } else {
-            Result.mutable_partitioning_settings()->set_min_active_partitions(pqDescr.GetTotalGroupCount());
-        }
-
-        Result.mutable_partitioning_settings()->set_max_active_partitions(config.GetPartitionStrategy().GetMaxPartitionCount());
-        switch(config.GetPartitionStrategy().GetPartitionStrategyType()) {
-            case ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT:
-                Result.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
-                break;
-            case ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE:
-                Result.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
-                break;
-            case ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED:
-                Result.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED);
-                break;
-            default:
-                Result.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED);
-                break;
-        }
-        Result.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(config.GetPartitionStrategy().GetScaleThresholdSeconds());
-        Result.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent());
-        Result.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent());
-
-        if (!config.GetRequireAuthWrite()) {
-            (*Result.mutable_attributes())["_allow_unauthenticated_write"] = "true";
-        }
-
-        if (!config.GetRequireAuthRead()) {
-            (*Result.mutable_attributes())["_allow_unauthenticated_read"] = "true";
-        }
-
-        if (pqDescr.GetPartitionPerTablet() != 2) {
-            (*Result.mutable_attributes())["_partitions_per_tablet"] =
-                TStringBuilder() << pqDescr.GetPartitionPerTablet();
-        }
-        if (config.HasAbcId()) {
-            (*Result.mutable_attributes())["_abc_id"] = TStringBuilder() << config.GetAbcId();
-        }
-        if (config.HasAbcSlug()) {
-            (*Result.mutable_attributes())["_abc_slug"] = config.GetAbcSlug();
-        }
-        if (config.HasFederationAccount()) {
-            (*Result.mutable_attributes())["_federation_account"] = config.GetFederationAccount();
-        }
-        bool local = config.GetLocalDC();
-        const auto &partConfig = config.GetPartitionConfig();
-        i64 msip = partConfig.GetMaxSizeInPartition();
-        if (partConfig.HasMaxSizeInPartition() && msip != Max<i64>()) {
-            (*Result.mutable_attributes())["_max_partition_storage_size"] = TStringBuilder() << msip;
-        }
-        Result.mutable_retention_period()->set_seconds(partConfig.GetLifetimeSeconds());
-        Result.set_retention_storage_mb(partConfig.GetStorageLimitBytes() / 1024 / 1024);
-        (*Result.mutable_attributes())["_message_group_seqno_retention_period_ms"] = TStringBuilder() << (partConfig.GetSourceIdLifetimeSeconds() * 1000);
-        (*Result.mutable_attributes())["__max_partition_message_groups_seqno_stored"] = TStringBuilder() << partConfig.GetSourceIdMaxCounts();
-
-        const auto& pqConfig = AppData(ActorContext())->PQConfig;
-
-        if (local || pqConfig.GetTopicsAreFirstClassCitizen()) {
-            Result.set_partition_write_speed_bytes_per_second(partConfig.GetWriteSpeedInBytesPerSecond());
-            Result.set_partition_write_burst_bytes(partConfig.GetBurstSize());
-        }
-
-        if (pqConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) {
-            auto readSpeedPerConsumer = partConfig.GetWriteSpeedInBytesPerSecond() * 2;
-            Result.set_partition_total_read_speed_bytes_per_second(readSpeedPerConsumer * pqConfig.GetQuotingConfig().GetMaxParallelConsumersPerPartition());
-            Result.set_partition_consumer_read_speed_bytes_per_second(readSpeedPerConsumer);
-        }
-
-        for (const auto &codec : config.GetCodecs().GetIds()) {
-            Result.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec)(codec + 1));
-        }
-
-        if (pqConfig.GetBillingMeteringConfig().GetEnabled()) {
-            switch (config.GetMeteringMode()) {
-                case NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY:
-                    Result.set_metering_mode(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY);
-                    break;
-                case NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS:
-                    Result.set_metering_mode(Ydb::Topic::METERING_MODE_REQUEST_UNITS);
-                    break;
-                default:
-                    break;
-            }
-        }
         auto consumerName = NPersQueue::ConvertNewConsumerName(Settings.Consumer, ActorContext());
         bool found = false;
         for (const auto& consumer : config.GetConsumers()) {
             if (consumerName == consumer.GetName()) {
-                 found = true;
-            }
-            auto rr = Result.add_consumers();
-            Ydb::StatusIds::StatusCode status;
-            TString error;
-            if (!FillConsumerProto(rr, consumer, ActorContext(), status, error)) {
-                return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
+                found = true;
+                break;
             }
         }
 
@@ -1205,6 +1062,12 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
             ProcessTablets(pqDescr, ActorContext());
             return;
+        }
+    } else {
+        Ydb::Scheme::Entry *selfEntry = Result.mutable_self();
+        ConvertDirectoryEntry(response.Self->Info, selfEntry, true);
+        if (const auto& name = GetCdcStreamName()) {
+            selfEntry->set_name(*name);
         }
     }
     return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ActorContext());
@@ -1248,7 +1111,7 @@ void TDescribeConsumerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::
             auto rr = Result.mutable_consumer();
             Ydb::StatusIds::StatusCode status;
             TString error;
-            if (!FillConsumerProto(rr, consumer, ActorContext(), status, error)) {
+            if (!FillConsumer(*rr, consumer, status, error)) {
                 return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
             }
             break;
@@ -1478,13 +1341,10 @@ void TPartitionsLocationActor::Bootstrap(const NActors::TActorContext&)
 {
     SendDescribeProposeRequest();
     UnsafeBecome(&TPartitionsLocationActor::StateWork);
-    SendNodesRequest();
-
 }
 
 void TPartitionsLocationActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvICNodesInfoCache::TEvGetAllNodesInfoResponse, Handle);
         default:
             if (!TDescribeTopicActorImpl::StateWork(ev, ActorContext())) {
                 TBase::StateWork(ev);
@@ -1519,25 +1379,8 @@ bool TPartitionsLocationActor::ApplyResponse(
         partLocation.NodeId = nodeId;
         Response->Partitions.emplace_back(std::move(partLocation));
     }
-    if (GotNodesInfo)
-        Finalize();
-    else
-        GotPartitions = true;
+    Finalize();
     return true;
-}
-
-void TPartitionsLocationActor::SendNodesRequest() const {
-    auto* icEv = new TEvICNodesInfoCache::TEvGetAllNodesInfoRequest();
-    ActorContext().Send(CreateICNodesInfoCacheServiceId(), icEv);
-
-}
-
-void TPartitionsLocationActor::Handle(TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev) {
-    NodesInfoEv = ev;
-    if (GotPartitions)
-        Finalize();
-    else
-        GotNodesInfo = true;
 }
 
 void TPartitionsLocationActor::Finalize() {
@@ -1545,17 +1388,6 @@ void TPartitionsLocationActor::Finalize() {
         Y_ABORT_UNLESS(Response->Partitions.size() == Settings.Partitions.size());
     } else {
         Y_ABORT_UNLESS(Response->Partitions.size() == PQGroupInfo->Description.PartitionsSize());
-    }
-    for (auto& pInResponse : Response->Partitions) {
-        auto iter = NodesInfoEv->Get()->NodeIdsMapping->find(pInResponse.NodeId);
-        if (iter.IsEnd()) {
-            return RaiseError(
-                    TStringBuilder() << "Hostname not found for nodeId " << pInResponse.NodeId,
-                    Ydb::PersQueue::ErrorCode::ERROR,
-                    Ydb::StatusIds::INTERNAL_ERROR, ActorContext()
-            );
-        }
-        pInResponse.Hostname = (*NodesInfoEv->Get()->Nodes)[iter->second].Host;
     }
     TBase::RespondWithCode(Ydb::StatusIds::SUCCESS);
 }

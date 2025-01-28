@@ -4,6 +4,8 @@
 
 #include "export_s3_buffer.h"
 
+#include <ydb/core/backup/common/checksum.h>
+
 #include <util/generic/buffer.h>
 
 namespace NKikimr {
@@ -42,7 +44,7 @@ protected:
     ui64 BytesRead;
     TBuffer Buffer;
 
-    IExportChecksum::TPtr Checksum;
+    NBackup::IChecksum::TPtr Checksum;
 
     TString ErrorString;
 }; // TS3BufferRaw

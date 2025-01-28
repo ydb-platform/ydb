@@ -1,8 +1,9 @@
-#include "schemeshard_xxport__tx_base.h"
-#include "schemeshard_export_flow_proposals.h"
-#include "schemeshard_export.h"
 #include "schemeshard_audit_log.h"
+#include "schemeshard_export.h"
+#include "schemeshard_export_flow_proposals.h"
+#include "schemeshard_export_helpers.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -57,6 +58,10 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
             Send(Request->Sender, std::move(response), 0, Request->Cookie);
             return true;
         }
+
+        LOG_D("TExport::TTxCancel, cancelling manually"
+            << ", info: " << exportInfo->ToString()
+        );
 
         exportInfo->Issue = "Cancelled manually";
 

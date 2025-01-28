@@ -140,4 +140,12 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
   $ydb = new Ydb($config);
   ```
 
+- Rust
+
+  ```rust
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+        .with_credentials(AccessTokenCredentials::from("..."))
+        .client()?
+  ```
+
 {% endlist %}

@@ -250,7 +250,7 @@ public:
         auto it = ChildToKey_.find(child);
         YT_ASSERT(it != ChildToKey_.end());
 
-        // NB: don't use const auto& here, it becomes invalid!
+        // NB: Don't use const auto& here, it becomes invalid!
         auto key = it->second;
         ChildToKey_.erase(it);
         YT_VERIFY(KeyToChild_.erase(key) == 1);
@@ -267,7 +267,7 @@ public:
         auto it = ChildToKey_.find(oldChild);
         YT_ASSERT(it != ChildToKey_.end());
 
-        // NB: don't use const auto& here, it becomes invalid!
+        // NB: Don't use const auto& here, it becomes invalid!
         auto key = it->second;
 
         oldChild->SetParent(nullptr);

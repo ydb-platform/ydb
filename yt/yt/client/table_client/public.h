@@ -10,11 +10,12 @@
 
 #include <yt/yt/client/transaction_client/public.h>
 
-#include <yt/yt/core/misc/range.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <util/generic/size_literals.h>
 

@@ -27,7 +27,7 @@ namespace NYql {
                 : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
             {
                 using EFlag = NPushdown::TSettings::EFeatureFlag;
-                Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64);
+                Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::DateTimeTypes | EFlag::TimestampCtor);
             }
         };
 

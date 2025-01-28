@@ -1217,11 +1217,16 @@ class StaticConfigGenerator(object):
         state_storage_cfg.Ring.Node.extend(selected_ids)
 
     def __generate_log_txt(self):
-        self.__proto_configs["log.txt"] = config_pb2.TLogConfig()
-        utils.apply_config_changes(
-            self.__proto_configs["log.txt"],
-            self.__cluster_details.log_config,
-        )
+        log_config = self.__cluster_details.log_config
+        if isinstance(log_config, config_pb2.TLogConfig):
+            self.__proto_configs["log.txt"] = log_config
+        else:
+            self.__proto_configs["log.txt"] = config_pb2.TLogConfig()
+            utils.apply_config_changes(
+                self.__proto_configs["log.txt"],
+                self.__cluster_details.log_config,
+            )
+
 
     def __generate_names_txt(self):
         self.__proto_configs["names.txt"] = config_pb2.TStaticNameserviceConfig()

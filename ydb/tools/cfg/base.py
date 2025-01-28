@@ -5,7 +5,9 @@ import copy
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from ydb.tools.cfg import types, validation, walle
+from ydb.tools.cfg import types, validation, walle, utils
+
+from ydb.core.protos import config_pb2
 
 DEFAULT_LOG_LEVEL = types.LogLevels.NOTICE
 
@@ -662,6 +664,17 @@ class ClusterDetailsProvider(object):
     # Log Stuff
     @property
     def log_config(self):
+        # `config.yaml` style
+        log_config_dict = self.__cluster_description.get("log_config", {})
+        if log_config_dict != {}:
+            log_config = config_pb2.TLogConfig()
+            if "default_level" not in log_config_dict:
+                log_config["default_level"] = self.default_log_level
+            utils.wrap_parse_dict(log_config_dict, log_config)
+            return log_config
+
+
+        # Old, `template.yaml` style
         log_config = copy.deepcopy(self.__cluster_description.get("log", {}))
 
         if "entries" in log_config:

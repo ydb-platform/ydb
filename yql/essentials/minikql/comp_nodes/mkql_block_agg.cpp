@@ -1199,6 +1199,7 @@ public:
     std::optional<NThreading::TFuture<ISpiller::TKey>> SpillingOperation_ = std::nullopt;
     bool IsExtractingFinished = false;
     std::vector<ISpiller::TKey> SpillingKeys_;
+    bool IteratorsInitialized = false;
 
     THashedWrapperBaseState(TMemoryUsageInfo* memInfo, ui32 keyLength, ui32 streamIndex, size_t width, size_t outputWidth, std::optional<ui32> filterColumn, const std::vector<TAggParams<TAggregator>>& params,
         const std::vector<std::vector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
@@ -1254,7 +1255,6 @@ public:
 
     template <typename THash>
     bool SpillingIterate(THash& hash, typename THash::const_iterator& iter, TOutputBuffer& buf) {
-        MKQL_ENSURE(WritingOutput_, "Supposed to be called at the end");
         std::array<typename THash::const_iterator, PrefetchBatchSize> iters;
         ui32 itersLen = 0;
 
@@ -1271,9 +1271,10 @@ public:
                 }
 
                 TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
-                for (auto& kb : Builders_) {
-                    kb->Add(in);
-                }
+                Y_UNUSED(in);
+                // for (auto& kb : Builders_) {
+                //     kb->Add(in);
+                // }
 
                 if constexpr (Many) {
                     for (ui32 i = 0; i < Streams_.size(); ++i) {
@@ -1285,7 +1286,7 @@ public:
 
                 for (size_t i = 0; i < Aggs_.size(); ++i) {
                     Aggs_[i]->SerializeState(ptr, buf);
-                    Aggs_[i]->DestroyState(ptr);
+                    // Aggs_[i]->DestroyState(ptr);
 
 
                     ptr += Aggs_[i]->StateSize;
@@ -1299,7 +1300,6 @@ public:
             }
 
 
-            buf.Resize(0);
             if (SpillingOutputBlockSize_ == MaxBlockLen_) {
                 iterateBatch();
                 return false;
@@ -1335,6 +1335,15 @@ public:
     }
 
     bool SpillEverything() {
+        if (!IteratorsInitialized) {
+            if constexpr (!InlineAggState) {
+                SpillingHashFixedMapIt_ = HashFixedMap_->Begin();
+            } else {
+                SpillingHashMapIt_ = HashMap_->Begin();
+            }
+            IteratorsInitialized = true;
+        }
+        std::cerr << "Spilling everything" << std::endl;
         if (SpillingOperation_.has_value() && !SpillingOperation_->HasValue()) return false;
 
         if (SpillingOperation_.has_value()) {
@@ -1348,9 +1357,14 @@ public:
                 SpillingIterate(*HashMap_, SpillingHashMapIt_, spillingBuffer) :
                 SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_, spillingBuffer);
             auto sb = spillingBuffer.Finish();
+            if (!sb.size()) continue;
             TString s = TString(sb.begin(), sb.size());
+            int stringSize = s.size();
             NYql::TChunkedBuffer cb = NYql::TChunkedBuffer(std::move(s));
             SpillingOperation_ = Spiller_->Put(std::move(cb));
+            std::cerr << "Spilled block " << stringSize << std::endl;
+            SpillingOutputBlockSize_ = 0;
+            break;
         }
         return !SpillingOperation_.has_value();
 
@@ -1976,6 +1990,11 @@ private:
                         case NUdf::EFetchStatus::Finish:
                             if constexpr(Finalize) {
                                 if (!state.SpillEverything()) return NUdf::EFetchStatus::Yield;
+                                std::cerr << "MISHA blobs spilled: ";
+                                for (auto blobId : state.SpillingKeys_) {
+                                    std::cerr << blobId << " ";
+                                }
+                                std::cerr << std::endl;
                                 if (!state.LoadEverything()) return NUdf::EFetchStatus::Yield;
                             }
                             break;

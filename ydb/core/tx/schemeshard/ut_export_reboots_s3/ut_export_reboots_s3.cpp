@@ -510,111 +510,76 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
+    class TestData {
+    public:
+    static const TTypedScheme& Table() const {
+        return TableScheme;
+    } 
+
+    static const TTypedScheme& Changefeed() const {
+        return ChangefeedScheme;
+    }
+
+    static const TString& Request() const {
+        return request;
+    }
+
+    private:
+    static const char* TableName = "Table";
+
+    static const TTypedScheme TableScheme = TTypedScheme {
+        Sprintf(R"(
+            Name: "%s"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", tableName),
+        EPathTypeTable
+    };
+
+    static const TTypedScheme ChangefeedScheme = TTypedScheme {
+        Sprintf(R"(
+            TableName: "%s"
+            StreamDescription {
+                Name: "update_feed"
+                Mode: ECdcStreamModeUpdate
+                Format: ECdcStreamFormatJson
+                State: ECdcStreamStateReady
+            }
+        )", tableName),
+        EPathTypeCdcStream
+    };
+
+    static const TString request = R"(
+        ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+            source_path: "/MyRoot/Table"
+            destination_prefix: ""
+            }
+        }
+    )";
+    };
+
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTableWithChangefeed) {
-        const char* tableName = "Table";
         RunS3({
-            TTypedScheme {
-                Sprintf(R"(
-                    Name: "%s"
-                    Columns { Name: "key" Type: "Utf8" }
-                    Columns { Name: "value" Type: "Utf8" }
-                    KeyColumnNames: ["key"]
-                )", tableName),
-                EPathTypeTable
-            },
-            TTypedScheme {
-                Sprintf(R"(
-                    TableName: "%s"
-                    StreamDescription {
-                        Name: "update_feed"
-                        Mode: ECdcStreamModeUpdate
-                        Format: ECdcStreamFormatJson
-                        State: ECdcStreamStateReady
-                    }
-                )", tableName),
-                EPathTypeCdcStream
-            }
-        }, R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: ""
-              }
-            }
-        )");
+            TestData::Table(),
+            TestData::Changefeed()
+        }, TestData::Request());
     }
 
     Y_UNIT_TEST(CancelOnSingleShardTableWithChangefeed) {
-        const char* tableName = "Table";
         CancelS3({
-            TTypedScheme {
-                Sprintf(R"(
-                    Name: "%s"
-                    Columns { Name: "key" Type: "Utf8" }
-                    Columns { Name: "value" Type: "Utf8" }
-                    KeyColumnNames: ["key"]
-                )", tableName),
-                EPathTypeTable
-            },
-            TTypedScheme {
-                Sprintf(R"(
-                    TableName: "%s"
-                    StreamDescription {
-                        Name: "update_feed"
-                        Mode: ECdcStreamModeUpdate
-                        Format: ECdcStreamFormatJson
-                        State: ECdcStreamStateReady
-                    }
-                )", tableName),
-                EPathTypeCdcStream
-            }
-        }, R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: ""
-              }
-            }
-        )");
+            TestData::Table(),
+            TestData::Changefeed()
+        }, TestData::Request());
     }
 
     Y_UNIT_TEST(ForgetShouldSucceedOnSingleShardTableWithChangefeed) {
-        const char* tableName = "Table";
         ForgetS3({
-            TTypedScheme {
-                Sprintf(R"(
-                    Name: "%s"
-                    Columns { Name: "key" Type: "Utf8" }
-                    Columns { Name: "value" Type: "Utf8" }
-                    KeyColumnNames: ["key"]
-                )", tableName),
-                EPathTypeTable
-            },
-            TTypedScheme {
-                Sprintf(R"(
-                    TableName: "%s"
-                    StreamDescription {
-                        Name: "update_feed"
-                        Mode: ECdcStreamModeUpdate
-                        Format: ECdcStreamFormatJson
-                        State: ECdcStreamStateReady
-                    }
-                )", tableName),
-                EPathTypeCdcStream
-            }
-        }, R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: ""
-              }
-            }
-        )");
+            TestData::Table(),
+            TestData::Changefeed()
+        }, TestData::Request());
     }
 }

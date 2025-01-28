@@ -8,6 +8,18 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+void CreateChangefeedsPropose(THolder<TEvSchemeShard::TEvModifySchemeTransaction>& propose, const TImportInfo::TItem& item) {
+    auto& record = propose->Record;
+    const auto& changefeeds = item.Changefeeds;
+    
+    for (const auto& changefeed : changefeeds) {
+        auto& modifyScheme = *record.AddTransaction();
+        const auto& cdcStream = modifyScheme.MutableCreateCdcStream();
+        cdcStream->MutableTableName();
+    }
+
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,

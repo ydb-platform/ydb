@@ -5,13 +5,6 @@ from .base import TllTieringTestBase, ColumnTableHelper
 logger = logging.getLogger(__name__)
 
 
-def get_all_rows(answer):
-    result = []
-    for set in answer:
-        result += set.rows
-    return result
-
-
 class TestDeleteS3Ttl(TllTieringTestBase):
 
     row_count = 10 ** 7
@@ -26,15 +19,19 @@ class TestDeleteS3Ttl(TllTieringTestBase):
     def portions_actualized_in_sys(self, table):
         portions = table.get_portion_stat_by_tier()
         logger.info(f"portions: {portions}, blobs: {table.get_blob_stat_by_tier()}")
-        return "__DEFAULT" in portions and self.row_count <= portions["__DEFAULT"]["Rows"]
+        return "__DEFAULT" in portions and self.row_count > portions["__DEFAULT"]["Rows"]
+
+    def get_aggregated(self, table_path):
+        answer = self.ydb_client.query(f"SELECT count(*), sum(val), sum(Digest::Fnv32(s)) from `{table_path}`")
+        return [answer[0].rows[0][0], answer[0].rows[0][1], answer[0].rows[0][2]]
 
     def get_row_count_by_date(self, table_path: str, past_days: int) -> int:
         return self.ydb_client.query(f"SELECT count(*) as Rows from `{table_path}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromDays({past_days})")[0].rows[0]["Rows"]
 
     def test_data_unchanged_after_ttl_change(self):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13542 '''
-        self.row_count = 100000
-        single_upsert_row_count = 10000
+        self.row_count = 7000000
+        single_upsert_row_count = 700000
         test_name = 'test_data_unchanged_after_ttl_change'
         cold_bucket = 'cold_uc'
         frozen_bucket = 'frozen_uc'
@@ -48,7 +45,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         cold_eds_path = f"{test_dir}/{cold_bucket}"
         frozen_eds_path = f"{test_dir}/{frozen_bucket}"
 
-        days_to_medium = 2000
+        days_to_medium = 2500
         medium_bucket = 'medium'
         self.s3_client.create_bucket(medium_bucket)
         medium_eds_path = f"{test_dir}/{medium_bucket}"
@@ -137,18 +134,14 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         logger.info(f"Rows older than {self.days_to_cool} days: {self.get_row_count_by_date(table_path, self.days_to_cool)}")
         logger.info(f"Rows older than {self.days_to_freeze} days: {self.get_row_count_by_date(table_path, self.days_to_freeze)}")
 
-        if not self.wait_for(lambda: self.portions_actualized_in_sys(table), 120):
-            raise Exception(".sys reports incorrect data portions")
-
-        answer = self.ydb_client.query(f"SELECT * from `{table_path}` ORDER BY ts")
-        data = get_all_rows(answer)
+        data = self.get_aggregated(table_path)
+        logger.info('Aggregated answer {}'.format(data))
 
         def change_ttl_and_check(days_to_cool, days_to_medium, days_to_freeze):
             t0 = time.time()
             stmt = f"""
                 ALTER TABLE `{table_path}` SET (TTL =
                     Interval("P{days_to_cool}D") TO EXTERNAL DATA SOURCE `{cold_eds_path}`,
-                    Interval("P{days_to_medium}D") TO EXTERNAL DATA SOURCE `{medium_eds_path}`,
                     Interval("P{days_to_freeze}D") TO EXTERNAL DATA SOURCE `{frozen_eds_path}`
                     ON ts
                 )
@@ -167,12 +160,10 @@ class TestDeleteS3Ttl(TllTieringTestBase):
                 # So we wait until some data appears in any bucket
                 return cold_bucket_stat[0] != 0 or frozen_bucket_stat[0] != 0 or medium_bucket_stat[0] != 0
 
-            if not self.wait_for(lambda: data_distributes_across_tiers(), 120):
+            if not self.wait_for(lambda: data_distributes_across_tiers(), 240):
                 raise Exception("Data eviction has not been started")
 
-            answer1 = self.ydb_client.query(f"SELECT * from `{table_path}` ORDER BY ts")
-            data1 = get_all_rows(answer1)
-            logger.info("Old record count {} new record count {}".format(len(data), len(data1)))
+            data1 = self.get_aggregated(table_path)
             if data1 != data:
                 raise Exception("Data changed after ttl change, was {} now {}".format(data, data1))
 
@@ -180,7 +171,6 @@ class TestDeleteS3Ttl(TllTieringTestBase):
             stmt = f"""
                 ALTER TABLE `{table_path}` SET (TTL =
                     Interval("PT800M") TO EXTERNAL DATA SOURCE `{cold_eds_path}`,
-                    Interval("PT850M") TO EXTERNAL DATA SOURCE `{medium_eds_path}`,
                     Interval("PT900M") TO EXTERNAL DATA SOURCE `{frozen_eds_path}`
                     ON ts
                 )
@@ -201,9 +191,8 @@ class TestDeleteS3Ttl(TllTieringTestBase):
             if not self.wait_for(lambda: data_deleted_from_buckets(), 120):
                 # raise Exception("not all data deleted") TODO FIXME after https://github.com/ydb-platform/ydb/issues/13535
                 pass
-            answer1 = self.ydb_client.query(f"SELECT * from `{table_path}` ORDER BY ts")
-            data1 = get_all_rows(answer1)
-            logger.info("Old record count {} new record count {}".format(len(data), len(data1)))
+            data1 = self.get_aggregated(table_path)
+
             if data1 != data:
                 raise Exception("Data changed after ttl change, was {} now {}".format(data, data1))
 

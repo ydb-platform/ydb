@@ -538,7 +538,7 @@ public:
 
     template<typename TRequest>
     void SendRequest(const TActorContext& ctx, std::unique_ptr<TRequest>&& request) {
-        ctx.Send(MakeBlobStoragePDiskID(TActivationContext::ActorSystem()->NodeId, PDiskId), request.release());
+        ctx.Send(MakeBlobStoragePDiskID(ctx.SelfID.NodeId(), PDiskId), request.release());
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {

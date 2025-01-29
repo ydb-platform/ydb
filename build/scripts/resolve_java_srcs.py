@@ -80,7 +80,7 @@ def resolve_java_srcs(srcdir, include_patterns, exclude_patterns, all_resources,
     return sorted(result['java']), sorted(result['not_java']), sorted(result['kotlin'])
 
 
-def do_it(
+def resolve_sources_and_fill_filelists(
     directory,
     sources_file,
     resources_file,
@@ -115,7 +115,7 @@ def cli_main(argv, force_skip_source_jars=False):
     if force_skip_source_jars and args.all_resources:
         return
 
-    do_it(**vars(args))
+    resolve_sources_and_fill_filelists(**vars(args))
 
 
 if __name__ == '__main__':

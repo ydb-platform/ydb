@@ -38,7 +38,7 @@ static NYdb::TType MakeOptionalType(NYdb::EPrimitiveType type) {
 }
 
 
-TEST(Integration, BasicExample) {
+TEST(BasicExample, BasicExample) {
     auto [driver, path] = GetRunArgs();
 
     NYdb::NTable::TTableClient client(driver);

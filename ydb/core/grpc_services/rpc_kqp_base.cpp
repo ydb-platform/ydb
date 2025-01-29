@@ -10,9 +10,15 @@ namespace NGRpcService {
 void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKqpProto::TKqpStatsQuery& kqpStats) {
     uint64_t totalCpuTimeUs = 0;
 
+    uint64_t totalReadRows = 0;
+    uint64_t totalReadBytes = 0;
+
     for (auto& exec : kqpStats.GetExecutions()) {
         auto durationUs = exec.GetDurationUs();
         auto cpuTimeUs = exec.GetCpuTimeUs();
+
+        totalReadRows += exec.GetTotalReadRows();
+        totalReadBytes += exec.GetTotalReadBytes();
 
         totalCpuTimeUs += cpuTimeUs;
 
@@ -67,6 +73,8 @@ void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKqpProto::TK
     queryStats.set_process_cpu_time_us(kqpStats.GetWorkerCpuTimeUs());
     queryStats.set_total_cpu_time_us(totalCpuTimeUs);
     queryStats.set_total_duration_us(kqpStats.GetDurationUs());
+    queryStats.set_total_read_rows(totalReadRows);
+    queryStats.set_total_read_bytes(totalReadBytes);
 }
 
 void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse) {

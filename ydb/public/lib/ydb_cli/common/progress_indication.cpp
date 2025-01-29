@@ -1,11 +1,13 @@
 #include "print_utils.h"
 #include "progress_indication.h"
 
+#include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
+
 namespace NYdb {
 namespace NConsoleClient {
 
-TProgressIndication::TProgressIndication(bool onlyReadStats)
-    : OnlyReadStats(onlyReadStats) {
+TProgressIndication::TProgressIndication() {
 }
 
 void TProgressIndication::UpdateProgress(const TCurrentStats& stats)
@@ -16,6 +18,7 @@ void TProgressIndication::UpdateProgress(const TCurrentStats& stats)
     CurrentStats.UpdateBytes += stats.UpdateBytes;
     CurrentStats.DeleteRows += stats.DeleteRows;
     CurrentStats.DeleteBytes += stats.DeleteBytes;
+    CurrentStats.DurationUs += stats.DurationUs;
 }
 
 TProgressIndication::~TProgressIndication() {
@@ -31,23 +34,32 @@ void TProgressIndication::Finish() {
 
 void TProgressIndication::Render()
 {
+    if (!GetTerminalWidth())
+        return;
+
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+
     Cerr << "\r" "\033[K";
+    Cerr << colors.LightGreen();
     switch (RendersCount % 4) {
         case 0: Cerr << "|"; break;
         case 1: Cerr << "/"; break;
         case 2: Cerr << "-"; break;
         case 3: Cerr << "\\"; break;
     }
-    Cerr << "Progress: ";
+    Cerr << colors.Default();
+    Cerr << colors.BoldColor() << "Progress: " << colors.Default();
 
-    Cerr << PrettyNumber(CurrentStats.ReadRows) << " rows read, " << PrettySize(CurrentStats.ReadBytes) << " read"; 
-
-    if (OnlyReadStats) {
-        Cerr << ".";
-    } else {
-        Cerr << ", " << PrettyNumber(CurrentStats.UpdateRows) << " rows updated, " << PrettySize(CurrentStats.UpdateBytes) << " updated, " <<
-        PrettyNumber(CurrentStats.DeleteRows) << " rows deleted, " << PrettySize(CurrentStats.DeleteBytes) << " deleted.";
+    Cerr << colors.LightBlack() << PrettyNumber(CurrentStats.ReadRows) << " rows read, " << PrettySize(CurrentStats.ReadBytes) << " read";
+    if (CurrentStats.DurationUs) { 
+        Cerr << colors.Black() << " (" << PrettyNumber(CurrentStats.ReadRows * 1000000.0 / CurrentStats.DurationUs) << "/s" << ", " << 
+            PrettySize(CurrentStats.ReadBytes * 1000000.0 / CurrentStats.DurationUs) << "/s" << ")";
     }
+
+    Cerr << ".";
+
+    Cerr << colors.Default();
+    Cerr.Flush();
 
     RendersCount++;
 

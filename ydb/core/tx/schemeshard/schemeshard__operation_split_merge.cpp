@@ -784,6 +784,13 @@ public:
             return result;
         }
 
+        if (tableInfo->IsRestore) {
+            TString errMsg = TStringBuilder()
+                << "cannot split/merge restore table " << info.GetTablePath();
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
+            return result;
+        }
+
         const THashMap<TShardIdx, ui64>& shardIdx2partition = tableInfo->GetShard2PartitionIdx();
 
         TVector<ui64> srcPartitionIdxs;

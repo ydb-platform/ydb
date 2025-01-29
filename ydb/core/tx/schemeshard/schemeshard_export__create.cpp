@@ -988,8 +988,7 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         auto& item = exportInfo->Items[itemIdx];
-        Self->RunningExportSchemeUploaders.erase(item.SchemeUploader);
-        item.SchemeUploader = TActorId();
+        Self->RunningExportSchemeUploaders.erase(std::exchange(item.SchemeUploader, {}));
 
         if (!result.Success) {
             item.State = EState::Cancelled;

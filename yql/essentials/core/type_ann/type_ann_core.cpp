@@ -8706,12 +8706,24 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         auto variantType = type->Cast<TVariantExprType>();
 
+        const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TOptionalExprType>(
+            ctx.Expr.MakeType<TDataExprType>(
+                variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple ?
+                    EDataSlot::Uint32 :
+                    EDataSlot::Utf8));
+
+        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+        if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
+            return convertStatus;
+        }
+
         const TTypeAnnotationNode* firstType;
         if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
-            if (!EnsureSpecificDataType(*input->Child(1), EDataSlot::Uint32, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
             auto tupleType = variantType->GetUnderlyingType()->Cast<TTupleExprType>();
             firstType = tupleType->GetItems()[0];
             for (size_t i = 1; i < tupleType->GetSize(); ++i) {
@@ -8723,10 +8735,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
         } else {
-            if (!EnsureSpecificDataType(*input->Child(1), EDataSlot::Utf8, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
             auto structType = variantType->GetUnderlyingType()->Cast<TStructExprType>();
             firstType = structType->GetItems()[0]->GetItemType();
             for (size_t i = 1; i < structType->GetSize(); ++i) {
@@ -8738,7 +8746,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
 
-        const auto convertStatus = TryConvertTo(input->ChildRef(0), *firstType, ctx.Expr);
+        convertStatus = TryConvertTo(input->ChildRef(0), *firstType, ctx.Expr);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
                 TStringBuilder() << "Mismatch item type, expected: " << *firstType << ", got: " << *input->Child(0)->GetTypeAnn()));

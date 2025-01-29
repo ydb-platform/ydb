@@ -908,7 +908,7 @@ void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMe
     auto& memTable = MemTable();
     bool hadTxRef = memTable.GetTxIdStats().contains(txId);
 
-    if (ErasedKeysCache && rop != ERowOp::Erase) {
+    if (ErasedKeysCache) {
         const TCelled cells(key, *Scheme->Keys, true);
         auto res = ErasedKeysCache->FindKey(cells);
         if (res.second) {

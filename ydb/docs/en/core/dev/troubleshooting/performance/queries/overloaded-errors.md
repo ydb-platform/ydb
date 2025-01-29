@@ -4,7 +4,7 @@
 
 * Overloaded table partitions with over 15000 queries in their queue.
 
-* The outbound CDC queue exceeds the limit of 10000 elements or 125 MB.
+* The outbound [CDC](../../../../concepts/glossary.md#cdc) queue exceeds the limit of 10000 elements or 125 MB.
 
 * Table partitions in states other than normal, for example partitions in the process of splitting or merging.
 

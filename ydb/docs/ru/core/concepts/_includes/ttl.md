@@ -54,7 +54,7 @@ eviction_time = valueof(ttl_column) + evict_after_seconds
   * наносекунды.
 
 * Нельзя указать несколько TTL-колонок.
-* Нельзя удалить TTL-колонку. Если это все же требуется, сначала нужно [выключить TTL](../../recipes/yql/ttl.md#disable) на таблице.
+* Нельзя удалить TTL-колонку. Если это все же требуется, сначала нужно [выключить TTL](../../yql/reference/recipes/ttl.md#disable) на таблице.
 * В качестве типа внешнего хранилища доступен только {{ objstorage-name }}.
 * Действие `DELETE` может быть задано только для последнего тира.
 
@@ -62,6 +62,6 @@ eviction_time = valueof(ttl_column) + evict_after_seconds
 
 Управление настройками TTL в настоящий момент возможно с использованием:
 
-* [YQL](../../recipes/yql/ttl.md).
+* [YQL](../../yql/reference/recipes/ttl.md).
 * [Консольного клиента {{ ydb-short-name }}](../../recipes/ydb-cli/ttl.md).
 * {{ ydb-short-name }} {% if oss %}C++, {% endif %}Go и Python [SDK](../../recipes/ydb-sdk/ttl.md).

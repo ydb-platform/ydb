@@ -179,7 +179,6 @@ class TestDeleteS3Ttl(TllTieringTestBase):
             self.ydb_client.query(stmt)
             logger.info(f"TTL set in {time.time() - t0} seconds")
 
-            # TODO FIXME after https://github.com/ydb-platform/ydb/issues/13523
             def data_deleted_from_buckets():
                 cold_bucket_stat = self.s3_client.get_bucket_stat(cold_bucket)
                 medium_bucket_stat = self.s3_client.get_bucket_stat(medium_bucket)
@@ -188,8 +187,8 @@ class TestDeleteS3Ttl(TllTieringTestBase):
                     f"portions: {table.get_portion_stat_by_tier()}, blobs: {table.get_blob_stat_by_tier()}, cold bucket stat: {cold_bucket_stat}, frozen bucket stat: {frozen_bucket_stat}")
                 return cold_bucket_stat[0] == 0 and frozen_bucket_stat[0] == 0 and medium_bucket_stat[0] == 0
 
-            if not self.wait_for(lambda: data_deleted_from_buckets(), 120):
-                # raise Exception("not all data deleted") TODO FIXME after https://github.com/ydb-platform/ydb/issues/13535
+            if not self.wait_for(lambda: data_deleted_from_buckets(), 300):
+                raise Exception("not all data deleted")
                 pass
             data1 = self.get_aggregated(table_path)
 
@@ -418,6 +417,6 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         logger.info(stmt)
         self.ydb_client.query(stmt)
 
-        if not self.wait_for(lambda: self.data_deleted_from_buckets('cold_delete', 'frozen_delete'), 120):
+        if not self.wait_for(lambda: self.data_deleted_from_buckets('cold_delete', 'frozen_delete'), 300):
             # raise Exception("not all data deleted") TODO FIXME after https://github.com/ydb-platform/ydb/issues/13594
             pass

@@ -104,6 +104,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         FeatureFlags.SetEnableParameterizedDecimal(true);
         FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
         FeatureFlags.SetEnableFollowerStats(true);
+        FeatureFlags.SetEnableColumnStore(true);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }

@@ -102,6 +102,10 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
         Execute(CreateTxCleanBlockStoreVolumes(std::move(opts.BlockStoreVolumesToClean)), ctx);
     }
 
+    if (opts.RestoreTablesToUnmark) {
+        Execute(CreateTxUnmarkRestoreTables(std::move(opts.RestoreTablesToUnmark)), ctx);
+    }
+
     if (IsDomainSchemeShard) {
         InitializeTabletMigrations();
     }
@@ -2668,6 +2672,16 @@ void TSchemeShard::PersistTableFinishColumnBuilding(NIceDb::TNiceDb& db, const T
     }
 }
 
+void TSchemeShard::PersistTableIsRestore(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
+    if (pathId.OwnerId == TabletID()) {
+        db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::Tables::IsRestore>(tableInfo->IsRestore));
+    } else {
+        db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::MigratedTables::IsRestore>(tableInfo->IsRestore));
+    }
+}
+
 void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
     TString partitionConfig;
     Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PartitionConfig().SerializeToString(&partitionConfig);
@@ -2696,6 +2710,7 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::AlterTableFull>(TString()),
             NIceDb::TUpdate<Schema::Tables::TTLSettings>(ttlSettings),
             NIceDb::TUpdate<Schema::Tables::IsBackup>(tableInfo->IsBackup),
+            NIceDb::TUpdate<Schema::Tables::IsRestore>(tableInfo->IsRestore),
             NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::Tables::IsTemporary>(tableInfo->IsTemporary),
             NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
@@ -2709,6 +2724,7 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::MigratedTables::AlterTableFull>(TString()),
             NIceDb::TUpdate<Schema::MigratedTables::TTLSettings>(ttlSettings),
             NIceDb::TUpdate<Schema::MigratedTables::IsBackup>(tableInfo->IsBackup),
+            NIceDb::TUpdate<Schema::MigratedTables::IsRestore>(tableInfo->IsRestore),
             NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::MigratedTables::IsTemporary>(tableInfo->IsTemporary),
             NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
@@ -4542,6 +4558,12 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     for (TActorId schemeUploader : RunningExportSchemeUploaders) {
         ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());
     }
+    for (TActorId schemeGetter : RunningImportSchemeGetters) {
+        ctx.Send(schemeGetter, new TEvents::TEvPoisonPill());
+    }
+    for (TActorId schemeQueryExecutor : RunningImportSchemeQueryExecutors) {
+        ctx.Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
+    }
 
     IndexBuildPipes.Shutdown(ctx);
     CdcStreamScanPipes.Shutdown(ctx);
@@ -4839,6 +4861,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvImport::TEvForgetImportRequest, Handle);
         HFuncTraced(TEvImport::TEvListImportsRequest, Handle);
         HFuncTraced(TEvPrivate::TEvImportSchemeReady, Handle);
+        HFuncTraced(TEvPrivate::TEvImportSchemeQueryResult, Handle);
         // } // NImport
 
         // namespace NBackup {
@@ -6832,6 +6855,10 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
 
     if (tinfo->IsBackup) {
         tableDescr->SetIsBackup(true);
+    }
+
+    if (tinfo->IsRestore) {
+        tableDescr->SetIsRestore(true);
     }
 
     if (tinfo->HasReplicationConfig()) {

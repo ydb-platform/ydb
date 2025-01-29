@@ -317,6 +317,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
     REGISTER_SETTING(*this, DisableFuseOperations);
+    REGISTER_SETTING(*this, EnableFuseMapToMapReduce);
     REGISTER_SETTING(*this, MaxExtraJobMemoryToFuseOperations);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseOperations).Lower(1.0);
     REGISTER_SETTING(*this, MaxOperationFiles).Lower(2).Upper(1000);

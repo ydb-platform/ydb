@@ -100,6 +100,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         hFunc(NPDisk::TEvSlayResult, Handle);
+        hFunc(NPDisk::TEvShredPDiskResult, Handle);
+        hFunc(NPDisk::TEvShredPDisk, Handle);
 
         hFunc(TEvRegisterPDiskLoadActor, Handle);
 
@@ -575,6 +577,50 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
     };
 }
 
+void TNodeWarden::Handle(NPDisk::TEvShredPDiskResult::TPtr ev) {
+    ProcessShredStatus(ev->Cookie, ev->Get()->ShredGeneration, ev->Get()->Status == NKikimrProto::OK ? std::nullopt :
+        std::make_optional(TStringBuilder() << "failed to shred PDisk Status# " << NKikimrProto::EReplyStatus_Name(
+        ev->Get()->Status)));
+}
+
+void TNodeWarden::Handle(NPDisk::TEvShredPDisk::TPtr ev) {
+    // the message has returned to sender -- PDisk was terminated before processing it; normally it must never happen,
+    // because NodeWarden issues PoisonPill synchronously with removing PDisk from the LocalPDisks set
+    ProcessShredStatus(ev->Cookie, ev->Get()->ShredGeneration, "PDisk has been terminated before it got shredded");
+    Y_DEBUG_ABORT("unexpected case");
+}
+
+void TNodeWarden::ProcessShredStatus(ui64 cookie, ui64 generation, std::optional<TString> error) {
+    const auto it = ShredInFlight.find(cookie);
+    const std::optional<TPDiskKey> key = it != ShredInFlight.end() ? std::make_optional(it->second) : std::nullopt;
+    if (it != ShredInFlight.end()) {
+        ShredInFlight.erase(it);
+    }
+
+    const auto pdiskIt = key ? LocalPDisks.find(*key) : LocalPDisks.end();
+    TPDiskRecord *pdisk = pdiskIt != LocalPDisks.end() ? &pdiskIt->second : nullptr;
+    if (pdisk) {
+        const size_t numErased = pdisk->ShredCookies.erase(cookie);
+        Y_ABORT_UNLESS(numErased);
+    }
+
+    STLOG(PRI_DEBUG, BS_SHRED, BSSN00, "processing shred result from PDisk",
+        (Cookie, cookie),
+        (PDiskId, key),
+        (ShredGeneration, generation),
+        (ErrorReason, error),
+        (ShredGenerationIssued, pdisk ? pdisk->ShredGenerationIssued : std::nullopt));
+
+    if (pdisk && generation == pdisk->ShredGenerationIssued) {
+        if (error) {
+            pdisk->ShredState.emplace<TString>(std::move(*error));
+        } else {
+            pdisk->ShredState.emplace<ui64>(generation);
+        }
+        SendPDiskReport(key->PDiskId, NKikimrBlobStorage::TEvControllerNodeReport::PD_SHRED, pdisk->ShredState);
+    }
+}
+
 void TNodeWarden::Handle(TEvRegisterPDiskLoadActor::TPtr ev) {
     Send(ev.Get()->Sender, new TEvRegisterPDiskLoadActorResult(NextLocalPDiskInitOwnerRound()));
 }
@@ -607,6 +653,56 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         const ui32 generation = item.GetCurrentGeneration();
         if (const auto it = Groups.find(groupId); it != Groups.end() && it->second.MaxKnownGeneration < generation) {
             ApplyGroupInfo(groupId, generation, nullptr, false, false);
+        }
+    }
+
+    if (record.HasShredRequest()) {
+        const auto& request = record.GetShredRequest();
+        const ui64 generation = request.GetShredGeneration();
+        for (ui32 pdiskId : request.GetPDiskIds()) {
+            const TPDiskKey key(LocalNodeId, pdiskId);
+            if (const auto it = LocalPDisks.find(key); it != LocalPDisks.end()) {
+                TPDiskRecord& pdisk = it->second;
+
+                auto issueShredRequestToPDisk = [&] {
+                    const ui64 cookie = ++LastShredCookie;
+                    ShredInFlight.emplace(cookie, key);
+                    pdisk.ShredCookies.insert(cookie);
+
+                    const TActorId actorId = SelfId();
+                    auto ev = std::make_unique<NPDisk::TEvShredPDisk>(generation);
+                    TActivationContext::Send(new IEventHandle(MakeBlobStoragePDiskID(LocalNodeId, pdiskId), SelfId(),
+                        ev.release(), IEventHandle::FlagForwardOnNondelivery, cookie, &actorId));
+                    pdisk.ShredGenerationIssued.emplace(generation);
+
+                    STLOG(PRI_DEBUG, BS_SHRED, BSSN01, "sending shred query to PDisk",
+                        (Cookie, cookie),
+                        (PDiskId, key),
+                        (ShredGeneration, generation));
+                };
+
+                if (pdisk.ShredGenerationIssued == generation) {
+                    std::visit(TOverloaded{
+                        [&](std::monostate&) {
+                            // shredding is in progress, do nothing
+                        },
+                        [&](ui64& generation) {
+                            // shredding has already completed for this generation, report it
+                            SendPDiskReport(pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::PD_SHRED, generation);
+                        },
+                        [&](TString& /*aborted*/) {
+                            // shredding finished with error last time, restart
+                            issueShredRequestToPDisk();
+                        }
+                    }, pdisk.ShredState);
+                } else if (pdisk.ShredGenerationIssued < generation) {
+                    issueShredRequestToPDisk();
+                } else {
+                    SendPDiskReport(pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::PD_SHRED, "obsolete generation");
+                }
+            } else {
+                SendPDiskReport(pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::PD_SHRED, "PDisk not found");
+            }
         }
     }
 }

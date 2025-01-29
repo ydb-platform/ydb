@@ -438,6 +438,7 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvTabletPipe::TEvClientDestroyed, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvGetBlockResult, ConsoleInteraction->Handle);
         fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
+        cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),

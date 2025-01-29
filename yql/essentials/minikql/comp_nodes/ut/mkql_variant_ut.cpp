@@ -589,6 +589,28 @@ Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
+
+    Y_UNIT_TEST(TestDynamicVariantStructWithNullIndex) {
+        TSetup<false> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto data1 = pb.NewDataLiteral<ui32>(10);
+        const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
+        const auto structType = pb.NewStructType({{"x", dataType}, {"y", dataType }});
+        const auto varType = pb.NewVariantType(structType);
+        const auto var1 = pb.DynamicVariant(data1, pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<NUdf::TUtf8>::Id), varType);
+        const auto list = pb.AsList({var1});
+        const auto pgmReturn = list;
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto iterator = graph->GetValue().GetListIterator();
+        NUdf::TUnboxedValue item;
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(!item);
+        UNIT_ASSERT(!iterator.Next(item));
+        UNIT_ASSERT(!iterator.Next(item));
+    }
 }
 
 }

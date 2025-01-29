@@ -20,6 +20,7 @@ struct TLookupRequestOptions
     TDetailedProfilingInfoPtr DetailedProfilingInfo;
     //! Add |$timestamp:columnName| to result if readMode is latest_timestamp.
     NTableClient::TVersionedReadOptions VersionedReadOptions;
+    std::optional<std::string> ExecutionPool;
 };
 
 struct TLookupRowsOptionsBase

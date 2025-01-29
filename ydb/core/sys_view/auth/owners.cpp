@@ -22,7 +22,7 @@ public:
     TOwnersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), false)
+        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), false, true)
     {
     }
 

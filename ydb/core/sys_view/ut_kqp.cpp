@@ -3038,6 +3038,48 @@ Y_UNIT_TEST_SUITE(SystemView) {
         NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
     }
 
+    Y_UNIT_TEST(AuthOwners_TableRange) {
+        TTestEnv env;
+        SetupAuthEnvironment(env);
+        TTableClient client(env.GetDriver());
+
+        for (auto path : {
+            "Dir0/SubDir0",
+            "Dir0/SubDir1",
+            "Dir0/SubDir2",
+            "Dir1/SubDir0",
+            "Dir1/SubDir1",
+            "Dir1/SubDir2",
+            "Dir2/SubDir0",
+            "Dir2/SubDir1",
+            "Dir2/SubDir2",
+            "Dir3/SubDir0",
+            "Dir3/SubDir1",
+            "Dir3/SubDir2",
+        }) {
+            env.GetClient().MkDir("/Root", path);
+        }
+        env.GetClient().CreateUser("/Root", "user1", "password1");
+        env.GetClient().ModifyOwner("/Root/Dir1", "SubDir1", "user1");
+        
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT *
+                FROM `Root/.sys/auth_owners`
+                WHERE Path >= "/Root/Dir1/SubDir1" AND Path < "/Root/Dir2/SubDir1"
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["/Root/Dir1/SubDir1"];["user1"]];
+                [["/Root/Dir1/SubDir2"];["root@builtin"]];
+                [["/Root/Dir2"];["root@builtin"]];
+                [["/Root/Dir2/SubDir0"];["root@builtin"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+    }
+
     Y_UNIT_TEST(AuthPermissions) {
         TTestEnv env;
         SetupAuthEnvironment(env);

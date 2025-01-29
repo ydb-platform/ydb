@@ -79,8 +79,8 @@ target_sources(common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/sys.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/tabbed_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/waiting_bar.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/ydb_updater.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/yt.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/ydb_updater.cpp
 )
 
 

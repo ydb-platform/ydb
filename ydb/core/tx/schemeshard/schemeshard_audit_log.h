@@ -36,12 +36,12 @@ class TSchemeShard;
 struct TExportInfo;
 struct TImportInfo;
 
-using TAuditLogParts = TVector<std::pair<TString, TString>>;
+using TParts = TVector<std::pair<TString, TString>>;
 
 void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operation,
                                    NKikimrScheme::EStatus status, const TString& reason, TSchemeShard* SS,
                                    const TString& peerName, const TString& userSID, const TString& sanitizedToken,
-                                   ui64 txId, const TAuditLogParts& additionalParts);
+                                   ui64 txId, const TParts& additionalParts);
 
 void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request,
                                      const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS,

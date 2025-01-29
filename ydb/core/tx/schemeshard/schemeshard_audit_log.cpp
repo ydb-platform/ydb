@@ -84,7 +84,7 @@ TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) 
 void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operation,
                                    NKikimrScheme::EStatus status, const TString& reason, TSchemeShard* SS,
                                    const TString& peerName, const TString& userSID, const TString& sanitizedToken,
-                                   ui64 txId, const TAuditLogParts& additionalParts) {
+                                   ui64 txId, const TParts& additionalParts) {
     auto logEntry = MakeAuditLogFragment(operation);
 
     TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
@@ -151,7 +151,7 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
         if (NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin == type) {
             continue;
         }
-        AuditLogModifySchemeOperation(operation, status, reason, SS, peerName, userSID, sanitizedToken, txId, TAuditLogParts());
+        AuditLogModifySchemeOperation(operation, status, reason, SS, peerName, userSID, sanitizedToken, txId, TParts());
     }
 }
 
@@ -214,7 +214,7 @@ struct TXxportRecord {
     TString Status;
     Ydb::StatusIds::StatusCode DetailedStatus;
     TString Reason;
-    TAuditLogParts AdditionalParts;
+    TParts AdditionalParts;
     TString StartTime;
     TString EndTime;
     TString CloudId;
@@ -309,7 +309,7 @@ template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromS3Settin
 }  // anonymous namespace
 
 template <class Request, class Response>
-void _AuditLogXxportStart(const Request& request, const Response& response, const TString& operationName, TAuditLogParts&& additionalParts, TSchemeShard* SS) {
+void _AuditLogXxportStart(const Request& request, const Response& response, const TString& operationName, TParts&& additionalParts, TSchemeShard* SS) {
     TPath databasePath = DatabasePathFromWorkingDir(SS, request.GetDatabaseName());
     auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(databasePath);
     auto peerName = NKikimr::NAddressClassifier::ExtractAddress(request.GetPeerName());
@@ -348,7 +348,7 @@ void AuditLogImportStart(const NKikimrImport::TEvCreateImportRequest& request, c
 }
 
 template <class Info>
-void _AuditLogXxportEnd(const Info& info, const TString& operationName, TAuditLogParts&& additionalParts, TSchemeShard* SS) {
+void _AuditLogXxportEnd(const Info& info, const TString& operationName, TParts&& additionalParts, TSchemeShard* SS) {
     const TPath databasePath = TPath::Init(info.DomainPathId, SS);
     auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(databasePath);
     auto peerName = NKikimr::NAddressClassifier::ExtractAddress(info.PeerName);

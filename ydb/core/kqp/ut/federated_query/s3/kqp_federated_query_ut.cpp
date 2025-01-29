@@ -121,7 +121,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             )", "external_table"_a=externalTableName);
 
         auto db = kikimr->GetQueryClient();
-        auto executeQueryIterator = db.StreamExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        NYdb::NQuery::TExecuteQuerySettings execSettings;
+        execSettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+        // execSettings.StatsCollectPeriod(std::chrono::milliseconds(50));
+
+        auto executeQueryIterator = db.StreamExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
 
         size_t currentRow = 0;
         while (true) {
@@ -129,6 +134,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             if (!part.IsSuccess()) {
                 UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
                 break;
+            }
+
+            if (part.HasStats()) {
+                auto execStats = part.ExtractStats();
+                UNIT_ASSERT_C(false, execStats.ToString());
+                const auto& protoStats = TProtoAccessor::GetProto(execStats);
+                UNIT_ASSERT(protoStats.total_read_rows() == 0 || protoStats.total_read_rows() == 1);
+                UNIT_ASSERT(protoStats.total_read_bytes() == 0 || protoStats.total_read_bytes() == 1);
+                UNIT_ASSERT(protoStats.total_duration_us());
             }
 
             if (!part.HasResultSet()) {

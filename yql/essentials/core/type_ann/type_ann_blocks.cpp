@@ -222,38 +222,6 @@ IGraphTransformer::TStatus BlockExistsWrapper(const TExprNode::TPtr& input, TExp
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus BlockExpandChunkedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    if (!EnsureArgsCount(*input, 1U, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    TTypeAnnotationNode::TListType itemTypes;
-    TTypeAnnotationNode::TListType blockItemTypes;
-
-    if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
-        if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        itemTypes = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    } else {
-        if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        itemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    }
-    
-    bool allScalars = AllOf(itemTypes, [](const TTypeAnnotationNode* item) { return item->GetKind() == ETypeAnnotationKind::Scalar; });
-    if (allScalars) {
-        output = input->HeadPtr();
-        return IGraphTransformer::TStatus::Repeat;
-    }
-
-    input->SetTypeAnn(input->Head().GetTypeAnn());
-    return IGraphTransformer::TStatus::Ok;
-}
-
 IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
@@ -1204,7 +1172,7 @@ IGraphTransformer::TStatus BlockExtendWrapper(const TExprNode::TPtr& input, TExp
 
     TTypeAnnotationNode::TListType commonItemTypes;
     for (size_t idx = 0; idx < input->ChildrenSize(); ++idx) {
-        auto child = input->Child(idx);        
+        auto child = input->Child(idx);
         TTypeAnnotationNode::TListType currentItemTypes;
         if (!EnsureWideFlowBlockType(*child, idx ? currentItemTypes : commonItemTypes, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;

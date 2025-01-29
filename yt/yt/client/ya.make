@@ -95,6 +95,7 @@ SRCS(
 
     scheduler/operation_id_or_alias.cpp
     scheduler/operation_cache.cpp
+    scheduler/spec_patch.cpp
 
     security_client/acl.cpp
     security_client/access_control.cpp

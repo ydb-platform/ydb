@@ -210,8 +210,14 @@ namespace NKikimr::NYaml {
             ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, DISABLE_BUILTIN_SECURITY_PATH).value_or(false);
         }
         EraseByPath(json, DISABLE_BUILTIN_SECURITY_PATH);
-        ctx.ExplicitEmptyDefaultGroups = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_GROUPS_PATH).value_or(false);
-        ctx.ExplicitEmptyDefaultAccess = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_ACCESS_PATH).value_or(false);
+        if (!ctx.ExplicitEmptyDefaultGroups) {
+            ctx.ExplicitEmptyDefaultGroups = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_GROUPS_PATH).value_or(false);
+            EraseByPath(json, DEFAULT_GROUPS_PATH);
+        }
+        if (!ctx.ExplicitEmptyDefaultAccess) {
+            ctx.ExplicitEmptyDefaultAccess = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_ACCESS_PATH).value_or(false);
+            EraseByPath(json, DEFAULT_ACCESS_PATH);
+        }
     }
 
     ui32 GetDefaultTabletCount(TString& type) {
@@ -1395,10 +1401,16 @@ namespace NKikimr::NYaml {
     void MoveFields(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         if (ephemeralConfig.HasSecurityConfig()) {
             config.MutableDomainsConfig()->MutableSecurityConfig()->CopyFrom(ephemeralConfig.GetSecurityConfig());
-        }
-
-        if (ephemeralConfig.HasDisableBuiltinSecurity()) {
-            ctx.DisableBuiltinSecurity = ephemeralConfig.GetDisableBuiltinSecurity();
+            auto securityConfig = ephemeralConfig.GetSecurityConfig();
+            if (securityConfig.HasDisableBuiltinSecurity()) {
+                ctx.DisableBuiltinSecurity = securityConfig.GetDisableBuiltinSecurity();
+            }
+            if (securityConfig.HasDisableBuiltinGroups()) {
+                ctx.ExplicitEmptyDefaultGroups = securityConfig.GetDisableBuiltinGroups();
+            }
+            if (securityConfig.HasDisableBuiltinAccess()) {
+                ctx.ExplicitEmptyDefaultAccess = securityConfig.GetDisableBuiltinAccess();
+            }
         }
     }
 

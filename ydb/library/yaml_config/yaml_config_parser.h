@@ -44,8 +44,8 @@ namespace NKikimr::NYaml {
 
     struct TTransformContext {
         std::optional<bool> DisableBuiltinSecurity;
-        bool ExplicitEmptyDefaultGroups;
-        bool ExplicitEmptyDefaultAccess;
+        std::optional<bool> ExplicitEmptyDefaultGroups;
+        std::optional<bool> ExplicitEmptyDefaultAccess;
         std::map<TCombinedDiskInfoKey, NKikimrConfig::TCombinedDiskInfo> CombinedDiskInfo;
         std::map<TPoolConfigKey, TPoolConfigInfo> PoolConfigInfo;
         std::map<ui32, TString> GroupErasureSpecies;

@@ -12952,7 +12952,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockDecimalDiv"] = &BlockDecimalBinaryWrapper;
 
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
-        ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
 
         Functions["BlockMapJoinCore"] = &BlockMapJoinCoreWrapper;
 

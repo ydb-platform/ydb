@@ -2794,12 +2794,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockFunc(node.Child(0)->Content(), returnType, args);
     });
 
-    AddCallable("BlockBitCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        auto arg = MkqlBuildExpr(*node.Child(0), ctx);
-        auto targetType = ctx.BuildType(node, *node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
-        return ctx.ProgramBuilder.BlockBitCast(arg, targetType);
-    });
-
     AddCallable("BlockMember", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto structObj = MkqlBuildExpr(node.Head(), ctx);
         const auto name = node.Tail().Content();

@@ -58,32 +58,32 @@ public:
     {
     }
 
-    grpc::Status CreateSession(grpc::ServerContext *context, const Ydb::Query::CreateSessionRequest *request,
-                               Ydb::Query::CreateSessionResponse *response) override {
+    template <typename TRequest, typename TResponse>
+    using TGrpcCall =
+        grpc::Status(Ydb::Query::V1::QueryService::Stub::*)(grpc::ClientContext*, const TRequest& request, TResponse* response);
+
+    template <typename TRequest, typename TResponse>
+    using TGrpcStreamCall =
+        std::unique_ptr<grpc::ClientReader<TResponse>>(Ydb::Query::V1::QueryService::Stub::*)(grpc::ClientContext*, const TRequest& request);
+
+    template <typename TRequest, typename TResponse>
+    grpc::Status Run(TGrpcCall<TRequest, TResponse> call, grpc::ServerContext *context,
+                     const TRequest* request, TResponse* response) {
         if (Paused_.load()) {
             return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Server is paused");
         }
 
         auto clientContext = grpc::ClientContext::FromServerContext(*context);
-        return Stub_.CreateSession(clientContext.get(), *request, response);
+        return (Stub_.*call)(clientContext.get(), *request, response);
     }
 
-    grpc::Status DeleteSession(grpc::ServerContext *context, const Ydb::Query::DeleteSessionRequest *request,
-                               Ydb::Query::DeleteSessionResponse *response) override {
-        if (Paused_.load()) {
-            return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Server is paused");
-        }
-
+    template <typename TRequest, typename TResponse>
+    grpc::Status RunStream(TGrpcStreamCall<TRequest, TResponse> call, grpc::ServerContext *context,
+                     const TRequest* request, grpc::ServerWriter<TResponse>* writer) {
         auto clientContext = grpc::ClientContext::FromServerContext(*context);
-        return Stub_.DeleteSession(clientContext.get(), *request, response);
-    }
+        auto reader = (Stub_.*call)(clientContext.get(), *request);
 
-    grpc::Status AttachSession(grpc::ServerContext *context, const Ydb::Query::AttachSessionRequest *request,
-                               grpc::ServerWriter<Ydb::Query::SessionState> *writer) override {
-        auto clientContext = grpc::ClientContext::FromServerContext(*context);
-        auto reader = Stub_.AttachSession(clientContext.get(), *request);
-
-        Ydb::Query::SessionState state;
+        TResponse state;
 
         while (reader->Read(&state)) {
             if (Paused_.load()) {
@@ -91,25 +91,28 @@ public:
             }
             writer->Write(state);
         }
-        
+
         return reader->Finish();
+    }
+
+    grpc::Status CreateSession(grpc::ServerContext *context, const Ydb::Query::CreateSessionRequest* request,
+                               Ydb::Query::CreateSessionResponse* response) override {
+        return Run(&Ydb::Query::V1::QueryService::Stub::CreateSession, context, request, response);
+    }
+
+    grpc::Status DeleteSession(grpc::ServerContext *context, const Ydb::Query::DeleteSessionRequest *request,
+                               Ydb::Query::DeleteSessionResponse *response) override {
+        return Run(&Ydb::Query::V1::QueryService::Stub::DeleteSession, context, request, response);
+    }
+
+    grpc::Status AttachSession(grpc::ServerContext *context, const Ydb::Query::AttachSessionRequest *request,
+                               grpc::ServerWriter<Ydb::Query::SessionState> *writer) override {
+        return RunStream(&Ydb::Query::V1::QueryService::Stub::AttachSession, context, request, writer);
     }
 
     grpc::Status ExecuteQuery(grpc::ServerContext *context, const Ydb::Query::ExecuteQueryRequest *request,
                               grpc::ServerWriter<Ydb::Query::ExecuteQueryResponsePart> *writer) override {
-        auto clientContext = grpc::ClientContext::FromServerContext(*context);
-        auto reader = Stub_.ExecuteQuery(clientContext.get(), *request);
-
-        Ydb::Query::ExecuteQueryResponsePart part;
-
-        while (reader->Read(&part)) {
-            if (Paused_.load()) {
-                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Server is paused");
-            }
-            writer->Write(part);
-        }
-
-        return reader->Finish();
+        return RunStream(&Ydb::Query::V1::QueryService::Stub::ExecuteQuery, context, request, writer);
     }
 
 private:

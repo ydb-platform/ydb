@@ -59,15 +59,18 @@ struct TCheckpointContext : public TThrRefBase {
     TGenerationContextPtr GenerationContext;
     TCheckpointGraphDescriptionContextPtr CheckpointGraphDescriptionContext;
     IEntityIdGenerator::TPtr EntityIdGenerator;
+    TExecDataQuerySettings Settings;
 
     TCheckpointContext(const TCheckpointId& id,
                        ECheckpointStatus status,
                        ECheckpointStatus expected,
-                       ui64 stateSizeBytes)
+                       ui64 stateSizeBytes,
+                       TExecDataQuerySettings settings)
         : CheckpointId(id)
         , Status(status)
         , ExpectedStatus(expected)
         , StateSizeBytes(stateSizeBytes)
+        , Settings(settings)
     {
     }
 };
@@ -220,7 +223,7 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
     }
 
     auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
-    return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build()).Apply(
+    return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->Settings).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -236,21 +239,41 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
-        $ts = cast(%lu as Timestamp);
+        DECLARE $graph_id AS String;
+        DECLARE $coordinator_generation AS Uint64;
+        DECLARE $seq_no AS Uint64;
+        DECLARE $status AS Uint8;
+        DECLARE $state_size AS Uint64;
+        DECLARE $ts AS Timestamp;
 
         UPSERT INTO %s (graph_id, coordinator_generation, seq_no, status, state_size, modified_by) VALUES
-            ("%s", %lu, %lu, %u, %lu, $ts);
+            ($graph_id, $coordinator_generation, $seq_no, $status, $state_size, $ts);
     )", generationContext->TablePathPrefix.c_str(),
-        TInstant::Now().MicroSeconds(),
-        CheckpointsMetadataTable,
-        generationContext->PrimaryKey.c_str(),
-        context->CheckpointId.CoordinatorGeneration,
-        context->CheckpointId.SeqNo,
-        (ui32)context->Status,
-        context->StateSizeBytes);
+        CheckpointsMetadataTable);
+
+    NYdb::TParamsBuilder params;
+    params
+        .AddParam("$graph_id")
+            .String(generationContext->PrimaryKey)
+            .Build()
+        .AddParam("$coordinator_generation")
+            .Uint64(context->CheckpointId.CoordinatorGeneration)
+            .Build()
+        .AddParam("$seq_no")
+            .Uint64(context->CheckpointId.SeqNo)
+            .Build()
+        .AddParam("$status")
+            .Uint8((ui8)context->Status)
+            .Build()
+        .AddParam("$state_size")
+            .Uint64(context->StateSizeBytes)
+            .Build()
+        .AddParam("$ts")
+            .Timestamp(TInstant::Now())
+            .Build();
 
     auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
-    return generationContext->Session.ExecuteDataQuery(query, ttxControl).Apply(
+    return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->Settings).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -264,15 +287,20 @@ TFuture<TDataQueryResult> SelectGraphDescId(const TCheckpointContextPtr& context
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
+        DECLARE $graph_desc_id AS String;
 
         SELECT ref_count
         FROM %s
-        WHERE id = "%s";
+        WHERE id = $graph_desc_id;
     )", generationContext->TablePathPrefix.c_str(),
-        CheckpointsGraphsDescriptionTable,
-        graphDescContext->GraphDescId.c_str());
+        CheckpointsGraphsDescriptionTable);
+    NYdb::TParamsBuilder params;
+    params
+        .AddParam("$graph_desc_id")
+            .String(graphDescContext->GraphDescId)
+            .Build();
 
-    return generationContext->Session.ExecuteDataQuery(query, TTxControl::Tx(*generationContext->Transaction));
+    return generationContext->Session.ExecuteDataQuery(query, TTxControl::Tx(*generationContext->Transaction), params.Build(), context->Settings);
 }
 
 bool GraphDescIdExists(const TFuture<TDataQueryResult>& result) {
@@ -292,6 +320,7 @@ TFuture<TStatus> GenerateGraphDescId(const TCheckpointContextPtr& context) {
                 if (!result.GetValue().IsSuccess()) {
                     return MakeFuture<TStatus>(result.GetValue());
                 }
+                // TODO racing!
                 if (!GraphDescIdExists(result)) {
                     return MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
                 } else {
@@ -443,19 +472,33 @@ TFuture<TDataQueryResult> SelectCheckpoint(const TCheckpointContextPtr& context)
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
+        DECLARE $graph_id AS String;
+        DECLARE $coordinator_generation AS Uint64;
+        DECLARE $seq_no AS Uint64;
 
         SELECT status
         FROM %s
-        WHERE graph_id = "%s" AND  coordinator_generation = %lu AND seq_no = %lu;
+        WHERE graph_id = $graph_id AND  coordinator_generation = $coordinator_generation AND seq_no = $seq_no;
     )", generationContext->TablePathPrefix.c_str(),
-        CheckpointsMetadataTable,
-        generationContext->PrimaryKey.c_str(),
-        context->CheckpointId.CoordinatorGeneration,
-        context->CheckpointId.SeqNo);
+        CheckpointsMetadataTable);
+
+    NYdb::TParamsBuilder params;
+    params
+        .AddParam("$graph_id")
+            .String(generationContext->PrimaryKey)
+            .Build()
+        .AddParam("$coordinator_generation")
+            .Uint64(context->CheckpointId.CoordinatorGeneration)
+            .Build()
+        .AddParam("$seq_no")
+            .Uint64(context->CheckpointId.SeqNo)
+            .Build();
 
     return generationContext->Session.ExecuteDataQuery(
         query,
-        TTxControl::Tx(*generationContext->Transaction));
+        TTxControl::Tx(*generationContext->Transaction),
+        params.Build(),
+        context->Settings);
 }
 
 TFuture<TStatus> CheckCheckpoint(
@@ -768,7 +811,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
     ECheckpointStatus status)
 {
     Y_ABORT_UNLESS(graphDescId);
-    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status, ECheckpointStatus::Pending, 0ul);
+    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status, ECheckpointStatus::Pending, 0ul, DefaultExecDataQuerySettings());
     checkpointContext->CheckpointGraphDescriptionContext = MakeIntrusive<TCheckpointGraphDescriptionContext>(graphDescId);
     return CreateCheckpointImpl(coordinator, checkpointContext);
 }
@@ -779,7 +822,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
     const NProto::TCheckpointGraphDescription& graphDesc,
     ECheckpointStatus status)
 {
-    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status, ECheckpointStatus::Pending, 0ul);
+    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status, ECheckpointStatus::Pending, 0ul, DefaultExecDataQuerySettings());
     checkpointContext->CheckpointGraphDescriptionContext = MakeIntrusive<TCheckpointGraphDescriptionContext>(graphDesc);
     checkpointContext->EntityIdGenerator = EntityIdGenerator;
     return CreateCheckpointImpl(coordinator, checkpointContext);
@@ -820,7 +863,7 @@ TFuture<TIssues> TCheckpointStorage::UpdateCheckpointStatus(
     ECheckpointStatus prevStatus,
     ui64 stateSizeBytes)
 {
-    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, newStatus, prevStatus, stateSizeBytes);
+    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, newStatus, prevStatus, stateSizeBytes, DefaultExecDataQuerySettings());
     auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
@@ -846,7 +889,7 @@ TFuture<TIssues> TCheckpointStorage::AbortCheckpoint(
     const TCoordinatorId& coordinator,
     const TCheckpointId& checkpointId)
 {
-    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, ECheckpointStatus::Aborted, ECheckpointStatus::Pending, 0ul);
+    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, ECheckpointStatus::Aborted, ECheckpointStatus::Pending, 0ul, DefaultExecDataQuerySettings());
     auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
@@ -905,28 +948,35 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
 
 TFuture<TIssues> TCheckpointStorage::DeleteGraph(const TString& graphId) {
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, graphId] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix, graphId, settings = DefaultExecDataQuerySettings()] (TSession session) {
             // TODO: use prepared queries
             auto query = Sprintf(R"(
                 --!syntax_v1
                 PRAGMA TablePathPrefix("%s");
+                DECLARE $graph_id AS String;
 
                 DELETE
                 FROM %s
-                WHERE graph_id = "%s";
+                WHERE graph_id = $graph_id;
 
                 DELETE
                 FROM %s
-                WHERE graph_id = "%s";
+                WHERE graph_id = $graph_id;
             )", prefix.c_str(),
                 CoordinatorsSyncTable,
-                graphId.c_str(),
-                CheckpointsMetadataTable,
-                graphId.c_str());
+                CheckpointsMetadataTable);
+
+            NYdb::TParamsBuilder params;
+            params
+                .AddParam("$graph_id")
+                    .String(graphId)
+                    .Build();
 
             auto future = session.ExecuteDataQuery(
                 query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx());
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                params.Build(),
+                settings);
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
@@ -943,30 +993,48 @@ TFuture<TIssues> TCheckpointStorage::MarkCheckpointsGC(
     const TCheckpointId& checkpointUpperBound)
 {
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, graphId, checkpointUpperBound] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix, graphId, checkpointUpperBound, thisPtr = TIntrusivePtr(this)] (TSession session) {
             // TODO: use prepared queries
             auto query = Sprintf(R"(
                 --!syntax_v1
                 PRAGMA TablePathPrefix("%s");
-                $ts = cast(%lu as Timestamp);
+                DECLARE $ts AS Timestamp;
+                DECLARE $status AS Uint8;
+                DECLARE $graph_id AS String;
+                DECLARE $coordinator_generation AS Uint64;
+                DECLARE $seq_no AS Uint64;
 
                 UPDATE %s
-                SET status = %u, modified_by = $ts
-                WHERE graph_id = "%s" AND
-                    (coordinator_generation < %lu OR
-                        (coordinator_generation = %lu AND seq_no < %lu));
+                SET status = $status, modified_by = $ts
+                WHERE graph_id = $graph_id AND
+                    (coordinator_generation < $coordinator_generation OR
+                        (coordinator_generation = $coordinator_generation AND seq_no < $seq_no));
             )", prefix.c_str(),
-                TInstant::Now().MicroSeconds(),
-                CheckpointsMetadataTable,
-                (ui32)ECheckpointStatus::GC,
-                graphId.c_str(),
-                checkpointUpperBound.CoordinatorGeneration,
-                checkpointUpperBound.CoordinatorGeneration,
-                checkpointUpperBound.SeqNo);
+                CheckpointsMetadataTable);
+
+    NYdb::TParamsBuilder params;
+    params
+        .AddParam("$graph_id")
+            .String(graphId)
+            .Build()
+        .AddParam("$coordinator_generation")
+            .Uint64(checkpointUpperBound.CoordinatorGeneration)
+            .Build()
+        .AddParam("$seq_no")
+            .Uint64(checkpointUpperBound.SeqNo)
+            .Build()
+        .AddParam("$status")
+            .Uint8((ui8)ECheckpointStatus::GC)
+            .Build()
+        .AddParam("$ts")
+            .Timestamp(TInstant::Now())
+            .Build();
 
             auto future = session.ExecuteDataQuery(
                 query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx());
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                params.Build(),
+                thisPtr->DefaultExecDataQuerySettings());
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
@@ -983,7 +1051,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
     const TCheckpointId& checkpointUpperBound)
 {
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, graphId, checkpointUpperBound] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix, graphId, checkpointUpperBound, settings = DefaultExecDataQuerySettings()] (TSession session) {
             // TODO: use prepared queries
             using namespace fmt::literals;
             const TString query = fmt::format(R"sql(
@@ -1042,7 +1110,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
 
             auto future = session.ExecuteDataQuery(
                 query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params.Build());
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params.Build(), settings);
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {

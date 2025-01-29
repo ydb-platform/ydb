@@ -22,6 +22,11 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+#include <yql/essentials/protos/pg_ext.pb.h>
+#include <yql/essentials/core/pg_ext/yql_pg_ext.h>
+
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
@@ -350,6 +355,7 @@ public:
                     NYql::GetCommonDqFactory(),
                     NYql::GetDqYtFactory(),
                     NKikimr::NMiniKQL::GetYqlFactory(),
+                    GetPgFactory(),
                 });
                 dataProvidersInit.push_back(GetDqDataProviderInitializer(NYql::CreateDqExecTransformerFactory(MakeIntrusive<TSkiffConverter>()), dqGateway, dqCompFactory, {}, FileStorage_));
             }

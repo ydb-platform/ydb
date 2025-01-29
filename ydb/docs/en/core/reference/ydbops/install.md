@@ -30,7 +30,7 @@ Currently, only building from source is available as an installation option. The
   make build-in-docker
   ```
 
-  The `ydbops` executables will be available in the `bin` folder. There will be several binary files for Linux, MacOS (arm64, amd64).
+  The `ydbops` executables will be available in the `bin` folder. Binary files are generated for Linux and MacOS (arm64, amd64).
 
 4. To install the binary file, execute the following command:
 

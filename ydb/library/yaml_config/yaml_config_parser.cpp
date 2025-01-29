@@ -210,13 +210,11 @@ namespace NKikimr::NYaml {
             ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, DISABLE_BUILTIN_SECURITY_PATH).value_or(false);
         }
         EraseByPath(json, DISABLE_BUILTIN_SECURITY_PATH);
-        if (!ctx.ExplicitEmptyDefaultGroups) {
-            ctx.ExplicitEmptyDefaultGroups = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_GROUPS_PATH).value_or(false);
-            EraseByPath(json, DEFAULT_GROUPS_PATH);
+        if (!ctx.DisableBuiltinGroups) {
+            ctx.DisableBuiltinGroups = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_GROUPS_PATH).value_or(false);
         }
-        if (!ctx.ExplicitEmptyDefaultAccess) {
-            ctx.ExplicitEmptyDefaultAccess = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_ACCESS_PATH).value_or(false);
-            EraseByPath(json, DEFAULT_ACCESS_PATH);
+        if (!ctx.DisableBuiltinAccess) {
+            ctx.DisableBuiltinAccess = CheckExplicitEmptyArrayByPathOrNone(json, DEFAULT_ACCESS_PATH).value_or(false);
         }
     }
 
@@ -433,6 +431,8 @@ namespace NKikimr::NYaml {
         auto* domainsConfig = config.MutableDomainsConfig();
 
         bool disabledDefaultSecurity = ctx.DisableBuiltinSecurity ? *ctx.DisableBuiltinSecurity : false;
+        bool disableBuiltinGroups = ctx.DisableBuiltinGroups ? *ctx.DisableBuiltinGroups : false;
+        bool disableBuiltinAccess = ctx.DisableBuiltinAccess ? *ctx.DisableBuiltinAccess : false;
 
         NKikimrConfig::TDomainsConfig::TSecurityConfig* securityConfig = nullptr;
         if (domainsConfig->HasSecurityConfig()) {
@@ -451,7 +451,7 @@ namespace NKikimr::NYaml {
             user->SetPassword("");
         }
 
-        if (!ctx.ExplicitEmptyDefaultGroups && !(securityConfig && securityConfig->DefaultGroupsSize()) && !disabledDefaultSecurity) {
+        if (!disableBuiltinGroups && !(securityConfig && securityConfig->DefaultGroupsSize()) && !disabledDefaultSecurity) {
             securityConfig = domainsConfig->MutableSecurityConfig();
             {
                 auto* defaultGroupAdmins = securityConfig->AddDefaultGroups();
@@ -515,7 +515,7 @@ namespace NKikimr::NYaml {
             securityConfig->SetAllUsersGroup("USERS");
         }
 
-        if (!ctx.ExplicitEmptyDefaultAccess && !(securityConfig && securityConfig->DefaultAccessSize()) && !disabledDefaultSecurity) {
+        if (!disableBuiltinAccess && !(securityConfig && securityConfig->DefaultAccessSize()) && !disabledDefaultSecurity) {
             securityConfig = domainsConfig->MutableSecurityConfig();
             securityConfig->AddDefaultAccess("+(ConnDB):USERS"); // ConnectDatabase
             securityConfig->AddDefaultAccess("+(DS|RA):METADATA-READERS"); // DescribeSchema | ReadAttributes
@@ -1406,10 +1406,10 @@ namespace NKikimr::NYaml {
                 ctx.DisableBuiltinSecurity = securityConfig.GetDisableBuiltinSecurity();
             }
             if (securityConfig.HasDisableBuiltinGroups()) {
-                ctx.ExplicitEmptyDefaultGroups = securityConfig.GetDisableBuiltinGroups();
+                ctx.DisableBuiltinGroups = securityConfig.GetDisableBuiltinGroups();
             }
             if (securityConfig.HasDisableBuiltinAccess()) {
-                ctx.ExplicitEmptyDefaultAccess = securityConfig.GetDisableBuiltinAccess();
+                ctx.DisableBuiltinAccess = securityConfig.GetDisableBuiltinAccess();
             }
         }
     }

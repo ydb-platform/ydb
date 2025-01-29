@@ -10,6 +10,7 @@ enum EEv : ui32 {
     EvBegin = 5000,
     EvQueryResult,
     EvQueryError,
+    EvWatch,
     EvEnd
 };
 

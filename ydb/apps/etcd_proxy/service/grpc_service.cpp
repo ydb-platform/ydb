@@ -1,5 +1,7 @@
 #include "grpc_service.h"
 #include "etcd_impl.h"
+#include "etcd_watch.h"
+#include "etcd_shared.h"
 
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -7,6 +9,8 @@
 #include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
+
+namespace {
 
 template <typename TDerived>
 class TEtcdResponseSenderImpl : public IRequestOpCtx {
@@ -423,7 +427,7 @@ public:
     TEtcdRequestCall(NYdbGrpc::IRequestContextBase* ctx, TRequestAuxSettings auxSettings = {})
         : TBase(ctx)
         , AuxSettings(std::move(auxSettings))
-    { }
+    {}
 
     void Pass(const IFacilityProvider&) override {
         Y_ABORT("unimplemented");
@@ -464,45 +468,39 @@ private:
 template <typename TReq, typename TResp>
 using TEtcdRequestOperationCall = TEtcdRequestCall<TReq, TResp, true>;
 
+}
 
-TEtcdGRpcService::TEtcdGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId)
+TEtcdKVService::TEtcdKVService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId)
     : ActorSystem(actorSystem), Counters(std::move(counters))
 {}
 
-TEtcdGRpcService::~TEtcdGRpcService() = default;
-
-void TEtcdGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
+void TEtcdKVService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
     CQ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
-void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
-#define SETUP_METHOD_RAW(methodName, secondName, rlMode, serviceType, serviceName, counterName)    \
-    MakeIntrusive<NGRpcService::TGRpcRequest<                                                      \
-        etcdserverpb::Y_CAT(secondName, Request),                                                  \
-        etcdserverpb::Y_CAT(secondName, Response),                                                 \
-        T##serviceType##GRpcService>>                                                              \
-    (                                                                                              \
-        this,                                                                                      \
-        &Service_,                                                                                 \
-        CQ,                                                                                        \
-        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                            \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                     \
-            ActorSystem->Register(Make##methodName(new TEtcdRequestOperationCall<                  \
-                etcdserverpb::Y_CAT(secondName, Request),                                          \
-                etcdserverpb::Y_CAT(secondName, Response)>(reqCtx)                                 \
-            ));                                                                                    \
+#define SETUP_ETCD_KV_METHOD(methodName, secondName)                                  \
+    MakeIntrusive<NGRpcService::TGRpcRequest<                                          \
+        etcdserverpb::Y_CAT(secondName, Request),                                       \
+        etcdserverpb::Y_CAT(secondName, Response),                                       \
+        TEtcdKVService>>                                                                  \
+    (                                                                                      \
+        this, this->GetService(), CQ,                                                       \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                      \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                \
+            ActorSystem->Register(Make##methodName(new TEtcdRequestOperationCall<              \
+                etcdserverpb::Y_CAT(secondName, Request),                                       \
+                etcdserverpb::Y_CAT(secondName, Response)>(reqCtx)                               \
+            ));                                                                                   \
         },                                                                                         \
-        &etcdserverpb::serviceName::AsyncService::Y_CAT(Request, methodName),                      \
-        Y_STRINGIZE(serviceType) "/" Y_STRINGIZE(methodName),                                      \
+        &etcdserverpb::KV::AsyncService::Y_CAT(Request, methodName),                               \
+        "KV/" Y_STRINGIZE(methodName),                                                             \
         logger,                                                                                    \
-        getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                         \
+        getCounterBlock("etcd", Y_STRINGIZE(methodName))                                           \
     )->Run()
-
-    #define SETUP_ETCD_KV_METHOD(methodName, secondName) \
-        SETUP_METHOD_RAW(methodName,secondName,Rps,Etcd,KV,etcd)
 
     SETUP_ETCD_KV_METHOD(Range,Range);
     SETUP_ETCD_KV_METHOD(Put,Put);
@@ -511,7 +509,36 @@ void TEtcdGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_ETCD_KV_METHOD(Compact,Compaction);
 
     #undef SETUP_ETCD_KV_METHOD
-    #undef SETUP_METHOD_RAW
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEtcdWatchService::TEtcdWatchService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId)
+    : ActorSystem(actorSystem), Counters(std::move(counters))
+{}
+
+void TEtcdWatchService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
+    CQ = cq;
+    SetupIncomingRequests(std::move(logger));
+}
+
+void TEtcdWatchService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr ) {
+    auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
+
+    using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
+                etcdserverpb::WatchRequest,
+                etcdserverpb::WatchResponse,
+                TEtcdWatchService,
+                NKikimrServices::GRPC_SERVER>;
+
+
+    TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Watch::AsyncService::RequestWatch,
+                [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
+                        Cerr << "WaTcH !!!!" << Endl;
+                      ActorSystem->Send(NEtcd::TSharedStuff::Get()->Watchman, new TEvWatchRequest(context.Release()));
+                },
+                *ActorSystem, "Watch", getCounterBlock("etcd", "Watch", true), nullptr
+            );
 }
 
 } // namespace NKikimr::NGRpcService

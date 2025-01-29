@@ -10,6 +10,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
 #include <ydb/apps/etcd_proxy/service/etcd_shared.h>
+#include <ydb/apps/etcd_proxy/service/etcd_watch.h>
 #include <ydb/apps/etcd_proxy/service/grpc_service.h>
 #include <ydb/core/grpc_services/base/base.h>
 
@@ -79,8 +80,11 @@ int TProxy::StartServer() {
     NYdbGrpc::TServerOptions opts;
     opts.SetPort(ListeningPort);
 
+    ActorSystem->Register(NEtcd::CreateEtcdWatchman());
+
     GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts, Counters);
-    GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdGRpcService(ActorSystem.get(), Counters));
+    GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdKVService(ActorSystem.get(), Counters));
+    GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdWatchService(ActorSystem.get(), Counters));
     GRpcServer->Start();
     Cout << "Etcd service over " << Database << " on " << Endpoint << " was started." << Endl;
     return 0;

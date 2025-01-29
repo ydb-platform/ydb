@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <atomic>
 
@@ -12,6 +13,7 @@ struct TSharedStuff {
 
     std::unique_ptr<NYdb::NQuery::TQueryClient> Client;
     std::atomic_int64_t Revision = 0LL;
+    NActors::TActorId Watchman;
 };
 
 }

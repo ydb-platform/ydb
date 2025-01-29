@@ -7,21 +7,33 @@
 
 namespace NKikimr::NGRpcService {
 
-class TEtcdGRpcService
+class TEtcdKVService
     : public NYdbGrpc::TGrpcServiceBase<etcdserverpb::KV>
 {
 public:
-    TEtcdGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId = {});
-    ~TEtcdGRpcService();
+    TEtcdKVService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId = {});
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
 private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
-private:
     NActors::TActorSystem *const ActorSystem;
     const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    grpc::ServerCompletionQueue* CQ = nullptr;
+};
 
+class TEtcdWatchService
+    : public NYdbGrpc::TGrpcServiceBase<etcdserverpb::Watch>
+{
+public:
+    TEtcdWatchService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId = {});
+
+    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
+private:
+    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
+
+    NActors::TActorSystem *const ActorSystem;
+    const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     grpc::ServerCompletionQueue* CQ = nullptr;
 };
 

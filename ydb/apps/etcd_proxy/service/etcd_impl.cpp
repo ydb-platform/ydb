@@ -13,7 +13,6 @@
 #include <ydb/core/protos/local.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
-
 namespace NKikimr::NGRpcService {
 
 using TEvRangeKVRequest = TGrpcRequestOperationCall<etcdserverpb::RangeRequest, etcdserverpb::RangeResponse>;
@@ -957,7 +956,36 @@ private:
 
     i64 KeyRevision;
 };
+/*
+class TWatchtRequest
+    : public TEtcdRequestGrpc<TWatchtRequest, TEvWatchRequest> {
+public:
+    using TBase = TEtcdRequestGrpc<TWatchtRequest, TEvWatchRequest>;
+    using TBase::TBase;
+private:
+    bool ParseGrpcRequest() final {
+        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
 
+     //   const auto &rec = *GetProtoRequest();
+        return true;
+    }
+
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& ) final {
+        sql << "delete from `verhaal` where `modified` < " << ';' << Endl;
+    }
+
+    void ReplyWith(const NYdb::TResultSets&) final {
+        etcdserverpb::WatchResponse response;
+        const auto header = response.mutable_header();
+        header->set_revision(Revision);
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+    }
+
+};
+*/
 }
 
 NActors::IActor* MakeRange(IRequestOpCtx* p) {

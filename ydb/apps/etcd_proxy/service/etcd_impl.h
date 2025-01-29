@@ -2,11 +2,11 @@
 
 namespace NActors {
     class IActor;
+    class IEventBase;
 }
 
 namespace NKikimr::NGRpcService {
     class IRequestOpCtx;
-    class IFacilityProvider;
 
     NActors::IActor* MakeRange(IRequestOpCtx* p);
     NActors::IActor* MakePut(IRequestOpCtx* p);

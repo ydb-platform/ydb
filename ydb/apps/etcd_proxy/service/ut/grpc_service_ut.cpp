@@ -1,5 +1,6 @@
 #include "../etcd_base_init.h"
 #include "../etcd_shared.h"
+#include "../etcd_watch.h"
 #include "../grpc_service.h"
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
@@ -70,7 +71,8 @@ public:
         }
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
-        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdGRpcService>("etcd");
+        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdKVService>("kv");
+        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdWatchService>("watch");
         ServerSettings->Verbose = true;
 
         Server_.Reset(new Tests::TServer(*ServerSettings));

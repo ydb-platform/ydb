@@ -89,7 +89,7 @@ public:
         for (auto&& key : portion2Key) {
             NKikimrTxColumnShard::TIndexColumnMeta metaProto;
             UNIT_ASSERT(metaProto.ParseFromArray(key.Metadata.data(), key.Metadata.size()));
-            metaProto.ClearNumRows();
+//            metaProto.ClearNumRows();
             metaProto.ClearRawBytes();
 
             db.Table<Schema::IndexColumns>()

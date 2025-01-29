@@ -10,7 +10,7 @@ namespace NKikimr::NArrow::NAccessor {
 
 class TColumnLoader {
 private:
-    NSerialization::TSerializerContainer Serializer;
+    YDB_READONLY_DEF(NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(NAccessor::TConstructorContainer, AccessorConstructor);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Field>, ResultField);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, DefaultValue);

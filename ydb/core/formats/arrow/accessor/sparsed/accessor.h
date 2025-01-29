@@ -92,7 +92,7 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
 
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
-        const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) override;
+        const TColumnLoader& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) override;
 
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override {
         ui32 currentIdx = 0;

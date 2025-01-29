@@ -134,7 +134,7 @@ TGeneralContainer::TGeneralContainer(const ui32 recordsCount)
     , Schema(std::make_shared<NModifier::TSchema>()) {
 }
 
-std::shared_ptr<NKikimr::NArrow::NAccessor::IChunkedArray> TGeneralContainer::GetAccessorByNameVerified(const std::string& fieldId) const {
+std::shared_ptr<NAccessor::IChunkedArray> TGeneralContainer::GetAccessorByNameVerified(const std::string& fieldId) const {
     auto result = GetAccessorByNameOptional(fieldId);
     AFL_VERIFY(result)("event", "cannot_find_accessor_in_general_container")("field_id", fieldId)("schema", Schema->ToString());
     return result;

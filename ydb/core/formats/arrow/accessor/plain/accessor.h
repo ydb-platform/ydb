@@ -23,7 +23,7 @@ protected:
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
-        const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) override;
+        const TColumnLoader& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) override;
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
@@ -58,7 +58,7 @@ protected:
         return NArrow::TStatusValidator::GetValid(chunk.GetArray()->GetScalar(chunk.GetAddress().GetLocalIndex(index)));
     }
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
-        const TColumnSaver& /*saver*/, const TString& /*fullSerializedData*/, const std::vector<ui64>& /*splitSizes*/) override {
+        const TColumnLoader& /*saver*/, const TString& /*fullSerializedData*/, const std::vector<ui64>& /*splitSizes*/) override {
         AFL_VERIFY(false);
         return {};
     }

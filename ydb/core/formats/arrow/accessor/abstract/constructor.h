@@ -19,8 +19,7 @@ private:
 
     virtual TConclusion<std::shared_ptr<IChunkedArray>> DoDeserializeFromString(
         const TString& originalData, const TChunkConstructionData& externalInfo) const = 0;
-    virtual TConclusion<std::shared_ptr<IChunkedArray>> DoConstructDefault(
-        const TChunkConstructionData& externalInfo) const = 0;
+    virtual TConclusion<std::shared_ptr<IChunkedArray>> DoConstructDefault(const TChunkConstructionData& externalInfo) const = 0;
     virtual NKikimrArrowAccessorProto::TConstructor DoSerializeToProto() const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& proto) = 0;
     virtual TString DoDebugString() const {
@@ -41,6 +40,7 @@ public:
 
     TString SerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
         AFL_VERIFY(columnData);
+        AFL_VERIFY(columnData->GetType() == Type)("column", columnData->GetType())("current", Type);
         return DoSerializeToString(columnData, externalInfo);
     }
 
@@ -52,7 +52,7 @@ public:
         return TStringBuilder() << GetClassName() << ":" << DoDebugString();
     }
 
-    TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> DeserializeFromString(
+    TConclusion<std::shared_ptr<IChunkedArray>> DeserializeFromString(
         const TString& originalData, const TChunkConstructionData& externalInfo) const {
         return DoDeserializeFromString(originalData, externalInfo);
     }

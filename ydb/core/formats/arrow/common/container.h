@@ -30,6 +30,14 @@ private:
 public:
     TGeneralContainer(const ui32 recordsCount);
 
+    ui64 GetRawSizeVerified() const {
+        ui64 result = 0;
+        for (auto&& i : Columns) {
+            result += i->GetRawSizeVerified();
+        }
+        return result;
+    }
+
     ui32 GetRecordsCount() const {
         AFL_VERIFY(RecordsCount);
         return *RecordsCount;

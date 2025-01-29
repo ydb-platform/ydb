@@ -4,9 +4,9 @@
 namespace NKikimr::NOlap::NChunks {
 
 std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSplitImpl(
-    const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/, const std::vector<ui64>& splitSizes) const {
+    const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/, const std::vector<ui64>& splitSizes) const {
     auto accessor = ColumnInfo.GetLoader()->ApplyVerified(Data, GetRecordsCountVerified());
-    std::vector<NArrow::NAccessor::TChunkedArraySerialized> chunks = accessor->SplitBySizes(saver, Data, splitSizes);
+    std::vector<NArrow::NAccessor::TChunkedArraySerialized> chunks = accessor->SplitBySizes(*ColumnInfo.GetLoader(), Data, splitSizes);
 
     std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
     for (auto&& i : chunks) {

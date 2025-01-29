@@ -1,6 +1,7 @@
 #include "accessor.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
 
@@ -10,11 +11,11 @@ std::optional<ui64> TTrivialArray::DoGetRawSize() const {
     return NArrow::GetArrayDataSize(Array);
 }
 
-std::vector<NKikimr::NArrow::NAccessor::TChunkedArraySerialized> TTrivialArray::DoSplitBySizes(
-    const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
+std::vector<TChunkedArraySerialized> TTrivialArray::DoSplitBySizes(
+    const TColumnLoader& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("f", GetDataType()) }));
-    auto chunks = NArrow::NSplitter::TSimpleSplitter(saver).SplitBySizes(
-        arrow::RecordBatch::Make(schema, GetRecordsCount(), { Array }), fullSerializedData, splitSizes);
+    auto chunks = NArrow::NSplitter::TSimpleSplitter(saver.GetSerializer())
+                      .SplitBySizes(arrow::RecordBatch::Make(schema, GetRecordsCount(), { Array }), fullSerializedData, splitSizes);
     std::vector<TChunkedArraySerialized> result;
     for (auto&& i : chunks) {
         AFL_VERIFY(i.GetSlicedBatch()->num_columns() == 1);

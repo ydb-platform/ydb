@@ -16,7 +16,7 @@ protected:
         const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
 
     virtual std::vector<NArrow::NAccessor::TChunkedArraySerialized> DoSplitBySizes(
-        const TColumnSaver& /*saver*/, const TString& /*fullSerializedData*/, const std::vector<ui64>& /*splitSizes*/) override {
+        const TColumnLoader& /*saver*/, const TString& /*fullSerializedData*/, const std::vector<ui64>& /*splitSizes*/) override {
         AFL_VERIFY(false);
         return {};
     }

@@ -49,18 +49,11 @@ std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared
     return table ? ToBatch(table, true) : nullptr;
 }
 
-std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& tableExt, const bool combine) {
+std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& tableExt) {
     if (!tableExt) {
         return nullptr;
     }
-    std::shared_ptr<arrow::Table> table;
-    if (combine) {
-        auto res = tableExt->CombineChunks();
-        Y_ABORT_UNLESS(res.ok());
-        table = *res;
-    } else {
-        table = tableExt;
-    }
+    std::shared_ptr<arrow::Table> res = TStatusValidator::GetValid(tableExt->CombineChunks());
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(table->num_columns());
     for (auto& col : table->columns()) {

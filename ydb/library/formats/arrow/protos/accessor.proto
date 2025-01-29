@@ -23,8 +23,23 @@ message TConstructor {
 
     message TSparsed {
     }
+
+    message TSubColumns {
+    }
     oneof Implementation {
         TPlain Plain = 10;
         TSparsed Sparsed = 11;
+        TSubColumns SubColumns = 12;
     }
+}
+
+message TSubColumnsAccessor {
+    message TSchema {
+        optional string Description = 1;
+    }
+    optional TSchema Schema = 1;
+    message TColumn {
+        optional string Description = 1;
+    }
+    repeated TColumn Columns = 2;
 }

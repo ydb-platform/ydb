@@ -1,8 +1,9 @@
 #include "accessor.h"
 
+#include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
-#include <ydb/core/formats/arrow/save_load/saver.h>
+
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NArrow::NAccessor {
@@ -70,9 +71,10 @@ TSparsedArray::TSparsedArray(const IChunkedArray& defaultArray, const std::share
 }
 
 std::vector<NKikimr::NArrow::NAccessor::TChunkedArraySerialized> TSparsedArray::DoSplitBySizes(
-    const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
+    const TColumnLoader& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
     AFL_VERIFY(Records.size() == 1)("size", Records.size());
-    auto chunks = NArrow::NSplitter::TSimpleSplitter(saver).SplitBySizes(Records.front().GetRecords(), fullSerializedData, splitSizes);
+    auto chunks =
+        NArrow::NSplitter::TSimpleSplitter(saver.GetSerializer()).SplitBySizes(Records.front().GetRecords(), fullSerializedData, splitSizes);
 
     std::vector<TChunkedArraySerialized> result;
     ui32 idx = 0;
@@ -101,7 +103,7 @@ std::vector<NKikimr::NArrow::NAccessor::TChunkedArraySerialized> TSparsedArray::
         {
             TBuilder builder(DefaultValue, GetDataType());
             builder.AddChunk(nextStartIdx - startIdx, batch);
-            result.emplace_back(builder.Finish(), saver.Apply(batch));
+            result.emplace_back(builder.Finish(), saver.GetSerializer()->SerializePayload(batch));
         }
         startIdx = nextStartIdx;
     }
@@ -159,8 +161,7 @@ IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
         return IChunkedArray::TLocalDataAddress(
             NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, it->GetSize()), StartPosition + it->GetStartExt(), chunkIdx);
     } else {
-        return IChunkedArray::TLocalDataAddress(
-            ColValue->Slice(it->GetStartInt(), it->GetSize()), StartPosition + it->GetStartExt(), chunkIdx);
+        return IChunkedArray::TLocalDataAddress(ColValue->Slice(it->GetStartInt(), it->GetSize()), StartPosition + it->GetStartExt(), chunkIdx);
     }
 }
 

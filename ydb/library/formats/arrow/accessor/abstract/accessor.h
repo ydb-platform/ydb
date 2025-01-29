@@ -10,7 +10,7 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-class TColumnSaver;
+class TColumnLoader;
 class IChunkedArray;
 
 class TChunkedArraySerialized {
@@ -29,7 +29,8 @@ public:
         Array,
         ChunkedArray,
         SerializedChunkedArray,
-        SparsedArray
+        SparsedArray,
+        SubColumnsArray
     };
 
     class TCommonChunkAddress {
@@ -237,12 +238,9 @@ protected:
     TLocalChunkedArrayAddress GetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
-    TLocalDataAddress GetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
-        return DoGetLocalData(chunkCurrent, position);
-    }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const = 0;
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
-        const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) = 0;
+        const TColumnLoader& loader, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) = 0;
 
     template <class TCurrentPosition, class TChunkAccessor>
     void SelectChunk(const std::optional<TCurrentPosition>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) const {
@@ -300,6 +298,9 @@ protected:
     }
 
 public:
+    TLocalDataAddress GetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+        return DoGetLocalData(chunkCurrent, position);
+    }
     class TReader {
     private:
         std::shared_ptr<IChunkedArray> ChunkedArray;
@@ -329,8 +330,8 @@ public:
     }
 
     std::vector<TChunkedArraySerialized> SplitBySizes(
-        const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
-        return DoSplitBySizes(saver, fullSerializedData, splitSizes);
+        const TColumnLoader& loader, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
+        return DoSplitBySizes(loader, fullSerializedData, splitSizes);
     }
 
     std::shared_ptr<arrow::Scalar> GetMaxScalar() const {
@@ -359,6 +360,7 @@ public:
         switch (Type) {
             case EType::SparsedArray:
             case EType::ChunkedArray:
+            case EType::SubColumnsArray:
             case EType::Array:
                 return true;
             case EType::Undefined:

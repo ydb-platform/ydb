@@ -1161,6 +1161,24 @@
         ],
         "version": 7
     },
+    "test.test_viewer_query_issue_13945": {
+        "result": [
+            {
+                "columns": [
+                    {
+                        "name": "column0",
+                        "type": "EmptyList"
+                    }
+                ],
+                "rows": [
+                    [
+                        []
+                    ]
+                ]
+            }
+        ],
+        "version": 7
+    },
     "test.test_viewer_sysinfo": {
         "ResponseDuration": "number",
         "ResponseTime": "number-text",

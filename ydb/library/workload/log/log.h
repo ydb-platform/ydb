@@ -23,6 +23,7 @@ public:
     ui64 TimestampStandardDeviationMinutes = 0;
     ui64 TimestampTtlMinutes = 0;
     ui64 RowsCnt = 1;
+    ui32 NullPercent = 10;
     bool PartitionsByLoad = true;
 
     std::string TableName = "log_writer_test";
@@ -65,7 +66,9 @@ public:
 
 private:
     std::string RandomWord(bool canBeEmpty) const;
+    std::string RandomPhrase(ui32 maxLen, ui32 minLen = 1) const;
     TInstant RandomInstant() const;
+    bool RandomIsNotNull() const;
     TQueryInfoList WriteRows(TString operation, TVector<TRow>&& rows) const;
     TQueryInfoList Insert(TVector<TRow>&& rows) const;
     TQueryInfoList Upsert(TVector<TRow>&& rows) const;

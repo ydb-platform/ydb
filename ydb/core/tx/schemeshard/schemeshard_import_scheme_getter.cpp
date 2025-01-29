@@ -5,6 +5,7 @@
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/dump.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -24,9 +25,17 @@ using namespace Aws::S3;
 using namespace Aws;
 
 class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
-    static TString SchemeKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx) {
+    static TString SchemeKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx, TStringBuf filename) {
         Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
-        return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/scheme.pb";
+        return TStringBuilder() << settings.items(itemIdx).source_prefix() << '/' << filename;
+    }
+
+    static bool IsView(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::CREATE_VIEW_FILE_NAME);
+    }
+
+    static bool NoObjectFound(Aws::S3::S3Errors errorType) {
+        return errorType == S3Errors::RESOURCE_NOT_FOUND || errorType == S3Errors::NO_SUCH_KEY;
     }
 
     void HeadObject(const TString& key) {
@@ -42,6 +51,13 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         LOG_D("Handle TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
+
+        if (!IsView(SchemeKey) && NoObjectFound(result.GetError().GetErrorType())) {
+            // try search for a view
+            SchemeKey = SchemeKeyFromSettings(ImportInfo->Settings, ItemIdx, NYdb::NDump::CREATE_VIEW_FILE_NAME);
+            HeadObject(SchemeKey);
+            return;
+        }
 
         if (!CheckResult(result, "HeadObject")) {
             return;
@@ -76,9 +92,13 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
         LOG_T("Trying to parse"
             << ": self# " << SelfId()
+            << ", itemIdx# " << ItemIdx
+            << ", schemeKey# " << SchemeKey
             << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
 
-        if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &item.Scheme)) {
+        if (IsView(SchemeKey)) {
+            item.CreationQuery = msg.Body;
+        } else if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &item.Scheme)) {
             return Reply(false, "Cannot parse scheme");
         }
 
@@ -129,7 +149,7 @@ public:
         , ReplyTo(replyTo)
         , ImportInfo(importInfo)
         , ItemIdx(itemIdx)
-        , SchemeKey(SchemeKeyFromSettings(importInfo->Settings, itemIdx))
+        , SchemeKey(SchemeKeyFromSettings(importInfo->Settings, itemIdx, NYdb::NDump::SCHEME_FILE_NAME))
         , Retries(importInfo->Settings.number_of_retries())
     {
     }
@@ -160,7 +180,7 @@ private:
     TImportInfo::TPtr ImportInfo;
     const ui32 ItemIdx;
 
-    const TString SchemeKey;
+    TString SchemeKey;
 
     const ui32 Retries;
     ui32 Attempt = 0;

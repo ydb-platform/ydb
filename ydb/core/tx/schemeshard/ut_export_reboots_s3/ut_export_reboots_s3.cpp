@@ -131,11 +131,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(ShouldSucceedOnSingleView) {
         RunS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }
         }, R"(
             ExportToS3Settings {
@@ -152,19 +152,19 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(ShouldSucceedOnViewsAndTables) {
         RunS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }, {
+                EPathTypeTable,
                 R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Utf8" }
                     Columns { Name: "value" Type: "Utf8" }
                     KeyColumnNames: ["key"]
-                )",
-                EPathTypeTable
+                )"
             }
         }, R"(
             ExportToS3Settings {
@@ -260,11 +260,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(CancelShouldSucceedOnSingleView) {
         CancelS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }
         }, R"(
             ExportToS3Settings {
@@ -281,19 +281,19 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(CancelShouldSucceedOnViewsAndTables) {
         CancelS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }, {
+                EPathTypeTable,
                 R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Utf8" }
                     Columns { Name: "value" Type: "Utf8" }
                     KeyColumnNames: ["key"]
-                )",
-                EPathTypeTable
+                )"
             }
         }, R"(
             ExportToS3Settings {
@@ -389,11 +389,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(ForgetShouldSucceedOnSingleView) {
         ForgetS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }
         }, R"(
             ExportToS3Settings {
@@ -410,19 +410,19 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     Y_UNIT_TEST(ForgetShouldSucceedOnViewsAndTables) {
         ForgetS3({
             {
+                EPathTypeView,
                 R"(
                     Name: "View"
                     QueryText: "some query"
-                )",
-                EPathTypeView
+                )"
             }, {
+                EPathTypeTable,
                 R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Utf8" }
                     Columns { Name: "value" Type: "Utf8" }
                     KeyColumnNames: ["key"]
-                )",
-                EPathTypeTable
+                )"
             }
         }, R"(
             ExportToS3Settings {

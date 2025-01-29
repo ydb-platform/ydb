@@ -4409,6 +4409,12 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     for (TActorId schemeUploader : RunningExportSchemeUploaders) {
         ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());
     }
+    for (TActorId schemeGetter : RunningImportSchemeGetters) {
+        ctx.Send(schemeGetter, new TEvents::TEvPoisonPill());
+    }
+    for (TActorId schemeQueryExecutor : RunningImportSchemeQueryExecutors) {
+        ctx.Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
+    }
 
     if (CdcStreamScanFinalizer) {
         ctx.Send(CdcStreamScanFinalizer, new TEvents::TEvPoisonPill());
@@ -4710,6 +4716,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvImport::TEvForgetImportRequest, Handle);
         HFuncTraced(TEvImport::TEvListImportsRequest, Handle);
         HFuncTraced(TEvPrivate::TEvImportSchemeReady, Handle);
+        HFuncTraced(TEvPrivate::TEvImportSchemeQueryResult, Handle);
         // } // NImport
 
         // namespace NBackup {

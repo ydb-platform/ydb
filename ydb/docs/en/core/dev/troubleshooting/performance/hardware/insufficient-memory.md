@@ -26,8 +26,10 @@ Additionally, which components within the  {{ ydb-short-name }} process consume 
 
         Look for the lines like this:
 
-            [ 2203.393223] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=user.slice,mems_allowed=0,global_oom,task_memcg=/user.slice/user-1000.slice/session-1.scope,task=ydb,pid=1332,uid=1000
-            [ 2203.393263] Out of memory: Killed process 1332 (ydb) total-vm:14219904kB, anon-rss:1771156kB, file-rss:0kB, shmem-rss:0kB, UID:1000 pgtables:4736kB oom_score_adj:0
+        ```plaintext
+        [ 2203.393223] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=user.slice,mems_allowed=0,global_oom,task_memcg=/user.slice/user-1000.slice/session-1.scope,task=ydb,pid=1332,uid=1000
+        [ 2203.393263] Out of memory: Killed process 1332 (ydb) total-vm:14219904kB, anon-rss:1771156kB, file-rss:0kB, shmem-rss:0kB, UID:1000 pgtables:4736kB oom_score_adj:0
+        ```
 
     Additionally, review the `ydbd` logs for relevant details.
 
@@ -53,6 +55,3 @@ Consider the following solutions for addressing insufficient memory:
 - If the load on {{ ydb-short-name }} has increased due to new usage patterns or increased query rate, try optimizing the application to reduce the load on {{ ydb-short-name }} or add more {{ ydb-short-name }} nodes.
 
 - If the load on {{ ydb-short-name }} has not changed but nodes are still restarting, consider adding more {{ ydb-short-name }} nodes or raising the hard memory limit for the nodes. For more information about memory management in {{ ydb-short-name }}, see [{#T}](../../../../reference/configuration/index.md#memory-controller).
-
-
-

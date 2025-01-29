@@ -638,6 +638,13 @@ bool CompareValues(const T& lhs, const T& rhs);
 template <CAnyMap T>
 bool CompareValues(const T& lhs, const T& rhs);
 
+template <class T>
+concept CNode = CNodePtr<TIntrusivePtr<T>>;
+
+// INode, IListNode, IMapNode.
+template <CNode T>
+bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Any T.
@@ -722,6 +729,13 @@ bool CompareValues(const T& lhs, const T& rhs)
     }
 
     return true;
+}
+
+// INode, IListNode, IMapNode.
+template <CNode T>
+bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
+{
+    return AreNodesEqual(lhs, rhs);
 }
 
 } // namespace NPrivate

@@ -18,12 +18,12 @@ bool TFileListValueBase::TIterator::Next(NUdf::TUnboxedValue& value) {
     }
     AtStart_ = false;
     if (!State_->IsValid()) {
-        MKQL_ENSURE(!ExpectedLength_ || *ExpectedLength_ == 0, "Invalid file length");
+        MKQL_ENSURE(!ExpectedLength_ || *ExpectedLength_ == 0, "Invalid file length, ExpectedLength=" << *ExpectedLength_ << ", State: " << State_->DebugInfo());
         return false;
     }
 
     if (ExpectedLength_) {
-        MKQL_ENSURE(*ExpectedLength_ > 0, "Invalid file length");
+        MKQL_ENSURE(*ExpectedLength_ > 0, "Invalid file length. State: " << State_->DebugInfo());
         --(*ExpectedLength_);
     }
     value = State_->GetCurrent();

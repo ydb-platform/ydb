@@ -3935,7 +3935,7 @@ void TPDisk::ProgressShredState() {
                             << " sends compact request to VDisk# " << data.VDiskId
                             << " ownerId# " << ownerId
                             << " request# " << compactRequest->ToString());
-                        PCtx->ActorSystem->Send(data.CutLogId, compactRequest.Release());
+                        PCtx->ActorSystem->Send(new IEventHandle(data.CutLogId, PCtx->PDiskActor, compactRequest.Release()));
                         data.LastShredGeneration = ShredGeneration;
                         data.ShredState = TOwnerData::VDISK_SHRED_STATE_COMPACT_REQUESTED;
                     }
@@ -3984,7 +3984,7 @@ void TPDisk::ProgressShredState() {
                         << " sends shred request to VDisk# " << data.VDiskId
                         << " ownerId# " << ownerId
                         << " request# " << shredRequest->ToString());
-                    PCtx->ActorSystem->Send(data.CutLogId, shredRequest.Release());
+                    PCtx->ActorSystem->Send(new IEventHandle(data.CutLogId, PCtx->PDiskActor, shredRequest.Release()));
                     data.ShredState = TOwnerData::VDISK_SHRED_STATE_SHRED_REQUESTED;
                     data.LastShredGeneration = ShredGeneration;
                 }
@@ -4011,8 +4011,9 @@ void TPDisk::ProgressShredState() {
         LOG_NOTICE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
             "Shred request is finished at PDisk# " << PCtx->PDiskId
             << " ShredGeneration# " << ShredGeneration);
-        for (TActorId &requester : ShredRequesters) {
-            PCtx->ActorSystem->Send(requester, new TEvShredPDiskResult(NKikimrProto::OK, ShredGeneration, ""));
+        for (auto& [requester, cookie] : ShredRequesters) {
+            PCtx->ActorSystem->Send(new IEventHandle(requester, PCtx->PDiskActor, new TEvShredPDiskResult(
+                NKikimrProto::OK, ShredGeneration, ""), 0, cookie));
         }
         ShredRequesters.clear();
     }
@@ -4029,27 +4030,28 @@ void TPDisk::ProcessShredPDisk(TShredPDisk& request) {
     TGuard<TMutex> guard(StateMutex);
     if (request.ShredGeneration < ShredGeneration) {
         guard.Release();
-        PCtx->ActorSystem->Send(request.Sender,
-            new TEvShredPDiskResult(NKikimrProto::RACE, request.ShredGeneration,
-                "A shred request with a higher generation is already in progress"));
+        PCtx->ActorSystem->Send(new IEventHandle(request.Sender, PCtx->PDiskActor, new TEvShredPDiskResult(
+            NKikimrProto::RACE, request.ShredGeneration, "A shred request with a higher generation is already in progress"),
+            0, request.Cookie));
         return;
     }
     if (request.ShredGeneration == ShredGeneration) {
         // Do nothing, since we already have a shred request with the same generation.
         // Just add the sender to the list of requesters.
-        ShredRequesters.push_back(request.Sender);
+        ShredRequesters.emplace_back(request.Sender, request.Cookie);
         return;
     }
     // ShredGeneration > request.ShredGeneration
     if (ShredRequesters.size() > 0) {
-        for (TActorId &requester : ShredRequesters) {
-            PCtx->ActorSystem->Send(requester, new TEvShredPDiskResult(NKikimrProto::RACE, request.ShredGeneration,
-                "A shred request with a higher generation is received"));
+        for (auto& [requester, cookie] : ShredRequesters) {
+            PCtx->ActorSystem->Send(new IEventHandle(requester, PCtx->PDiskActor, new TEvShredPDiskResult(
+                NKikimrProto::RACE, request.ShredGeneration, "A shred request with a higher generation is received"), 0,
+                cookie));
         }
         ShredRequesters.clear();
     }
     ShredGeneration = request.ShredGeneration;
-    ShredRequesters.push_back(request.Sender);
+    ShredRequesters.emplace_back(request.Sender, request.Cookie);
     ShredState = EShredStateSendPreShredCompactVDisk;
     ProgressShredState();
 }
@@ -4094,7 +4096,7 @@ void TPDisk::ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& requ
     }
     if (request.Status != NKikimrProto::OK) {
         ShredState = EShredStateFailed;
-        for (TActorId &requester : ShredRequesters) {
+        for (auto& [requester, cookie] : ShredRequesters) {
             TStringStream str;
             str << "Shred request failed at PDisk# " << PCtx->PDiskId
                 << " for shredGeneration# " << request.ShredGeneration
@@ -4103,8 +4105,8 @@ void TPDisk::ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& requ
                 << " replied with PreShredCompactVDiskResult status# " << request.Status
                 << " and ErrorReason# " << request.ErrorReason;
             LOG_ERROR_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, str.Str());
-            PCtx->ActorSystem->Send(requester, new TEvShredPDiskResult(NKikimrProto::ERROR, request.ShredGeneration,
-                str.Str()));
+            PCtx->ActorSystem->Send(new IEventHandle(requester, PCtx->PDiskActor, new TEvShredPDiskResult(
+                NKikimrProto::ERROR, request.ShredGeneration, str.Str()), 0, cookie));
         }
         ShredRequesters.clear();
         return;
@@ -4153,7 +4155,7 @@ void TPDisk::ProcessShredVDiskResult(TShredVDiskResult& request) {
     }
     if (request.Status != NKikimrProto::OK) {
         ShredState = EShredStateFailed;
-        for (TActorId &requester : ShredRequesters) {
+        for (auto& [requester, cookie] : ShredRequesters) {
             TStringStream str;
             str << "Shred request failed at PDisk# " << PCtx->PDiskId
                 << " for shredGeneration# " << request.ShredGeneration
@@ -4162,8 +4164,8 @@ void TPDisk::ProcessShredVDiskResult(TShredVDiskResult& request) {
                 << " replied with status# " << request.Status
                 << " and ErrorReason# " << request.ErrorReason;
             LOG_ERROR_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, str.Str());
-            PCtx->ActorSystem->Send(requester, new TEvShredPDiskResult(NKikimrProto::ERROR, request.ShredGeneration,
-                str.Str()));
+            PCtx->ActorSystem->Send(new IEventHandle(requester, PCtx->PDiskActor, new TEvShredPDiskResult(
+                NKikimrProto::ERROR, request.ShredGeneration, str.Str()), 0, cookie));
         }
         ShredRequesters.clear();
         return;

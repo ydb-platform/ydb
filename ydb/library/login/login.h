@@ -140,11 +140,6 @@ public:
         std::vector<TString> TouchedGroups;
     };
 
-    struct TRemoveGroupRequest : TBasicRequest {
-        TString Group;
-        bool MissingOk;
-    };
-
     struct TRemoveGroupResponse : TBasicResponse {
         std::vector<TString> TouchedGroups;
     };
@@ -166,7 +161,7 @@ public:
         bool IsEnabled;
         std::unordered_set<TString> Members;
         std::chrono::system_clock::time_point CreatedAt;
-        size_t FailedLoginAttemptCount = 0;
+        ui32 FailedLoginAttemptCount = 0;
         std::chrono::system_clock::time_point LastFailedLogin;
         std::chrono::system_clock::time_point LastSuccessfulLogin;
     };
@@ -188,6 +183,7 @@ public:
     NLoginProto::TSecurityState GetSecurityState() const;
     void UpdateSecurityState(const NLoginProto::TSecurityState& state);
 
+    bool IsLockedOut(const TSidRecord& user) const;
     TCheckLockOutResponse CheckLockOutUser(const TCheckLockOutRequest& request);
     TLoginUserResponse LoginUser(const TLoginUserRequest& request);
     TValidateTokenResponse ValidateToken(const TValidateTokenRequest& request);
@@ -201,7 +197,8 @@ public:
     TBasicResponse AddGroupMembership(const TAddGroupMembershipRequest& request);
     TBasicResponse RemoveGroupMembership(const TRemoveGroupMembershipRequest& request);
     TRenameGroupResponse RenameGroup(const TRenameGroupRequest& request);
-    TRemoveGroupResponse RemoveGroup(const TRemoveGroupRequest& request);
+    TRemoveGroupResponse RemoveGroup(const TString& group);
+    bool CheckGroupExists(const TString& group);
 
     void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
     void UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer);

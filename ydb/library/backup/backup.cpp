@@ -546,7 +546,7 @@ NView::TViewDescription DescribeView(NView::TViewClient& client, const TString& 
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeView(path).ExtractValueSync();
     });
-    VerifyStatus(status);
+    VerifyStatus(status, "describe view to build a backup");
     return status.GetViewDescription();
 }
 

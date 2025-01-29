@@ -83,6 +83,21 @@ void TNodeWarden::SendRegisterNode() {
     FillInVDiskStatus(ev->Record.MutableVDiskStatus(), true);
     ev->Record.SetDeclarativePDiskManagement(true);
 
+    for (const auto& [key, pdisk] : LocalPDisks) {
+        if (pdisk.ShredGenerationIssued) {
+            auto *item = ev->Record.AddShredStatus();
+            item->SetPDiskId(key.PDiskId);
+            if (pdisk.Record.HasPDiskGuid()) {
+                item->SetPDiskGuid(pdisk.Record.GetPDiskGuid());
+            }
+            std::visit(TOverloaded{
+                [item](const std::monostate&) { item->SetShredInProgress(true); },
+                [item](const ui64& generation) { item->SetShredGenerationFinished(generation); },
+                [item](const TString& aborted) { item->SetShredAborted(aborted); }
+            }, pdisk.ShredState);
+        }
+    }
+
     SendToController(std::move(ev));
 }
 

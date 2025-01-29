@@ -124,13 +124,19 @@ std::vector<TString> ScanQuerySelect(
     return ScanQuerySelectSimple(client, tablePath, ydbSchema);
 }
 
+
+NKikimrConfig::TAppConfig GetAppConfig() {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableFeatureFlags()->SetEnableColumnStore(true);
+    return appConfig;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
     Y_UNIT_TEST(UpsertArrowBatch) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         TTestOlap::CreateTable(*server.ServerSettings);
@@ -214,8 +220,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
     }
 
     Y_UNIT_TEST(UpsertArrowDupField) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         ui16 grpc = server.GetPort();
@@ -282,8 +287,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
     }
 
     void ParquetImportBug(bool columnTable) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         ui16 grpc = server.GetPort();
@@ -387,8 +391,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
     }
 
     Y_UNIT_TEST(UpsertCsvBug) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         ui16 grpc = server.GetPort();
@@ -574,8 +577,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
     }
 
     Y_UNIT_TEST(UpsertCSV) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         TTestOlap::CreateTable(*server.ServerSettings); // 2 shards

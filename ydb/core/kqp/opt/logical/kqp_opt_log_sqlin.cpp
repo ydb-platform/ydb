@@ -48,10 +48,6 @@ bool CanRewriteSqlInToEquiJoin(const TTypeAnnotationNode* lookupType, const TTyp
 TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrConfiguration::TPtr& config)
 {
-    if (kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
-        return node;
-    }
-
     if (config->HasOptDisableSqlInToJoin()) {
         return node;
     }

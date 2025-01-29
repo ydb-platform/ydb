@@ -22,7 +22,7 @@ Consider the following recommendations:
 
     If possible, avoid [interactive transactions](../../../../concepts/glossary.md#interactive-transaction). A better approach is to use a single YQL query with `begin;` and `commit;` to select data, update data, and commit the transaction.
 
-    If you do need interactive transactions, append `commit;` to the last query in the transaction.
+    If you do need interactive transactions, perform `commit` in the last query in the transaction.
 
 - Analyze the range of primary keys where conflicting modifications occur, and try to change the application logic to reduce the number of conflicts.
 

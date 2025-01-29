@@ -100,6 +100,10 @@ bool TLoginProvider::CheckUserExists(const TString& user) {
     return CheckSubjectExists(user, ESidType::USER);
 }
 
+bool TLoginProvider::CheckGroupExists(const TString& group) {
+    return CheckSubjectExists(group, ESidType::GROUP);
+}
+
 TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserRequest& request) {
     TBasicResponse response;
 
@@ -278,31 +282,29 @@ TLoginProvider::TRenameGroupResponse TLoginProvider::RenameGroup(const TRenameGr
     return response;
 }
 
-TLoginProvider::TRemoveGroupResponse TLoginProvider::RemoveGroup(const TRemoveGroupRequest& request) {
+TLoginProvider::TRemoveGroupResponse TLoginProvider::RemoveGroup(const TString& group) {
     TRemoveGroupResponse response;
 
-    auto itGroupModify = Sids.find(request.Group);
+    auto itGroupModify = Sids.find(group);
     if (itGroupModify == Sids.end() || itGroupModify->second.Type != ESidType::GROUP) {
-        if (!request.MissingOk) {
-            response.Error = "Group not found";
-        }
+        response.Error = "Group not found";
         return response;
     }
 
-    auto itChildToParentIndex = ChildToParentIndex.find(request.Group);
+    auto itChildToParentIndex = ChildToParentIndex.find(group);
     if (itChildToParentIndex != ChildToParentIndex.end()) {
         for (const TString& parent : itChildToParentIndex->second) {
             auto itGroup = Sids.find(parent);
             if (itGroup != Sids.end()) {
                 response.TouchedGroups.emplace_back(itGroup->first);
-                itGroup->second.Members.erase(request.Group);
+                itGroup->second.Members.erase(group);
             }
         }
         ChildToParentIndex.erase(itChildToParentIndex);
     }
 
     for (const TString& member : itGroupModify->second.Members) {
-        ChildToParentIndex[member].erase(request.Group);
+        ChildToParentIndex[member].erase(group);
     }
 
     Sids.erase(itGroupModify);
@@ -358,6 +360,24 @@ bool TLoginProvider::ShouldUnlockAccount(const TSidRecord& sid) const {
     return sid.IsEnabled && ShouldResetFailedAttemptCount(sid);
 }
 
+bool TLoginProvider::IsLockedOut(const TSidRecord& user) const {
+    Y_ABORT_UNLESS(user.Type == NLoginProto::ESidType::USER);
+    
+    if (AccountLockout.AttemptThreshold == 0) {
+        return false;
+    }
+
+    if (user.FailedLoginAttemptCount < AccountLockout.AttemptThreshold) {
+        return false;
+    }
+
+    if (ShouldResetFailedAttemptCount(user)) {
+        return false;
+    }
+
+    return true;
+}
+
 TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCheckLockOutRequest& request) {
     TCheckLockOutResponse response;
     auto itUser = Sids.find(request.User);
@@ -371,7 +391,7 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
         return response;
     }
 
-    TSidRecord& sid  = itUser->second;
+    TSidRecord& sid = itUser->second;
     if (CheckLockout(sid)) {
         if (ShouldUnlockAccount(sid)) {
             UnlockAccount(&sid);

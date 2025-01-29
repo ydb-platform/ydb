@@ -1,6 +1,7 @@
 #include "auth_scan_base.h"
 #include "users.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
@@ -19,8 +20,10 @@ public:
     using TBase = TScanActorBase<TUsersScan>;
 
     TUsersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
+        , UserToken(std::move(userToken))
     {
     }
 
@@ -93,9 +96,11 @@ protected:
     void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const NKikimrScheme::TEvListUsersResult& result) {
         TVector<TCell> cells(::Reserve(Columns.size()));
 
-        // TODO: add rows according to request's sender user rights
-
         for (const auto& user : result.GetUsers()) {
+            if (!user.HasName() || !CanAccessUser(user.GetName())) {
+                continue;
+            }
+
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthUsers::Sid::ColumnId:
@@ -150,12 +155,25 @@ protected:
 
         batch.Finished = true;
     }
+
+private:
+    bool CanAccessUser(const TString& user) {
+        if (IsAdministrator(AppData(), UserToken.Get())) {
+            return true;
+        }
+
+        return UserToken && UserToken->GetUserSID() == user;
+    }
+
+private:
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 THolder<NActors::IActor> CreateUsersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TUsersScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TUsersScan>(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
 }
 
 }

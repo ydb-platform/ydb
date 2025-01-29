@@ -32,15 +32,18 @@ To do this in your [Yandex Cloud console](https://console.yandex.cloud):
 
 Authentication is required to work with Yandex Cloud, see authentication examples [below](#authentication-in-cloud-examples).
 
-## Kafka API Usage Examples
+## Kafka API usage examples
+
 
 ### Reading
 
-When reading, the distinctive features of the Kafka API are:
+Consider the following points of using the Kafka API for reading:
 
-- absence of support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option;
-- only one partition assignment strategy - roundrobin;
-- no ability to read without a pre-created consumer group
+
+- No support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option.
+- Only one partition assignment strategy - roundrobin.
+- No reading without a pre-created consumer group.
+
 
 Therefore, in the consumer configuration, you must always specify the **consumer group name** and the parameters:
 
@@ -340,7 +343,8 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
 
 {% endlist %}
 
-### Examples with Authentication {#authentication-examples}
+### Authentication examples {#authentication-examples}
+
 
 For more details on authentication, see the section [Authentication](./auth.md). Below are examples of authentication in a cloud database and a local database.
 
@@ -350,9 +354,11 @@ Currently, the only available authentication mechanism with Kafka API in YDB Top
 
 {% endnote %}
 
-#### Examples with Authentication in Yandex Cloud {#authentication-in-cloud-examples}
+#### Authentication examples in Yandex Cloud {#authentication-in-cloud-examples}
 
-Instructions on how to try working with the Kafka API over YDB Topics in Yandex Cloud are [above](#how-to-try-kafka-api-in-cloud).
+
+See instructions on how to start working with the Kafka API over YDB Topics in Yandex Cloud in the section [above](#how-to-try-kafka-api-in-cloud).
+
 
 For authentication, add the following values to the Kafka connection parameters:
 
@@ -441,7 +447,8 @@ The username is not specified in <path_to_database>. Only `@` is added, followed
 
 {% endlist %}
 
-#### Examples with Authentication in on-prem YDB
+#### Authentication examples in on-prem YDB
+
 
 To use authentication in a on-prem database:
 
@@ -449,7 +456,8 @@ To use authentication in a on-prem database:
 1. Create a user. [How to do this in YQL](../../yql/reference/syntax/create-user.md). [How to execute YQL from CLI](../ydb-cli/yql.md).
 2. Connect to the Kafka API as shown in the examples below. In all examples, it is assumed that:
 
-   - YDB is running locally with the environment variable YDB_KAFKA_PROXY_PORT=9092, meaning that the Kafka API is available at localhost:9092. You can run YDB in Docker for instance as described [here](../../quickstart.md#install).
+   - YDB is running locally with the environment variable `YDB_KAFKA_PROXY_PORT=9092`, meaning that the Kafka API is available at `localhost:9092`. For example, you can run YDB in Docker as described [here](../../quickstart.md#install).
+
    - <username> is the username you specified when creating the user.
    - <password> is the user's password you specified when creating the user.
 

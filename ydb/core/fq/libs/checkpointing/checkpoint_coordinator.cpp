@@ -372,11 +372,12 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvScheduleC
     CC_LOG_D("Got TEvScheduleCheckpointing");
     ScheduleNextCheckpoint();
     const auto checkpointsInFly = PendingCheckpoints.size() + PendingCommitCheckpoints.size();
-    if (checkpointsInFly >= Settings.GetMaxInflight() || InitingZeroCheckpoint) {
+    if (checkpointsInFly >= Settings.GetMaxInflight() || (InitingZeroCheckpoint && !FailedZeroCheckpoint)) {
         CC_LOG_W("Skip schedule checkpoint event since inflight checkpoint limit exceeded: current: " << checkpointsInFly << ", limit: " << Settings.GetMaxInflight());
         Metrics.SkippedDueToInFlightLimit->Inc();
         return;
     }
+    FailedZeroCheckpoint = false;
     Metrics.SkippedDueToInFlightLimit->Set(0);
     InitCheckpoint();
 }
@@ -389,6 +390,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
     if (issues) {
         CC_LOG_E("[" << checkpointId << "] StorageError: can't create checkpoint: " << issues.ToOneLineString());
         PendingCheckpoints.erase(checkpointId);
+        FailedZeroCheckpoint = InitingZeroCheckpoint;
         UpdateInProgressMetric();
         ++*Metrics.FailedToCreate;
         ++*Metrics.StorageError;
@@ -470,6 +472,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
             CC_LOG_E("[" << checkpointId << "] Got all acks for aborted checkpoint, aborting in storage");
             CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod;  // Next checkpoint is snapshot.
             Send(StorageProxy, new TEvCheckpointStorage::TEvAbortCheckpointRequest(CoordinatorId, checkpointId, "Can't save node state"), IEventHandle::FlagTrackDelivery);
+            FailedZeroCheckpoint = InitingZeroCheckpoint;
         } else {
             CC_LOG_I("[" << checkpointId << "] Got all acks, changing checkpoint status to 'PendingCommit'");
             Send(StorageProxy, new TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest(CoordinatorId, checkpointId, checkpoint.GetStats().StateSize), IEventHandle::FlagTrackDelivery);
@@ -494,6 +497,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvSetCheckpoint
         CC_LOG_E("[" << checkpointId << "] StorageError: can't change checkpoint status to 'PendingCommit': " << issues.ToString());
         ++*Metrics.StorageError;
         PendingCheckpoints.erase(it);
+        FailedZeroCheckpoint = InitingZeroCheckpoint;
         return;
     }
 
@@ -571,6 +575,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvAbortCheckpoi
         ++*Metrics.Aborted;
     }
     PendingCheckpoints.erase(checkpointId);
+    FailedZeroCheckpoint = InitingZeroCheckpoint;
     PendingCommitCheckpoints.erase(checkpointId);
     UpdateInProgressMetric();
 }
@@ -616,6 +621,8 @@ void TCheckpointCoordinator::Handle(NActors::TEvents::TEvPoison::TPtr& ev) {
 }
 
 void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&) {
+    Y_DEBUG_ABORT_UNLESS(InitingZeroCheckpoint);
+    Y_DEBUG_ABORT_UNLESS(!FailedZeroCheckpoint);
     InitingZeroCheckpoint = false;
     // TODO: run graph only now, not before zero checkpoint inited
 }

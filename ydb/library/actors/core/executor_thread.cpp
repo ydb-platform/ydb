@@ -265,6 +265,20 @@ namespace NActors {
                         return nameWithoutSpace;
                     };
 
+                    auto getMessageTypeWithoutSpace = [&ev]() {
+                        auto type = ev->GetTypeName();
+                        std::string typeWithoutSpace;
+                        for (auto sym : type) {
+                            if (sym == ' ') {
+                                typeWithoutSpace += '+';
+                            } else {
+                                typeWithoutSpace += sym;
+                            }
+                        }
+
+                        return typeWithoutSpace;
+                    };
+
                     TStringStream logOut;
 
                     if (ev) {
@@ -273,7 +287,9 @@ namespace NActors {
                             << ev->Sender << " "
                             << (void*)ev.Get() << " "
                             << TInstant::Now().ToString() << " "
-                            << getNameWithoutSpace() << "\n";
+                            << getNameWithoutSpace() << " "
+                            << getMessageTypeWithoutSpace() << " "
+                            << TThread::CurrentThreadId() << "\n";
                         Cerr << logOut.Str();
                         logOut.Clear();
                     }

@@ -178,7 +178,10 @@ private:
     void SetStorageSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
         TString diskPath;
         if (Settings_.PDisksPath && *Settings_.PDisksPath != "-") {
-            diskPath = TStringBuilder() << *Settings_.PDisksPath << "/";
+            if (Settings_.PDisksPath->empty()) {
+                ythrow yexception() << "Storage directory path should not be empty";
+            }
+            diskPath = TStringBuilder() << Settings_.PDisksPath << (Settings_.PDisksPath->back() != '/' ? "/" : "");
         }
 
         bool formatDisk = true;
@@ -196,6 +199,13 @@ private:
                 formatDisk = false;
             }
 
+            if (Settings_.DiskSize && storageMeta.GetStorageSize() != *Settings_.DiskSize) {
+                if (!formatDisk) {
+                    ythrow yexception() << "Cannot change disk size without formatting storage, please use --format-storage";
+                }
+                storageMeta.SetStorageSize(*Settings_.DiskSize);
+            }
+
             TString storageMetaStr;
             google::protobuf::TextFormat::PrintToString(storageMeta, &storageMetaStr);
 
@@ -208,7 +218,7 @@ private:
             .UseDisk = !!Settings_.PDisksPath,
             .SectorSize = NKikimr::TTestStorageFactory::SECTOR_SIZE,
             .ChunkSize = Settings_.PDisksPath ? NKikimr::TTestStorageFactory::CHUNK_SIZE : NKikimr::TTestStorageFactory::MEM_CHUNK_SIZE,
-            .DiskSize = Settings_.DiskSize,
+            .DiskSize = Settings_.DiskSize ? *Settings_.DiskSize : 32_GB,
             .FormatDisk = formatDisk,
             .DiskPath = diskPath
         };
@@ -351,7 +361,13 @@ private:
 
     void WaitResourcesPublishing() const {
         auto promise = NThreading::NewPromise();
-        GetRuntime()->Register(CreateResourcesWaiterActor(promise, Settings_.NodeCount), 0, GetRuntime()->GetAppData().SystemPoolId);
+        const TWaitResourcesSettings settings = {
+            .ExpectedNodeCount = static_cast<i32>(Settings_.NodeCount),
+            .HealthCheckLevel = Settings_.HealthCheckLevel,
+            .VerboseLevel = Settings_.VerboseLevel,
+            .Database = NKikimr::CanonizePath(Settings_.DomainName)
+        };
+        GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), 0, GetRuntime()->GetAppData().SystemPoolId);
 
         try {
             promise.GetFuture().GetValue(Settings_.InitializationTimeout);

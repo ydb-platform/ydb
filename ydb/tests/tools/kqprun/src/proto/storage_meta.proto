@@ -4,4 +4,5 @@ package NKqpRun;
 
 message TStorageMeta {
     uint64 StorageGeneration = 1;
+    uint64 StorageSize = 2;
 }

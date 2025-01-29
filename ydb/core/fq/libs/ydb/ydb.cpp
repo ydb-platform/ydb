@@ -207,7 +207,9 @@ NYql::TIssues StatusToIssues(const NYdb::TStatus& status) {
     if (!status.IsSuccess()) {
         issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
         if (!issues) {
-            issues.AddIssue("Internal error: empty issues with failed status");
+            TStringStream str;
+            str << "Internal error: empty issues with failed status (" << status.GetStatus() << ")";
+            issues.AddIssue(str.Str());
         }
     }
     return issues;

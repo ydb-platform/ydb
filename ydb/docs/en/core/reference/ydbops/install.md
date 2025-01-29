@@ -32,7 +32,7 @@ Currently, only building from source is available as an installation option. The
 
   The `ydbops` executables will be available in the `bin` folder. There will be several binary files for Linux, MacOS (arm64, amd64).
 
-4. To install binary file to the specific folder (folder `~/ydb/bin` is defined by default) execute this command
+4. To install the binary file, execute the following command:
 
    ```bash
    make install [INSTALL_DIR=<path_to_install_folder>] [BUILD_DIR=<path_to_build_folder>]

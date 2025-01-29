@@ -8,16 +8,20 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-void CreateChangefeedsPropose(THolder<TEvSchemeShard::TEvModifySchemeTransaction>& propose, const TImportInfo::TItem& item) {
+bool CreateChangefeedsPropose(THolder<TEvSchemeShard::TEvModifySchemeTransaction>& propose, const TImportInfo::TItem& item, TString& error) {
     auto& record = propose->Record;
     const auto& changefeeds = item.Changefeeds;
     
     for (const auto& changefeed : changefeeds) {
         auto& modifyScheme = *record.AddTransaction();
-        const auto& cdcStream = modifyScheme.MutableCreateCdcStream();
-        cdcStream->MutableTableName();
+        auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
+        Ydb::StatusIds::StatusCode status;
+        auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
+        if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
+            return false;
+        }
     }
-
+    return true;
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
@@ -84,6 +88,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     if (!FillACL(modifyScheme, item.Permissions, error)) {
         return nullptr;
     }
+
+    CreateChangefeedsPropose(propose, item, error);
 
     return propose;
 }

@@ -51,6 +51,11 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         return errorType == S3Errors::RESOURCE_NOT_FOUND || errorType == S3Errors::NO_SUCH_KEY;
     }
 
+    static TString ChangefeedKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx, const TString& changefeedName) {
+        Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
+        return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/" << changefeedName << "/changefeed_description.pb";
+    }
+
     void HeadObject(const TString& key) {
         auto request = Model::HeadObjectRequest()
             .WithKey(key);
@@ -432,6 +437,7 @@ private:
     const TString MetadataKey;
     TString SchemeKey;
     const TString PermissionsKey;
+    const TString ChangefeedKey;
 
     const ui32 Retries;
     ui32 Attempt = 0;

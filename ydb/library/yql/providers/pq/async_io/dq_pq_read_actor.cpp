@@ -290,7 +290,7 @@ private:
 
         if (!InflightReconnect && ReconnectPeriod != TDuration::Zero()) {
             Metrics.ReconnectRate->Inc();
-            Schedule(ReconnectPeriod, new TEvPrivate::TEvSourceDataReady());
+            Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
             InflightReconnect = true;
         }
 

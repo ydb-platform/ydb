@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.25.3)
+VERSION(0.25.5)
 
 LICENSE(Apache-2.0)
 
@@ -26,7 +26,6 @@ RESOURCE_FILES(
     PREFIX contrib/python/responses/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
-    responses/py.typed
 )
 
 END()

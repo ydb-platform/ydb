@@ -196,6 +196,7 @@ SRCS(
     schemeshard__sync_update_tenants.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
+    schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
     schemeshard_audit_log.cpp
@@ -234,6 +235,7 @@ SRCS(
     schemeshard_import__get.cpp
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
+    schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
     schemeshard_path.cpp
@@ -308,6 +310,7 @@ PEERDIR(
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer
+    ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/dump/util
     yql/essentials/minikql
     yql/essentials/providers/common/proto

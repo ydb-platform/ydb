@@ -187,4 +187,5 @@ message TFeatureFlags {
     optional bool EnableExportChecksums = 162 [default = false];
     optional bool EnableTopicTransfer = 163 [default = false];
     optional bool EnableViewExport = 164 [default = false];
+    optional bool EnableColumnStore = 165 [default = false];
 }

@@ -284,6 +284,7 @@ namespace Tests {
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
             FeatureFlags.SetEnableWritePortionsOnInsert(true);
             FeatureFlags.SetEnableFollowerStats(true);
+            FeatureFlags.SetEnableColumnStore(true);
         }
 
         TServerSettings(const TServerSettings& settings) = default;

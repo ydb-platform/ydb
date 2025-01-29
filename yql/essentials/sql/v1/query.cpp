@@ -1961,10 +1961,8 @@ public:
                 options = L(options, Q(Y(Q("nullPassword"))));
             }
 
-            if (Params->CanLogin.has_value() && Params->CanLogin.value() || !Params->CanLogin.has_value() && IsCreateUser) {
-                options = L(options, Q(Y(Q("login"))));
-            } else {
-                options = L(options, Q(Y(Q("noLogin"))));
+            if (Params->CanLogin.has_value()) {
+                options = L(options, Q(Y(Q(Params->CanLogin.value() ? "login" : "noLogin"))));
             }
         }
 

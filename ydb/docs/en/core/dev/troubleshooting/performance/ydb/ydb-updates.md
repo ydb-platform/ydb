@@ -1,6 +1,6 @@
 # Rolling restart
 
-{{ ydb-short-name }} clusters can be updated without downtime, which is possible because {{ ydb-short-name }} normally has redundant components and supports rolling restart procedure. To ensure continuous data availability, {{ ydb-short-name }} includes Cluster Management System (CMS) that tracks all outages and nodes taken offline for maintenance, such as restarts. CMS halts new maintenance requests if they might risk data availability.
+{{ ydb-short-name }} clusters can be updated without downtime, which is possible because {{ ydb-short-name }} normally has redundant components and supports rolling restart procedure. To ensure continuous data availability, {{ ydb-short-name }} includes [Cluster Management System (CMS)](../../../../concepts/glossary.md#cms) that tracks all outages and nodes taken offline for maintenance, such as restarts. CMS halts new maintenance requests if they might risk data availability.
 
 However, even if data is always available, the restart of all nodes in a relatively short period of time might have a noticeable impact on overall performance. Each [tablet](../../../../concepts/glossary.md#tablet) running on a restarted node is relaunched on a different node. Moving a tablet between nodes takes time and may affect latencies of queries involving it. See recommendations [for rolling restart](#rolling-restart).
 

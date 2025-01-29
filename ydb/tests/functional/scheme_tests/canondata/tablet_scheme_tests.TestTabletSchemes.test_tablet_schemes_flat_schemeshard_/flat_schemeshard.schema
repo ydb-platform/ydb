@@ -379,6 +379,11 @@
                 "ColumnId": 13,
                 "ColumnName": "IncrementalBackupConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "IsRestore",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -397,7 +402,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3794,6 +3800,11 @@
                 "ColumnId": 14,
                 "ColumnName": "IncrementalBackupConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "IsRestore",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -3813,7 +3824,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6179,6 +6191,16 @@
                 "ColumnId": 12,
                 "ColumnName": "Metadata",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "CreationQuery",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "PreparedCreationQuery",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6196,7 +6218,9 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -472,11 +472,22 @@ bool TColumnEngineForLogs::ApplyChangesOnExecute(
     return true;
 }
 
-void TColumnEngineForLogs::AppendPortion(const TPortionDataAccessor& portionInfo, const bool addAsAccessor) {
+void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo) {
+    AFL_VERIFY(portionInfo);
+    auto granule = GetGranulePtrVerified(portionInfo->GetPathId());
+    AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
+    UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
+    granule->AppendPortion(portionInfo);
+    if (portionInfo->HasRemoveSnapshot()) {
+        AddCleanupPortion(portionInfo);
+    }
+}
+
+void TColumnEngineForLogs::AppendPortion(const TPortionDataAccessor& portionInfo) {
     auto granule = GetGranulePtrVerified(portionInfo.GetPortionInfo().GetPathId());
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo.GetPortionInfo().GetPortionId()));
     UpdatePortionStats(portionInfo.GetPortionInfo(), EStatsUpdateType::ADD);
-    granule->AppendPortion(portionInfo, addAsAccessor);
+    granule->AppendPortion(portionInfo);
     if (portionInfo.GetPortionInfo().HasRemoveSnapshot()) {
         AddCleanupPortion(portionInfo.GetPortionInfoPtr());
     }

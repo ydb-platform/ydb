@@ -183,7 +183,7 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
                 << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
 
     if (TMonotonic::Now() >= GetDeadline()) {
-        SendScanError("ColumnShard scanner timeout");
+        SendScanError("ColumnShard scanner timeout: HAS_ACK=" + ::ToString(!!AckReceivedInstant));
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
         ScheduleWakeup(GetDeadline());

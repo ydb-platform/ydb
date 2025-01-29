@@ -4,6 +4,10 @@
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjectResponse::TPtr& ev) {
+    if (!ev->Get()->IsSuccess()) {
+        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "s3_error")("storage_id",
+            GCTask->GetStorageId())("message", ev->Get()->GetError().GetMessage())("exception", ev->Get()->GetError().GetExceptionName());
+    }
     TLogoBlobID logoBlobId;
     TString errorMessage;
     Y_ABORT_UNLESS(ev->Get()->Key);

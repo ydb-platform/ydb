@@ -12,7 +12,7 @@ PEERDIR(
 )
 
 SRCS(
-    transfer_parser_ut.cpp
+    transfer_writer_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

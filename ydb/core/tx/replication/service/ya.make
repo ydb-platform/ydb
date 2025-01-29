@@ -44,6 +44,7 @@ RECURSE_FOR_TESTS(
     ut_json_change_record
     ut_table_writer
     ut_topic_reader
+    ut_transfer_writer
     ut_worker
 )
 

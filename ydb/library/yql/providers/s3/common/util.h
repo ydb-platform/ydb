@@ -15,4 +15,22 @@ TString UrlEscapeRet(const TStringBuf from);
 
 bool ValidateS3ReadWriteSchema(const TStructExprType* schemaStructRowType, TExprContext& ctx);
 
+class TUrlBuilder {
+    struct TParam {
+        TString Name;
+        TString Value;
+    };
+
+public:
+    explicit TUrlBuilder(const TString& uri);
+
+    TUrlBuilder& AddUrlParam(const TString& name, const TString& value = "");
+
+    TString Build() const;
+
+private:
+    std::vector<TParam> Params;
+    TString MainUri;
+};
+
 }

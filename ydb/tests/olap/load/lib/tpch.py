@@ -40,7 +40,7 @@ class TpchSuiteBase(LoadSuiteBase):
             return
         cls.check_tables_size(folder=cls._get_path(False), tables=cls._get_tables_size())
 
-    @pytest.mark.parametrize('query_num', [4,5,10])
+    @pytest.mark.parametrize('query_num', [7, 9, 18])
     def test_tpch(self, query_num: int):
         self.run_workload_test(self._get_path(), query_num)
 

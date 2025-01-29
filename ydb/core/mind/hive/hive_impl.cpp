@@ -170,12 +170,7 @@ void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvDeleteTablet::TPtr& ev) {
-    if (DeleteTabletInProgress < MAX_DELETE_TABLET_IN_PROGRESS) {
-        ++DeleteTabletInProgress;
-        Execute(CreateDeleteTablet(ev));
-    } else {
-        DeleteTabletQueue.push(std::move(ev));
-    }
+    Execute(CreateDeleteTablet(ev));
 }
 
 void THive::Handle(TEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
@@ -188,7 +183,6 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet) {
 
     // Tablet has no storage, so there's nothing to block or delete
     // Simulate a response from CreateTabletReqDelete as if all steps have been completed
-    ++DeleteTabletInProgress;
     Send(SelfId(), new TEvTabletBase::TEvDeleteTabletResult(NKikimrProto::OK, tablet->Id));
 }
 
@@ -198,7 +192,6 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& 
 
     // Tablet has no storage, so there's nothing to block or delete
     // Simulate a response from CreateTabletReqDelete as if all steps have been completed
-    ++DeleteTabletInProgress;
     sideEffects.Send(SelfId(), new TEvTabletBase::TEvDeleteTabletResult(NKikimrProto::OK, tablet->Id));
 }
 
@@ -523,9 +516,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         } else if (tablet.IsReadyToBlockStorage()) {
             tablet.InitiateBlockStorage(sideEffects);
         } else if (tablet.IsDeleting()) {
-            if (!tablet.InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
-                DeleteTabletWithoutStorage(&tablet);
-            }
+            BlockStorageForDelete(tablet.Id, sideEffects);
         } else if (tablet.IsLockedToActor()) {
             // we are wating for a lock
         } else if (tablet.IsExternalBoot()) {
@@ -862,9 +853,7 @@ void THive::Handle(TEvHive::TEvInitiateBlockStorage::TPtr& ev) {
     TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId);
     if (tablet != nullptr) {
         if (tablet->IsDeleting()) {
-            if (!tablet->InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
-                DeleteTabletWithoutStorage(tablet);
-            }
+            BlockStorageForDelete(tabletId, sideEffects);
         } else
         if (tablet->IsReadyToBlockStorage()) {
             tablet->InitiateBlockStorage(sideEffects);
@@ -1126,11 +1115,6 @@ void THive::Handle(TEvTabletBase::TEvBlockBlobStorageResult::TPtr &ev) {
 
 void THive::Handle(TEvTabletBase::TEvDeleteTabletResult::TPtr &ev) {
     Execute(CreateDeleteTabletResult(ev));
-    --DeleteTabletInProgress;
-    while (!DeleteTabletQueue.empty() && DeleteTabletInProgress < MAX_DELETE_TABLET_IN_PROGRESS) {
-        Handle(DeleteTabletQueue.front());
-        DeleteTabletQueue.pop();
-    }
 }
 
 template <>
@@ -2890,6 +2874,21 @@ ui64 THive::GetObjectImbalance(TFullObjectId object) {
         return 0;
     }
     return it->second->GetImbalance();
+}
+
+void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects) {
+    auto* tablet = FindTabletEvenInDeleting(tabletId);
+    if (tablet == nullptr) {
+        return;
+    }
+    if (DeleteTabletInProgress < MAX_DELETE_TABLET_IN_PROGRESS) {
+        ++DeleteTabletInProgress;
+        if (!tablet->InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
+            DeleteTabletWithoutStorage(tablet);
+        }
+    } else {
+        DeleteTabletQueue.push(tabletId);
+    }
 }
 
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)

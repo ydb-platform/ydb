@@ -438,7 +438,7 @@ protected:
     static constexpr ui64 MAX_UPDATE_TABLET_METRICS_IN_PROGRESS = 10000; // 10K
     i64 DeleteTabletInProgress = 0;
     static constexpr i64 MAX_DELETE_TABLET_IN_PROGRESS = 100;
-    std::queue<TEvHive::TEvDeleteTablet::TPtr> DeleteTabletQueue;
+    std::queue<TTabletId> DeleteTabletQueue;
 
     TString BootStateBooting = "Booting";
     TString BootStateStarting = "Starting";
@@ -713,6 +713,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     TDuration GetBalancerCooldown(EBalancerType balancerType) const;
     void UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff);
     ui64 GetObjectImbalance(TFullObjectId object);
+    void BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects);
 
     ui32 GetEventPriority(IEventHandle* ev);
     void PushProcessIncomingEvent();

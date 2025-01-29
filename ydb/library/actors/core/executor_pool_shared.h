@@ -165,11 +165,11 @@ namespace NActors {
 
         void SetForeignThreadSlots(i16 poolId, i16 slots) override;
 
-        void ScheduleActivation(TMailbox* mailbox) override {
+        void ScheduleActivation(TMailbox*) override {
             Y_ABORT("TSharedExecutorPool::ScheduleActivation is not implemented");
         }
 
-        void SpecificScheduleActivation(TMailbox* mailbox) override {
+        void SpecificScheduleActivation(TMailbox*) override {
             Y_ABORT("TSharedExecutorPool::SpecificScheduleActivation is not implemented");
         }
 

@@ -725,7 +725,7 @@ namespace NActors {
         SharedPool = pool;
     }
 
-    TMailbox* TBasicExecutorPool::GetReadyActivationShared(TWorkerContext& wctx, ui64 revolvingCounter) {
+    TMailbox* TBasicExecutorPool::GetReadyActivationShared(TWorkerContext&, ui64 revolvingCounter) {
         TWorkerId workerId = TlsThreadContext->WorkerId();
         NHPTimer::STime hpnow = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);

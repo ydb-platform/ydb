@@ -62,7 +62,7 @@ namespace {
 } // namespace
 
 
-void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo>> &pools, const TSharedInfo& sharedInfo) {
+void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo>> &pools, const TSharedInfo&) {
     NeedyPools.clear();
     HoggishPools.clear();
     IsNeedyByPool.clear();

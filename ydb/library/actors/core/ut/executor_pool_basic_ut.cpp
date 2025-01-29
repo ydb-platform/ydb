@@ -532,7 +532,7 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
 
         TState State;
 
-        void Init(size_t maxThreadCount, size_t sendingMessageCount) {
+        void Init(size_t, size_t) {
             TBasicExecutorPoolConfig config;
             config.MaxThreadCount = MaxThreadCount;
             config.Threads = MaxThreadCount;

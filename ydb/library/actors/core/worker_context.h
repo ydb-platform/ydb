@@ -177,7 +177,7 @@ namespace NActors {
         void IncreaseNotEnoughCpuExecutions() {}
 #endif
 
-        void Switch(TMailboxTable* mailboxTable,
+        void Switch(TMailboxTable*,
                     TExecutorThreadStats* stats)
         {
             Stats = stats;

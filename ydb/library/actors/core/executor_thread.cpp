@@ -176,7 +176,7 @@ namespace NActors {
     }
 
     void TExecutorThread::SetOverwrittenEventsPerMailbox(ui32 value) {
-        Ctx.OverwrittenEventsPerMailbox = Max(value, Ctx.EventsPerMailbox);
+        Ctx.OverwrittenEventsPerMailbox = Max(value, ThreadCtx.EventsPerMailbox());
     }
 
     ui64 TExecutorThread::GetOverwrittenTimePerMailboxTs() const {
@@ -184,7 +184,7 @@ namespace NActors {
     }
 
     void TExecutorThread::SetOverwrittenTimePerMailboxTs(ui64 value) {
-        Ctx.OverwrittenTimePerMailboxTs = Max(value, Ctx.TimePerMailboxTs);
+        Ctx.OverwrittenTimePerMailboxTs = Max(value, ThreadCtx.TimePerMailboxTs());
     }
 
     void TExecutorThread::SubscribeToPreemption(TActorId actorId) {
@@ -217,7 +217,7 @@ namespace NActors {
         TlsThreadContext->ActivityContext.ActivationStartTS.store(Ctx.HPStart, std::memory_order_release);
 
         Ctx.OverwrittenEventsPerMailbox = ThreadCtx.EventsPerMailbox();
-        Ctx.OverwrittenTimePerMailboxTs = ThreadCtx.TimePerMailbixTs();
+        Ctx.OverwrittenTimePerMailboxTs = ThreadCtx.TimePerMailboxTs();
         bool drained = false;
         for (; Ctx.ExecutedEvents < Ctx.OverwrittenEventsPerMailbox; ++Ctx.ExecutedEvents) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {

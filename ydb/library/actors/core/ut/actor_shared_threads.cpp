@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
             ACTORLIB_DEBUG(EDebugLevel::Test, "TRegistratorActor::~TRegistratorActor: ", this->SelfId());
         }
 
-        void Bootstrap(const TActorContext &ctx) {
+        void Bootstrap(const TActorContext &) {
             ACTORLIB_DEBUG(EDebugLevel::Test, "TSendReceiveActor::Bootstrap: ", this->SelfId());
             this->Become(&TRegistratorActor<SendingType>::StateFunc);
             this->Schedule(TDuration::MicroSeconds(1), new TEvents::TEvWakeup());
@@ -77,6 +77,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         }
 
         STFUNC(StateFunc) {
+            Y_UNUSED(ev);
             auto actors = ActorFactory(Iteration++, PoolId);
             for (auto &actor : actors) {
                 if (StrictPool) {
@@ -122,6 +123,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         }
 
         STFUNC(StateFunc) {
+            Y_UNUSED(ev);
             ACTORLIB_VERIFY(TlsThreadContext->Pool()->PoolId == PoolId, "PoolId mismatch in state func: expected ", PoolId, " got ", TlsThreadContext->Pool()->PoolId, "; self ", this->SelfId());
             if (Delay--) {
                 Schedule(TDuration::MicroSeconds(1), new TEvents::TEvWakeup());

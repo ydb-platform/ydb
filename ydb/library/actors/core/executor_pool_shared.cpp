@@ -94,7 +94,7 @@ namespace NActors {
         return threadCount;
     }
 
-    i16 TSharedExecutorPool::FindPoolForWorker(TSharedExecutorThreadCtx& thread, ui64 revolvingCounter) {
+    i16 TSharedExecutorPool::FindPoolForWorker(TSharedExecutorThreadCtx& thread, ui64) {
         TWorkerId workerId = Max<TWorkerId>();
         if (TlsThreadContext) {
             workerId = TlsThreadContext->WorkerId();
@@ -136,7 +136,7 @@ namespace NActors {
         return -1;
     }
 
-    void TSharedExecutorPool::SwitchToPool(TWorkerContext& wctx, i16 poolId, NHPTimer::STime hpNow) {
+    void TSharedExecutorPool::SwitchToPool(TWorkerContext& wctx, i16 poolId, NHPTimer::STime) {
         ACTORLIB_VERIFY(TlsThreadContext, "TlsThreadContext is nullptr");
         TWorkerId workerId = TlsThreadContext->WorkerId();
         wctx.UpdateThreadTime();
@@ -260,7 +260,7 @@ namespace NActors {
         return nullptr;
     }
 
-    void TSharedExecutorPool::ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingCounter) {
+    void TSharedExecutorPool::ScheduleActivationEx(TMailbox*, ui64) {
         // unreachable call
         Y_ABORT("ScheduleActivationEx is not allowed for united pool");
     }

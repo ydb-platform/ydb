@@ -5,10 +5,12 @@
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
+
 
 namespace NKikimr::NKqp {
 
@@ -120,6 +122,15 @@ public:
         Become(&TKqpSchemeExecuter::ExecuteState);
     }
 
+    TString GetDatabaseName() const {
+        const auto appData = AppData();
+        if (appData && appData->AuthConfig.GetDomainLoginOnly()) {
+            const auto domain = appData->DomainsInfo ? appData->DomainsInfo->GetDomain() : nullptr;
+            return domain ? CanonizePath(domain->Name) : "";
+        }
+        return Database;
+    }
+
     void MakeSchemeOperationRequest() {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
@@ -181,18 +192,21 @@ public:
             case NKqpProto::TKqpSchemeOperation::kCreateUser: {
                 const auto& modifyScheme = schemeOp.GetCreateUser();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(GetDatabaseName());
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kAlterUser: {
                 const auto& modifyScheme = schemeOp.GetAlterUser();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(GetDatabaseName());
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kDropUser: {
                 const auto& modifyScheme = schemeOp.GetDropUser();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(GetDatabaseName());
                 break;
             }
             case NKqpProto::TKqpSchemeOperation::kCreateExternalTable: {
@@ -214,30 +228,35 @@ public:
             case NKqpProto::TKqpSchemeOperation::kCreateGroup: {
                 const auto& modifyScheme = schemeOp.GetCreateGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(GetDatabaseName());
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kAddGroupMembership: {
                 const auto& modifyScheme = schemeOp.GetAddGroupMembership();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(GetDatabaseName());
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kRemoveGroupMembership: {
                 const auto& modifyScheme = schemeOp.GetRemoveGroupMembership();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(GetDatabaseName());
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kRenameGroup: {
                 const auto& modifyScheme = schemeOp.GetRenameGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(GetDatabaseName());
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kDropGroup: {
                 const auto& modifyScheme = schemeOp.GetDropGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(GetDatabaseName());
                 break;
             }
 

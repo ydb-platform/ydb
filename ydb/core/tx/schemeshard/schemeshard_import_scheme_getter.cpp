@@ -56,6 +56,34 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/" << changefeedName << "/changefeed_description.pb";
     }
 
+    void ListObjects(const TString& prefix) {
+        auto request = Model::ListObjectsRequest()
+            .WithPrefix(prefix);
+
+        Send(Client, new TEvExternalStorage::TEvListObjectsRequest(request));
+    }
+
+    void HandleChangefeeds(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {
+        const auto& result = ev.Get()->Get()->Result;
+
+        LOG_D("HandleChangefeeds TEvExternalStorage::TEvListObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "ListObject")) {
+            return;
+        }
+        TString a;
+
+        //Создать поле класса с ветором ключей (перед этим пофильтровать именно ченджфиды - пути до директорий)
+        //создать индекс уже скаченных
+        //сделать по аналогии с импортом
+        for (const auto& x : result.GetResult().GetContents()) {
+            x.GetKey().
+        }
+
+    }
+
     void HeadObject(const TString& key) {
         auto request = Model::HeadObjectRequest()
             .WithKey(key);
@@ -247,7 +275,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         item.Permissions = std::move(permissions);
 
         auto nextStep = [this]() {
-            Reply();
+            StartDonloadingChangefeeds();
         };
 
         if (NeedValidateChecksums) {
@@ -317,12 +345,20 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         TActor::PassAway();
     }
 
-    void Download(const TString& key) {
+    void DownloadCommon() {
         if (Client) {
             Send(Client, new TEvents::TEvPoisonPill());
         }
         Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+    }
 
+    void DownloadWithoutKey() {
+        DownloadCommon();
+        ListObjects(ImportInfo->Settings.items(ItemIdx).source_prefix());
+    }
+
+    void Download(const TString& key) {
+        DownloadCommon();
         HeadObject(key);
     }
 
@@ -342,6 +378,10 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         Download(ChecksumKey);
     }
 
+    void DownloadChangefeeds() {
+        DownloadWithoutKey();
+    }
+
     void ResetRetries() {
         Attempt = 0;
     }
@@ -356,6 +396,12 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         ResetRetries();
         DownloadPermissions();
         Become(&TThis::StateDownloadPermissions);
+    }
+
+    void StartDonloadingChangefeeds() {
+        ResetRetries();
+        DownloadChangefeeds();
+        Become(&TThis::StateDownloadChangefeeds);
     }
 
     void StartValidatingChecksum(const TString& key, const TString& object, std::function<void()> checksumValidatedCallback) {
@@ -414,6 +460,17 @@ public:
             hFunc(TEvExternalStorage::TEvGetObjectResponse, HandlePermissions);
 
             sFunc(TEvents::TEvWakeup, DownloadPermissions);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
+    STATEFN(StateDownloadChangefeeds) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvListObjectsResponse, HandleChangefeeds);
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChangefeeds);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleChangefeeds);
+
+            sFunc(TEvents::TEvWakeup, DownloadChangefeeds);
             sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }

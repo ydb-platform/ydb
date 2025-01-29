@@ -176,9 +176,9 @@ class LoadSuiteBase:
         if result.query_out is not None:
             allure.attach(result.query_out, 'Query output', attachment_type=allure.attachment_type.TEXT)
 
-        if result.explain.plan is not None:
+        if result.explain.final_plan is not None:
             with allure.step('Explain'):
-                _attach_plans(result.explain.plan, 'Plan')
+                _attach_plans(result.explain.final_plan, 'Plan')
 
         for iter_num in sorted(result.iterations.keys()):
             iter_res = result.iterations[iter_num]
@@ -187,8 +187,8 @@ class LoadSuiteBase:
                 s.params['duration'] = _duration_text(iter_res.time)
             try:
                 with s:
-                    _attach_plans(iter_res.plan, 'Plan')
-                    _attach_plans(iter_res.current_plan, 'Current plan')
+                    _attach_plans(iter_res.final_plan, 'Final plan')
+                    _attach_plans(iter_res.in_progress_plan, 'In-progress plan')
                     if iter_res.error_message:
                         pytest.fail(iter_res.error_message)
             except BaseException:

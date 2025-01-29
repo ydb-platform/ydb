@@ -48,8 +48,8 @@ class YdbCliHelper:
 
     class Iteration:
         def __init__(self):
-            self.plan: Optional[YdbCliHelper.QueryPlan] = None
-            self.current_plan: Optional[YdbCliHelper.QueryPlan] = None
+            self.final_plan: Optional[YdbCliHelper.QueryPlan] = None
+            self.in_progress_plan: Optional[YdbCliHelper.QueryPlan] = None
             self.error_message: Optional[str] = None
             self.time: Optional[float] = None
 
@@ -193,9 +193,9 @@ class YdbCliHelper:
         def _load_plans(self) -> None:
             for i in range(self.iterations):
                 self._init_iter(i)
-                self.result.iterations[i].plan = self._load_plan(str(i))
-                self.result.iterations[i].current_plan = self._load_plan(f'{i}.current')
-            self.result.explain.plan = self._load_plan('explain')
+                self.result.iterations[i].final_plan = self._load_plan(str(i))
+                self.result.iterations[i].in_progress_plan = self._load_plan(f'{i}.in_progress')
+            self.result.explain.final_plan = self._load_plan('explain')
 
         def _load_stats(self):
             if not os.path.exists(self._json_path):

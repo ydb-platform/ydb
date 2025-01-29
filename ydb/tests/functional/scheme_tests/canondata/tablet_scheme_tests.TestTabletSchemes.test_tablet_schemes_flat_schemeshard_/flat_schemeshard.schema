@@ -5851,6 +5851,16 @@
                 "ColumnId": 10,
                 "ColumnName": "Issue",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "CreationQuery",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "PreparedCreationQuery",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],

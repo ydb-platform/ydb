@@ -34,10 +34,11 @@
 #include <util/string/join.h>
 #include <util/string/printf.h>
 
-using namespace NKikimr;
-using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr::NWrappers::NTestHelpers;
+using namespace NKikimr;
+using namespace NKikimrSchemeOp;
+using namespace NSchemeShardUT_Private;
 
 namespace {
 
@@ -51,7 +52,7 @@ namespace {
 
     const TString EmptyYsonStr = R"([[[[];%false]]])";
 
-    TString GenerateScheme(const NKikimrSchemeOp::TPathDescription& pathDesc) {
+    TString GenerateScheme(const TPathDescription& pathDesc) {
         UNIT_ASSERT(pathDesc.HasTable());
         const auto& tableDesc = pathDesc.GetTable();
 
@@ -85,7 +86,7 @@ namespace {
         UNIT_ASSERT(describeResult.GetPathDescription().HasTable());
         const auto& tableDesc = describeResult.GetPathDescription().GetTable();
 
-        NKikimrSchemeOp::TTableDescription scheme;
+        TTableDescription scheme;
         scheme.MutableColumns()->CopyFrom(tableDesc.GetColumns());
         scheme.MutableKeyColumnNames()->CopyFrom(tableDesc.GetKeyColumnNames());
 
@@ -136,7 +137,9 @@ namespace {
     };
 
     struct TTestDataWithScheme {
+        EPathType Type = EPathTypeTable;
         TString Scheme;
+        TString CreationQuery;
         TVector<TTestData> Data;
 
         TTestDataWithScheme() = default;
@@ -239,12 +242,26 @@ namespace {
         }
     }
 
-    TTestDataWithScheme GenerateTestData(const TString& scheme, const TVector<std::pair<TString, ui64>>& shardsConfig) {
+    TTestDataWithScheme GenerateTestData(
+        const TTypedScheme& typedScheme,
+        const TVector<std::pair<TString, ui64>>& shardsConfig = {{"a", 1}}
+    ) {
         TTestDataWithScheme result;
-        result.Scheme = scheme;
+        result.Type = typedScheme.Type;
 
-        for (const auto& [keyPrefix, count] : shardsConfig) {
-            result.Data.push_back(GenerateTestData(keyPrefix, count));
+        switch (typedScheme.Type) {
+        case EPathTypeTable:
+            result.Scheme = typedScheme.Scheme;
+            for (const auto& [keyPrefix, count] : shardsConfig) {
+                result.Data.emplace_back(GenerateTestData(keyPrefix, count));
+            }
+            break;
+        case EPathTypeView:
+            result.CreationQuery = typedScheme.Scheme;
+            break;
+        default:
+            UNIT_FAIL("cannot create sample test data for the scheme object type: " << typedScheme.Type);
+            return {};
         }
 
         return result;
@@ -254,7 +271,17 @@ namespace {
         THashMap<TString, TString> result;
 
         for (const auto& [prefix, item] : data) {
-            result.emplace(prefix + "/scheme.pb", item.Scheme);
+            switch (item.Type) {
+            case EPathTypeTable:
+                result.emplace(prefix + "/scheme.pb", item.Scheme);
+                break;
+            case EPathTypeView:
+                result.emplace(prefix + "/create_view.sql", item.CreationQuery);
+                break;
+            default:
+                UNIT_FAIL("cannot determine key for the scheme object type: " << item.Type);
+                return {};
+            }
             for (ui32 i = 0; i < item.Data.size(); ++i) {
                 const auto& data = item.Data.at(i);
                 result.emplace(Sprintf("%s/data_%02d%s", prefix.data(), i, data.Ext().c_str()), data.Data);
@@ -391,11 +418,11 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    bool CheckDefaultFromSequence(const NKikimrSchemeOp::TTableDescription& desc) {
+    bool CheckDefaultFromSequence(const TTableDescription& desc) {
         for (const auto& column: desc.GetColumns()) {
             if (column.GetName() == "key") {
                 switch (column.GetDefaultValueCase()) {
-                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
+                    case TColumnDescription::kDefaultFromSequence: {
                         const auto& fromSequence = column.GetDefaultFromSequence();
                         return fromSequence == "myseq";
                     }
@@ -407,11 +434,11 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         return false;
     }
 
-    bool CheckDefaultFromLiteral(const NKikimrSchemeOp::TTableDescription& desc) {
+    bool CheckDefaultFromLiteral(const TTableDescription& desc) {
         for (const auto& column: desc.GetColumns()) {
             if (column.GetName() == "value") {
                 switch (column.GetDefaultValueCase()) {
-                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
+                    case TColumnDescription::kDefaultFromLiteral: {
                         const auto& fromLiteral = column.GetDefaultFromLiteral();
 
                         TString str;
@@ -1791,7 +1818,7 @@ value {
         ui64 txId = 100;
 
         // prepare table schema with special policy
-        NKikimrSchemeOp::TTableDescription desc;
+        TTableDescription desc;
         desc.SetName("Table");
         desc.AddKeyColumnNames("key");
         {
@@ -2972,7 +2999,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )", {
-            NLs::HasTtlEnabled("modified_at", TDuration::Hours(2), NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS),
+            NLs::HasTtlEnabled("modified_at", TDuration::Hours(2), TTTLSettings::UNIT_SECONDS),
         });
     }
 
@@ -3514,7 +3541,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
 
             return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexedTable;
+                .GetTransaction(0).GetOperationType() == ESchemeOpCreateIndexedTable;
         });
     }
 
@@ -3525,7 +3552,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
 
             return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore;
+                .GetTransaction(0).GetOperationType() == ESchemeOpRestore;
         });
     }
 
@@ -3536,7 +3563,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
 
             return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild;
+                .GetTransaction(0).GetOperationType() == ESchemeOpApplyIndexBuild;
         });
     }
 
@@ -3747,7 +3774,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
 
             return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore;
+                .GetTransaction(0).GetOperationType() == ESchemeOpRestore;
         };
 
         THolder<IEventHandle> delayed;
@@ -3917,7 +3944,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
 
             return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore;
+                .GetTransaction(0).GetOperationType() == ESchemeOpRestore;
         };
 
         THolder<IEventHandle> delayed;
@@ -4335,47 +4362,165 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::ShardsInsideDomain(7)
         });
     }
-}
 
-Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
-    void ShouldSucceed(const TString& scheme) {
+    Y_UNIT_TEST(ViewCreationRetry) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(2);
+        bucketContent.emplace("/table", GenerateTestData(R"(
+            columns {
+                name: "key"
+                type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+                name: "value"
+                type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )"));
+        bucketContent.emplace("/view", GenerateTestData(
+            {
+                EPathTypeView,
+                R"(
+                    -- backup root: "/MyRoot"
+                    CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT * FROM `table`;
+                )"
+            }
+        ));
+
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        const auto data = GenerateTestData(scheme, {{"a", 1}});
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
 
-        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        ui64 tableCreationTxId = 0;
+        TActorId schemeshardActorId;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> tableCreationBlocker(runtime,
+            [&](const TEvSchemeShard::TEvModifySchemeTransaction::TPtr& event) {
+                const auto& record = event->Get()->Record;
+                if (record.GetTransaction(0).GetOperationType() == ESchemeOpCreateIndexedTable) {
+                    tableCreationTxId = record.GetTxId();
+                    schemeshardActorId = event->Recipient;
+                    return true;
+                }
+                return false;
+            }
+        );
+
+        TBlockEvents<TEvPrivate::TEvImportSchemeQueryResult> queryResultBlocker(runtime,
+            [&](const TEvPrivate::TEvImportSchemeQueryResult::TPtr& event) {
+                // When we receive the scheme query result message, we can be sure that the SchemeShard actor ID is set,
+                // because the table is the first item on the import list.
+                if (!schemeshardActorId || event->Recipient != schemeshardActorId) {
+                    return false;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(event->Get()->Status, Ydb::StatusIds::SCHEME_ERROR);
+                const auto* error = std::get_if<TString>(&event->Get()->Result);
+                UNIT_ASSERT(error);
+                UNIT_ASSERT_STRING_CONTAINS(*error, "Cannot find table");
+                return true;
+            }
+        );
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "table"
+                destination_path: "/MyRoot/table"
+              }
+              items {
+                source_prefix: "view"
+                destination_path: "/MyRoot/view"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("table creation attempt", [&]{ return !tableCreationBlocker.empty(); });
+        runtime.WaitFor("query result", [&]{ return !queryResultBlocker.empty(); });
+        tableCreationBlocker.Unblock().Stop();
+        queryResultBlocker.Unblock().Stop();
+        env.TestWaitNotification(runtime, tableCreationTxId);
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/view"), {
+            NLs::Finished,
+            NLs::IsView
+        });
+    }
+}
+
+Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
+
+    constexpr TStringBuf DefaultImportSettings = R"(
+        ImportFromS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+            }
+        }
+    )";
+
+    void ShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(schemes.size());
+        for (const auto& [prefix, typedScheme] : schemes) {
+            bucketContent.emplace(prefix, GenerateTestData(typedScheme));
+        }
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
         TTestWithReboots t;
+        const bool createsViews = AnyOf(schemes, [](const auto& scheme) {
+            return scheme.second.Type == EPathTypeView;
+        });
+        if (createsViews) {
+            t.GetTestEnvOptions().RunFakeConfigDispatcher(true);
+            t.GetTestEnvOptions().SetupKqpProxy(true);
+        }
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
 
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                if (createsViews) {
+                    runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+                }
             }
 
-            AsyncImport(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
-                ImportFromS3Settings {
-                  endpoint: "localhost:%d"
-                  scheme: HTTP
-                  items {
-                    source_prefix: ""
-                    destination_path: "/MyRoot/Table"
-                  }
-                }
-            )", port));
-            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", Sprintf(importSettings.data(), port));
+            t.TestEnv->TestWaitNotification(runtime, importId);
 
             {
                 TInactiveZone inactive(activeZone);
-                TestGetImport(runtime, t.TxId, "/MyRoot", {
+                TestGetImport(runtime, importId, "/MyRoot", {
                     Ydb::StatusIds::SUCCESS,
                     Ydb::StatusIds::NOT_FOUND
                 });
             }
         });
+    }
+
+    void ShouldSucceed(const TTypedScheme& scheme) {
+        ShouldSucceed({{"", scheme}});
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSimpleTable) {
@@ -4411,36 +4556,96 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )");
     }
 
-    void CancelShouldSucceed(const TString& scheme) {
+    Y_UNIT_TEST(ShouldSucceedOnSingleView) {
+        ShouldSucceed(
+            {
+                EPathTypeView,
+                R"(
+                    -- backup root: "/MyRoot"
+                    CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+                )"
+            }
+        );
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnViewsAndTables) {
+        ShouldSucceed(
+            {
+                {
+                    "/view",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+                        )"
+                    }
+                }, {
+                    "/table",
+                    {
+                        EPathTypeTable,
+                        R"(
+                            columns {
+                                name: "key"
+                                type { optional_type { item { type_id: UTF8 } } }
+                            }
+                            columns {
+                                name: "value"
+                                type { optional_type { item { type_id: UTF8 } } }
+                            }
+                            primary_key: "key"
+                        )"
+                    }
+                }
+            }, R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "view"
+                        destination_path: "/MyRoot/View"
+                    }
+                    items {
+                        source_prefix: "table"
+                        destination_path: "/MyRoot/Table"
+                    }
+                }
+            )"
+        );
+    }
+
+    void CancelShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        const auto data = GenerateTestData(scheme, {{"a", 1}});
-
-        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        THashMap<TString, TTestDataWithScheme> bucketContent(schemes.size());
+        for (const auto& [prefix, typedScheme] : schemes) {
+            bucketContent.emplace(prefix, GenerateTestData(typedScheme));
+        }
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
         TTestWithReboots t;
+        const bool createsViews = AnyOf(schemes, [](const auto& scheme) {
+            return scheme.second.Type == EPathTypeView;
+        });
+        if (createsViews) {
+            t.GetTestEnvOptions().RunFakeConfigDispatcher(true);
+            t.GetTestEnvOptions().SetupKqpProxy(true);
+        }
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
 
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                if (createsViews) {
+                    runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+                }
             }
 
-            AsyncImport(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
-                ImportFromS3Settings {
-                  endpoint: "localhost:%d"
-                  scheme: HTTP
-                  items {
-                    source_prefix: ""
-                    destination_path: "/MyRoot/Table"
-                  }
-                }
-            )", port));
-            t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            const ui64 importId = t.TxId;
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", Sprintf(importSettings.data(), port));
 
             t.TestEnv->ReliablePropose(runtime, CancelImportRequest(++t.TxId, "/MyRoot", importId), {
                 Ydb::StatusIds::SUCCESS,
@@ -4450,13 +4655,21 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestGetImport(runtime, importId, "/MyRoot", {
+                const auto response = TestGetImport(runtime, importId, "/MyRoot", {
                     Ydb::StatusIds::SUCCESS,
                     Ydb::StatusIds::CANCELLED,
                     Ydb::StatusIds::NOT_FOUND
                 });
+                const auto& entry = response.GetResponse().GetEntry();
+                if (entry.GetStatus() == Ydb::StatusIds::CANCELLED) {
+                    UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(entry.GetIssues()), "Cancelled manually");
+                }
             }
         });
+    }
+
+    void CancelShouldSucceed(const TTypedScheme& scheme) {
+        CancelShouldSucceed({{"", scheme}});
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnSimpleTable) {
@@ -4490,5 +4703,63 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
               global_index {}
             }
         )");
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleView) {
+        CancelShouldSucceed(
+            {
+                EPathTypeView,
+                R"(
+                    -- backup root: "/MyRoot"
+                    CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+                )"
+            }
+        );
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnViewsAndTables) {
+        CancelShouldSucceed(
+            {
+                {
+                    "/view",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+                        )"
+                    }
+                }, {
+                    "/table",
+                    {
+                        EPathTypeTable,
+                        R"(
+                            columns {
+                                name: "key"
+                                type { optional_type { item { type_id: UTF8 } } }
+                            }
+                            columns {
+                                name: "value"
+                                type { optional_type { item { type_id: UTF8 } } }
+                            }
+                            primary_key: "key"
+                        )"
+                    }
+                }
+            }, R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "view"
+                        destination_path: "/MyRoot/View"
+                    }
+                    items {
+                        source_prefix: "table"
+                        destination_path: "/MyRoot/Table"
+                    }
+                }
+            )"
+        );
     }
 }

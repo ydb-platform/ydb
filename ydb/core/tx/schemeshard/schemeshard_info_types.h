@@ -2788,7 +2788,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         Invalid = 0,
         Waiting,
         GetScheme,
-        CreateTable,
+        CreateSchemeObject,
         Transferring,
         BuildIndexes,
         Done = 240,
@@ -2810,12 +2810,17 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString DstPathName;
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
+        TString CreationQuery;
+        TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
         TTxId WaitTxId = InvalidTxId;
+        TActorId SchemeGetter;
+        TActorId SchemeQueryExecutor;
         int NextIndexIdx = 0;
         TString Issue;
+        int ViewCreationRetries = 0;
 
         TItem() = default;
 

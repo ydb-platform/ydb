@@ -1523,6 +1523,9 @@ struct Schema : NIceDb::Schema {
         struct DstPathOwnerId : Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct DstPathLocalId : Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct Scheme : Column<6, NScheme::NTypeIds::String> {};
+        struct CreationQuery : Column<13, NScheme::NTypeIds::Utf8> {};
+        // NKikimrSchemeOp::TModifyScheme serialized as string
+        struct PreparedCreationQuery : Column<14, NScheme::NTypeIds::String> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1537,6 +1540,8 @@ struct Schema : NIceDb::Schema {
             DstPathOwnerId,
             DstPathLocalId,
             Scheme,
+            CreationQuery,
+            PreparedCreationQuery,
             State,
             WaitTxId,
             NextIndexIdx,

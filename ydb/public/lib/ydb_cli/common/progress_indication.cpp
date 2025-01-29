@@ -47,18 +47,16 @@ void TProgressIndication::Render()
         case 2: Cerr << "-"; break;
         case 3: Cerr << "\\"; break;
     }
-    Cerr << colors.Default();
-    Cerr << colors.BoldColor() << "Progress: " << colors.Default();
+    Cerr << colors.Default() << "Progress: " << colors.Default();
 
-    Cerr << colors.LightBlack() << PrettyNumber(CurrentStats.ReadRows) << " rows read, " << PrettySize(CurrentStats.ReadBytes) << " read";
+    Cerr << colors.Default() << PrettyNumber(CurrentStats.ReadRows) << " rows read, " << PrettySize(CurrentStats.ReadBytes) << " read";
     if (CurrentStats.DurationUs) { 
-        Cerr << colors.Black() << " (" << PrettyNumber(CurrentStats.ReadRows * 1000000.0 / CurrentStats.DurationUs) << "/s" << ", " << 
+        Cerr << colors.Default() << " (" << PrettyNumber(CurrentStats.ReadRows * 1000000.0 / CurrentStats.DurationUs) << "/s" << ", " << 
             PrettySize(CurrentStats.ReadBytes * 1000000.0 / CurrentStats.DurationUs) << "/s" << ")";
     }
 
-    Cerr << ".";
+    Cerr << colors.Default() << ".";
 
-    Cerr << colors.Default();
     Cerr.Flush();
 
     RendersCount++;

@@ -35,9 +35,9 @@ message TConfig {
 
     optional uint32 StorageMediaKind = 32;
 
-    optional uint32 PerformanceProfileMaxReadBandwidth = 33;
+    optional uint64 PerformanceProfileMaxReadBandwidth = 33;
     optional uint32 PerformanceProfileMaxReadIops = 34;
-    optional uint32 PerformanceProfileMaxWriteBandwidth = 35;
+    optional uint64 PerformanceProfileMaxWriteBandwidth = 35;
     optional uint32 PerformanceProfileMaxWriteIops = 36;
     optional uint32 PerformanceProfileBoostTime = 37;
     optional uint32 PerformanceProfileBoostRefillTime = 38;

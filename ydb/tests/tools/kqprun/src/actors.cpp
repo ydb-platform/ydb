@@ -232,33 +232,68 @@ class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaite
     static constexpr TDuration REFRESH_PERIOD = TDuration::MilliSeconds(10);
 
 public:
-    TResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount)
-        : ExpectedNodeCount_(expectedNodeCount)
+    TResourcesWaiterActor(NThreading::TPromise<void> promise, const TWaitResourcesSettings& settings)
+        : Settings_(settings)
         , Promise_(promise)
     {}
 
     void Bootstrap() {
-        Become(&TResourcesWaiterActor::StateFunc);
+        if (Settings_.HealthCheckLevel < 1) {
+            Finish();
+            return;
+        }
+
+        Become(&TResourcesWaiterActor::StateWaitNodeCont);
         CheckResourcesPublish();
     }
 
-    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+    void HandleWaitNodeCountWakeup() {
         CheckResourcesPublish();
     }
 
     void Handle(TEvPrivate::TEvResourcesInfo::TPtr& ev) {
-        if (ev->Get()->NodeCount == ExpectedNodeCount_) {
-            Promise_.SetValue();
-            PassAway();
+        const auto nodeCont = ev->Get()->NodeCount;
+        if (nodeCont == Settings_.ExpectedNodeCount) {
+            if (Settings_.HealthCheckLevel < 2) {
+                Finish();
+            } else {
+                Become(&TResourcesWaiterActor::StateWaitScript);
+                StartScriptQuery();
+            }
             return;
         }
 
+        if (Settings_.VerboseLevel >= 2) {
+            Cout << CoutColors_.Cyan() << "Retry invalid node count, got " << nodeCont << ", expected " << Settings_.ExpectedNodeCount << CoutColors_.Default() << Endl;
+        }
         Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
     }
 
-    STRICT_STFUNC(StateFunc,
-        hFunc(NActors::TEvents::TEvWakeup, Handle);
+    void HandleWaitScriptWakeup() {
+        StartScriptQuery();
+    }
+
+    void Handle(NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr& ev) {
+        const auto status = ev->Get()->Status;
+        if (status == Ydb::StatusIds::SUCCESS) {
+            Finish();
+            return;
+        }
+
+        if (Settings_.VerboseLevel >= 2) {
+            Cout << CoutColors_.Cyan() << "Retry script creation fail with status " << status << ", reason:\n" << CoutColors_.Default() << ev->Get()->Issues.ToString() << Endl;
+        }
+        Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
+    }
+
+    STRICT_STFUNC(StateWaitNodeCont,
+        sFunc(NActors::TEvents::TEvWakeup, HandleWaitNodeCountWakeup);
         hFunc(TEvPrivate::TEvResourcesInfo, Handle);
+    )
+
+    STRICT_STFUNC(StateWaitScript,
+        sFunc(NActors::TEvents::TEvWakeup, HandleWaitScriptWakeup);
+        hFunc(NKikimr::NKqp::TEvKqp::TEvScriptResponse, Handle);
     )
 
 private:
@@ -266,6 +301,9 @@ private:
         GetResourceManager();
 
         if (!ResourceManager_) {
+            if (Settings_.VerboseLevel >= 2) {
+                Cout << CoutColors_.Cyan() << "Retry uninitialized resource manager" << CoutColors_.Default() << Endl;
+            }
             Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
             return;
         }
@@ -287,8 +325,27 @@ private:
         });
     }
 
+    void StartScriptQuery() {
+        auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvScriptRequest>();
+        event->Record.SetUserToken(NACLib::TUserToken("", BUILTIN_ACL_ROOT, {}).SerializeAsString());
+
+        auto request = event->Record.MutableRequest();
+        request->SetQuery("SELECT 42");
+        request->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+        request->SetAction(NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE);
+        request->SetDatabase(Settings_.Database);
+
+        Send(NKikimr::NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+    }
+
+    void Finish() {
+        Promise_.SetValue();
+        PassAway();
+    }
+
 private:
-    const i32 ExpectedNodeCount_;
+    const TWaitResourcesSettings Settings_;
+    const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
     NThreading::TPromise<void> Promise_;
 
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
@@ -415,8 +472,8 @@ NActors::IActor* CreateAsyncQueryRunnerActor(const TAsyncQueriesSettings& settin
     return new TAsyncQueryRunnerActor(settings);
 }
 
-NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount) {
-    return new TResourcesWaiterActor(promise, expectedNodeCount);
+NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, const TWaitResourcesSettings& settings) {
+    return new TResourcesWaiterActor(promise, settings);
 }
 
 NActors::IActor* CreateSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise) {

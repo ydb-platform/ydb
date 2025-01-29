@@ -50,7 +50,7 @@ public:
     }
 
 private:
-    static constexpr bool ExtraActivitiesIsAllowed = true;
+    static constexpr bool ExtraActivitiesIsAllowed = false;
     static constexpr bool Allowed = ExtraActivitiesIsAllowed || IsMainActivity;
     static ui32 Index;
     ui32 NextIndex = 0;

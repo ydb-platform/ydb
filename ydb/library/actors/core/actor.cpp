@@ -263,7 +263,6 @@ namespace NActors {
 
     void IActor::PassAway() {
         auto& cx = *TlsActivationContext;
-        //ACTORLIB_VERIFY(SelfActorId.PoolID() == TlsThreadContext->Pool()->PoolId, (i64)SelfActorId.PoolID(), ' ', (i64)TlsThreadContext->Pool()->PoolId);
         cx.ExecutorThread.UnregisterActor(&cx.Mailbox, SelfActorId);
     }
 
@@ -272,9 +271,6 @@ namespace NActors {
     }
 
     void TActorCallbackBehaviour::Receive(IActor* actor, TAutoPtr<IEventHandle>& ev) {
-        if (TlsThreadContext) {
-            ACTORLIB_VERIFY(actor->SelfId().PoolID() == TlsThreadContext->Pool()->PoolId, "Worker_", TlsThreadContext->WorkerContext.WorkerId, " Receive ActorId.PoolId: ", (i64)actor->SelfId().PoolID(), " PoolId: ", (i64)TlsThreadContext->PoolId(), " ActorId: ", actor->SelfId().ToString());
-        }
         (actor->*StateFunc)(ev);
     }
 
@@ -343,9 +339,6 @@ namespace NActors {
                 ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
                 id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
                 TlsThreadContext->SendingType = previousType;
-            }
-            if (TlsThreadContext) {
-                ACTORLIB_VERIFY(id.PoolID() == ThreadCtx.PoolId(), POOL_ID(), " ", WORKER_ID(), (TlsThreadContext && TlsThreadContext->IsShared() ? "Shared" : ThreadCtx.PoolName()), " RegisterActor SpecialSendingType ActorId.PoolId: ", (i64)id.PoolID(), " PoolId: ", ThreadCtx.PoolId(), " ActorId: ", id.ToString(), " hint ", id.Hint());
             }
             return id;
         } else {

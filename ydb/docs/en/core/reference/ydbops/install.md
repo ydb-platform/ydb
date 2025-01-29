@@ -14,7 +14,7 @@ Currently, only building from source is available as an installation option. The
     git clone https://github.com/ydb-platform/ydbops.git
     ```
 
-3. There two way to build `ydbops`:
+3. There are two ways to build `ydbops`:
 
 - Manual build. Invoke `go build` in the repository root folder:
 

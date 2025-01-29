@@ -4,7 +4,6 @@
 
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/protos/services_common.pb.h>

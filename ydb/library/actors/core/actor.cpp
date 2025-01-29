@@ -12,8 +12,8 @@
 
 #define WORKER_ID() ("Worker_" + ToString(TlsThreadContext ? TlsThreadContext->WorkerId() : Max<TWorkerId>()))
 
-#define EXECUTOR_THREAD_DEBUG(level, ...) \
-    ACTORLIB_DEBUG(level, POOL_ID(), " ", WORKER_ID(), " ", __func__, ": ", ##__VA_ARGS__)
+#define ACTOR_DEBUG(level, ...) \
+    ACTORLIB_DEBUG(level, POOL_ID(), " ", WORKER_ID(), " ", __func__, ": ", __VA_ARGS__)
 
 
 namespace NActors {
@@ -187,7 +187,7 @@ namespace NActors {
 
     TActorId IActor::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept {
         TActorId id = TlsActivationContext->ExecutorThread.RegisterActor(actor, mailboxType, poolId, SelfActorId);
-        EXECUTOR_THREAD_DEBUG(EDebugLevel::Special, " Registered actor ", id, " in pool ", poolId, " with mailbox type ", mailboxType, " hint ", id.Hint());
+        ACTOR_DEBUG(EDebugLevel::Special, " Registered actor ", id, " in pool ", poolId, " with mailbox type ", mailboxType, " hint ", id.Hint());
         return id;
     }
 
@@ -282,7 +282,7 @@ namespace NActors {
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
         // fallback to legacy method, do not use it anymore
         if (auto eh = AfterRegister(SelfId(), owner)) {
-            EXECUTOR_THREAD_DEBUG(EDebugLevel::Special, " Registered actor ", SelfId().ToString(), " expected poolId ", (i64)SelfId().PoolID(), " after register send hint ", SelfId().Hint());
+            ACTOR_DEBUG(EDebugLevel::Special, " Registered actor ", SelfId().ToString(), " expected poolId ", (i64)SelfId().PoolID(), " after register send hint ", SelfId().Hint());
             if (!TlsThreadContext || TlsThreadContext->SendingType == ESendingType::Common) {
                 sys->Send(eh);
             } else {
@@ -329,13 +329,13 @@ namespace NActors {
         }
         if (poolId == Max<ui32>()) {
             TActorId id;
-            EXECUTOR_THREAD_DEBUG(EDebugLevel::Special, " RegisterActor poolId == Max<ui32>()");
+            ACTOR_DEBUG(EDebugLevel::Special, " RegisterActor poolId == Max<ui32>()");
             if constexpr (SendingType == ESendingType::Common) {
                 id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
             } else if (!TlsThreadContext) {
                 id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
             } else {
-                EXECUTOR_THREAD_DEBUG(EDebugLevel::Special, " RegisterActor SpecialSendingType");
+                ACTOR_DEBUG(EDebugLevel::Special, " RegisterActor SpecialSendingType");
                 ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
                 id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
                 TlsThreadContext->SendingType = previousType;

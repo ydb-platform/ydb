@@ -35,7 +35,6 @@ namespace NActors {
     };
 
     struct TSharedExecutorPoolConfig {
-        ui32 PoolId = 0;
         ui32 Threads = 1;
         ui64 SpinThreshold = 100;
         TCpuMask Affinity; // Executor thread affinity

@@ -1,8 +1,6 @@
 #include "interconnect_mon.h"
 #include "interconnect_tcp_proxy.h"
 
-#include <ydb/library/actors/core/executor_thread.h>
-
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/monlib/service/pages/templates.h>

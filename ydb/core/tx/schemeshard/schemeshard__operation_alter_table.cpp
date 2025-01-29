@@ -77,8 +77,14 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             copyAlter.ColumnsSize() != 0 ||
             copyAlter.DropColumnsSize() != 0);
 
-    if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() !=  table->IsBackup) {
+    if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() != table->IsBackup) {
         errStr = Sprintf("Cannot add/remove 'IsBackup' property");
+        status = NKikimrScheme::StatusInvalidParameter;
+        return nullptr;
+    }
+
+    if (copyAlter.HasIsRestore() && copyAlter.GetIsRestore() != table->IsRestore) {
+        errStr = Sprintf("Cannot add/remove 'IsRestore' property");
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }

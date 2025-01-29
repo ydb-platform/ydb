@@ -30,14 +30,22 @@ protected:
     void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) override {
         Y_ABORT_UNLESS(entry.Status == TNavigate::EStatus::Ok);
         Y_ABORT_UNLESS(CanonizePath(entry.Path) == TBase::TenantName);
+
+        TVector<const TDomainInfo::TGroup*> groups(::Reserve(entry.DomainInfo->Groups.size()));
+        for (const auto& group : entry.DomainInfo->Groups) {
+            groups.push_back(&group);
+        }
+        SortBatch(groups, [](const auto* left, const auto* right) {
+            return left->Sid < right->Sid;
+        });
         
         TVector<TCell> cells(::Reserve(Columns.size()));
 
-        for (const auto& group : entry.DomainInfo->Groups) {
+        for (const auto* group : groups) {
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthGroups::Sid::ColumnId:
-                    cells.push_back(TCell(group.Sid.data(), group.Sid.size()));
+                    cells.push_back(TCell(group->Sid.data(), group->Sid.size()));
                     break;
                 default:
                     cells.emplace_back();

@@ -926,6 +926,9 @@ namespace NTable {
                                 NTable::ITransactionObserverSimplePtr transactionObserver,
                                 const NTable::ITransactionSet& decidedTransactions) noexcept
         {
+            // Temporary: we don't cache erases when there are uncompacted deltas
+            Y_UNUSED(decidedTransactions);
+
             Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Attempt to use an invalid iterator");
 
             // We cannot use min/max hints when part has uncommitted deltas
@@ -962,31 +965,22 @@ namespace NTable {
                 const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
 
                 while (data->IsDelta()) {
+                    // We cannot cache when there are uncompacted deltas
+                    stats.UncertainErase = true;
+
                     ui64 txId = data->GetDeltaTxId(info);
                     const auto* commitVersion = committedTransactions.Find(txId);
                     if (commitVersion && *commitVersion <= rowVersion) {
                         // Already committed and correct version
-                        if (!decidedTransactions.Contains(txId)) {
-                            // This change may rollback and change the iteration result
-                            stats.UncertainErase = true;
-                        }
                         return EReady::Data;
                     }
                     if (commitVersion) {
                         // Skipping a newer committed delta
                         transactionObserver.OnSkipCommitted(*commitVersion, txId);
                         stats.InvisibleRowSkips++;
-                        if (data->GetRop() != ERowOp::Erase) {
-                            // Skipping non-erase delta, so any erase below cannot be trusted
-                            stats.UncertainErase = true;
-                        }
                     } else {
                         // Skipping an uncommitted delta
                         transactionObserver.OnSkipUncommitted(txId);
-                        if (data->GetRop() != ERowOp::Erase && !decidedTransactions.Contains(txId)) {
-                            // This change may commit and change the iteration result
-                            stats.UncertainErase = true;
-                        }
                     }
                     data = Main.GetRecord()->GetAltRecord(++SkipMainDeltas);
                     if (!data) {

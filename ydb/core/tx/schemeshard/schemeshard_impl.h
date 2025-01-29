@@ -171,6 +171,31 @@ private:
         TSchemeShard* Self;
     };
 
+    using TDataErasureQueue = NOperationQueue::TOperationQueueWithTimer<
+        TShardIdx,
+        TFifoQueue<TShardIdx>,
+        TEvPrivate::EvRunDataErasure,
+        NKikimrServices::FLAT_TX_SCHEMESHARD,
+        NKikimrServices::TActivity::DATA_ERASURE>;
+
+    class TDataErasureStarter : public TDataErasureQueue::IStarter {
+    public:
+        TDataErasureStarter(TSchemeShard* self)
+            : Self(self)
+        { }
+
+        NOperationQueue::EStartStatus StartOperation(const TShardIdx& shardIdx) override {
+            return Self->StartDataErasure(shardIdx);
+        }
+
+        void OnTimeout(const TShardIdx& shardIdx) override {
+            Self->OnDataErasureTimeout(shardIdx);
+        }
+
+    private:
+        TSchemeShard* Self;
+    };
+
 public:
     static constexpr ui32 DefaultPQTabletPartitionsCount = 1;
     static constexpr ui32 MaxPQTabletPartitionsCount = 1000;
@@ -304,6 +329,9 @@ public:
 
     TBackgroundCleaningStarter BackgroundCleaningStarter;
     TBackgroundCleaningQueue* BackgroundCleaningQueue = nullptr;
+
+    TDataErasureStarter DataErasureStarter;
+    TDataErasureQueue* DataErasureQueue = nullptr;
 
     struct TBackgroundCleaningState {
         THashSet<TTxId> TxIds;
@@ -496,6 +524,10 @@ public:
     void ConfigureBackgroundCleaningQueue(
         const NKikimrConfig::TBackgroundCleaningConfig& config,
         const TActorContext &ctx);
+
+    void ConfigureDataErasureQueue(
+        const NKikimrConfig::TDataErasureConfig& config,
+        const TActorContext& ctx);
 
     void ConfigureLoginProvider(
         const ::NKikimrProto::TAuthConfig& config,
@@ -918,7 +950,7 @@ public:
 
     void ScheduleCleanDroppedPaths();
     void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);
-    
+
     struct TTxUnmarkRestoreTables;
     NTabletFlatExecutor::ITransaction* CreateTxUnmarkRestoreTables(TVector<TPathId>&& tablesToUnmark);
 
@@ -957,6 +989,13 @@ public:
     void HandleBackgroundCleaningCompletionResult(const TTxId& txId);
     void CleanBackgroundCleaningState(const TPathId& pathId);
     void ClearTempDirsState();
+
+    void EnqueueDataErasure(const TShardIdx& shardIdx);
+    void RemoveDataErasure(const TShardIdx& shardIdx);
+    NOperationQueue::EStartStatus StartDataErasure(const TShardIdx& shardIdx);
+    void OnDataErasureTimeout(const TShardIdx& shardIdx);
+    void UpdateDataErasureQueueMetrics();
+    void DataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId);
 
     struct TTxCleanDroppedSubDomains;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedSubDomains();

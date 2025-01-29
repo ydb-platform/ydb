@@ -361,9 +361,12 @@ private:
         ui64 taskId = s.GetTaskId();
         ui64 stageId = Stages.Value(taskId, s.GetStageId());
 
+#define SET_COUNTER(name) \
+        TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, #name), stats.Get ## name ()); \
+
 #define ADD_COUNTER(name) \
         if (stats.Get ## name()) { \
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, #name), stats.Get ## name ()); \
+            SET_COUNTER(name); \
         }
 
         std::map<TString, TString> commonLabels = {
@@ -392,8 +395,8 @@ private:
 
         ADD_COUNTER(IngressFilteredBytes)
         ADD_COUNTER(IngressFilteredRows)
-        ADD_COUNTER(IngressQueuedBytes)
-        ADD_COUNTER(IngressQueuedRows)
+        SET_COUNTER(IngressQueuedBytes)
+        SET_COUNTER(IngressQueuedRows)
 
         ADD_COUNTER(StartTimeMs)
         ADD_COUNTER(FinishTimeMs)

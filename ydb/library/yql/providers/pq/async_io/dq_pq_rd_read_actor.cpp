@@ -215,6 +215,8 @@ private:
         ui64 Generation = std::numeric_limits<ui64>::max();
         THashMap<ui32, TPartition> Partitions;
         bool IsWaitingStartSessionAck = false;
+        ui64 QueuedBytes = 0;
+        ui64 QueuedRows = 0;
     };
     
     TMap<NActors::TActorId, TSession> Sessions;
@@ -309,6 +311,7 @@ public:
     void ProcessGlobalState();
     void ProcessSessionsState();
     void UpdateSessions();
+    void UpdateQueuedSize();
 };
 
 TDqPqRdReadActor::TDqPqRdReadActor(
@@ -589,8 +592,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     IngressStats.Bytes += ev->Get()->Record.GetReadBytes();
     IngressStats.FilteredBytes += ev->Get()->Record.GetFilteredBytes();
     IngressStats.FilteredRows += ev->Get()->Record.GetFilteredRows();
-    IngressStats.QueuedBytes = ev->Get()->Record.GetQueuedBytes();
-    IngressStats.QueuedRows = ev->Get()->Record.GetQueuedRows();
+    session->QueuedBytes = ev->Get()->Record.GetQueuedBytes();
+    session->QueuedRows = ev->Get()->Record.GetQueuedRows();
+    UpdateQueuedSize();
 
     for (auto partition : ev->Get()->Record.GetPartition()) {
         ui64 partitionId = partition.GetPartitionId();
@@ -1002,6 +1006,17 @@ void TDqPqRdReadActor::UpdateSessions() {
         ReadActorByEventQueueId[queueId] = rowDispatcherActorId;
     }
     LastUsedPartitionDistribution = LastReceivedPartitionDistribution;
+}
+
+void TDqPqRdReadActor::UpdateQueuedSize() {
+    ui64 queuedBytes = 0;
+    ui64 queuedRows = 0;
+    for (auto& [_, sessionInfo] : Sessions) {
+        queuedBytes += sessionInfo.QueuedBytes;
+        queuedRows += sessionInfo.QueuedRows;
+    }
+    IngressStats.QueuedBytes = queuedBytes;
+    IngressStats.QueuedRows = queuedRows;
 }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(

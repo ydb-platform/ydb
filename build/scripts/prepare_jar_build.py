@@ -7,7 +7,9 @@ import argparse
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 import java_pack_to_file as jcov
+import resolve_java_srcs as  resolve
 from autotar_gendirs import unpack_dir
+
 
 def writelines(f, rng):
     f.writelines(item + '\n' for item in rng)
@@ -121,8 +123,19 @@ def prepare_build_dirs(bindir, with_sources_jar):
             os.makedirs(dir)
 
 
+def split_cmd_by_delim(cmd, delim='DELIM'):
+    result = [[]]
+    for arg in cmd:
+        if arg == delim:
+            result.append([])
+        else:
+            result[-1].append(arg)
+    return result[0], result[1:]
+
+
 def main():
-    args = pcf.get_args(sys.argv[1:])
+    args, resolve_args = split_cmd_by_delim(pcf.get_args(sys.argv[1:]))
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--with-sources-jar', action='store_true')
     parser.add_argument('--moddir')
@@ -156,6 +169,9 @@ def main():
             writelines(f, src_consumer.kotlin)
     if args.coverage:
         jcov.write_coverage_sources(args.coverage, args.source_root, src_consumer.coverage)
+
+    for rargs in resolve_args:
+        resolve.cli_main(rargs, force_skip_source_jars=not args.with_sources_jar)
 
     return 0
 

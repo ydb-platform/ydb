@@ -20,17 +20,6 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
-    TString GetSymbolsString(char start, char end, const TString& skip = "") {
-        TStringBuilder result;
-        for (char symbol = start; symbol <= end; ++symbol) {
-            if (skip.Contains(symbol)) {
-                continue;
-            }
-            result << symbol;
-        }
-        return result;
-    }
-
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";

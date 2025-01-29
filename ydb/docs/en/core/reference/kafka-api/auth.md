@@ -10,7 +10,7 @@ To require authentication, set the [`enforce_user_token_requirement` configurati
 
 ## How does authentication work in the Kafka API?
 
-In the Kafka API authentication is conducted through the SASL_PLAINTEXT/PLAIN or SASL_SSL/PLAIN mechanisms.
+The Kafka API uses the SASL_PLAINTEXT/PLAIN or SASL_SSL/PLAIN authentication mechanism.
 
 The following variables are required for authentication:
 
@@ -23,13 +23,9 @@ These parameters form the following variables you can use in `sasl.jaas.config` 
 * `<sasl.username> = <user-name>@<database>`
 * `<sasl.password> = <password>`
 
-{% note warning %}
-
 {% note info %}
 
 The `<sasl.username>` and `<sasl.password>` parameters are formed differently. See [examples](./examples#authentication-in-cloud-examples) for details.
-
-{% endnote %}
 
 {% endnote %}
 

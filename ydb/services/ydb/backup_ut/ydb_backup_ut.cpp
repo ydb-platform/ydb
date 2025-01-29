@@ -2,6 +2,7 @@
 
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
+#include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb-cpp-sdk/client/export/export.h>
@@ -9,6 +10,7 @@
 #include <ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 
 #include <ydb/library/backup/backup.h>
 
@@ -37,6 +39,14 @@ bool operator==(const TKeyBound& lhs, const TKeyBound& rhs) {
 bool operator==(const TKeyRange& lhs, const TKeyRange& rhs) {
     return lhs.From() == lhs.From() && lhs.To() == rhs.To();
 }
+
+}
+
+namespace NYdb {
+
+struct TTenantsTestSettings : TKikimrTestSettings {
+    static constexpr bool PrecreatePools = false;
+};
 
 }
 
@@ -92,24 +102,49 @@ TDataQueryResult ExecuteDataModificationQuery(TSession& session,
     return result;
 }
 
-TDataQueryResult GetTableContent(TSession& session, const char* table) {
+NQuery::TExecuteQueryResult ExecuteQuery(NQuery::TSession& session, const TString& script, bool isDDL = false) {
+    const auto result = session.ExecuteQuery(
+        script,
+        isDDL ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx().CommitTx()
+    ).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), "query:\n" << script << "\nissues:\n" << result.GetIssues().ToString());
+    return result;
+}
+
+TDataQueryResult GetTableContent(TSession& session, const char* table,
+    const char* keyColumn = "Key"
+) {
     return ExecuteDataModificationQuery(session, Sprintf(R"(
-            SELECT * FROM `%s` ORDER BY Key;
-        )", table
+            SELECT * FROM `%s` ORDER BY %s;
+        )", table, keyColumn
     ));
 }
 
-void CompareResults(const TDataQueryResult& first, const TDataQueryResult& second) {
-    const auto& firstResults = first.GetResultSets();
-    const auto& secondResults = second.GetResultSets();
+NQuery::TExecuteQueryResult GetTableContent(NQuery::TSession& session, const char* table,
+    const char* keyColumn = "Key"
+) {
+    return ExecuteQuery(session, Sprintf(R"(
+            SELECT * FROM `%s` ORDER BY %s;
+        )", table, keyColumn
+    ));
+}
 
-    UNIT_ASSERT_VALUES_EQUAL(firstResults.size(), secondResults.size());
-    for (size_t i = 0; i < firstResults.size(); ++i) {
+void CompareResults(const std::vector<TResultSet>& first, const std::vector<TResultSet>& second) {
+    UNIT_ASSERT_VALUES_EQUAL(first.size(), second.size());
+    for (size_t i = 0; i < first.size(); ++i) {
         UNIT_ASSERT_STRINGS_EQUAL(
-            FormatResultSetYson(firstResults[i]),
-            FormatResultSetYson(secondResults[i])
+            FormatResultSetYson(first[i]),
+            FormatResultSetYson(second[i])
         );
     }
+}
+
+void CompareResults(const TDataQueryResult& first, const TDataQueryResult& second) {
+    CompareResults(first.GetResultSets(), second.GetResultSets());
+}
+
+void CompareResults(const NQuery::TExecuteQueryResult& first, const NQuery::TExecuteQueryResult& second) {
+    CompareResults(first.GetResultSets(), second.GetResultSets());
 }
 
 TTableDescription GetTableDescription(TSession& session, const TString& path,
@@ -170,8 +205,21 @@ void CheckBuildIndexOperationsCleared(TDriver& driver) {
     UNIT_ASSERT_C(result.GetList().empty(), "Build index operations aren't cleared:\n" << result.ToJsonString());
 }
 
-using TBackupFunction = std::function<void(const char*)>;
-using TRestoreFunction = std::function<void(const char*)>;
+// note: the storage pool kind must be preconfigured in the server
+void CreateDatabase(TTenants& tenants, TStringBuf path, TStringBuf storagePoolKind) {
+    Ydb::Cms::CreateDatabaseRequest request;
+    request.set_path(path);
+    auto& storage = *request.mutable_resources()->add_storage_units();
+    storage.set_unit_kind(storagePoolKind);
+    storage.set_count(1);
+
+    tenants.CreateTenant(std::move(request));
+}
+
+// whole database backup
+using TBackupFunction = std::function<void(void)>;
+// whole database restore
+using TRestoreFunction = std::function<void(void)>;
 
 void TestTableContentIsPreserved(
     const char* table, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
@@ -201,14 +249,14 @@ void TestTableContentIsPreserved(
     ));
     const auto originalContent = GetTableContent(session, table);
 
-    backup(table);
+    backup();
 
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             DROP TABLE `%s`;
         )", table
     ));
 
-    restore(table);
+    restore();
     CompareResults(GetTableContent(session, table), originalContent);
 }
 
@@ -230,14 +278,14 @@ void TestTablePartitioningSettingsArePreserved(
     ));
     CheckTableDescription(session, table, CreateMinPartitionsChecker(minPartitions, DEBUG_HINT));
 
-    backup(table);
+    backup();
 
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             DROP TABLE `%s`;
         )", table
     ));
 
-    restore(table);
+    restore();
     CheckTableDescription(session, table, CreateMinPartitionsChecker(minPartitions, DEBUG_HINT));
 }
 
@@ -266,14 +314,14 @@ void TestIndexTablePartitioningSettingsArePreserved(
     ));
     CheckTableDescription(session, indexTablePath, CreateMinPartitionsChecker(minIndexPartitions, DEBUG_HINT));
 
-    backup(table);
+    backup();
 
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             DROP TABLE `%s`;
         )", table
     ));
 
-    restore(table);
+    restore();
     CheckTableDescription(session, indexTablePath, CreateMinPartitionsChecker(minIndexPartitions, DEBUG_HINT));
 }
 
@@ -300,14 +348,14 @@ void TestTableSplitBoundariesArePreserved(
     const auto& originalKeyRanges = originalTableDescription.GetKeyRanges();
     UNIT_ASSERT_VALUES_EQUAL(originalKeyRanges.size(), partitions);
 
-    backup(table);
+    backup();
 
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             DROP TABLE `%s`;
         )", table
     ));
 
-    restore(table);
+    restore();
     const auto restoredTableDescription = GetTableDescription(session, table, describeSettings);
     UNIT_ASSERT_VALUES_EQUAL(restoredTableDescription.GetPartitionsCount(), partitions);
     const auto& restoredKeyRanges = restoredTableDescription.GetKeyRanges();
@@ -336,14 +384,14 @@ void TestIndexTableSplitBoundariesArePreserved(
     const auto& originalKeyRanges = originalDescription.GetKeyRanges();
     UNIT_ASSERT_VALUES_EQUAL(originalKeyRanges.size(), indexPartitions);
 
-    backup(table);
+    backup();
 
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             DROP TABLE `%s`;
         )", table
     ));
 
-    restore(table);
+    restore();
     const auto restoredDescription = GetTableDescription(
         session, indexTablePath, describeSettings
     );
@@ -375,14 +423,14 @@ void TestRestoreTableWithSerial(
     ));
     const auto originalContent = GetTableContent(session, table);
 
-    backup(table);
+    backup();
 
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             DROP TABLE `%s`;
         )", table
     ));
 
-    restore(table);
+    restore();
 
     CheckTableDescription(session, table, CreateHasSerialChecker(8, false), TDescribeTableSettings().WithSetVal(true));
     CompareResults(GetTableContent(session, table), originalContent);
@@ -433,7 +481,7 @@ void TestRestoreTableWithIndex(
         table, index, ConvertIndexTypeToSQL(indexType)
     ));
 
-    backup(table);
+    backup();
 
     // restore deleted table
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
@@ -441,7 +489,7 @@ void TestRestoreTableWithIndex(
         )", table
     ));
 
-    restore(table);
+    restore();
 
     CheckTableDescription(session, table, CreateHasIndexChecker(index, ConvertIndexTypeToAPI(indexType)));
 }
@@ -452,14 +500,14 @@ void TestRestoreDirectory(const char* directory, TSchemeClient& client, TBackupF
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
-    backup(directory);
+    backup();
 
     {
         const auto result = client.RemoveDirectory(directory).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
-    restore(directory);
+    restore();
 
     {
         const auto result = client.DescribePath(directory).ExtractValueSync();
@@ -472,24 +520,19 @@ void TestRestoreDirectory(const char* directory, TSchemeClient& client, TBackupF
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
 
-    void Restore(NDump::TClient& client, const TFsPath& sourceFile, const TString& dbPath) {
-        auto result = client.Restore(sourceFile, dbPath);
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    auto CreateBackupLambda(const TDriver& driver, const TFsPath& pathToBackup, bool schemaOnly = false) {
-        return [&driver, &pathToBackup, schemaOnly](const char* table) {
-            Y_UNUSED(table);
-            // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
-            NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, schemaOnly, false);
+    auto CreateBackupLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root") {
+        return [&]{
+            NDump::TClient backupClient(driver);
+            const auto result = backupClient.Dump(dbPath, fsPath, NDump::TDumpSettings().Database(dbPath));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
     }
 
-    auto CreateRestoreLambda(const TDriver& driver, const TFsPath& pathToBackup) {
-        return [&driver, &pathToBackup](const char* table) {
-            Y_UNUSED(table);
+    auto CreateRestoreLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root") {
+        return [&]{
             NDump::TClient backupClient(driver);
-            Restore(backupClient, pathToBackup, "/Root");
+            const auto result = backupClient.Restore(fsPath, dbPath);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
     }
 
@@ -508,7 +551,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             table,
             minPartitions,
             session,
-            CreateBackupLambda(driver, pathToBackup, true),
+            CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
     }
@@ -530,7 +573,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             index,
             minIndexPartitions,
             session,
-            CreateBackupLambda(driver, pathToBackup, true),
+            CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
     }
@@ -550,7 +593,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             table,
             partitions,
             session,
-            CreateBackupLambda(driver, pathToBackup, true),
+            CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
     }
@@ -717,44 +760,52 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
     using NKikimr::NWrappers::NTestHelpers::TS3Mock;
 
     class TS3TestEnv {
-        TKikimrWithGrpcAndRootSchema server;
-        TDriver driver;
-        TTableClient tableClient;
-        TSession session;
-        ui16 s3Port;
-        TS3Mock s3Mock;
+        TKikimrWithGrpcAndRootSchema Server;
+        TDriver Driver;
+        TTableClient TableClient;
+        TSession TableSession;
+        NQuery::TQueryClient QueryClient;
+        NQuery::TSession QuerySession;
+        ui16 S3Port;
+        TS3Mock S3Mock;
         // required for exports to function
-        TDataShardExportFactory dataShardExportFactory;
+        TDataShardExportFactory DataShardExportFactory;
 
     public:
         TS3TestEnv()
-            : driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())))
-            , tableClient(driver)
-            , session(tableClient.CreateSession().ExtractValueSync().GetSession())
-            , s3Port(server.GetPortManager().GetPort())
-            , s3Mock({}, TS3Mock::TSettings(s3Port))
+            : Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())))
+            , TableClient(Driver)
+            , TableSession(TableClient.CreateSession().ExtractValueSync().GetSession())
+            , QueryClient(Driver)
+            , QuerySession(QueryClient.GetSession().ExtractValueSync().GetSession())
+            , S3Port(Server.GetPortManager().GetPort())
+            , S3Mock({}, TS3Mock::TSettings(S3Port))
         {
-            UNIT_ASSERT_C(s3Mock.Start(), s3Mock.GetError());
+            UNIT_ASSERT_C(S3Mock.Start(), S3Mock.GetError());
 
-            auto& runtime = *server.GetRuntime();
+            auto& runtime = *Server.GetRuntime();
             runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
-            runtime.GetAppData().DataShardExportFactory = &dataShardExportFactory;
+            runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
         }
 
         TKikimrWithGrpcAndRootSchema& GetServer() {
-            return server;
+            return Server;
         }
 
         const TDriver& GetDriver() const {
-            return driver;
+            return Driver;
         }
 
-        TSession& GetSession() {
-            return session;
+        TSession& GetTableSession() {
+            return TableSession;
+        }
+
+        NQuery::TSession& GetQuerySession() {
+            return QuerySession;
         }
 
         ui16 GetS3Port() const {
-            return s3Port;
+            return S3Port;
         }
     };
 
@@ -776,20 +827,49 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         return false;
     }
 
-    void ExportToS3(NExport::TExportClient& exportClient, ui16 s3Port, NOperation::TOperationClient& operationClient,
-        const TString& source, const TString& destination
+    bool FilterSupportedSchemeObjects(const NYdb::NScheme::TSchemeEntry& entry) {
+        return IsIn({
+            NYdb::NScheme::ESchemeEntryType::Table,
+            NYdb::NScheme::ESchemeEntryType::View,
+        }, entry.Type);
+    }
+
+    void RecursiveListSourceToItems(TSchemeClient& schemeClient, const TString& source, const TString& destination,
+        NExport::TExportToS3Settings& exportSettings
+    ) {
+        const auto listSettings = NConsoleClient::TRecursiveListSettings().Filter(FilterSupportedSchemeObjects);
+        const auto sourceListing = NConsoleClient::RecursiveList(schemeClient, source, listSettings);
+        UNIT_ASSERT_C(sourceListing.Status.IsSuccess(), sourceListing.Status.GetIssues());
+
+        for (const auto& entry : sourceListing.Entries) {
+            exportSettings.AppendItem({
+                .Src = entry.Name,
+                .Dst = TStringBuilder() << destination << TStringBuf(entry.Name).RNextTok(source)
+            });
+        }
+    }
+
+    void ExportToS3(
+        TSchemeClient& schemeClient,
+        NExport::TExportClient& exportClient,
+        ui16 s3Port,
+        NOperation::TOperationClient& operationClient,
+        const TString& source,
+        const TString& destination
    ) {
         // The exact values for Bucket, AccessKey and SecretKey do not matter if the S3 backend is TS3Mock.
         // Any non-empty strings should do.
-        const auto exportSettings = NExport::TExportToS3Settings()
+        auto exportSettings = NExport::TExportToS3Settings()
             .Endpoint(Sprintf("localhost:%u", s3Port))
             .Scheme(ES3Scheme::HTTP)
             .Bucket("test_bucket")
             .AccessKey("test_key")
-            .SecretKey("test_secret")
-            .AppendItem(NExport::TExportToS3Settings::TItem{.Src = source, .Dst = destination});
+            .SecretKey("test_secret");
 
-        auto response = exportClient.ExportToS3(exportSettings).ExtractValueSync();
+        RecursiveListSourceToItems(schemeClient, source, destination, exportSettings);
+
+        const auto response = exportClient.ExportToS3(exportSettings).ExtractValueSync();
+        UNIT_ASSERT_C(response.Status().IsSuccess(), response.Status().GetIssues().ToString());
         UNIT_ASSERT_C(WaitForOperation<NExport::TExportToS3Response>(operationClient, response.Id()),
             Sprintf("The export from %s to %s did not complete within the allocated time.",
                 source.c_str(), destination.c_str()
@@ -797,40 +877,55 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    const TString DefaultS3Prefix = "";
+
+    auto CreateBackupLambda(const TDriver& driver, ui16 s3Port, const TString& source = "/Root") {
+        return [&, s3Port]{
+            const auto clientSettings = TCommonClientSettings().Database(source);
+            TSchemeClient schemeClient(driver, clientSettings);
+            NExport::TExportClient exportClient(driver, clientSettings);
+            NOperation::TOperationClient operationClient(driver, clientSettings);
+            ExportToS3(schemeClient, exportClient, s3Port, operationClient, source, DefaultS3Prefix);
+        };
+    }
+
     void ImportFromS3(NImport::TImportClient& importClient, ui16 s3Port, NOperation::TOperationClient& operationClient,
-        const TString& source, const TString& destination
+        TVector<NImport::TImportFromS3Settings::TItem>&& items
     ) {
         // The exact values for Bucket, AccessKey and SecretKey do not matter if the S3 backend is TS3Mock.
         // Any non-empty strings should do.
-        const auto importSettings = NImport::TImportFromS3Settings()
+        auto importSettings = NImport::TImportFromS3Settings()
             .Endpoint(Sprintf("localhost:%u", s3Port))
             .Scheme(ES3Scheme::HTTP)
             .Bucket("test_bucket")
             .AccessKey("test_key")
-            .SecretKey("test_secret")
-            .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = source, .Dst = destination});
+            .SecretKey("test_secret");
 
-        auto response = importClient.ImportFromS3(importSettings).ExtractValueSync();
+        // to do: implement S3 list objects command for TS3Mock to use it here to list the source
+        importSettings.Item_ = std::move(items);
+
+        const auto response = importClient.ImportFromS3(importSettings).ExtractValueSync();
+        UNIT_ASSERT_C(response.Status().IsSuccess(), response.Status().GetIssues().ToString());
         UNIT_ASSERT_C(WaitForOperation<NImport::TImportFromS3Response>(operationClient, response.Id()),
-            Sprintf("The import from %s to %s did not complete within the allocated time.",
-                source.c_str(), destination.c_str()
-            )
+            "The import did not complete within the allocated time."
         );
     }
 
-    auto CreateBackupLambda(const TDriver& driver, ui16 s3Port) {
-        return [&driver, s3Port](const char* table) {
-            NExport::TExportClient exportClient(driver);
-            NOperation::TOperationClient operationClient(driver);
-            ExportToS3(exportClient, s3Port, operationClient, table, "table");
-        };
-    }
-
-    auto CreateRestoreLambda(const TDriver& driver, ui16 s3Port) {
-        return [&driver, s3Port](const char* table) {
-            NImport::TImportClient importClient(driver);
-            NOperation::TOperationClient operationClient(driver);
-            ImportFromS3(importClient, s3Port, operationClient, "table", table);
+    // to do: implement source item list expansion
+    auto CreateRestoreLambda(const TDriver& driver, ui16 s3Port, const TVector<TString>& sourceItems, const TString& destinationPrefix = "/Root") {
+        return [&, s3Port]{
+            const auto clientSettings = TCommonClientSettings().Database(destinationPrefix);
+            NImport::TImportClient importClient(driver, clientSettings);
+            NOperation::TOperationClient operationClient(driver, clientSettings);
+            using TItem = NImport::TImportFromS3Settings::TItem;
+            TVector<TItem> items;
+            for (const auto& item : sourceItems) {
+                items.emplace_back(TItem{
+                    .Src = item,
+                    .Dst = TStringBuilder() << destinationPrefix << '/' << item
+                });
+            }
+            ImportFromS3(importClient, s3Port, operationClient, std::move(items));
         };
     }
 
@@ -842,9 +937,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         TestTablePartitioningSettingsArePreserved(
             table,
             minPartitions,
-            testEnv.GetSession(),
+            testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
@@ -858,9 +953,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             table,
             index,
             minIndexPartitions,
-            testEnv.GetSession(),
+            testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
@@ -872,9 +967,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         TestTableSplitBoundariesArePreserved(
             table,
             partitions,
-            testEnv.GetSession(),
+            testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
@@ -914,10 +1009,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             table,
             index,
             indexPartitions,
-            testEnv.GetSession(),
+            testEnv.GetTableSession(),
             tableBuilder,
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
@@ -964,10 +1059,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             table,
             index,
             indexPartitions,
-            testEnv.GetSession(),
+            testEnv.GetTableSession(),
             tableBuilder,
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
@@ -977,9 +1072,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
         TestTableContentIsPreserved(
             table,
-            testEnv.GetSession(),
+            testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
@@ -992,9 +1087,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             table,
             index,
             indexType,
-            testEnv.GetSession(),
+            testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
@@ -1004,9 +1099,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
         TestRestoreTableWithSerial(
             table,
-            testEnv.GetSession(),
+            testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 

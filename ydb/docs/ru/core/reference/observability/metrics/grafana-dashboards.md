@@ -6,6 +6,21 @@
 
 Общий дашборд базы данных.
 
+## DB overview {#dboverview}
+
+Общий дашборд базы данных по категориям:
+
+- Health
+- API
+- API details
+- CPU
+- CPU pools
+- Memory
+- Storage
+- DataShard
+- DataShard details
+- Latency
+
 ## Actors {#actors}
 
 Потребление CPU в актор-системе.

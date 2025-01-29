@@ -17,7 +17,6 @@ static std::string JoinPath(const std::string& basePath, const std::string& path
 }
 
 TRunArgs GetRunArgs() {
-    
     std::string database = std::getenv("YDB_DATABASE");
     std::string endpoint = std::getenv("YDB_ENDPOINT");
 

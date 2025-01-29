@@ -5,8 +5,7 @@
 #include <util/string/cast.h>
 
 
-TEST(Integration, BulkUpsert) {
-
+TEST(BulkUpsert, BulkUpsert) {
     uint32_t correctSumApp = 0;
     uint32_t correctSumHost = 0;
     uint32_t correctRowCount = 0;

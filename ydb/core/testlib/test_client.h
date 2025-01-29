@@ -8,7 +8,7 @@
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/server/grpc_server.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
@@ -248,6 +248,10 @@ namespace Tests {
             return *this;
         }
 
+        TServerSettings& SetColumnShardAlterObjectEnabled(bool enable) {
+            AppConfig->MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
+            return *this;
+        }
 
         // Add additional grpc services
         template <typename TService>
@@ -280,6 +284,7 @@ namespace Tests {
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
             FeatureFlags.SetEnableWritePortionsOnInsert(true);
             FeatureFlags.SetEnableFollowerStats(true);
+            FeatureFlags.SetEnableColumnStore(true);
         }
 
         TServerSettings(const TServerSettings& settings) = default;
@@ -380,6 +385,19 @@ namespace Tests {
             ui64 PathId = 0;
             ui64 Version = 0;
         };
+
+        struct TCreateUserOption {
+            TString User;
+            TString Password;
+            bool CanLogin = true;
+        };
+
+        struct TModifyUserOption {
+            TString User;
+            std::optional<TString> Password;
+            std::optional<bool> CanLogin;
+        };
+
         using TApplyIf = TVector<TPathVersion>;
 
         TClient(const TServerSettings& settings);
@@ -460,12 +478,13 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus DeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteUnsafe(const TString& parent, const TString &name);
+        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken = "");
         NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
-        NMsgBusProxy::EResponseStatus ModifyUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
+        NMsgBusProxy::EResponseStatus ModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken = "");
         NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
         NMsgBusProxy::EResponseStatus CreateGroup(const TString& parent, const TString& group);
         NMsgBusProxy::EResponseStatus AddGroupMembership(const TString& parent, const TString& group, const TString& member);
-        
+
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent,
@@ -504,15 +523,14 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusResponse> Ls(const TString& path);
         static TPathVersion ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe);
         static TVector<ui64> ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-        bool FlatQuery(const TString& mkql, NKikimrMiniKQL::TResult& result);
-        bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
+        bool FlatQuery(TTestActorRuntime* runtime, const TString& mkql, NKikimrMiniKQL::TResult& result);
+        bool FlatQuery(TTestActorRuntime* runtime, const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
                        const NKikimrClient::TResponse& expectedResponse);
-        bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
+        bool FlatQuery(TTestActorRuntime* runtime, const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
                        ui32 expectedStatus = NMsgBusProxy::MSTATUS_OK);
-        bool FlatQueryParams(const TString &query, const TString &params, bool queryCompiled, NKikimrMiniKQL::TResult &result);
 
         // returns NMsgBusProxy::MSTATUS_* and the raw response
-        ui32 FlatQueryRaw(const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
+        ui32 FlatQueryRaw(TTestActorRuntime* runtime, const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
 
         bool Compile(const TString &mkql, TString &compiled);
         void SetSecurityToken(const TString& token) { SecurityToken = token; }

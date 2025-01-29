@@ -1,7 +1,7 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "endpoint_pool.h"
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 using std::string;
 using std::vector;

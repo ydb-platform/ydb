@@ -3,7 +3,7 @@
 #include "grpc_request_base.h"
 #include "logger.h"
 
-#include <ydb/library/grpc/common/constants.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/common/constants.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/ptr.h>

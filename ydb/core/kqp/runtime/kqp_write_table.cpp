@@ -672,22 +672,22 @@ class TDataShardPayloadSerializer : public IPayloadSerializer {
 
 public:
     TDataShardPayloadSerializer(
-        const TKeyDesc& keyDescription,
+        const TVector<TKeyDesc::TPartitionInfo>& partitioning,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>& inputColumns,
         std::vector<ui32> writeIndex)
-        : KeyDescription(keyDescription)
+        : Partitioning(partitioning)
         , Columns(BuildColumns(inputColumns))
         , WriteIndex(std::move(writeIndex))
         , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
         , KeyColumnTypes(BuildKeyColumnTypes(keyColumns)) {
     }
 
-    void AddRow(TRowWithData&& row, const TKeyDesc& keyRange) {
+    void AddRow(TRowWithData&& row, const TVector<TKeyDesc::TPartitionInfo>& partitioning) {
         YQL_ENSURE(row.Cells.size() >= KeyColumnTypes.size());
         auto shardIter = std::lower_bound(
-            std::begin(keyRange.GetPartitions()),
-            std::end(keyRange.GetPartitions()),
+            std::begin(partitioning),
+            std::end(partitioning),
             TArrayRef(row.Cells.data(), KeyColumnTypes.size()),
             [this](const auto &partition, const auto& key) {
                 const auto& range = *partition.Range;
@@ -695,7 +695,7 @@ public:
                     range.IsInclusive || range.IsPoint, true, KeyColumnTypes);
             });
 
-        YQL_ENSURE(shardIter != keyRange.GetPartitions().end());
+        YQL_ENSURE(shardIter != partitioning.end());
 
         auto batcherIter = Batchers.find(shardIter->ShardId);
         if (batcherIter == std::end(Batchers)) {
@@ -726,7 +726,7 @@ public:
                     TVector<TCell>(cells.begin() + (rowIndex * Columns.size()), cells.begin() + (rowIndex * Columns.size()) + Columns.size()),
                     std::move(data[rowIndex]),
                 },
-                KeyDescription);
+                Partitioning);
         }
     }
 
@@ -800,7 +800,7 @@ public:
     }
 
 private:
-    const TKeyDesc& KeyDescription;
+    const TVector<TKeyDesc::TPartitionInfo>& Partitioning;
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;
     const std::vector<ui32> WriteColumnIds;
@@ -822,12 +822,12 @@ IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
 }
 
 IPayloadSerializerPtr CreateDataShardPayloadSerializer(
-        const TKeyDesc& keyDescription,
+        const TVector<TKeyDesc::TPartitionInfo>& partitioning,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const std::vector<ui32> writeIndex) {
     return MakeIntrusive<TDataShardPayloadSerializer>(
-        keyDescription, keyColumns, inputColumns, std::move(writeIndex));
+        partitioning, keyColumns, inputColumns, std::move(writeIndex));
 }
 
 }
@@ -1079,13 +1079,13 @@ public:
     }
 
     void OnPartitioningChanged(
-        THolder<TKeyDesc>&& keyDescription) override {
+        const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) override {
         IsOlap = false;
-        KeyDescription = std::move(keyDescription);
+        Partitioning = partitioning;
         BeforePartitioningChanged();
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateDataShardPayloadSerializer(
-                *KeyDescription,
+                *Partitioning,
                 writeInfo.Metadata.KeyColumnsMetadata,
                 writeInfo.Metadata.InputColumnsMetadata,
                 writeInfo.Metadata.WriteIndex);
@@ -1148,9 +1148,9 @@ public:
                 .Serializer = nullptr,
                 .Closed = false,
             }).first;
-        if (KeyDescription) {
+        if (Partitioning) {
             iter->second.Serializer = CreateDataShardPayloadSerializer(
-                *KeyDescription,
+                *Partitioning,
                 iter->second.Metadata.KeyColumnsMetadata,
                 iter->second.Metadata.InputColumnsMetadata,
                 iter->second.Metadata.WriteIndex);
@@ -1461,7 +1461,7 @@ private:
     TShardsInfo ShardsInfo;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    THolder<TKeyDesc> KeyDescription;
+    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
     std::optional<bool> IsOlap;
 };
 

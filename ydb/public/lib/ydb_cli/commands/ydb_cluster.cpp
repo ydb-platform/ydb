@@ -1,6 +1,6 @@
 #include "ydb_cluster.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_bsconfig/ydb_storage_config.h>
+#include <ydb-cpp-sdk/client/bsconfig/storage_config.h>
 
 using namespace NKikimr;
 
@@ -31,7 +31,7 @@ int TCommandClusterBootstrap::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     NYdb::NStorageConfig::TStorageConfigClient client(*driver);
     auto result = client.BootstrapCluster(SelfAssemblyUUID).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return EXIT_SUCCESS;
 }
 

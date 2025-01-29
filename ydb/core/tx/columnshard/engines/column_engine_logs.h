@@ -234,7 +234,8 @@ public:
         UpdatePortionStats(*portion, EStatsUpdateType::DEFAULT, &exPortion);
     }
 
-    void AppendPortion(const TPortionDataAccessor& portionInfo, const bool addAsAccessor = true);
+    void AppendPortion(const TPortionDataAccessor& portionInfo);
+    void AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo);
 
 private:
     ui64 TabletId;

@@ -207,6 +207,7 @@ class StreamWriteMessage:
             data: bytes
             uncompressed_size: int
             partitioning: "StreamWriteMessage.PartitioningType"
+            metadata_items: Dict[str, bytes]
 
             def to_proto(
                 self,
@@ -216,6 +217,10 @@ class StreamWriteMessage:
                 proto.created_at.FromDatetime(self.created_at)
                 proto.data = self.data
                 proto.uncompressed_size = self.uncompressed_size
+
+                for key, value in self.metadata_items.items():
+                    item = ydb_topic_pb2.MetadataItem(key=key, value=value)
+                    proto.metadata_items.append(item)
 
                 if self.partitioning is None:
                     pass
@@ -488,16 +493,19 @@ class StreamReadMessage:
             data: bytes
             uncompresed_size: int
             message_group_id: str
+            metadata_items: Dict[str, bytes]
 
             @staticmethod
             def from_proto(
                 msg: ydb_topic_pb2.StreamReadMessage.ReadResponse.MessageData,
             ) -> "StreamReadMessage.ReadResponse.MessageData":
+                metadata_items = {meta.key: meta.value for meta in msg.metadata_items}
                 return StreamReadMessage.ReadResponse.MessageData(
                     offset=msg.offset,
                     seq_no=msg.seq_no,
                     created_at=msg.created_at.ToDatetime(),
                     data=msg.data,
+                    metadata_items=metadata_items,
                     uncompresed_size=msg.uncompressed_size,
                     message_group_id=msg.message_group_id,
                 )

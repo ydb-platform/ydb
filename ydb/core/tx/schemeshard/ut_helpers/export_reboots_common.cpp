@@ -6,20 +6,37 @@
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
 
+using namespace NKikimrSchemeOp;
+
 namespace NSchemeShardUT_Private {
 namespace NExportReboots {
 
-void Run(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
+void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<TTypedScheme>& schemeObjects) {
+    TSet<ui64> toWait;
+    for (const auto& [type, scheme] : schemeObjects) {
+        switch (type) {
+            case EPathTypeTable:
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", scheme);
+                break;
+            case EPathTypeView:
+                TestCreateView(runtime, ++t.TxId, "/MyRoot", scheme);
+                break;
+            default:
+                UNIT_FAIL("export is not implemented for the scheme object type: " << type);
+                return;
+        }
+        toWait.insert(t.TxId);
+    }
+    t.TestEnv->TestWaitNotification(runtime, toWait);
+}
+
+void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
-
-            TSet<ui64> toWait;
-            for (const auto& table : tables) {
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", table);
-                toWait.insert(t.TxId);
-            }
-            t.TestEnv->TestWaitNotification(runtime, toWait);
+            CreateSchemeObjects(t, runtime, schemeObjects);
         }
 
         TestExport(runtime, ++t.TxId, "/MyRoot", request);
@@ -47,17 +64,13 @@ void Run(const TVector<TString>& tables, const TString& request, TTestWithReboot
     });
 }
 
-void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
+void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
-
-            TSet<ui64> toWait;
-            for (const auto& table : tables) {
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", table);
-                toWait.insert(t.TxId);
-            }
-            t.TestEnv->TestWaitNotification(runtime, toWait);
+            CreateSchemeObjects(t, runtime, schemeObjects);
         }
 
         TestExport(runtime, ++t.TxId, "/MyRoot", request);
@@ -90,17 +103,13 @@ void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReb
     });
 }
 
-void Forget(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
+void Forget(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
-
-            TSet<ui64> toWait;
-            for (const auto& table : tables) {
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", table);
-                toWait.insert(t.TxId);
-            }
-            t.TestEnv->TestWaitNotification(runtime, toWait);
+            CreateSchemeObjects(t, runtime, schemeObjects);
 
             TestExport(runtime, ++t.TxId, "/MyRoot", request);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);

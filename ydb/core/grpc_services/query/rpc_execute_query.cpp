@@ -8,6 +8,7 @@
 #include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
@@ -214,6 +215,7 @@ private:
                 HFunc(TEvents::TEvWakeup, Handle);
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+                hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
                 HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
                 hFunc(NKikimr::NGRpcService::TEvSubscribeGrpcCancel, Handle);
                 default:
@@ -280,6 +282,8 @@ private:
             nullptr, // operationParams
             settings,
             req->pool_id());
+
+        ev->SetProgressStatsPeriod(TDuration::MilliSeconds(req->stats_period_ms()));
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId())) {
             NYql::TIssues issues;
@@ -351,6 +355,27 @@ private:
             << ", queue: " << FlowControl_.QueueSize());
 
         channel.SendAck(SelfId());
+    }
+
+    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+
+        Ydb::Query::ExecuteQueryResponsePart response;
+        response.set_status(Ydb::StatusIds::SUCCESS);
+
+        if (NeedReportStats(*Request_->GetProtoRequest())) {
+            if (record.HasQueryStats()) {
+                FillQueryStats(*response.mutable_exec_stats(), record.GetQueryStats());
+                response.mutable_exec_stats()->set_query_plan(NKqp::SerializeAnalyzePlan(record.GetQueryStats()));
+            }
+        }
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+
+        FlowControl_.PushResponse(out.size());
+
+        Request_->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {

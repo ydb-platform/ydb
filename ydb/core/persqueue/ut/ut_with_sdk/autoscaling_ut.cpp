@@ -1,6 +1,6 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/topic_sdk_test_setup.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_oldSDK(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -354,7 +354,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionMerge_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
+        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 2, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -426,7 +426,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_ReadEmptyPartitions(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .AutoPartitioningSupport = autoscaleAwareSDK });
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_ReadNotEmptyPartitions(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .AutoCommit = false, .AutoPartitioningSupport = false });
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .AutoPartitioningSupport = true });
@@ -511,7 +511,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_ManySession(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -551,7 +551,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ManySession_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -596,7 +596,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ManySession_existed_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -624,7 +624,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(CommitTopPast_BeforeAutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -889,8 +889,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
-        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TEST_TOPIC, false);
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
@@ -910,8 +910,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
-        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TEST_TOPIC, false);
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, std::string{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, std::string{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
@@ -1157,7 +1157,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(BalancingAfterSplit_sessionsWithPartition) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TString{TEST_TOPIC}, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -1197,7 +1197,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(ReBalancingAfterSplit_sessionsWithPartition) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
+        setup.CreateTopicWithAutoscale(TString{TEST_TOPIC}, TEST_CONSUMER, 2, 100);
 
         TTopicClient client = setup.MakeClient();
 

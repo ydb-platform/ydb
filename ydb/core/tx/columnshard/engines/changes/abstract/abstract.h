@@ -12,6 +12,7 @@
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
@@ -182,6 +183,53 @@ public:
         : SchemaVersions(schemaVersions)
         , Counters(counters)
         , LastCommittedTx(lastCommittedTx) {
+    }
+
+    std::shared_ptr<TFilteredSnapshotSchema> BuildResultFiltered(
+        const std::vector<TPortionDataAccessor>& portionAccessors, std::set<ui32>& seqDataColumnIds) const {
+        auto resultSchema = SchemaVersions.GetLastSchema();
+        std::set<ui32> pkColumnIds;
+        {
+            auto pkColumnIdsVector = IIndexInfo::AddSnapshotFieldIds(resultSchema->GetIndexInfo().GetPKColumnIds());
+            pkColumnIds = std::set<ui32>(pkColumnIdsVector.begin(), pkColumnIdsVector.end());
+        }
+        std::set<ui32> dataColumnIds;
+        {
+            {
+                THashMap<ui64, ISnapshotSchema::TPtr> schemas;
+                for (auto& portion : portionAccessors) {
+                    auto dataSchema = portion.GetPortionInfo().GetSchema(SchemaVersions);
+                    schemas.emplace(dataSchema->GetVersion(), dataSchema);
+                }
+                dataColumnIds = ISnapshotSchema::GetColumnsWithDifferentDefaults(schemas, resultSchema);
+            }
+            for (auto&& accessor : portionAccessors) {
+                if (accessor.GetPortionInfo().GetMeta().GetDeletionsCount()) {
+                    dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
+                }
+                if (dataColumnIds.size() != resultSchema->GetColumnsCount()) {
+                    for (auto id : accessor.GetColumnIds()) {
+                        if (resultSchema->HasColumnId(id)) {
+                            dataColumnIds.emplace(id);
+                        }
+                    }
+                }
+            }
+            AFL_VERIFY(dataColumnIds.size() <= resultSchema->GetColumnsCount());
+            if (dataColumnIds.contains((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
+                pkColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
+            }
+            dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::WRITE_ID);
+        }
+        dataColumnIds.insert(IIndexInfo::GetSnapshotColumnIds().begin(), IIndexInfo::GetSnapshotColumnIds().end());
+        auto resultFiltered = std::make_shared<TFilteredSnapshotSchema>(resultSchema, dataColumnIds);
+        {
+            seqDataColumnIds = dataColumnIds;
+            for (auto&& i : pkColumnIds) {
+                AFL_VERIFY(seqDataColumnIds.erase(i))("id", i);
+            }
+        }
+        return resultFiltered;
     }
 };
 

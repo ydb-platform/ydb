@@ -15,7 +15,7 @@
 
 using namespace NJson;
 
-const re2::RE2 NAME_RE{R"((?:[a-zA-Z0-9\.\-/@_]+_)+(?:[ad][vehmntx]{3}|summ|hgram|max))"};
+const re2::RE2 NAME_RE{R"((?:[a-zA-Z0-9\.\-/@_]+_)+(?:[advehmntx][vehmntx]{3}|summ|hgram|max))"};
 
 namespace NMonitoring {
     namespace {
@@ -144,7 +144,7 @@ namespace NMonitoring {
                             OnHistogram(value);
                         }
                     } else if (IsNumber(value)) {
-                        if (MetricContext_.Name.EndsWith("_ahhh")) {
+                        if (MetricContext_.Name.EndsWith("hhh") && !MetricContext_.IsDeriv) {
                             OnLogHistogram(value);
                         } else {
                             OnScalar(value);
@@ -169,7 +169,8 @@ namespace NMonitoring {
             }
 
             void OnLogHistogram(const TJsonValue& value) {
-                Y_ENSURE(MetricContext_.Name.EndsWith("_ahhh"), "Values list is supported only for _ahhh metrics");
+                Y_ENSURE(MetricContext_.Name.EndsWith("hhh") && !MetricContext_.IsDeriv,
+                        "Values list is supported only for histogram metrics");
                 MetricContext_.Type = EMetricType::HIST;
 
                 LogHistogramBuilder histogramBuilder;

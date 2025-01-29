@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 //! Checks the following environment variables and creates TDriverConfig with the first appeared:
 //! YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=<path-to-file> — service account key file,

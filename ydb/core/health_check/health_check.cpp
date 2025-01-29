@@ -8,7 +8,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/digest/old_crc/crc.h>
 #include <library/cpp/protobuf/json/proto2json.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <util/random/shuffle.h>
 
@@ -3124,7 +3124,7 @@ public:
             }
             break;
         }
-        if (!config.Locator) {
+        if (config.Locator.empty()) {
             AddIssue(Ydb::Monitoring::StatusFlag::RED, "Couldn't find local gRPC endpoint");
             ReplyAndPassAway();
         }

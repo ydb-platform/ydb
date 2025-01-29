@@ -7,6 +7,8 @@ SRCS(
     groups.h
     owners.cpp
     owners.h
+    permissions.cpp
+    permissions.h
     users.cpp
     users.h
 )

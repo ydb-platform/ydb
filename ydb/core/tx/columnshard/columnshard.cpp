@@ -62,7 +62,7 @@ void TColumnShard::BecomeBroken(const TActorContext& ctx) {
 }
 
 void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
-    if (!Tiers->AreConfigsComplete()) {
+    if (Tiers->GetAwaitedConfigsCount()) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "skip_switch_to_work")("reason", "tiering_metadata_not_ready");
         return;
     }

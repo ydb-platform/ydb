@@ -1,6 +1,6 @@
 #include "scripting.h"
 
-namespace NYdb::NScripting {
+namespace NYdb::inline V2::NScripting {
 
 grpc::Status TMockSlyDbProxy::ExecuteYql(
     grpc::ServerContext* context,

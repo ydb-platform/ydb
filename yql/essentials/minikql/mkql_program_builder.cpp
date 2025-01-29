@@ -1503,12 +1503,28 @@ TRuntimeNode TProgramBuilder::FromBlocks(TRuntimeNode flow) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode flow) {
-    auto outputItems = ValidateBlockFlowType(flow.GetStaticType());
+TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode stream) {
+    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected WideStream as input type");
+    if constexpr (RuntimeVersion < 55U) {
+        // Preserve the old behaviour for ABI compatibility.
+        // Emit (FromFlow (WideFromBlocks (ToFlow (<stream>)))) to
+        // process the flow in favor to the given stream following
+        // the older MKQL ABI.
+        // FIXME: Drop the branch below, when the time comes.
+        const auto inputFlow = ToFlow(stream);
+        auto outputItems = ValidateBlockFlowType(inputFlow.GetStaticType());
+        outputItems.pop_back();
+        TType* outputMultiType = NewMultiType(outputItems);
+        TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
+        callableBuilder.Add(inputFlow);
+        const auto outputFlow = TRuntimeNode(callableBuilder.Build(), false);
+        return FromFlow(outputFlow);
+    }
+    auto outputItems = ValidateBlockStreamType(stream.GetStaticType());
     outputItems.pop_back();
     TType* outputMultiType = NewMultiType(outputItems);
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
-    callableBuilder.Add(flow);
+    TCallableBuilder callableBuilder(Env, __func__, NewStreamType(outputMultiType));
+    callableBuilder.Add(stream);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -3428,6 +3444,26 @@ TRuntimeNode TProgramBuilder::VariantItem(TRuntimeNode variant) {
 
     TCallableBuilder callableBuilder(Env, __func__, resType);
     callableBuilder.Add(variant);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::DynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType) {
+    if constexpr (RuntimeVersion < 56U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    auto type = AS_TYPE(TVariantType, variantType);
+    auto expectedIndexSlot = type->GetUnderlyingType()->IsTuple() ? NUdf::EDataSlot::Uint32 : NUdf::EDataSlot::Utf8;
+    bool isOptional;
+    auto indexType = UnpackOptionalData(index.GetStaticType(), isOptional);
+    MKQL_ENSURE(indexType->GetDataSlot() == expectedIndexSlot, "Mismatch type of index");
+
+    auto resType = TOptionalType::Create(type, Env);
+
+    TCallableBuilder callableBuilder(Env, __func__, resType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(index);
+    callableBuilder.Add(TRuntimeNode(variantType, true));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -5976,11 +6012,19 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
     if constexpr (RuntimeVersion < 53U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
+    if (RuntimeVersion < 57U && joinKind == EJoinKind::Cross) {
+        THROW yexception() << __func__ << " does not support cross join in runtime version (" << RuntimeVersion << ")";
+    }
+
     MKQL_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
-                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
+                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly || joinKind == EJoinKind::Cross,
                 "Unsupported join kind");
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
+    if (joinKind == EJoinKind::Cross) {
+        MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
+    } else {
+        MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    }
 
     ValidateBlockStreamType(leftStream.GetStaticType());
     ValidateBlockStreamType(rightStream.GetStaticType());

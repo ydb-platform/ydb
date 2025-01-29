@@ -5,6 +5,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    tests
 )
 
 LIBRARY()
@@ -585,7 +586,8 @@ PEERDIR(
     ydb/public/lib/json_value
     ydb/public/lib/ydb_cli/common
     ydb/public/api/grpc
-    ydb/public/sdk/cpp/client/ydb_types
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/types
     contrib/libs/yaml-cpp
 )
 

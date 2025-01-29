@@ -61,6 +61,7 @@ public:
         Cleanup,
         GC
     };
+    YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
 
 protected:
     virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {
@@ -145,6 +146,7 @@ protected:
 private:
     inline static const NKikimrConfig::TColumnShardConfig DefaultConfig = {};
 
+public:
     static const NKikimrConfig::TColumnShardConfig& GetConfig() {
         if (HasAppData()) {
             return AppDataVerified().ColumnShardConfig;
@@ -152,12 +154,11 @@ private:
         return DefaultConfig;
     }
 
-public:
     const NOlap::NSplitter::TSplitSettings& GetBlobSplitSettings(
         const NOlap::NSplitter::TSplitSettings& defaultValue = Default<NOlap::NSplitter::TSplitSettings>()) {
         return DoGetBlobSplitSettings(defaultValue);
     }
-
+    virtual bool CheckPortionsToMergeOnCompaction(const ui64 memoryAfterAdd, const ui32 currentSubsetsCount);
     virtual void OnRequestTracingChanges(
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }

@@ -21,7 +21,6 @@
 #include <yt/cpp/mapreduce/interface/protobuf_format.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-#include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/http/requests.h>
 #include <yt/cpp/mapreduce/http/retry_request.h>
@@ -37,8 +36,7 @@
 #include <yt/cpp/mapreduce/io/proto_helpers.h>
 #include <yt/cpp/mapreduce/io/skiff_table_reader.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <library/cpp/yson/node/serialize.h>
 
@@ -705,6 +703,9 @@ void BuildUserJobFluently(
         .DoIf(!preparer.GetLayers().empty(), [&] (TFluentMap fluentMap) {
             fluentMap.Item("layer_paths").List(preparer.GetLayers());
         })
+        .DoIf(userJobSpec.DockerImage_.Defined(), [&] (TFluentMap fluentMap) {
+            fluentMap.Item("docker_image").Value(*userJobSpec.DockerImage_);
+        })
         .Item("command").Value(preparer.GetCommand())
         .Item("class_name").Value(preparer.GetClassName())
         .DoIf(!userJobSpec.Environment_.empty(), [&] (TFluentMap fluentMap) {
@@ -877,14 +878,14 @@ void BuildCommonOperationPart(
     if (baseSpec.Title_.Defined()) {
         (*specNode)["title"] = *baseSpec.Title_;
     }
+    if (baseSpec.MaxFailedJobCount_.Defined()) {
+        (*specNode)["max_failed_job_count"] = *baseSpec.MaxFailedJobCount_;
+    }
 }
 
 template <typename TSpec>
 void BuildCommonUserOperationPart(const TSpec& baseSpec, TNode* spec)
 {
-    if (baseSpec.MaxFailedJobCount_.Defined()) {
-        (*spec)["max_failed_job_count"] = *baseSpec.MaxFailedJobCount_;
-    }
     if (baseSpec.FailOnJobRestart_.Defined()) {
         (*spec)["fail_on_job_restart"] = *baseSpec.FailOnJobRestart_;
     }
@@ -2408,7 +2409,8 @@ TString TOperation::TOperationImpl::GetWebInterfaceUrl() const
 
 void TOperation::TOperationImpl::OnPrepared()
 {
-    Y_ABORT_UNLESS(!PreparedPromise_.HasException() && !PreparedPromise_.HasValue());
+    Y_ABORT_IF(PreparedPromise_.HasException());
+    Y_ABORT_IF(PreparedPromise_.HasValue());
     PreparedPromise_.SetValue();
 }
 
@@ -2454,7 +2456,8 @@ bool TOperation::TOperationImpl::IsStarted() const {
 
 void TOperation::TOperationImpl::OnPreparationException(std::exception_ptr e)
 {
-    Y_ABORT_UNLESS(!PreparedPromise_.HasValue() && !PreparedPromise_.HasException());
+    Y_ABORT_IF(PreparedPromise_.HasValue());
+    Y_ABORT_IF(PreparedPromise_.HasException());
     PreparedPromise_.SetException(e);
 }
 
@@ -3022,7 +3025,8 @@ void* SyncPrepareAndStartOperation(void* pArgs)
         try {
             prepare();
             operation->OnPrepared();
-        } catch (...) {
+        } catch (const std::exception& ex) {
+            YT_LOG_INFO("Operation preparation failed: %v", ex.what());
             operation->OnPreparationException(std::current_exception());
         }
         if (mode >= TOperationOptions::EStartOperationMode::AsyncStart) {

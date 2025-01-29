@@ -20,8 +20,9 @@ public:
     using TAuthBase = TAuthScanBase<TOwnersScan>;
 
     TOwnersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns)
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), false)
     {
     }
 
@@ -31,10 +32,7 @@ protected:
         
         TVector<TCell> cells(::Reserve(Columns.size()));
 
-        // TODO: add rows according to request's sender user rights
-
         auto entryPath = CanonizePath(entry.Path);
-        auto entryOwner = entry.Self->Info.GetOwner();
 
         for (auto& column : Columns) {
             switch (column.Tag) {
@@ -42,7 +40,11 @@ protected:
                 cells.push_back(TCell(entryPath.data(), entryPath.size()));
                 break;
             case Schema::AuthOwners::Sid::ColumnId:
-                cells.push_back(TCell(entryOwner.data(), entryOwner.size()));
+                if (entry.SecurityObject && entry.SecurityObject->HasOwnerSID()) {
+                    cells.push_back(TCell(entry.SecurityObject->GetOwnerSID().data(), entry.SecurityObject->GetOwnerSID().size()));
+                } else {
+                    cells.emplace_back();
+                }
                 break;
             default:
                 cells.emplace_back();
@@ -58,9 +60,10 @@ protected:
 };
 
 THolder<NActors::IActor> CreateOwnersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TOwnersScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TOwnersScan>(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
 }
 
 }

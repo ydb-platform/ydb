@@ -10,7 +10,7 @@
 #include <shared_mutex>
 #include <thread>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 template<typename T>
 class TContextOwner;

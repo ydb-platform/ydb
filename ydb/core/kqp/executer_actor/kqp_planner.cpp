@@ -221,7 +221,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(TasksGraph, task, /* serializeAsyncIoSettings = */ true);
+        NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(
+            TasksGraph, task, /* serializeAsyncIoSettings = */ true);
         if (ArrayBufferMinFillPercentage) {
             serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
         }
@@ -272,6 +273,10 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         if (UserRequestContext->PoolConfig->ResourceWeight >= 0) {
             request.SetResourceWeight(UserRequestContext->PoolConfig->ResourceWeight);
         }
+    }
+
+    if (UserToken) {
+        request.SetUserToken(UserToken->SerializeAsString());
     }
 
     return result;
@@ -505,9 +510,10 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .WithSpilling = WithSpilling,
         .StatsMode = GetDqStatsMode(StatsMode),
         .Deadline = Deadline,
-        .ShareMailbox = (computeTasksSize <= 1) || NeedToRunLocally(task),
+        .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
-        .BlockTrackingMode = BlockTrackingMode
+        .BlockTrackingMode = BlockTrackingMode,
+        .UserToken = UserToken
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {

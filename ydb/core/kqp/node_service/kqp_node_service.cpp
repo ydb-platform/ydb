@@ -257,7 +257,7 @@ private:
                 }
             }
 
-            auto result = CaFactory_->CreateKqpComputeActor({
+            NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = request.Executer,
                 .TxId = txId,
                 .LockTxId = lockTxId,
@@ -281,7 +281,12 @@ private:
                 .State = State_,
                 .SchedulingOptions = std::move(schedulingTaskOptions),
                 // TODO: block tracking mode is not set!
-            });
+            };
+            if (msg.HasUserToken() && msg.GetUserToken()) {
+                createArgs.UserToken.Reset(MakeIntrusive<NACLib::TUserToken>(msg.GetUserToken()));
+            }
+
+            auto result = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
                 ReplyError(txId, request.Executer, msg, rmResult->GetStatus(), rmResult->GetFailReason());

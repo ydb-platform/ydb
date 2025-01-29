@@ -164,4 +164,12 @@
   $ydb = new Ydb($config);
   ```
 
+- Rust
+
+  ```rust
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+        .with_credentials(AccessTokenCredentials::from("..."))
+        .client()?
+  ```
+
 {% endlist %}

@@ -1,33 +1,55 @@
 # Установка {{ ydb-short-name }} DSTool
 
-Чтобы установить и настроить {{ ydb-short-name }} DSTool:
+<!-- markdownlint-disable blanks-around-fences -->
 
-1. Установите Python-пакет `ydb-dstool`:
+{% list tabs %}
 
-    ```bash
-    pip install ydb-dstool
-    ```
+- Linux
 
-1. Настройте окружение:
+     {% include  [unix_install](./_includes/unix_install.md) %}
 
-    ```bash
-    export PATH=${PATH}:${HOME}/.local/bin
-    ```
+- macOS
 
-1. Проверьте работу, выполнив команду вывода информации о кластере:
+    {% include  [unix_install](./_includes/unix_install.md) %}
 
-    ```bash
-    ydb-dstool -e <bs_endpoint> cluster list
-    ```
+- Windows
 
-    * `bs_endpoint` — URI интерфейса управления распределенным хранилищем кластера {{ ydb-short-name }}. Интерфейс доступен на любом узле кластера по протоколу HTTP на порте 8765 по умолчанию. Пример URI: `http://localhost:8765`.
+    Чтобы установить {{ ydb-short-name }} DSTool:
 
-    Результат:
+    1. Выполните команду:
 
-    ```text
-    ┌───────┬───────┬───────┬────────┬────────┬───────┬────────┐
-    │ Hosts │ Nodes │ Pools │ Groups │ VDisks │ Boxes │ PDisks │
-    ├───────┼───────┼───────┼────────┼────────┼───────┼────────┤
-    │ 8     │ 16    │ 1     │ 5      │ 40     │ 1     │ 32     │
-    └───────┴───────┴───────┴────────┴────────┴───────┴────────┘
-    ```
+        - **PowerShell**:
+
+            ```powershell
+            iex (New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows')
+            ```
+
+        - **CMD**:
+
+            ```cmd
+            @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows'))"
+            ```
+
+    1. Укажите, нужно ли добавить путь к `ydb-dstool` в переменную окружения `PATH`:
+
+        ```text
+        Add ydb-dstool installation dir to your PATH? [Y/n]
+        ```
+
+    1. Чтобы обновить переменные окружения, перезапустите командную оболочку.
+
+        {% note info %}
+
+        {{ ydb-short-name }} DSTool использует символы Юникода в выводе некоторых команд. При некорректном отображении таких символов в консоли Windows, переключите кодировку на UTF-8:
+
+        ```cmd
+        chcp 65001
+        ```
+
+        {% endnote %}
+
+    1. Проверьте работу, выполнив команду вывода информации о кластере:
+
+        {% include  [test step](./_includes/test.md) %}
+
+{% endlist %}

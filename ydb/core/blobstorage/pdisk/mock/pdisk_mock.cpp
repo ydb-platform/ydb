@@ -525,7 +525,7 @@ public:
             auto& msg = std::get<1>(item);
             NPDisk::TEvLogResult *res = nullptr;
             auto addRes = [&](NKikimrProto::EReplyStatus status, const TString& errorReason = TString()) {
-                auto p = std::make_unique<NPDisk::TEvLogResult>(status, GetStatusFlags(), errorReason);
+                auto p = std::make_unique<NPDisk::TEvLogResult>(status, GetStatusFlags(), errorReason, 0);
                 res = p.get();
                 results.emplace_back(new IEventHandle(recipient, SelfId(), p.release()));
             };
@@ -896,14 +896,14 @@ public:
 
     void ErrorHandle(NPDisk::TEvLog::TPtr &ev) {
         const NPDisk::TEvLog &evLog = *ev->Get();
-        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason(), 0));
         result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         Send(ev->Sender, result.Release());
     }
 
     void ErrorHandle(NPDisk::TEvMultiLog::TPtr &ev) {
         const NPDisk::TEvMultiLog &evMultiLog = *ev->Get();
-        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason(), 0));
         for (auto &[log, _] : evMultiLog.Logs) {
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
         }

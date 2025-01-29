@@ -1709,7 +1709,7 @@ TFuture<std::vector<TColumnarStatistics>> TClient::GetColumnarStatistics(
     auto req = proxy.GetColumnarStatistics();
     SetTimeoutOptions(*req, options);
 
-    for (const auto& subPath: path) {
+    for (const auto& subPath : path) {
         req->add_paths(ConvertToYsonString(subPath).ToString());
     }
 
@@ -2234,6 +2234,13 @@ TFuture<TRequestRestartResult> TClient::RequestRestart(
     }));
 }
 
+TFuture<TCollectCoverageResult> TClient::CollectCoverage(
+    const std::string& /*address*/,
+    const NApi::TCollectCoverageOptions& /*options*/)
+{
+    ThrowUnimplemented("CollectCoverage");
+}
+
 TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
     NQueryTrackerClient::EQueryEngine engine,
     const TString& query,
@@ -2318,6 +2325,7 @@ TFuture<TQueryResult> TClient::GetQueryResult(
             .Schema = rsp->has_schema() ? FromProto<NTableClient::TTableSchemaPtr>(rsp->schema()) : nullptr,
             .DataStatistics = FromProto<NChunkClient::NProto::TDataStatistics>(rsp->data_statistics()),
             .IsTruncated = rsp->is_truncated(),
+            .FullResult = rsp->has_full_result() ? std::make_optional(TYsonString(rsp->full_result())) : std::nullopt,
         };
     }));
 }

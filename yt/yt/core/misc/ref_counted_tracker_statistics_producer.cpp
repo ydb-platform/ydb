@@ -71,7 +71,7 @@ private:
 
     const TYsonProducer Producer_;
 
-    static constexpr auto CachedStatisticsTtl = TDuration::Seconds(10);
+    static constexpr auto CachedStatisticsTtl = TDuration::Seconds(5);
 
     NThreading::TSpinLock CachedStatisticsLock_;
     TIntrusivePtr<TRefCountedTrackerStatistics> CachedStatistics_;
@@ -94,7 +94,9 @@ private:
         {
             auto guard = Guard(CachedStatisticsLock_);
             if (!CachedStatistics_ || now > CachedStatisticsUpdateTime_ + CachedStatisticsTtl) {
-                CachedStatistics_ = std::move(statistics);
+                // Avoid destruction under spinlock.
+                std::swap(CachedStatistics_, statistics);
+                CachedStatisticsUpdateTime_ = now;
             }
             return CachedStatistics_;
         }

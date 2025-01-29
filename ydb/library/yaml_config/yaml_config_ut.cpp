@@ -1738,6 +1738,36 @@ obj: {value: 2} # comment2
             UNIT_ASSERT_VALUES_EQUAL(res, exp);
         }
 
+        {
+            TString str = R"(
+---
+metadata:
+  kind: MainConfig
+  version: 0
+  cluster: "test"
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: "test"
+  version: 1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
         metadata.Cluster = "";
 
         {

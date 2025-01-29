@@ -169,7 +169,7 @@ public:
     template <typename TIterator>
     TStatus Scan(TIterator& it, std::optional<TString> planFileName = std::nullopt) {
 
-        TProgressIndication progressIndication(true);
+        TProgressIndication progressIndication;
         TMaybe<NQuery::TExecStats> execStats;
 
         TString currentPlanFileNameStats;
@@ -222,11 +222,10 @@ public:
                     const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
                     for (const auto& queryPhase : protoStats.query_phases()) {
                         for (const auto& tableAccessStats : queryPhase.table_access()) {
-                            progressIndication.UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes(),
-                                tableAccessStats.updates().rows(), tableAccessStats.updates().bytes(),
-                                tableAccessStats.deletes().rows(), tableAccessStats.deletes().bytes()});
+                            progressIndication.UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes()});
                         }
                     }
+                    progressIndication.SetDurationUs(protoStats.total_duration_us());
 
                     progressIndication.Render();
                 }

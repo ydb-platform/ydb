@@ -20,15 +20,15 @@
 Для этого в своей [консоли Yandex Cloud](https://console.yandex.cloud):
 
 1. Создайте [базу данных YDB](https://yandex.cloud/ru/docs/ydb/quickstart), если у вас ее еще нет.
-2. Создайте [очередь Yandex Data Streams](https://yandex.cloud/ru/docs/data-streams/quickstart).
-3. Создайте [сервисный аккаунт](https://yandex.cloud/ru/docs/iam/operations/sa/create), если у вас его еще нет.
-4. Добавьте этому сервисному аккаунту следующие роли:
+1. Создайте [очередь Yandex Data Streams](https://yandex.cloud/ru/docs/data-streams/quickstart).
+1. Создайте [сервисный аккаунт](https://yandex.cloud/ru/docs/iam/operations/sa/create), если у вас его еще нет.
+1. Добавьте этому сервисному аккаунту следующие роли:
 
     - ydb.viewer (для чтения данных из потока);
     - ydb.editor (для записи данных в поток);
     - ydb.kafkaApi.client (для доступа к потоку данных по Kafka API).
 
-4. Создайте [API ключ](https://yandex.cloud/ru/docs/iam/operations/sa/create-access-key) для этого сервисного аккаунта.
+1. Создайте [API ключ](https://yandex.cloud/ru/docs/iam/operations/sa/create-access-key) для этого сервисного аккаунта.
 
    - В поле **Описание** введите описание ключа.
    - В поле **Область действия** выберите `yc.ydb.topics.manage`.

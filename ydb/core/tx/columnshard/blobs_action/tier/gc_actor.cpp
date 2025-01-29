@@ -4,10 +4,49 @@
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjectResponse::TPtr& ev) {
+    AFL_VERIFY(ev->Get()->Key);
+    const TString& key = *ev->Get()->Key;
+
     if (!ev->Get()->IsSuccess()) {
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "s3_error")("storage_id",
-            GCTask->GetStorageId())("message", ev->Get()->GetError().GetMessage())("exception", ev->Get()->GetError().GetExceptionName());
+        const auto& error = ev->Get()->GetError();
+
+        bool isRemoved = false;
+        switch (error.GetErrorType()) {
+            case Aws::S3::S3Errors::NO_SUCH_BUCKET:
+            case Aws::S3::S3Errors::NO_SUCH_KEY:
+                isRemoved = true;
+                break;
+            default:
+                break;
+        }
+
+        if (isRemoved) {
+            // Do nothing
+        } else if (error.ShouldRetry()) {
+            // TODO: add backoff, don't pass away immediately ever
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "retriable_error")(
+                "exception", error.GetExceptionName())("message", error.GetMessage())("key", key);
+            {
+                ui64& retryCounter = RetryCountersByKey.emplace(key, 0).first->second;
+                if (++retryCounter > 10) {
+                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "exceeded_retry_limit")(
+                        "exception", error.GetExceptionName())("message", error.GetMessage())("key", key);
+                    Abort();
+                    PassAway();
+                    return;
+                }
+            }
+            StartDeletingObject(*ev->Get()->Key);
+            return;
+        } else {
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "error")(
+                "exception", error.GetExceptionName())("message", error.GetMessage())("key", key);
+            Abort();
+            PassAway();
+            return;
+        }
     }
+
     TLogoBlobID logoBlobId;
     TString errorMessage;
     Y_ABORT_UNLESS(ev->Get()->Key);
@@ -25,11 +64,7 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
         BlobIdsToRemove.emplace(i.GetLogoBlobId());
     }
     for (auto&& i : BlobIdsToRemove) {
-        auto awsRequest = Aws::S3::Model::DeleteObjectRequest().WithKey(i.ToString());
-        auto request = std::make_unique<NWrappers::NExternalStorage::TEvDeleteObjectRequest>(awsRequest);
-        auto hRequest = std::make_unique<IEventHandle>(NActors::TActorId(), TActorContext::AsActorContext().SelfID, request.release());
-        TAutoPtr<TEventHandle<NWrappers::NExternalStorage::TEvDeleteObjectRequest>> evPtr((TEventHandle<NWrappers::NExternalStorage::TEvDeleteObjectRequest>*)hRequest.release());
-        GCTask->GetExternalStorageOperator()->Execute(evPtr);
+        StartDeletingObject(i.ToString());
     }
     TBase::Bootstrap(ctx);
     Become(&TGarbageCollectionActor::StateWork);

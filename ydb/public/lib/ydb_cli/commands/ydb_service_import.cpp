@@ -158,7 +158,9 @@ int TCommandImportFromS3::Run(TConfig& config) {
                 auto listResult = s3Client->ListObjectKeys(item.Source, token);
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
-                    if (key.ChopSuffix(NDump::SCHEME_FILE_NAME)) {
+                    if (key.ChopSuffix(NDump::SCHEME_FILE_NAME)
+                        || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
+                    ) {
                         TString destination = item.Destination + key.substr(item.Source.Size());
                         settings.AppendItem({TString(key), std::move(destination)});
                     }

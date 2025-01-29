@@ -37,13 +37,10 @@ protected:
                 memberships.emplace_back(&group, &member);
             }
         }
-        std::sort(memberships.begin(), memberships.end(), [](const auto& left, const auto& right) {
+        SortBatch(memberships, [](const auto& left, const auto& right) {
             return left.first->Sid < right.first->Sid ||
                 left.first->Sid == right.first->Sid && *left.second < *right.second;
         });
-        Y_DEBUG_ABORT_UNLESS(memberships.end() == std::unique(memberships.begin(), memberships.end(), [](const auto& left, const auto& right) {
-            return left.first->Sid == right.first->Sid && *left.second == *right.second;
-        }));
 
         TVector<TCell> cells(::Reserve(Columns.size()));
 

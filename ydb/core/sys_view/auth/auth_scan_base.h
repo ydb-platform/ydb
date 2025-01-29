@@ -1,5 +1,7 @@
 #pragma once
 
+#include "sort_helpers.h"
+
 #include <ydb/core/base/auth.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -33,12 +35,9 @@ class TAuthScanBase : public TScanActorBase<TDerived> {
             for (const auto& child : Entry.ListNodeEntry->Children) {
                 SortedChildren.push_back(&child);
             }
-            std::sort(SortedChildren.begin(), SortedChildren.end(), [](const auto* left, const auto* right) {
+            SortBatch(SortedChildren, [](const auto* left, const auto* right) {
                 return left->Name < right->Name;
             });
-            Y_DEBUG_ABORT_UNLESS(SortedChildren.end() == std::unique(SortedChildren.begin(), SortedChildren.end(), [](const auto* left, const auto* right) {
-                return left->Name == right->Name;
-            }));
         }
     };
 

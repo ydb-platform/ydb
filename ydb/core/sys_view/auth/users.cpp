@@ -1,5 +1,5 @@
-#include "auth_scan_base.h"
 #include "users.h"
+#include "sort_helpers.h"
 
 #include <ydb/core/base/auth.h>
 #include <ydb/core/sys_view/common/events.h>
@@ -101,12 +101,9 @@ protected:
             }
             users.push_back(&user);
         }
-        std::sort(users.begin(), users.end(), [](const auto* left, const auto* right) {
+        SortBatch(users, [](const auto* left, const auto* right) {
             return left->GetName() < right->GetName();
         });
-        Y_DEBUG_ABORT_UNLESS(users.end() == std::unique(users.begin(), users.end(), [](const auto* left, const auto* right) {
-            return left->GetName() == right->GetName();
-        }));
         
         TVector<TCell> cells(::Reserve(Columns.size()));
         

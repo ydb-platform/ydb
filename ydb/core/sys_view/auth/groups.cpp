@@ -35,12 +35,9 @@ protected:
         for (const auto& group : entry.DomainInfo->Groups) {
             groups.push_back(&group);
         }
-        std::sort(groups.begin(), groups.end(), [](const auto* left, const auto* right) {
+        SortBatch(groups, [](const auto* left, const auto* right) {
             return left->Sid < right->Sid;
         });
-        Y_DEBUG_ABORT_UNLESS(groups.end() == std::unique(groups.begin(), groups.end(), [](const auto* left, const auto* right) {
-            return left->Sid == right->Sid;
-        }));
         
         TVector<TCell> cells(::Reserve(Columns.size()));
 

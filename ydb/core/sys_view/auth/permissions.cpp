@@ -51,14 +51,11 @@ protected:
                 permissions.emplace_back(ace.HasSID() ? ace.GetSID() : TString{}, std::move(permission));
             }
         }
-        std::sort(permissions.begin(), permissions.end(), [](const auto& left, const auto& right) {
+        // Note: due to rights inheritance permissions may be duplicated
+        SortBatch(permissions, [](const auto& left, const auto& right) {
             return left.first < right.first ||
                 left.first == right.first && left.second < right.second;
-        });
-        // Note: due to rights inheritance permissions may be duplicated
-        permissions.erase(std::unique(permissions.begin(), permissions.end(), [](const auto& left, const auto& right) {
-            return left.first == right.first && left.second == right.second;
-        }), permissions.end());
+        }, false);
 
         TVector<TCell> cells(::Reserve(Columns.size()));
 

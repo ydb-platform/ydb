@@ -63,6 +63,7 @@ target_proto_messages(yt_proto-yt-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/tablet_client/proto/lock_mask.proto
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/transaction_client/proto/timestamp_service.proto
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/query_client/proto/query_statistics.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/scheduler/proto/spec_patch.proto
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/misc/proto/workload.proto
 )
 
@@ -89,6 +90,7 @@ target_sources(yt_proto-yt-client PRIVATE
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/tablet_client/proto/lock_mask.pb.h
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/transaction_client/proto/timestamp_service.pb.h
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/query_client/proto/query_statistics.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/scheduler/proto/spec_patch.pb.h
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/misc/proto/workload.pb.h
 )
 

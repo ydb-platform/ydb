@@ -133,6 +133,7 @@ target_sources(yt-yt-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/client/object_client/helpers.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/scheduler/operation_id_or_alias.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/scheduler/operation_cache.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/client/scheduler/spec_patch.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/security_client/acl.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/security_client/access_control.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/security_client/public.cpp

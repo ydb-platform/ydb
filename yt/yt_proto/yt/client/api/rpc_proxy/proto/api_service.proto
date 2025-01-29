@@ -14,6 +14,7 @@ import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
 import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
+import "yt_proto/yt/client/scheduler/proto/spec_patch.proto";
 import "yt_proto/yt/client/table_client/proto/versioned_io_options.proto";
 import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
 
@@ -2310,6 +2311,21 @@ message TReqUpdateOperationParameters
 }
 
 message TRspUpdateOperationParameters
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqPatchOperationSpec
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    repeated NYT.NScheduler.NProto.TSpecPatch patches = 3;
+}
+
+message TRspPatchOperationSpec
 {
 }
 

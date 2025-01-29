@@ -304,7 +304,7 @@ private:
         // This requirement will be fixed in the curl library
         // https://github.com/curl/curl/commit/fc76a24c53b08cdf6eec8ba787d8eac64651d56e
         // https://github.com/curl/curl/commit/c87920353883ef9d5aa952e724a8e2589d76add5
-        TUrlBuilder urlBuilder(ctx.ListingRequest.Url);
+        NS3Util::TUrlBuilder urlBuilder(ctx.ListingRequest.Url);
         if (ctx.ContinuationToken.Defined()) {
             urlBuilder.AddUrlParam("continuation-token", *ctx.ContinuationToken);
         }

@@ -108,7 +108,6 @@ void TTxInit::Complete(const TActorContext& ctx) {
     AFL_VERIFY(!Self->IsTxInitFinished);
     Self->IsTxInitFinished = true;
     Self->TrySwitchToWork(ctx);
-    NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*Self);
     if (Self->SubDomainPathId) {
         Self->StartWatchingSubDomainPathId();
     } else {

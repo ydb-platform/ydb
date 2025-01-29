@@ -102,28 +102,10 @@ TDataQueryResult ExecuteDataModificationQuery(TSession& session,
     return result;
 }
 
-NQuery::TExecuteQueryResult ExecuteQuery(NQuery::TSession& session, const TString& script, bool isDDL = false) {
-    const auto result = session.ExecuteQuery(
-        script,
-        isDDL ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx().CommitTx()
-    ).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), "query:\n" << script << "\nissues:\n" << result.GetIssues().ToString());
-    return result;
-}
-
 TDataQueryResult GetTableContent(TSession& session, const char* table,
     const char* keyColumn = "Key"
 ) {
     return ExecuteDataModificationQuery(session, Sprintf(R"(
-            SELECT * FROM `%s` ORDER BY %s;
-        )", table, keyColumn
-    ));
-}
-
-NQuery::TExecuteQueryResult GetTableContent(NQuery::TSession& session, const char* table,
-    const char* keyColumn = "Key"
-) {
-    return ExecuteQuery(session, Sprintf(R"(
             SELECT * FROM `%s` ORDER BY %s;
         )", table, keyColumn
     ));
@@ -140,10 +122,6 @@ void CompareResults(const std::vector<TResultSet>& first, const std::vector<TRes
 }
 
 void CompareResults(const TDataQueryResult& first, const TDataQueryResult& second) {
-    CompareResults(first.GetResultSets(), second.GetResultSets());
-}
-
-void CompareResults(const NQuery::TExecuteQueryResult& first, const NQuery::TExecuteQueryResult& second) {
     CompareResults(first.GetResultSets(), second.GetResultSets());
 }
 
@@ -203,17 +181,6 @@ void CheckBuildIndexOperationsCleared(TDriver& driver) {
     const auto result = operationClient.List<TBuildIndexOperation>().GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), "issues:\n" << result.GetIssues().ToString());
     UNIT_ASSERT_C(result.GetList().empty(), "Build index operations aren't cleared:\n" << result.ToJsonString());
-}
-
-// note: the storage pool kind must be preconfigured in the server
-void CreateDatabase(TTenants& tenants, TStringBuf path, TStringBuf storagePoolKind) {
-    Ydb::Cms::CreateDatabaseRequest request;
-    request.set_path(path);
-    auto& storage = *request.mutable_resources()->add_storage_units();
-    storage.set_unit_kind(storagePoolKind);
-    storage.set_count(1);
-
-    tenants.CreateTenant(std::move(request));
 }
 
 // whole database backup

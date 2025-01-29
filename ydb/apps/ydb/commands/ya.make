@@ -5,7 +5,7 @@ SRCS(
     ydb_version.cpp
 )
 
-IF (DISABLE_UPDATE)
+IF (YDB_CERTIFIED)
     CFLAGS(
         -DDISABLE_UPDATE
     )

@@ -32,7 +32,7 @@ SRCS(
     yt.cpp
 )
 
-IF (DISABLE_UPDATE)
+IF (YDB_CERTIFIED)
     CFLAGS(
         -DDISABLE_UPDATE
     )

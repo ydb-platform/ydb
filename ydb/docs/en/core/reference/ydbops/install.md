@@ -24,7 +24,7 @@ Currently, only building from source is available as an installation option. The
 
     The `ydbops` executable will be available in the repository root folder.
 
-- Automated build. Invoke this command in the the repository root folder:
+- Automated build. Invoke this command in the repository root folder:
 
   ```bash
   make build-in-docker

@@ -238,7 +238,7 @@ public:
 
                     const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
                     progressIndication.UpdateProgress({protoStats.total_read_rows(), protoStats.total_read_bytes(),
-                        0, 0, 0, 0});
+                        0, 0, 0, 0, protoStats.total_duration_us()});
 
                     progressIndication.Render();
                 }

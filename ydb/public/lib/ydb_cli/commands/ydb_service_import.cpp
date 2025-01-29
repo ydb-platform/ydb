@@ -94,7 +94,7 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
-    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder() 
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
             << "Sets bucket URL style. Value "
             << colors.BoldColor() << "true" << colors.OldColor()
             << " means use Virtual-Hosted-Style URL, "
@@ -173,7 +173,9 @@ int TCommandImportFromS3::Run(TConfig& config) {
                 auto listResult = s3Client->ListObjectKeys(item.Source, token);
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
-                    if (key.ChopSuffix(NDump::NFiles::TableScheme().FileName)) {
+                    if (key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
+                        || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
+                    ) {
                         TString destination = item.Destination + key.substr(item.Source.size());
                         settings.AppendItem({TString(key), std::move(destination)});
                     }

@@ -46,7 +46,7 @@ std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared
         return nullptr;
     }
     auto table = TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
-    return table ? ToBatch(table, true) : nullptr;
+    return table ? ToBatch(table) : nullptr;
 }
 
 std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& tableExt) {
@@ -55,13 +55,13 @@ std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>&
     }
     std::shared_ptr<arrow::Table> res = TStatusValidator::GetValid(tableExt->CombineChunks());
     std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(table->num_columns());
-    for (auto& col : table->columns()) {
-        AFL_VERIFY(col->num_chunks() == 1)("size", col->num_chunks())("size_bytes", GetTableDataSize(tableExt))
-            ("schema", tableExt->schema()->ToString())("size_new", GetTableDataSize(table));
+    columns.reserve(tableExt->num_columns());
+    for (auto& col : res->columns()) {
+        AFL_VERIFY(col->num_chunks() == 1)("size", col->num_chunks())("size_bytes", GetTableDataSize(res))("schema", res->schema()->ToString())(
+            "size_new", GetTableDataSize(res));
         columns.push_back(col->chunk(0));
     }
-    return arrow::RecordBatch::Make(table->schema(), table->num_rows(), columns);
+    return arrow::RecordBatch::Make(res->schema(), res->num_rows(), columns);
 }
 
 // Check if the permutation doesn't reorder anything

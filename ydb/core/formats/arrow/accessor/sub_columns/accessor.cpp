@@ -15,7 +15,7 @@ std::vector<TChunkedArraySerialized> TSubColumnsArray::DoSplitBySizes(
     const TColumnLoader& loader, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
     std::vector<TChunkedArraySerialized> result;
     auto table = Records->BuildTableVerified();
-    auto rb = NArrow::ToBatch(table, true);
+    auto rb = NArrow::ToBatch(table);
     AFL_VERIFY(GetRecordsCount());
 
     ui32 idxCurrent = 0;
@@ -93,7 +93,7 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     *proto.MutableSchema()->MutableDescription() = NArrow::SerializeSchema(*Schema);
     AFL_VERIFY((ui32)Schema->num_fields() == Records->num_columns());
     for (auto&& i : Schema->fields()) {
-        auto rb = NArrow::ToBatch(Records->BuildTableVerified(TGeneralContainer::TTableConstructionContext({ i->name() })), true);
+        auto rb = NArrow::ToBatch(Records->BuildTableVerified(TGeneralContainer::TTableConstructionContext({ i->name() })));
         *proto.AddColumns()->MutableDescription() = externalInfo.GetDefaultSerializer()->SerializePayload(rb);
     }
     return proto.SerializeAsString();

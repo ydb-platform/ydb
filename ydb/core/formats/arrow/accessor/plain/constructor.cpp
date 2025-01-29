@@ -47,7 +47,7 @@ TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& 
     } else {
         auto chunked = columnData->GetChunkedArray();
         auto table = arrow::Table::Make(schema, { chunked }, columnData->GetRecordsCount());
-        rb = NArrow::ToBatch(table, chunked->num_chunks() > 1);
+        rb = NArrow::ToBatch(table);
     }
     return externalInfo.GetDefaultSerializer()->SerializePayload(rb);
 }
@@ -57,7 +57,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
     auto chunked = originalArray->GetChunkedArray();
     auto table = arrow::Table::Make(schema, { chunked }, originalArray->GetRecordsCount());
-    return std::make_shared<TTrivialArray>(NArrow::ToBatch(table, chunked->num_chunks() > 1)->column(0));
+    return std::make_shared<TTrivialArray>(NArrow::ToBatch(table)->column(0));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NPlain

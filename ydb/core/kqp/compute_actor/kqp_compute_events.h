@@ -173,7 +173,7 @@ private:
                     Y_DEBUG_ABORT_UNLESS(ArrowBatch != nullptr);
                     auto* protoArrowBatch = Remote->Record.MutableArrowBatch();
                     protoArrowBatch->SetSchema(NArrow::SerializeSchema(*ArrowBatch->schema()));
-                    protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(NArrow::ToBatch(ArrowBatch, true)));
+                    protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(NArrow::ToBatch(ArrowBatch)));
                     break;
                 }
             }

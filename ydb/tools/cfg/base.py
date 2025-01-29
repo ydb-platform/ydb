@@ -285,7 +285,7 @@ class ClusterDetailsProvider(object):
         if host_info_provider is not None:
             self._host_info_provider = host_info_provider
         else:
-            self._host_info_provider = walle.NopHostsInformationProvider
+            self._host_info_provider = walle.NopHostsInformationProvider()
 
         self.__translated_storage_pools_deprecated = None
         self.__translated_hosts = None

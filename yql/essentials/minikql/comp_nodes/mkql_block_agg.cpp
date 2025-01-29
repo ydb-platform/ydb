@@ -1197,6 +1197,7 @@ public:
     typename TFixedMapImpl::const_iterator SpillingHashFixedMapIt_;
     size_t SpillingOutputBlockSize_ = 0;
     std::optional<NThreading::TFuture<ISpiller::TKey>> SpillingOperation_ = std::nullopt;
+    std::optional<NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>> LoadingOperation_ = std::nullopt;
     bool IsExtractingFinished = false;
     std::vector<ISpiller::TKey> SpillingKeys_;
     bool IteratorsInitialized = false;
@@ -1219,6 +1220,7 @@ public:
         , Builders_(keys.size())
         , Arena_(TlsAllocState)
     {
+        std::cerr << "Keys.size(): " << Keys_.size() << std::endl;
         Pointer_ = Values_.data();
         for (size_t i = 0; i < Keys_.size(); ++i) {
             auto itemType = AS_TYPE(TBlockType, Keys_[i].Type)->GetItemType();
@@ -1378,13 +1380,147 @@ public:
             break;
         }
         return !SpillingOperation_.has_value();
-
     }
 
     bool LoadEverything() {
+        std::cerr << "Loading everything" << std::endl;
+        if (LoadingOperation_.has_value() && !LoadingOperation_->HasValue()) return false;
 
-        return true;
+        if (LoadingOperation_.has_value()) {
+            SpillingKeys_.push_back(SpillingOperation_->ExtractValue());
+            LoadingOperation_ = std::nullopt;
+        }
+        if (!SpillingKeys_.empty()) {
+            LoadingOperation_ = Spiller_->Get(SpillingKeys_.back());
+            SpillingKeys_.pop_back();
+        }
 
+        return !LoadingOperation_.has_value();
+
+    }
+
+    void SpillingProcessInput() {
+        ++BatchNum_;
+        const auto batchLength = 1;
+        if (!batchLength) {
+            return;
+        }
+
+
+
+        HasValues_ = true;
+
+        std::array<TOutputBuffer, PrefetchBatchSize> out;
+        for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
+            out[i].Resize(sizeof(TKey));
+        }
+
+        std::array<TRobinHoodBatchRequestItem<TKey>, PrefetchBatchSize> insertBatch;
+        std::array<ui64, PrefetchBatchSize> insertBatchRows;
+        std::array<char*, PrefetchBatchSize> insertBatchPayloads;
+        std::array<bool, PrefetchBatchSize> insertBatchIsNew;
+        ui32 insertBatchLen = 0;
+
+        const auto processInsertBatch = [&]() {
+            for (ui32 i = 0; i < insertBatchLen; ++i) {
+                auto& r = insertBatch[i];
+                TStringBuf str = out[i].Finish();
+                TKey key = MakeKey<TKey>(str, KeyLength_);
+                r.ConstructKey(key);
+            }
+
+            if constexpr (UseSet) {
+                HashSet_->BatchInsert({insertBatch.data(), insertBatchLen},[&](size_t index, typename THashedWrapperBaseState::TSetImpl::iterator iter, bool isNew) {
+                    Y_UNUSED(index);
+                    if (isNew) {
+                        if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                            MoveKeyToArena(HashSet_->GetKey(iter), Arena_, KeyLength_);
+                        }
+                    }
+                });
+            } else {
+                using THashTable = std::conditional_t<InlineAggState, typename THashedWrapperBaseState::TDynMapImpl, typename THashedWrapperBaseState::TFixedMapImpl>;
+                THashTable* hash;
+                if constexpr (!InlineAggState) {
+                    hash = HashFixedMap_.get();
+                } else {
+                    hash = HashMap_.get();
+                }
+
+                hash->BatchInsert({insertBatch.data(), insertBatchLen}, [&](size_t index, typename THashTable::iterator iter, bool isNew) {
+                    if (isNew) {
+                        if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                            MoveKeyToArena(hash->GetKey(iter), Arena_, KeyLength_);
+                        }
+                    }
+
+                    if constexpr (UseArena) {
+                        // prefetch payloads only
+                        auto payload = hash->GetPayload(iter);
+                        char* ptr;
+                        if (isNew) {
+                            ptr = (char*)Arena_.Alloc(TotalStateSize_);
+                            *(char**)payload = ptr;
+                        } else {
+                            ptr = *(char**)payload;
+                        }
+
+                        insertBatchIsNew[index] = isNew;
+                        insertBatchPayloads[index] = ptr;
+                        NYql::PrefetchForWrite(ptr);
+                    } else {
+                        // process insert
+                        auto payload = (char*)hash->GetPayload(iter);
+                        auto row = insertBatchRows[index];
+                        // ui32 streamIndex = 0;
+                        if constexpr (Many) {
+                            MKQL_ENSURE(false, "wrong");
+                            // streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
+                        }
+
+                        SpillingInsert(row, payload, isNew);
+                    }
+                });
+
+                if constexpr (UseArena) {
+                    for (ui32 i = 0; i < insertBatchLen; ++i) {
+                        auto row = insertBatchRows[i];
+                        ui32 streamIndex = 0;
+                        if constexpr (Many) {
+                            MKQL_ENSURE(false, "wrong");
+                            // streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
+                        }
+
+                        bool isNew = insertBatchIsNew[i];
+                        char* payload = insertBatchPayloads[i];
+                        SpilingInsert(row, payload, isNew);
+                    }
+                }
+            }
+        };
+
+        for (ui64 row = 0; row < batchLength; ++row) {
+
+            // encode key
+            out[insertBatchLen].Rewind();
+            for (ui32 i = 0; i < keysDatum.size(); ++i) {
+                if (keysDatum[i].is_scalar()) {
+                    // TODO: more efficient code when grouping by scalar
+                    Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), out[insertBatchLen]);
+                } else {
+                    Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
+                }
+            }
+
+            insertBatchRows[insertBatchLen] = row;
+            ++insertBatchLen;
+            if (insertBatchLen == PrefetchBatchSize) {
+                processInsertBatch();
+                insertBatchLen = 0;
+            }
+        }
+
+        processInsertBatch();
     }
 
     void ProcessInput(const THolderFactory& holderFactory) {
@@ -1657,6 +1793,55 @@ private:
 
         Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputBlockSize_)));
         OutputBlockSize_ = 0;
+    }
+
+    void SpillingInsert(ui64 row, char* payload, bool isNew) const {
+        char* ptr = payload;
+
+        if (isNew) {
+            if constexpr (Many) {
+                MKQL_ENSURE(false, "Wrong");
+                // static_assert(Finalize);
+                // MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
+                // memset(ptr, 0, Streams_.size());
+                // ptr[currentStreamIndex] = 1;
+
+                // for (auto i : Streams_[currentStreamIndex]) {
+
+                //     Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                // }
+            } else {
+                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                    Aggs_[i]->DeSerializeState(...);
+
+                    ptr += Aggs_[i]->StateSize;
+                }
+            }
+        } else {
+            if constexpr (Many) {
+                MKQL_ENSURE(false, "Wrong");
+                // static_assert(Finalize);
+                // MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
+
+                // bool isNewStream = !ptr[currentStreamIndex];
+                // ptr[currentStreamIndex] = 1;
+
+                // for (auto i : Streams_[currentStreamIndex]) {
+
+                //     if (isNewStream) {
+                //         Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                //     } else {
+                //         Aggs_[i]->UpdateState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                //     }
+                // }
+            } else {
+                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                    Aggs_[i]->UpdateState(ptr, BatchNum_, Values_.data(), row);
+
+                    ptr += Aggs_[i]->StateSize;
+                }
+            }
+        }
     }
 
     void Insert(ui64 row, char* payload, bool isNew, ui32 currentStreamIndex) const {

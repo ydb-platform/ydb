@@ -131,6 +131,11 @@ void TCommandImportFromS3::Parse(TConfig& config) {
     }
 }
 
+bool IsSupportedObject(TStringBuf& key) {
+    return key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
+        || key.ChopSuffix(NDump::NFiles::CreateView().FileName);
+}
+
 int TCommandImportFromS3::Run(TConfig& config) {
     using namespace NImport;
 
@@ -173,10 +178,14 @@ int TCommandImportFromS3::Run(TConfig& config) {
                 auto listResult = s3Client->ListObjectKeys(item.Source, token);
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
-                    if (key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
-                        || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
-                    ) {
-                        TString destination = item.Destination + key.substr(item.Source.size());
+                    if (IsSupportedObject(key)) {
+                        key.ChopSuffix("/");
+                        TString destination;
+                        if (const auto suffix = key.substr(item.Source.size())) {
+                            destination = item.Destination + suffix;
+                        } else {
+                            destination = NormalizePath(item.Destination);
+                        }
                         settings.AppendItem({TString(key), std::move(destination)});
                     }
                 }

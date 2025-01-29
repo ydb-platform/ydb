@@ -168,3 +168,4 @@ The following command unpauses the topic [autopartitioning](../../../concepts/to
 ALTER TOPIC `my_topic` SET (
     auto_partitioning_strategy = 'scale_up'
 );
+```

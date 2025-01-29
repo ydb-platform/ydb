@@ -261,6 +261,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 19,
+                "ColumnName": "ShredComplete",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 2,
                 "ColumnName": "PDiskID",
                 "ColumnType": "Uint32"
@@ -333,6 +338,7 @@
                     17,
                     18,
                     1,
+                    19,
                     2,
                     3,
                     4,

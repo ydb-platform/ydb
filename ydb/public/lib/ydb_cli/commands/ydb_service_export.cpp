@@ -19,19 +19,25 @@ namespace {
     const char slashC = '/';
     const TStringBuf slash(&slashC, 1);
 
-    bool FilterSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {
+    using TFilterOp = TRecursiveListSettings::TFilterOp;
+
+    bool FilterTables(const NScheme::TSchemeEntry& entry) {
+        return entry.Type == NScheme::ESchemeEntryType::Table;
+    }
+
+    bool FilterAllSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {
         return IsIn({
             NScheme::ESchemeEntryType::Table,
             NScheme::ESchemeEntryType::View,
         }, entry.Type);
     }
 
-    TVector<std::pair<TString, TString>> ExpandItem(NScheme::TSchemeClient& client, TStringBuf srcPath, TStringBuf dstPath) {
+    TVector<std::pair<TString, TString>> ExpandItem(NScheme::TSchemeClient& client, TStringBuf srcPath, TStringBuf dstPath, const TFilterOp& filter) {
         // cut trailing slash
         srcPath.ChopSuffix(slash);
         dstPath.ChopSuffix(slash);
 
-        const auto ret = RecursiveList(client, TString{srcPath}, TRecursiveListSettings().Filter(&FilterSupportedSchemeObjects));
+        const auto ret = RecursiveList(client, TString{srcPath}, TRecursiveListSettings().Filter(filter));
         NStatusHelpers::ThrowOnErrorOrPrintIssues(ret.Status);
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
@@ -47,7 +53,7 @@ namespace {
     }
 
     template <typename TSettings>
-    void ExpandItems(NScheme::TSchemeClient& client, TSettings& settings, const TVector<TRegExMatch>& exclusions) {
+    void ExpandItems(NScheme::TSchemeClient& client, TSettings& settings, const TVector<TRegExMatch>& exclusions, const TFilterOp& filter = FilterTables) {
         auto isExclusion = [&exclusions](const char* str) -> bool {
             for (const auto& pattern : exclusions) {
                 if (pattern.Match(str)) {
@@ -60,7 +66,7 @@ namespace {
 
         auto items(std::move(settings.Item_));
         for (const auto& item : items) {
-            for (const auto& [src, dst] : ExpandItem(client, item.Src, item.Dst)) {
+            for (const auto& [src, dst] : ExpandItem(client, item.Src, item.Dst, filter)) {
                 if (isExclusion(src.c_str())) {
                     continue;
                 }
@@ -348,10 +354,18 @@ int TCommandExportToS3::Run(TConfig& config) {
     const TDriver driver = CreateDriver(config);
 
     TSchemeClient schemeClient(driver);
-    ExpandItems(schemeClient, settings, ExclusionPatterns);
-
     TExportClient client(driver);
-    TExportToS3Response response = client.ExportToS3(std::move(settings)).GetValueSync();
+
+    auto originalItems = settings.Item_;
+    ExpandItems(schemeClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+    TExportToS3Response response = client.ExportToS3(settings).ExtractValueSync();
+    if (response.Status().GetStatus() == EStatus::BAD_REQUEST) {
+        // Retry the export operation limiting the scope to tables only.
+        // This approach ensures compatibility with servers running an older version of YDB.
+        settings.Item_ = std::move(originalItems);
+        ExpandItems(schemeClient, settings, ExclusionPatterns, FilterTables);
+        response = client.ExportToS3(settings).ExtractValueSync();
+    }
     ThrowOnError(response);
     PrintOperation(response, OutputFormat);
 

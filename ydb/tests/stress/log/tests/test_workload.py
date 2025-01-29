@@ -38,6 +38,7 @@ class TestYdbLogWorkload(object):
             "workload", "log", "run", run_type,
             "--seconds", "10",
             "--threads", "10",
+            "--client-timeout", "10000"
         ]
 
     @classmethod
@@ -77,4 +78,8 @@ class TestYdbLogWorkload(object):
             ]
         ]
         for command in commands:
-            yatest.common.execute(command, wait=True)
+            res = yatest.common.execute(command, wait=True)
+            err: str = res.stderr.decode('UTF-8')
+            for line in err.splitlines():
+                strip_line = line.strip()
+                assert not strip_line or strip_line.find('Using access token from YDB_TOKEN env variable') >= 0, f'Command {command} has errors: {"\n".join(err.splitlines()[:50])}'

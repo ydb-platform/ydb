@@ -94,7 +94,7 @@ SELECT
     message,
     COUNT(*) as count
 FROM `{table}`
-GROUP BY request_id, DateTime::GetMinute(timestamp) AS m, message
+GROUP BY request_id, CAST(CAST(timestamp AS Uint64) / 60000000 * 60000000 AS DateTime) AS m, message
 ORDER BY count DESC
 LIMIT 10;
 -- Q19: Поиск по конкретному request_id
@@ -343,7 +343,7 @@ SELECT
     COUNT(*) AS views
 FROM `{table}`
 WHERE service_name = 'service1'
-    AND timestamp BETWEEN DateTime::FromSeconds(1372636800) AND DateTime::FromSeconds(1375315199)
+    AND timestamp BETWEEN (CurrentUtcTimestamp() - Interval("P7D")) AND CurrentUtcTimestamp()
     AND CAST(JSON_VALUE(metadata, "$.dont_count") AS Int32) = 0
     AND CAST(JSON_VALUE(metadata, "$.is_refresh") AS Int32) = 0
     AND JSON_VALUE(metadata, "$.url") <> ''
@@ -356,7 +356,7 @@ SELECT
     COUNT(*) AS views
 FROM `{table}`
 WHERE service_name = 'service1'
-    AND timestamp BETWEEN DateTime::FromSeconds(1372636800) AND DateTime::FromSeconds(1375315199)
+    AND timestamp BETWEEN (CurrentUtcTimestamp() - Interval("P7D")) AND CurrentUtcTimestamp()
     AND CAST(JSON_VALUE(metadata, "$.dont_count") AS Int32) = 0
     AND CAST(JSON_VALUE(metadata, "$.is_refresh") AS Int32) = 0
     AND JSON_VALUE(metadata, "$.title") <> ''
@@ -369,7 +369,7 @@ SELECT
     COUNT(*) AS views
 FROM `{table}`
 WHERE service_name = 'service1'
-    AND timestamp BETWEEN DateTime::FromSeconds(1372636800) AND DateTime::FromSeconds(1375315199)
+    AND timestamp BETWEEN (CurrentUtcTimestamp() - Interval("P7D")) AND CurrentUtcTimestamp()
     AND CAST(JSON_VALUE(metadata, "$.is_refresh") AS Int32) = 0
     AND CAST(JSON_VALUE(metadata, "$.is_link") AS Int32) <> 0
     AND CAST(JSON_VALUE(metadata, "$.is_download") AS Int32) = 0
@@ -387,7 +387,7 @@ SELECT
     COUNT(*) AS views
 FROM `{table}`
 WHERE service_name = 'service1'
-    AND timestamp BETWEEN DateTime::FromSeconds(1372636800) AND DateTime::FromSeconds(1375315199)
+    AND timestamp BETWEEN (CurrentUtcTimestamp() - Interval("P7D")) AND CurrentUtcTimestamp()
     AND CAST(JSON_VALUE(metadata, "$.is_refresh") AS Int32) = 0
 GROUP BY
     JSON_VALUE(metadata, "$.traffic_source_id") AS traffic_source_id,
@@ -410,7 +410,7 @@ SELECT
     COUNT(*) AS views
 FROM `{table}`
 WHERE service_name = 'service1'
-    AND timestamp BETWEEN DateTime::FromSeconds(1372636800) AND DateTime::FromSeconds(1375315199)
+    AND timestamp BETWEEN (CurrentUtcTimestamp() - Interval("P7D")) AND CurrentUtcTimestamp()
     AND CAST(JSON_VALUE(metadata, "$.is_refresh") AS Int32) = 0
     AND JSON_VALUE(metadata, "$.traffic_source_id") IN ('-1', '6')
     AND JSON_VALUE(metadata, "$.referer_hash") = '3594120000172545465'
@@ -427,7 +427,7 @@ SELECT
     COUNT(*) AS views
 FROM `{table}`
 WHERE service_name = 'service1'
-    AND timestamp BETWEEN DateTime::FromSeconds(1372636800) AND DateTime::FromSeconds(1375315199)
+    AND timestamp BETWEEN (CurrentUtcTimestamp() - Interval("P7D")) AND CurrentUtcTimestamp()
     AND CAST(JSON_VALUE(metadata, "$.is_refresh") AS Int32) = 0
     AND CAST(JSON_VALUE(metadata, "$.dont_count") AS Int32) = 0
     AND JSON_VALUE(metadata, "$.url_hash") = '2868770270353813622'
@@ -443,7 +443,7 @@ SELECT
     COUNT(*) AS views
 FROM `{table}`
 WHERE service_name = 'service1'
-    AND timestamp BETWEEN DateTime::FromSeconds(1373760000) AND DateTime::FromSeconds(1373846399)
+    AND timestamp BETWEEN (CurrentUtcTimestamp() - Interval("P7D")) AND CurrentUtcTimestamp()
     AND CAST(JSON_VALUE(metadata, "$.is_refresh") AS Int32) = 0
     AND CAST(JSON_VALUE(metadata, "$.dont_count") AS Int32) = 0
 GROUP BY CAST(CAST(timestamp AS Uint64) / 60000000 * 60000000 AS DateTime) AS M

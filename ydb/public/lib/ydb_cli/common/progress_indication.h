@@ -15,8 +15,9 @@ public:
         ui64 UpdateBytes = 0;
         ui64 DeleteRows = 0;
         ui64 DeleteBytes = 0;
+        ui64 DurationUs = 0;
     };
-    explicit TProgressIndication(bool onlyReadStats = false);
+    explicit TProgressIndication();
 
     ~TProgressIndication();
 
@@ -29,7 +30,6 @@ private:
     TCurrentStats CurrentStats;
     bool Finished = false;
     ui32 RendersCount = 0;
-    bool OnlyReadStats = false;
 };
 
 } // namespace NConsoleClient

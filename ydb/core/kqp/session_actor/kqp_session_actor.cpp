@@ -1482,6 +1482,7 @@ public:
                     stats = QueryState->QueryStats.ToProto();
                     stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
                     ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
+                    stats.SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
                 }
             }
 

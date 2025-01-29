@@ -411,7 +411,6 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
                 TEvCheckpointStorage::TEvCompleteCheckpointRequest(CoordinatorId, checkpointId, 300, type));
 
             MockCompleteCheckpointResponse(checkpointId);
-            MockRunGraph();
         }
 
         void SaveFailed(TCheckpointId checkpointId) {
@@ -423,7 +422,6 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
             ExpectEvent(StorageProxy, 
                TEvCheckpointStorage::TEvAbortCheckpointRequest( CoordinatorId, checkpointId, "Can't save node state"));
             MockAbortCheckpointResponse(checkpointId);
-            MockRunGraph();
         }
 
         void ScheduleCheckpointing() {
@@ -436,6 +434,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
         test.AllSavedAndCommited(test.CheckpointId1);
+        test.MockRunGraph();
     }
 
     Y_UNIT_TEST(ShouldTriggerCheckpointWithSourcesAndWithChannel) {
@@ -443,6 +442,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
         test.AllSavedAndCommited(test.CheckpointId1);
+        test.MockRunGraph();
     }
 
     Y_UNIT_TEST(ShouldAllSnapshots) {
@@ -450,6 +450,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
         test.AllSavedAndCommited(test.CheckpointId1);
+        test.MockRunGraph();
 
         test.ScheduleCheckpointing();
         test.InjectCheckpoint(test.CheckpointId2, test.GraphDescId, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
@@ -461,6 +462,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
         test.AllSavedAndCommited(test.CheckpointId1);
+        test.MockRunGraph();
 
         test.ScheduleCheckpointing();
         test.InjectCheckpoint(test.CheckpointId2, test.GraphDescId, NYql::NDqProto::CHECKPOINT_TYPE_INCREMENT_OR_SNAPSHOT);

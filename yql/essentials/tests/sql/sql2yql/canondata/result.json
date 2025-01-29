@@ -6805,9 +6805,9 @@
     ],
     "test_sql2yql.test[select-values]": [
         {
-            "checksum": "56344757a2a8bf027747880b8e70e81d",
-            "size": 4504,
-            "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_select-values_/sql.yql"
+            "checksum": "3bc46145c872ddd157bede47dcf525a1",
+            "size": 4548,
+            "uri": "https://{canondata_backend}/1903280/03a80e4eaf2d24e0b4fad2e65ee62b19b904eb3c/resource.tar.gz#test_sql2yql.test_select-values_/sql.yql"
         }
     ],
     "test_sql2yql.test[seq_mode-shared_named_expr]": [

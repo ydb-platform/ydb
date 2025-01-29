@@ -338,7 +338,10 @@ protected:
     }
 
     void GetInputTables(TTableList& tableList) const override {
-        Source->GetInputTables(tableList);
+        if (Source) {
+            Source->GetInputTables(tableList);
+        }
+
         ISource::GetInputTables(tableList);
     }
 

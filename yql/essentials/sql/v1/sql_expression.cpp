@@ -1308,7 +1308,22 @@ TNodePtr TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
         return nullptr;
     }
     const bool checkExist = true;
-    return BuildBuiltinFunc(Ctx, Ctx.Pos(), "ListHasItems", {BuildSourceNode(pos, std::move(source), checkExist)});
+    auto select = BuildSourceNode(Ctx.Pos(), source, checkExist);
+    if (Ctx.Settings.EmitReadsForExists) {
+        TTableList tableList;
+        source->GetInputTables(tableList);
+
+        TNodePtr inputTables(BuildInputTables(Ctx.Pos(), tableList, false, Ctx.Scoped));
+        if (!inputTables->Init(Ctx, source.Get())) {
+            return nullptr;
+        }
+
+        auto node = inputTables;
+        node = node->L(node, node->Y("return", select));
+        select = node->Y("block", node->Q(node));
+    }
+
+    return BuildBuiltinFunc(Ctx, Ctx.Pos(), "ListHasItems", {select});
 }
 
 TNodePtr TSqlExpression::CaseRule(const TRule_case_expr& rule) {

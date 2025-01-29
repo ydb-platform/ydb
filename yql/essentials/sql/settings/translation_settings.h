@@ -127,6 +127,7 @@ namespace NSQLTranslation {
         TMaybe<TString> ApplicationName;
         bool PgSortNulls = false;
         NYql::IAutoParamBuilderFactory* AutoParamBuilderFactory = nullptr;
+        bool EmitReadsForExists = false;
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

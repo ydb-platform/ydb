@@ -14,6 +14,7 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/parser/pg_wrapper/interface/optimizer.h>
 
@@ -290,6 +291,36 @@ protected:
         }
     }
 
+   static bool ValidateDqEquiJoinTree(const TCoEquiJoinTuple& joinTuple, EHashJoinMode mode) {
+        if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
+            if (!ValidateDqEquiJoinTree(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), mode)) {
+                return false;
+            }
+        }
+        if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
+            if (!ValidateDqEquiJoinTree(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), mode)) {
+                return false;
+            }
+        }
+        TStringBuf joinType = joinTuple.Type().Value();
+        auto options = joinTuple.Options();
+        auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
+        bool leftAny = linkSettings.LeftHints.contains("any");
+        bool rightAny = linkSettings.RightHints.contains("any");
+        if (linkSettings.JoinAlgo == EJoinAlgoType::MapJoin) {
+            mode = EHashJoinMode::Map;
+        } else if (linkSettings.JoinAlgo == EJoinAlgoType::GraceJoin) {
+            mode = EHashJoinMode::GraceAndSelf;
+        }
+        if (mode == EHashJoinMode::Off || mode == EHashJoinMode::Map) {
+            if ((joinType == "Full" || joinType == "Exclusion") && (leftAny || rightAny)) {
+                // YQL-19497
+                return false;
+            }
+        }
+        return true;
+    }
+
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         auto equiJoin = node.Cast<TCoEquiJoin>();
         bool hasDqConnections = false;
@@ -304,7 +335,17 @@ protected:
             hasDqConnections |= !!list.Maybe<TDqConnection>();
         }
 
-        return hasDqConnections ? DqRewriteEquiJoin(node, Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off), false, ctx, TypesCtx) : node;
+        if (!hasDqConnections) {
+            return node;
+        }
+
+        auto mode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
+        auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
+        if (!ValidateDqEquiJoinTree(joinTuple, mode)) {
+            return node;
+        }
+
+        return DqRewriteEquiJoin(node, Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off), false, ctx, TypesCtx);
     }
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {

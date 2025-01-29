@@ -39,7 +39,7 @@ bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
     return hasIntersection;
 }
 
-TExprNode::TPtr CreateNodeParameter(const TString& name, const TTypeAnnotationNode* colType, TPositionHandle pos,
+TExprNode::TPtr CreateNodeTypeParameter(const TString& name, const TTypeAnnotationNode* colType, TPositionHandle pos,
     TExprContext& ctx) {
     if (colType->GetKind() == ETypeAnnotationKind::Optional) {
       colType = colType->Cast<TOptionalExprType>()->GetItemType();
@@ -49,6 +49,15 @@ TExprNode::TPtr CreateNodeParameter(const TString& name, const TTypeAnnotationNo
         ctx.NewAtom(pos, name),
         ctx.NewCallable(pos, "DataType", {
             ctx.NewAtom(pos, FormatType(colType))
+        })
+    });
+}
+
+TExprNode::TPtr CreateNodeBoolParameter(const TString& name, TPositionHandle pos, TExprContext& ctx) {
+    return ctx.NewCallable(pos, "Parameter", {
+        ctx.NewAtom(pos, name),
+        ctx.NewCallable(pos, "DataType", {
+            ctx.NewAtom(pos, "Bool")
         })
     });
 }
@@ -67,8 +76,8 @@ TCoLambda RewriteBatchFilter(const TCoLambda& node, const TKikimrTableDescriptio
 
     for (size_t i = 0; i < primaryColumns.size(); ++i) {
         auto colType = tableDesc.GetColumnType(primaryColumns[i]);
-        beginParamsList.push_back(CreateNodeParameter("_kqp_batch_begin_" + ToString(i + 1), colType, pos, ctx));
-        endParamsList.push_back(CreateNodeParameter("_kqp_batch_end_" + ToString(i + 1), colType, pos, ctx));
+        beginParamsList.push_back(CreateNodeTypeParameter("_kqp_batch_begin_" + ToString(i + 1), colType, pos, ctx));
+        endParamsList.push_back(CreateNodeTypeParameter("_kqp_batch_end_" + ToString(i + 1), colType, pos, ctx));
 
         primaryMembersList.push_back(ctx.NewCallable(pos, "Member", {
             row,
@@ -87,22 +96,40 @@ TCoLambda RewriteBatchFilter(const TCoLambda& node, const TKikimrTableDescriptio
     }
 
     TExprNode::TPtr newFilter = ctx.ChangeChild(*filter, 0, ctx.NewCallable(pos, "And", {
-        ctx.NewCallable(pos, "And", {
-            ctx.NewCallable(pos, "Or", {
-                ctx.NewCallable(pos, "Parameter", {
-                    ctx.NewAtom(pos, "_kqp_batch_is_first_query"),
-                    ctx.NewCallable(pos, "DataType", {
-                        ctx.NewAtom(pos, "Bool")
+        ctx.NewCallable(pos, "Or", {
+            ctx.NewCallable(pos, "And", {
+                CreateNodeBoolParameter("_kqp_batch_is_inclusive", pos, ctx),
+                ctx.NewCallable(pos, "And", {
+                    ctx.NewCallable(pos, "Or", {
+                        CreateNodeBoolParameter("_kqp_batch_is_first_query", pos, ctx),
+                        ctx.NewCallable(pos, ">", {
+                            primaryNodeMember,
+                            beginNodeParams
+                        })
+                    }),
+                    ctx.NewCallable(pos, "<=", {
+                        primaryNodeMember,
+                        endNodeParams
                     })
-                }),
-                ctx.NewCallable(pos, ">=", {
-                    primaryNodeMember,
-                    beginNodeParams
                 })
             }),
-            ctx.NewCallable(pos, "<", {
-                primaryNodeMember,
-                endNodeParams
+            ctx.NewCallable(pos, "And", {
+                ctx.NewCallable(pos, "Not", {
+                    CreateNodeBoolParameter("_kqp_batch_is_inclusive", pos, ctx)
+                }),
+                ctx.NewCallable(pos, "And", {
+                    ctx.NewCallable(pos, "Or", {
+                        CreateNodeBoolParameter("_kqp_batch_is_first_query", pos, ctx),
+                        ctx.NewCallable(pos, ">=", {
+                            primaryNodeMember,
+                            beginNodeParams
+                        })
+                    }),
+                    ctx.NewCallable(pos, "<", {
+                        primaryNodeMember,
+                        endNodeParams
+                    })
+                })
             })
         }),
         filter->ChildPtr(0)

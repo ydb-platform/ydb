@@ -1248,7 +1248,7 @@ TCheckFunc HasGroup(const TString& group, const TSet<TString> members) {
     return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
         std::optional<TSet<TString>> actualMembers;
         for (const auto& sid : record.GetPathDescription().GetDomainDescription().GetSecurityState().GetSids()) {
-            if (sid.GetName() == group) {
+            if (sid.GetName() == group && sid.GetType() == NLoginProto::ESidType::GROUP) {
                 actualMembers.emplace();
                 for (const auto& member : sid.GetMembers()) {
                     actualMembers->insert(member);
@@ -1257,6 +1257,16 @@ TCheckFunc HasGroup(const TString& group, const TSet<TString> members) {
         }
         UNIT_ASSERT_C(actualMembers.has_value(), "Group " + group + " not found");
         UNIT_ASSERT_VALUES_EQUAL(members, actualMembers.value());
+    };
+}
+
+TCheckFunc HasNoGroup(const TString& group) {
+    return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        for (const auto& sid : record.GetPathDescription().GetDomainDescription().GetSecurityState().GetSids()) {
+            if (sid.GetName() == group && sid.GetType() == NLoginProto::ESidType::GROUP) {
+                UNIT_FAIL("Group " + group + " exists");
+            }
+        }
     };
 }
 

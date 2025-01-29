@@ -36,9 +36,7 @@ namespace NActors {
                         TActorSystem* actorSystem,
                         IExecutorPool* executorPool,
                         TMailboxTable* mailboxTable,
-                        const TString& threadName,
-                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
-                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX);
+                        const TString& threadName);
 
         // shared thread ctor
         TExecutorThread(TWorkerId workerId,
@@ -47,9 +45,7 @@ namespace NActors {
                     IExecutorPool* executorPool,
                     i16 poolCount,
                     const TString& threadName,
-                    ui64 softProcessingDurationTs,
-                    TDuration timePerMailbox,
-                    ui32 eventsPerMailbox);
+                    ui64 softProcessingDurationTs);
 
         virtual ~TExecutorThread();
 
@@ -88,7 +84,7 @@ namespace NActors {
         void SetOverwrittenTimePerMailboxTs(ui64 value);
 
     protected:
-        void ProcessExecutorPool(IExecutorPool *pool);
+        void ProcessExecutorPool();
 
         TProcessingResult Execute(TMailbox* mailbox, bool isTailExecution);
 
@@ -105,7 +101,6 @@ namespace NActors {
 
     protected:
         // Pool-specific
-        IExecutorPool* ExecutorPool;
         TStackVec<TExecutorThreadStats, 8> SharedStats;
         
 
@@ -115,7 +110,7 @@ namespace NActors {
         ui64 CurrentActorScheduledEventsCounter = 0;
 
         // Thread-specific
-        mutable TThreadContext *TlsThreadCtx = nullptr;
+        mutable TThreadContext ThreadCtx;
         mutable TWorkerContext Ctx;
         ui64 RevolvingReadCounter = 0;
         ui64 RevolvingWriteCounter = 0;
@@ -123,8 +118,6 @@ namespace NActors {
         volatile TThreadId ThreadId = UnknownThreadId;
         bool IsSharedThread = false;
 
-        TDuration TimePerMailbox;
-        ui32 EventsPerMailbox;
         ui64 SoftProcessingDurationTs;
 
         const ui32 ActorSystemIndex;

@@ -19,6 +19,17 @@
 #include <pthread.h>
 #endif
 
+#define POOL_ID() \
+    (!TlsThreadContext ? "OUTSIDE" : \
+    (TlsThreadContext->IsShared() ? "Shared[" + ToString(TlsThreadContext->OwnerPoolId()) + "]_" + ToString(TlsThreadContext->PoolId()) : \
+    ("Pool_" + ToString(TlsThreadContext->PoolId()))))
+
+#define WORKER_ID() ("Worker_" + ToString(TlsThreadContext ? TlsThreadContext->WorkerId() : Max<TWorkerId>()))
+
+#define EXECUTOR_THREAD_DEBUG(level, ...) \
+    ACTORLIB_DEBUG(level, POOL_ID(), " ", WORKER_ID(), " ", __func__, ": ", ##__VA_ARGS__)
+
+
 namespace NActors {
 
     namespace {
@@ -40,7 +51,7 @@ namespace NActors {
 
     TString GetCurrentThreadKind() { 
         if (TlsThreadContext) {
-            return TlsThreadContext->WorkerId >= 0 ? "[common]" : "[shared]";
+            return TlsThreadContext->WorkerId() >= 0 ? "[common]" : "[shared]";
         }
         return "[outsider]";
     }
@@ -94,7 +105,8 @@ namespace NActors {
         , WaitingStats(new TWaitingStats<ui64>[cfg.Threads])
         , PoolName(cfg.PoolName)
         , TimePerMailbox(cfg.TimePerMailbox)
-        , EventsPerMailbox(cfg.EventsPerMailbox)
+        , TimePerMailboxTsValue(NHPTimer::GetClockRate() * cfg.TimePerMailbox.SecondsFloat())
+        , EventsPerMailboxValue(cfg.EventsPerMailbox)
         , RealtimePriority(cfg.RealtimePriority)
         , ThreadCount(cfg.Threads)
         , MinFullThreadCount(cfg.MinThreadCount)
@@ -206,25 +218,25 @@ namespace NActors {
     }
 
     TMailbox* TBasicExecutorPool::GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingCounter) {
-        ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", wctx.WorkerId, " TBasicExecutorPool::GetReadyActivationCommon: start");
+        TWorkerId workerId = TlsThreadContext->WorkerId();
+        ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivationCommon: start");
         NHPTimer::STime hpnow = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
 
-        TWorkerId workerId = wctx.WorkerId;
         ACTORLIB_VERIFY(workerId < MaxFullThreadCount && workerId >= 0, "workerId == ", workerId, " MaxFullThreadCount == ", MaxFullThreadCount);
 
         Threads[workerId].UnsetWork();
         if (Harmonizer) {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", wctx.WorkerId, " TBasicExecutorPool::GetReadyActivationCommon: try to harmonize");
+            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivationCommon: try to harmonize");
             LWPROBE(TryToHarmonize, PoolId, PoolName);
             Harmonizer->Harmonize(hpnow);
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", wctx.WorkerId, " TBasicExecutorPool::GetReadyActivationCommon: harmonize done");
+            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivationCommon: harmonize done");
         }
 
         TAtomic semaphoreRaw = AtomicGet(Semaphore);
         TSemaphore semaphore = TSemaphore::GetSemaphore(semaphoreRaw);
         while (!StopFlag.load(std::memory_order_acquire)) {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", wctx.WorkerId, " TBasicExecutorPool::GetReadyActivationCommon: semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
+            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivationCommon: semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
             if (!semaphore.OldSemaphore || workerId >= 0 && semaphore.CurrentSleepThreadCount < 0) {
                 ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, '_', workerId, " TBasicExecutorPool::GetReadyActivationCommon: semaphore.OldSemaphore == 0 or workerId >= 0 && semaphore.CurrentSleepThreadCount < 0");
                 if (!wctx.IsNeededToWaitNextActivation) {
@@ -261,31 +273,31 @@ namespace NActors {
     }
 
     TMailbox* TBasicExecutorPool::GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingCounter) {
-        TWorkerId workerId = wctx.WorkerId;
+        TWorkerId workerId = TlsThreadContext->WorkerId();
         Y_DEBUG_ABORT_UNLESS(workerId < static_cast<i32>(MaxFullThreadCount));
 
         if (workerId >= 0 && LocalQueues[workerId].size()) {
             ui32 activation = LocalQueues[workerId].front();
             LocalQueues[workerId].pop();
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", wctx.WorkerId, " TBasicExecutorPool::GetReadyActivation: local queue: activation found");
+            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivation: local queue: activation found");
             return MailboxTable->Get(activation);
         } else {
-            TlsThreadContext->WriteTurn = 0;
-            TlsThreadContext->LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
+            TlsThreadContext->LocalQueueContext.WriteTurn = 0;
+            TlsThreadContext->LocalQueueContext.LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
         }
-        ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", wctx.WorkerId, " TBasicExecutorPool::GetReadyActivation: local queue done; moving to common");
+        ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivation: local queue done; moving to common");
         return GetReadyActivationCommon(wctx, revolvingCounter);
     }
 
     TMailbox* TBasicExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
+        TWorkerId workerId = TlsThreadContext->WorkerId();
         if constexpr (NFeatures::IsLocalQueues()) {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", wctx.WorkerId, " TBasicExecutorPool::GetReadyActivation: local queue");
+            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivation: local queue");
             return GetReadyActivationLocalQueue(wctx, revolvingCounter);
         } else {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", wctx.WorkerId, " TBasicExecutorPool::GetReadyActivation");
+            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivation");
             return GetReadyActivationCommon(wctx, revolvingCounter);
         }
-        return nullptr;
     }
 
     inline void TBasicExecutorPool::WakeUpLoop(i16 currentThreadCount) {
@@ -304,10 +316,13 @@ namespace NActors {
 
     void TBasicExecutorPool::ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingCounter, TAtomic x) {
         TWorkerId workerId = Max<TWorkerId>();
-        if (TlsThreadContext && TlsThreadContext->Pool == this && TlsThreadContext->WorkerId >= 0) {
-            workerId = TlsThreadContext->WorkerId;
+        if (TlsThreadContext && TlsThreadContext->Pool() == this && TlsThreadContext->WorkerId() >= 0) {
+            workerId = TlsThreadContext->WorkerId();
         }
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
+        if (TlsThreadContext && TlsThreadContext->IsRegister) {
+            EXECUTOR_THREAD_DEBUG(EDebugLevel::Special, " SchedulePool: ", PoolName, " ", PoolId, " hint ", mailbox->Hint);
+        }
         ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, ' ', '_', workerId, " TBasicExecutorPool::ScheduleActivationExCommon: semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
         std::visit([mailbox, revolvingCounter](auto &x) {
             x.Push(mailbox->Hint, revolvingCounter);
@@ -353,9 +368,9 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter) {
-        if (TlsThreadContext && TlsThreadContext->Pool == this && TlsThreadContext->WorkerId >= 0) {
-            if (++TlsThreadContext->WriteTurn < TlsThreadContext->LocalQueueSize) {
-                LocalQueues[TlsThreadContext->WorkerId].push(mailbox->Hint);
+        if (TlsThreadContext && TlsThreadContext->Pool() == this && TlsThreadContext->WorkerId() >= 0) {
+            if (++TlsThreadContext->LocalQueueContext.WriteTurn < TlsThreadContext->LocalQueueContext.LocalQueueSize) {
+                LocalQueues[TlsThreadContext->WorkerId()].push(mailbox->Hint);
                 return;
             }
             if (ActorSystemProfile != EASProfile::Default) {
@@ -363,8 +378,8 @@ namespace NActors {
                 TSemaphore semaphore = TSemaphore::GetSemaphore(x);
                 if constexpr (NFeatures::TLocalQueuesFeatureFlags::UseIfAllOtherThreadsAreSleeping) {
                     if (semaphore.CurrentSleepThreadCount == semaphore.CurrentThreadCount - 1 && semaphore.OldSemaphore == 0) {
-                        if (LocalQueues[TlsThreadContext->WorkerId].empty()) {
-                            LocalQueues[TlsThreadContext->WorkerId].push(mailbox->Hint);
+                        if (LocalQueues[TlsThreadContext->WorkerId()].empty()) {
+                            LocalQueues[TlsThreadContext->WorkerId()].push(mailbox->Hint);
                             return;
                         }
                     }
@@ -372,9 +387,9 @@ namespace NActors {
 
                 if constexpr (NFeatures::TLocalQueuesFeatureFlags::UseOnMicroburst) {
                     if (semaphore.OldSemaphore >= semaphore.CurrentThreadCount) {
-                        if (LocalQueues[TlsThreadContext->WorkerId].empty() && TlsThreadContext->WriteTurn < 1) {
-                            TlsThreadContext->WriteTurn++;
-                            LocalQueues[TlsThreadContext->WorkerId].push(mailbox->Hint);
+                        if (LocalQueues[TlsThreadContext->WorkerId()].empty() && TlsThreadContext->LocalQueueContext.WriteTurn < 1) {
+                            TlsThreadContext->LocalQueueContext.WriteTurn++;
+                            LocalQueues[TlsThreadContext->WorkerId()].push(mailbox->Hint);
                             return;
                         }
                     }
@@ -458,9 +473,7 @@ namespace NActors {
                     actorSystem,
                     this,
                     MailboxTable,
-                    PoolName,
-                    TimePerMailbox,
-                    EventsPerMailbox));
+                    PoolName));
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 
@@ -526,8 +539,8 @@ namespace NActors {
         if (deadline < current)
             deadline = current;
 
-        if (TlsThreadContext->WorkerCtx->SharedExecutor) {
-            TlsThreadContext->WorkerCtx->SharedExecutor->Schedule(deadline, ev, cookie, workerId);
+        if (auto sharedPool = TlsThreadContext->SharedPool()) {
+            sharedPool->Schedule(deadline, ev, cookie, workerId);
         } else {
             ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
         }
@@ -537,8 +550,8 @@ namespace NActors {
         Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
 
         const auto deadline = ActorSystem->Monotonic() + delta;
-        if (TlsThreadContext->WorkerCtx->SharedExecutor) {
-            TlsThreadContext->WorkerCtx->SharedExecutor->Schedule(deadline, ev, cookie, workerId);
+        if (auto sharedPool = TlsThreadContext->SharedPool()) {
+            sharedPool->Schedule(deadline, ev, cookie, workerId);
         } else {
             ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
         }
@@ -640,8 +653,8 @@ namespace NActors {
         }
     }
 
-    void TBasicExecutorPool::Initialize(TWorkerContext& wctx) {
-        TlsThreadContext->WaitingStats = &WaitingStats[wctx.WorkerId];
+    void TBasicExecutorPool::Initialize(TWorkerContext&) {
+        TlsThreadContext->WaitingStats = &WaitingStats[TlsThreadContext->WorkerId()];
     }
 
     void TBasicExecutorPool::SetSpinThresholdCycles(ui32 cycles) {
@@ -713,7 +726,7 @@ namespace NActors {
     }
 
     TMailbox* TBasicExecutorPool::GetReadyActivationShared(TWorkerContext& wctx, ui64 revolvingCounter) {
-        TWorkerId workerId = wctx.WorkerId;
+        TWorkerId workerId = TlsThreadContext->WorkerId();
         NHPTimer::STime hpnow = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
 
@@ -751,6 +764,14 @@ namespace NActors {
 
     void TBasicExecutorPool::SetSharedCpuQuota(float quota) {
         SharedCpuQuota.store(quota, std::memory_order_release);
+    }
+
+    ui64 TBasicExecutorPool::TimePerMailboxTs() const {
+        return TimePerMailboxTsValue;
+    }
+
+    ui32 TBasicExecutorPool::EventsPerMailbox() const {
+        return EventsPerMailboxValue;
     }
 
 }

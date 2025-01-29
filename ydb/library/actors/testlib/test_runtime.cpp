@@ -306,6 +306,18 @@ namespace NActors {
             return Node->MailboxTable->Get(hint);
         }
 
+        TMailboxTable* GetMailboxTable() const override {
+            return Node->MailboxTable.Get();
+        }
+
+        ui64 TimePerMailboxTs() const override {
+            return NHPTimer::GetClockRate() * TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat();
+        }
+
+        ui32 EventsPerMailbox() const override {
+            return TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
+        }
+
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override {
             DoSchedule(deadline, ev, cookie, workerId);
         }
@@ -1952,7 +1964,7 @@ namespace NActors {
                 delete Context->Queue->Pop();
             }
             auto ctx(ActorContext());
-            ctx.ExecutorThread.Send(IEventHandle::Forward(ev, originalSender));
+            ctx.Send(IEventHandle::Forward(ev, originalSender));
             if (!IsSync && Context->Queue->Head()) {
                 SendHead(ctx);
             }
@@ -1961,11 +1973,11 @@ namespace NActors {
     private:
         void SendHead(const TActorContext& ctx) {
             if (!IsSync) {
-                ctx.ExecutorThread.Send(GetForwardedEvent().Release());
+                ctx.Send(GetForwardedEvent().Release());
             } else {
                 while (Context->Queue->Head()) {
                     HasReply = false;
-                    ctx.ExecutorThread.Send(GetForwardedEvent().Release());
+                    ctx.Send(GetForwardedEvent().Release());
                     int count = 100;
                     while (!HasReply && count > 0) {
                         try {

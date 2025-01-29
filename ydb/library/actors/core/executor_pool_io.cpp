@@ -31,7 +31,8 @@ namespace NActors {
     }
 
     TMailbox* TIOExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
-        i16 workerId = wctx.WorkerId;
+        Y_ABORT_UNLESS(TlsThreadContext, "TlsThreadContext is nullptr");
+        i16 workerId = TlsThreadContext->WorkerId();
         Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
         const TAtomic semaphoreRaw = AtomicDecrement(Semaphore);
@@ -41,7 +42,7 @@ namespace NActors {
 
             NHPTimer::STime hpnow = GetCycleCountFast();
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            TlsThreadContext->ElapsingActorActivity.store(SleepActivity, std::memory_order_release);
+            TlsThreadContext->ActivityContext.ElapsingActorActivity.store(SleepActivity, std::memory_order_release);
             wctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
 
             if (threadCtx.WaitingPad.Park())
@@ -49,7 +50,7 @@ namespace NActors {
 
             hpnow = GetCycleCountFast();
             hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
+            TlsThreadContext->ActivityContext.ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
             wctx.AddParkedCycles(hpnow - hpprev);
         }
 
@@ -166,5 +167,13 @@ namespace NActors {
 
     TString TIOExecutorPool::GetName() const {
         return PoolName;
+    }
+
+    ui64 TIOExecutorPool::TimePerMailboxTs() const {
+        return NHPTimer::GetClockRate() * TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat();
+    }
+
+    ui32 TIOExecutorPool::EventsPerMailbox() const {
+        return TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
     }
 }

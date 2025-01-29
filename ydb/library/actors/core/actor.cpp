@@ -5,6 +5,17 @@
 #include "executor_thread.h"
 #include <ydb/library/actors/util/datetime.h>
 
+#define POOL_ID() \
+    (!TlsThreadContext ? "OUTSIDE" : \
+    (TlsThreadContext->IsShared() ? "Shared[" + ToString(TlsThreadContext->OwnerPoolId()) + "]_" + ToString(TlsThreadContext->PoolId()) : \
+    ("Pool_" + ToString(TlsThreadContext->PoolId()))))
+
+#define WORKER_ID() ("Worker_" + ToString(TlsThreadContext ? TlsThreadContext->WorkerId() : Max<TWorkerId>()))
+
+#define EXECUTOR_THREAD_DEBUG(level, ...) \
+    ACTORLIB_DEBUG(level, POOL_ID(), " ", WORKER_ID(), " ", __func__, ": ", ##__VA_ARGS__)
+
+
 namespace NActors {
     Y_POD_THREAD(TThreadContext*) TlsThreadContext(nullptr);
     thread_local TActivationContext *TActivationContextHolder::Value = nullptr;
@@ -176,11 +187,7 @@ namespace NActors {
 
     TActorId IActor::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept {
         TActorId id = TlsActivationContext->ExecutorThread.RegisterActor(actor, mailboxType, poolId, SelfActorId);
-        TWorkerId workerId = Max<TWorkerId>();
-        if (TlsThreadContext) {
-            workerId = TlsThreadContext->WorkerId;
-        }
-        ACTORLIB_DEBUG(EDebugLevel::Special, "Worker_", workerId, " Registered actor ", id, " in pool ", poolId, " with mailbox type ", mailboxType);
+        EXECUTOR_THREAD_DEBUG(EDebugLevel::Special, " Registered actor ", id, " in pool ", poolId, " with mailbox type ", mailboxType, " hint ", id.Hint());
         return id;
     }
 
@@ -256,7 +263,7 @@ namespace NActors {
 
     void IActor::PassAway() {
         auto& cx = *TlsActivationContext;
-        //ACTORLIB_VERIFY(SelfActorId.PoolID() == TlsThreadContext->Pool->PoolId, (i64)SelfActorId.PoolID(), ' ', (i64)TlsThreadContext->Pool->PoolId);
+        //ACTORLIB_VERIFY(SelfActorId.PoolID() == TlsThreadContext->Pool()->PoolId, (i64)SelfActorId.PoolID(), ' ', (i64)TlsThreadContext->Pool()->PoolId);
         cx.ExecutorThread.UnregisterActor(&cx.Mailbox, SelfActorId);
     }
 
@@ -266,7 +273,7 @@ namespace NActors {
 
     void TActorCallbackBehaviour::Receive(IActor* actor, TAutoPtr<IEventHandle>& ev) {
         if (TlsThreadContext) {
-            ACTORLIB_VERIFY(actor->SelfId().PoolID() == TlsThreadContext->Pool->PoolId, "Worker_", TlsThreadContext->WorkerId, " Receive PoolId mismatch: ", (i64)actor->SelfId().PoolID(), " PoolId: ", (i64)TlsThreadContext->Pool->PoolId, " ActorId: ", actor->SelfId().ToString());
+            ACTORLIB_VERIFY(actor->SelfId().PoolID() == TlsThreadContext->Pool()->PoolId, "Worker_", TlsThreadContext->WorkerContext.WorkerId, " Receive ActorId.PoolId: ", (i64)actor->SelfId().PoolID(), " PoolId: ", (i64)TlsThreadContext->PoolId(), " ActorId: ", actor->SelfId().ToString());
         }
         (actor->*StateFunc)(ev);
     }
@@ -279,11 +286,7 @@ namespace NActors {
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
         // fallback to legacy method, do not use it anymore
         if (auto eh = AfterRegister(SelfId(), owner)) {
-            if (TlsThreadContext) {
-                ACTORLIB_DEBUG(EDebugLevel::Special, "Worker_", TlsThreadContext->WorkerId, " PoolId: ", (i64)TlsThreadContext->Pool->PoolId, " Registered actor ", SelfId().ToString(), " expected poolId ", (i64)SelfId().PoolID(), " after register send");
-            } else {
-                ACTORLIB_DEBUG(EDebugLevel::Special, "OUTSIDE, PoolId: ", (i64)SelfId().PoolID(), " Registered actor ", SelfId().ToString(), " after register send");
-            }
+            EXECUTOR_THREAD_DEBUG(EDebugLevel::Special, " Registered actor ", SelfId().ToString(), " expected poolId ", (i64)SelfId().PoolID(), " after register send hint ", SelfId().Hint());
             if (!TlsThreadContext || TlsThreadContext->SendingType == ESendingType::Common) {
                 sys->Send(eh);
             } else {
@@ -330,19 +333,19 @@ namespace NActors {
         }
         if (poolId == Max<ui32>()) {
             TActorId id;
-            ACTORLIB_DEBUG(EDebugLevel::Special, "Worker_", (TlsThreadContext ? ToString(TlsThreadContext->WorkerId) : "OUTSIDE"), " ", (Ctx.SharedExecutor ? "Shared" : ExecutorPool->GetName()), " RegisterActor poolId == Max<ui32>()");
+            EXECUTOR_THREAD_DEBUG(EDebugLevel::Special, " RegisterActor poolId == Max<ui32>()");
             if constexpr (SendingType == ESendingType::Common) {
-                id = Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+                id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
             } else if (!TlsThreadContext) {
-                id = Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+                id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
             } else {
-                ACTORLIB_DEBUG(EDebugLevel::Special, "Worker_", (TlsThreadContext ? ToString(TlsThreadContext->WorkerId) : "OUTSIDE"), " ", (Ctx.SharedExecutor ? "Shared" : ExecutorPool->GetName()), " RegisterActor SpecialSendingType");
+                EXECUTOR_THREAD_DEBUG(EDebugLevel::Special, " RegisterActor SpecialSendingType");
                 ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
-                id = Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+                id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
                 TlsThreadContext->SendingType = previousType;
             }
             if (TlsThreadContext) {
-                ACTORLIB_VERIFY(id.PoolID() == ExecutorPool->PoolId, "Worker_", (TlsThreadContext ? ToString(TlsThreadContext->WorkerId) : "OUTSIDE"), " ", (Ctx.SharedExecutor ? "Shared" : ExecutorPool->GetName()), " RegisterActor SpecialSendingType PoolId mismatch: ", (i64)id.PoolID(), " PoolId: ", (i64)ExecutorPool->PoolId, " ActorId: ", id.ToString());
+                ACTORLIB_VERIFY(id.PoolID() == ThreadCtx.PoolId(), POOL_ID(), " ", WORKER_ID(), (TlsThreadContext && TlsThreadContext->IsShared() ? "Shared" : ThreadCtx.PoolName()), " RegisterActor SpecialSendingType ActorId.PoolId: ", (i64)id.PoolID(), " PoolId: ", ThreadCtx.PoolId(), " ActorId: ", id.ToString(), " hint ", id.Hint());
             }
             return id;
         } else {
@@ -360,23 +363,23 @@ namespace NActors {
             parentId = CurrentRecipient;
         }
         if constexpr (SendingType == ESendingType::Common) {
-            return Ctx.Executor->Register(actor, mailbox, parentId);
+            return ThreadCtx.Pool()->Register(actor, mailbox, parentId);
         } else if (!TlsActivationContext) {
-            return Ctx.Executor->Register(actor, mailbox, parentId);
+            return ThreadCtx.Pool()->Register(actor, mailbox, parentId);
         } else {
             ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
-            TActorId id = Ctx.Executor->Register(actor, mailbox, parentId);
+            TActorId id = ThreadCtx.Pool()->Register(actor, mailbox, parentId);
             TlsThreadContext->SendingType = previousType;
             return id;
         }
     }
 
     TActorId TExecutorThread::RegisterAlias(TMailbox* mailbox, IActor* actor) {
-        return Ctx.Executor->RegisterAlias(mailbox, actor);
+        return ThreadCtx.Pool()->RegisterAlias(mailbox, actor);
     }
 
     void TExecutorThread::UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) {
-        Ctx.Executor->UnregisterAlias(mailbox, actorId);
+        ThreadCtx.Pool()->UnregisterAlias(mailbox, actorId);
     }
 
     template bool TActivationContext::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev);

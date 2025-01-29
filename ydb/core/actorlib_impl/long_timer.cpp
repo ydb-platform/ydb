@@ -1,6 +1,5 @@
 #include "long_timer.h"
 #include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/services/services.pb.h>
@@ -26,13 +25,13 @@ class TLongTimer : public TActor<TLongTimer> {
         const TMonotonic now = ctx.Monotonic();
         if (SignalTime <= now) {
             if (!Cookie.Get() || Cookie.Detach())
-                ctx.ExecutorThread.Send(Ev);
+                ctx.Send(Ev);
             return Die(ctx);
         }
 
         const TDuration delta = SignalTime - now;
         if (delta <= TDuration::Seconds(ThresholdSec)) {
-            ctx.ExecutorThread.Schedule(SignalTime, Ev, Cookie.Release());
+            TActivationContext::Schedule(SignalTime, Ev, Cookie.Release());
             return Die(ctx);
         }
 
@@ -67,7 +66,7 @@ public:
         const TActorId& parentId)
     {
         if (delta.Seconds() < ThresholdSec) { // direct scheduling w/o creating actor
-            ctx.ExecutorThread.Schedule(delta, ev, cookie);
+            ctx.Schedule(delta, ev, cookie);
             return TActorId();
         }
 
@@ -75,7 +74,7 @@ public:
         TMonotonic signalTime = now + delta;
         ui64 semirandomNumber = parentId.LocalId();
         const TActorId timerActorID = ctx.ActorSystem()->Register(new TLongTimer(now, signalTime, ev, cookie), TMailboxType::HTSwap, poolId, semirandomNumber, parentId);
-        ctx.ExecutorThread.Schedule(TDuration::Seconds(ThresholdSec), new IEventHandle(timerActorID, timerActorID, new TEvents::TEvWakeup()));
+        ctx.Schedule(TDuration::Seconds(ThresholdSec), new IEventHandle(timerActorID, timerActorID, new TEvents::TEvWakeup()));
 
         return timerActorID;
     }

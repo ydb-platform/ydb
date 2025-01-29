@@ -85,6 +85,7 @@ SRCS(
     monotonic_provider.h
     worker_context.cpp
     worker_context.h
+    thread_context.cpp
     probes.cpp
     probes.h
     process_stats.cpp

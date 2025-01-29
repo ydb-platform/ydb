@@ -50,7 +50,7 @@ namespace NActors {
 
         NHPTimer::STime hpnow = GetCycleCountFast();
         NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-        ui32 prevActivity = TlsThreadContext->ElapsingActorActivity.exchange(SleepActivity, std::memory_order_acq_rel);
+        ui32 prevActivity = TlsThreadContext->ActivityContext.ElapsingActorActivity.exchange(SleepActivity, std::memory_order_acq_rel);
         TlsThreadContext->WorkerCtx->AddElapsedCycles(prevActivity, hpnow - hpprev);
         do {
             if (WaitingPad.Park()) // interrupted
@@ -60,8 +60,8 @@ namespace NActors {
             TlsThreadContext->WorkerCtx->AddParkedCycles(hpnow - hpprev);
             state = GetState<TWaitState>();
         } while (static_cast<EThreadState>(state) == EThreadState::Sleep && !stopFlag->load(std::memory_order_relaxed));
-        TlsThreadContext->ActivationStartTS.store(hpnow, std::memory_order_release);
-        TlsThreadContext->ElapsingActorActivity.store(TlsThreadContext->ActorSystemIndex, std::memory_order_release);
+        TlsThreadContext->ActivityContext.ActivationStartTS.store(hpnow, std::memory_order_release);
+        TlsThreadContext->ActivityContext.ElapsingActorActivity.store(TlsThreadContext->ActivityContext.ActorSystemIndex, std::memory_order_release);
         static_cast<TDerived*>(this)->AfterWakeUp(state);
         return false;
     }
@@ -122,7 +122,7 @@ namespace NActors {
                         if (threadsStateValue.Notifications == 0 && localNotificationsValue == 0) {
                             SpinLockPause();
                         } else {
-                            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerId, " TSharedExecutorPool::Spin: wake up from notifications; ownerPoolId == ", OwnerPoolId, " notifications == ", threadsStateValue.Notifications, " localNotifications == ", localNotificationsValue);
+                            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerContext.WorkerId, " TSharedExecutorPool::Spin: wake up from notifications; ownerPoolId == ", OwnerPoolId, " notifications == ", threadsStateValue.Notifications, " localNotifications == ", localNotificationsValue);
                             ExchangeState(EThreadState::None);
                             return true;
                         }
@@ -151,11 +151,11 @@ namespace NActors {
         ui64 localNotificationsValue = localNotifications->load(std::memory_order_acquire);
         if (threadsStateValue.Notifications != 0 || localNotificationsValue != 0)
         {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerId, " TSharedExecutorPool::Wait: wake up from notifications; ownerPoolId == ", OwnerPoolId, " notifications == ", threadsStateValue.Notifications, " localNotifications == ", localNotificationsValue);
+            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerContext.WorkerId, " TSharedExecutorPool::Wait: wake up from notifications; ownerPoolId == ", OwnerPoolId, " notifications == ", threadsStateValue.Notifications, " localNotifications == ", localNotificationsValue);
             ExchangeState(EThreadState::None);
             return false;
         } else {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerId, " TSharedExecutorPool::Wait: going to sleep after checking notifications; ownerPoolId == ", OwnerPoolId);
+            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerContext.WorkerId, " TSharedExecutorPool::Wait: going to sleep after checking notifications; ownerPoolId == ", OwnerPoolId);
         }
         return Sleep(stopFlag);
     }

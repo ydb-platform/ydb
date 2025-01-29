@@ -5,14 +5,11 @@
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
-    TWorkerContext::TWorkerContext(TWorkerId workerId)
-        : WorkerId(workerId)
+    TWorkerContext::TWorkerContext()
     {
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TWorkerContext::ctor ", WorkerId);
     }
 
     TWorkerContext::~TWorkerContext() {
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TWorkerContext::dtor ", WorkerId);
     }
 
 }

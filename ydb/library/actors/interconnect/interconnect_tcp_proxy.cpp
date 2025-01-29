@@ -979,7 +979,7 @@ namespace NActors {
     TActorId TInterconnectProxyTCP::GenerateSessionVirtualId() {
         ICPROXY_PROFILED;
 
-        const ui64 localId = TlsActivationContext->ExecutorThread.ActorSystem->AllocateIDSpace(1);
+        const ui64 localId = TActivationContext::ActorSystem()->AllocateIDSpace(1);
         return NActors::TActorId(SelfId().NodeId(), 0, localId, 0);
     }
 

@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         {}
 
         void Bootstrap() {
-            ACTORLIB_VERIFY(TlsThreadContext->Pool->PoolId == PoolId, "PoolId mismatch in bootstrap: expected ", PoolId, " got ", TlsThreadContext->Pool->PoolId, "; self ", this->SelfId());
+            ACTORLIB_VERIFY(TlsThreadContext->Pool()->PoolId == PoolId, "PoolId mismatch in bootstrap: expected ", PoolId, " got ", TlsThreadContext->Pool()->PoolId, "; self ", this->SelfId());
             Become(&TDelayedPassAwayActor::StateFunc);
             if (Delay--) {
                 Schedule(TDuration::MicroSeconds(1), new TEvents::TEvWakeup());
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         }
 
         STFUNC(StateFunc) {
-            ACTORLIB_VERIFY(TlsThreadContext->Pool->PoolId == PoolId, "PoolId mismatch in state func: expected ", PoolId, " got ", TlsThreadContext->Pool->PoolId, "; self ", this->SelfId());
+            ACTORLIB_VERIFY(TlsThreadContext->Pool()->PoolId == PoolId, "PoolId mismatch in state func: expected ", PoolId, " got ", TlsThreadContext->Pool()->PoolId, "; self ", this->SelfId());
             if (Delay--) {
                 Schedule(TDuration::MicroSeconds(1), new TEvents::TEvWakeup());
             } else {
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
 
         void PassAway() override {
             ACTORLIB_DEBUG(EDebugLevel::Test, "TDelayedPassAwayActor::PassAway: ", this->SelfId());
-            ACTORLIB_VERIFY(TlsThreadContext->Pool->PoolId == PoolId, "PoolId mismatch in pass away: expected ", PoolId, " got ", TlsThreadContext->Pool->PoolId, "; self ", this->SelfId());
+            ACTORLIB_VERIFY(TlsThreadContext->Pool()->PoolId == PoolId, "PoolId mismatch in pass away: expected ", PoolId, " got ", TlsThreadContext->Pool()->PoolId, "; self ", this->SelfId());
             TBase::PassAway();
         }
     

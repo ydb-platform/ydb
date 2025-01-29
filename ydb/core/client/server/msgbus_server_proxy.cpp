@@ -173,7 +173,7 @@ void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
     DbOperationsCounters = new TMessageBusDbOpsCounters(AppData(ctx)->Counters);
 
     auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), SchemeCacheCounters);
-    SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
+    SchemeCache = ctx.Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
     PqMetaCache = CreatePersQueueMetaCacheV2Id();
 
     if (Server) {

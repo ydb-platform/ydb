@@ -46,9 +46,7 @@ namespace NActors {
         TActorId RegisterAlias(TMailbox* mailbox, IActor* actor) override;
         void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) override;
         bool Cleanup() override;
-        virtual TMailboxTable* GetMailboxTable() const {
-            return MailboxTable;
-        }
+        TMailboxTable* GetMailboxTable() const override;
     };
 
     class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {

@@ -46,5 +46,8 @@ namespace NActors {
         void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
         void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override;
+
+        ui64 TimePerMailboxTs() const override;
+        ui32 EventsPerMailbox() const override;
     };
 }

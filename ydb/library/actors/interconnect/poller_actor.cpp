@@ -268,7 +268,7 @@ namespace NActors {
         }
 
         void Bootstrap() {
-            PollerThread = std::make_shared<TPollerThread>(TlsActivationContext->ExecutorThread.ActorSystem);
+            PollerThread = std::make_shared<TPollerThread>(TActivationContext::ActorSystem());
             Become(&TPollerActor::StateFunc);
         }
 

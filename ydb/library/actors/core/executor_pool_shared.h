@@ -76,8 +76,6 @@ namespace NActors {
 
         const ui64 DefaultSpinThresholdCycles;
         const TString PoolName;
-        const TDuration TimePerMailbox;
-        const ui32 EventsPerMailbox;
         const ui64 SoftProcessingDurationTs;
 
         char Barrier[64];
@@ -174,6 +172,9 @@ namespace NActors {
         void SpecificScheduleActivation(TMailbox* mailbox) override {
             Y_ABORT("TSharedExecutorPool::SpecificScheduleActivation is not implemented");
         }
+
+        ui64 TimePerMailboxTs() const override;
+        ui32 EventsPerMailbox() const override;
 
         // generic
         TAffinity* Affinity() const override {

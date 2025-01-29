@@ -8,6 +8,7 @@
 #include "lease.h"
 #include "mailbox.h"
 #include "mon_stats.h"
+#include "thread_context.h"
 
 #include <ydb/library/actors/util/cpumask.h>
 #include <ydb/library/actors/util/datetime.h>
@@ -29,15 +30,7 @@ namespace NActors {
     };
     
     struct TWorkerContext {
-        const TWorkerId WorkerId;
-        IExecutorPool* Executor = nullptr;
-        IExecutorPool* SharedExecutor = nullptr;
-        TMailboxTable* MailboxTable = nullptr;
-        ui64 TimePerMailboxTs = 0;
-        ui32 EventsPerMailbox = 0;
-        ui64 SoftDeadlineTs = ui64(-1);
         TExecutorThreadStats* Stats = nullptr; // pool stats
-        TPoolId PoolId = MaxPools;
         mutable NLWTrace::TOrbit Orbit;
         bool IsNeededToWaitNextActivation = true;
         i64 HPStart = 0;
@@ -48,9 +41,8 @@ namespace NActors {
         TCpuSensor CpuSensor;
         TStackVec<TActorId, 1> PreemptionSubscribed;
 
-        TMailboxCache MailboxCache;
 
-        TWorkerContext(TWorkerId workerId);
+        TWorkerContext();
 
         ~TWorkerContext();
 
@@ -144,13 +136,13 @@ namespace NActors {
             return elapsed;
         }
 
-        void UpdateActorsStats(size_t dyingActorsCnt) {
+        void UpdateActorsStats(size_t dyingActorsCnt, IExecutorPool* pool) {
             if (dyingActorsCnt) {
-                AtomicAdd(Executor->DestroyedActors, dyingActorsCnt);
+                AtomicAdd(pool->DestroyedActors, dyingActorsCnt);
             }
-            RelaxedStore(&Stats->PoolDestroyedActors, (ui64)RelaxedLoad(&Executor->DestroyedActors));
-            RelaxedStore(&Stats->PoolActorRegistrations, (ui64)RelaxedLoad(&Executor->ActorRegistrations));
-            RelaxedStore(&Stats->PoolAllocatedMailboxes, MailboxTable->GetAllocatedMailboxCountFast());
+            RelaxedStore(&Stats->PoolDestroyedActors, (ui64)RelaxedLoad(&pool->DestroyedActors));
+            RelaxedStore(&Stats->PoolActorRegistrations, (ui64)RelaxedLoad(&pool->ActorRegistrations));
+            RelaxedStore(&Stats->PoolAllocatedMailboxes, pool->GetMailboxTable()->GetAllocatedMailboxCountFast());
         }
 
         void UpdateThreadTime() {
@@ -185,21 +177,10 @@ namespace NActors {
         void IncreaseNotEnoughCpuExecutions() {}
 #endif
 
-        void Switch(IExecutorPool* executor,
-                    TMailboxTable* mailboxTable,
-                    ui64 timePerMailboxTs,
-                    ui32 eventsPerMailbox,
-                    ui64 softDeadlineTs,
+        void Switch(TMailboxTable* mailboxTable,
                     TExecutorThreadStats* stats)
         {
-            Executor = executor;
-            MailboxTable = mailboxTable;
-            TimePerMailboxTs = timePerMailboxTs;
-            EventsPerMailbox = eventsPerMailbox;
-            SoftDeadlineTs = softDeadlineTs;
             Stats = stats;
-            PoolId = Executor ? Executor->PoolId : MaxPools;
-            MailboxCache.Switch(mailboxTable);
         }
     };
 }

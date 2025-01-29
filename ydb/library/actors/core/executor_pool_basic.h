@@ -150,7 +150,8 @@ namespace NActors {
 
         const TString PoolName;
         const TDuration TimePerMailbox;
-        const ui32 EventsPerMailbox;
+        const ui64 TimePerMailboxTsValue;
+        const ui32 EventsPerMailboxValue;
 
         const int RealtimePriority;
 
@@ -279,6 +280,9 @@ namespace NActors {
         TSemaphore GetSemaphore() const;
         void SetSharedPool(TSharedExecutorPool* pool);
         void SetSharedCpuQuota(float quota);
+
+        ui64 TimePerMailboxTs() const final;
+        ui32 EventsPerMailbox() const final;
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 

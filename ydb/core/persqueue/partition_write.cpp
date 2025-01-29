@@ -388,9 +388,11 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         PQ_LOG_D("clear head keys");
         for (auto& k : HeadKeys) {
             // The keys are queued. They will be deleted later when the `RefCount' value is reset.
+            PQ_LOG_D("delete head key " << k.Key.ToString());
             DeletedHeadKeys.push_back(std::move(k));
         }
         HeadKeys.clear();
+        PQ_LOG_D("head keys cleared");
     }
 
     if (NewHeadKey.Size > 0) {
@@ -437,6 +439,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
                 GapSize += ck.first.GetOffset() - lastOffset;
             }
         }
+        PQ_LOG_D("add new body key " << ck.first.ToString());
         DataKeysBody.emplace_back(ck.first,
                                   ck.second,
                                   ctx.Now(),

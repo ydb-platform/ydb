@@ -2468,7 +2468,6 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
 
     data[0].first = 1;
     data[0].second = TString(1_KB, 'x');
-    CmdWrite(0, "sourceid1", data, tc, false, {}, true);
     CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 0);
 
     ++data[0].first;
@@ -2494,6 +2493,22 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
     keys = GetTabletKeys(tc);
     UNIT_ASSERT_C(!keys.contains(firstMessageKey),
                   "the PQ tablet did not delete the '" << firstMessageKey << "' key during startup");
+}
+
+Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+
+    PQTabletPrepare({.partitions = 1}, {}, tc);
+
+    for (size_t i = 0; i < 7; ++i) {
+        TVector<std::pair<ui64, TString>> data;
+        data.emplace_back(i + 1, TString(7_MB, 'x'));
+        CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, i);
+    }
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

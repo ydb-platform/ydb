@@ -1012,6 +1012,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
                 info.Offset, info.PartNo, info.Count, info.Size, info.ReadTimestampMs, &count,
                 &size, &insideHeadOffset, info.LastOffset
         );
+        PQ_LOG_D("info.Cached.size=" << info.Cached.size());
         info.CachedOffset = insideHeadOffset;
     }
     if (info.Destination != 0) {

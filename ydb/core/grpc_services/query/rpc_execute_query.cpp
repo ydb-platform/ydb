@@ -385,7 +385,8 @@ private:
 
         if (NeedReportStats(*Request_->GetProtoRequest())) {
             if (record.HasQueryStats()) {
-                FillQueryStats(*response.mutable_exec_stats(), record);            
+                FillQueryStats(*response.mutable_exec_stats(), record.GetQueryStats());
+                response.mutable_exec_stats()->set_query_plan(record.GetQueryPlan());
             }
         }
 

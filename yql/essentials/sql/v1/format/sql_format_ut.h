@@ -1015,6 +1015,8 @@ Y_UNIT_TEST(TableHints) {
             "SELECT\n\t*\nFROM\n\tplato.T WITH SCHEMA struct<foo: integer, Bar: list<string?>>\nWHERE\n\tkey < 0\n;\n"},
         {"select * from plato.T with (foo=bar, x=$y, a=(a, b, c), u='aaa', schema (foo int32, bar list<string>))",
             "SELECT\n\t*\nFROM\n\tplato.T WITH (\n\t\tfoo = bar,\n\t\tx = $y,\n\t\ta = (a, b, c),\n\t\tu = 'aaa',\n\t\tSCHEMA (foo int32, bar list<string>)\n\t)\n;\n"},
+        {"select * from plato.T with schema struct<\nfoo:int32,\nbar:double\n> as a",
+            "SELECT\n\t*\nFROM\n\tplato.T WITH SCHEMA struct<\n\t\tfoo: int32,\n\t\tbar: double\n\t> AS a\n;\n"},
     };
 
     TSetup setup;

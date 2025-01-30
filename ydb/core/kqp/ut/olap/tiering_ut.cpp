@@ -16,12 +16,35 @@ namespace NKikimr::NKqp {
 class TTestEvictionBase {
 protected:
     std::optional<TTestHelper> TestHelper;
-    TString TieringRule;
+    std::optional<TLocalHelper> LocalHelper;
+    std::optional<NYDBTest::TControllers::TGuard<NOlap::TWaitCompactionController>> CsController;
 
 protected:
     virtual void UnevictAll() = 0;
     virtual TString GetTierPathOverride() const {
         return "/Root/tier1";
+    }
+
+    void Setup() {
+        CsController.emplace(NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>());
+        (*CsController)->SetSkipSpecialCheckForEvict(true);
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TestHelper.emplace(runnerSettings);
+        LocalHelper.emplace(TestHelper->GetKikimr());
+        // TestHelper->GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        // TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
+        // TestHelper->GetRuntime().SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
+        // TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
+        // TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
+        NYdb::NTable::TTableClient tableClient = TestHelper->GetKikimr().GetTableClient();
+        Tests::NCommon::TLoggerInit(TestHelper->GetKikimr()).Initialize();
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+
+        localHelper->CreateTestOlapTable();
+        TestHelper->CreateTier("tier1");
     }
 
 public:

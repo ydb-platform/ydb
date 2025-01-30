@@ -303,7 +303,7 @@ class ClusterDetailsProvider(object):
         self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
         self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
-        self.memory_controller_config = self.__cluster_description.get("memory_controller_config", {})
+        self.memory_controller_config = self.__cluster_description.get("memory_controller_config")
         self.channel_profile_config = self.__cluster_description.get("channel_profile_config")
         self.immediate_controls_config = self.__cluster_description.get("immediate_controls_config")
         self.pdisk_key_config = self.__cluster_description.get("pdisk_key_config", {})

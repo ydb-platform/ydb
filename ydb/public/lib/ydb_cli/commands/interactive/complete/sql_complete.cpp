@@ -15,26 +15,11 @@
 
 namespace NSQLComplete {
 
-    static const TVector<TRuleId> KeywordRules = {
-        RULE(Keyword),
-        RULE(Keyword_expr_uncompat),
-        RULE(Keyword_table_uncompat),
-        RULE(Keyword_select_uncompat),
-        RULE(Keyword_alter_uncompat),
-        RULE(Keyword_in_uncompat),
-        RULE(Keyword_window_uncompat),
-        RULE(Keyword_hint_uncompat),
-        RULE(Keyword_as_compat),
-        RULE(Keyword_compat),
-    };
-
+    const TVector<TRuleId>& GetKeywordRules(ESqlSyntaxMode mode);
+    
     IC3Engine::TConfig GetEngineConfig(ESqlSyntaxMode mode);
 
-    bool IsIdKeyword(const TSuggestedToken& token);
-
-    TVector<TString> SiftedKeywords(
-        const TVector<TSuggestedToken>& tokens,
-        const antlr4::dfa::Vocabulary& vocabulary);
+    void FilterIdKeywords(TVector<TSuggestedToken>& tokens, ESqlSyntaxMode mode);
 
     TSqlCompletionEngine::TSqlCompletionEngine()
         : DefaultEngine(GetEngineConfig(ESqlSyntaxMode::Default))
@@ -46,17 +31,15 @@ namespace NSQLComplete {
 
     TCompletionContext TSqlCompletionEngine::Complete(TCompletionInput input) {
         auto prefix = input.Text.Head(input.CursorPosition);
-
         auto mode = QuerySyntaxMode(TString(prefix));
+
         auto& c3 = GetEngine(mode);
 
         auto tokens = c3.Complete(prefix);
-        std::ranges::remove_if(tokens, IsIdKeyword);
-
-        auto keywords = SiftedKeywords(tokens, mode);
+        FilterIdKeywords(tokens, mode);
 
         return {
-            .Keywords = std::move(keywords),
+            .Keywords = SiftedKeywords(tokens, mode),
         };
     }
 
@@ -92,15 +75,20 @@ namespace NSQLComplete {
         }
     }
 
-    std::unordered_set<TTokenId> GetIgnoredTokens(ESqlSyntaxMode mode) {
-        auto ignoredTokens = GetAllTokens(mode);
-        for (auto keywordToken : GetKeywordTokens(mode)) {
-            ignoredTokens.erase(keywordToken);
-        }
-        return ignoredTokens;
-    }
+    const TVector<TRuleId>& GetKeywordRules(ESqlSyntaxMode mode) {
+        static const TVector<TRuleId> KeywordRules = {
+            RULE(Keyword),
+            RULE(Keyword_expr_uncompat),
+            RULE(Keyword_table_uncompat),
+            RULE(Keyword_select_uncompat),
+            RULE(Keyword_alter_uncompat),
+            RULE(Keyword_in_uncompat),
+            RULE(Keyword_window_uncompat),
+            RULE(Keyword_hint_uncompat),
+            RULE(Keyword_as_compat),
+            RULE(Keyword_compat),
+        };
 
-    std::unordered_set<TRuleId> GetPreferredRules(ESqlSyntaxMode mode) {
         Y_UNUSED(mode);
 
         STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword);
@@ -114,8 +102,22 @@ namespace NSQLComplete {
         STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_as_compat);
         STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_compat);
 
+        return KeywordRules;
+    }
+
+    std::unordered_set<TTokenId> GetIgnoredTokens(ESqlSyntaxMode mode) {
+        auto ignoredTokens = GetAllTokens(mode);
+        for (auto keywordToken : GetKeywordTokens(mode)) {
+            ignoredTokens.erase(keywordToken);
+        }
+        return ignoredTokens;
+    }
+
+    std::unordered_set<TRuleId> GetPreferredRules(ESqlSyntaxMode mode) {
+        const auto& keywordRules = GetKeywordRules(mode);
+
         std::unordered_set<TRuleId> preferredRules;
-        preferredRules.insert(std::begin(KeywordRules), std::end(KeywordRules));
+        preferredRules.insert(std::begin(keywordRules), std::end(keywordRules));
         return preferredRules;
     }
 
@@ -126,9 +128,12 @@ namespace NSQLComplete {
         };
     }
 
-    bool IsIdKeyword(const TSuggestedToken& token) {
-        return AnyOf(token.ParserCallStack, [&](TRuleId rule) {
-            return Find(KeywordRules, rule) != std::end(KeywordRules);
+    void FilterIdKeywords(TVector<TSuggestedToken>& tokens, ESqlSyntaxMode mode) {
+        const auto& keywordRules = GetKeywordRules(mode);
+        std::ranges::remove_if(tokens, [&](const TSuggestedToken& token) {
+            return AnyOf(token.ParserCallStack, [&](TRuleId rule) {
+                return Find(keywordRules, rule) != std::end(keywordRules);
+            });
         });
     }
 

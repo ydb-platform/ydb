@@ -4466,7 +4466,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     if (rowset.HaveValue<Schema::ImportItems::Changefeeds>() && rowset.HaveValue<Schema::ImportItems::Topics>()) {
                         const ui64 count = rowset.GetValue<Schema::ImportItems::Changefeeds>().size();
-                        TVector<TChangefeedImportDescriptions> changefeeds;
+                        TVector<TImportInfo::TChangefeedImportDescriptions> changefeeds;
                         changefeeds.reserve(count);
                         for (ui64 i = 0; i < count; ++i) {
                             Ydb::Table::ChangefeedDescription changefeed;

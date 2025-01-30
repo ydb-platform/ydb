@@ -304,7 +304,7 @@ inline bool HasAppData() {
 
 inline TAppData& AppDataVerified() {
     Y_ABORT_UNLESS(HasAppData());
-    auto& actorSystem = NActors::TlsActivationContext->ActorSystem();
+    NActors::TActorSystem* actorSystem = NActors::TlsActivationContext->ActorSystem();
     TAppData* const x = actorSystem->AppData<TAppData>();
     Y_ABORT_UNLESS(x->Magic == TAppData::MagicTag);
     return *x;

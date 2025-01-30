@@ -6,281 +6,281 @@ using namespace NSQLComplete;
 
 Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     Y_UNIT_TEST(Beginning) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "ALTER"},
-            {ECandidateKind::Keyword, "ANALYZE"},
-            {ECandidateKind::Keyword, "BACKUP"},
-            {ECandidateKind::Keyword, "BATCH"},
-            {ECandidateKind::Keyword, "COMMIT"},
-            {ECandidateKind::Keyword, "CREATE"},
-            {ECandidateKind::Keyword, "DECLARE"},
-            {ECandidateKind::Keyword, "DEFINE"},
-            {ECandidateKind::Keyword, "DELETE"},
-            {ECandidateKind::Keyword, "DISCARD"},
-            {ECandidateKind::Keyword, "DO"},
-            {ECandidateKind::Keyword, "DROP"},
-            {ECandidateKind::Keyword, "EVALUATE"},
-            {ECandidateKind::Keyword, "EXPLAIN"},
-            {ECandidateKind::Keyword, "EXPORT"},
-            {ECandidateKind::Keyword, "FOR"},
-            {ECandidateKind::Keyword, "FROM"},
-            {ECandidateKind::Keyword, "GRANT"},
-            {ECandidateKind::Keyword, "IF"},
-            {ECandidateKind::Keyword, "IMPORT"},
-            {ECandidateKind::Keyword, "INSERT"},
-            {ECandidateKind::Keyword, "PARALLEL"},
-            {ECandidateKind::Keyword, "PRAGMA"},
-            {ECandidateKind::Keyword, "PROCESS"},
-            {ECandidateKind::Keyword, "REDUCE"},
-            {ECandidateKind::Keyword, "REPLACE"},
-            {ECandidateKind::Keyword, "RESTORE"},
-            {ECandidateKind::Keyword, "REVOKE"},
-            {ECandidateKind::Keyword, "ROLLBACK"},
-            {ECandidateKind::Keyword, "SELECT"},
-            {ECandidateKind::Keyword, "UPDATE"},
-            {ECandidateKind::Keyword, "UPSERT"},
-            {ECandidateKind::Keyword, "USE"},
-            {ECandidateKind::Keyword, "VALUES"},
+        TVector<std::string> expected = {
+            "ALTER",
+            "ANALYZE",
+            "BACKUP",
+            "BATCH",
+            "COMMIT",
+            "CREATE",
+            "DECLARE",
+            "DEFINE",
+            "DELETE",
+            "DISCARD",
+            "DO",
+            "DROP",
+            "EVALUATE",
+            "EXPLAIN",
+            "EXPORT",
+            "FOR",
+            "FROM",
+            "GRANT",
+            "IF",
+            "IMPORT",
+            "INSERT",
+            "PARALLEL",
+            "PRAGMA",
+            "PROCESS",
+            "REDUCE",
+            "REPLACE",
+            "RESTORE",
+            "REVOKE",
+            "ROLLBACK",
+            "SELECT",
+            "UPDATE",
+            "UPSERT",
+            "USE",
+            "VALUES",
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({""}).Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({" "}).Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"  "}).Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({";"}).Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"; "}).Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({" ; "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({""}).Keywords, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({" "}).Keywords, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"  "}).Keywords, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({";"}).Keywords, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"; "}).Keywords, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({" ; "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(Alter) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "ASYNC"},
-            {ECandidateKind::Keyword, "BACKUP"},
-            {ECandidateKind::Keyword, "EXTERNAL"},
-            {ECandidateKind::Keyword, "GROUP"},
-            {ECandidateKind::Keyword, "OBJECT"},
-            {ECandidateKind::Keyword, "RESOURCE"},
-            {ECandidateKind::Keyword, "SEQUENCE"},
-            {ECandidateKind::Keyword, "TABLE"},
-            {ECandidateKind::Keyword, "TABLESTORE"},
-            {ECandidateKind::Keyword, "TOPIC"},
-            {ECandidateKind::Keyword, "TRANSFER"},
-            {ECandidateKind::Keyword, "USER"},
+        TVector<std::string> expected = {
+            "ASYNC",
+            "BACKUP",
+            "EXTERNAL",
+            "GROUP",
+            "OBJECT",
+            "RESOURCE",
+            "SEQUENCE",
+            "TABLE",
+            "TABLESTORE",
+            "TOPIC",
+            "TRANSFER",
+            "USER",
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"ALTER "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"ALTER "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(Create) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "ASYNC"},
-            {ECandidateKind::Keyword, "BACKUP"},
-            {ECandidateKind::Keyword, "EXTERNAL"},
-            {ECandidateKind::Keyword, "GROUP"},
-            {ECandidateKind::Keyword, "OBJECT"},
-            {ECandidateKind::Keyword, "OR"},
-            {ECandidateKind::Keyword, "RESOURCE"},
-            {ECandidateKind::Keyword, "TABLE"},
-            {ECandidateKind::Keyword, "TABLESTORE"},
-            {ECandidateKind::Keyword, "TEMP"},
-            {ECandidateKind::Keyword, "TEMPORARY"},
-            {ECandidateKind::Keyword, "TOPIC"},
-            {ECandidateKind::Keyword, "TRANSFER"},
-            {ECandidateKind::Keyword, "USER"},
-            {ECandidateKind::Keyword, "VIEW"},
+        TVector<std::string> expected = {
+            "ASYNC",
+            "BACKUP",
+            "EXTERNAL",
+            "GROUP",
+            "OBJECT",
+            "OR",
+            "RESOURCE",
+            "TABLE",
+            "TABLESTORE",
+            "TEMP",
+            "TEMPORARY",
+            "TOPIC",
+            "TRANSFER",
+            "USER",
+            "VIEW",
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"CREATE "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"CREATE "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(Delete) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "FROM"},
+        TVector<std::string> expected = {
+            "FROM",
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"DELETE "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"DELETE "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(Drop) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "ASYNC"},
-            {ECandidateKind::Keyword, "BACKUP"},
-            {ECandidateKind::Keyword, "EXTERNAL"},
-            {ECandidateKind::Keyword, "GROUP"},
-            {ECandidateKind::Keyword, "OBJECT"},
-            {ECandidateKind::Keyword, "RESOURCE"},
-            {ECandidateKind::Keyword, "TABLE"},
-            {ECandidateKind::Keyword, "TABLESTORE"},
-            {ECandidateKind::Keyword, "TOPIC"},
-            {ECandidateKind::Keyword, "TRANSFER"},
-            {ECandidateKind::Keyword, "USER"},
-            {ECandidateKind::Keyword, "VIEW"},
+        TVector<std::string> expected = {
+            "ASYNC",
+            "BACKUP",
+            "EXTERNAL",
+            "GROUP",
+            "OBJECT",
+            "RESOURCE",
+            "TABLE",
+            "TABLESTORE",
+            "TOPIC",
+            "TRANSFER",
+            "USER",
+            "VIEW",
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"DROP "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"DROP "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(Explain) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "ALTER"},
-            {ECandidateKind::Keyword, "ANALYZE"},
-            {ECandidateKind::Keyword, "BACKUP"},
-            {ECandidateKind::Keyword, "BATCH"},
-            {ECandidateKind::Keyword, "COMMIT"},
-            {ECandidateKind::Keyword, "CREATE"},
-            {ECandidateKind::Keyword, "DECLARE"},
-            {ECandidateKind::Keyword, "DEFINE"},
-            {ECandidateKind::Keyword, "DELETE"},
-            {ECandidateKind::Keyword, "DISCARD"},
-            {ECandidateKind::Keyword, "DO"},
-            {ECandidateKind::Keyword, "DROP"},
-            {ECandidateKind::Keyword, "EVALUATE"},
-            {ECandidateKind::Keyword, "EXPORT"},
-            {ECandidateKind::Keyword, "FOR"},
-            {ECandidateKind::Keyword, "FROM"},
-            {ECandidateKind::Keyword, "GRANT"},
-            {ECandidateKind::Keyword, "IF"},
-            {ECandidateKind::Keyword, "IMPORT"},
-            {ECandidateKind::Keyword, "INSERT"},
-            {ECandidateKind::Keyword, "PARALLEL"},
-            {ECandidateKind::Keyword, "PRAGMA"},
-            {ECandidateKind::Keyword, "PROCESS"},
-            {ECandidateKind::Keyword, "QUERY"},
-            {ECandidateKind::Keyword, "REDUCE"},
-            {ECandidateKind::Keyword, "REPLACE"},
-            {ECandidateKind::Keyword, "RESTORE"},
-            {ECandidateKind::Keyword, "REVOKE"},
-            {ECandidateKind::Keyword, "ROLLBACK"},
-            {ECandidateKind::Keyword, "SELECT"},
-            {ECandidateKind::Keyword, "UPDATE"},
-            {ECandidateKind::Keyword, "UPSERT"},
-            {ECandidateKind::Keyword, "USE"},
-            {ECandidateKind::Keyword, "VALUES"},
+        TVector<std::string> expected = {
+            "ALTER",
+            "ANALYZE",
+            "BACKUP",
+            "BATCH",
+            "COMMIT",
+            "CREATE",
+            "DECLARE",
+            "DEFINE",
+            "DELETE",
+            "DISCARD",
+            "DO",
+            "DROP",
+            "EVALUATE",
+            "EXPORT",
+            "FOR",
+            "FROM",
+            "GRANT",
+            "IF",
+            "IMPORT",
+            "INSERT",
+            "PARALLEL",
+            "PRAGMA",
+            "PROCESS",
+            "QUERY",
+            "REDUCE",
+            "REPLACE",
+            "RESTORE",
+            "REVOKE",
+            "ROLLBACK",
+            "SELECT",
+            "UPDATE",
+            "UPSERT",
+            "USE",
+            "VALUES",
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"EXPLAIN "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"EXPLAIN "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(Grant) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "ALL"},
-            {ECandidateKind::Keyword, "ALTER"},
-            {ECandidateKind::Keyword, "CONNECT"},
-            {ECandidateKind::Keyword, "CREATE"},
-            {ECandidateKind::Keyword, "DESCRIBE"},
-            {ECandidateKind::Keyword, "DROP"},
-            {ECandidateKind::Keyword, "ERASE"},
-            {ECandidateKind::Keyword, "FULL"},
-            {ECandidateKind::Keyword, "GRANT"},
-            {ECandidateKind::Keyword, "INSERT"},
-            {ECandidateKind::Keyword, "LIST"},
-            {ECandidateKind::Keyword, "MANAGE"},
-            {ECandidateKind::Keyword, "MODIFY"},
-            {ECandidateKind::Keyword, "REMOVE"},
-            {ECandidateKind::Keyword, "SELECT"},
-            {ECandidateKind::Keyword, "UPDATE"},
-            {ECandidateKind::Keyword, "USE"},
+        TVector<std::string> expected = {
+            "ALL",
+            "ALTER",
+            "CONNECT",
+            "CREATE",
+            "DESCRIBE",
+            "DROP",
+            "ERASE",
+            "FULL",
+            "GRANT",
+            "INSERT",
+            "LIST",
+            "MANAGE",
+            "MODIFY",
+            "REMOVE",
+            "SELECT",
+            "UPDATE",
+            "USE",
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"GRANT "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"GRANT "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(Insert) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "INTO"},
-            {ECandidateKind::Keyword, "OR"},
+        TVector<std::string> expected = {
+            "INTO",
+            "OR",
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"INSERT "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"INSERT "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(Pragma) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "ANSI"},
-            {ECandidateKind::Keyword, "CALLABLE"},
-            {ECandidateKind::Keyword, "DICT"},
-            {ECandidateKind::Keyword, "ENUM"},
-            {ECandidateKind::Keyword, "FLOW"},
-            {ECandidateKind::Keyword, "LIST"},
-            {ECandidateKind::Keyword, "OPTIONAL"},
-            {ECandidateKind::Keyword, "RESOURCE"},
-            {ECandidateKind::Keyword, "SET"},
-            {ECandidateKind::Keyword, "STRUCT"},
-            {ECandidateKind::Keyword, "TAGGED"},
-            {ECandidateKind::Keyword, "TUPLE"},
-            {ECandidateKind::Keyword, "VARIANT"},
+        TVector<std::string> expected = {
+            "ANSI",
+            "CALLABLE",
+            "DICT",
+            "ENUM",
+            "FLOW",
+            "LIST",
+            "OPTIONAL",
+            "RESOURCE",
+            "SET",
+            "STRUCT",
+            "TAGGED",
+            "TUPLE",
+            "VARIANT",
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"PRAGMA "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"PRAGMA "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(Select) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "ALL"},
-            {ECandidateKind::Keyword, "BITCAST"},
-            {ECandidateKind::Keyword, "CALLABLE"},
-            {ECandidateKind::Keyword, "CASE"},
-            {ECandidateKind::Keyword, "CAST"},
-            {ECandidateKind::Keyword, "CURRENT_DATE"},
-            {ECandidateKind::Keyword, "CURRENT_TIME"},
-            {ECandidateKind::Keyword, "CURRENT_TIMESTAMP"},
-            {ECandidateKind::Keyword, "DICT"},
-            {ECandidateKind::Keyword, "DISTINCT"},
-            {ECandidateKind::Keyword, "EMPTY_ACTION"},
-            {ECandidateKind::Keyword, "ENUM"},
-            {ECandidateKind::Keyword, "EXISTS"},
-            {ECandidateKind::Keyword, "FALSE"},
-            {ECandidateKind::Keyword, "FLOW"},
-            {ECandidateKind::Keyword, "JSON_EXISTS"},
-            {ECandidateKind::Keyword, "JSON_QUERY"},
-            {ECandidateKind::Keyword, "JSON_VALUE"},
-            {ECandidateKind::Keyword, "LIST"},
-            {ECandidateKind::Keyword, "NOT"},
-            {ECandidateKind::Keyword, "NULL"},
-            {ECandidateKind::Keyword, "OPTIONAL"},
-            {ECandidateKind::Keyword, "RESOURCE"},
-            {ECandidateKind::Keyword, "SET"},
-            {ECandidateKind::Keyword, "STREAM"},
-            {ECandidateKind::Keyword, "STRUCT"},
-            {ECandidateKind::Keyword, "TAGGED"},
-            {ECandidateKind::Keyword, "TRUE"},
-            {ECandidateKind::Keyword, "TUPLE"},
-            {ECandidateKind::Keyword, "VARIANT"},
+        TVector<std::string> expected = {
+            "ALL",
+            "BITCAST",
+            "CALLABLE",
+            "CASE",
+            "CAST",
+            "CURRENT_DATE",
+            "CURRENT_TIME",
+            "CURRENT_TIMESTAMP",
+            "DICT",
+            "DISTINCT",
+            "EMPTY_ACTION",
+            "ENUM",
+            "EXISTS",
+            "FALSE",
+            "FLOW",
+            "JSON_EXISTS",
+            "JSON_QUERY",
+            "JSON_VALUE",
+            "LIST",
+            "NOT",
+            "NULL",
+            "OPTIONAL",
+            "RESOURCE",
+            "SET",
+            "STREAM",
+            "STRUCT",
+            "TAGGED",
+            "TRUE",
+            "TUPLE",
+            "VARIANT",
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(Upsert) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "INTO"},
-            {ECandidateKind::Keyword, "OBJECT"},
+        TVector<std::string> expected = {
+            "INTO",
+            "OBJECT",
         };
 
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"UPSERT "}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"UPSERT "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(UTF8Wide) {
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"\xF0\x9F\x98\x8A"}).Candidates.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"编码"}).Candidates.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"\xF0\x9F\x98\x8A"}).Keywords.size(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"编码"}).Keywords.size(), 34);
     }
 
     Y_UNIT_TEST(WordBreak) {
         TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT ("}).Candidates.size(), 28);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT (1)"}).Candidates.size(), 30);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT 1;"}).Candidates.size(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT ("}).Keywords.size(), 28);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT (1)"}).Keywords.size(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT 1;"}).Keywords.size(), 34);
     }
 
     Y_UNIT_TEST(Typing) {
@@ -300,15 +300,4 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
     }
 
-    Y_UNIT_TEST(CaseInsensitivity) {
-        TVector<TCandidate> expected = {
-            {ECandidateKind::Keyword, "SELECT"},
-        };
-
-        TSqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"se"}).Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"sE"}).Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"Se"}).Candidates, expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SE"}).Candidates, expected);
-    }
 } // Y_UNIT_TEST_SUITE(SqlCompleteTests)

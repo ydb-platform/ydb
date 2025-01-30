@@ -1,8 +1,7 @@
 #include "line_reader.h"
 
+#include "yql_complete.h"
 #include "yql_highlight.h"
-
-#include <ydb/public/lib/ydb_cli/commands/interactive/complete/sql_complete.h>
 
 #include <util/generic/string.h>
 #include <util/system/file.h>
@@ -37,7 +36,7 @@ std::optional<FileHandlerLockGuard> LockFile(TFileHandle & fileHandle) {
     return FileHandlerLockGuard(&fileHandle);
 }
 
-replxx::Replxx::Color ReplxxColorOf(NSQLComplete::ECandidateKind /* kind */) {
+replxx::Replxx::Color ReplxxColorOf(ECandidateKind /* kind */) {
     return replxx::Replxx::Color::DEFAULT;
 }
 
@@ -54,7 +53,7 @@ private:
     std::string Prompt;
     std::string HistoryFilePath;
     TFileHandle HistoryFileHandle;
-    NSQLComplete::TSqlCompletionEngine CompletionEngine;
+    TYqlCompletionEngine CompletionEngine;
     replxx::Replxx Rx;
 };
 

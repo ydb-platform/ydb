@@ -1,7 +1,6 @@
 #include "sql_complete.h"
 
 #include "c3_engine.h"
-#include "string_util.h"
 #include "sql_syntax.h"
 
 #include <yql/essentials/sql/v1/format/sql_format.h>
@@ -37,20 +36,11 @@ namespace NSQLComplete {
     std::unordered_set<TRuleId> GetPreferredRules(ESqlSyntaxMode mode);
     IC3Engine::TConfig GetEngineConfig(ESqlSyntaxMode mode);
 
-    size_t LastWordIndex(TStringBuf text);
-    TCompletedToken GetCompletedToken(TStringBuf prefix);
-
     bool IsIdKeyword(const TSuggestedToken& token);
 
     TVector<TString> SiftedKeywords(
         const TVector<TSuggestedToken>& tokens,
         const antlr4::dfa::Vocabulary& vocabulary);
-
-    void EnrichWithKeywords(TVector<TCandidate>& candidates, TVector<TString> keywords);
-
-    void FilterByContent(TVector<TCandidate>& candidates, TStringBuf prefix);
-
-    void RankingSort(TVector<TCandidate>& candidates);
 
     TSqlCompletionEngine::TSqlCompletionEngine()
         : DefaultEngine(GetEngineConfig(ESqlSyntaxMode::Default))
@@ -60,10 +50,8 @@ namespace NSQLComplete {
     {
     }
 
-    TCompletion TSqlCompletionEngine::Complete(TCompletionInput input) {
+    TCompletionContext TSqlCompletionEngine::Complete(TCompletionInput input) {
         auto prefix = input.Text.Head(input.CursorPosition);
-
-        auto completedToken = GetCompletedToken(prefix);
 
         auto mode = QuerySyntaxMode(TString(prefix));
         auto& c3 = GetEngine(mode);
@@ -71,16 +59,10 @@ namespace NSQLComplete {
         auto tokens = c3.Complete(prefix);
         std::ranges::remove_if(tokens, IsIdKeyword);
 
-        TVector<TCandidate> candidates;
-        EnrichWithKeywords(candidates, SiftedKeywords(tokens, mode));
-
-        FilterByContent(candidates, completedToken.Content);
-
-        RankingSort(candidates);
+        auto keywords = SiftedKeywords(tokens, mode);
 
         return {
-            .CompletedToken = std::move(completedToken),
-            .Candidates = std::move(candidates),
+            .Keywords = std::move(keywords),
         };
     }
 
@@ -93,11 +75,11 @@ namespace NSQLComplete {
         }
     }
 
-    TVector<TString> TSqlCompletionEngine::SiftedKeywords(const TVector<TSuggestedToken>& tokens, ESqlSyntaxMode mode) {
+    TVector<std::string> TSqlCompletionEngine::SiftedKeywords(const TVector<TSuggestedToken>& tokens, ESqlSyntaxMode mode) {
         const auto& vocabulary = GetVocabulary(mode);
         const auto& keywordTokens = GetKeywordTokens(mode);
 
-        TVector<TString> keywords;
+        TVector<std::string> keywords;
         for (const auto& token : tokens) {
             if (keywordTokens.contains(token.Number)) {
                 keywords.emplace_back(vocabulary.getDisplayName(token.Number));
@@ -187,56 +169,10 @@ namespace NSQLComplete {
         };
     }
 
-    TCompletedToken GetCompletedToken(TStringBuf prefix) {
-        return {
-            .Content = LastWord(prefix),
-            .SourcePosition = LastWordIndex(prefix),
-        };
-    }
-
     bool IsIdKeyword(const TSuggestedToken& token) {
         return AnyOf(token.ParserCallStack, [&](TRuleId rule) {
             return Find(KeywordRules, rule) != std::end(KeywordRules);
         });
     }
 
-    void EnrichWithKeywords(
-        TVector<TCandidate>& candidates,
-        TVector<TString> keywords) {
-        for (auto keyword : keywords) {
-            candidates.push_back({
-                .Kind = ECandidateKind::Keyword,
-                .Content = std::move(keyword),
-            });
-        }
-    }
-
-    void FilterByContent(TVector<TCandidate>& candidates, TStringBuf prefix) {
-        const auto lowerPrefix = ToLowerUTF8(prefix);
-        auto removed = std::ranges::remove_if(candidates, [&](const auto& candidate) {
-            return !ToLowerUTF8(candidate.Content).StartsWith(lowerPrefix);
-        });
-        candidates.erase(std::begin(removed), std::end(removed));
-    }
-
-    void RankingSort(TVector<TCandidate>& candidates) {
-        Sort(candidates, [](const TCandidate& lhs, const TCandidate& rhs) {
-            return std::tie(lhs.Content, lhs.Kind) < std::tie(rhs.Content, rhs.Kind);
-        });
-    }
-
 } // namespace NSQLComplete
-
-template <>
-void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandidateKind kind) {
-    switch (kind) {
-        case NSQLComplete::ECandidateKind::Keyword:
-            out << "Keyword";
-            break;
-    }
-}
-
-template <>
-void Out<NSQLComplete::TCandidate>(IOutputStream& out, const NSQLComplete::TCandidate& candidate) {
-    out << "(" << candidate.Kind << ": " << candidate.Content << ")";
-}

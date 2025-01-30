@@ -20,6 +20,9 @@ public:
     ui64 MaxPartitions = 1000;
     ui64 PartitionSizeMb = 2000;
     ui64 StringLen = 8;
+    ui64 StrColumnsCnt = 0;
+    ui64 IntColumnsCnt = 0;
+    ui64 KeyColumnsCnt = 0;
     ui64 TimestampStandardDeviationMinutes = 0;
     ui64 TimestampTtlMinutes = 0;
     ui64 RowsCnt = 1;
@@ -44,6 +47,8 @@ public:
         std::string RequestId;
         std::string Metadata;
         TInstant IngestedAt;
+        TVector<ui64> Ints;
+        TVector<TString> Strings;
     };
 
     using TBase::TBase;

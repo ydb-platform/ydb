@@ -38,8 +38,20 @@ std::string TLogGenerator::GetDDLQueries() const {
     metadata        JsonDocument,           -- Дополнительные данные в JSON формате
 
     ingested_at    Timestamp,
-    PRIMARY KEY (timestamp, log_id)
-) WITH ()" << std::endl;
+)";
+    std::stringstream keys;
+    keys << "timestamp, log_id";
+    for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+        ss << "c" << i << (i < Params.IntColumnsCnt ? " Uint64" : " Utf8");
+        if (i < Params.KeyColumnsCnt) {
+            keys << ", c" << i;
+            if (Params.GetStoreType() == TLogWorkloadParams::EStoreType::Column) {
+                ss << " NOT NULL";
+            }
+        }
+        ss << "," << std::endl;
+    }
+    ss << "    PRIMARY KEY (" << keys.str() << ")" << std::endl << ") WITH (" << std::endl;
     ss << "    TTL = Interval(\"PT" << Params.TimestampTtlMinutes << "M\") ON timestamp," << std::endl;
     switch (Params.GetStoreType()) {
         case TLogWorkloadParams::EStoreType::Row:
@@ -99,6 +111,13 @@ TQueryInfoList TLogGenerator::WriteRows(TString operation, TVector<TRow>&& rows)
         ss << "DECLARE $request_id_" << row << " AS Utf8?;" << std::endl;
         ss << "DECLARE $metadata_" << row << " AS JsonDocument?;" << std::endl;
         ss << "DECLARE $ingested_at_" << row << " AS Timestamp?;" << std::endl;
+        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+            ss << "DECLARE $c" << i << "_" << row << " AS " << (i < Params.IntColumnsCnt ? "Uint64" : "Utf8");
+            if (i >= Params.KeyColumnsCnt) {
+                ss << "?";
+            }
+            ss << ";" << std::endl;
+        }
 
         const auto& r = rows[row];
 
@@ -111,11 +130,38 @@ TQueryInfoList TLogGenerator::WriteRows(TString operation, TVector<TRow>&& rows)
         paramsBuilder.AddParam("$request_id_" + ToString(row)).OptionalUtf8(!r.RequestId.empty() ? std::optional<std::string>(r.RequestId) : std::optional<std::string>()).Build();
         paramsBuilder.AddParam("$metadata_" + ToString(row)).OptionalJsonDocument(!r.Metadata.empty() ? std::optional<std::string>(r.Metadata) : std::optional<std::string>()).Build();
         paramsBuilder.AddParam("$ingested_at_" + ToString(row)).OptionalTimestamp(r.IngestedAt != TInstant::Zero() ? std::optional<TInstant>(r.IngestedAt) : std::optional<TInstant>()).Build();
+        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+            auto& p = paramsBuilder.AddParam(TStringBuilder() << "$c" << i << "_" << row);
+            if (i < Params.IntColumnsCnt) {
+                const auto value = r.Ints[i];
+                if (i < Params.KeyColumnsCnt) {
+                    p.Uint64(value);
+                } else {
+                    p.OptionalUint64(value ? std::optional<ui64>(value) : std::optional<ui64>());
+                }
+            } else {
+                const auto& value = r.Strings[i - Params.IntColumnsCnt];
+                if (i < Params.KeyColumnsCnt) {
+                    p.Utf8(value);
+                } else {
+                    p.OptionalUtf8(value ? std::optional<std::string>(value) : std::optional<std::string>());
+                }
+            }
+            p.Build();
+        }
     }
 
-    ss << operation << " INTO `" << Params.TableName << "` (log_id, timestamp, level, service_name, component, message, request_id, metadata, ingested_at) VALUES" ;
+    ss << operation << " INTO `" << Params.TableName << "` (log_id, timestamp, level, service_name, component, message, request_id, metadata, ingested_at";
+    for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+        ss << ", c" << i;
+    }
+    ss << ") VALUES" ;
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
-        ss << "($log_id_" << row << ", $timestamp_" << row << ", $level_" << row << ", $service_name_" << row << ", $component_" << row << ", $message_" << row << ", $request_id_" << row << ", $metadata_" << row << ", $ingested_at_" << row << ")";
+        ss << "($log_id_" << row << ", $timestamp_" << row << ", $level_" << row << ", $service_name_" << row << ", $component_" << row << ", $message_" << row << ", $request_id_" << row << ", $metadata_" << row << ", $ingested_at_" << row;
+        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+            ss << ", $c" << i << "_" << row;
+        }
+        ss << ")";
         if (row + 1 < Params.RowsCnt) {
             ss << ", ";
         }
@@ -146,6 +192,24 @@ TQueryInfoList TLogGenerator::BulkUpsert(TVector<TRow>&& rows) const {
         listItem.AddMember("request_id").OptionalUtf8(!row.RequestId.empty() ? std::optional<std::string>(row.RequestId) : std::optional<std::string>());
         listItem.AddMember("metadata").OptionalJsonDocument(!row.Metadata.empty() ? std::optional<std::string>(row.Metadata) : std::optional<std::string>());
         listItem.AddMember("ingested_at").OptionalTimestamp(row.IngestedAt != TInstant::Zero() ? std::optional<TInstant>(row.IngestedAt) : std::optional<TInstant>());
+        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+            auto& m = listItem.AddMember(TStringBuilder() << "c" << i);
+            if (i < Params.IntColumnsCnt) {
+                const auto value = row.Ints[i];
+                if (i < Params.KeyColumnsCnt) {
+                    m.Uint64(value);
+                } else {
+                    m.OptionalUint64(value ? std::optional<ui64>(value) : std::optional<ui64>());
+                }
+            } else {
+                const auto& value = row.Strings[i - Params.IntColumnsCnt];
+                if (i < Params.KeyColumnsCnt) {
+                    m.Utf8(value);
+                } else {
+                    m.OptionalUtf8(value ? std::optional<std::string>(value) : std::optional<std::string>());
+                }
+            }
+        }
         listItem.EndStruct();
     }
     valueBuilder.EndList();
@@ -277,6 +341,13 @@ TVector<TRow> TLogGenerator::GenerateRandomRows() const {
             result.back().Metadata = json.GetStringRobust().c_str();
         }
         result.back().IngestedAt = RandomIsNotNull() ? RandomInstant() : TInstant::Zero();
+        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+            if (i < Params.IntColumnsCnt) {
+                result.back().Ints.emplace_back(i < Params.KeyColumnsCnt || RandomIsNotNull() ? RandomNumber<ui64>(Max<ui64>() - 1) + 1 : 0);
+            } else {
+                result.back().Strings.emplace_back(RandomWord(i >= Params.KeyColumnsCnt));
+            }
+        }
     }
 
     return result;
@@ -303,6 +374,12 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
             .DefaultValue(PartitionsByLoad).StoreResult(&PartitionsByLoad);
         opts.AddLongOption("len", "String len")
             .DefaultValue(StringLen).StoreResult(&StringLen);
+        opts.AddLongOption("int-cols", "Number of int columns")
+            .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
+        opts.AddLongOption("str-cols", "Number of string columns")
+            .DefaultValue(StrColumnsCnt).StoreResult(&StrColumnsCnt);
+        opts.AddLongOption("key-cols", "Number of key columns")
+            .DefaultValue(KeyColumnsCnt).StoreResult(&KeyColumnsCnt);
         opts.AddLongOption("ttl", "TTL for timestamp column in minutes")
             .DefaultValue(TimestampTtlMinutes).StoreResult(&TimestampTtlMinutes);
         opts.AddLongOption("store", "Storage type."
@@ -326,6 +403,12 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
         case TLogGenerator::EType::BulkUpsert:
             opts.AddLongOption("len", "String len")
                 .DefaultValue(StringLen).StoreResult(&StringLen);
+            opts.AddLongOption("int-cols", "Number of int columns")
+                .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
+            opts.AddLongOption("str-cols", "Number of string columns")
+                .DefaultValue(StrColumnsCnt).StoreResult(&StrColumnsCnt);
+            opts.AddLongOption("key-cols", "Number of key columns")
+                .DefaultValue(KeyColumnsCnt).StoreResult(&KeyColumnsCnt);
             opts.AddLongOption("rows", "Number of rows to upsert")
                 .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
             opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")

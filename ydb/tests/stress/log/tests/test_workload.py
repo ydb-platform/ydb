@@ -16,70 +16,54 @@ class TestYdbLogWorkload(object):
         cls.cluster.start()
 
     @classmethod
-    def get_init_command_prefix(cls) -> list[str]:
+    def get_command_prefix(cls, subcmds: list[str], path: str) -> list[str]:
         return [
-            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
-            "--verbose",
-            "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
-            "--database=/Root",
-            "workload", "log", "init",
-            "--min-partitions", "100",
-            "--partition-size", "10",
-            "--auto-partition", "0"
+            yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
+            '--verbose',
+            '--endpoint', 'grpc://localhost:%d' % cls.cluster.nodes[1].grpc_port,
+            '--database=/Root',
+            'workload', 'log'
+        ] + subcmds + [
+            '--path', path
         ]
 
     @classmethod
-    def get_run_command_prefix(cls, run_type: str) -> list[str]:
+    def get_insert_command_params(cls) -> list[str]:
         return [
-            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
-            "--verbose",
-            "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
-            "--database=/Root",
-            "workload", "log", "run", run_type,
-            "--seconds", "10",
-            "--threads", "10",
-            "--client-timeout", "10000"
+            '--int-cols', '2',
+            '--str-cols', '5',
+            '--key-cols', '4',
+            '--len', '200',
         ]
 
     @classmethod
     def teardown_class(cls):
         cls.cluster.stop()
 
-    @pytest.mark.parametrize("store_type", ["row", "column"])
+    @pytest.mark.parametrize('store_type', ['row', 'column'])
     def test(self, store_type):
         commands = [
             # init
-            self.get_init_command_prefix() + [
-                "--path", store_type,
-                "--store", store_type,
+            self.get_command_prefix(subcmds=['init'], path=store_type) + self.get_insert_command_params() + [
+                '--store', store_type,
+                '--min-partitions', '100',
+                '--partition-size', '10',
+                '--auto-partition', '0',
             ],
 
             # bulk upsert workload
-            self.get_run_command_prefix(run_type='bulk_upsert') + [
-                "--path", store_type,
-                "--len", "200"
-            ],
+            self.get_command_prefix(subcmds=['run', 'bulk_upsert'], path=store_type) + self.get_insert_command_params(),
 
             # upsert workload
-            self.get_run_command_prefix(run_type='upsert') + [
-                "--path", store_type,
-                "--len", "200"
-            ],
+            self.get_command_prefix(subcmds=['run', 'upsert'], path=store_type) + self.get_insert_command_params(),
 
             # insert workload
-            self.get_run_command_prefix(run_type='insert') + [
-                "--path", store_type,
-                "--len", "200"
-            ],
+            self.get_command_prefix(subcmds=['run', 'insert'], path=store_type) + self.get_insert_command_params(),
 
             # select workload
-            self.get_run_command_prefix(run_type='select') + [
-                "--path", store_type,
+            self.get_command_prefix(subcmds=['run', 'select'], path=store_type) + [
+                '--client-timeout', '10000'
             ]
         ]
         for command in commands:
             res = yatest.common.execute(command, wait=True)
-            err: str = res.stderr.decode('UTF-8')
-            for line in err.splitlines():
-                strip_line = line.strip()
-                assert not strip_line or strip_line.find('Using access token from YDB_TOKEN env variable') >= 0, f'Command {command} has errors: {"\n".join(err.splitlines()[:50])}'

@@ -39,6 +39,7 @@ namespace TEvPrivate {
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
         EvRunDataErasure,
+        EvRunTenantDataErasure,
         EvEnd
     };
 

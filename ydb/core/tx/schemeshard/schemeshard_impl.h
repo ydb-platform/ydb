@@ -172,8 +172,8 @@ private:
     };
 
     using TDataErasureQueue = NOperationQueue::TOperationQueueWithTimer<
-        TShardIdx,
-        TFifoQueue<TShardIdx>,
+        TString,
+        TFifoQueue<TString>,
         TEvPrivate::EvRunDataErasure,
         NKikimrServices::FLAT_TX_SCHEMESHARD,
         NKikimrServices::TActivity::DATA_ERASURE>;
@@ -184,12 +184,37 @@ private:
             : Self(self)
         { }
 
+        NOperationQueue::EStartStatus StartOperation(const TString& tenant) override {
+            return Self->StartDataErasure(tenant);
+        }
+
+        void OnTimeout(const TString& tenant) override {
+            Self->OnDataErasureTimeout(tenant);
+        }
+
+    private:
+        TSchemeShard* Self;
+    };
+
+    using TTenantDataErasureQueue = NOperationQueue::TOperationQueueWithTimer<
+        TShardIdx,
+        TFifoQueue<TShardIdx>,
+        TEvPrivate::EvRunTenantDataErasure,
+        NKikimrServices::FLAT_TX_SCHEMESHARD,
+        NKikimrServices::TActivity::TENANT_DATA_ERASURE>;
+
+    class TTenantDataErasureStarter : public TTenantDataErasureQueue::IStarter {
+    public:
+        TTenantDataErasureStarter(TSchemeShard* self)
+            : Self(self)
+        { }
+
         NOperationQueue::EStartStatus StartOperation(const TShardIdx& shardIdx) override {
-            return Self->StartDataErasure(shardIdx);
+            return Self->StartTenantDataErasure(shardIdx);
         }
 
         void OnTimeout(const TShardIdx& shardIdx) override {
-            Self->OnDataErasureTimeout(shardIdx);
+            Self->OnTenantDataErasureTimeout(shardIdx);
         }
 
     private:
@@ -332,6 +357,9 @@ public:
 
     TDataErasureStarter DataErasureStarter;
     TDataErasureQueue* DataErasureQueue = nullptr;
+
+    TTenantDataErasureStarter TenantDataErasureStarter;
+    TTenantDataErasureQueue* TenantDataErasureQueue = nullptr;
 
     struct TBackgroundCleaningState {
         THashSet<TTxId> TxIds;
@@ -525,7 +553,15 @@ public:
         const NKikimrConfig::TBackgroundCleaningConfig& config,
         const TActorContext &ctx);
 
+    void ConfigureDataErasure(
+        const NKikimrConfig::TDataErasureConfig& config,
+        const TActorContext& ctx);
+
     void ConfigureDataErasureQueue(
+        const NKikimrConfig::TDataErasureConfig& config,
+        const TActorContext& ctx);
+
+    void ConfigureTenantDataErasureQueue(
         const NKikimrConfig::TDataErasureConfig& config,
         const TActorContext& ctx);
 
@@ -990,12 +1026,19 @@ public:
     void CleanBackgroundCleaningState(const TPathId& pathId);
     void ClearTempDirsState();
 
-    void EnqueueDataErasure(const TShardIdx& shardIdx);
-    void RemoveDataErasure(const TShardIdx& shardIdx);
-    NOperationQueue::EStartStatus StartDataErasure(const TShardIdx& shardIdx);
-    void OnDataErasureTimeout(const TShardIdx& shardIdx);
-    void UpdateDataErasureQueueMetrics();
-    void DataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId);
+    // void EnqueueDataErasure(const TShardIdx& shardIdx);
+    // void RemoveDataErasure(const TShardIdx& shardIdx);
+    NOperationQueue::EStartStatus StartDataErasure(const TString& tenant);
+    void OnDataErasureTimeout(const TString& tenant);
+    // void UpdateDataErasureQueueMetrics();
+    // void DataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId);
+
+    void EnqueueTenantDataErasure(const TShardIdx& shardIdx);
+    void RemoveTenantDataErasure(const TShardIdx& shardIdx);
+    NOperationQueue::EStartStatus StartTenantDataErasure(const TShardIdx& shardIdx);
+    void OnTenantDataErasureTimeout(const TShardIdx& shardIdx);
+    void UpdateTenantDataErasureQueueMetrics();
+    void TenantDataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId);
 
     struct TTxCleanDroppedSubDomains;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedSubDomains();

@@ -1079,5 +1079,6 @@ message TActivity {
         IMPORT_SCHEME_QUERY_EXECUTOR = 656;
         REPLICATION_TRANSFER_WRITER = 657;
         DATA_ERASURE = 658;
+        TENANT_DATA_ERASURE = 659;
     };
 };

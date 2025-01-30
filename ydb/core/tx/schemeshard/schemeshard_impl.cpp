@@ -4480,6 +4480,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , BorrowedCompactionStarter(this)
     , BackgroundCleaningStarter(this)
     , DataErasureStarter(this)
+    , TenantDataErasureStarter(this)
     , ShardDeleter(info->TabletID)
     , TableStatsQueue(this,
             COUNTER_STATS_QUEUE_SIZE,
@@ -4638,7 +4639,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
 
     ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
-    ConfigureDataErasureQueue(appData->DataErasureConfig, ctx);
+    ConfigureDataErasure(appData->DataErasureConfig, ctx);
 
     if (appData->ChannelProfiles) {
         ChannelProfiles = appData->ChannelProfiles;
@@ -7179,7 +7180,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
 
     if (appConfig.HasDataErasureConfig()) {
         const auto& dataErasureConfig = appConfig.GetDataErasureConfig();
-        ConfigureDataErasureQueue(dataErasureConfig, ctx);
+        ConfigureDataErasure(dataErasureConfig, ctx);
     }
 
     if (appConfig.HasSchemeShardConfig()) {
@@ -7405,6 +7406,17 @@ void TSchemeShard::ConfigureBackgroundCleaningQueue(
                  << ", InflightLimit# " << cleaningConfig.InflightLimit);
 }
 
+void TSchemeShard::ConfigureDataErasure(
+    const NKikimrConfig::TDataErasureConfig& config,
+    const TActorContext& ctx)
+{
+    if (IsDomainSchemeShard) {
+        ConfigureDataErasureQueue(config, ctx);
+    } else {
+        ConfigureTenantDataErasureQueue(config, ctx);
+    }
+}
+
 void TSchemeShard::ConfigureDataErasureQueue(
     const NKikimrConfig::TDataErasureConfig& config,
     const TActorContext& ctx)
@@ -7429,6 +7441,32 @@ void TSchemeShard::ConfigureDataErasureQueue(
                 << ", Rate# " << DataErasureQueue->GetRate()
                 << ", WakeupInterval# " << dataErasureConfig.WakeupInterval
                 << ", InflightLimit# " << dataErasureConfig.InflightLimit);
+}
+
+void TSchemeShard::ConfigureTenantDataErasureQueue(
+    const NKikimrConfig::TDataErasureConfig& config,
+    const TActorContext& ctx)
+{
+    TTenantDataErasureQueue::TConfig tenantDataErasureConfig;
+
+    tenantDataErasureConfig.IsCircular = false;
+    tenantDataErasureConfig.MaxRate = config.GetMaxRate();
+    tenantDataErasureConfig.InflightLimit = config.GetInflightLimit();
+
+    if (TenantDataErasureQueue) {
+        TenantDataErasureQueue->UpdateConfig(tenantDataErasureConfig);
+    } else {
+        TenantDataErasureQueue = new TTenantDataErasureQueue(
+            tenantDataErasureConfig,
+            TenantDataErasureStarter);
+        ctx.RegisterWithSameMailbox(TenantDataErasureQueue);
+    }
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TenantDataErasureQueue configured: Timeout# " << tenantDataErasureConfig.Timeout
+                << ", Rate# " << TenantDataErasureQueue->GetRate()
+                << ", WakeupInterval# " << tenantDataErasureConfig.WakeupInterval
+                << ", InflightLimit# " << tenantDataErasureConfig.InflightLimit);
 }
 
 void TSchemeShard::ConfigureLoginProvider(

@@ -490,17 +490,7 @@ protected:
             << " opId# " << OperationId;
     }
 
-public:
-    explicit TDone(const TOperationId& id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), AllIncomingEvents());
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
-
+    bool Process(TOperationContext& context) {
         const auto* txState = context.SS->FindTx(OperationId);
 
         const auto& pathId = txState->TargetPathId;
@@ -547,6 +537,20 @@ public:
 
         context.OnComplete.DoneOperation(OperationId);
         return true;
+    }
+
+public:
+    explicit TDone(const TOperationId& id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), AllIncomingEvents());
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+
+        return Process(context);
     }
 };
 

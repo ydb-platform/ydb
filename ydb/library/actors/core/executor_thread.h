@@ -26,6 +26,8 @@ namespace NActors {
             bool WasWorking = false;
         };
 
+        constexpr static ui32 DefaultPoolCountForExecutorThread = 1;
+
     public:
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX =
             TDuration::MilliSeconds(10);
@@ -100,8 +102,7 @@ namespace NActors {
 
     protected:
         // Pool-specific
-        TStackVec<TExecutorThreadStats, 8> SharedStats;
-        
+        TStackVec<TExecutorThreadStats, DefaultPoolCountForExecutorThread> Stats;
 
         // Event-specific (currently executing)
         TVector<THolder<IActor>> DyingActors;

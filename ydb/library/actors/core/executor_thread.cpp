@@ -51,13 +51,13 @@ namespace NActors {
             IExecutorPool* executorPool,
             const TString& threadName)
         : ActorSystem(actorSystem)
-        , SharedStats(1)
+        , Stats(1)
         , ThreadCtx(workerId, executorPool, nullptr)
         , ExecutionStats()
         , ThreadName(threadName)
         , ActorSystemIndex(TActorTypeOperator::GetActorSystemIndex())
     {
-        ExecutionStats.Switch(&SharedStats[0]);
+        ExecutionStats.Switch(&Stats[0]);
     }
 
     TExecutorThread::TExecutorThread(TWorkerId workerId,
@@ -68,20 +68,20 @@ namespace NActors {
             const TString& threadName,
             ui64 softProcessingDurationTs)
         : ActorSystem(actorSystem)
-        , SharedStats(poolCount)
+        , Stats(poolCount)
         , ThreadCtx(workerId, executorPool, sharedPool)
         , ExecutionStats()
         , ThreadName(threadName)
         , SoftProcessingDurationTs(softProcessingDurationTs)
         , ActorSystemIndex(TActorTypeOperator::GetActorSystemIndex())
     {
-        SharedStats.resize(poolCount);
-        ExecutionStats.Switch(&SharedStats[executorPool->PoolId]);
+        Stats.resize(poolCount);
+        ExecutionStats.Switch(&Stats[executorPool->PoolId]);
     }
 
     void TExecutorThread::SwitchPool(TExecutorPoolBaseMailboxed* pool) {
         Y_ABORT_UNLESS(ThreadCtx.IsShared());
-        ExecutionStats.Switch(&SharedStats[pool->PoolId]);
+        ExecutionStats.Switch(&Stats[pool->PoolId]);
         ThreadCtx.AssignPool(pool);
     }
 
@@ -566,7 +566,7 @@ namespace NActors {
     void TExecutorThread::GetSharedStats(i16 poolId, TExecutorThreadStats &statsCopy) {
         UpdateThreadStats();
         statsCopy = TExecutorThreadStats();
-        statsCopy.Aggregate(SharedStats[poolId]);
+        statsCopy.Aggregate(Stats[poolId]);
     }
 
     void TExecutorThread::GetCurrentStatsForHarmonizer(TExecutorThreadStats& statsCopy) {
@@ -577,10 +577,10 @@ namespace NActors {
     }
 
     void TExecutorThread::GetSharedStatsForHarmonizer(i16 poolId, TExecutorThreadStats &stats) {
-        stats.SafeElapsedTicks = RelaxedLoad(&SharedStats[poolId].SafeElapsedTicks);
-        stats.SafeParkedTicks = RelaxedLoad(&SharedStats[poolId].SafeParkedTicks);
-        stats.CpuUs = RelaxedLoad(&SharedStats[poolId].CpuUs);
-        stats.NotEnoughCpuExecutions = RelaxedLoad(&SharedStats[poolId].NotEnoughCpuExecutions);
+        stats.SafeElapsedTicks = RelaxedLoad(&Stats[poolId].SafeElapsedTicks);
+        stats.SafeParkedTicks = RelaxedLoad(&Stats[poolId].SafeParkedTicks);
+        stats.CpuUs = RelaxedLoad(&Stats[poolId].CpuUs);
+        stats.NotEnoughCpuExecutions = RelaxedLoad(&Stats[poolId].NotEnoughCpuExecutions);
     }
 
     TExecutorThread::~TExecutorThread() {

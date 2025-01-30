@@ -56,6 +56,7 @@ TString GetRegisteredActorName(const TActorId& actorId) {
 class TTestExecutorPool : public IExecutorPool {
     TTestActorSystem *Context;
     const ui32 NodeId;
+
 public:
     TTestExecutorPool(TTestActorSystem *context, ui32 nodeId)
         : IExecutorPool(0)

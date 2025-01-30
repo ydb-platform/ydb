@@ -392,12 +392,13 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
         }
     }
 
-    if (!result.Defined() && !IsDatabase(SchemeClient, dbPath)) {
+    const bool dbPathExists = oldEntries.contains(dbPath);
+    if (!result.Defined() && !dbPathExists) {
         // This situation occurs when all the children of the folder are views.
-        return RestoreEmptyDir(fsPath, dbPath, settings, oldEntries.contains(dbPath));
+        return RestoreEmptyDir(fsPath, dbPath, settings, dbPathExists);
     }
 
-    return RestorePermissions(fsPath, dbPath, settings, oldEntries.contains(dbPath));
+    return RestorePermissions(fsPath, dbPath, settings, dbPathExists);
 }
 
 TRestoreResult TRestoreClient::RestoreView(

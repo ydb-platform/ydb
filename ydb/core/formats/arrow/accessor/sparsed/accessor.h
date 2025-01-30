@@ -68,8 +68,6 @@ public:
     IChunkedArray::TLocalDataAddress GetChunk(
         const std::optional<IChunkedArray::TCommonChunkAddress>& chunkCurrent, const ui64 position, const ui32 chunkIdx) const;
 
-    std::vector<std::shared_ptr<arrow::Array>> GetChunkedArray() const;
-
     TSparsedArrayChunk(const ui32 posStart, const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& records,
         const std::shared_ptr<arrow::Scalar>& defaultValue);
 
@@ -83,12 +81,6 @@ private:
     std::vector<TSparsedArrayChunk> Records;
 
 protected:
-    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
-        const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
-        AFL_VERIFY(false);
-        return TLocalChunkedArrayAddress(nullptr, 0, 0);
-    }
-
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
 
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
@@ -104,14 +96,6 @@ protected:
         }
         AFL_VERIFY(false);
         return TLocalDataAddress(nullptr, 0, 0);
-    }
-    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
-        std::vector<std::shared_ptr<arrow::Array>> chunks;
-        for (auto&& i : Records) {
-            auto chunksLocal = i.GetChunkedArray();
-            chunks.insert(chunks.end(), chunksLocal.begin(), chunksLocal.end());
-        }
-        return std::make_shared<arrow::ChunkedArray>(chunks, GetDataType());
     }
     virtual std::optional<ui64> DoGetRawSize() const override {
         ui64 bytes = 0;

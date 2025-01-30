@@ -61,7 +61,7 @@ protected:
         AFL_VERIFY(false);
         return nullptr;
     }
-    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {
         AFL_VERIFY(false);
         return nullptr;
     }

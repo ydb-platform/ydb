@@ -21,12 +21,6 @@ private:
     std::shared_ptr<TGeneralContainer> Records;
 
 protected:
-    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
-        const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
-        AFL_VERIFY(false);
-        return TLocalChunkedArrayAddress(nullptr, 0, 0);
-    }
-
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
         return nullptr;
     }
@@ -36,9 +30,6 @@ protected:
 
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override {
         return Records->GetAccessorByNameVerified("__ORIGINAL")->GetLocalData(chunkCurrent, position);
-    }
-    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
-        return Records->GetAccessorByNameVerified("__ORIGINAL")->GetChunkedArray();
     }
     virtual std::optional<ui64> DoGetRawSize() const override {
         return Records->GetRawSizeVerified();

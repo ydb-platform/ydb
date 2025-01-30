@@ -43,7 +43,7 @@ std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, con
     return std::make_shared<arrow::ChunkedArray>(chunks, DataType);
 }
 
-NKikimr::NArrow::NAccessor::IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(
+IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(
     const std::optional<TAddressChain>& chunkCurrent, const ui64 position) const {
     AFL_VERIFY(position < GetRecordsCount())("pos", position)("records", GetRecordsCount())("current", chunkCurrent ? chunkCurrent->DebugString() : Default<TString>());
     std::optional<TCommonChunkAddress> address;

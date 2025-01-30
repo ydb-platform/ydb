@@ -230,11 +230,13 @@ private:
     virtual std::optional<ui64> DoGetRawSize() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const = 0;
 
-    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
+    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+        AFL_VERIFY(false);
+        return TLocalChunkedArrayAddress(nullptr, 0, 0);
+    }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
 
 protected:
-    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const = 0;
     TLocalChunkedArrayAddress GetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
@@ -349,8 +351,15 @@ public:
         return *result;
     }
 
-    std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const {
-        return DoGetChunkedArray();
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const {
+        std::vector<std::shared_ptr<arrow::Array>> chunks;
+        std::optional<TFullDataAddress> address;
+        for (ui32 position = 0; position < GetRecordsCount();) {
+            address = GetChunk(address, position);
+            chunks.emplace_back(address->GetArray());
+            position += address->GetArray()->length();
+        }
+        return std::make_shared<arrow::ChunkedArray>(chunks, GetDataType());
     }
     virtual ~IChunkedArray() = default;
 
@@ -390,7 +399,7 @@ public:
         if (chunkCurrent) {
             return GetArray(chunkCurrent->GetAddress(), position, selfPtr);
         } else {
-            return GetArray(std::optional<TAddressChain>(), position, selfPtr);
+            return GetArraySlow(position, selfPtr);
         }
     }
 

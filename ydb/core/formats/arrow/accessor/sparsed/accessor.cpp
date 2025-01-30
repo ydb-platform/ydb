@@ -165,18 +165,6 @@ IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
     }
 }
 
-std::vector<std::shared_ptr<arrow::Array>> TSparsedArrayChunk::GetChunkedArray() const {
-    std::vector<std::shared_ptr<arrow::Array>> chunks;
-    for (auto&& i : RemapExternalToInternal) {
-        if (i.GetIsDefault()) {
-            chunks.emplace_back(NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, i.GetSize()));
-        } else {
-            chunks.emplace_back(ColValue->Slice(i.GetStartInt(), i.GetSize()));
-        }
-    }
-    return chunks;
-}
-
 TSparsedArrayChunk::TSparsedArrayChunk(const ui32 posStart, const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& records,
     const std::shared_ptr<arrow::Scalar>& defaultValue)
     : RecordsCount(recordsCount)

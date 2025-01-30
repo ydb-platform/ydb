@@ -80,7 +80,7 @@ int TProxy::StartServer() {
     NYdbGrpc::TServerOptions opts;
     opts.SetPort(ListeningPort);
 
-    ActorSystem->Register(NEtcd::CreateEtcdWatchman());
+    ActorSystem->Register(NEtcd::CreateEtcdWatchtower(Counters));
 
     GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts, Counters);
     GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdKVService(ActorSystem.get(), Counters));

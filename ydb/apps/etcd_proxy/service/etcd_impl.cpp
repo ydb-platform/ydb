@@ -26,18 +26,6 @@ using namespace Ydb;
 
 namespace {
 
-TString DecrementKey(TString key) {
-    for (auto i = key.size(); i > 0u;) {
-        if (const auto k = key[--i]) {
-            key[i] = k - '\x01';
-            return key;
-        } else {
-            key[i] = '\xFF';
-        }
-    }
-    return TString();
-}
-
 TString GetNameWithIndex(const std::string_view& name, const size_t* counter) {
     auto param = TString('$') += name;
     if (counter)
@@ -90,7 +78,7 @@ struct TRange : public TOperation {
 
     bool Parse(const etcdserverpb::RangeRequest& rec) {
         Key = rec.key();
-        RangeEnd = DecrementKey(rec.range_end());
+        RangeEnd = NEtcd::DecrementKey(rec.range_end());
         KeysOnly = rec.keys_only();
         CountOnly = rec.count_only();
         Limit = rec.limit();
@@ -212,18 +200,25 @@ struct TPut : public TOperation {
         const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
         const auto& newResultSetName = GetNameWithIndex("New", resultsCounter);
 
-        sql  << oldResultSetName << " = select `key`, `created`, `modified`, `version`, `value`, `lease` from `verhaal` where ";
+        sql << oldResultSetName << " = select `key`, `created`, `modified`, `version`, `value`, `lease` from `verhaal` where ";
         if (!txnFilter.empty())
             sql << txnFilter << " and ";
         sql << "`key` = " << keyParamName << " order by `modified` desc limit 1;" << Endl;
 
-        const bool update = IgnoreValue || IgnoreLease;
-        sql << newResultSetName << " = select `key` as `key`, if(`version` > 0L, `created`, $Revision) as `created`, $Revision as `modified`, `version` + 1L as `version`, nvl(" << valueParamName << ", `value`) as `value`, nvl(" << leaseParamName << ",`lease`) as `lease`" << Endl;
+        sql << newResultSetName << " = select" << Endl;
+        sql << '\t' << keyParamName << " as `key`," << Endl;
+        sql << '\t' << "if(`version` > 0L, `created`, $Revision) as `created`," << Endl;
+        sql << '\t' << "$Revision as `modified`," << Endl;
+        sql << '\t' << "`version` + 1L as `version`," << Endl;
+        sql << '\t' << "nvl(" << valueParamName << ",`value`) as `value`," << Endl;
+        sql << '\t' << "nvl(" << leaseParamName << ",`lease`) as `lease`" << Endl;
         sql << '\t' << "from ";
+
+        const bool update = IgnoreValue || IgnoreLease;
         if (update)
             sql << oldResultSetName;
         else
-            sql << "(select * from " << oldResultSetName <<" union all select * from as_table([<|`key`:" << keyParamName << ", `created`:$Revision, `modified`: $Revision, `version`:1L, `value`:" << valueParamName << ", `lease`:" << leaseParamName << "|>]) order by `modified` desc limit 1)";
+            sql << "(select * from " << oldResultSetName <<" union all select * from as_table([<|`key`:'', `created`:0L, `modified`: 0L, `version`:0L, `value`:'', `lease`:0L|>]) order by `created` desc limit 1)";
         if (!txnFilter.empty())
             sql << " where " << txnFilter;
         sql << ';' << Endl;
@@ -261,7 +256,7 @@ struct TDeleteRange : public TOperation {
 
     bool Parse(const etcdserverpb::DeleteRangeRequest& rec) {
         Key = rec.key();
-        RangeEnd = DecrementKey(rec.range_end());
+        RangeEnd = NEtcd::DecrementKey(rec.range_end());
         GetPrevious = rec.prev_kv();
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
@@ -322,7 +317,7 @@ struct TCompare {
 
     bool Parse(const etcdserverpb::Compare& rec) {
         Key = rec.key();
-        RangeEnd = DecrementKey(rec.range_end());
+        RangeEnd = NEtcd::DecrementKey(rec.range_end());
         Result = rec.result();
         Target = rec.target();
         switch (rec.target()) {
@@ -956,36 +951,7 @@ private:
 
     i64 KeyRevision;
 };
-/*
-class TWatchtRequest
-    : public TEtcdRequestGrpc<TWatchtRequest, TEvWatchRequest> {
-public:
-    using TBase = TEtcdRequestGrpc<TWatchtRequest, TEvWatchRequest>;
-    using TBase::TBase;
-private:
-    bool ParseGrpcRequest() final {
-        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
 
-     //   const auto &rec = *GetProtoRequest();
-        return true;
-    }
-
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& ) final {
-        sql << "delete from `verhaal` where `modified` < " << ';' << Endl;
-    }
-
-    void ReplyWith(const NYdb::TResultSets&) final {
-        etcdserverpb::WatchResponse response;
-        const auto header = response.mutable_header();
-        header->set_revision(Revision);
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
-        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
-    }
-
-};
-*/
 }
 
 NActors::IActor* MakeRange(IRequestOpCtx* p) {

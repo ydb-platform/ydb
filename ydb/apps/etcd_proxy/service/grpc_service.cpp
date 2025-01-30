@@ -531,14 +531,12 @@ void TEtcdWatchService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr ) {
                 TEtcdWatchService,
                 NKikimrServices::GRPC_SERVER>;
 
-
     TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Watch::AsyncService::RequestWatch,
-                [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-                        Cerr << "WaTcH !!!!" << Endl;
-                      ActorSystem->Send(NEtcd::TSharedStuff::Get()->Watchman, new TEvWatchRequest(context.Release()));
-                },
-                *ActorSystem, "Watch", getCounterBlock("etcd", "Watch", true), nullptr
-            );
+        [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
+            ActorSystem->Send(NEtcd::TSharedStuff::Get()->Watchtower, new TEvWatchRequest(context.Release()));
+        },
+        *ActorSystem, "Watch", getCounterBlock("etcd", "Watch", true), nullptr
+    );
 }
 
 } // namespace NKikimr::NGRpcService

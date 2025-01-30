@@ -57,19 +57,7 @@ public:
         ServerSettings->SetGrpcPort(grpc);
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
-        ServerSettings->SetDynamicNodeCount(1);
-        if (TestSettings::PrecreatePools) {
-            ServerSettings->AddStoragePool("ssd");
-            ServerSettings->AddStoragePool("hdd");
-            ServerSettings->AddStoragePool("hdd1");
-            ServerSettings->AddStoragePool("hdd2");
-        } else {
-            ServerSettings->AddStoragePoolType("ssd");
-            ServerSettings->AddStoragePoolType("hdd");
-            ServerSettings->AddStoragePoolType("hdd1");
-            ServerSettings->AddStoragePoolType("hdd2");
-        }
-        ServerSettings->Formats = new TFormatFactory;
+
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
         ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdKVService>("kv");
         ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdWatchService>("watch");
@@ -151,11 +139,6 @@ private:
 using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings>;
 
 Y_UNIT_TEST_SUITE(EtcdKV) {
-    template <typename TCtx>
-    void AdjustCtxForDB(TCtx &ctx) {
-        ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
-    }
-
     void MakeTables(auto &channel) {
         const auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
         Ydb::Query::ExecuteQueryRequest request;
@@ -165,7 +148,6 @@ Y_UNIT_TEST_SUITE(EtcdKV) {
         request.mutable_query_content()->set_text(sql);
 
         grpc::ClientContext executeCtx;
-        AdjustCtxForDB(executeCtx);
         Ydb::Query::ExecuteQueryResponsePart response;
         auto reader = stub->ExecuteQuery(&executeCtx, request);
         while (reader->Read(&response)) {
@@ -188,8 +170,6 @@ Y_UNIT_TEST_SUITE(EtcdKV) {
     void Write(const TString &key, const TString &value, const std::unique_ptr<etcdserverpb::KV::Stub> &stub)
     {
         grpc::ClientContext writeCtx;
-        AdjustCtxForDB(writeCtx);
-
         etcdserverpb::PutRequest putRequest;
         putRequest.set_key(key);
         putRequest.set_value(value);
@@ -211,8 +191,6 @@ Y_UNIT_TEST_SUITE(EtcdKV) {
 
             {
                 grpc::ClientContext readRangeCtx;
-                AdjustCtxForDB(readRangeCtx);
-
                 etcdserverpb::RangeRequest rangeRequest;
                 rangeRequest.set_key("key1");
                 rangeRequest.set_range_end("key5");
@@ -232,8 +210,6 @@ Y_UNIT_TEST_SUITE(EtcdKV) {
             }
             {
                 grpc::ClientContext delCtx;
-                AdjustCtxForDB(delCtx);
-
                 etcdserverpb::DeleteRangeRequest deleteRangeRequest;
                 deleteRangeRequest.set_key("key2");
                 deleteRangeRequest.set_range_end("key4");
@@ -242,8 +218,6 @@ Y_UNIT_TEST_SUITE(EtcdKV) {
             }
             {
                 grpc::ClientContext readRangeCtx;
-                AdjustCtxForDB(readRangeCtx);
-
                 etcdserverpb::RangeRequest rangeRequest;
                 rangeRequest.set_key("key1");
                 rangeRequest.set_range_end("key5");

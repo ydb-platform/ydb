@@ -144,8 +144,12 @@ public:
         return {};
     }
 
-    IStreamCtx* GetStreamCtx() {
+    IStreamCtx* GetStreamCtx() const {
         return Ctx_.Get();
+    }
+
+    TIntrusivePtr<IStreamCtx> ReleaseStreamCtx() const {
+        return Ctx_.Release();
     }
 
     const TString& GetRequestName() const override {
@@ -241,10 +245,7 @@ using TEvWatchRequest = TEtcdRequestStreamWrapper<NEtcd::EvWatch, etcdserverpb::
 
 namespace NEtcd {
 
-NActors::IActor* CreateEtcdWatchman();
-
-
-
+NActors::IActor* CreateEtcdWatchtower(TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
 }
 

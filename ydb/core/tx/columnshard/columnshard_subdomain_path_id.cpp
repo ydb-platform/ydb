@@ -41,9 +41,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_PATH_ID; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        if (Self->CurrentSchemeShardId == SchemeShardId &&
-            !Self->SubDomainPathId || Self->SubDomainPathId->OwnerId != SchemeShardId)
-        {
+        if (!Self->SubDomainPathId) {
             Self->PersistSubDomainPathId(SchemeShardId, LocalPathId, txc);
             Self->StartWatchingSubDomainPathId();
         }

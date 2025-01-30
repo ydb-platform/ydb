@@ -12,4 +12,22 @@ TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues);
 // '#', '?'
 TString UrlEscapeRet(const TStringBuf from);
 
+class TUrlBuilder {
+    struct TParam {
+        TString Name;
+        TString Value;
+    };
+
+public:
+    explicit TUrlBuilder(const TString& uri);
+
+    TUrlBuilder& AddUrlParam(const TString& name, const TString& value = "");
+
+    TString Build() const;
+
+private:
+    std::vector<TParam> Params;
+    TString MainUri;
+};
+
 }

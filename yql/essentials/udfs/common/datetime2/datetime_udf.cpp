@@ -12,23 +12,26 @@ using namespace NKikimr;
 using namespace NUdf;
 using namespace NYql::DateTime;
 
-extern const char SplitName[] = "Split";
-extern const char ToSecondsName[] = "ToSeconds";
-extern const char ToMillisecondsName[] = "ToMilliseconds";
-extern const char ToMicrosecondsName[] = "ToMicroseconds";
-extern const char GetYearName[] = "GetYear";
-extern const char GetDayOfYearName[] = "GetDayOfYear";
-extern const char GetMonthName[] = "GetMonth";
-extern const char GetWeekOfYearName[] = "GetWeekOfYear";
-extern const char GetWeekOfYearIso8601Name[] = "GetWeekOfYearIso8601";
-extern const char GetDayOfMonthName[] = "GetDayOfMonth";
-extern const char GetDayOfWeekName[] = "GetDayOfWeek";
-extern const char GetTimezoneIdName[] = "GetTimezoneId";
-extern const char GetHourName[] = "GetHour";
-extern const char GetMinuteName[] = "GetMinute";
-extern const char GetSecondName[] = "GetSecond";
-extern const char GetMillisecondOfSecondName[] = "GetMillisecondOfSecond";
-extern const char GetMicrosecondOfSecondName[] = "GetMicrosecondOfSecond";
+extern const char SplitUDF[] = "Split";
+extern const char ToSecondsUDF[] = "ToSeconds";
+extern const char ToMillisecondsUDF[] = "ToMilliseconds";
+extern const char ToMicrosecondsUDF[] = "ToMicroseconds";
+extern const char GetYearUDF[] = "GetYear";
+extern const char GetDayOfYearUDF[] = "GetDayOfYear";
+extern const char GetMonthUDF[] = "GetMonth";
+extern const char GetMonthNameUDF[] = "GetMonthName";
+extern const char GetWeekOfYearUDF[] = "GetWeekOfYear";
+extern const char GetWeekOfYearIso8601UDF[] = "GetWeekOfYearIso8601";
+extern const char GetDayOfMonthUDF[] = "GetDayOfMonth";
+extern const char GetDayOfWeekUDF[] = "GetDayOfWeek";
+extern const char GetDayOfWeekNameUDF[] = "GetDayOfWeekName";
+extern const char GetTimezoneIdUDF[] = "GetTimezoneId";
+extern const char GetTimezoneNameUDF[] = "GetTimezoneName";
+extern const char GetHourUDF[] = "GetHour";
+extern const char GetMinuteUDF[] = "GetMinute";
+extern const char GetSecondUDF[] = "GetSecond";
+extern const char GetMillisecondOfSecondUDF[] = "GetMillisecondOfSecond";
+extern const char GetMicrosecondOfSecondUDF[] = "GetMicrosecondOfSecond";
 
 extern const char TMResourceName[] = "DateTime2.TM";
 extern const char TM64ResourceName[] = "DateTime2.TM64";
@@ -1136,6 +1139,113 @@ private:
     }
 };
 
+// TODO: Merge this with <TGetDateComponent> class.
+template<const char* TUdfName, auto Accessor, auto WAccessor>
+class TGetDateComponentName: public ::NYql::NUdf::TBoxedValue {
+public:
+    typedef bool TTypeAwareMarker;
+    static const ::NYql::NUdf::TStringRef& Name() {
+        static auto name = TStringRef(TUdfName, std::strlen(TUdfName));
+        return name;
+    }
+
+    static bool DeclareSignature(
+        const ::NYql::NUdf::TStringRef& name,
+        ::NYql::NUdf::TType* userType,
+        ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,
+        bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
+
+        if (!userType) {
+            builder.SetError("User type is missing");
+            return true;
+        }
+
+        builder.UserType(userType);
+
+        const auto typeInfoHelper = builder.TypeInfoHelper();
+        TTupleTypeInspector tuple(*typeInfoHelper, userType);
+        Y_ENSURE(tuple, "Tuple with args and options tuples expected");
+        Y_ENSURE(tuple.GetElementsCount() > 0,
+                 "Tuple has to contain positional arguments");
+
+        TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
+        Y_ENSURE(argsTuple, "Tuple with args expected");
+        if (argsTuple.GetElementsCount() != 1) {
+            builder.SetError("Single argument expected");
+            return true;
+        }
+
+        auto argType = argsTuple.GetElementType(0);
+
+        if (const auto optType = TOptionalTypeInspector(*typeInfoHelper, argType)) {
+            argType = optType.GetItemType();
+        }
+
+        TResourceTypeInspector resource(*typeInfoHelper, argType);
+        if (!resource) {
+            TDataTypeInspector data(*typeInfoHelper, argType);
+            if (!data) {
+                builder.SetError("Data type expected");
+                return true;
+            }
+
+            const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
+            if (features & NUdf::BigDateType) {
+                BuildSignature<TM64ResourceName, WAccessor>(builder, typesOnly);
+                return true;
+            }
+            if (features & (NUdf::DateType | NUdf::TzDateType)) {
+                BuildSignature<TMResourceName, Accessor>(builder, typesOnly);
+                return true;
+            }
+
+            ::TStringBuilder sb;
+            sb << "Invalid argument type: got ";
+            TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
+            sb << ", but Resource<" << TMResourceName <<"> or Resource<"
+               << TM64ResourceName << "> expected";
+            builder.SetError(sb);
+            return true;
+        }
+
+        if (resource.GetTag() == TStringRef::Of(TM64ResourceName)) {
+            BuildSignature<TM64ResourceName, WAccessor>(builder, typesOnly);
+            return true;
+        }
+
+        if (resource.GetTag() == TStringRef::Of(TMResourceName)) {
+            BuildSignature<TMResourceName, Accessor>(builder, typesOnly);
+            return true;
+        }
+
+        builder.SetError("Unexpected Resource tag");
+        return true;
+    }
+private:
+    template<auto Func>
+    class TImpl : public TBoxedValue {
+    public:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
+            return Func(valueBuilder, args[0]);
+        }
+    };
+
+    template<const char* TResourceName, auto Func>
+    static void BuildSignature(NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        builder.Returns<char*>();
+        builder.Args()->Add<TAutoMap<TResource<TResourceName>>>();
+        builder.IsStrict();
+        if (!typesOnly) {
+            builder.Implementation(new TImpl<Func>());
+        }
+    }
+};
+
     // template<typename TValue>
     // TValue GetMonthNameValue(size_t idx) {
     //     static const std::array<TValue, 12U> monthNames = {{
@@ -1169,24 +1279,31 @@ private:
     // }
     // END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TGetMonthName, TGetMonthNameKernelExec::Do, arrow::compute::NullHandling::INTERSECTION);
 
-    SIMPLE_STRICT_UDF(TGetMonthName, char*(TAutoMap<TResource<TMResourceName>>)) {
-        Y_UNUSED(valueBuilder);
-        static const std::array<TUnboxedValue, 12U> monthNames = {{
-            TUnboxedValuePod::Embedded(TStringRef::Of("January")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("February")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("March")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("April")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("May")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("June")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("July")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("August")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("September")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("October")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("November")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("December"))
-        }};
-        return monthNames.at(GetMonth(*args) - 1U);
+template<const char* TResourceName>
+TUnboxedValue GetMonthName(const IValueBuilder* valueBuilder, const TUnboxedValuePod& arg) {
+    Y_UNUSED(valueBuilder);
+    static const std::array<TUnboxedValue, 12U> monthNames = {{
+        TUnboxedValuePod::Embedded(TStringRef::Of("January")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("February")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("March")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("April")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("May")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("June")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("July")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("August")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("September")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("October")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("November")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("December"))
+    }};
+    if constexpr (TResourceName == TMResourceName) {
+        return monthNames.at(GetMonth(arg) - 1U);
     }
+    if constexpr (TResourceName == TM64ResourceName) {
+        return monthNames.at(GetWMonth(arg) - 1U);
+    }
+    Y_UNREACHABLE();
+}
 
     // struct TGetDayOfMonthKernelExec : TUnaryKernelExec<TGetMonthNameKernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<ui8, false>> {
     //     template<typename TSink>
@@ -1201,24 +1318,26 @@ private:
     // }
     // END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TGetDayOfMonth, TGetDayOfMonthKernelExec::Do, arrow::compute::NullHandling::INTERSECTION);
 
-    template<typename TValue>
-    TValue GetDayNameValue(size_t idx) {
-        static const std::array<TValue, 7U> dayNames = {{
-            TValue::Embedded(TStringRef::Of("Monday")),
-            TValue::Embedded(TStringRef::Of("Tuesday")),
-            TValue::Embedded(TStringRef::Of("Wednesday")),
-            TValue::Embedded(TStringRef::Of("Thursday")),
-            TValue::Embedded(TStringRef::Of("Friday")),
-            TValue::Embedded(TStringRef::Of("Saturday")),
-            TValue::Embedded(TStringRef::Of("Sunday"))
-        }};
-        return dayNames.at(idx);
+template<const char* TResourceName>
+TUnboxedValue GetDayOfWeekName(const IValueBuilder* valueBuilder, const TUnboxedValuePod& arg) {
+    Y_UNUSED(valueBuilder);
+    static const std::array<TUnboxedValue, 7U> dayNames = {{
+        TUnboxedValuePod::Embedded(TStringRef::Of("Monday")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("Tuesday")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("Wednesday")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("Thursday")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("Friday")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("Saturday")),
+        TUnboxedValuePod::Embedded(TStringRef::Of("Sunday"))
+    }};
+    if constexpr (TResourceName == TMResourceName) {
+        return dayNames.at(GetDayOfWeek(arg) - 1U);
     }
-
-    SIMPLE_STRICT_UDF(TGetDayOfWeekName, char*(TAutoMap<TResource<TMResourceName>>)) {
-        Y_UNUSED(valueBuilder);
-        return GetDayNameValue<TUnboxedValuePod>(GetDayOfWeek(*args) - 1U);
+    if constexpr (TResourceName == TM64ResourceName) {
+        return dayNames.at(GetWDayOfWeek(arg) - 1U);
     }
+    Y_UNREACHABLE();
+}
 
     // struct TGetDayOfWeekNameKernelExec : TUnaryKernelExec<TGetDayOfWeekNameKernelExec, TReaderTraits::TResource<true>, TStringArrayBuilder<arrow::StringType, false>> {
     //     template<typename TSink>
@@ -1255,6 +1374,22 @@ private:
         return valueBuilder->NewString(NUdf::GetTimezones()[timezoneId]);
     }
     END_SIMPLE_ARROW_UDF(TGetTimezoneName, TTGetTimezoneNameKernelExec::Do);
+
+template<const char* TResourceName>
+TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedValuePod& arg) {
+    ui16 tzId;
+    if constexpr (TResourceName == TMResourceName) {
+        tzId = GetTimezoneId(arg);
+    }
+    if constexpr (TResourceName == TM64ResourceName) {
+        tzId = GetWTimezoneId(arg);
+    }
+    const auto& tzNames = NUdf::GetTimezones();
+    if (tzId >= tzNames.size()) {
+        return TUnboxedValuePod();
+    }
+    return valueBuilder->NewString(tzNames[tzId]);
+}
 
     // Update
 
@@ -2455,7 +2590,7 @@ private:
     PARSE_SPECIFIC_FORMAT(X509);
 
     SIMPLE_MODULE(TDateTime2Module,
-        TUserDataTypeFuncFactory<true, true, SplitName, TSplit,
+        TUserDataTypeFuncFactory<true, true, SplitUDF, TSplit,
             TDate,
             TDatetime,
             TTimestamp,
@@ -2479,22 +2614,22 @@ private:
         TMakeDatetime64,
         TMakeTimestamp64,
 
-        TGetDateComponent<GetYearName, ui16, GetYear, i32, GetWYear>,
-        TGetDateComponent<GetDayOfYearName, ui16, GetDayOfYear, ui16, GetWDayOfYear>,
-        TGetDateComponent<GetMonthName, ui8, GetMonth, ui8, GetWMonth>,
-        TGetMonthName,
-        TGetDateComponent<GetWeekOfYearName, ui8, GetWeekOfYear, ui8, GetWWeekOfYear>,
-        TGetDateComponent<GetWeekOfYearIso8601Name, ui8, GetWeekOfYearIso8601, ui8, GetWWeekOfYearIso8601>,
-        TGetDateComponent<GetDayOfMonthName, ui8, GetDay, ui8, GetWDay>,
-        TGetDateComponent<GetDayOfWeekName, ui8, GetDayOfWeek, ui8, GetWDayOfWeek>,
-        TGetDayOfWeekName,
-        TGetTimeComponent<GetHourName, ui8, GetHour, 1u, 3600u, 24u, false>,
-        TGetTimeComponent<GetMinuteName, ui8, GetMinute, 1u, 60u, 60u, false>,
-        TGetTimeComponent<GetSecondName, ui8, GetSecond, 1u, 1u, 60u, false>,
-        TGetTimeComponent<GetMillisecondOfSecondName, ui32, GetMicrosecond, 1000u, 1000u, 1000u, true>,
-        TGetTimeComponent<GetMicrosecondOfSecondName, ui32, GetMicrosecond, 1u, 1u, 1000000u, true>,
-        TGetDateComponent<GetTimezoneIdName, ui16, GetTimezoneId, ui16, GetWTimezoneId>,
-        TGetTimezoneName,
+        TGetDateComponent<GetYearUDF, ui16, GetYear, i32, GetWYear>,
+        TGetDateComponent<GetDayOfYearUDF, ui16, GetDayOfYear, ui16, GetWDayOfYear>,
+        TGetDateComponent<GetMonthUDF, ui8, GetMonth, ui8, GetWMonth>,
+        TGetDateComponentName<GetMonthNameUDF, GetMonthName<TMResourceName>, GetMonthName<TM64ResourceName>>,
+        TGetDateComponent<GetWeekOfYearUDF, ui8, GetWeekOfYear, ui8, GetWWeekOfYear>,
+        TGetDateComponent<GetWeekOfYearIso8601UDF, ui8, GetWeekOfYearIso8601, ui8, GetWWeekOfYearIso8601>,
+        TGetDateComponent<GetDayOfMonthUDF, ui8, GetDay, ui8, GetWDay>,
+        TGetDateComponent<GetDayOfWeekUDF, ui8, GetDayOfWeek, ui8, GetWDayOfWeek>,
+        TGetDateComponentName<GetDayOfWeekNameUDF, GetDayOfWeekName<TMResourceName>, GetDayOfWeekName<TM64ResourceName>>,
+        TGetTimeComponent<GetHourUDF, ui8, GetHour, 1u, 3600u, 24u, false>,
+        TGetTimeComponent<GetMinuteUDF, ui8, GetMinute, 1u, 60u, 60u, false>,
+        TGetTimeComponent<GetSecondUDF, ui8, GetSecond, 1u, 1u, 60u, false>,
+        TGetTimeComponent<GetMillisecondOfSecondUDF, ui32, GetMicrosecond, 1000u, 1000u, 1000u, true>,
+        TGetTimeComponent<GetMicrosecondOfSecondUDF, ui32, GetMicrosecond, 1u, 1u, 1000000u, true>,
+        TGetDateComponent<GetTimezoneIdUDF, ui16, GetTimezoneId, ui16, GetWTimezoneId>,
+        TGetDateComponentName<GetTimezoneNameUDF, GetTimezoneName<TMResourceName>, GetTimezoneName<TM64ResourceName>>,
 
         TUpdate,
 
@@ -2542,9 +2677,9 @@ private:
         TEndOfWeek,
         TEndOfDay,
 
-        TToUnits<ToSecondsName, ui32, 1>,
-        TToUnits<ToMillisecondsName, ui64, 1000>,
-        TToUnits<ToMicrosecondsName, ui64, 1000000>,
+        TToUnits<ToSecondsUDF, ui32, 1>,
+        TToUnits<ToMillisecondsUDF, ui64, 1000>,
+        TToUnits<ToMicrosecondsUDF, ui64, 1000000>,
 
         TFormat,
         TParse,

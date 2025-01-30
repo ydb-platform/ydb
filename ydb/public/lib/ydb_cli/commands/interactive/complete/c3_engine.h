@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sql_antlr4.h"
 #include "string_util.h"
 
 #include <contrib/libs/antlr4_cpp_runtime/src/ANTLRInputStream.h>
@@ -14,11 +15,6 @@
 #include <unordered_set>
 
 namespace NSQLComplete {
-
-    using TTokenId = size_t;
-    using TRuleId = size_t;
-
-    constexpr TTokenId TOKEN_EOF = antlr4::Token::EOF;
 
     // std::vector is used to prevent copying from c3 results
     struct TSuggestedToken final {

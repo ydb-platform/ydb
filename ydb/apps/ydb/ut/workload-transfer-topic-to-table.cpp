@@ -18,13 +18,9 @@ class TFixture : public NUnitTest::TBaseFixture {
         TString TableName;
 
     public:
-         TFixture() {
-            std::cout << "TFixture constructor" << std::endl;
-        }
         void SetUp(NUnitTest::TTestContext&) override {
             // we need to generate random topic name and table name, cause in CI tests are executed parallely against one common database
-            TString tmp = GenerateTopicName();
-            TopicName = tmp;
+            TopicName = GenerateTopicName();;
             TableName = GenerateTableName();
 
             try {

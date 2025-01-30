@@ -207,7 +207,7 @@ public:
             Owner.StartInitialization();
         }
         void InitializationFinished(std::shared_ptr<TFetchingScript>&& script) {
-            Owner.FinishInitialization(script);
+            Owner.FinishInitialization(std::move(script));
         }
         ~TInitializationGuard() {
             AFL_VERIFY(!Owner.NeedInitialization());
@@ -216,7 +216,7 @@ public:
 
     std::optional<TInitializationGuard> StartInitialization() {
         if (AtomicCas(&InitializationDetector, 2, 0)) {
-            return TInitializationGuard(*this);
+            return std::optional<TInitializationGuard>(*this);
         } else {
             return std::nullopt;
         }

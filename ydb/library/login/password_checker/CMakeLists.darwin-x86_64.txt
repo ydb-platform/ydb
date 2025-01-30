@@ -20,9 +20,11 @@ add_library(library-login-password_checker)
 target_link_libraries(library-login-password_checker PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-string_utils-base64
 )
 
 target_sources(library-login-password_checker PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/login/password_checker/password_checker.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/login/password_checker/hash_checker.cpp
 )
 

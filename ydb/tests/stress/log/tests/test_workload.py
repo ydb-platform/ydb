@@ -66,4 +66,4 @@ class TestYdbLogWorkload(object):
             ]
         ]
         for command in commands:
-            res = yatest.common.execute(command, wait=True)
+            yatest.common.execute(command, wait=True)

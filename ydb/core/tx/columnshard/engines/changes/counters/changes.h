@@ -58,7 +58,7 @@ public:
     TChangesCounters()
         : TBase("ColumnEngineChanges") {
         for (ui64 i = 0; i < (ui64)NBlobOperations::EConsumer::COUNT; ++i) {
-            StagesByConsumer[i] = std::make_shared<TStageCounters>(*this, i);
+            StagesByConsumer[i] = std::make_shared<TStageCounters>(*this, static_cast<NBlobOperations::EConsumer>(i));
         }
     }
 

@@ -208,7 +208,7 @@ Y_UNIT_TEST(Double_Init)
 
 Y_UNIT_TEST(Statistics)
 {
-    EnsureStatisticsColumns({"run", "-s", "1", "--warmup", "0"},
+    EnsureStatisticsColumns({"run", "-s", "1", "--warmup", "0", "--topic", TopicName, "--table", TableName},
                             {"Window", "Write speed", "Write time", "Inflight", "Read speed", "Topic time", "Select time", "Upsert time", "Commit time"},
                             {"#", "msg/s", "MB/s", "percentile,ms", "percentile,msg", "msg/s", "MB/s", "percentile,ms", "percentile,ms", "percentile,ms", "percentile,ms"});
 }

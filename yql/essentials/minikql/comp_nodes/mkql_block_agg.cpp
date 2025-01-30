@@ -1221,6 +1221,7 @@ public:
         , Arena_(TlsAllocState)
     {
         std::cerr << "Keys.size(): " << Keys_.size() << std::endl;
+        std::cerr << "UseArens: " << UseArena << std::endl;
         Pointer_ = Values_.data();
         for (size_t i = 0; i < Keys_.size(); ++i) {
             auto itemType = AS_TYPE(TBlockType, Keys_[i].Type)->GetItemType();
@@ -1278,7 +1279,6 @@ public:
         auto iterateBatch = [&]() {
             for (ui32 i = 0; i < itersLen; ++i) {
                 auto iter = iters[i];
-                const TKey& key = hash.GetKey(iter);
                 auto payload = (char*)hash.GetPayload(iter);
                 char* ptr;
                 if constexpr (UseArena) {
@@ -1286,8 +1286,6 @@ public:
                 } else {
                     ptr = payload;
                 }
-
-                buf.PushString(GetKeyView<TKey>(key, KeyLength_));
 
                 if constexpr (Many) {
                     for (ui32 i = 0; i < Streams_.size(); ++i) {
@@ -1304,6 +1302,13 @@ public:
 
                     ptr += Aggs_[i]->StateSize;
                 }
+            }
+
+            for (ui32 i = 0; i < itersLen; ++i) {
+                auto iter = iters[i];
+                const TKey& key = hash.GetKey(iter);
+
+                buf.PushString(GetKeyView<TKey>(key, KeyLength_));
             }
         };
 
@@ -1369,6 +1374,7 @@ public:
             IsExtractingFinished = InlineAggState ?
                 SpillingIterate(*HashMap_, SpillingHashMapIt_, spillingBuffer) :
                 SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_, spillingBuffer);
+            spillingBuffer.PushNumber(SpillingOutputBlockSize_);
             auto sb = spillingBuffer.Finish();
             if (!sb.size()) continue;
             TString s = TString(sb.begin(), sb.size());
@@ -1388,7 +1394,10 @@ public:
 
         if (LoadingOperation_.has_value()) {
             SpillingKeys_.push_back(SpillingOperation_->ExtractValue());
+            auto data = *LoadingOperation_->ExtractValue();
             LoadingOperation_ = std::nullopt;
+
+            SpillingProcessInput(data);
         }
         if (!SpillingKeys_.empty()) {
             LoadingOperation_ = Spiller_->Get(SpillingKeys_.back());
@@ -1399,15 +1408,22 @@ public:
 
     }
 
-    void SpillingProcessInput() {
+    void SpillingProcessInput(NYql::TChunkedBuffer& data) {
+        NYql::NUdf::TOutputBuffer buf;
+        buf.Resize(data.Size());
+
+        NYql::TChunkedBufferOutput outtmp(data);
+
+        TStringBuf tmp;
+        outtmp.Write(tmp);
+
+        NYql::NUdf::TInputBuffer input(tmp);
+
         ++BatchNum_;
-        const auto batchLength = 1;
+        const auto batchLength = input.PopNumber<size_t>();
         if (!batchLength) {
             return;
         }
-
-
-
         HasValues_ = true;
 
         std::array<TOutputBuffer, PrefetchBatchSize> out;
@@ -1478,14 +1494,14 @@ public:
                             // streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
                         }
 
-                        SpillingInsert(row, payload, isNew);
+                        SpillingInsert(row, payload, isNew, input);
                     }
                 });
 
                 if constexpr (UseArena) {
                     for (ui32 i = 0; i < insertBatchLen; ++i) {
                         auto row = insertBatchRows[i];
-                        ui32 streamIndex = 0;
+                        // ui32 streamIndex = 0;
                         if constexpr (Many) {
                             MKQL_ENSURE(false, "wrong");
                             // streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
@@ -1493,7 +1509,7 @@ public:
 
                         bool isNew = insertBatchIsNew[i];
                         char* payload = insertBatchPayloads[i];
-                        SpilingInsert(row, payload, isNew);
+                        SpillingInsert(row, payload, isNew, input);
                     }
                 }
             }
@@ -1503,14 +1519,7 @@ public:
 
             // encode key
             out[insertBatchLen].Rewind();
-            for (ui32 i = 0; i < keysDatum.size(); ++i) {
-                if (keysDatum[i].is_scalar()) {
-                    // TODO: more efficient code when grouping by scalar
-                    Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), out[insertBatchLen]);
-                } else {
-                    Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
-                }
-            }
+            out[insertBatchLen].PushString(input.PopString());
 
             insertBatchRows[insertBatchLen] = row;
             ++insertBatchLen;
@@ -1795,7 +1804,7 @@ private:
         OutputBlockSize_ = 0;
     }
 
-    void SpillingInsert(ui64 row, char* payload, bool isNew) const {
+    void SpillingInsert(ui64 row, char* payload, bool isNew, NYql::NUdf::TInputBuffer& input) const {
         char* ptr = payload;
 
         if (isNew) {
@@ -1811,13 +1820,15 @@ private:
                 //     Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
                 // }
             } else {
+                // TODO: reverse order
                 for (size_t i = 0; i < Aggs_.size(); ++i) {
-                    Aggs_[i]->DeSerializeState(...);
+                    Aggs_[i]->DeserializeState(ptr, input);
 
                     ptr += Aggs_[i]->StateSize;
                 }
             }
         } else {
+            MKQL_ENSURE(false, "Every key should be new");
             if constexpr (Many) {
                 MKQL_ENSURE(false, "Wrong");
                 // static_assert(Finalize);

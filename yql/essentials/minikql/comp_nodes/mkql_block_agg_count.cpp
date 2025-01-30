@@ -154,6 +154,7 @@ public:
     }
 
     void DeserializeState(void* state, NUdf::TInputBuffer& buffer) final {
+        new(state) TState();
         auto typedState = static_cast<TState*>(state);
         typedState->Count_ = buffer.PopNumber<decltype(typedState->Count_)>();
     }

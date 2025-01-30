@@ -18,24 +18,32 @@
 #include <pthread.h>
 #endif
 
+#define POOL_ID() \
+    (!TlsThreadContext ? "OUTSIDE" : \
+    (TlsThreadContext->IsShared() ? "Shared[" + ToString(TlsThreadContext->OwnerPoolId()) + "]_" + ToString(TlsThreadContext->PoolId()) : \
+    ("Pool_" + ToString(TlsThreadContext->PoolId()))))
+
+#define WORKER_ID() ("Worker_" + ToString(TlsThreadContext ? TlsThreadContext->WorkerId() : Max<TWorkerId>()))
+
+#define EXECUTOR_POOL_SHARED_DEBUG(level, ...) \
+    ACTORLIB_DEBUG(level, POOL_ID(), " ", WORKER_ID(), " TExecutorPoolShared::", __func__, ": ", __VA_ARGS__)
+
+
 namespace NActors {
 
     TPoolManager::TPoolManager(const TVector<TPoolShortInfo> &poolInfos)
         : PoolInfos(poolInfos)
     {
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TPoolManager::TPoolManager: poolInfos.size() == ", poolInfos.size());
         PoolThreadRanges.resize(poolInfos.size());
         ui64 totalThreads = 0;
         for (const auto& poolInfo : poolInfos) {
             PoolThreadRanges[poolInfo.PoolId].Begin = totalThreads;
             PoolThreadRanges[poolInfo.PoolId].End = totalThreads + poolInfo.SharedThreadCount;
-            ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TPoolManager::TPoolManager: PoolThreadRanges[", poolInfo.PoolId, "]:  Threads: [" , PoolThreadRanges[poolInfo.PoolId].Begin, ";", PoolThreadRanges[poolInfo.PoolId].End, ")");
             totalThreads += poolInfo.SharedThreadCount;
             if (poolInfo.InPriorityOrder) {
                 PriorityOrder.push_back(poolInfo.PoolId);
             }
         }
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TPoolManager::TPoolManager: totalThreads == ", totalThreads);
         Sort(PoolInfos.begin(), PoolInfos.end(), [](const TPoolShortInfo& a, const TPoolShortInfo& b) {
             return a.PoolId < b.PoolId;
         });
@@ -101,21 +109,21 @@ namespace NActors {
         }
         for (i16 i : PoolManager.PriorityOrder) {
             if (Pools[i] == nullptr) {
-                ACTORLIB_DEBUG(EDebugLevel::Trace, "Worker_", workerId, " TSharedExecutorPool::FindPoolForWorker: pool[", i, "] is nullptr; OwnerPoolId == ", thread.OwnerPoolId);
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Trace, "pool[", i, "] is nullptr; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;
             }
             if (ForeignThreadsAllowedByPool[i].load(std::memory_order_acquire) == 0) {
-                ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::FindPoolForWorker: don't have leases; OwnerPoolId == ", thread.OwnerPoolId);
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "don't have leases; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;
             }
             ui64 semaphore = Pools[i]->GetSemaphore().OldSemaphore;
             if (semaphore == 0) {
-                ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::FindPoolForWorker: pool[", i, "]::Semaphore == 0; OwnerPoolId == ", thread.OwnerPoolId);
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "pool[", i, "]::Semaphore == 0; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;
             }
 
             if (thread.OwnerPoolId == i) {
-                ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::FindPoolForWorker: ownerPoolId == poolId; ownerPoolId == ", thread.OwnerPoolId, " poolId == ", i);
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "ownerPoolId == poolId; ownerPoolId == ", thread.OwnerPoolId, " poolId == ", i);
                 return i;
             }
 
@@ -123,12 +131,11 @@ namespace NActors {
 
             while (true) {
                 if (slots <= 0) {
-                    ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::FindPoolForWorker: pool[", i, "]::Slots == 0; OwnerPoolId == ", thread.OwnerPoolId);
+                    EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "pool[", i, "]::Slots == 0; OwnerPoolId == ", thread.OwnerPoolId);
                     break;
                 }
                 if (ForeignThreadSlots[i].compare_exchange_strong(slots, slots - 1, std::memory_order_acq_rel, std::memory_order_acquire)) {
-                    ACTORLIB_DEBUG(EDebugLevel::Lease, "Worker_", workerId, " TSharedExecutorPool::FindPoolForWorker: get lease; ownerPoolId == ", thread.OwnerPoolId, " poolId == ", i, " semaphore == ", semaphore, " slots == ", slots, " -> ", slots - 1);
-                    ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::FindPoolForWorker: found pool; ownerPoolId == ", thread.OwnerPoolId, " poolId == ", i, " semaphore == ", semaphore);
+                    EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Lease, "found pool; get lease; ownerPoolId == ", thread.OwnerPoolId, " poolId == ", i, " semaphore == ", semaphore, " slots == ", slots, " -> ", slots - 1);
                     return i;
                 }
             }
@@ -142,12 +149,12 @@ namespace NActors {
         TlsThreadContext->ExecutionStats->UpdateThreadTime();
         if (Threads[workerId].CurrentPoolId != poolId && Threads[workerId].CurrentPoolId != Threads[workerId].OwnerPoolId) {
             ui64 slots = ForeignThreadSlots[Threads[workerId].CurrentPoolId].fetch_add(1, std::memory_order_acq_rel);
-            ACTORLIB_DEBUG(EDebugLevel::Lease, "Worker_", workerId, " TSharedExecutorPool::SwitchToPool: return lease; ownerPoolId == ", Threads[workerId].OwnerPoolId, " currentPoolId == ", Threads[workerId].CurrentPoolId, " poolId = ", poolId, " slots == ", slots, " -> ", slots + 1);
+            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Lease, "return lease; ownerPoolId == ", Threads[workerId].OwnerPoolId, " currentPoolId == ", Threads[workerId].CurrentPoolId, " poolId = ", poolId, " slots == ", slots, " -> ", slots + 1);
         }
         Threads[workerId].CurrentPoolId = poolId;
         Threads[workerId].SoftDeadlineForPool = Max<NHPTimer::STime>();
         Threads[workerId].Thread->SwitchPool(Pools[poolId]);
-        ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::SwitchToPool: end; ownerPoolId == ", Threads[workerId].OwnerPoolId, " currentPoolId == ", Threads[workerId].CurrentPoolId, " poolId = ", poolId);
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "end; ownerPoolId == ", Threads[workerId].OwnerPoolId, " currentPoolId == ", Threads[workerId].CurrentPoolId, " poolId = ", poolId);
     }
 
     TMailbox* TSharedExecutorPool::GetReadyActivation(ui64 revolvingCounter) {
@@ -162,21 +169,21 @@ namespace NActors {
         TMailbox *mailbox = nullptr;
         while (!StopFlag.load(std::memory_order_acquire)) {
             if (hpnow < thread.SoftDeadlineForPool || thread.CurrentPoolId == thread.OwnerPoolId) {
-                ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: continue same pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "continue same pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                 if (thread.SoftDeadlineForPool == Max<NHPTimer::STime>()) {
                     thread.SoftDeadlineForPool = GetCycleCountFast() + thread.SoftProcessingDurationTs;
                 }
                 mailbox = Pools[thread.CurrentPoolId]->GetReadyActivationShared(revolvingCounter);
                 if (mailbox) {
                     TlsThreadContext->ProcessedActivationsByCurrentPool++;
-                    ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: found mailbox; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
+                    EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "found mailbox; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                     return mailbox;
                 } else if (!TlsThreadContext->ExecutionContext.IsNeededToWaitNextActivation) {
                     TlsThreadContext->ProcessedActivationsByCurrentPool++;
-                    ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: no mailbox and no need to wait; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
+                    EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "no mailbox and no need to wait; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                     return nullptr;
                 } else {
-                    ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: no mailbox and need to find new pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " processedActivationsByCurrentPool == ", TlsThreadContext->ProcessedActivationsByCurrentPool);
+                    EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "no mailbox and need to find new pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " processedActivationsByCurrentPool == ", TlsThreadContext->ProcessedActivationsByCurrentPool);
                     TlsThreadContext->ProcessedActivationsByCurrentPool = 0;
                     if (thread.CurrentPoolId != thread.OwnerPoolId) {
                         SwitchToPool(thread.OwnerPoolId, hpnow);
@@ -185,10 +192,10 @@ namespace NActors {
                 }
             } else if (!TlsThreadContext->ExecutionContext.IsNeededToWaitNextActivation) {
                 TlsThreadContext->ProcessedActivationsByCurrentPool++;
-                ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: no mailbox and no need to wait; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "no mailbox and no need to wait; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                 return nullptr;
             } else {
-                ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: comeback to owner pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " processedActivationsByCurrentPool == ", TlsThreadContext->ProcessedActivationsByCurrentPool, " hpnow == ", hpnow, " softDeadlineForPool == ", thread.SoftDeadlineForPool);
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "comeback to owner pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " processedActivationsByCurrentPool == ", TlsThreadContext->ProcessedActivationsByCurrentPool, " hpnow == ", hpnow, " softDeadlineForPool == ", thread.SoftDeadlineForPool);
                 TlsThreadContext->ProcessedActivationsByCurrentPool = 0;
                 SwitchToPool(thread.OwnerPoolId, hpnow);
                 // after soft deadline we check owner pool again
@@ -196,9 +203,9 @@ namespace NActors {
             }
             bool goToSleep = true;
             for (i16 attempt = 0; attempt < 2; ++attempt) {
-                ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: attempt == ", attempt, " ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "attempt == ", attempt, " ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                 if (i16 poolId = FindPoolForWorker(thread, revolvingCounter); poolId != -1) {
-                    ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: found pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
+                    EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "found pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                     SwitchToPool(poolId, hpnow);
                     goToSleep = false;
                     break;
@@ -213,13 +220,13 @@ namespace NActors {
                         threadsState.WorkingThreadCount--;
                         if (ThreadsState.compare_exchange_strong(threadsStateRaw, threadsState.ConvertToUI64(), std::memory_order_acq_rel, std::memory_order_acquire)) {
                             allowedToSleep = true;
-                            ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: checked global state; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " notifications == ", threadsState.Notifications, " workingThreadCount: ", threadsState.WorkingThreadCount + 1, " -> ", threadsState.WorkingThreadCount);
+                            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "checked global state; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " notifications == ", threadsState.Notifications, " workingThreadCount: ", threadsState.WorkingThreadCount + 1, " -> ", threadsState.WorkingThreadCount);
                             break;
                         }
                     } else {
                         threadsState.Notifications--;
                         if (ThreadsState.compare_exchange_strong(threadsStateRaw, threadsState.ConvertToUI64(), std::memory_order_acq_rel, std::memory_order_acquire)) {
-                            ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: checked global state; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " workingThreadCount == ", threadsState.WorkingThreadCount, " notifications: ", threadsState.Notifications + 1, " -> ", threadsState.Notifications);
+                            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "checked global state; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " workingThreadCount == ", threadsState.WorkingThreadCount, " notifications: ", threadsState.Notifications + 1, " -> ", threadsState.Notifications);
                             break;
                         }
                     }
@@ -229,13 +236,13 @@ namespace NActors {
                     ui64 localNotifications = LocalNotifications[thread.OwnerPoolId].load(std::memory_order_acquire);
                     while (true) {
                         if (localNotifications == 0) {
-                            ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: checked local state; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " localNotifications == 0");
+                            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "checked local state; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " localNotifications == 0");
                             break;
                         }
                         if (LocalNotifications[thread.OwnerPoolId].compare_exchange_strong(localNotifications, localNotifications - 1, std::memory_order_acq_rel, std::memory_order_acquire)) {
                             allowedToSleep = false;
                             ThreadsState.fetch_add(1, std::memory_order_acq_rel);
-                            ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: checked local state; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " localNotifications: ", localNotifications, " -> ", localNotifications - 1);
+                            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "checked local state; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " localNotifications: ", localNotifications, " -> ", localNotifications - 1);
                             break;
                         }
                     }
@@ -243,11 +250,11 @@ namespace NActors {
                 if (allowedToSleep) {
                     SwitchToPool(thread.OwnerPoolId, hpnow); // already switched, needless
                     LocalThreads[thread.OwnerPoolId].fetch_sub(1, std::memory_order_acq_rel);
-                    ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: going to sleep; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
+                    EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "going to sleep; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                     ACTORLIB_VERIFY(thread.OwnerPoolId < static_cast<i16>(Pools.size()), "thread.OwnerPoolId == ", thread.OwnerPoolId, " Pools.size() == ", Pools.size());
                     ACTORLIB_VERIFY(Pools[thread.OwnerPoolId] != nullptr, "Pools[thread.OwnerPoolId] is nullptr");
                     if (thread.Wait(Pools[thread.OwnerPoolId]->SpinThresholdCycles.load(std::memory_order_relaxed), &StopFlag, &LocalNotifications[thread.OwnerPoolId], &ThreadsState)) {
-                        ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::GetReadyActivation: interrupted; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
+                        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "interrupted; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                         return nullptr; // interrupted
                     }
                     LocalThreads[thread.OwnerPoolId].fetch_add(1, std::memory_order_acq_rel);
@@ -293,7 +300,7 @@ namespace NActors {
     void TSharedExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) {
         TAffinityGuard affinityGuard(Affinity());
 
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TSharedExecutorPool::Prepare: start");
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "TSharedExecutorPool::Prepare: start");
 
         ActorSystem = actorSystem;
 
@@ -305,7 +312,7 @@ namespace NActors {
             Y_ABORT_UNLESS(Pools[Threads[i].OwnerPoolId] != nullptr, "Pool is nullptr i %" PRIu16, i);
             Y_ABORT_UNLESS(Threads[i].OwnerPoolId < static_cast<i16>(Pools.size()), "OwnerPoolId is out of range i %" PRIu16 " OwnerPoolId == %" PRIu16, i, Threads[i].OwnerPoolId);
             Y_ABORT_UNLESS(Threads[i].OwnerPoolId >= 0, "OwnerPoolId is out of range i %" PRIu16 " OwnerPoolId == %" PRIu16, i, Threads[i].OwnerPoolId);
-            ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TSharedExecutorPool::Prepare: create thread ", i, " OwnerPoolId == ", Threads[i].OwnerPoolId);
+            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "create thread ", i, " OwnerPoolId == ", Threads[i].OwnerPoolId);
             Threads[i].Thread.reset(    
                 new TExecutorThread(
                     i,
@@ -323,13 +330,13 @@ namespace NActors {
         *scheduleSz = PoolThreads;
 
         //Sanitizer = std::make_unique<TSharedExecutorPoolSanitizer>(this);
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TSharedExecutorPool::Prepare: end");
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "end");
     }
 
     void TSharedExecutorPool::Start() {
         TAffinityGuard affinityGuard(Affinity());
 
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TSharedExecutorPool::Start");
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "start");
 
         for (i16 i = 0; i != PoolThreads; ++i) {
             Y_ABORT_UNLESS(Threads[i].Thread != nullptr, "Thread is nullptr i %" PRIu16, i);
@@ -341,7 +348,7 @@ namespace NActors {
     }
 
     void TSharedExecutorPool::PrepareStop() {
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TSharedExecutorPool::PrepareStop");
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "prepare stop");
         StopFlag.store(true, std::memory_order_release);
         for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread->StopFlag.store(true, std::memory_order_release);
@@ -353,7 +360,7 @@ namespace NActors {
     }
 
     void TSharedExecutorPool::Shutdown() {
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TSharedExecutorPool::Shutdown");
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "shutdown");
         for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread->Join();
         }
@@ -406,10 +413,10 @@ namespace NActors {
     }
 
     void TSharedExecutorPool::Initialize() {
-        ACTORLIB_DEBUG(EDebugLevel::Executor, "TSharedExecutorPool::Initialize: start");
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "start");
         TWorkerId workerId = TlsThreadContext->WorkerId();
         Threads[workerId].Thread->SwitchPool(Pools[Threads[workerId].OwnerPoolId]);
-        ACTORLIB_DEBUG(EDebugLevel::Executor, "TSharedExecutorPool::Initialize: end");
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "end");
     }
 
     bool TSharedExecutorPool::WakeUpLocalThreads(i16 ownerPoolId) {
@@ -429,7 +436,7 @@ namespace NActors {
                 if (TlsThreadContext) {
                     workerId = TlsThreadContext->WorkerId();
                 }
-                ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::TryToWakeUp: wakeup from own pool; ownerPoolId == ", ownerPoolId, " threadId == ", threadId);
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "wakeup from own pool; ownerPoolId == ", ownerPoolId, " threadId == ", threadId);
                 break;
             }
         }
@@ -450,7 +457,7 @@ namespace NActors {
             workerId = TlsThreadContext->WorkerId();
         }
 
-        ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", workerId, " TSharedExecutorPool::TryToWakeUp: ownerPoolId == ", ownerPoolId);
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "ownerPoolId == ", ownerPoolId);
         ui64 threadsStateRaw = ThreadsState.load(std::memory_order_acquire);
         TThreadsState threadsState = TThreadsState::GetThreadsState(threadsStateRaw);
         bool allowedToWakeUp = false;
@@ -469,10 +476,10 @@ namespace NActors {
             increaseNotifications = false;
         }
         if (increaseNotifications) {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", workerId, " TSharedExecutorPool::TryToWakeUp: increase notifications; ", threadsState.Notifications - 1, " -> ", threadsState.Notifications);
+            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "increase notifications; ", threadsState.Notifications - 1, " -> ", threadsState.Notifications);
         }
         if (!allowedToWakeUp) {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", workerId, " TSharedExecutorPool::TryToWakeUp: no free threads");
+            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "no free threads");
             return false;
         }
 
@@ -481,7 +488,7 @@ namespace NActors {
             for (i16 threadId = PoolManager.PoolThreadRanges[poolId].Begin; threadId < PoolManager.PoolThreadRanges[poolId].End; ++threadId) {
                 auto &thread = Threads[threadId];
                 if (thread.WakeUp()) {
-                    ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " TSharedExecutorPool::TryToWakeUp: wakeup from other pool; ownerPoolId == ", ownerPoolId, " poolId == ", poolId, " threadId == ", threadId);
+                    EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "wakeup from other pool; ownerPoolId == ", ownerPoolId, " poolId == ", poolId, " threadId == ", threadId);
                     return true;
                 }
             }
@@ -531,7 +538,6 @@ namespace NActors {
 
     void TSharedExecutorPool::SetBasicPool(TBasicExecutorPool* pool) {
         Pools[pool->PoolId] = pool;
-        //pool->MailboxTable = MailboxTable;
     }
 
     void TSharedExecutorPool::FillThreadOwners(std::vector<i16>& threadOwners) const {

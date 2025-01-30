@@ -4,6 +4,17 @@
 #include "thread_context.h"
 #include "executor_pool_basic.h"
 
+#define POOL_ID() \
+    (!TlsThreadContext ? "OUTSIDE" : \
+    (TlsThreadContext->IsShared() ? "Shared[" + ToString(TlsThreadContext->OwnerPoolId()) + "]_" + ToString(TlsThreadContext->PoolId()) : \
+    ("Pool_" + ToString(TlsThreadContext->PoolId()))))
+
+#define WORKER_ID() ("Worker_" + ToString(TlsThreadContext ? TlsThreadContext->WorkerId() : Max<TWorkerId>()))
+
+#define EXECUTOR_THREAD_CTX_DEBUG(level, ...) \
+    ACTORLIB_DEBUG(level, POOL_ID(), " ", WORKER_ID(), " T*ExecutorThreadCtx::", __func__, ": ", __VA_ARGS__)
+
+
 namespace NActors {
 
     template <typename TDerived, typename TWaitState>
@@ -122,7 +133,7 @@ namespace NActors {
                         if (threadsStateValue.Notifications == 0 && localNotificationsValue == 0) {
                             SpinLockPause();
                         } else {
-                            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerContext.WorkerId, " TSharedExecutorPool::Spin: wake up from notifications; ownerPoolId == ", OwnerPoolId, " notifications == ", threadsStateValue.Notifications, " localNotifications == ", localNotificationsValue);
+                            EXECUTOR_THREAD_CTX_DEBUG(EDebugLevel::Activation, "wake up from notifications; ownerPoolId == ", OwnerPoolId, " notifications == ", threadsStateValue.Notifications, " localNotifications == ", localNotificationsValue);
                             ExchangeState(EThreadState::None);
                             return true;
                         }
@@ -151,11 +162,11 @@ namespace NActors {
         ui64 localNotificationsValue = localNotifications->load(std::memory_order_acquire);
         if (threadsStateValue.Notifications != 0 || localNotificationsValue != 0)
         {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerContext.WorkerId, " TSharedExecutorPool::Wait: wake up from notifications; ownerPoolId == ", OwnerPoolId, " notifications == ", threadsStateValue.Notifications, " localNotifications == ", localNotificationsValue);
+            EXECUTOR_THREAD_CTX_DEBUG(EDebugLevel::Activation, "wake up from notifications; ownerPoolId == ", OwnerPoolId, " notifications == ", threadsStateValue.Notifications, " localNotifications == ", localNotificationsValue);
             ExchangeState(EThreadState::None);
             return false;
         } else {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", TlsThreadContext->WorkerContext.WorkerId, " TSharedExecutorPool::Wait: going to sleep after checking notifications; ownerPoolId == ", OwnerPoolId);
+            EXECUTOR_THREAD_CTX_DEBUG(EDebugLevel::Activation, "going to sleep after checking notifications; ownerPoolId == ", OwnerPoolId);
         }
         return Sleep(stopFlag);
     }

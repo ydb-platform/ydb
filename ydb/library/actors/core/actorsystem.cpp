@@ -88,14 +88,11 @@ namespace NActors {
         , StopExecuted(false)
         , CleanupExecuted(false)
     {
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::TActorSystem");
         ServiceMap.Reset(new TServiceMap());
     }
 
     TActorSystem::~TActorSystem() {
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::~TActorSystem: start");
         Cleanup();
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::~TActorSystem: end");
     }
 
     template <TActorSystem::TEPSendFunction EPSpecificSend>
@@ -279,14 +276,13 @@ namespace NActors {
     }
 
     void TActorSystem::Start() {
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: start");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start");
         Y_ABORT_UNLESS(StartExecuted == false);
         StartExecuted = true;
 
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
         TVector<NSchedulerQueue::TReader*> scheduleReaders;
         scheduleReaders.push_back(&ScheduleQueue->Reader);
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: prepare start");
         CpuManager->PrepareStart(scheduleReaders, this);
         Scheduler->Prepare(this, &CurrentTimestamp, &CurrentMonotonic);
         Scheduler->PrepareSchedules(&scheduleReaders.front(), (ui32)scheduleReaders.size());
@@ -318,20 +314,19 @@ namespace NActors {
             }
         }
 
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: prepare start");
         Scheduler->PrepareStart();
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: cpu manager start");
         CpuManager->Start();
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: send scheduler initialize");
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: scheduler start");
         Scheduler->Start();
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: end");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: started");
     }
 
     void TActorSystem::Stop() {
-        if (StopExecuted || !StartExecuted)
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop");
+        if (StopExecuted || !StartExecuted) {
+            ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: already stopped");
             return;
+        }
 
         StopExecuted = true;
 
@@ -343,15 +338,20 @@ namespace NActors {
         CpuManager->PrepareStop();
         Scheduler->Stop();
         CpuManager->Shutdown();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: stopped");
     }
 
     void TActorSystem::Cleanup() {
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup");
         Stop();
-        if (CleanupExecuted || !StartExecuted)
+        if (CleanupExecuted || !StartExecuted) {
+            ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: already cleaned up");
             return;
+        }
         CleanupExecuted = true;
         CpuManager->Cleanup();
         Scheduler.Destroy();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: cleaned up");
     }
 
     void TActorSystem::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {

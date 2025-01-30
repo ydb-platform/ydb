@@ -26,8 +26,8 @@
 
 #define WORKER_ID() ("Worker_" + ToString(TlsThreadContext ? TlsThreadContext->WorkerId() : Max<TWorkerId>()))
 
-#define EXECUTOR_THREAD_DEBUG(level, ...) \
-    ACTORLIB_DEBUG(level, POOL_ID(), " ", WORKER_ID(), " ", __func__, ": ", __VA_ARGS__)
+#define EXECUTOR_POOL_BASIC_DEBUG(level, ...) \
+    ACTORLIB_DEBUG(level, POOL_ID(), " ", WORKER_ID(), " TExecutorPoolBasic::", __func__, ": ", __VA_ARGS__)
 
 
 namespace NActors {
@@ -90,11 +90,9 @@ namespace NActors {
             .HasSharedThread = hasOwnSharedThread,
         }, harmonizer, jail)
     {
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::ctor ", poolName, ' ', threads);
         if (affinity != nullptr) {
             delete affinity;
         }
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::ctor end");
     }
 
     TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail)
@@ -119,7 +117,6 @@ namespace NActors {
         , Jail(jail)
         , ActorSystemProfile(cfg.ActorSystemProfile)
     {
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::ctor start ", cfg.PoolName, ' ', cfg.Threads);
         Y_UNUSED(Jail, SoftProcessingDurationTs);
 
         ui32 threads = ThreadCount;
@@ -172,13 +169,10 @@ namespace NActors {
         if constexpr (DebugMode) {
             Sanitizer.reset(new TBasicExecutorPoolSanitizer(this));
         }
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::ctor end");
     }
 
     TBasicExecutorPool::~TBasicExecutorPool() {
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::dtor start");
         Threads.Destroy();
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::dtor end");
     }
 
     void TBasicExecutorPool::AskToGoToSleep(bool *needToWait, bool *needToBlock) {
@@ -219,7 +213,7 @@ namespace NActors {
 
     TMailbox* TBasicExecutorPool::GetReadyActivationCommon(ui64 revolvingCounter) {
         TWorkerId workerId = TlsThreadContext->WorkerId();
-        ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivationCommon: start");
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "");
         NHPTimer::STime hpnow = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
 
@@ -227,20 +221,20 @@ namespace NActors {
 
         Threads[workerId].UnsetWork();
         if (Harmonizer) {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivationCommon: try to harmonize");
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "try to harmonize");
             LWPROBE(TryToHarmonize, PoolId, PoolName);
             Harmonizer->Harmonize(hpnow);
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivationCommon: harmonize done");
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "harmonize done");
         }
 
         TAtomic semaphoreRaw = AtomicGet(Semaphore);
         TSemaphore semaphore = TSemaphore::GetSemaphore(semaphoreRaw);
         while (!StopFlag.load(std::memory_order_acquire)) {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivationCommon: semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
             if (!semaphore.OldSemaphore || workerId >= 0 && semaphore.CurrentSleepThreadCount < 0) {
-                ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, '_', workerId, " TBasicExecutorPool::GetReadyActivationCommon: semaphore.OldSemaphore == 0 or workerId >= 0 && semaphore.CurrentSleepThreadCount < 0");
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "semaphore.OldSemaphore == 0 or workerId >= 0 && semaphore.CurrentSleepThreadCount < 0");
                 if (!TlsThreadContext->ExecutionContext.IsNeededToWaitNextActivation) {
-                    ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, '_', workerId, " TBasicExecutorPool::GetReadyActivationCommon: wctx.ExecutionContext.IsNeededToWaitNextActivation == false");
+                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "wctx.ExecutionContext.IsNeededToWaitNextActivation == false");
                     return nullptr;
                 }
 
@@ -248,16 +242,16 @@ namespace NActors {
                 bool needToBlock = false;
                 AskToGoToSleep(&needToWait, &needToBlock);
                 if (needToWait) {
-                    ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, '_', workerId, " TBasicExecutorPool::GetReadyActivationCommon: go to sleep");
+                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "go to sleep");
                     if (Threads[workerId].Wait(SpinThresholdCycles, &StopFlag)) {
-                        ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, '_', workerId, " TBasicExecutorPool::GetReadyActivationCommon: sleep interrupted");
+                        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "sleep interrupted");
                         return nullptr;
                     }
                 }
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
                 if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
-                    ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, '_', workerId, " TBasicExecutorPool::GetReadyActivationCommon: activation found");
+                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation found");
                     Threads[workerId].SetWork();
                     AtomicDecrement(Semaphore);
                     return MailboxTable->Get(activation);
@@ -279,23 +273,23 @@ namespace NActors {
         if (workerId >= 0 && LocalQueues[workerId].size()) {
             ui32 activation = LocalQueues[workerId].front();
             LocalQueues[workerId].pop();
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivation: local queue: activation found");
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue: activation found");
             return MailboxTable->Get(activation);
         } else {
             TlsThreadContext->LocalQueueContext.WriteTurn = 0;
             TlsThreadContext->LocalQueueContext.LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
         }
-        ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivation: local queue done; moving to common");
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue done; moving to common");
         return GetReadyActivationCommon(revolvingCounter);
     }
 
     TMailbox* TBasicExecutorPool::GetReadyActivation(ui64 revolvingCounter) {
         TWorkerId workerId = TlsThreadContext->WorkerId();
         if constexpr (NFeatures::IsLocalQueues()) {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivation: local queue");
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue");
             return GetReadyActivationLocalQueue(revolvingCounter);
         } else {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, "_", workerId, " TBasicExecutorPool::GetReadyActivation");
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "");
             return GetReadyActivationCommon(revolvingCounter);
         }
     }
@@ -320,7 +314,7 @@ namespace NActors {
             workerId = TlsThreadContext->WorkerId();
         }
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
-        ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, ' ', '_', workerId, " TBasicExecutorPool::ScheduleActivationExCommon: semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
         std::visit([mailbox, revolvingCounter](auto &x) {
             x.Push(mailbox->Hint, revolvingCounter);
         }, Activations);
@@ -331,7 +325,7 @@ namespace NActors {
             x = AtomicIncrement(Semaphore);
             needToChangeOldSemaphore = false;
             if (SharedPool->WakeUpLocalThreads(PoolId)) {
-                ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName,' ', '_', workerId, " TBasicExecutorPool::ScheduleActivationExCommon: shared pool wake up local threads");
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "shared pool wake up local threads");
                 return;
             }
             semaphore = TSemaphore::GetSemaphore(x);
@@ -356,10 +350,10 @@ namespace NActors {
         } while (true);
 
         if (needToWakeUp) { // we must find someone to wake-up
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, ' ', '_', workerId, " TBasicExecutorPool::ScheduleActivationExCommon: need to wake up");
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "need to wake up");
             WakeUpLoop(semaphore.CurrentThreadCount);
         } else if (SharedPool) {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, PoolName, ' ', '_', workerId, " TBasicExecutorPool::ScheduleActivationExCommon: shared pool wake up global threads");
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "shared pool wake up global threads");
             SharedPool->WakeUpGlobalThreads(PoolId);
         }
     }
@@ -455,7 +449,7 @@ namespace NActors {
 
     void TBasicExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) {
         TAffinityGuard affinityGuard(Affinity());
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::Prepare: start");
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "");
 
         ActorSystem = actorSystem;
 
@@ -476,12 +470,12 @@ namespace NActors {
 
         *scheduleReaders = ScheduleReaders.Get();
         *scheduleSz = MaxFullThreadCount;
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::Prepare: end");
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "prepared");
     }
 
     void TBasicExecutorPool::Start() {
         TAffinityGuard affinityGuard(Affinity());
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::Start: start ", PoolName, ' ', MaxFullThreadCount);
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "max threads: ", MaxFullThreadCount);
         ThreadUtilization = 0;
         AtomicAdd(MaxUtilizationCounter, -(i64)GetCycleCountFast());
 
@@ -492,34 +486,33 @@ namespace NActors {
         if constexpr (DebugMode) {
             Sanitizer->Start();
         }
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::Start: end");
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "started");
     }
 
     void TBasicExecutorPool::PrepareStop() {
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::PrepareStop: start ", PoolName, ' ', MaxFullThreadCount);
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "stop flag set");
         StopFlag.store(true, std::memory_order_release);
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
-            ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::PrepareStop: stop flag ", i);
             Threads[i].Thread->StopFlag.store(true, std::memory_order_release);
             Threads[i].Interrupt();
         }
         if constexpr (DebugMode) {
             Sanitizer->Stop();
         }
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::PrepareStop: end");
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "stopped");
     }
 
     void TBasicExecutorPool::Shutdown() {
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::Shutdown: start ", PoolName, ' ', MaxFullThreadCount);
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "shutdown");
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
-            ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::Shutdown: join ", i);
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "join ", i);
             Threads[i].Thread->Join();
         }
         if constexpr (DebugMode) {
-            ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::Shutdown: join sanitizer");
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "join sanitizer");
             Sanitizer->Join();
         }
-        ACTORLIB_DEBUG(EDebugLevel::ExecutorPool, "TBasicExecutorPool::Shutdown: end");
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "shutdown done");
     }
 
     void TBasicExecutorPool::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
@@ -728,24 +721,22 @@ namespace NActors {
 
         SharedPool->Threads[workerId].UnsetWork();
         if (Harmonizer) {
-            ACTORLIB_DEBUG(EDebugLevel::Activation, "TBasicExecutorPool::GetReadyActivationShared: try to harmonize");
             LWPROBE(TryToHarmonize, PoolId, PoolName);
             Harmonizer->Harmonize(hpnow);
-            ACTORLIB_DEBUG(EDebugLevel::Activation, "TBasicExecutorPool::GetReadyActivationShared: harmonize done");
         }
         TAtomic x = AtomicGet(Semaphore);
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
-        ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", workerId, " Shared_", PoolId, " TBasicExecutorPool::GetReadyActivationShared: revolvingCounter == ", revolvingCounter, " semaphore == ", semaphore.OldSemaphore);
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "revolvingCounter == ", revolvingCounter, " semaphore == ", semaphore.OldSemaphore);
         while (!StopFlag.load(std::memory_order_acquire)) {
             if (!semaphore.OldSemaphore) {
-                ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " Shared_", PoolId, " TBasicExecutorPool::GetReadyActivationShared: semaphore == 0");
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "semaphore == 0");
                 return nullptr;
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
                 if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
                     SharedPool->Threads[workerId].SetWork();
                     AtomicDecrement(Semaphore);
-                    ACTORLIB_DEBUG(EDebugLevel::Activation, "Worker_", workerId, " Shared_", PoolId, " TBasicExecutorPool::GetReadyActivationShared: activation == ", activation, " semaphore == ", semaphore.OldSemaphore);
+                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphore == ", semaphore.OldSemaphore);
                     return MailboxTable->Get(activation);
                 }
             }
@@ -754,7 +745,7 @@ namespace NActors {
             x = AtomicGet(Semaphore);
             semaphore = TSemaphore::GetSemaphore(x);
         }
-        ACTORLIB_DEBUG(EDebugLevel::Executor, "Worker_", workerId, " Shared_", PoolId, " TBasicExecutorPool::GetReadyActivation: stop");
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "stop");
         return nullptr;
     }
 

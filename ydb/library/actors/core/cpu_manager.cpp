@@ -26,7 +26,7 @@ namespace NActors {
     }
 
     void TCpuManager::SetupShared() {
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared: start");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared");
         bool hasSharedThread = false;
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
             if (cfg.HasSharedThread) {
@@ -63,11 +63,11 @@ namespace NActors {
         }
         Shared = std::make_unique<TSharedExecutorPool>(Config.Shared, poolInfos);
 
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared: end");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared: created");
     }
 
     void TCpuManager::Setup() {
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Setup: start");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Setup");
         TAffinity available;
         available.Current();
 
@@ -102,11 +102,11 @@ namespace NActors {
                 Harmonizer->AddPool(Executors[excIdx].Get());
             }
         }
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Setup: end");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Setup: created");
     }
 
     void TCpuManager::PrepareStart(TVector<NSchedulerQueue::TReader*>& scheduleReaders, TActorSystem* actorSystem) {
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::PrepareStart: start");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::PrepareStart");
         NSchedulerQueue::TReader* readers;
         ui32 readersCount = 0;
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
@@ -123,33 +123,33 @@ namespace NActors {
                 scheduleReaders.push_back(readers);
             }
         }
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::PrepareStart: end");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::PrepareStart: prepared");
     }
 
     void TCpuManager::Start() {
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Start: start");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Start");
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx]->Start();
         }
         if (Shared) {
             Shared->Start();
         }
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Start: end");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Start: started");
     }
 
     void TCpuManager::PrepareStop() {
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::PrepareStop: start");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::PrepareStop");
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx]->PrepareStop();
         }
         if (Shared) {
             Shared->PrepareStop();
         }
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::PrepareStop: end");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::PrepareStop: prepared");
     }
 
     void TCpuManager::Shutdown() {
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Shutdown: start");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Shutdown");
         if (Shared) {
             Shared->Shutdown();
         }
@@ -168,11 +168,11 @@ namespace NActors {
         if (Shared) {
             Shared->Cleanup();
         }
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Shutdown: end");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Shutdown: shutdown");
     }
 
     void TCpuManager::Cleanup() {
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Cleanup: start");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Cleanup");
         if (Shared) {
             Shared->Cleanup();
         }
@@ -185,13 +185,12 @@ namespace NActors {
                 }
             }
         }
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Cleanup: Destroy");
         if (Shared) {
             Shared.reset();
         }
         Executors.Destroy();
 
-        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Cleanup: end");
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Cleanup: destroyed");
     }
 
     IExecutorPool* TCpuManager::CreateExecutorPool(ui32 poolId) {

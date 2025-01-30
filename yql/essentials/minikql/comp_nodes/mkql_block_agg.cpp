@@ -1200,6 +1200,7 @@ public:
     std::optional<NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>> LoadingOperation_ = std::nullopt;
     bool IsExtractingFinished = false;
     std::vector<ISpiller::TKey> SpillingKeys_;
+    std::vector<size_t> SpillingSizes_;
     bool IteratorsInitialized = false;
 
     THashedWrapperBaseState(TMemoryUsageInfo* memInfo, ui32 keyLength, ui32 streamIndex, size_t width, size_t outputWidth, std::optional<ui32> filterColumn, const std::vector<TAggParams<TAggregator>>& params,
@@ -1279,6 +1280,13 @@ public:
         auto iterateBatch = [&]() {
             for (ui32 i = 0; i < itersLen; ++i) {
                 auto iter = iters[i];
+                const TKey& key = hash.GetKey(iter);
+
+                buf.PushString(GetKeyView<TKey>(key, KeyLength_));
+            }
+
+            for (ui32 i = 0; i < itersLen; ++i) {
+                auto iter = iters[i];
                 auto payload = (char*)hash.GetPayload(iter);
                 char* ptr;
                 if constexpr (UseArena) {
@@ -1304,12 +1312,6 @@ public:
                 }
             }
 
-            for (ui32 i = 0; i < itersLen; ++i) {
-                auto iter = iters[i];
-                const TKey& key = hash.GetKey(iter);
-
-                buf.PushString(GetKeyView<TKey>(key, KeyLength_));
-            }
         };
 
         for (; iter != hash.End(); hash.Advance(iter)) {
@@ -1374,14 +1376,14 @@ public:
             IsExtractingFinished = InlineAggState ?
                 SpillingIterate(*HashMap_, SpillingHashMapIt_, spillingBuffer) :
                 SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_, spillingBuffer);
-            spillingBuffer.PushNumber(SpillingOutputBlockSize_);
+            SpillingSizes_.push_back(SpillingOutputBlockSize_);
             auto sb = spillingBuffer.Finish();
             if (!sb.size()) continue;
             TString s = TString(sb.begin(), sb.size());
             int stringSize = s.size();
             NYql::TChunkedBuffer cb = NYql::TChunkedBuffer(std::move(s));
             SpillingOperation_ = Spiller_->Put(std::move(cb));
-            std::cerr << "Spilled block " << stringSize << std::endl;
+            std::cerr << "Spilled block " << stringSize << "SpillingOutputBlockSize: " << SpillingOutputBlockSize_ << std::endl;
             SpillingOutputBlockSize_ = 0;
             break;
         }
@@ -1396,6 +1398,7 @@ public:
             auto data = *LoadingOperation_->ExtractValue();
             LoadingOperation_ = std::nullopt;
 
+            std::cerr << "ProcessingLoaded" << std::endl;
             SpillingProcessInput(data);
         }
         if (!SpillingKeys_.empty()) {
@@ -1408,18 +1411,19 @@ public:
     }
 
     void SpillingProcessInput(NYql::TChunkedBuffer& data) {
-        NYql::NUdf::TOutputBuffer buf;
-        buf.Resize(data.Size());
-
         NYql::TChunkedBufferOutput outtmp(data);
 
-        TStringBuf tmp;
-        outtmp.Write(tmp);
+        TStringStream stream;
+
+        data.CopyTo(stream, data.Size());
+
+        TStringBuf tmp = stream.Str();
 
         NYql::NUdf::TInputBuffer input(tmp);
 
         ++BatchNum_;
-        const auto batchLength = input.PopNumber<size_t>();
+        const auto batchLength = SpillingSizes_.back();
+        SpillingSizes_.pop_back();
         if (!batchLength) {
             return;
         }

@@ -48,21 +48,18 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         }
     }
     {
-        auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
+        auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
                                           [hasDeletions ? 1 : 0];
-        if (!result) {
-            TGuard<TMutex> wg(Mutex);
-            result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                         [hasDeletions ? 1 : 0];
-            if (!result) {
-                result = BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions);
-                CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                    [hasDeletions ? 1 : 0] = result;
+        if (result.NeedInitialization()) {
+            TGuard<TMutex> g(Mutex);
+            if (auto gInit = result.StartInitialization()) {
+                gInit.InitializationFinished(
+                    BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions));
+            } else {
+                AFL_VERIFY(!result.NeedInitialization());
             }
         }
-        AFL_VERIFY(result);
-        AFL_VERIFY(*result);
-        return *result;
+        return result.GetScriptVerified();
     }
 }
 

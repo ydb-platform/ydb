@@ -74,6 +74,7 @@ message TEvTabletStateRequest {
     optional string Format = 5; // it could be "packed5"
     optional string GroupBy = 20; // it's either empty or "Type,State" for now
     repeated fixed64 FilterTabletId = 22;
+    optional NKikimrSubDomains.TDomainKey FilterTenantId = 23;
 }
 
 message TEvTabletStateResponse {

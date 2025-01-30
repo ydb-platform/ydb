@@ -42,6 +42,7 @@ protected:
     TString Database;
     TString SharedDatabase;
     bool Direct = false;
+    bool NeedRedirect = true;
     ui32 Requests = 0;
     bool PassedAway = false;
     ui32 MaxRequestsInFlight = 200;

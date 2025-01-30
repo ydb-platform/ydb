@@ -428,4 +428,5 @@ ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_class
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-False]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit
+ydb/tests/stress/log/tests/test_workload.py.TestYdbLogWorkload.test[column]
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

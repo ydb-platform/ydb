@@ -56,7 +56,6 @@ TString GetRegisteredActorName(const TActorId& actorId) {
 class TTestExecutorPool : public IExecutorPool {
     TTestActorSystem *Context;
     const ui32 NodeId;
-
 public:
     TTestExecutorPool(TTestActorSystem *context, ui32 nodeId)
         : IExecutorPool(0)
@@ -64,13 +63,17 @@ public:
         , NodeId(nodeId)
     {}
 
-    TMailbox* GetReadyActivation(TWorkerContext& /*wctx*/, ui64 /*revolvingCounter*/) override {
+    TMailbox* GetReadyActivation(ui64 /*revolvingCounter*/) override {
         Y_ABORT();
     }
 
     TMailbox* ResolveMailbox(ui32 hint) override {
         const auto it = Context->Mailboxes.find({NodeId, PoolId, hint});
         return it != Context->Mailboxes.end() ? &it->second : nullptr;
+    }
+
+    TMailboxTable* GetMailboxTable() const override {
+        return Context->PerNodeInfo[NodeId - 1].MailboxTable.get();
     }
 
     void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, NActors::TWorkerId /*workerId*/) override {

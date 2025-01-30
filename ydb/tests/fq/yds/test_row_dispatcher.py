@@ -981,10 +981,10 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_row_dispatcher_sensor_value(kikimr, "RowsSent", 1, exact_match=False)
         wait_row_dispatcher_sensor_value(kikimr, "IncomingRequests", 1, exact_match=False)
 
-        wait_public_sensor_value(kikimr, query_id, "query.filtered_bytes", 1)
-        wait_public_sensor_value(kikimr, query_id, "query.filtered_rows", 1)
-        wait_public_sensor_value(kikimr, query_id, "query.queued_bytes", 0)
-        wait_public_sensor_value(kikimr, query_id, "query.queued_rows", 0)
+        wait_public_sensor_value(kikimr, query_id, "query.input_filtered_bytes", 1)
+        wait_public_sensor_value(kikimr, query_id, "query.source_input_filtered_records", 1)
+        wait_public_sensor_value(kikimr, query_id, "query.input_queued_bytes", 0)
+        wait_public_sensor_value(kikimr, query_id, "query.source_input_queued_records", 0)
         stop_yds_query(client, query_id)
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)

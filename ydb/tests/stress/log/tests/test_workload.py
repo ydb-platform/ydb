@@ -42,28 +42,35 @@ class TestYdbLogWorkload(object):
 
     @pytest.mark.parametrize('store_type', ['row', 'column'])
     def test(self, store_type):
-        commands = [
-            # init
+        upload_commands = [
+            # bulk upsert workload
+            self.get_command_prefix(subcmds=['run', 'bulk_upsert'], path=store_type) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+
+            # upsert workload
+            self.get_command_prefix(subcmds=['run', 'upsert'], path=store_type) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+
+            # insert workload
+            self.get_command_prefix(subcmds=['run', 'insert'], path=store_type) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+        ]
+
+        # init
+        yatest.common.execute(
             self.get_command_prefix(subcmds=['init'], path=store_type) + self.get_insert_command_params() + [
                 '--store', store_type,
                 '--min-partitions', '100',
                 '--partition-size', '10',
                 '--auto-partition', '0',
             ],
+        )
 
-            # bulk upsert workload
-            self.get_command_prefix(subcmds=['run', 'bulk_upsert'], path=store_type) + self.get_insert_command_params(),
-
-            # upsert workload
-            self.get_command_prefix(subcmds=['run', 'upsert'], path=store_type) + self.get_insert_command_params(),
-
-            # insert workload
-            self.get_command_prefix(subcmds=['run', 'insert'], path=store_type) + self.get_insert_command_params(),
-
-            # select workload
+        select = yatest.common.execute(
             self.get_command_prefix(subcmds=['run', 'select'], path=store_type) + [
-                '--client-timeout', '10000'
-            ]
-        ]
-        for command in commands:
+                '--client-timeout', '10000',
+                '--threads', '10',
+                '--seconds', str(10 * len(upload_commands)),
+            ], wait=False)
+
+        for command in upload_commands:
             yatest.common.execute(command, wait=True)
+
+        select.wait()

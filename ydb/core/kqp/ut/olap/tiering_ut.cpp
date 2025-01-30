@@ -5,6 +5,7 @@
 #include "helpers/writer.h"
 
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
@@ -314,6 +315,68 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_GT(GetUint64(rows[0].at("count")), 0);
+        }
+    }
+
+    Y_UNIT_TEST(LocksInterference) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->SetSkipSpecialCheckForEvict(true);
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        TLocalHelper localHelper(testHelper.GetKikimr());
+        testHelper.GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+
+        localHelper.CreateTestOlapTable();
+
+        for (ui64 i = 0; i < 100; ++i) {
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, 3600000000 + i * 10000, 1000);
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, 3600000000 + i * 10000, 1000);
+        }
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        csController->RegisterLock("table", std::make_shared<NOlap::NDataLocks::TListTablesLock>("table", THashSet<ui64>({0, 1, 2, 3, 4, 5}), NOlap::NDataLocks::ELockCategory::Compaction));
+        {
+            const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("PT1S") ON timestamp)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        csController->WaitActualization(TDuration::Seconds(5));
+
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
+        csController->UnregisterLock("table");
+        csController->WaitTtl(TDuration::Seconds(5));
+        {
+            auto selectQuery = TString(R"(
+                SELECT COUNT(*) AS Count
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+                GROUP BY TierName
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_GT(GetUint64(rows[0].at("Count")), 0);
+        }
+
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::TTL);
+        csController->WaitActualization(TDuration::Seconds(5));
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT *
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+                GROUP BY TierName
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 0);
         }
     }
 }

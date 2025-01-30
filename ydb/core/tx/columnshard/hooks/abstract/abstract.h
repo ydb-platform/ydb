@@ -29,6 +29,9 @@ class TDataAccessorsResult;
 namespace NIndexes {
 class TIndexMetaContainer;
 }
+namespace NDataLocks {
+class ILock;
+}
 }   // namespace NKikimr::NOlap
 namespace arrow {
 class RecordBatch;
@@ -330,6 +333,9 @@ public:
         Y_UNUSED(txInfo);
     }
 
+    virtual const THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>>& GetExternalDataLocks() const {
+        return Default<THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>>>();
+    }
 };
 
 class TControllers {

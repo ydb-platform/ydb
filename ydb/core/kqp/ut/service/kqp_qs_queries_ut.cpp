@@ -4958,6 +4958,58 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(R"([[2u]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST(ReadManyRangesAndPoints) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/DataShard` (
+                Col1 String,
+                Col2 String,
+                PRIMARY KEY (Col1)
+            )
+            WITH (
+                STORE = ROW,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10,
+                PARTITION_AT_KEYS = (("a"), ("b"), ("c"), ("d"), ("e"), ("f"), ("g"), ("h"), ("i"))
+            );
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES ("a", "a") , ("c", "c"), ("e", "e");
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT Col2 FROM `/Root/DataShard` WHERE
+                    ('f' <= Col1 AND Col1 <= 'g') OR
+                    ('h' <= Col1 AND Col1 <= 'i') OR
+                    ('j' <= Col1 AND Col1 <= 'k') OR
+                    ('l' <= Col1 AND Col1 <= 'm') OR
+                    Col1 == "a" OR
+                    Col1 == "c" OR
+                    Col1 == "e" OR
+                    Col1 == "";
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
 }
 
 } // namespace NKqp

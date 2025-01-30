@@ -93,13 +93,13 @@ public:
 
     void Apply(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId,
         const TTabletCountersBase* executorCounters, const TTabletCountersBase* appCounters,
-        const TActorContext& ctx)
+        const TTabletCountersBase* sysCounters, const TActorContext& ctx)
     {
-        AllTypes->Apply(tabletId, executorCounters, nullptr, tabletType);
+        AllTypes->Apply(tabletId, executorCounters, nullptr, sysCounters, tabletType);
         //
         auto typeCounters = GetOrAddCountersByTabletType(tabletType, CountersByTabletType, Counters);
         if (typeCounters) {
-            typeCounters->Apply(tabletId, executorCounters, appCounters, tabletType);
+            typeCounters->Apply(tabletId, executorCounters, appCounters, sysCounters, tabletType);
         }
         //
         if (!IsFollower && DbWatcherActorId && tenantPathId) {
@@ -342,13 +342,16 @@ private:
             : TabletCountersSection(owner->GetSubgroup(category, name))
             , TabletExecutorCountersSection(TabletCountersSection->GetSubgroup("category", "executor"))
             , TabletAppCountersSection(TabletCountersSection->GetSubgroup("category", "app"))
+            , TabletSysCountersSection(TabletCountersSection->GetSubgroup("category", "sys"))
             , TabletExecutorCounters(TabletExecutorCountersSection)
             , TabletAppCounters(TabletAppCountersSection)
+            , TabletSysCounters(TabletSysCountersSection)
         {}
 
         void Apply(ui64 tabletId,
             const TTabletCountersBase* executorCounters,
             const TTabletCountersBase* appCounters,
+            const TTabletCountersBase* sysCounters,
             TTabletTypes::EType tabletType,
             const TTabletCountersBase* limitedAppCounters = {})
         {
@@ -367,6 +370,13 @@ private:
                 }
                 TabletAppCounters.Apply(tabletId, appCounters, tabletType);
             }
+
+            if (sysCounters) {
+                if (!TabletSysCounters.IsInitialized) {
+                    TabletSysCounters.Initialize(sysCounters);
+                }
+                TabletSysCounters.Apply(tabletId, sysCounters, tabletType);
+            }
         }
 
         void Forget(ui64 tabletId) {
@@ -375,6 +385,9 @@ private:
             }
             if (TabletAppCounters.IsInitialized) {
                 TabletAppCounters.Forget(tabletId);
+            }
+            if (TabletSysCounters.IsInitialized) {
+                TabletSysCounters.Forget(tabletId);
             }
         }
 
@@ -704,9 +717,11 @@ private:
 
         ::NMonitoring::TDynamicCounterPtr TabletExecutorCountersSection;
         ::NMonitoring::TDynamicCounterPtr TabletAppCountersSection;
+        ::NMonitoring::TDynamicCounterPtr TabletSysCountersSection;
 
         TSolomonCounters TabletExecutorCounters;
         TSolomonCounters TabletAppCounters;
+        TSolomonCounters TabletSysCounters;
     };
 
     using TTabletCountersForTabletTypePtr = TIntrusivePtr<TTabletCountersForTabletType>;
@@ -1137,12 +1152,12 @@ public:
             auto allTypes = GetOrAddCounters(TTabletTypes::Unknown);
             {
                 TWriteGuard guard(CountersByTabletType.GetBucketForKey(TTabletTypes::Unknown).GetLock());
-                allTypes->Apply(tabletId, executorCounters, nullptr, type);
+                allTypes->Apply(tabletId, executorCounters, nullptr, nullptr, type);
             }
             auto typeCounters = GetOrAddCounters(type);
             {
                 TWriteGuard guard(CountersByTabletType.GetBucketForKey(type).GetLock());
-                typeCounters->Apply(tabletId, executorCounters, appCounters, type, limitedAppCounters);
+                typeCounters->Apply(tabletId, executorCounters, appCounters, nullptr, type, limitedAppCounters);
             }
         }
 
@@ -1368,7 +1383,7 @@ void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddCounters::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     TEvTabletCounters::TEvTabletAddCounters* msg = ev->Get();
-    TabletMon->Apply(msg->TabletID, msg->TabletType, msg->TenantPathId, msg->ExecutorCounters.Get(), msg->AppCounters.Get(), ctx);
+    TabletMon->Apply(msg->TabletID, msg->TabletType, msg->TenantPathId, msg->ExecutorCounters.Get(), msg->AppCounters.Get(), msg->SysCounters.Get(), ctx);
 }
 
 ////////////////////////////////////////////

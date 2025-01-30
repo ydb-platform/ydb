@@ -418,8 +418,10 @@ class TExecutor
     THolder<TPrivatePageCache> PrivatePageCache;
     THolder<TExecutorCounters> Counters;
     THolder<TTabletCountersBase> AppCounters;
+    THolder<TTabletCountersBase> SysCounters;
     THolder<TTabletCountersBase> CountersBaseline;
     THolder<TTabletCountersBase> AppCountersBaseline;
+    THolder<TTabletCountersBase> SysCountersBaseline;
     THolder<NMetrics::TResourceMetrics> ResourceMetrics;
 
     TAutoPtr<NTable::TDatabase> Database;
@@ -668,6 +670,7 @@ public:
     NMetrics::TResourceMetrics* GetResourceMetrics() const override;
 
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) override;
+    void RegisterExternalTabletSysCounters(THolder<TTabletCountersBase> sysCounters) override;
 
     virtual void SetPreloadTablesData(THashSet<ui32> tables) override;
 

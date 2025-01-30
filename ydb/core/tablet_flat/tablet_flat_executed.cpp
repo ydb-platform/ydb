@@ -160,12 +160,22 @@ void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx, TString &
     ctx.Send(Tablet(), new TEvTablet::TEvTabletActive(std::move(versionInfo)));
 }
 
+void TTabletExecutedFlat::ReportStartTime() {
+    TDuration startTime = TAppData::TimeProvider->Now() - StartTime0;
+    if (Counters) {
+        Counters->Simple()[TTabletSysCounters::START_TIME_US].Set(startTime.MicroSeconds());
+    }
+}
+
 void TTabletExecutedFlat::Enqueue(STFUNC_SIG) {
     Y_UNUSED(ev);
     Y_DEBUG_ABORT("Unhandled StateInit event 0x%08" PRIx32, ev->GetTypeRewrite());
 }
 
 void TTabletExecutedFlat::ActivateExecutor(const TActorContext &ctx) {
+    THolder<TTabletCountersBase> countersPtr = MakeHolder<TTabletSysCounters>();
+    Counters = countersPtr.get();
+    Executor()->RegisterExternalTabletSysCounters(std::move(countersPtr));
     OnActivateExecutor(ctx);
 }
 

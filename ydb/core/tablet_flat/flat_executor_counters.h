@@ -165,4 +165,18 @@ public:
     TExecutorCounters();
 };
 
+#define TABLET_SYS_SIMPLE_COUNTERS_MAP(XX) \
+    XX(START_TIME_US, "StartTimeUs") \
+
+class TTabletSysCounters : public TTabletCountersBase {
+public:
+    enum ESimpleCounter {
+        TABLET_SYS_SIMPLE_COUNTERS_MAP(ENUM_VALUE_GEN_NO_VALUE)
+        SIMPLE_COUNTER_SIZE
+    };
+    static const char* SimpleCounterNames[SIMPLE_COUNTER_SIZE];
+
+    TTabletSysCounters();
+};
+
 }}

@@ -21,9 +21,7 @@ TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit, cons
 
 bool TTieringProcessContext::AddPortion(
     const std::shared_ptr<const TPortionInfo>& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait) {
-    if (!UsedPortions.emplace(info->GetAddress()).second) {
-        return false;
-    }
+    AFL_VERIFY(UsedPortions.emplace(info->GetAddress()).second);
     if (DataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Actualization)) {
         return false;
     }

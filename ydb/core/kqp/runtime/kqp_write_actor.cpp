@@ -1945,6 +1945,8 @@ public:
                 info.WriteTableActor->Terminate();
             }
         }
+
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TActorBootstrapped<TKqpBufferWriteActor>::PassAway();
     }
 

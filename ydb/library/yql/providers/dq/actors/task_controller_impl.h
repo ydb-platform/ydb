@@ -296,15 +296,15 @@ private:
                         publicCounterName = "query.sink_output_records";
                         isDeriv = true;
                     } else if (name == "IngressFilteredBytes" && taskLevelCounter) {
-                        publicCounterName = "query.filtered_bytes";
+                        publicCounterName = "query.input_filtered_bytes";
                         isDeriv = true;
                     } else if (name == "IngressFilteredRows" && taskLevelCounter) {
-                        publicCounterName = "query.filtered_rows";
+                        publicCounterName = "query.input_filtered_records";
                         isDeriv = true;
                     } else if (name == "IngressQueuedBytes" && taskLevelCounter) {
-                        publicCounterName = "query.queued_bytes";
+                        publicCounterName = "query.input_queued_bytes";
                     } else if (name == "IngressQueuedRows" && taskLevelCounter) {
-                        publicCounterName = "query.queued_rows";
+                        publicCounterName = "query.input_queued_records";
                     } else if (name == "Tasks") {
                         publicCounterName = "query.running_tasks";
                         isDeriv = false;

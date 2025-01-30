@@ -1294,7 +1294,7 @@ private:
     void Process() {
         if (GetFreeSpace() <= 0) {
             WaitingForTableActor = true;
-        } else if (WaitingForTableActor && GetFreeSpace() > MessageSettings.InFlightMemoryLimitPerActorBytes / 2) {
+        } else if (WaitingForTableActor) {
             ResumeExecution();
         }
 

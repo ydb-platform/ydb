@@ -2497,6 +2497,19 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
 
 Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
 {
+    // The test verifies that the block is not deleted until the reading is finished. We write
+    // down several large messages in the topic. We start reading and hold it. While we are reading
+    // the message, we add a few more messages to the topic. The retention is triggered. We make
+    // sure that the blobs are deleted only when the reading is finished
+
+    auto writeMsgs = [](const TString& sourceId, size_t begin, size_t end, size_t size, TTestContext& tc) {
+        for (size_t i = begin; i < end; ++i) {
+            TVector<std::pair<ui64, TString>> data;
+            data.emplace_back(i + 1, TString(size, 'x'));
+            CmdWrite(0, sourceId, data, tc, false, {}, true, "", -1, i);
+        }
+    };
+
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.EnableDetailedPQLog = true;
@@ -2505,14 +2518,13 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     const TString sessionId = "session1";
     const TString user = "user1";
 
+    // Creating a topic with the retention settings
     PQTabletPrepare({.partitions = 1, .storageLimitBytes = 50_MB}, {{user, false}}, tc);
 
-    for (size_t i = 0; i < 7; ++i) {
-        TVector<std::pair<ui64, TString>> data;
-        data.emplace_back(i + 1, TString(7_MB, 'x'));
-        CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, i);
-    }
+    // We record several messages. If you record another one, the first one will be deleted
+    writeMsgs("sourceid1", 0, 7, 7_MB, tc);
 
+    // Making sure that the blobs have not been deleted yet
     auto keys = GetTabletKeys(tc);
 
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
@@ -2520,6 +2532,7 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
 
+    // We are reading from topic 2 messages from offset 2
     TPQCmdSettings sessionSettings{0, user, sessionId};
     sessionSettings.PartitionSessionId = 1;
     sessionSettings.KeepPipe = true;
@@ -2529,6 +2542,8 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     readSettings.User = user;
     readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
 
+    // The messages are large and will be cached. We intercept the response from the
+    // cache and hold it. The reading will not end until the response from the cache arrives
     TAutoPtr<IEventHandle> blobResponseEvent;
     auto observe = [&](TAutoPtr<IEventHandle>& ev) {
         if (auto* event = ev->CastAsLocal<TEvPQ::TEvBlobResponse>()) {
@@ -2541,18 +2556,18 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
 
     BeginCmdRead(readSettings, tc);
 
+    // Waiting for a response from the cache
     TDispatchOptions options;
     options.CustomFinalCondition = [&] { return !!blobResponseEvent; };
     tc.Runtime->DispatchEvents(options);
 
-    for (size_t i = 7; i < 14; ++i) {
-        TVector<std::pair<ui64, TString>> data;
-        data.emplace_back(i + 1, TString(7_MB, 'x'));
-        CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, i);
-    }
+    // We're recording a few more big messages. The retention will be triggered and the first messages
+    // will have to be deleted
+    writeMsgs("sourceid1", 7, 14, 7_MB, tc);
 
     keys = GetTabletKeys(tc);
 
+    // We make sure that the blobs with messages on offsets 2 and 3 have not been deleted
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
@@ -2560,16 +2575,15 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
 
     tc.Runtime->Send(blobResponseEvent);
 
+    // The reading ended without error
     UNIT_ASSERT_C(EndCmdRead(readSettings, tc), "CmdRead failed with an error");
 
-    for (size_t i = 14; i < 15; ++i) {
-        TVector<std::pair<ui64, TString>> data;
-        data.emplace_back(i + 1, TString(100_KB, 'x'));
-        CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, i);
-    }
+    // We are writing a short message to launch the planned blob removals
+    writeMsgs("sourceid1", 14, 15, 100_KB, tc);
 
     keys = GetTabletKeys(tc);
 
+    // Making sure that the blobs for messages with offsets 2 and 3 are removed
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
 }

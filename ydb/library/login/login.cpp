@@ -58,6 +58,24 @@ bool TLoginProvider::CheckAllowedName(const TString& name) {
     return name.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789") == std::string::npos;
 }
 
+bool TLoginProvider::CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const {
+    if (IsHashedPassword) {
+        auto hashCheckResult = HashChecker.Check(password);
+        if (!hashCheckResult.Success) {
+            error = hashCheckResult.Error;
+            return false;
+        }
+    } else {
+        auto passwordCheckResult = PasswordChecker.Check(user, password);
+        if (!passwordCheckResult.Success) {
+            error = passwordCheckResult.Error;
+            return false;
+        }
+    }
+
+    return true;
+}
+
 TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserRequest& request) {
     TBasicResponse response;
 
@@ -66,9 +84,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
         return response;
     }
 
-    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
-    if (!passwordCheckResult.Success) {
-        response.Error = passwordCheckResult.Error;
+    if (!CheckPasswordOrHash(request.IsHashedPassword, request.User, request.Password, response.Error)) {
         return response;
     }
 
@@ -84,7 +100,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
 
     TSidRecord& user = itUserCreate.first->second;
     user.Name = request.User;
-    user.PasswordHash = Impl->GenerateHash(request.Password);
+    user.PasswordHash = request.IsHashedPassword ? request.Password : Impl->GenerateHash(request.Password);
     user.CreatedAt = std::chrono::system_clock::now();
     user.LastFailedLogin = std::chrono::system_clock::time_point();
     user.IsEnabled = request.CanLogin;
@@ -116,13 +132,11 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
     TSidRecord& user = itUserModify->second;
 
     if (request.Password.has_value()) {
-        TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password.value());
-        if (!passwordCheckResult.Success) {
-            response.Error = passwordCheckResult.Error;
+        if (!CheckPasswordOrHash(request.IsHashedPassword, request.User, request.Password.value(), response.Error)) {
             return response;
         }
 
-        user.PasswordHash = Impl->GenerateHash(request.Password.value());
+        user.PasswordHash = request.IsHashedPassword ? request.Password.value() : Impl->GenerateHash(request.Password.value());
     }
 
     if (request.CanLogin.has_value()) {

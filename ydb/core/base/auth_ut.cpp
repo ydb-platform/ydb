@@ -81,3 +81,55 @@ Y_UNIT_TEST_SUITE(AuthTokenAllowed) {
     }
 
 }
+
+Y_UNIT_TEST_SUITE(AuthDatabaseAdmin) {
+
+    // Empty owner forbids empty token (regardless of its kind)
+    Y_UNIT_TEST(FailOnEmptyOwnerAndEmptyToken) {
+        NACLib::TUserToken token(NACLib::TUserToken::TUserTokenInitFields{});
+        UNIT_ASSERT_EQUAL(IsDatabaseAdministrator(&token, ""), false);
+    }
+    Y_UNIT_TEST(FailOnEmptyOwnerAndTokenWithEmptyUserSid) {
+        NACLib::TUserToken token({ .UserSID = "" });
+        UNIT_ASSERT_EQUAL(IsDatabaseAdministrator(&token, ""), false);
+    }
+    Y_UNIT_TEST(FailOnEmptyOwnerAndTokenWithEmptyUserSidAndGroups) {
+        NACLib::TUserToken token({ .UserSID = "", .GroupSIDs = {"group1"} });
+        UNIT_ASSERT_EQUAL(IsDatabaseAdministrator(&token, ""), false);
+    }
+    Y_UNIT_TEST(FailOnEmptyOwnerAndNoToken) {
+        UNIT_ASSERT_EQUAL(IsDatabaseAdministrator(nullptr, ""), false);
+    }
+
+    // Non empty owner forbids empty token (regardless of its kind)
+    Y_UNIT_TEST(FailOnOwnerAndEmptyToken) {
+        NACLib::TUserToken token(NACLib::TUserToken::TUserTokenInitFields{});
+        UNIT_ASSERT_EQUAL(IsDatabaseAdministrator(&token, "owner"), false);
+    }
+    Y_UNIT_TEST(FailOnOwnerAndTokenWithEmptyUserSid) {
+        NACLib::TUserToken token({ .UserSID = "" });
+        UNIT_ASSERT_EQUAL(IsDatabaseAdministrator(&token, "owner"), false);
+    }
+    Y_UNIT_TEST(FailOnOwnerAndTokenWithEmptyUserSidAndGroups) {
+        NACLib::TUserToken token({ .UserSID = "", .GroupSIDs = {"group1"} });
+        UNIT_ASSERT_EQUAL(IsDatabaseAdministrator(&token, "owner"), false);
+    }
+    Y_UNIT_TEST(FailOnOwnerAndNoToken) {
+        UNIT_ASSERT_EQUAL(IsDatabaseAdministrator(nullptr, "owner"), false);
+    }
+
+    // Owner matches token
+    Y_UNIT_TEST(PassOnOwnerMatchUserSid) {
+        NACLib::TUserToken token({ .UserSID = "user1" });
+        UNIT_ASSERT_EQUAL(IsDatabaseAdministrator(&token, "user1"), true);
+    }
+    Y_UNIT_TEST(PassOnOwnerMatchUserSidWithGroup) {
+        NACLib::TUserToken token({ .UserSID = "user1", .GroupSIDs = {"group1"} });
+        UNIT_ASSERT_EQUAL(IsDatabaseAdministrator(&token, "user1"), true);
+    }
+    Y_UNIT_TEST(PassOnOwnerMatchGroupSid) {
+        NACLib::TUserToken token({ .UserSID = "user1", .GroupSIDs = {"group1"} });
+        UNIT_ASSERT_EQUAL(IsDatabaseAdministrator(&token, "group1"), true);
+    }
+
+}

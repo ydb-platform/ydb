@@ -1,3 +1,5 @@
+#include <ydb/library/aclib/aclib.h>
+
 #include "auth.h"
 
 namespace NKikimr {
@@ -66,5 +68,16 @@ bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToke
 }
 
 
+bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::TSID& databaseOwner) {
+    // no database, no access
+    if (databaseOwner.empty()) {
+        return false;
+    }
+    // empty token can't have raised access level
+    if (!userToken || userToken->GetUserSID().empty()) {
+        return false;
+    }
+    return userToken->IsExist(databaseOwner);
+}
 
 }

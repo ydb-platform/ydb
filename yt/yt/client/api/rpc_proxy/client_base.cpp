@@ -1053,7 +1053,7 @@ void FillRequestBySelectRowsOptionsBase(
 }
 
 TFuture<TSelectRowsResult> TClientBase::SelectRows(
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1125,7 +1125,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
 }
 
 TFuture<TYsonString> TClientBase::ExplainQuery(
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

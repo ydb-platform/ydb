@@ -4,8 +4,7 @@
 
 namespace NYql::NMatchRecognize {
 
-inline TRowPattern ConvertPattern(const TExprNode::TPtr& pattern, TExprContext &ctx, size_t nestingLevel = 0) {
-    YQL_ENSURE(nestingLevel <= MaxPatternNesting, "To big nesting level in the pattern");
+inline TRowPattern ConvertPattern(const TExprNode::TPtr& pattern, TExprContext &ctx) {
     TRowPattern result;
     for (const auto& term: pattern->Children()) {
         result.push_back(TRowPatternTerm{});
@@ -14,7 +13,7 @@ inline TRowPattern ConvertPattern(const TExprNode::TPtr& pattern, TExprContext &
             result.back().push_back(TRowPatternFactor{
                 factor->Child(0)->IsAtom() ?
                     TRowPatternPrimary(TString(factor->Child(0)->Content())) :
-                    ConvertPattern(factor->Child(0), ctx, nestingLevel + 1),
+                    ConvertPattern(factor->Child(0), ctx),
                 FromString<ui64>(factor->Child(1)->Content()),
                 FromString<ui64>(factor->Child(2)->Content()),
                 FromString<bool>(factor->Child(3)->Content()),

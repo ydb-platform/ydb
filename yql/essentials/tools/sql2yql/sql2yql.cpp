@@ -272,6 +272,7 @@ int BuildAST(int argc, char* argv[]) {
             settings.V0ForceDisable = false;
             settings.AssumeYdbOnClusterWithSlash = res.Has("assume-ydb-on-slash");
             settings.TestAntlr4 = res.Has("test-antlr4");
+            settings.EmitReadsForExists = true;
 
             if (res.Has("lexer")) {
                 NYql::TIssues issues;

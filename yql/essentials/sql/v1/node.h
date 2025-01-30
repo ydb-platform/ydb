@@ -1437,6 +1437,8 @@ namespace NSQLTranslationV1 {
 
     TString TypeByAlias(const TString& alias, bool normalize = true);
 
+    TNodePtr BuildList(TPosition pos, TVector<TNodePtr> nodes = {});
+    TNodePtr BuildQuote(TPosition pos, TNodePtr expr);
     TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent,
         bool isOptionalArg = false);
     TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent);
@@ -1471,7 +1473,6 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildColumn(TPosition pos, const TDeferredAtom& column, const TString& source = TString());
     TNodePtr BuildColumnOrType(TPosition pos, const TString& column = TString());
     TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
-    TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, const TString& var, const TString& column, bool theSameVar);
     TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, const TVector<TNodePtr>& bodies);

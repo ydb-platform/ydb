@@ -15,10 +15,6 @@ def validate_pr_description(file_path):
             print("::warning::PR description is empty. Please fill it out.")
             sys.exit(1)
 
-        if "### Changelog entry" not in description:
-            print("::warning::Missing '### Changelog entry'.")
-            sys.exit(1)
-
         if "### Changelog category" not in description:
             print("::warning::Missing '### Changelog category'.")
             sys.exit(1)
@@ -39,7 +35,7 @@ def validate_pr_description(file_path):
         valid_categories = [
             "New feature",
             "Experimental feature",
-            "Improvement",
+            "User Interface",
             "Performance improvement",
             "Bugfix",
             "Backward incompatible change"

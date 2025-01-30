@@ -16,14 +16,14 @@
 namespace NSQLComplete {
 
     const TVector<TRuleId>& GetKeywordRules(ESqlSyntaxMode mode);
-    
-    IC3Engine::TConfig GetEngineConfig(ESqlSyntaxMode mode);
+
+    IC3Engine::TConfig GetC3Config(ESqlSyntaxMode mode);
 
     void FilterIdKeywords(TVector<TSuggestedToken>& tokens, ESqlSyntaxMode mode);
 
     TSqlCompletionEngine::TSqlCompletionEngine()
-        : DefaultEngine(GetEngineConfig(ESqlSyntaxMode::Default))
-        , AnsiEngine(GetEngineConfig(ESqlSyntaxMode::ANSI))
+        : DefaultEngine(GetC3Config(ESqlSyntaxMode::Default))
+        , AnsiEngine(GetC3Config(ESqlSyntaxMode::ANSI))
         , DefaultKeywordTokens(NSQLComplete::GetKeywordTokens(ESqlSyntaxMode::Default))
         , AnsiKeywordTokens(NSQLComplete::GetKeywordTokens(ESqlSyntaxMode::ANSI))
     {
@@ -121,7 +121,7 @@ namespace NSQLComplete {
         return preferredRules;
     }
 
-    IC3Engine::TConfig GetEngineConfig(ESqlSyntaxMode mode) {
+    IC3Engine::TConfig GetC3Config(ESqlSyntaxMode mode) {
         return {
             .IgnoredTokens = GetIgnoredTokens(mode),
             .PreferredRules = GetPreferredRules(mode),

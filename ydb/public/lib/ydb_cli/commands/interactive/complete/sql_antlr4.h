@@ -15,9 +15,9 @@ namespace NSQLComplete {
     constexpr TTokenId TOKEN_EOF = antlr4::Token::EOF;
 
     const antlr4::dfa::Vocabulary& GetVocabulary(ESqlSyntaxMode mode);
-    
+
     std::unordered_set<TTokenId> GetAllTokens(ESqlSyntaxMode mode);
-    
+
     std::unordered_set<TTokenId> GetKeywordTokens(ESqlSyntaxMode mode);
 
-}
+} // namespace NSQLComplete

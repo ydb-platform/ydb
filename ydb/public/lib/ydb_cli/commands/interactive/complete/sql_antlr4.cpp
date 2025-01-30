@@ -5,7 +5,7 @@
 #include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
 
 namespace NSQLComplete {
-    
+
     // Returning a reference is okay as vocabulary storage is static
     const antlr4::dfa::Vocabulary& GetVocabulary(ESqlSyntaxMode mode) {
         switch (mode) {
@@ -41,4 +41,4 @@ namespace NSQLComplete {
         return keywordTokens;
     }
 
-}
+} // namespace NSQLComplete

@@ -1003,47 +1003,55 @@ void CmdRead(
     );
 }
 
-void CmdRead(const TPQCmdReadSettings& settings, TTestContext& tc) {
-    TAutoPtr<IEventHandle> handle;
-    TEvPersQueue::TEvResponse *result;
+void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)
+{
     THolder<TEvPersQueue::TEvRequest> request;
 
+    tc.Runtime->ResetScheduledCount();
+    request.Reset(new TEvPersQueue::TEvRequest);
+    auto req = request->Record.MutablePartitionRequest();
+    req->SetPartition(settings.Partition);
+    auto read = req->MutableCmdRead();
+    read->SetOffset(settings.Offset);
+    read->SetSessionId(settings.Session);
+    read->SetClientId(settings.User);
+    read->SetCount(settings.Count);
+    read->SetBytes(settings.Size);
+    if (settings.MaxTimeLagMs > 0) {
+        read->SetMaxTimeLagMs(settings.MaxTimeLagMs);
+    }
+    if (settings.ReadTimestampMs > 0) {
+        read->SetReadTimestampMs(settings.ReadTimestampMs);
+    }
+    if (settings.DirectReadId > 0) {
+        read->SetDirectReadId(settings.DirectReadId);
+    }
+    if (settings.PartitionSessionId > 0) {
+        read->SetPartitionSessionId(settings.PartitionSessionId);
+    }
+    if (settings.Pipe) {
+        ActorIdToProto(settings.Pipe, req->MutablePipeClient());
+    }
+
+    req->SetCookie(123);
+
+    Cerr << "Send read request: " << request->Record.DebugString() << " via pipe: " << tc.Edge.ToString() << Endl;
+
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+}
+
+bool EndCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)
+{
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    return CheckCmdReadResult(settings, result);
+}
+
+void CmdRead(const TPQCmdReadSettings& settings, TTestContext& tc) {
     for (ui32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
-            tc.Runtime->ResetScheduledCount();
-            request.Reset(new TEvPersQueue::TEvRequest);
-            auto req = request->Record.MutablePartitionRequest();
-            req->SetPartition(settings.Partition);
-            auto read = req->MutableCmdRead();
-            read->SetOffset(settings.Offset);
-            read->SetSessionId(settings.Session);
-            read->SetClientId(settings.User);
-            read->SetCount(settings.Count);
-            read->SetBytes(settings.Size);
-            if (settings.MaxTimeLagMs > 0) {
-                read->SetMaxTimeLagMs(settings.MaxTimeLagMs);
-            }
-            if (settings.ReadTimestampMs > 0) {
-                read->SetReadTimestampMs(settings.ReadTimestampMs);
-            }
-            if (settings.DirectReadId > 0) {
-                read->SetDirectReadId(settings.DirectReadId);
-            }
-            if (settings.PartitionSessionId > 0) {
-                read->SetPartitionSessionId(settings.PartitionSessionId);
-            }
-            if (settings.Pipe) {
-                ActorIdToProto(settings.Pipe, req->MutablePipeClient());
-            }
-
-            req->SetCookie(123);
-
-            Cerr << "Send read request: " << request->Record.DebugString() << " via pipe: " << tc.Edge.ToString() << Endl;
-
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
-
-            auto checkRes = CheckCmdReadResult(settings, result);
+            BeginCmdRead(settings, tc);
+            auto checkRes = EndCmdRead(settings, tc);
             if (!checkRes) {
                 tc.Runtime->DispatchEvents();   // Dispatch events so that initialization can make progress
                 retriesLeft = 3;

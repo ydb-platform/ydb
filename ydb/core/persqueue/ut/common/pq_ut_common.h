@@ -524,6 +524,9 @@ void CmdRead(
     const TPQCmdReadSettings& settings,
     TTestContext& tc);
 
+void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc);
+bool EndCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc);
+
 void CmdPublishRead(const TCmdDirectReadSettings& settings, TTestContext& tc);
 void CmdForgetRead(const TCmdDirectReadSettings& settings, TTestContext& tc);
 

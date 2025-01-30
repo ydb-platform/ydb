@@ -19,6 +19,13 @@ get_built_tool_path(
   enum_parser
 )
 
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
+
 add_library(library-workload-log)
 
 
@@ -27,19 +34,18 @@ target_link_libraries(library-workload-log PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-workload-abstract
+  library-cpp-json
+  library-cpp-resource
   tools-enum_parser-enum_serialization_runtime
 )
 
 target_sources(library-workload-log PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/log/log.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/log/log.h_serialized.h
 )
 
 
 generate_enum_serilization(library-workload-log
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/log/log.h
-  GEN_HEADER
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/log/log.h_serialized.h
   INCLUDE_HEADERS
   ydb/library/workload/log/log.h
 )
@@ -53,10 +59,22 @@ target_link_libraries(library-workload-log.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-workload-abstract
+  library-cpp-json
+  library-cpp-resource
   tools-enum_parser-enum_serialization_runtime
 )
 
 target_sources(library-workload-log.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/log/registrar.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/log/c169ba64d7ab39988074b96cfdbd49fe.cpp
 )
 
+
+resources(library-workload-log.global
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/log/c169ba64d7ab39988074b96cfdbd49fe.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/log/select_queries.sql
+  KEYS
+  workload_logs_select_queries.sql
+  OPTS
+)

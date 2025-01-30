@@ -1,3 +1,4 @@
+* Added message query text if query fails in `ydb workload run` comamnd.
 * Enable view exports and imports. Views are exported as `CREATE VIEW` YQL statements which are executed on import.
 * Save current stats in `ydb workload run`.
 * Added message if global timeout expiried in `ydb workload run` comamnd.

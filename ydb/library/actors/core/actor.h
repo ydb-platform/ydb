@@ -133,6 +133,11 @@ namespace NActors {
         static double GetCurrentEventTicksAsSeconds();
 
         static void EnableMailboxStats();
+
+        static ui32 GetOverwrittenEventsPerMailbox();
+        static void SetOverwrittenEventsPerMailbox(ui32 value);
+        static ui64 GetOverwrittenTimePerMailboxTs();
+        static void SetOverwrittenTimePerMailboxTs(ui64 value);
     };
 
     struct TActorContext: public TActivationContext {

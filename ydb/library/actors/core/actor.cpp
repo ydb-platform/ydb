@@ -186,9 +186,7 @@ namespace NActors {
     }
 
     TActorId IActor::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept {
-        TActorId id = TlsActivationContext->ExecutorThread.RegisterActor(actor, mailboxType, poolId, SelfActorId);
-        ACTOR_DEBUG(EDebugLevel::Special, " Registered actor ", id, " in pool ", poolId, " with mailbox type ", mailboxType, " hint ", id.Hint());
-        return id;
+        return TlsActivationContext->ExecutorThread.RegisterActor(actor, mailboxType, poolId, SelfActorId);
     }
 
     void TActorContext::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
@@ -282,8 +280,7 @@ namespace NActors {
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
         // fallback to legacy method, do not use it anymore
         if (auto eh = AfterRegister(SelfId(), owner)) {
-            ACTOR_DEBUG(EDebugLevel::Special, " Registered actor ", SelfId().ToString(), " expected poolId ", (i64)SelfId().PoolID(), " after register send hint ", SelfId().Hint());
-            if (!TlsThreadContext || TlsThreadContext->SendingType == ESendingType::Common) {
+            if (!TlsThreadContext || TlsThreadContext->CheckSendingType(ESendingType::Common)) {
                 sys->Send(eh);
             } else {
                 sys->SpecificSend(eh);
@@ -309,7 +306,7 @@ namespace NActors {
             (ev)->Callstack.Trace();
         } while (false)
 #endif
-        Ctx.IncrementSentEvents();
+        ExecutionStats.IncrementSentEvents();
         return ActorSystem->Send<SendingType>(ev);
     }
 
@@ -329,16 +326,14 @@ namespace NActors {
         }
         if (poolId == Max<ui32>()) {
             TActorId id;
-            ACTOR_DEBUG(EDebugLevel::Special, " RegisterActor poolId == Max<ui32>()");
             if constexpr (SendingType == ESendingType::Common) {
                 id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
             } else if (!TlsThreadContext) {
                 id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
             } else {
-                ACTOR_DEBUG(EDebugLevel::Special, " RegisterActor SpecialSendingType");
-                ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
+                ESendingType previousType = TlsThreadContext->ExchangeSendingType(SendingType);
                 id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
-                TlsThreadContext->SendingType = previousType;
+                TlsThreadContext->SetSendingType(previousType);
             }
             return id;
         } else {
@@ -360,9 +355,9 @@ namespace NActors {
         } else if (!TlsActivationContext) {
             return ThreadCtx.Pool()->Register(actor, mailbox, parentId);
         } else {
-            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
+            ESendingType previousType = TlsThreadContext->ExchangeSendingType(SendingType);
             TActorId id = ThreadCtx.Pool()->Register(actor, mailbox, parentId);
-            TlsThreadContext->SendingType = previousType;
+            TlsThreadContext->SetSendingType(previousType);
             return id;
         }
     }
@@ -511,9 +506,9 @@ namespace NActors {
         } else if (!TlsThreadContext) {
             return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
         } else {
-            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
+            ESendingType previousType = TlsThreadContext->ExchangeSendingType(SendingType);
             TActorId id = CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
-            TlsThreadContext->SendingType = previousType;
+            TlsThreadContext->SetSendingType(previousType);
             return id;
         }
     }
@@ -529,5 +524,21 @@ namespace NActors {
         } else {
             return this->SpecificSend(ev, SendingType);
         }
+    }
+
+    ui32 TActivationContext::GetOverwrittenEventsPerMailbox() {
+        return TlsActivationContext->ExecutorThread.GetOverwrittenEventsPerMailbox();
+    }
+
+    void TActivationContext::SetOverwrittenEventsPerMailbox(ui32 value) {
+        TlsActivationContext->ExecutorThread.SetOverwrittenEventsPerMailbox(value);
+    }
+
+    ui64 TActivationContext::GetOverwrittenTimePerMailboxTs() {
+        return TlsActivationContext->ExecutorThread.GetOverwrittenTimePerMailboxTs();
+    }
+
+    void TActivationContext::SetOverwrittenTimePerMailboxTs(ui64 value) {
+        TlsActivationContext->ExecutorThread.SetOverwrittenTimePerMailboxTs(value);
     }
 }

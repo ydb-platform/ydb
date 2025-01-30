@@ -1,15 +1,15 @@
-#include "worker_context.h"
+#include "execution_stats.h"
 #include "probes.h"
 #include "debug.h"
 
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
-    TWorkerContext::TWorkerContext()
+    TExecutionStats::TExecutionStats()
     {
     }
 
-    TWorkerContext::~TWorkerContext() {
+    TExecutionStats::~TExecutionStats() {
     }
 
 }

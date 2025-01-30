@@ -228,11 +228,11 @@ namespace NActors {
         explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail=nullptr);
         ~TBasicExecutorPool();
 
-        void Initialize(TWorkerContext& wctx) override;
-        TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
-        TMailbox* GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingReadCounter);
-        TMailbox* GetReadyActivationShared(TWorkerContext& wctx, ui64 revolvingReadCounter);
-        TMailbox* GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingReadCounter);
+        void Initialize() override;
+        TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
+        TMailbox* GetReadyActivationCommon(ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationShared(ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationLocalQueue(ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;

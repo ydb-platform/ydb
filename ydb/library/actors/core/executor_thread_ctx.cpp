@@ -51,13 +51,13 @@ namespace NActors {
         NHPTimer::STime hpnow = GetCycleCountFast();
         NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
         ui32 prevActivity = TlsThreadContext->ActivityContext.ElapsingActorActivity.exchange(SleepActivity, std::memory_order_acq_rel);
-        TlsThreadContext->WorkerCtx->AddElapsedCycles(prevActivity, hpnow - hpprev);
+        TlsThreadContext->ExecutionStats->AddElapsedCycles(prevActivity, hpnow - hpprev);
         do {
             if (WaitingPad.Park()) // interrupted
                 return true;
             hpnow = GetCycleCountFast();
             hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            TlsThreadContext->WorkerCtx->AddParkedCycles(hpnow - hpprev);
+            TlsThreadContext->ExecutionStats->AddParkedCycles(hpnow - hpprev);
             state = GetState<TWaitState>();
         } while (static_cast<EThreadState>(state) == EThreadState::Sleep && !stopFlag->load(std::memory_order_relaxed));
         TlsThreadContext->ActivityContext.ActivationStartTS.store(hpnow, std::memory_order_release);

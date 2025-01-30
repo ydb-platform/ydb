@@ -46,6 +46,7 @@ SRCS(
     events.h
     events_undelivered.cpp
     executelater.h
+    execution_stats.cpp
     executor_pool_base.cpp
     executor_pool_base.h
     executor_pool_basic.cpp
@@ -83,8 +84,6 @@ SRCS(
     monotonic.h
     monotonic_provider.cpp
     monotonic_provider.h
-    worker_context.cpp
-    worker_context.h
     thread_context.cpp
     probes.cpp
     probes.h

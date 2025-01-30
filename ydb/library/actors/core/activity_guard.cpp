@@ -1,7 +1,7 @@
 #include "activity_guard.h"
 
 #include "thread_context.h"
-#include "worker_context.h"
+#include "execution_stats.h"
 
 namespace NActors {
 
@@ -10,9 +10,9 @@ namespace NActors {
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
             prevIndex = TlsThreadContext->ActivityContext.ElapsingActorActivity.exchange(index, std::memory_order_acq_rel);
             if (prevIndex != SleepActivity) {
-                TlsThreadContext->WorkerCtx->AddElapsedCycles(prevIndex, hpnow - hpprev);
+                TlsThreadContext->ExecutionStats->AddElapsedCycles(prevIndex, hpnow - hpprev);
             } else {
-                TlsThreadContext->WorkerCtx->AddParkedCycles(hpnow - hpprev);
+                TlsThreadContext->ExecutionStats->AddParkedCycles(hpnow - hpprev);
             }
         }
     }

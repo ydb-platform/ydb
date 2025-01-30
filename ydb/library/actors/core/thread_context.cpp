@@ -4,7 +4,7 @@
 
 namespace NActors {
 
-    TNewWorkerContext::TNewWorkerContext(TWorkerId workerId, IExecutorPool* pool, IExecutorPool* sharedPool)
+    TWorkerContext::TWorkerContext(TWorkerId workerId, IExecutorPool* pool, IExecutorPool* sharedPool)
         : WorkerId(workerId)
         , Pool(pool)
         , OwnerPool(pool)
@@ -21,23 +21,23 @@ namespace NActors {
         ActivityContext.ActivationStartTS = now;
     }
 
-    ui32 TNewWorkerContext::PoolId() const {
+    ui32 TWorkerContext::PoolId() const {
         return Pool ? Pool->PoolId : Max<ui32>();
     }
 
-    TString TNewWorkerContext::PoolName() const {
+    TString TWorkerContext::PoolName() const {
         return Pool ? Pool->GetName() : TString();
     }
 
-    ui32 TNewWorkerContext::OwnerPoolId() const {
+    ui32 TWorkerContext::OwnerPoolId() const {
         return OwnerPool ? OwnerPool->PoolId : Max<ui32>();
     }
 
-    bool TNewWorkerContext::IsShared() const {
+    bool TWorkerContext::IsShared() const {
         return SharedPool != nullptr;
     }
 
-    void TNewWorkerContext::AssignPool(IExecutorPool* pool, ui64 softDeadlineTs) {
+    void TWorkerContext::AssignPool(IExecutorPool* pool, ui64 softDeadlineTs) {
         Pool = pool;
         TimePerMailboxTs = pool->TimePerMailboxTs();
         EventsPerMailbox = pool->EventsPerMailbox();
@@ -46,7 +46,7 @@ namespace NActors {
         MailboxCache.Switch(MailboxTable);
     }
 
-    void TNewWorkerContext::FreeMailbox(TMailbox* mailbox) {
+    void TWorkerContext::FreeMailbox(TMailbox* mailbox) {
         MailboxCache.Free(mailbox);
     }
 
@@ -96,5 +96,66 @@ namespace NActors {
 
     void TThreadContext::FreeMailbox(TMailbox* mailbox) {
         WorkerContext.FreeMailbox(mailbox);
+    }
+
+    bool TExecutionContext::CheckSendingType(ESendingType type) const {
+        return SendingType == type;
+    }
+
+    bool TExecutionContext::CheckCapturedSendingType(ESendingType type) const {
+        return CapturedActivation.SendingType == type;
+    }
+
+    bool TThreadContext::CheckSendingType(ESendingType type) const {
+        return ExecutionContext.CheckSendingType(type);
+    }
+
+    bool TThreadContext::CheckCapturedSendingType(ESendingType type) const {
+        return ExecutionContext.CheckCapturedSendingType(type);
+    }
+
+    void TThreadContext::SetSendingType(ESendingType type) {
+        ExecutionContext.SendingType = type;
+    }
+
+    ESendingType TThreadContext::ExchangeSendingType(ESendingType type) {
+        return std::exchange(ExecutionContext.SendingType, type);
+    }
+
+    TMailbox* TThreadContext::CaptureMailbox(TMailbox* mailbox) {
+        ExecutionContext.CapturedActivation.SendingType = ExecutionContext.SendingType;
+        return std::exchange(ExecutionContext.CapturedActivation.Mailbox, mailbox);
+    }
+
+    ESendingType TThreadContext::SendingType() const {
+        return ExecutionContext.SendingType;
+    }
+
+    void TThreadContext::ChangeCapturedSendingType(ESendingType type) {
+        ExecutionContext.CapturedActivation.SendingType = type;
+    }
+
+    ui32 TThreadContext::OverwrittenEventsPerMailbox() const {
+        return ExecutionContext.OverwrittenEventsPerMailbox;
+    }
+
+    void TThreadContext::SetOverwrittenEventsPerMailbox(ui32 value) {
+        ExecutionContext.OverwrittenEventsPerMailbox = value;
+    }
+
+    ui64 TThreadContext::OverwrittenTimePerMailboxTs() const {
+        return ExecutionContext.OverwrittenTimePerMailboxTs;
+    }
+
+    void TThreadContext::SetOverwrittenTimePerMailboxTs(ui64 value) {
+        ExecutionContext.OverwrittenTimePerMailboxTs = value;
+    }
+
+    void TThreadContext::ResetOverwrittenEventsPerMailbox() {
+        ExecutionContext.OverwrittenEventsPerMailbox = EventsPerMailbox();
+    }
+
+    void TThreadContext::ResetOverwrittenTimePerMailboxTs() {
+        ExecutionContext.OverwrittenTimePerMailboxTs = TimePerMailboxTs();
     }
 }

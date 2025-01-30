@@ -119,11 +119,11 @@ namespace NActors {
         ~TSharedExecutorPool();
 
         i16 SumThreads(const TVector<TPoolShortInfo> &poolInfos);
-        void Initialize(TWorkerContext& wctx) override;
+        void Initialize() override;
         i16 FindPoolForWorker(TSharedExecutorThreadCtx& thread, ui64 revolvingReadCounter);
-        TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
+        TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
 
-        void SwitchToPool(TWorkerContext& wctx, i16 poolId, NHPTimer::STime hpNow);
+        void SwitchToPool(i16 poolId, NHPTimer::STime hpNow);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;

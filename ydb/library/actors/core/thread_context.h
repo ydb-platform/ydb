@@ -8,14 +8,15 @@
 #include <ydb/library/actors/queues/mpmc_ring_queue.h>
 #include <util/system/tls.h>
 
+#include <library/cpp/lwtrace/shuttle.h>
 
 namespace NActors {
 
     class TMailbox;
     class TMailboxTable;
+    struct TExecutionStats;
 
     class IExecutorPool;
-    struct TWorkerContext;
 
     template <typename T>
     struct TWaitingStats;
@@ -39,7 +40,7 @@ namespace NActors {
         ui32 ActorSystemIndex = 0;
     };
 
-    struct TNewWorkerContext {
+    struct TWorkerContext {
         const TWorkerId WorkerId;
         IExecutorPool* Pool = nullptr;
         IExecutorPool* OwnerPool = nullptr;
@@ -50,7 +51,7 @@ namespace NActors {
         ui32 EventsPerMailbox = 0;
         ui64 SoftDeadlineTs = ui64(-1);
 
-        TNewWorkerContext(TWorkerId workerId, IExecutorPool* pool, IExecutorPool* sharedPool);
+        TWorkerContext(TWorkerId workerId, IExecutorPool* pool, IExecutorPool* sharedPool);
 
         ui32 PoolId() const;
         TString PoolName() const;
@@ -61,20 +62,34 @@ namespace NActors {
         void FreeMailbox(TMailbox* mailbox);
     };
 
-    struct TThreadContext {
-        TNewWorkerContext WorkerContext;
+    struct TExecutionContext {
         TCapturedActivation CapturedActivation;
+        ui32 ExecutedEvents = 0;
+        ui32 OverwrittenEventsPerMailbox = 0;
+        ui64 OverwrittenTimePerMailboxTs = 0;
+        TStackVec<TActorId, 1> PreemptionSubscribed;
+        bool IsNeededToWaitNextActivation = true;
+        ESendingType SendingType = ESendingType::Common;
+        NHPTimer::STime HPStart = 0;
+        mutable NLWTrace::TOrbit Orbit;
+
+        bool CheckSendingType(ESendingType type) const;
+        bool CheckCapturedSendingType(ESendingType type) const;
+    };
+
+    struct TThreadContext {
+        TWorkerContext WorkerContext;
         TLocalQueueContext LocalQueueContext;
         TThreadActivityContext ActivityContext;
+        TExecutionContext ExecutionContext;
+        TExecutionStats *ExecutionStats = nullptr;
 
-        ESendingType SendingType = ESendingType::Common;
-        bool IsRegister = false;
+
         bool IsEnoughCpu = true;
         TWaitingStats<ui64> *WaitingStats = nullptr;
         bool IsCurrentRecipientAService = false;
         TMPMCRingQueue<20>::EPopMode ActivationPopMode = TMPMCRingQueue<20>::EPopMode::ReallySlow;
         ui64 ProcessedActivationsByCurrentPool = 0;
-        TWorkerContext *WorkerCtx = nullptr;
 
 
         TThreadContext(TWorkerId workerId, IExecutorPool* pool, IExecutorPool* sharedPool);
@@ -105,6 +120,21 @@ namespace NActors {
         void FreeMailbox(TMailbox* mailbox);
 
         void AssignPool(IExecutorPool* pool, ui64 softDeadlineTs = Max<ui64>());
+
+        bool CheckSendingType(ESendingType type) const;
+        ESendingType SendingType() const;
+        void SetSendingType(ESendingType type);
+        ESendingType ExchangeSendingType(ESendingType type);
+        bool CheckCapturedSendingType(ESendingType type) const;
+        TMailbox* CaptureMailbox(TMailbox* mailbox);
+        void ChangeCapturedSendingType(ESendingType type);
+
+        ui32 OverwrittenEventsPerMailbox() const;
+        void SetOverwrittenEventsPerMailbox(ui32 value);
+        void ResetOverwrittenEventsPerMailbox();
+        ui64 OverwrittenTimePerMailboxTs() const;
+        void SetOverwrittenTimePerMailboxTs(ui64 value);
+        void ResetOverwrittenTimePerMailboxTs();
     };
 
     extern Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp

@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "event.h"
 #include "thread_context.h"
-#include "worker_context.h"
+#include "execution_stats.h"
 #include "log_settings.h"
 
 #include <ydb/library/actors/util/datetime.h>
@@ -35,7 +35,6 @@ namespace NActors {
         TExecutorThread(TWorkerId workerId,
                         TActorSystem* actorSystem,
                         IExecutorPool* executorPool,
-                        TMailboxTable* mailboxTable,
                         const TString& threadName);
 
         // shared thread ctor
@@ -111,7 +110,7 @@ namespace NActors {
 
         // Thread-specific
         mutable TThreadContext ThreadCtx;
-        mutable TWorkerContext Ctx;
+        mutable TExecutionStats ExecutionStats;
         ui64 RevolvingReadCounter = 0;
         ui64 RevolvingWriteCounter = 0;
         const TString ThreadName;

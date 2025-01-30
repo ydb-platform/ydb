@@ -9,7 +9,6 @@ namespace NActors {
     class TMailbox;
     class TMailboxCache;
     class TMailboxTable;
-    struct TWorkerContext;
     struct TExecutorPoolStats;
     struct TExecutorPoolState;
     struct TExecutorThreadStats;
@@ -60,10 +59,9 @@ namespace NActors {
         }
 
         // for workers
-        virtual void Initialize(TWorkerContext& wctx) {
-            Y_UNUSED(wctx);
+        virtual void Initialize() {
         }
-        virtual TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) = 0;
+        virtual TMailbox* GetReadyActivation(ui64 revolvingCounter) = 0;
         virtual TMailbox* ResolveMailbox(ui32 hint) = 0;
         virtual TMailboxTable* GetMailboxTable() const {
             return nullptr;

@@ -15,7 +15,6 @@
 #include <ydb/library/actors/util/intrinsics.h>
 #include <ydb/library/actors/util/thread.h>
 
-#include <library/cpp/lwtrace/shuttle.h>
 
 namespace NActors {
     struct TSharedExecutorThreadCtx;
@@ -29,22 +28,14 @@ namespace NActors {
         }
     };
     
-    struct TWorkerContext {
+    struct TExecutionStats {
         TExecutorThreadStats* Stats = nullptr; // pool stats
-        mutable NLWTrace::TOrbit Orbit;
-        bool IsNeededToWaitNextActivation = true;
-        i64 HPStart = 0;
-        ui32 ExecutedEvents = 0;
-        ui32 OverwrittenEventsPerMailbox = 0;
-        ui64 OverwrittenTimePerMailboxTs = 0;
-        TSharedExecutorThreadCtx *SharedThread = nullptr;
         TCpuSensor CpuSensor;
-        TStackVec<TActorId, 1> PreemptionSubscribed;
 
 
-        TWorkerContext();
+        TExecutionStats();
 
-        ~TWorkerContext();
+        ~TExecutionStats();
 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         void GetCurrentStats(TExecutorThreadStats& statsCopy) const {
@@ -177,8 +168,7 @@ namespace NActors {
         void IncreaseNotEnoughCpuExecutions() {}
 #endif
 
-        void Switch(TMailboxTable*,
-                    TExecutorThreadStats* stats)
+        void Switch(TExecutorThreadStats* stats)
         {
             Stats = stats;
         }

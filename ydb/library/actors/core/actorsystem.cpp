@@ -173,9 +173,9 @@ namespace NActors {
         if (!TlsThreadContext) {
             return this->GenericSend<&IExecutorPool::Send>(ev);
         } else {
-            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, sendingType);
+            ESendingType previousType = TlsThreadContext->ExchangeSendingType(sendingType);
             bool isSent = this->GenericSend<&IExecutorPool::SpecificSend>(ev);
-            TlsThreadContext->SendingType = previousType;
+            TlsThreadContext->SetSendingType(previousType);
             return isSent;
         }
     }

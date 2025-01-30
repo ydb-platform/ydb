@@ -296,8 +296,7 @@ namespace NActors {
         }
 
         // for threads
-        TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override {
-            Y_UNUSED(wctx);
+        TMailbox* GetReadyActivation(ui64 revolvingCounter) override {
             Y_UNUSED(revolvingCounter);
             Y_ABORT();
         }
@@ -553,7 +552,7 @@ namespace NActors {
             node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));
             node->MailboxTable.Reset(new TMailboxTable());
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
-            node->ExecutorThread.Reset(new TExecutorThread(0, node->ActorSystem.Get(), node->SchedulerPool.Get(), node->MailboxTable.Get(), "TestExecutor"));
+            node->ExecutorThread.Reset(new TExecutorThread(0, node->ActorSystem.Get(), node->SchedulerPool.Get(), "TestExecutor"));
         } else {
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
         }

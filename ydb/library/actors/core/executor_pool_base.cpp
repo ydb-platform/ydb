@@ -155,27 +155,24 @@ namespace NActors {
     }
 
     Y_FORCE_INLINE bool IsAllowedToCapture(IExecutorPool *self) {
-        if (TlsThreadContext->Pool() != self || TlsThreadContext->CapturedActivation.SendingType == ESendingType::Tail) {
+        if (TlsThreadContext->Pool() != self || TlsThreadContext->CheckCapturedSendingType(ESendingType::Tail)) {
             return false;
         }
-        return TlsThreadContext->SendingType != ESendingType::Common;
+        return !TlsThreadContext->CheckSendingType(ESendingType::Common);
     }
 
     Y_FORCE_INLINE bool IsTailSend(IExecutorPool *self) {
-        return TlsThreadContext->Pool() == self && TlsThreadContext->SendingType == ESendingType::Tail && TlsThreadContext->CapturedActivation.SendingType != ESendingType::Tail;
+        return TlsThreadContext->Pool() == self && TlsThreadContext->CheckSendingType(ESendingType::Tail) && !TlsThreadContext->CheckCapturedSendingType(ESendingType::Tail);
     }
 
     void TExecutorPoolBase::SpecificScheduleActivation(TMailbox* mailbox) {
         if (NFeatures::IsCommon() && IsAllowedToCapture(this) || IsTailSend(this)) {
-            std::swap(TlsThreadContext->CapturedActivation.Mailbox, mailbox);
-            TlsThreadContext->CapturedActivation.SendingType = TlsThreadContext->SendingType;
+            mailbox = TlsThreadContext->CaptureMailbox(mailbox);
         }
-        if (mailbox) {
-#ifdef RING_ACTIVATION_QUEUE
-        ScheduleActivationEx(mailbox, 0);
-#else
-        ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
-#endif
+        if (mailbox && UseRingQueue) {
+            ScheduleActivationEx(mailbox, 0);
+        } else {
+            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
         }
     }
 
@@ -207,9 +204,6 @@ namespace NActors {
         mailbox->AttachActor(localActorId, actor);
 
         // do init
-        if (TlsThreadContext) {
-            TlsThreadContext->IsRegister = true;
-        }
         const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, mailbox->Hint);
         DoActorInit(ActorSystem, actor, actorId, parentId);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
@@ -221,10 +215,6 @@ namespace NActors {
             }
         }
 #endif
-
-        if (TlsThreadContext) {
-            TlsThreadContext->IsRegister = false;
-        }
 
         // Once we unlock the mailbox the actor starts running and we cannot use the pointer any more
         actor = nullptr;

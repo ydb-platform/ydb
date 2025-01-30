@@ -1393,7 +1393,6 @@ public:
         if (LoadingOperation_.has_value() && !LoadingOperation_->HasValue()) return false;
 
         if (LoadingOperation_.has_value()) {
-            SpillingKeys_.push_back(SpillingOperation_->ExtractValue());
             auto data = *LoadingOperation_->ExtractValue();
             LoadingOperation_ = std::nullopt;
 
@@ -2172,6 +2171,15 @@ private:
         {
         }
 
+    enum class TSpillingState {
+        InMemory,
+        Spilling,
+        Restoring,
+        Done,
+    };
+
+    TSpillingState spillingState = TSpillingState::InMemory;
+
 
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
@@ -2196,14 +2204,23 @@ private:
                             continue;
                         case NUdf::EFetchStatus::Finish:
                             if constexpr(Finalize) {
-                                if (!state.SpillEverything()) return NUdf::EFetchStatus::Yield;
-                                std::cerr << "MISHA blobs spilled: ";
-                                for (auto blobId : state.SpillingKeys_) {
-                                    std::cerr << blobId << " ";
+                                if (spillingState == TSpillingState::InMemory || spillingState == TSpillingState::Spilling) {
+                                    spillingState = TSpillingState::Spilling;
+                                    if (!state.SpillEverything()) return NUdf::EFetchStatus::Yield;
+                                    std::cerr << "MISHA blobs spilled: ";
+                                    for (auto blobId : state.SpillingKeys_) {
+                                        std::cerr << blobId << " ";
+                                    }
+                                    std::cerr << std::endl;
+                                    state.Clear();
+
+                                    spillingState = TSpillingState::Restoring;
                                 }
-                                std::cerr << std::endl;
-                                state.Clear();
-                                if (!state.LoadEverything()) return NUdf::EFetchStatus::Yield;
+
+                                if (spillingState == TSpillingState::Restoring) {
+                                    if (!state.LoadEverything()) return NUdf::EFetchStatus::Yield;
+                                    spillingState = TSpillingState::Done;
+                                }
                             }
                             break;
                     }

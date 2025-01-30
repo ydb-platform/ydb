@@ -39,6 +39,7 @@ private:
     const std::shared_ptr<arrow::ChunkedArray> Array;
 
 protected:
+    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::optional<ui64> DoGetRawSize() const override;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
         auto chunk = GetChunkSlow(index);

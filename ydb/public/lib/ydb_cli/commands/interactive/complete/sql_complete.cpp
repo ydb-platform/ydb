@@ -65,8 +65,7 @@ namespace NSQLComplete {
         return keywords;
     }
 
-    const std::unordered_set<TTokenId>& TSqlCompletionEngine::GetKeywordTokens(
-        ESqlSyntaxMode mode) {
+    const std::unordered_set<TTokenId>& TSqlCompletionEngine::GetKeywordTokens(ESqlSyntaxMode mode) {
         switch (mode) {
             case ESqlSyntaxMode::Default:
                 return DefaultKeywordTokens;

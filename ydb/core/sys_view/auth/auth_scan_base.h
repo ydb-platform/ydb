@@ -122,7 +122,7 @@ protected:
                 if (child.Kind == TSchemeCacheNavigate::KindExtSubdomain || child.Kind == TSchemeCacheNavigate::KindSubdomain) {
                     continue;
                 }
-                                
+
                 last.Entry.Path.push_back(child.Name);
                 if ((PathFrom || PathTo) && ShouldSkipSubTree(CanonizePath(last.Entry.Path))) {
                     last.Entry.Path.pop_back();

@@ -172,7 +172,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         GetObject(ChecksumKey, std::make_pair(0, contentLength - 1));
     }
 
-    void HandleChangefeeds(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+    void HandleChangefeed(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
         LOG_D("HandleChangefeeds TEvExternalStorage::TEvHeadObjectResponse"
@@ -187,10 +187,10 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         GetObject(ChangefeedDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]), std::make_pair(0, contentLength - 1));
     }
 
-    void HandleTopics(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+    void HandleTopic(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleChangefeeds TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_D("HandleTopic TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -584,7 +584,7 @@ public:
     STATEFN(StateDownloadChangefeeds) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvListObjectsResponse, HandleChangefeeds);
-            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChangefeeds);
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChangefeed);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleChangefeed);
 
             sFunc(TEvents::TEvWakeup, DownloadChangefeeds);

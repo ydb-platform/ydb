@@ -6,7 +6,6 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/mailbox.h>
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/scheduler_queue.h>
 #include <ydb/library/actors/interconnect/interconnect_common.h>
 #include <ydb/library/actors/util/should_continue.h>
@@ -22,6 +21,10 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 
 #include "single_thread_ic_mock.h"
+
+namespace NActors {
+    class TExecutorThread;
+}
 
 namespace NKikimr {
 
@@ -259,34 +262,7 @@ public:
         }
     }
 
-    void SetupNode(ui32 nodeId, TPerNodeInfo& info) {
-        auto setup = MakeHolder<TActorSystemSetup>();
-        setup->NodeId = nodeId;
-        setup->ExecutorsCount = 1;
-        info.SchedulerThread = new TTestSchedulerThread(this, nodeId);
-        setup->Scheduler.Reset(info.SchedulerThread);
-        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
-        IExecutorPool *pool = CreateTestExecutorPool(nodeId);
-        setup->Executors[0].Reset(pool);
 
-        // we create this actor for correct service lookup through ActorSystem
-        setup->LocalServices.emplace_back(LoggerSettings_->LoggerActorId, TActorSetupCmd(
-            std::make_unique<TEdgeActor>(__FILE__, __LINE__), TMailboxType::Simple, 0));
-
-        auto common = MakeIntrusive<TInterconnectProxyCommon>();
-        auto& proxyActors = setup->Interconnect.ProxyActors;
-        proxyActors.resize(MaxNodeId + 1);
-        for (const auto& [peerNodeId, peerInfo] : PerNodeInfo) {
-            if (peerNodeId != nodeId) {
-                proxyActors[peerNodeId] = TActorSetupCmd(InterconnectMock.CreateProxyActor(nodeId, peerNodeId, common), TMailboxType::Simple, 0);
-            }
-        }
-
-        info.AppData = std::move(MakeAppData());
-        info.ActorSystem = std::make_unique<TActorSystem>(setup, info.AppData.get(), LoggerSettings_);
-        info.MailboxTable = std::make_unique<TMailboxTable>();
-        info.ExecutorThread = std::make_unique<TExecutorThread>(0, info.ActorSystem.get(), pool, "TestExecutor");
-    }
 
     void StartNode(ui32 nodeId) {
         TPerNodeInfo& info = PerNodeInfo.at(nodeId);

@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
+
 import logging
-
-from hamcrest import (
-    assert_that,
-    has_length,
-)
-
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb

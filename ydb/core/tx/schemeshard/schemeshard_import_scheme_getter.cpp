@@ -175,7 +175,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     void HandleChangefeed(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleChangefeeds TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_D("HandleChangefeed TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -352,7 +352,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleChangefeeds TEvExternalStorage::TEvGetObjectResponse"
+        LOG_D("HandleChangefeed TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -369,7 +369,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
         Ydb::Table::ChangefeedDescription changefeed;
         if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &changefeed)) {
-            return Reply(false, "Cannot parse permissions");
+            return Reply(false, "Cannot parse сhangefeed");
         }
         item.Changefeeds[IndexDownloadedChangefeed].ChangefeedDescription = std::move(changefeed);
 
@@ -388,7 +388,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleChangefeeds TEvExternalStorage::TEvGetObjectResponse"
+        LOG_D("HandleTopic TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -399,13 +399,13 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
-        LOG_T("Trying to parse changefeed"
+        LOG_T("Trying to parse topic"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
 
         Ydb::Topic::DescribeTopicResult topic;
         if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &topic)) {
-            return Reply(false, "Cannot parse permissions");
+            return Reply(false, "Cannot parse topic");
         }
         item.Changefeeds[IndexDownloadedChangefeed].Topic = std::move(topic);
 

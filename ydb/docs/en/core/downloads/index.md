@@ -6,15 +6,19 @@
 
 {% list tabs group=os %}
 
-- Linux
+- Linux (amd64)
 
-   {% include notitle [Linux](_includes/ydb-cli/linux.md) %}
+   {% include notitle [LinuxAmd64](_includes/ydb-cli/linux_amd64.md) %}
 
-- macOS (Intel)
+- Linux (arm64)
+
+   {% include notitle [LinuxArm64](_includes/ydb-cli/linux_arm64.md) %}
+
+- MacOS (amd64)
 
    {% include notitle [macIntel](_includes/ydb-cli/darwin_amd64.md) %}
 
-- macOS (M1 arm)
+- MacOS (arm64)
 
    {% include notitle [macM1](_includes/ydb-cli/darwin_arm64.md) %}
 
@@ -48,7 +52,7 @@
 
 {{ ydb-short-name }} DSTool is a command line utility for [managing a {{ ydb-short-name }} cluster's disk subsystem](../maintenance/manual/index.md).
 
-To use the utility, install the [ydb-dstool](https://pypi.org/project/ydb-dstool/) Python package.
+To use the utility, install the [ydb-dstool](../reference/ydb-dstool/install.md).
 
 ## {{ ydb-short-name }} Ops {#ydbops}
 

@@ -12,7 +12,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -106,7 +106,7 @@ void TWorkloadCommand::Config(TConfig& config) {
     config.Opts->AddLongOption("window", "Window duration in seconds.")
         .DefaultValue(1).StoreResult(&WindowSec);
     config.Opts->AddLongOption("executer", "Query executer type (data or generic).")
-        .DefaultValue("data").StoreResult(&QueryExecuterType);
+        .DefaultValue("generic").StoreResult(&QueryExecuterType);
 }
 
 void TWorkloadCommand::PrepareForRun(TConfig& config) {
@@ -123,12 +123,13 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
         driverConfig.UseSecureConnection(config.CaCerts);
     }
     Driver = std::make_unique<NYdb::TDriver>(NYdb::TDriver(driverConfig));
+    auto tableClientSettings = NTable::TClientSettings()
+                        .SessionPoolSettings(
+                            NTable::TSessionPoolSettings()
+                                .MaxActiveSessions(10+Threads));
+    TableClient = std::make_unique<NTable::TTableClient>(*Driver, tableClientSettings);
     if (QueryExecuterType == "data") {
-        auto tableClientSettings = NTable::TClientSettings()
-                            .SessionPoolSettings(
-                                NTable::TSessionPoolSettings()
-                                    .MaxActiveSessions(10+Threads));
-        TableClient = std::make_unique<NTable::TTableClient>(*Driver, tableClientSettings);
+        // nothing to do
     } else if (QueryExecuterType == "generic") {
         auto queryClientSettings = NQuery::TClientSettings()
                             .SessionPoolSettings(
@@ -136,7 +137,7 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
                                     .MaxActiveSessions(10+Threads));
         QueryClient = std::make_unique<NQuery::TQueryClient>(*Driver, queryClientSettings);
     } else {
-        Y_FAIL_S("Unexpected executor Type: " + QueryExecuterType);
+        throw TMisuseException() << "Unexpected executor Type: " << QueryExecuterType;
     }
 }
 
@@ -153,7 +154,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
 
     auto runTableClient = [this, &queryInfo, &dataQuerySettings, &retryCount] (NYdb::NTable::TSession session) -> NYdb::TStatus {
         if (!TableClient) {
-            Y_FAIL_S("Only data query executer type supported.");
+            Y_FAIL_S("TableClient is not initialized.");
         }
         ++retryCount;
         if (queryInfo.AlterTable) {
@@ -167,6 +168,9 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
             if (queryInfo.ReadRowsResultCallback) {
                 queryInfo.ReadRowsResultCallback.value()(result);
             }
+            return result;
+        } else if (queryInfo.TableOperation) {
+            auto result = queryInfo.TableOperation(*TableClient);
             return result;
         } else {
             auto mode = queryInfo.UseStaleRO ? NYdb::NTable::TTxSettings::StaleRO() : NYdb::NTable::TTxSettings::SerializableRW();
@@ -183,13 +187,13 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
 
     auto runQueryClient = [this, &queryInfo, &genericQuerySettings, &retryCount] (NYdb::NQuery::TSession session) -> NYdb::NQuery::TAsyncExecuteQueryResult {
         if (!QueryClient) {
-            Y_FAIL_S("Only generic query executer type supported.");
+            Y_FAIL_S("QueryClient is not initialized.");
         }
         ++retryCount;
         if (queryInfo.AlterTable) {
-            Y_FAIL_S("Generic query doesn't support alter table.");
+            throw TMisuseException() << "Generic query doesn't support alter table. Use data query (--executer data)";
         } else if (queryInfo.UseReadRows) {
-            Y_FAIL_S("Generic query doesn't support readrows.");
+            throw TMisuseException() << "Generic query doesn't support readrows. Use data query (--executer data)";
         } else {
             auto result = session.ExecuteQuery(queryInfo.Query.c_str(),
                 NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
@@ -200,8 +204,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
     };
 
     auto runQuery = [this, &runQueryClient, &runTableClient, &queryInfo]() -> NYdb::TStatus {
-        Y_ENSURE_BT(TableClient || QueryClient);
-        if (TableClient) {
+        if (QueryExecuterType == "data") {
             return TableClient->RetryOperationSync(runTableClient);
         } else {
             auto result = QueryClient->RetryQuery(runQueryClient).GetValueSync();
@@ -233,7 +236,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
             }
 
             queryInfo = *it;
-            auto status = runQuery();
+            auto status = queryInfo.TableOperation ? TableClient->RetryOperationSync(runTableClient) : runQuery();
             if (status.IsSuccess()) {
                 TotalQueries++;
             } else {
@@ -397,7 +400,7 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
         if (DryRun) {
             Cout << "Remove " << fullPath << Endl;
         } else {
-            ThrowOnError(RemovePathRecursive(*SchemeClient, *TableClient, *TopicClient, fullPath, ERecursiveRemovePrompt::Never, settings));
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(RemovePathRecursive(*SchemeClient, *TableClient, TopicClient.Get(), QueryClient.Get(), fullPath, ERecursiveRemovePrompt::Never, settings));
         }
         Cout << "Remove path " << path << "...Ok"  << Endl;
     }
@@ -444,7 +447,7 @@ TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
     }
     AddCommand(std::make_unique<TWorkloadCommandClean>(*Params));
 }
-    
+
 void TWorkloadCommandRoot::Config(TConfig& config) {
     TClientCommandTree::Config(config);
     Params->ConfigureOpts(*config.Opts, NYdbWorkload::TWorkloadParams::ECommandType::Root, 0);
@@ -463,7 +466,7 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
             auto result = TableClient->RetryOperationSync([ddlQueries](NTable::TSession session) {
                 return session.ExecuteSchemeQuery(ddlQueries.c_str()).GetValueSync();
             });
-            ThrowOnError(result);
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         }
         Cout << "Init tables ...Ok"  << Endl;
     }
@@ -508,7 +511,7 @@ int TWorkloadCommandClean::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workload
 
 NTable::TSession TWorkloadCommandInit::GetSession() {
     NTable::TCreateSessionResult result = TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return result.GetSession();
 }
 

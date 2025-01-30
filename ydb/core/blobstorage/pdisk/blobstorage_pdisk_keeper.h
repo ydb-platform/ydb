@@ -87,6 +87,10 @@ public:
         return ChunkTracker.GetOwnerUsed(owner);
     }
 
+    i64 GetLogChunkCount() const {
+        return ChunkTracker.GetLogChunkCount();
+    }
+
     TChunkIdx PopOwnerFreeChunk(TOwner owner, TString &outErrorReason) {
         if (ChunkTracker.TryAllocate(owner, 1, outErrorReason)) {
             TChunkIdx idx = PopFree(outErrorReason);

@@ -1,12 +1,10 @@
 PRAGMA SeqMode;
 
-USE plato;
-
 DEFINE SUBQUERY $a() AS
-    $r =
+    $r = (
         SELECT
             1 AS x
-    ;
+    );
 
     SELECT
         *

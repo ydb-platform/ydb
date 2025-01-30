@@ -285,7 +285,8 @@ IYPathService::TResolveResult TMapNodeMixin::ResolveRecursive(
                     method == "Set" ||
                     method == "Create" ||
                     method == "Copy" ||
-                    method == "EndCopy")
+                    method == "LockCopyDestination" ||
+                    method == "AssembleTreeCopy")
                 {
                     return IYPathService::TResolveResultHere{"/" + path};
                 } else {

@@ -6,16 +6,19 @@
 
 #include "collection_helpers.h"
 #include "maybe_inf.h"
+#include "mpl.h"
 
 #include <yt/yt/core/phoenix/concepts.h>
 
 #include <yt/yt/core/yson/string.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
-#include <library/cpp/yt/small_containers/compact_set.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_set.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
+
+#include <library/cpp/yt/assert/assert.h>
 
 #include <optional>
 #include <variant>
@@ -161,7 +164,7 @@ TSharedRef PackRefs(const T& parts)
 
     WritePod(output, static_cast<i32>(parts.size()));
     for (const auto& ref : parts) {
-        WritePod(output, static_cast<i64>(ref.Size()));
+        WritePod(output, std::ssize(ref));
         WriteRef(output, ref);
     }
 
@@ -515,7 +518,7 @@ struct TValueBoundSerializer
     { };
 
     template <class T, class C>
-        requires (NPhoenix2::SupportsPhoenix2<T> || !NPhoenix2::SupportsPersist<T, C>)
+        requires (NPhoenix::SupportsPhoenix<T> || !NPhoenix::SupportsPersist<T, C>)
     struct TSaver<
         T,
         C,
@@ -529,7 +532,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
-        requires (NPhoenix2::SupportsPhoenix2<T> || !NPhoenix2::SupportsPersist<T, C>)
+        requires (NPhoenix::SupportsPhoenix<T> || !NPhoenix::SupportsPersist<T, C>)
     struct TLoader<
         T,
         C,
@@ -542,7 +545,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
-        requires (!NPhoenix2::SupportsPhoenix2<T>)
+        requires (!NPhoenix::SupportsPhoenix<T>)
     struct TSaver<
         T,
         C,
@@ -555,7 +558,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
-        requires (!NPhoenix2::SupportsPhoenix2<T>)
+        requires (!NPhoenix::SupportsPhoenix<T>)
     struct TLoader<
         T,
         C,

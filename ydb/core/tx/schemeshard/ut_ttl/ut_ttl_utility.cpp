@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLUtility) {
         };
         auto makeEvictTier = [](const ui32 seconds) {
             NKikimrSchemeOp::TTTLSettings::TTier tier;
-            tier.MutableEvictToExternalStorage()->SetStorageName("/Root/abc");
+            tier.MutableEvictToExternalStorage()->SetStorage("/Root/abc");
             tier.SetApplyAfterSeconds(seconds);
             return tier;
         };
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLUtility) {
 
     Y_UNIT_TEST(GetExpireAfter) {
         NKikimrSchemeOp::TTTLSettings::TTier evictTier;
-        evictTier.MutableEvictToExternalStorage()->SetStorageName("/Root/abc");
+        evictTier.MutableEvictToExternalStorage()->SetStorage("/Root/abc");
         evictTier.SetApplyAfterSeconds(1800);
         NKikimrSchemeOp::TTTLSettings::TTier deleteTier;
         deleteTier.MutableDelete();

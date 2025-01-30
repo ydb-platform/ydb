@@ -48,6 +48,7 @@ class IClientRetryPolicy
 public:
     virtual IRequestRetryPolicyPtr CreatePolicyForGenericRequest() = 0;
     virtual IRequestRetryPolicyPtr CreatePolicyForStartOperationRequest() = 0;
+    virtual IRequestRetryPolicyPtr CreatePolicyForReaderRequest() = 0;
 };
 
 

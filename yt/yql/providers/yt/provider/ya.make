@@ -1,8 +1,10 @@
 LIBRARY()
 
 SRCS(
-    yql_yt_block_input_filter.cpp
     yql_yt_block_input.cpp
+    yql_yt_block_io_filter.cpp
+    yql_yt_block_io_utils.cpp
+    yql_yt_block_output.cpp
     yql_yt_datasink_constraints.cpp
     yql_yt_datasink_exec.cpp
     yql_yt_datasink_finalize.cpp
@@ -14,6 +16,7 @@ SRCS(
     yql_yt_datasource_type_ann.cpp
     yql_yt_datasource.cpp
     yql_yt_epoch.cpp
+    yql_yt_forwarding_gateway.cpp
     yql_yt_gateway.cpp
     yql_yt_horizontal_join.cpp
     yql_yt_helpers.cpp
@@ -59,6 +62,7 @@ SRCS(
     phy_opt/yql_yt_phy_opt_field_subset.cpp
     phy_opt/yql_yt_phy_opt_helper.cpp
     phy_opt/yql_yt_phy_opt_key_range.cpp
+    phy_opt/yql_yt_phy_opt_ytql.cpp
     phy_opt/yql_yt_phy_opt_merge.cpp
     phy_opt/yql_yt_phy_opt_push.cpp
     phy_opt/yql_yt_phy_opt_write.cpp

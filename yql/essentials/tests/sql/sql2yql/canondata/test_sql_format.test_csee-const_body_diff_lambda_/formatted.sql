@@ -6,7 +6,7 @@ SELECT
             }
         ),
         ListMap(
-            AsList("foo", "bar"), ($_x) -> {
+            AsList('foo', 'bar'), ($_x) -> {
                 RETURN 3 + 4;
             }
         )

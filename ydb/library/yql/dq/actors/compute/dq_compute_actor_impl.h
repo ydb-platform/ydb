@@ -248,8 +248,7 @@ protected:
 
     void ReportEventElapsedTime() {
         if (RuntimeSettings.CollectBasic()) {
-            ui64 elapsedMicros = NActors::TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000ull;
-            CpuTime += TDuration::MicroSeconds(elapsedMicros);
+            ComputeActorElapsedTicks += NActors::TlsActivationContext->GetCurrentEventTicks();
         }
     }
 
@@ -1704,7 +1703,8 @@ public:
             ReportEventElapsedTime();
         }
 
-        dst->SetCpuTimeUs(CpuTime.MicroSeconds() + SourceCpuTime.MicroSeconds() + InputTransformCpuTime.MicroSeconds());
+        ui64 computeActorElapsedUs = NHPTimer::GetSeconds(ComputeActorElapsedTicks) * 1'000'000ull;
+        dst->SetCpuTimeUs(computeActorElapsedUs + SourceCpuTime.MicroSeconds() + InputTransformCpuTime.MicroSeconds());
         dst->SetMaxMemoryUsage(MemoryLimits.MemoryQuotaManager->GetMaxMemorySize());
 
         if (auto memProfileStats = GetMemoryProfileStats(); memProfileStats) {
@@ -1740,9 +1740,9 @@ public:
             auto cpuTimeUs = taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds();
             if (TDerived::HasAsyncTaskRunner) {
                 // Async TR is another actor, summarize CPU usage
-                cpuTimeUs += CpuTime.MicroSeconds();
+                cpuTimeUs = NHPTimer::GetSeconds(ComputeActorElapsedTicks + TaskRunnerActorElapsedTicks) * 1'000'000ull;
             }
-            // CpuTimeUs does include SourceCpuTime
+            // cpuTimeUs does include SourceCpuTime
             protoTask->SetCpuTimeUs(cpuTimeUs + SourceCpuTime.MicroSeconds() + InputTransformCpuTime.MicroSeconds());
             protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
 
@@ -1757,6 +1757,9 @@ public:
                     auto inputIndex = protoSource.GetInputIndex();
                     if (auto* sourceInfoPtr = SourcesMap.FindPtr(inputIndex)) {
                         auto& sourceInfo = *sourceInfoPtr;
+                        if (!sourceInfo.AsyncInput)
+                            continue;
+
                         protoSource.SetIngressName(sourceInfo.Type);
                         const auto& ingressStats = sourceInfo.AsyncInput->GetIngressStats();
                         FillAsyncStats(*protoSource.MutableIngress(), ingressStats);
@@ -1826,6 +1829,10 @@ public:
                     // egress rows are usually not reported, so we count rows in task runner output
                     egressRows += egressStats.Rows ? egressStats.Rows : pushStats.Rows;
                     // p.s. sink == sinkInfo.Buffer
+                }
+
+                if (auto* source = sinkInfo.AsyncOutput) {
+                    source->FillExtraStats(protoTask, last, GetMeteringStats());
                 }
             }
 
@@ -1992,7 +1999,8 @@ protected:
     bool ResumeEventScheduled = false;
     NDqProto::EComputeState State;
     TIntrusivePtr<NYql::NDq::TRequestContext> RequestContext;
-    TDuration CpuTime;
+    ui64 ComputeActorElapsedTicks = 0;
+    ui64 TaskRunnerActorElapsedTicks = 0;
 
     struct TProcessOutputsState {
         int Inflight = 0;

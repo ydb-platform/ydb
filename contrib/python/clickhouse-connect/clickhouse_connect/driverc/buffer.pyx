@@ -186,7 +186,7 @@ cdef class ResponseBuffer:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    def  read_byte(self) -> int:
+    def read_byte(self) -> int:
         if self.buf_loc < self.buf_sz:
             b = self.buffer[self.buf_loc]
             self.buf_loc += 1
@@ -299,8 +299,8 @@ cdef class ResponseBuffer:
     @property
     def last_message(self):
         if self.buffer == NULL:
-            return None
-        return self.buffer[self.buf_sz:].decode()
+            return self.slice[0:]
+        return self.buffer[self.buf_sz:]
 
     def __dealloc__(self):
         self.close()

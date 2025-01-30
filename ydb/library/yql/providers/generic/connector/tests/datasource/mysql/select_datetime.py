@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import datetime
 from typing import Sequence
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
@@ -90,8 +90,8 @@ class Factory:
             data_out_=data_out,
             select_what=SelectWhat.asterisk(self._schema.columns),
             select_where=None,
-            data_source_kind=EDataSourceKind.MYSQL,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.MYSQL,
+            protocol=EGenericProtocol.NATIVE,
             schema=self._schema,
             pragmas=dict(),
         )
@@ -121,8 +121,8 @@ class Factory:
             data_out_=data_out,
             select_what=SelectWhat.asterisk(self._schema.columns),
             select_where=None,
-            data_source_kind=EDataSourceKind.MYSQL,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.MYSQL,
+            protocol=EGenericProtocol.NATIVE,
             schema=self._schema,
             pragmas=dict(),
         )

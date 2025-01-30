@@ -118,6 +118,18 @@ std::unique_ptr<TEvBlobStorage::TEvBlockResult> TEvBlobStorage::TEvBlock::MakeEr
     return res;
 }
 
+void TEvBlobStorage::TEvGetBlock::ToSpan(NWilson::TSpan& span) const {
+    span
+        .Attribute("TabletId", ::ToString(TabletId));
+}
+
+std::unique_ptr<TEvBlobStorage::TEvGetBlockResult> TEvBlobStorage::TEvGetBlock::MakeErrorResponse(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, TGroupId /*groupId*/) {
+    auto res = std::make_unique<TEvGetBlockResult>(status, TabletId, 0);
+    res->ErrorReason = errorReason;
+    return res;
+}
+
 void TEvBlobStorage::TEvPatch::ToSpan(NWilson::TSpan& span) const {
     span
         .Attribute("OriginalGroupId", OriginalGroupId)

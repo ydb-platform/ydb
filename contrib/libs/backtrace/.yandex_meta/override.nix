@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "2024-10-25";
+  version = "2024-11-29";
 
   src = fetchFromGitHub {
     owner = "ianlancetaylor";
     repo = "libbacktrace";
-    rev = "d48f84034ce3e53e501d10593710d025cb1121db";
-    hash = "sha256-suQJqNTh+dOI2nugASiRsWfMcjjJkTAKIpS5z9RIVUo=";
+    rev = "1db85642e3fca189cf4e076f840a45d6934b2456";
+    hash = "sha256-hRZqnro0fXFrcyMiC7k5Ztm0qckRV23UbzpmCThQ3Y4=";
   };
 
   patches = [];

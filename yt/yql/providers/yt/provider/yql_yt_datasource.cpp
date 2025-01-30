@@ -476,8 +476,9 @@ public:
         writer.OnKeyedItem("Table");
         if (auto table = TMaybeNode<TYtTable>(&node)) {
             writer.OnStringScalar(table.Cast().Name().Value());
-        }
-        else {
+        } else if (auto table = TMaybeNode<TYtPath>(&node).Table().Maybe<TYtTable>()) {
+            writer.OnStringScalar(table.Cast().Name().Value());
+        } else {
             writer.OnStringScalar("(tmp)");
         }
     }

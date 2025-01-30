@@ -229,19 +229,22 @@ inline boost::math::concepts::std_real_concept (nextafter)(boost::math::concepts
 { return (boost::math::nextafter)(a, b); }
 //
 // C++11 ism's
-// Note that these must not actually call the std:: versions as that precludes using this
-// header to test in C++03 mode, call the Boost versions instead:
+// Now that we only support C++11 and later, we can allow use of these:
 //
 inline boost::math::concepts::std_real_concept asinh(boost::math::concepts::std_real_concept a)
-{ return boost::math::asinh(a.value(), boost::math::policies::make_policy(boost::math::policies::overflow_error<boost::math::policies::ignore_error>())); }
+{ return std::asinh(a.value()); }
 inline boost::math::concepts::std_real_concept acosh(boost::math::concepts::std_real_concept a)
-{ return boost::math::acosh(a.value(), boost::math::policies::make_policy(boost::math::policies::overflow_error<boost::math::policies::ignore_error>())); }
+{ return std::acosh(a.value()); }
 inline boost::math::concepts::std_real_concept atanh(boost::math::concepts::std_real_concept a)
-{ return boost::math::atanh(a.value(), boost::math::policies::make_policy(boost::math::policies::overflow_error<boost::math::policies::ignore_error>())); }
+{ return std::atanh(a.value()); }
 inline bool (isfinite)(boost::math::concepts::std_real_concept a)
 {
    return (boost::math::isfinite)(a.value());
 }
+inline boost::math::concepts::std_real_concept log2(boost::math::concepts::std_real_concept a)
+{ return std::log2(a.value()); }
+inline int ilogb(boost::math::concepts::std_real_concept a)
+{ return std::ilogb(a.value()); }
 
 
 } // namespace std

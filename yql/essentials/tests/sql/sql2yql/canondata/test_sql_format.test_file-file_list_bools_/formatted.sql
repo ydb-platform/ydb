@@ -1,4 +1,4 @@
 /* postgres can not */
 SELECT
-    ParseFile('bool', "bools.lst")
+    ParseFile('bool', 'bools.lst')
 ;

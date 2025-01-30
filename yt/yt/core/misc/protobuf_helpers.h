@@ -3,7 +3,6 @@
 #include "guid.h"
 #include "mpl.h"
 #include "object_pool.h"
-#include "range.h"
 #include "serialize.h"
 
 #include <yt/yt/core/compression/public.h>
@@ -16,6 +15,9 @@
 #include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
+#include <library/cpp/yt/misc/static_initializer.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <google/protobuf/duration.pb.h>
 #include <google/protobuf/message.h>
@@ -373,17 +375,15 @@ struct IProtobufExtensionRegistry
 };
 
 #define REGISTER_PROTO_EXTENSION(type, tag, name) \
-    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterProtoExtension) = [] { \
+    YT_STATIC_INITIALIZER( \
         NYT::IProtobufExtensionRegistry::Get()->AddAction([] { \
             const auto* descriptor = type::default_instance().GetDescriptor(); \
-            NYT::IProtobufExtensionRegistry::Get()->RegisterDescriptor({ \
+            ::NYT::IProtobufExtensionRegistry::Get()->RegisterDescriptor({ \
                 .MessageDescriptor = descriptor, \
                 .Tag = tag, \
-                .Name = #name \
+                .Name = #name, \
             });\
-        }); \
-        return nullptr; \
-    } ();
+        }));
 
 //! Finds and deserializes an extension of the given type. Fails if no matching
 //! extension is found.
@@ -562,8 +562,9 @@ public:
 
 private:
     IZeroCopyOutput* const Stream_;
+
     std::exception_ptr Error_;
-    int64_t ByteCount_ = 0;
+    i64 ByteCount_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

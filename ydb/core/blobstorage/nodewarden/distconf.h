@@ -174,9 +174,14 @@ namespace NKikimr::NStorage {
 
         const bool IsSelfStatic = false;
         TIntrusivePtr<TNodeWardenConfig> Cfg;
+        bool SelfManagementEnabled = false;
 
         // currently active storage config
         std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        TString StorageConfigYaml; // the part we have to push (unless this is storage-only) to console
+        TString StorageConfigFetchYaml; // the part we would get is we fetch from console
+        ui64 StorageConfigFetchYamlHash = 0;
+        std::optional<ui32> StorageConfigYamlVersion;
 
         // base config from config file
         NKikimrBlobStorage::TStorageConfig BaseConfig;
@@ -261,6 +266,17 @@ namespace NKikimr::NStorage {
         // child actors
         THashSet<TActorId> ChildActors;
 
+        // pipe to Console
+        TActorId ConsolePipeId;
+        bool ConsoleConnected = false;
+        bool ConfigCommittedToConsole = false;
+        ui64 ValidateRequestCookie = 0;
+        ui64 ProposeRequestCookie = 0;
+        ui64 CommitRequestCookie = 0;
+        bool ProposeRequestInFlight = false;
+        std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
+        std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
+
         friend void ::Out<ERootState>(IOutputStream&, ERootState);
 
     public:
@@ -277,6 +293,7 @@ namespace NKikimr::NStorage {
         void Halt(); // cease any distconf activity, unbind and reject any bindings
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void HandleConfigConfirm(STATEFN_SIG);
+        void ReportStorageConfigToNodeWarden(ui64 cookie);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
@@ -339,7 +356,7 @@ namespace NKikimr::NStorage {
 
         struct TExConfigError : yexception {};
 
-        void GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
+        std::optional<TString> GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
         void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId, ui32 groupGeneration,
             TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
@@ -422,6 +439,23 @@ namespace NKikimr::NStorage {
         void Handle(NMon::TEvHttpInfo::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Console interaction
+
+        void ConnectToConsole(bool enablingDistconf = false);
+        void DisconnectFromConsole();
+        void SendConfigProposeRequest();
+        void Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev);
+        void Handle(TEvBlobStorage::TEvControllerProposeConfigResponse::TPtr ev);
+        void Handle(TEvBlobStorage::TEvControllerConsoleCommitResponse::TPtr ev);
+        void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
+        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
+        void OnConsolePipeError();
+        bool EnqueueConsoleConfigValidation(TActorId queryId, bool enablingDistconf, TString yaml);
+
+        static std::optional<TString> UpdateConfigComposite(NKikimrBlobStorage::TStorageConfig& config, const TString& yaml,
+            const std::optional<TString>& fetched);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Consistency checking
 
 #ifdef NDEBUG
@@ -442,18 +476,13 @@ namespace NKikimr::NStorage {
         }
         const auto& bsConfig = config.GetBlobStorageConfig();
 
-        if (!bsConfig.HasAutoconfigSettings()) {
+        if (!bsConfig.HasDefineBox()) {
             return;
         }
-        const auto& autoconfigSettings = bsConfig.GetAutoconfigSettings();
-
-        if (!autoconfigSettings.HasDefineBox()) {
-            return;
-        }
-        const auto& defineBox = autoconfigSettings.GetDefineBox();
+        const auto& defineBox = bsConfig.GetDefineBox();
 
         THashMap<ui64, const NKikimrBlobStorage::TDefineHostConfig*> defineHostConfigMap;
-        for (const auto& defineHostConfig : autoconfigSettings.GetDefineHostConfig()) {
+        for (const auto& defineHostConfig : bsConfig.GetDefineHostConfig()) {
             defineHostConfigMap.emplace(defineHostConfig.GetHostConfigId(), &defineHostConfig);
         }
 

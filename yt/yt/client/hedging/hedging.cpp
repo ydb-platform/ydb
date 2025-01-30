@@ -109,9 +109,9 @@ public:
     UNSUPPORTED_METHOD(IFileWriterPtr, CreateFileWriter, (const TRichYPath&, const TFileWriterOptions&));
     UNSUPPORTED_METHOD(IJournalReaderPtr, CreateJournalReader, (const TYPath&, const TJournalReaderOptions&));
     UNSUPPORTED_METHOD(IJournalWriterPtr, CreateJournalWriter, (const TYPath&, const TJournalWriterOptions&));
-    UNSUPPORTED_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (const NYPath::TRichYPath&, const TDistributedWriteSessionStartOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, FinishDistributedWriteSession, (TDistributedWriteSessionPtr, const TDistributedWriteSessionFinishOptions&));
-    UNSUPPORTED_METHOD(TFuture<ITableWriterPtr>, CreateFragmentTableWriter, (const TFragmentWriteCookiePtr&, const TFragmentTableWriterOptions&));
+    UNSUPPORTED_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (const NYPath::TRichYPath&, const TDistributedWriteSessionStartOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, FinishDistributedWriteSession, (const TDistributedWriteSessionWithResults&, const TDistributedWriteSessionFinishOptions&));
+    UNSUPPORTED_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (const TSignedWriteFragmentCookiePtr&, const TTableFragmentWriterOptions&));
 
     // IClient methods.
     // Unsupported methods.
@@ -158,6 +158,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, ResumeOperation, (const NScheduler::TOperationIdOrAlias&, const TResumeOperationOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, CompleteOperation, (const NScheduler::TOperationIdOrAlias&, const TCompleteOperationOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, UpdateOperationParameters, (const NScheduler::TOperationIdOrAlias&, const NYson::TYsonString&, const TUpdateOperationParametersOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, PatchOperationSpec, (const NScheduler::TOperationIdOrAlias&, const NScheduler::TSpecPatchList&, const TPatchOperationSpecOptions&));
     UNSUPPORTED_METHOD(TFuture<TOperation>, GetOperation, (const NScheduler::TOperationIdOrAlias&, const TGetOperationOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, DumpJobContext, (NJobTrackerClient::TJobId, const TYPath&, const TDumpJobContextOptions&));
     UNSUPPORTED_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, GetJobInput, (NJobTrackerClient::TJobId, const TGetJobInputOptions&));
@@ -204,6 +205,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (const std::string&, bool, const std::vector<TGuid>&, const TDestroyChunkLocationsOptions&));
     UNSUPPORTED_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (const std::string&, const std::vector<TGuid>&, const TResurrectChunkLocationsOptions&));
     UNSUPPORTED_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (const std::string&, const TRequestRestartOptions&));
+    UNSUPPORTED_METHOD(TFuture<TCollectCoverageResult>, CollectCoverage, (const std::string&, const TCollectCoverageOptions&));
     UNSUPPORTED_METHOD(TFuture<TPullRowsResult>, PullRows, (const TYPath&, const TPullRowsOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SetUserPassword, (const std::string&, const TString&, const TString&, const TSetUserPasswordOptions&));
     UNSUPPORTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const TString&, const TIssueTokenOptions&));

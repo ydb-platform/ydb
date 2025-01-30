@@ -254,7 +254,7 @@ namespace NYql {
 
         template<typename T>
         TWeakPtr<T> NewRequest(ui64 id, TActorId sender, const TActorContext& ctx) {
-            auto req = New<T>(SelfId(), sender, ctx.ExecutorThread.ActorSystem, id);
+            auto req = New<T>(SelfId(), sender, ctx.ActorSystem(), id);
             Requests.emplace(req);
             return NYT::MakeWeak(req);
         }

@@ -153,6 +153,9 @@ private:
             ? TMaybe<ui64>(msg.GetLockTxId())
             : Nothing();
         ui32 lockNodeId = msg.GetLockNodeId();
+        TMaybe<NKikimrDataEvents::ELockMode> lockMode = msg.HasLockMode()
+            ? TMaybe<NKikimrDataEvents::ELockMode>(msg.GetLockMode())
+            : Nothing();
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // todo: support partial start
 
@@ -217,7 +220,7 @@ private:
             } else {
                 schedulerGroup = "";
             }
-        } 
+        }
 
         std::optional<ui64> querySchedulerGroup;
         if (msg.HasQueryCpuShare() && schedulerGroup) {
@@ -233,7 +236,7 @@ private:
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
             txId, TInstant::Now(), ResourceManager_->GetCounters(),
             msg.GetSchedulerGroup(), msg.GetMemoryPoolPercent(),
-            msg.GetDatabase());
+            msg.GetDatabase(), Config.GetVerboseMemoryLimitException());
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
@@ -254,11 +257,12 @@ private:
                 }
             }
 
-            auto result = CaFactory_->CreateKqpComputeActor({
+            NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = request.Executer,
                 .TxId = txId,
                 .LockTxId = lockTxId,
                 .LockNodeId = lockNodeId,
+                .LockMode = lockMode,
                 .Task = &dqTask,
                 .TxInfo = txInfo,
                 .RuntimeSettings = runtimeSettingsBase,
@@ -276,7 +280,13 @@ private:
                 .ComputesByStages = &computesByStage,
                 .State = State_,
                 .SchedulingOptions = std::move(schedulingTaskOptions),
-            });
+                // TODO: block tracking mode is not set!
+            };
+            if (msg.HasUserToken() && msg.GetUserToken()) {
+                createArgs.UserToken.Reset(MakeIntrusive<NACLib::TUserToken>(msg.GetUserToken()));
+            }
+
+            auto result = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
                 ReplyError(txId, request.Executer, msg, rmResult->GetStatus(), rmResult->GetFailReason());
@@ -304,7 +314,8 @@ private:
         for (auto&& i : computesByStage) {
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
-                    m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
+                    m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, lockMode,
+                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
             }
         }
 

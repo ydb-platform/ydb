@@ -63,6 +63,7 @@ SRCS(
     counters_tx_allocator.proto
     counters_tx_proxy.proto
     data_events.proto
+    data_integrity_trails.proto
     database_basic_sausage_metainfo.proto
     datashard_config.proto
     datashard_load.proto

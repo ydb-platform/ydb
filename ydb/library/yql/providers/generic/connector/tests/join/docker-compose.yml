@@ -15,7 +15,7 @@ services:
       - ./init/clickhouse:/docker-entrypoint-initdb.d
   fq-connector-go:
     container_name: fq-tests-join-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.12-rc.2@sha256:84bb0b19f16f354b8a9ef7a020ee80f3ba7dc28db92f7007f235241153025b8a
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.6.2@sha256:a79b73f31d6ad37ca32d9212fe588e13bef30b56b3d29bbf49e450270c5e11f7
     ports:
       - 2130
     volumes:

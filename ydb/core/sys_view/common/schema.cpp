@@ -286,6 +286,16 @@ private:
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);
 
         RegisterPgTablesSystemViews();
+
+        {
+            using namespace NAuth;
+            RegisterSystemView<Schema::AuthUsers>(UsersName);
+            RegisterSystemView<Schema::AuthGroups>(NAuth::GroupsName);
+            RegisterSystemView<Schema::AuthGroupMembers>(GroupMembersName);
+            RegisterSystemView<Schema::AuthOwners>(OwnersName);
+            RegisterSystemView<Schema::AuthPermissions>(PermissionsName);
+            RegisterSystemView<Schema::AuthPermissions>(EffectivePermissionsName);
+        }
     }
 
 private:

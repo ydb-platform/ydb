@@ -222,6 +222,28 @@ private:
     std::unordered_set<TActorId> RunningRequests;
 };
 
+// The only purpose is to allow BUILTIN_SYSTEM_DOMAIN users
+struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
+    TFakeTicketParserActor()
+        : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StateFunc)
+    {}
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+    )
+
+    void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+        Y_ABORT_UNLESS(ev->Get()->Ticket.EndsWith(BUILTIN_SYSTEM_DOMAIN));
+        NACLib::TUserToken::TUserTokenInitFields args;
+        args.UserSID = ev->Get()->Ticket;
+        TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
+        Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
+    }
+};
+
+IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
+    return new TFakeTicketParserActor();
+}
 // Ydb setup
 
 class TWorkloadServiceYdbSetup : public IYdbSetup {
@@ -266,6 +288,8 @@ private:
         }
 
         SetLoggerSettings(serverSettings);
+
+        serverSettings.CreateTicketParser = CreateFakeTicketParser;
 
         return serverSettings;
     }

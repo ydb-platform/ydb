@@ -9,6 +9,6 @@ $callable = CALLABLE (
 );
 
 SELECT
-    $callable(<|a: "1"|>),
-    $callable(AddMember(<||>, "a", "2"))
+    $callable(<|a: '1'|>),
+    $callable(AddMember(<||>, 'a', '2'))
 ;

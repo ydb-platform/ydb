@@ -880,7 +880,7 @@ private:
         auto stageSettings = NDq::TDqStageSettings::Parse(stage);
         stageProto.SetStageGuid(stageSettings.Id);
         stageProto.SetIsSinglePartition(NDq::TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode);
-        stageProto.SetAllowWithSpilling(Config->EnableSpillingGenericQuery);
+        stageProto.SetAllowWithSpilling(Config->EnableSpilling);
     }
 
     void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx) {
@@ -1381,8 +1381,10 @@ private:
 
             auto settings = TKqpStreamLookupSettings::Parse(streamLookup);
             streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(settings.Strategy));
-            streamLookupProto.SetAllowNullKeys(settings.AllowNullKeys);
             streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
+            if (settings.AllowNullKeysPrefixSize) {
+                streamLookupProto.SetAllowNullKeysPrefixSize(*settings.AllowNullKeysPrefixSize);
+            }
 
             switch (streamLookupProto.GetLookupStrategy()) {
                 case NKqpProto::EStreamLookupStrategy::LOOKUP: {

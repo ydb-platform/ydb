@@ -878,17 +878,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto& settings = node.Child(4);
 
         //explore params
-        const auto& measures = params->ChildRef(0);
-        const auto& skipTo = params->ChildRef(2);
-        const auto& pattern = params->ChildRef(3);
-        const auto& defines = params->ChildRef(4);
+        const auto measures = params->Child(0);
+        const auto skipTo = params->Child(2);
+        const auto pattern = params->Child(3);
+        const auto defines = params->Child(4);
 
         //explore measures
-        const auto measureNames = measures->ChildRef(2);
+        const auto measureNames = measures->Child(2);
         constexpr size_t FirstMeasureLambdaIndex = 3;
 
         //explore defines
-        const auto defineNames = defines->ChildRef(2);
+        const auto defineNames = defines->Child(2);
         const size_t FirstDefineLambdaIndex = 3;
 
         TVector<TStringBuf> partitionColumnNames;
@@ -900,25 +900,21 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return MkqlBuildLambda(*partitionKeySelector, ctx, {inputRowArg});
         };
 
-        TVector<std::pair<TStringBuf, TProgramBuilder::TTernaryLambda>> getDefines(defineNames->ChildrenSize());
+        TVector<TStringBuf> defineVarNames(defineNames->ChildrenSize());
+        TVector<TProgramBuilder::TTernaryLambda> getDefines(defineNames->ChildrenSize());
         for (size_t i = 0; i != defineNames->ChildrenSize(); ++i) {
-            getDefines[i] = std::pair{
-                    defineNames->ChildRef(i)->Content(),
-                    [i, defines, &ctx](TRuntimeNode data, TRuntimeNode matchedVars, TRuntimeNode rowIndex) {
-                        return MkqlBuildLambda(*defines->ChildRef(FirstDefineLambdaIndex + i), ctx,
-                                               {data, matchedVars, rowIndex});
-                    }
+            defineVarNames[i] = defineNames->Child(i)->Content();
+            getDefines[i] = [i, defines, &ctx](TRuntimeNode data, TRuntimeNode matchedVars, TRuntimeNode rowIndex) {
+                return MkqlBuildLambda(*defines->Child(FirstDefineLambdaIndex + i), ctx, {data, matchedVars, rowIndex});
             };
         }
 
-        TVector<std::pair<TStringBuf, TProgramBuilder::TBinaryLambda>> getMeasures(measureNames->ChildrenSize());
+        TVector<TStringBuf> measureColumnNames(measureNames->ChildrenSize());
+        TVector<TProgramBuilder::TBinaryLambda> getMeasures(measureNames->ChildrenSize());
         for (size_t i = 0; i != measureNames->ChildrenSize(); ++i) {
-            getMeasures[i] = std::pair{
-                    measureNames->ChildRef(i)->Content(),
-                    [i, measures, &ctx](TRuntimeNode data, TRuntimeNode matchedVars) {
-                        return MkqlBuildLambda(*measures->ChildRef(FirstMeasureLambdaIndex + i), ctx,
-                                               {data, matchedVars});
-                    }
+            measureColumnNames[i] = measureNames->Child(i)->Content();
+            getMeasures[i] = [i, measures, &ctx](TRuntimeNode data, TRuntimeNode matchedVars) {
+                return MkqlBuildLambda(*measures->Child(FirstMeasureLambdaIndex + i), ctx, {data, matchedVars});
             };
         }
 
@@ -928,18 +924,26 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         NYql::NMatchRecognize::EAfterMatchSkipTo to;
         MKQL_ENSURE(TryFromString<NYql::NMatchRecognize::EAfterMatchSkipTo>(stringTo, to), "MATCH_RECOGNIZE: <row pattern skip to> cannot parse AfterMatchSkipTo mode");
 
+        auto rowsPerMatchString = params->Child(1)->Content();
+        MKQL_ENSURE(rowsPerMatchString.SkipPrefix("RowsPerMatch_"), R"(MATCH_RECOGNIZE: <row pattern rows per match> should start with "RowsPerMatch_")");
+        NYql::NMatchRecognize::ERowsPerMatch rowsPerMatch;
+        MKQL_ENSURE(TryFromString<NYql::NMatchRecognize::ERowsPerMatch>(rowsPerMatchString, rowsPerMatch), "MATCH_RECOGNIZE: cannot parse RowsPerMatch mode");
+
         const auto streamingMode = FromString<bool>(settings->Child(0)->Child(1)->Content());
 
         return ctx.ProgramBuilder.MatchRecognizeCore(
                 MkqlBuildExpr(*inputStream, ctx),
                 getPartitionKeySelector,
                 partitionColumnNames,
+                measureColumnNames,
                 getMeasures,
                 NYql::NMatchRecognize::ConvertPattern(pattern, ctx.ExprCtx),
+                defineVarNames,
                 getDefines,
                 streamingMode,
-                NYql::NMatchRecognize::TAfterMatchSkipTo{to, TString{var}}
-                );
+                NYql::NMatchRecognize::TAfterMatchSkipTo{to, TString{var}},
+                rowsPerMatch
+        );
     });
 
     AddCallable("TimeOrderRecover", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -1668,6 +1672,26 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.MapJoinCore(list, dict, joinKind, leftKeyColumns, leftRenames, rightRenames, returnType);
     });
 
+    AddCallable("BlockMapJoinCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto leftStream = MkqlBuildExpr(node.Head(), ctx);
+        const auto rightStream = MkqlBuildExpr(*node.Child(1), ctx);
+        const auto joinKind = GetJoinKind(node, node.Child(2)->Content());
+
+        const auto leftItemType = node.Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+        const auto rightItemType = node.Child(1U)->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+
+        std::vector<ui32> leftKeyColumns, leftKeyDrops, rightKeyColumns, rightKeyDrops;
+        node.Child(3)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
+        node.Child(4)->ForEachChild([&](const TExprNode& child){ leftKeyDrops.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
+        node.Child(5)->ForEachChild([&](const TExprNode& child){ rightKeyColumns.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
+        node.Child(6)->ForEachChild([&](const TExprNode& child){ rightKeyDrops.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
+
+        bool rightAny = HasSetting(node.Tail(), "rightAny");
+
+        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.BlockMapJoinCore(leftStream, rightStream, joinKind, leftKeyColumns, leftKeyDrops, rightKeyColumns, rightKeyDrops, rightAny, returnType);
+    });
+
     AddCallable({"GraceJoinCore", "GraceSelfJoinCore"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         bool selfJoin = node.Content() == "GraceSelfJoinCore";
         int shift = selfJoin ? 0 : 1;
@@ -1809,7 +1833,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         NNodes::TCoCombineCore core(&node);
 
         const auto stream = MkqlBuildExpr(core.Input().Ref(), ctx);
-        const auto memLimit = FromString<ui64>(core.MemLimit().Cast().Value());
+        const auto memLimit = NNodes::TCoCombineCore::idx_MemLimit < node.ChildrenSize() ?
+                FromString<ui64>(core.MemLimit().Cast().Value()) : 0;
 
         const auto keyExtractor = [&](TRuntimeNode item) {
             return MkqlBuildLambda(core.KeyExtractor().Ref(), ctx, {item});
@@ -2107,6 +2132,13 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 ctx.ProgramBuilder.NewVariant(item, node.Child(1)->Content(), type);
     });
 
+    AddCallable("DynamicVariant", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto varType = ctx.BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+        const auto item = MkqlBuildExpr(node.Head(), ctx);
+        const auto index = MkqlBuildExpr(*node.Child(1), ctx);
+        return ctx.ProgramBuilder.DynamicVariant(item, index, varType);
+    });
+
     AddCallable("AsStruct", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         std::vector<std::pair<std::string_view, TRuntimeNode>> members;
         members.reserve(node.ChildrenSize());
@@ -2382,6 +2414,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto input = MkqlBuildExpr(node.Head(), ctx);
         auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.Nop(input, returnType);
+    });
+
+    AddCallable({"TableSource", "WideTableSource"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return MkqlBuildExpr(node.Head(), ctx);
     });
 
     AddCallable({"WithWorld"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2758,12 +2794,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockFunc(node.Child(0)->Content(), returnType, args);
     });
 
-    AddCallable("BlockBitCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        auto arg = MkqlBuildExpr(*node.Child(0), ctx);
-        auto targetType = ctx.BuildType(node, *node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
-        return ctx.ProgramBuilder.BlockBitCast(arg, targetType);
-    });
-
     AddCallable("BlockMember", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto structObj = MkqlBuildExpr(node.Head(), ctx);
         const auto name = node.Tail().Content();
@@ -2899,11 +2929,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto flow = MkqlBuildExpr(node.Head(), ctx);
         const auto index = FromString<ui32>(node.Child(1)->Content());
         return ctx.ProgramBuilder.BlockCompress(flow, index);
-    });
-
-    AddCallable("BlockExpandChunked", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto flow = MkqlBuildExpr(node.Head(), ctx);
-        return ctx.ProgramBuilder.BlockExpandChunked(flow);
     });
 
     AddCallable("PgArray", [](const TExprNode& node, TMkqlBuildContext& ctx) {

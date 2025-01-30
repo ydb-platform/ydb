@@ -136,7 +136,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //client request
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
-#define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, const TActorId& partActor, \
+#define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx);
     DESCRIBE_HANDLE(HandleGetMaxSeqNoRequest)
     DESCRIBE_HANDLE(HandleSetClientOffsetRequest)
@@ -148,7 +148,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
 #undef DESCRIBE_HANDLE
 
-#define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, const TActorId& partActor, \
+#define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,\
                                   const TActorId& pipeClient, const TActorId& sender);
 
@@ -443,6 +443,10 @@ private:
     void DeleteExpiredTransactions(const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
+    void SetTxCounters();
+    void SetTxCompleteLagCounter();
+    void SetTxInFlyCounter();
+
     bool CanProcessProposeTransactionQueue() const;
     bool CanProcessPlanStepQueue() const;
     bool CanProcessWriteTxs() const;
@@ -472,18 +476,22 @@ private:
                                            const TActorId& sender,
                                            const TActorContext& ctx);
     void HandleEventForSupportivePartition(const ui64 responseCookie,
+                                           NWilson::TTraceId traceId,
                                            const NKikimrClient::TPersQueuePartitionRequest& req,
                                            const TActorId& sender,
                                            const TActorContext& ctx);
     void HandleGetOwnershipRequestForSupportivePartition(const ui64 responseCookie,
+                                                         NWilson::TTraceId traceId,
                                                          const NKikimrClient::TPersQueuePartitionRequest& req,
                                                          const TActorId& sender,
                                                          const TActorContext& ctx);
     void HandleReserveBytesRequestForSupportivePartition(const ui64 responseCookie,
+                                                         NWilson::TTraceId traceId,
                                                          const NKikimrClient::TPersQueuePartitionRequest& req,
                                                          const TActorId& sender,
                                                          const TActorContext& ctx);
     void HandleWriteRequestForSupportivePartition(const ui64 responseCookie,
+                                                  NWilson::TTraceId traceId,
                                                   const NKikimrClient::TPersQueuePartitionRequest& req,
                                                   const TActorContext& ctx);
 

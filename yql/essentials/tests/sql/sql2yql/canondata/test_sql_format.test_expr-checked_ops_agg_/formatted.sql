@@ -1,4 +1,4 @@
-PRAGMA CheckedOps = "true";
+PRAGMA CheckedOps = 'true';
 
 SELECT
     sum(NULL),

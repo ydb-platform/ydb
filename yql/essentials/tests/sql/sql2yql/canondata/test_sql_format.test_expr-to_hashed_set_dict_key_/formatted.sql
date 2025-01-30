@@ -7,9 +7,9 @@ $second = ($x) -> {
     RETURN $x.1;
 };
 
-$i = AsDict(AsTuple(1, "A"), AsTuple(2, "B"));
-$j = AsDict(AsTuple(1, "A"), AsTuple(2, "C"));
-$k = AsDict(AsTuple(1, "A"), AsTuple(2, "D"));
+$i = AsDict(AsTuple(1, 'A'), AsTuple(2, 'B'));
+$j = AsDict(AsTuple(1, 'A'), AsTuple(2, 'C'));
+$k = AsDict(AsTuple(1, 'A'), AsTuple(2, 'D'));
 
 $l = AsList(
     AsTuple($i, Void()),
@@ -51,7 +51,7 @@ SELECT
     DictContains($d, $k)
 ;
 
-$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
+$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom('Compact'), AsAtom('Hashed'), AsAtom('One')));
 
 SELECT
     ListSort(

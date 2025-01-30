@@ -31,8 +31,11 @@ void TRequestBase::AbortDelete(TRequestBase* request, TActorSystem* actorSystem)
         while (log) {
             auto batch = log->PopFromBatch();
             log->Abort(actorSystem);
+            delete log;
+
             log = batch;
         }
+        break;
     }
     default:
         request->Abort(actorSystem);

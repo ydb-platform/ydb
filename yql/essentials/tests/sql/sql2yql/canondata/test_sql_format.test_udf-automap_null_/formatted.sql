@@ -1,7 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 SELECT
-    String::CollapseText("abc", 1)
+    String::CollapseText('abc', 1)
 ;
 
 SELECT

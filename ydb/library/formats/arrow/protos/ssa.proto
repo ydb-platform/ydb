@@ -45,6 +45,10 @@ message TProgram {
         repeated uint64 HashValues = 1;
     }
 
+    message TBloomNGrammFilterChecker {
+        repeated uint64 HashValues = 1;
+    }
+
     message TCountMinSketchChecker {
     }
 
@@ -60,6 +64,7 @@ message TProgram {
             TBloomFilterChecker BloomFilter = 40;
             TCompositeChecker Composite = 41;
             TCountMinSketchChecker CountMinSketch = 42;
+            TBloomNGrammFilterChecker BloomNGrammFilter = 43;
         }
     }
 

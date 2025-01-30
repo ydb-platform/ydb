@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(19.1.4)
+VERSION(19.1.7)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.4/compiler-rt-19.1.4.src.tar.xz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/compiler-rt-19.1.7.src.tar.xz)
 
 NO_COMPILER_WARNINGS()
 
@@ -60,6 +60,32 @@ IF (GCC OR CLANG)
     NO_LTO()
 ENDIF()
 
+IF (OS_DARWIN OR OS_IOS)
+    SRCS(
+        atomic_flag_clear.c
+        atomic_flag_clear_explicit.c
+        atomic_flag_test_and_set.c
+        atomic_flag_test_and_set_explicit.c
+        atomic_signal_fence.c
+        atomic_thread_fence.c
+    )
+ENDIF()
+
+IF (ARCH_ARM64 OR ARCH_X86_64)
+    # As of r25b, clang-for-android does not have bf16 support.
+    # These can be built using r27 and above.
+    IF (NOT OS_ANDROID)
+        SRCS(
+            # NB: sources that were commented out were added in llvm-20
+            extendbfsf2.c
+            truncdfbf2.c
+            # truncxfbf2.c
+            truncsfbf2.c
+            # trunctfbf2.c
+        )
+    ENDIF()
+ENDIF()
+
 IF (ARCH_AARCH64)
     SRCS(
         aarch64/chkstk.S
@@ -83,12 +109,6 @@ IF (ARCH_AARCH64)
         ashrdi3.c
         ashrti3.c
         atomic.c
-        atomic_flag_clear.c
-        atomic_flag_clear_explicit.c
-        atomic_flag_test_and_set.c
-        atomic_flag_test_and_set_explicit.c
-        atomic_signal_fence.c
-        atomic_thread_fence.c
         bswapdi2.c
         bswapsi2.c
         clear_cache.c
@@ -119,7 +139,6 @@ IF (ARCH_AARCH64)
         emutls.c
         enable_execute_stack.c
         eprintf.c
-        extendbfsf2.c
         extenddftf2.c
         extendhfsf2.c
         extendhftf2.c
@@ -209,10 +228,8 @@ IF (ARCH_AARCH64)
         subvsi3.c
         subvti3.c
         trampoline_setup.c
-        truncdfbf2.c
         truncdfhf2.c
         truncdfsf2.c
-        truncsfbf2.c
         truncsfhf2.c
         trunctfdf2.c
         trunctfhf2.c
@@ -251,12 +268,6 @@ ELSEIF (ARCH_X86_64)
         ashrdi3.c
         ashrti3.c
         atomic.c
-        atomic_flag_clear.c
-        atomic_flag_clear_explicit.c
-        atomic_flag_test_and_set.c
-        atomic_flag_test_and_set_explicit.c
-        atomic_signal_fence.c
-        atomic_thread_fence.c
         bswapdi2.c
         bswapsi2.c
         clear_cache.c
@@ -287,7 +298,6 @@ ELSEIF (ARCH_X86_64)
         emutls.c
         enable_execute_stack.c
         eprintf.c
-        extendbfsf2.c
         extenddftf2.c
         extendhfsf2.c
         extendhftf2.c
@@ -374,10 +384,8 @@ ELSEIF (ARCH_X86_64)
         subvsi3.c
         subvti3.c
         trampoline_setup.c
-        truncdfbf2.c
         truncdfhf2.c
         truncdfsf2.c
-        truncsfbf2.c
         truncsfhf2.c
         trunctfdf2.c
         trunctfhf2.c
@@ -400,7 +408,7 @@ ELSEIF (ARCH_X86_64)
         x86_64/floatundisf.S
         x86_64/floatundixf.S
     )
-    IF (NOT OS_WINDOWS)
+    IF (NOT OS_WINDOWS AND NOT OS_ANDROID)
         SRCS(
             x86_64/floatdixf.c
             divxc3.c
@@ -434,15 +442,8 @@ ELSE()
         ashrdi3.c
         ashrti3.c
         atomic.c
-        atomic_flag_clear.c
-        atomic_flag_clear_explicit.c
-        atomic_flag_test_and_set.c
-        atomic_flag_test_and_set_explicit.c
-        atomic_signal_fence.c
-        atomic_thread_fence.c
         bswapdi2.c
         bswapsi2.c
-        clear_cache.c
         clzdi2.c
         clzsi2.c
         clzti2.c
@@ -466,10 +467,6 @@ ELSE()
         divtc3.c
         divtf3.c
         divti3.c
-        emutls.c
-        enable_execute_stack.c
-        eprintf.c
-        extendbfsf2.c
         extenddftf2.c
         extendhfsf2.c
         extendhftf2.c
@@ -560,10 +557,8 @@ ELSE()
         subvsi3.c
         subvti3.c
         trampoline_setup.c
-        truncdfbf2.c
         truncdfhf2.c
         truncdfsf2.c
-        truncsfbf2.c
         truncsfhf2.c
         trunctfdf2.c
         trunctfhf2.c
@@ -580,6 +575,14 @@ ELSE()
         umodsi3.c
         umodti3.c
     )
+    IF (NOT OS_EMSCRIPTEN)
+        SRCS(
+            clear_cache.c
+            emutls.c
+            enable_execute_stack.c
+            eprintf.c
+        )
+    ENDIF()
 ENDIF()
 
 IF (OS_LINUX AND NOT WITH_MAPKIT)

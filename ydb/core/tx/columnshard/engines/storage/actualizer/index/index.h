@@ -22,6 +22,7 @@ private:
 
     const ui64 PathId;
     const TVersionedIndex& VersionedIndex;
+    std::shared_ptr<IStoragesManager> StoragesManager;
 
 public:
     std::vector<TCSMetadataRequest> CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions);
@@ -31,7 +32,7 @@ public:
     }
 
     void Start();
-    TGranuleActualizationIndex(const ui64 pathId, const TVersionedIndex& versionedIndex);
+    TGranuleActualizationIndex(const ui64 pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager);
 
     void ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const;
 

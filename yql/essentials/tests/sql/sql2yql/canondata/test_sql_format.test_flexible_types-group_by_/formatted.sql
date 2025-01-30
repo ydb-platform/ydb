@@ -5,7 +5,7 @@
 /* yt can not */
 PRAGMA FlexibleTypes;
 
-$groupsrc =
+$groupsrc = (
     SELECT
         1 AS int32,
         2 AS value
@@ -13,7 +13,7 @@ $groupsrc =
     SELECT
         1 AS int32,
         1 AS value
-;
+);
 
 SELECT
     int32,

@@ -8,7 +8,8 @@ RECURSE(
     gateway
     metrics
     mkql
-    proto/python
+    mkql_simple_file
+    proto
     provider
     schema
     structured_token

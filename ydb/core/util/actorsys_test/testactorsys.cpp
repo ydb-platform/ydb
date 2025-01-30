@@ -125,6 +125,14 @@ public:
         return Context->Register(actor, parentId, PoolId, mailbox->Hint, NodeId);
     }
 
+    TActorId RegisterAlias(TMailbox* mailbox, IActor* actor) override {
+        return Context->RegisterAlias(mailbox->Hint, actor, PoolId, NodeId);
+    }
+
+    void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) override {
+        return Context->UnregisterAlias(mailbox->Hint, actorId, PoolId, NodeId);
+    }
+
     void Prepare(TActorSystem* /*actorSystem*/, NSchedulerQueue::TReader** /*scheduleReaders*/, ui32* /*scheduleSz*/) override {
     }
 

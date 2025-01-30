@@ -131,15 +131,6 @@ public:
     TConclusionStatus Init(
         const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor);
 
-    std::vector<std::string> GetColumnsOrder() const {
-        auto schema = GetResultSchema();
-        std::vector<std::string> result;
-        for (auto&& i : schema->GetSchema()->fields()) {
-            result.emplace_back(i->name());
-        }
-        return result;
-    }
-
     std::set<ui32> GetEarlyFilterColumnIds() const;
     std::set<ui32> GetPKColumnIds() const;
 

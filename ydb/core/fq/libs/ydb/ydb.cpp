@@ -2,6 +2,8 @@
 
 #include "util.h"
 
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+
 #include <util/stream/str.h>
 #include <util/string/printf.h>
 
@@ -53,7 +55,7 @@ TFuture<TStatus> CheckGeneration(
 
     TResultSetParser parser(selectResult.GetResultSet(0));
     if (parser.TryNextRow()) {
-        context->GenerationRead = parser.ColumnParser(context->GenerationColumn).GetOptionalUint64().GetOrElse(0);
+        context->GenerationRead = parser.ColumnParser(context->GenerationColumn).GetOptionalUint64().value_or(0);
     }
 
     bool isOk = false;
@@ -82,6 +84,7 @@ TFuture<TStatus> CheckGeneration(
     }
 
     context->Transaction = selectResult.GetTransaction();
+    selectResult.GetTransaction().reset();
 
     if (!isOk) {
         RollbackTransaction(context); // don't care about result
@@ -137,7 +140,7 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
     auto ttxControl = TTxControl::Tx(*context->Transaction);
     if (context->CommitTx) {
         ttxControl.CommitTx();
-        context->Transaction.Clear();
+        context->Transaction.reset();
     }
 
     return context->Session.ExecuteDataQuery(query, ttxControl).Apply(
@@ -196,13 +199,18 @@ TStatus MakeErrorStatus(
     auto& issue = issues.back();
     issue.SetCode((ui32)code, severity);
 
-    return TStatus(code, std::move(issues));
+    return TStatus(code, NYdb::NAdapters::ToSdkIssues(std::move(issues)));
 }
 
 NYql::TIssues StatusToIssues(const NYdb::TStatus& status) {
     TIssues issues;
     if (!status.IsSuccess()) {
-        issues = status.GetIssues();
+        issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
+        if (!issues) {
+            TStringStream str;
+            str << "Internal error: empty issues with failed status (" << status.GetStatus() << ")";
+            issues.AddIssue(str.Str());
+        }
     }
     return issues;
 }
@@ -298,7 +306,7 @@ TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
     }
 
     auto future = context->Transaction->Rollback();
-    context->Transaction.Clear();
+    context->Transaction.reset();
     return future;
 }
 

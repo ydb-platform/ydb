@@ -1,6 +1,5 @@
 import base64
 import fnmatch
-import random
 import re
 import ipaddress
 
@@ -9,8 +8,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from moto.core import get_account_id
 from moto.iam import iam_backends
+from moto.moto_api._internal import mock_random as random
 from moto.utilities.utils import md5_hash
 
 EC2_RESOURCE_TO_PREFIX = {
@@ -19,6 +18,7 @@ EC2_RESOURCE_TO_PREFIX = {
     "transit-gateway-route-table": "tgw-rtb",
     "transit-gateway-attachment": "tgw-attach",
     "dhcp-options": "dopt",
+    "fleet": "fleet",
     "flow-logs": "fl",
     "image": "ami",
     "instance": "i",
@@ -54,6 +54,7 @@ EC2_RESOURCE_TO_PREFIX = {
     "vpn-gateway": "vgw",
     "iam-instance-profile-association": "iip-assoc",
     "carrier-gateway": "cagw",
+    "key-pair": "key",
 }
 
 
@@ -73,7 +74,7 @@ def random_ami_id():
     return random_id(prefix=EC2_RESOURCE_TO_PREFIX["image"])
 
 
-def random_instance_id():
+def random_instance_id() -> str:
     return random_id(prefix=EC2_RESOURCE_TO_PREFIX["instance"], size=17)
 
 
@@ -87,6 +88,10 @@ def random_security_group_id():
 
 def random_security_group_rule_id():
     return random_id(prefix=EC2_RESOURCE_TO_PREFIX["security-group-rule"], size=17)
+
+
+def random_fleet_id():
+    return f"fleet-{random_resource_id(size=8)}-{random_resource_id(size=4)}-{random_resource_id(size=4)}-{random_resource_id(size=4)}-{random_resource_id(size=12)}"
 
 
 def random_flow_log_id():
@@ -141,6 +146,10 @@ def random_customer_gateway_id():
 
 def random_volume_id():
     return random_id(prefix=EC2_RESOURCE_TO_PREFIX["volume"])
+
+
+def random_key_pair_id():
+    return random_id(prefix=EC2_RESOURCE_TO_PREFIX["key-pair"])
 
 
 def random_vpc_id():
@@ -325,9 +334,7 @@ def get_object_value(obj, attr):
     keys = attr.split(".")
     val = obj
     for key in keys:
-        if key == "owner_id":
-            return get_account_id()
-        elif hasattr(val, key):
+        if hasattr(val, key):
             val = getattr(val, key)
         elif isinstance(val, dict):
             val = val[key]
@@ -336,6 +343,8 @@ def get_object_value(obj, attr):
                 item_val = get_object_value(item, key)
                 if item_val:
                     return item_val
+        elif key == "owner_id" and hasattr(val, "account_id"):
+            val = getattr(val, "account_id")
         else:
             return None
     return val
@@ -413,6 +422,7 @@ filter_dict_attribute_mapping = {
     "owner-id": "owner_id",
     "subnet-id": "subnet_id",
     "dns-name": "public_dns",
+    "key-name": "key_name",
 }
 
 
@@ -676,19 +686,21 @@ def filter_iam_instance_profile_associations(iam_instance_associations, filter_d
     return result
 
 
-def filter_iam_instance_profiles(iam_instance_profile_arn, iam_instance_profile_name):
+def filter_iam_instance_profiles(
+    account_id, iam_instance_profile_arn, iam_instance_profile_name
+):
     instance_profile = None
     instance_profile_by_name = None
     instance_profile_by_arn = None
     if iam_instance_profile_name:
-        instance_profile_by_name = iam_backends["global"].get_instance_profile(
-            iam_instance_profile_name
-        )
+        instance_profile_by_name = iam_backends[account_id][
+            "global"
+        ].get_instance_profile(iam_instance_profile_name)
         instance_profile = instance_profile_by_name
     if iam_instance_profile_arn:
-        instance_profile_by_arn = iam_backends["global"].get_instance_profile_by_arn(
-            iam_instance_profile_arn
-        )
+        instance_profile_by_arn = iam_backends[account_id][
+            "global"
+        ].get_instance_profile_by_arn(iam_instance_profile_arn)
         instance_profile = instance_profile_by_arn
     # We would prefer instance profile that we found by arn
     if iam_instance_profile_arn and iam_instance_profile_name:
@@ -775,14 +787,15 @@ def gen_moto_amis(described_images, drop_images_missing_keys=True):
     return result
 
 
-def convert_tag_spec(tag_spec_set):
-    # IN:  [{"ResourceType": _type, "Tag": [{"Key": k, "Value": v}, ..]}]
-    # OUT: {_type: {k: v, ..}}
+def convert_tag_spec(tag_spec_set, tag_key="Tag"):
+    # IN:   [{"ResourceType": _type, "Tag": [{"Key": k, "Value": v}, ..]}]
+    #  (or) [{"ResourceType": _type, "Tags": [{"Key": k, "Value": v}, ..]}] <-- special cfn case
+    # OUT:  {_type: {k: v, ..}}
     tags = {}
     for tag_spec in tag_spec_set:
         if tag_spec["ResourceType"] not in tags:
             tags[tag_spec["ResourceType"]] = {}
         tags[tag_spec["ResourceType"]].update(
-            {tag["Key"]: tag["Value"] for tag in tag_spec["Tag"]}
+            {tag["Key"]: tag["Value"] for tag in tag_spec[tag_key]}
         )
     return tags

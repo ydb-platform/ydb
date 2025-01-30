@@ -50,7 +50,7 @@ public:
     }
 
     void AddError(const ui64 pathId, const TString& errorMessage) {
-        AFL_VERIFY(ErrorsByPathId.emplace(pathId, errorMessage).second);
+        ErrorsByPathId.emplace(pathId, errorMessage);
     }
 
     bool HasErrors() const {
@@ -63,6 +63,7 @@ private:
     THashSet<ui64> RequestIds;
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) = 0;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const = 0;
 
     void OnRequestsFinished(TDataAccessorsResult&& result) {
         DoOnRequestsFinished(std::move(result));
@@ -85,12 +86,18 @@ public:
             OnRequestsFinished(std::move(*Result));
         }
     }
+    const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
+        return DoGetAbortionFlag();
+    }
 
     virtual ~IDataAccessorRequestsSubscriber() = default;
 };
 
 class TFakeDataAccessorsSubscriber: public IDataAccessorRequestsSubscriber {
 private:
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& /*result*/) override {
     }
 };
@@ -169,6 +176,7 @@ private:
     static inline TAtomicCounter Counter = 0;
     ui32 FetchStage = 0;
     YDB_READONLY(ui64, RequestId, Counter.Inc());
+    YDB_READONLY_DEF(TString, Consumer);
     THashSet<ui64> PortionIds;
     THashMap<ui64, TPathFetchingState> PathIdStatus;
     THashSet<ui64> PathIds;
@@ -208,7 +216,11 @@ public:
         return sb;
     }
 
-    TDataAccessorsRequest() = default;
+    TDataAccessorsRequest(const TString& consumer)
+        : Consumer(consumer)
+    {
+
+    }
 
     ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
         ui64 result = 0;
@@ -218,6 +230,17 @@ public:
             }
         }
         return result;
+    }
+
+    bool IsAborted() const {
+        AFL_VERIFY(HasSubscriber());
+        auto flag = Subscriber->GetAbortionFlag();
+        return flag && flag->Val();
+    }
+
+    const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
+        AFL_VERIFY(HasSubscriber());
+        return Subscriber->GetAbortionFlag();
     }
 
     bool HasSubscriber() const {
@@ -276,7 +299,8 @@ public:
     }
 
     void AddError(const ui64 pathId, const TString& errorMessage) {
-        AFL_VERIFY(FetchStage == 1);
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", errorMessage)("event", "ErrorOnFetching")("path_id", pathId);
+        AFL_VERIFY(FetchStage <= 1);
         auto itStatus = PathIdStatus.find(pathId);
         AFL_VERIFY(itStatus != PathIdStatus.end());
         itStatus->second.OnError(errorMessage);

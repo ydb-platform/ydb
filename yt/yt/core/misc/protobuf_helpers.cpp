@@ -11,6 +11,8 @@
 
 #include <library/cpp/yt/misc/cast.h>
 
+#include <library/cpp/yt/threading/spin_lock.h>
+
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
@@ -87,7 +89,7 @@ bool TryDeserializeProto(google::protobuf::MessageLite* message, TRef data)
     // to find out more about protobuf message size limits.
     CodedInputStream codedInputStream(
         reinterpret_cast<const ui8*>(data.Begin()),
-        static_cast<int>(data.Size()));
+        std::ssize(data));
     codedInputStream.SetTotalBytesLimit(data.Size() + 1);
 
     // Raise recursion limit.
@@ -123,17 +125,17 @@ TSharedRef SerializeProtoToRefWithEnvelope(
     fixedHeader.MessageSize = static_cast<ui32>(compressedMessage.Size());
 
     size_t totalSize =
-        sizeof (TEnvelopeFixedHeader) +
+        sizeof(TEnvelopeFixedHeader) +
         fixedHeader.EnvelopeSize +
         fixedHeader.MessageSize;
 
     auto data = TSharedMutableRef::Allocate<TSerializedMessageTag>(totalSize, {.InitializeStorage = false});
 
     char* targetFixedHeader = data.Begin();
-    char* targetHeader = targetFixedHeader + sizeof (TEnvelopeFixedHeader);
+    char* targetHeader = targetFixedHeader + sizeof(TEnvelopeFixedHeader);
     char* targetMessage = targetHeader + fixedHeader.EnvelopeSize;
 
-    memcpy(targetFixedHeader, &fixedHeader, sizeof (fixedHeader));
+    memcpy(targetFixedHeader, &fixedHeader, sizeof(fixedHeader));
     YT_VERIFY(envelope.SerializeToArray(targetHeader, fixedHeader.EnvelopeSize));
     memcpy(targetMessage, compressedMessage.Begin(), fixedHeader.MessageSize);
 
@@ -157,14 +159,14 @@ TString SerializeProtoToStringWithEnvelope(
     fixedHeader.MessageSize = CheckedCastToI32(message.ByteSizeLong());
 
     auto totalSize =
-        sizeof (fixedHeader) +
+        sizeof(fixedHeader) +
         fixedHeader.EnvelopeSize +
         fixedHeader.MessageSize;
 
     auto data = TString::Uninitialized(totalSize);
     char* ptr = data.begin();
-    ::memcpy(ptr, &fixedHeader, sizeof (fixedHeader));
-    ptr += sizeof (fixedHeader);
+    ::memcpy(ptr, &fixedHeader, sizeof(fixedHeader));
+    ptr += sizeof(fixedHeader);
     ptr = reinterpret_cast<char*>(envelope.SerializeWithCachedSizesToArray(reinterpret_cast<ui8*>(ptr)));
     ptr = reinterpret_cast<char*>(message.SerializeWithCachedSizesToArray(reinterpret_cast<ui8*>(ptr)));
     YT_ASSERT(ptr == data.end());
@@ -176,13 +178,13 @@ bool TryDeserializeProtoWithEnvelope(
     google::protobuf::MessageLite* message,
     TRef data)
 {
-    if (data.Size() < sizeof (TEnvelopeFixedHeader)) {
+    if (data.Size() < sizeof(TEnvelopeFixedHeader)) {
         return false;
     }
 
     const auto* fixedHeader = reinterpret_cast<const TEnvelopeFixedHeader*>(data.Begin());
-    const char* sourceHeader = data.Begin() + sizeof (TEnvelopeFixedHeader);
-    if (fixedHeader->EnvelopeSize + sizeof (*fixedHeader) > data.Size()) {
+    const char* sourceHeader = data.Begin() + sizeof(TEnvelopeFixedHeader);
+    if (fixedHeader->EnvelopeSize + sizeof(*fixedHeader) > data.Size()) {
         return false;
     }
 
@@ -198,7 +200,7 @@ bool TryDeserializeProtoWithEnvelope(
         return false;
     }
 
-    if (fixedHeader->MessageSize + fixedHeader->EnvelopeSize + sizeof (*fixedHeader) > data.Size()) {
+    if (fixedHeader->MessageSize + fixedHeader->EnvelopeSize + sizeof(*fixedHeader) > data.Size()) {
         return false;
     }
 
@@ -291,7 +293,7 @@ TSharedRef PushEnvelope(const TSharedRef& data, NCompression::ECodec codec)
     header.MessageSize = static_cast<ui32>(data.Size());
 
     auto headerRef = TSharedMutableRef::Allocate(
-        sizeof (header) +
+        sizeof(header) +
         header.EnvelopeSize);
 
     memcpy(headerRef.Begin(), &header, sizeof(header));
@@ -308,14 +310,15 @@ class TProtobufExtensionRegistry
 public:
     void AddAction(TRegisterAction action) override
     {
-        YT_VERIFY(State_ == EState::Uninitialized);
+        YT_VERIFY(State_.load() == EState::Uninitialized);
 
-        Actions_.push_back(std::move(action));
+        RegisterActions_.push_back(std::move(action));
     }
 
     void RegisterDescriptor(const TProtobufExtensionDescriptor& descriptor) override
     {
-        YT_VERIFY(State_ == EState::Initializing);
+        YT_VERIFY(State_.load() == EState::Initializing);
+        YT_VERIFY(InitializationLock_.IsLocked());
 
         EmplaceOrCrash(ExtensionTagToExtensionDescriptor_, descriptor.Tag, descriptor);
         EmplaceOrCrash(ExtensionNameToExtensionDescriptor_, descriptor.Name, descriptor);
@@ -345,28 +348,38 @@ private:
         Initialized
     };
 
-    EState State_ = EState::Uninitialized;
+    std::atomic<EState> State_ = EState::Uninitialized;
+    NThreading::TSpinLock InitializationLock_;
+    std::vector<TRegisterAction> RegisterActions_;
 
     THashMap<int, TProtobufExtensionDescriptor> ExtensionTagToExtensionDescriptor_;
     THashMap<TString, TProtobufExtensionDescriptor> ExtensionNameToExtensionDescriptor_;
 
-    std::vector<TRegisterAction> Actions_;
-
     void EnsureInitialized()
     {
-        if (State_ == EState::Initialized) {
+        // Fast path
+        if (State_.load(std::memory_order::relaxed) == EState::Initialized) {
             return;
         }
 
-        YT_VERIFY(State_ == EState::Uninitialized);
-        State_ = EState::Initializing;
+        // Slow path
+        {
+            auto guard = Guard(InitializationLock_);
 
-        for (const auto& action : Actions_) {
-            action();
+            if (State_.load() == EState::Initialized) {
+                return;
+            }
+
+            YT_VERIFY(State_.load() == EState::Uninitialized);
+            State_.store(EState::Initializing);
+
+            for (const auto& action : RegisterActions_) {
+                action();
+            }
+            RegisterActions_.clear();
+
+            State_.store(EState::Initialized);
         }
-        Actions_.clear();
-
-        State_ = EState::Initialized;
     }
 };
 
@@ -377,7 +390,7 @@ IProtobufExtensionRegistry* IProtobufExtensionRegistry::Get()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Intermediate extension representation for proto<->yson converter.
+//! Intermediate extension representation for proto<->YSON converter.
 struct TExtension
 {
     //! Extension tag.
@@ -387,7 +400,7 @@ struct TExtension
     TString Data;
 };
 
-//! Intermediate extension set representation for proto<->yson converter.
+//! Intermediate extension set representation for proto<->YSON converter.
 struct TExtensionSet
 {
     std::vector<TExtension> Extensions;

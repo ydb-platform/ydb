@@ -657,6 +657,22 @@ private:
     const TYtState::TPtr State_;
 };
 
+struct TPeepholeFinalPipelineConfigurator : public IPipelineConfigurator {
+    TPeepholeFinalPipelineConfigurator(TYtState::TPtr state)
+        : State_(std::move(state))
+        {}
+private:
+    void AfterCreate(TTransformationPipeline*) const final {}
+
+    void AfterTypeAnnotation(TTransformationPipeline*) const final {}
+
+    void AfterOptimize(TTransformationPipeline* pipeline) const final {
+        pipeline->Add(CreateYtBlockOutputTransformer(State_), "BlockOutput");
+    }
+
+    const TYtState::TPtr State_;
+};
+
 IGraphTransformer::TStatus PeepHoleOptimizeBeforeExec(TExprNode::TPtr input, TExprNode::TPtr& output,
     const TYtState::TPtr& state, bool& hasNonDeterministicFunctions, TExprContext& ctx, bool estimateTableContentWeight)
 {
@@ -666,8 +682,10 @@ IGraphTransformer::TStatus PeepHoleOptimizeBeforeExec(TExprNode::TPtr input, TEx
     }
 
     const TPeepholePipelineConfigurator wideFlowTransformers(state);
+    const TPeepholeFinalPipelineConfigurator wideFlowFinalTransformers(state);
     TPeepholeSettings peepholeSettings;
     peepholeSettings.CommonConfig = &wideFlowTransformers;
+    peepholeSettings.FinalConfig = &wideFlowFinalTransformers;
     return PeepHoleOptimizeNode(output, output, ctx, *state->Types, nullptr, hasNonDeterministicFunctions, peepholeSettings);
 }
 

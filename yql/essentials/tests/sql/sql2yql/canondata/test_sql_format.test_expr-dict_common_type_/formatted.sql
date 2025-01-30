@@ -1,7 +1,7 @@
 /* syntax version 1 */
 /* postgres can not */
 /* yt can not */
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 $d1 = ToDict([(1, 1u)]);
 $d2 = AsDict((2, 2u));

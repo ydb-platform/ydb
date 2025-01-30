@@ -178,6 +178,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
+        settings.EmitReadsForExists = true;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;
         settings.ClusterMapping[settings.DefaultCluster] = PurecalcDefaultService;

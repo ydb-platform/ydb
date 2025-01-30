@@ -609,6 +609,34 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
 
         // Immediate ops become ready when stopping flag is set
         return true;
+    } else if (HasVolatilePrepareFlag()) {
+        // Volatile transactions may be aborted at any time unless executed
+        // Note: we need to send the result (and discard the transaction) as
+        // soon as possible, because new transactions are unlikely to execute
+        // and commits will even more likely fail.
+        if (!HasResultSentFlag() && !Result() && !HasCompletedFlag()) {
+            auto status = NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED;
+            TString reason = TStringBuilder()
+                << "DataShard " << TabletId << " is restarting";
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, std::move(reason));
+
+            ctx.Send(GetTarget(), result.release(), 0, GetCookie());
+
+            // Make sure we also send acks and nodata readsets to expecting participants
+            std::vector<std::unique_ptr<IEventHandle>> cleanupReplies;
+            self.GetCleanupReplies(this, cleanupReplies);
+
+            for (auto& ev : cleanupReplies) {
+                TActivationContext::Send(ev.release());
+            }
+
+            SetResultSentFlag();
+            return true;
+        }
+
+        // Executed transactions will have to wait until committed
+        // There is no way to hand-off committing volatile transactions for now
+        return false;
     } else {
         // Distributed operations send notification when proposed
         if (GetTarget() && !HasCompletedFlag()) {

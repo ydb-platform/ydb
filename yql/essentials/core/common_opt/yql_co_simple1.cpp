@@ -5465,11 +5465,17 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (node->ChildrenSize() % 2 == 1) { // No default value
             bool allJust = true;
+            bool allSingleAsList = true;
             TNodeSet uniqLambdas;
             for (ui32 index = 1; index < node->ChildrenSize(); index += 2) {
-                uniqLambdas.insert(node->Child(index + 1));
-                if (!TCoJust::Match(node->Child(index + 1)->Child(1))) {
+                const TExprNode* visitLambda = node->Child(index + 1);
+                const TExprNode* body = visitLambda->Child(1);
+                uniqLambdas.insert(visitLambda);
+                if (!TCoJust::Match(body)) {
                     allJust = false;
+                }
+                if (!TCoAsList::Match(body) || body->ChildrenSize() != 1) {
+                    allSingleAsList = false;
                 }
             }
 
@@ -5486,10 +5492,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                     .Build();
             }
 
-            if (allJust) {
-                YQL_CLOG(DEBUG, Core) << node->Content() << " - extract Just";
+            if (allJust || allSingleAsList) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " - extract " << (allJust ? "Just" : "AsList");
                 return ctx.Builder(node->Pos())
-                    .Callable("Just")
+                    .Callable(allJust ? "Just" : "AsList")
                         .Callable(0, "Visit")
                             .Add(0, node->HeadPtr())
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {

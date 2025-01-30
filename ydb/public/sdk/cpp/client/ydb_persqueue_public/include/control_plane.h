@@ -11,11 +11,11 @@
 #include <util/generic/size_literals.h>
 
 
-namespace NYdb {
+namespace NYdb::inline V2 {
     class TProtoAccessor;
 }
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 enum class EFormat {
     BASE = 1,
@@ -176,14 +176,14 @@ const TVector<ECodec>& GetDefaultCodecs();
 struct TReadRuleSettings {
     TReadRuleSettings() {}
     using TSelf = TReadRuleSettings;
-    FLUENT_SETTING(TString, ConsumerName);
-    FLUENT_SETTING_DEFAULT(bool, Important, false);
-    FLUENT_SETTING_DEFAULT(TInstant, StartingMessageTimestamp, TInstant::Zero());
-    FLUENT_SETTING_DEFAULT(EFormat, SupportedFormat, EFormat::BASE)
-    FLUENT_SETTING_DEFAULT(TVector<ECodec>, SupportedCodecs, GetDefaultCodecs());
+    FLUENT_SETTING_DEPRECATED(TString, ConsumerName);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, Important, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TInstant, StartingMessageTimestamp, TInstant::Zero());
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EFormat, SupportedFormat, EFormat::BASE)
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TVector<ECodec>, SupportedCodecs, GetDefaultCodecs());
 
-    FLUENT_SETTING_DEFAULT(ui32, Version, 0);
-    FLUENT_SETTING(TString, ServiceType);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, Version, 0);
+    FLUENT_SETTING_DEPRECATED(TString, ServiceType);
 
     TReadRuleSettings& SetSettings(const TDescribeTopicResult::TTopicSettings::TReadRule& settings) {
         ConsumerName_ = settings.ConsumerName();
@@ -209,12 +209,12 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
     struct TRemoteMirrorRuleSettings {
         TRemoteMirrorRuleSettings() {}
         using TSelf = TRemoteMirrorRuleSettings;
-        FLUENT_SETTING(TString, Endpoint);
-        FLUENT_SETTING(TString, TopicPath);
-        FLUENT_SETTING(TString, ConsumerName);
-        FLUENT_SETTING_DEFAULT(TInstant, StartingMessageTimestamp, TInstant::Zero());
-        FLUENT_SETTING(TCredentials, Credentials);
-        FLUENT_SETTING(TString, Database);
+        FLUENT_SETTING_DEPRECATED(TString, Endpoint);
+        FLUENT_SETTING_DEPRECATED(TString, TopicPath);
+        FLUENT_SETTING_DEPRECATED(TString, ConsumerName);
+        FLUENT_SETTING_DEFAULT_DEPRECATED(TInstant, StartingMessageTimestamp, TInstant::Zero());
+        FLUENT_SETTING_DEPRECATED(TCredentials, Credentials);
+        FLUENT_SETTING_DEPRECATED(TString, Database);
 
         TRemoteMirrorRuleSettings& SetSettings(const TDescribeTopicResult::TTopicSettings::TRemoteMirrorRule& settings) {
             Endpoint_ = settings.Endpoint();
@@ -230,28 +230,28 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
 
     using TSelf = TDerived;
 
-    FLUENT_SETTING_DEFAULT(ui32, PartitionsCount, 1);
-    FLUENT_SETTING_DEFAULT(TDuration, RetentionPeriod, TDuration::Hours(18));
-    FLUENT_SETTING_DEFAULT(EFormat, SupportedFormat, EFormat::BASE)
-    FLUENT_SETTING_DEFAULT(TVector<ECodec>, SupportedCodecs, GetDefaultCodecs());
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, PartitionsCount, 1);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, RetentionPeriod, TDuration::Hours(18));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EFormat, SupportedFormat, EFormat::BASE)
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TVector<ECodec>, SupportedCodecs, GetDefaultCodecs());
 
-    FLUENT_SETTING_DEFAULT(ui64, MaxPartitionStorageSize, 0);
-    FLUENT_SETTING_DEFAULT(ui64, MaxPartitionWriteSpeed, 2_MB);
-    FLUENT_SETTING_DEFAULT(ui64, MaxPartitionWriteBurst, 2_MB);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui64, MaxPartitionStorageSize, 0);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui64, MaxPartitionWriteSpeed, 2_MB);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui64, MaxPartitionWriteBurst, 2_MB);
 
-    FLUENT_SETTING_DEFAULT(bool, ClientWriteDisabled, false);
-    FLUENT_SETTING_DEFAULT(bool, AllowUnauthenticatedWrite, false);
-    FLUENT_SETTING_DEFAULT(bool, AllowUnauthenticatedRead, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, ClientWriteDisabled, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, AllowUnauthenticatedWrite, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, AllowUnauthenticatedRead, false);
 
-    FLUENT_SETTING_OPTIONAL(ui32, PartitionsPerTablet);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, PartitionsPerTablet);
 
-    FLUENT_SETTING_OPTIONAL(ui32, AbcId);
-    FLUENT_SETTING_OPTIONAL(TString, AbcSlug);
-    FLUENT_SETTING_OPTIONAL(TString, FederationAccount);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, AbcId);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, AbcSlug);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, FederationAccount);
 
-    //TODO: FLUENT_SETTING_VECTOR
-    FLUENT_SETTING_DEFAULT(TVector<TReadRuleSettings>, ReadRules, {});
-    FLUENT_SETTING_OPTIONAL(TRemoteMirrorRuleSettings, RemoteMirrorRule);
+    //TODO: FLUENT_SETTING_VECTOR_DEPRECATED
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TVector<TReadRuleSettings>, ReadRules, {});
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TRemoteMirrorRuleSettings, RemoteMirrorRule);
 
     TSelf& SetSettings(const TDescribeTopicResult::TTopicSettings& settings) {
 
@@ -316,12 +316,12 @@ struct TDescribeTopicSettings : public TOperationRequestSettings<TDescribeTopicS
 
 // Settings for add read rule request
 struct TAddReadRuleSettings : public TTopicSettings<TAddReadRuleSettings> {
-    FLUENT_SETTING(TReadRuleSettings, ReadRule);
+    FLUENT_SETTING_DEPRECATED(TReadRuleSettings, ReadRule);
 };
 
 // Settings for remove read rule request
 struct TRemoveReadRuleSettings : public TOperationRequestSettings<TRemoveReadRuleSettings> {
-    FLUENT_SETTING(TString, ConsumerName);
+    FLUENT_SETTING_DEPRECATED(TString, ConsumerName);
 };
 
 }  // namespace NYdb::NPersQueue

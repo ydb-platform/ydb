@@ -1,4 +1,4 @@
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 SELECT
     StartsWith('test1'u, 'tes'p),

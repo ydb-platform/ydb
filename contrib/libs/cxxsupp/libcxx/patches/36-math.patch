@@ -21,24 +21,33 @@ index 29e42fd..7943b6f 100644
  template <class = int>
  _LIBCPP_NODISCARD_EXT _LIBCPP_HIDE_FROM_ABI double trunc(double __x) _NOEXCEPT {
 diff --git a/include/math.h b/include/math.h
-index b068ea3..5bde46a 100644
+index 0598973..376bbf7 100644
 --- a/include/math.h
 +++ b/include/math.h
 @@ -290,6 +290,9 @@ float          truncf(float x);
  long double    truncl(long double x);
  
  */
-+#ifdef __CUDACC__
-+#include <math_cuda.h>
-+#else
++#  ifdef __CUDACC__
++#    include <math_cuda.h>
++#  else
  
- #include <__config>
+ #  include <__config>
  
-@@ -504,6 +507,8 @@ using std::__math::trunc;
+@@ -323,7 +326,7 @@ extern "C++" {
+ #      undef isinf
+ #    endif
  
- #endif // __cplusplus
+-#    ifdef isnan
++#    if defined(isnan) && !defined(_LIBCPP_MSVCRT)
+ #      undef isnan
+ #    endif
  
-+#endif // __CUDACC__
+@@ -503,6 +506,8 @@ using std::__math::trunc;
+ 
+ #  endif // __cplusplus
+ 
++#  endif // __CUDACC__
 +
  #else // _LIBCPP_MATH_H
  

@@ -10,6 +10,7 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <util/generic/size_literals.h>
@@ -201,7 +202,7 @@ private:
             RequestsDone = true;
             while(!Blocks.empty())
                 Blocks.pop();
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, res.GetIssues(), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, ::NYdb::NAdapters::ToYqlIssues(res.GetIssues()), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
         } else {
             WakeUpTime = TMonotonic::Now() + Min(TDuration::Seconds(3), TDuration::MilliSeconds(0x30U * (1U << ++Retried)));
             ActorSystem->Schedule(WakeUpTime, new IEventHandle(SelfId(), TActorId(), new TEvPrivate::TEvRetryTime));

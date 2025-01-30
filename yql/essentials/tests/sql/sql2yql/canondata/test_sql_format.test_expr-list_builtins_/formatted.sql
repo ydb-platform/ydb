@@ -79,14 +79,14 @@ SELECT
             }
         )
     ) AS concat,
-    ListExtract($struct_list, "two") AS extract,
+    ListExtract($struct_list, 'two') AS extract,
     ListMap(
         $list, ($item) -> {
             RETURN CAST($item AS Double);
         }
     ),
     ListCreate(Tuple<Int64, Double>),
-    ListCreate(TypeOf("foo")),
+    ListCreate(TypeOf('foo')),
     ListFold($list, 6, $lambdaSum),
     ListFold([], 3, $lambdaSum),
     ListFold(Just($list), 6, $lambdaSum),

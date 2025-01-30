@@ -29,29 +29,42 @@ if [[ ${VERBOSE} != "" ]]; then
     set -x
 fi
 
-SYSTEM=${YDB_INSTALL_TEST_SYSTEM:-$(uname -s)} # $(uname -o) is not supported on macOS for example.
-MACHINE=${YDB_INSTALL_TEST_MACHINE:-$(uname -m)}
-
-GOOS=""
+CURRENT_OS=""
+CURRENT_ARCH=""
 YDB_BIN="ydb"
 SHELL_NAME=$(basename "${SHELL}")
 
 CONTACT_SUPPORT_MESSAGE="If you think that this should not be, contact support and attach this message.
 System info: $(uname -a)"
 
+SYSTEM=${YDB_INSTALL_TEST_SYSTEM:-$(uname -s)} # $(uname -o) is not supported on macOS for example.
 case ${SYSTEM} in
     Linux | GNU/Linux)
-        GOOS="linux"
+        CURRENT_OS="linux"
         ;;
     Darwin)
-        GOOS="darwin"
+        CURRENT_OS="darwin"
         ;;
     CYGWIN* | MINGW* | MSYS* | Windows_NT | WindowsNT )
-        GOOS="windows"
+        CURRENT_OS="windows"
         YDB_BIN="ydb.exe"
         ;;
      *)
         printf "'%s' system is not supported yet, or something is going wrong.\\n" "${SYSTEM}", "${CONTACT_SUPPORT_MESSAGE}"
+        exit 1
+          ;;
+esac
+
+MACHINE=${YDB_INSTALL_TEST_MACHINE:-$(uname -m)}
+case ${MACHINE} in
+    x86_64 | amd64 | i686-64)
+        CURRENT_ARCH="amd64"
+        ;;
+    arm64 | aarch64)
+        CURRENT_ARCH="arm64"
+        ;;
+     *)
+        printf "'%s' machines are not supported yet, or something is going wrong.\\n%s" "${MACHINE}" "${CONTACT_SUPPORT_MESSAGE}"
         exit 1
           ;;
 esac
@@ -139,7 +152,7 @@ trap cleanup EXIT
 
 # Download and show progress.
 TMP_YDB="${TMP_INSTALL_PATH}/${YDB_BIN}"
-curl_with_retry "${YDB_STORAGE_URL}/release/${YDB_VERSION}/${GOOS}/amd64/${YDB_BIN}" -o "${TMP_YDB}"
+curl_with_retry "${YDB_STORAGE_URL}/release/${YDB_VERSION}/${CURRENT_OS}/${CURRENT_ARCH}/${YDB_BIN}" -o "${TMP_YDB}"
 
 chmod +x "${TMP_YDB}"
 # Check that all is ok, and print full version to stdout.

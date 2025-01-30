@@ -2,7 +2,7 @@
 #include "dump_impl.h"
 #include "restore_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <library/cpp/logger/log.h>
 
@@ -10,11 +10,6 @@
 
 namespace NYdb {
 namespace NDump {
-
-extern const char SCHEME_FILE_NAME[] = "scheme.pb";
-extern const char PERMISSIONS_FILE_NAME[] = "permissions.pb";
-extern const char INCOMPLETE_FILE_NAME[] = "incomplete";
-extern const char EMPTY_FILE_NAME[] = "empty_dir";
 
 TString DataFileName(ui32 id) {
     return Sprintf("data_%02d.csv", id);

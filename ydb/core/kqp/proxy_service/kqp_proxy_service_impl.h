@@ -98,7 +98,6 @@ struct TKqpSessionInfo {
     TActorId AttachedRpcId;
     bool PgWire;
     TString QueryText;
-    bool Ready = true;
     TString ClientApplicationName;
     TString ClientSID;
     TString ClientHost;
@@ -111,6 +110,7 @@ struct TKqpSessionInfo {
     TInstant QueryStartAt;
 
     ESessionState State = ESessionState::IDLE;
+    bool Closing = false;
 
     struct TFieldsMap {
         ui64 bitmap = 0;
@@ -244,6 +244,11 @@ public:
         }
 
         return candidate;
+    }
+
+    void SetSessionClosing(const TKqpSessionInfo* sessionInfo) {
+        TKqpSessionInfo* info = const_cast<TKqpSessionInfo*>(sessionInfo);
+        info->Closing = true;
     }
 
     void StartIdleCheck(const TKqpSessionInfo* sessionInfo, const TDuration idleDuration) {

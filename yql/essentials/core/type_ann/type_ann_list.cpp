@@ -154,7 +154,7 @@ namespace {
 
             auto traits = ctx.ReplaceNodes(TExprNode::TPtr(traitsFactoryBody), factoryReplaces);
             ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-            auto status = ExpandApply(traits, traits, ctx);
+            auto status = ExpandApplyNoRepeat(traits, traits, ctx);
             if (status == IGraphTransformer::TStatus::Error) {
                 return nullptr;
             }
@@ -1224,6 +1224,7 @@ namespace {
         // lambda L F L S L
         // lambda S F L S S
         // lambda O F L S O
+        // lambda P F L S P
         // lambda F F F - F
 
         bool warn = false;
@@ -1300,7 +1301,7 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        input->SetTypeAnn(MakeSequenceType(resultKind, *lambdaItemType, ctx.Expr));
+        input->SetTypeAnn(resultKind == ETypeAnnotationKind::Pg ? lambdaItemType : MakeSequenceType(resultKind, *lambdaItemType, ctx.Expr));
         return IGraphTransformer::TStatus::Ok;
     }
 

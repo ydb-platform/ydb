@@ -6,6 +6,7 @@
 #include <vector>
 #include <span>
 
+#include <yql/essentials/minikql/mkql_rh_hash_utils.h>
 #include <yql/essentials/utils/prefetch.h>
 
 #include <util/digest/city.h>
@@ -31,7 +32,7 @@ struct TRobinHoodBatchRequestItem {
     void ConstructKey(const TKey& key) {
         new (KeyStorage) TKey(key);
     }
-    
+
     // intermediate data
     ui64 Hash;
     char* InitialIterator;
@@ -109,14 +110,22 @@ public:
 
     // should be called after Insert if isNew is true
     Y_FORCE_INLINE void CheckGrow() {
-        if (Size * 2 >= Capacity) {
+        if (RHHashTableNeedsGrow(Size, Capacity)) {
             Grow();
         }
     }
 
+    // returns iterator or nullptr if key is not present
+    Y_FORCE_INLINE char* Lookup(TKey key) {
+        auto hash = HashLocal(key);
+        auto ptr = MakeIterator(hash, Data, CapacityShift);
+        auto ret = LookupImpl(key, hash, Data, DataEnd, ptr);
+        return ret;
+    }
+
     template <typename TSink>
     Y_NO_INLINE void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
-        while (2 * (Size + batchRequest.size()) >= Capacity) {
+        while (RHHashTableNeedsGrow(Size + batchRequest.size(), Capacity)) {
             Grow();
         }
 
@@ -133,6 +142,22 @@ public:
             auto iter = InsertImpl(r.GetKey(), r.Hash, isNew, Data, DataEnd, r.InitialIterator);
             Size += isNew ? 1 : 0;
             sink(i, iter, isNew);
+        }
+    }
+
+    template <typename TSink>
+    Y_NO_INLINE void BatchLookup(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
+        for (size_t i = 0; i < batchRequest.size(); ++i) {
+            auto& r = batchRequest[i];
+            r.Hash = HashLocal(r.GetKey());
+            r.InitialIterator = MakeIterator(r.Hash, Data, CapacityShift);
+            NYql::PrefetchForRead(r.InitialIterator);
+        }
+
+        for (size_t i = 0; i < batchRequest.size(); ++i) {
+            auto& r = batchRequest[i];
+            auto iter = LookupImpl(r.GetKey(), r.Hash, Data, DataEnd, r.InitialIterator);
+            sink(i, iter);
         }
     }
 
@@ -215,7 +240,7 @@ private:
     };
 
     Y_FORCE_INLINE char* MakeIterator(const ui64 hash, char* data, ui64 capacityShift) {
-        // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/        
+        // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
         ui64 bucket = ((SelfHash ^ hash) * 11400714819323198485llu) >> capacityShift;
         char* ptr = data + AsDeriv().GetCellSize() * bucket;
         return ptr;
@@ -283,16 +308,31 @@ private:
         }
     }
 
-    Y_NO_INLINE void Grow() {
-        ui64 growFactor;
-        if (Capacity < 100'000) {
-            growFactor = 8;
-        } else if (Capacity < 1'000'000) {
-            growFactor = 4;
-        } else {
-            growFactor = 2;
+    Y_FORCE_INLINE char* LookupImpl(TKey key, const ui64 hash, char* data, char* dataEnd, char* ptr) {
+        i32 currDistance = 0;
+        for (;;) {
+            auto& pslPtr = GetPSL(ptr);
+            if (pslPtr.Distance < 0 || currDistance > pslPtr.Distance) {
+                return nullptr;
+            }
+
+            if constexpr (CacheHash) {
+                if (pslPtr.Hash == hash && EqualLocal(GetKey(ptr), key)) {
+                    return ptr;
+                }
+            } else {
+                if (EqualLocal(GetKey(ptr), key)) {
+                    return ptr;
+                }
+            }
+
+            ++currDistance;
+            AdvancePointer(ptr, data, dataEnd);
         }
-        auto newCapacity = Capacity * growFactor;
+    }
+
+    Y_NO_INLINE void Grow() {
+        auto newCapacity = Capacity * CalculateRHHashTableGrowFactor(Capacity);
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
@@ -475,8 +515,7 @@ public:
         TBase::Init();
     }
 
-
-    ui32 GetCellSize() const {
+    static constexpr ui32 GetCellSize() {
         return sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + sizeof(TPayload);
     }
 
@@ -522,7 +561,7 @@ public:
         TBase::Init();
     }
 
-    ui32 GetCellSize() const {
+    static constexpr ui32 GetCellSize() {
         return sizeof(typename TBase::TPSLStorage) + sizeof(TKey);
     }
 

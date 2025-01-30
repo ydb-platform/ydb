@@ -170,6 +170,17 @@ public:
     ui32 StatementResultSize = 0;
 
     TMaybe<TString> CommandTagName;
+    THashSet<ui32> ParticipantNodes;
+
+    bool IsLocalExecution(ui32 nodeId) const {
+        if (RequestEv->GetRequestCtx() == nullptr) {
+            return false;
+        }
+        if (ParticipantNodes.size() == 1) {
+            return *ParticipantNodes.begin() == nodeId;
+        }
+        return false;
+    }
 
     NKikimrKqp::EQueryAction GetAction() const {
         return QueryAction;
@@ -354,6 +365,12 @@ public:
             return false;
         }
 
+        if (TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
+            // ReadWrite snapshot isolation transaction with can only use uncommitted data.
+            // WriteOnly snapshot isolation transaction is executed like serializable transaction.
+            return !TxCtx->HasTableRead;
+        }
+
         if (TxCtx->NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
@@ -370,7 +387,8 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
-        if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
+        if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE &&
+                *TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
             return false;
         }
 
@@ -415,7 +433,7 @@ public:
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
         if (TxCtx->CanDeferEffects()) {
-            // At current time sinks require separate tnx with commit.
+            // Olap sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);

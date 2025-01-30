@@ -4,6 +4,7 @@
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
 #include <util/generic/map.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -285,6 +286,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(ReplicationKeywordNotReservedForNames) {
         UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE REPLICATION (REPLICATION Uint32, PRIMARY KEY (REPLICATION));").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; SELECT REPLICATION FROM REPLICATION").IsOk());
+    }
+
+    Y_UNIT_TEST(TransferKeywordNotReservedForNames) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE TRANSFER (TRANSFER Uint32, PRIMARY KEY (TRANSFER));").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; SELECT TRANSFER FROM TRANSFER").IsOk());
     }
 
     Y_UNIT_TEST(SecondsKeywordNotReservedForNames) {
@@ -1214,6 +1220,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DeleteFromTableBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch delete from plato.Input;", 10, "kikimr");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'delete)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('is_batch 'true)"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(DeleteFromTableOnValues) {
         NYql::TAstParseResult res = SqlToYql("delete from plato.Input on (key) values (1);",
             10, "kikimr");
@@ -1248,6 +1271,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DeleteFromTableOnBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch delete from plato.Input on (key) values (1);",
+            10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH DELETE is unsupported with ON\n");
+    }
+
     Y_UNIT_TEST(UpdateByValues) {
         NYql::TAstParseResult res = SqlToYql("update plato.Input set key = 777, value = 'cool' where key = 200;", 10, "kikimr");
         UNIT_ASSERT(res.Root);
@@ -1272,6 +1302,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
+    }
+
+    Y_UNIT_TEST(UpdateByValuesBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch update plato.Input set key = 777, value = 'cool' where key = 200;", 10, "kikimr");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('is_batch 'true)"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
     Y_UNIT_TEST(UpdateByMultiValues) {
@@ -1382,6 +1429,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(UpdateOnBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch update plato.Input on (key, value) values (5, 'cool')", 10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH UPDATE is unsupported with ON\n");
     }
 
     Y_UNIT_TEST(UnionAllTest) {
@@ -2340,7 +2393,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                     FORMAT = 'json',
                     INITIAL_SCAN = TRUE,
                     VIRTUAL_TIMESTAMPS = FALSE,
-                    RESOLVED_TIMESTAMPS = Interval("PT1S"),
+                    BARRIERS_INTERVAL = Interval("PT1S"),
                     RETENTION_PERIOD = Interval("P1D"),
                     TOPIC_MIN_ACTIVE_PARTITIONS = 10,
                     AWS_REGION = 'aws:region'
@@ -2360,7 +2413,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("true"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("virtual_timestamps"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("resolved_timestamps"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("barriers_interval"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("retention_period"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("topic_min_active_partitions"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("aws_region"));
@@ -3086,11 +3139,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         {
             auto req = R"(
                 USE plato;
-                ALTER ASYNC REPLICATION MyReplication SET (CONSISTENCY_MODE = "STRONG");
+                ALTER ASYNC REPLICATION MyReplication SET (CONSISTENCY_LEVEL = "GLOBAL");
             )";
             auto res = SqlToYql(req);
             UNIT_ASSERT(!res.Root);
-            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:79: Error: CONSISTENCY_MODE is not supported in ALTER\n");
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:80: Error: CONSISTENCY_LEVEL is not supported in ALTER\n");
         }
         {
             auto req = R"(
@@ -4705,12 +4758,12 @@ select FormatType($f());
             USE plato;
             CREATE TABLE tableName (
                 Key Uint32, PRIMARY KEY (Key),
-                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", RESOLVED_TIMESTAMPS = "foo")
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", BARRIERS_INTERVAL = "foo")
             );
         )";
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:102: Error: Literal of Interval type is expected for RESOLVED_TIMESTAMPS\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:100: Error: Literal of Interval type is expected for BARRIERS_INTERVAL\n");
     }
 
     Y_UNIT_TEST(InvalidChangefeedRetentionPeriod) {
@@ -4957,6 +5010,125 @@ select FormatType($f());
                             "<main>:1:8: Error: Can't use window function LastValue without window specification (OVER keyword is missing)\n");
     }
 
+    Y_UNIT_TEST(CreateAlterUserWithLoginNoLogin) {
+        auto reqCreateUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1;
+        )");
+
+        UNIT_ASSERT(reqCreateUser.IsOk());
+
+        auto reqAlterUser = SqlToYql(R"(
+            USE plato;
+            ALTER USER user1;
+        )");
+
+        UNIT_ASSERT(!reqAlterUser.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: Unexpected token ';' : cannot match to any predicted input...");
+
+        auto reqPasswordAndLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 PASSWORD '123' LOGIN;
+        )");
+
+        UNIT_ASSERT(reqPasswordAndLogin.IsOk());
+
+        auto reqPasswordAndNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 PASSWORD '123' NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqPasswordAndNoLogin.IsOk());
+
+        auto reqLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+        )");
+
+        UNIT_ASSERT(reqLogin.IsOk());
+
+        auto reqNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqNoLogin.IsOk());
+
+        auto reqLoginNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN NOLOGIN;
+        )");
+
+        UNIT_ASSERT(!reqLoginNoLogin.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqLoginNoLogin.Issues.ToString(), "Error: Conflicting or redundant options");
+
+        auto reqAlterLoginNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+            ALTER USER user1 NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqAlterLoginNoLogin.IsOk());
+
+        auto reqAlterLoginNoLoginWithPassword = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 LOGIN;
+            ALTER USER user1 PASSWORD '321' NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.IsOk());
+    }
+
+    Y_UNIT_TEST(CreateUserWithHash) {
+        auto reqCreateUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }';
+        )");
+
+        UNIT_ASSERT(reqCreateUser.IsOk());
+
+        auto reqCreateUserWithNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }'
+            NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqCreateUserWithNoLogin.IsOk());
+
+        auto reqCreateUserWithPassword = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }'
+            PASSWORD '123';
+        )");
+
+        UNIT_ASSERT(!reqCreateUserWithPassword.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqCreateUserWithPassword.Issues.ToString(), "Error: Conflicting or redundant options");
+
+        auto reqAlterUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1;
+            ALTER USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }';
+        )");
+
+        UNIT_ASSERT(reqAlterUser.IsOk());
+    }
+
     Y_UNIT_TEST(CreateAlterUserWithoutCluster) {
         ExpectFailWithError("\n CREATE USER user ENCRYPTED PASSWORD 'foobar';", "<main>:2:2: Error: USE statement is missing - no default cluster is selected\n");
         ExpectFailWithError("ALTER USER CURRENT_USER RENAME TO $foo;", "<main>:1:1: Error: USE statement is missing - no default cluster is selected\n");
@@ -5039,6 +5211,45 @@ select FormatType($f());
             )
         )";
         ExpectFailWithError(query, "<main>:2:33: Error: Aggregation function Min requires exactly 1 argument(s), given: 2\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage1) {
+        TString query = R"(
+            $a = (select 1 as x, 2 as y);
+            select 1 + $a;
+        )";
+        ExpectFailWithError(query, "<main>:2:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:3:24: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage2) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            select * from concat($a);
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:34: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage3) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            select * from range($a);
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:33: Error: Source is used here\n");
+    }
+
+    Y_UNIT_TEST(ScalarContextUsage4) {
+        TString query = R"(
+            use plato;
+            $a = (select 1 as x, 2 as y);
+            insert into $a select 1;
+        )";
+        ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+            "<main>:4:25: Error: Source is used here\n");
     }
 }
 
@@ -7892,5 +8103,101 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         UNIT_ASSERT(!res.IsOk());
         UNIT_ASSERT(res.Issues.Size() == 1);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
+    }
+}
+
+Y_UNIT_TEST_SUITE(QuerySplit) {
+    Y_UNIT_TEST(Simple) {
+        TString query = R"(
+        ;
+        -- Comment 1
+        SELECT * From Input; -- Comment 2
+        -- Comment 3
+        $a = "a";
+
+        -- Comment 9
+        ;
+
+        -- Comment 10
+
+        -- Comment 8
+
+        $b = ($x) -> {
+        -- comment 4
+        return /* Comment 5 */ $x;
+        -- Comment 6
+        };
+
+        // Comment 7
+
+
+
+        )";
+
+        google::protobuf::Arena Arena;
+
+        NSQLTranslation::TTranslationSettings settings;
+        settings.AnsiLexer = false;
+        settings.Antlr4Parser = true;
+        settings.Arena = &Arena;
+
+        TVector<TString> statements;
+        NYql::TIssues issues;
+
+        UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(query, statements, issues, settings));
+
+        UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(statements[0], "-- Comment 1\n        SELECT * From Input; -- Comment 2\n");
+        UNIT_ASSERT_VALUES_EQUAL(statements[1], R"(-- Comment 3
+        $a = "a";)");
+        UNIT_ASSERT_VALUES_EQUAL(statements[2], R"(-- Comment 10
+
+        -- Comment 8
+
+        $b = ($x) -> {
+        -- comment 4
+        return /* Comment 5 */ $x;
+        -- Comment 6
+        };)");
+    }
+}
+
+Y_UNIT_TEST_SUITE(MatchRecognizeMeasuresAggregation) {
+    Y_UNIT_TEST(InsideSelect) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(0), LAST(1);
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:30: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(OutsideSelect) {
+        ExpectFailWithError(R"sql(
+            $lambda = ($x) -> (FIRST($x) + LAST($x));
+            SELECT $lambda(x) FROM plato.Input;
+            )sql",
+            "<main>:2:32: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:44: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(AsAggregateFunction) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(x), LAST(x) FROM plato.Input;
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:30: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(AsWindowFunction) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(x) OVER(), LAST(x) OVER() FROM plato.Input;
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:37: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
     }
 }

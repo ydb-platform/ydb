@@ -145,6 +145,14 @@ namespace NActors {
         return TlsActivationContext->ExecutorThread.RegisterActor(actor, &TlsActivationContext->Mailbox, SelfActorId);
     }
 
+    TActorId IActor::RegisterAlias() noexcept {
+        return TlsActivationContext->ExecutorThread.RegisterAlias(&TlsActivationContext->Mailbox, this);
+    }
+
+    void IActor::UnregisterAlias(const TActorId& actorId) noexcept {
+        return TlsActivationContext->ExecutorThread.UnregisterAlias(&TlsActivationContext->Mailbox, actorId);
+    }
+
     TActorId TActivationContext::InterconnectProxy(ui32 destinationNodeId) {
         return TlsActivationContext->ExecutorThread.ActorSystem->InterconnectProxy(destinationNodeId);
     }
@@ -339,6 +347,14 @@ namespace NActors {
             TlsThreadContext->SendingType = previousType;
             return id;
         }
+    }
+
+    TActorId TGenericExecutorThread::RegisterAlias(TMailbox* mailbox, IActor* actor) {
+        return Ctx.Executor->RegisterAlias(mailbox, actor);
+    }
+
+    void TGenericExecutorThread::UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) {
+        Ctx.Executor->UnregisterAlias(mailbox, actorId);
     }
 
     template bool TActivationContext::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev);

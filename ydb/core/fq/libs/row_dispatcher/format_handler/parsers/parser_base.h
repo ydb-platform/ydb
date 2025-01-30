@@ -9,7 +9,7 @@ namespace NFq::NRowDispatcher {
 
 class TTypeParser {
 public:
-    explicit TTypeParser(const TSourceLocation& location);
+    explicit TTypeParser(const TSourceLocation& location, const TCountersDesc& counters);
     virtual ~TTypeParser();
 
     TValueStatus<NKikimr::NMiniKQL::TType*> ParseTypeYson(const TString& typeYson) const;
@@ -36,7 +36,7 @@ public:
     using TPtr = TIntrusivePtr<TTopicParserBase>;
 
 public:
-    TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location);
+    TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const TCountersDesc& counters);
     virtual ~TTopicParserBase() = default;
 
 public:

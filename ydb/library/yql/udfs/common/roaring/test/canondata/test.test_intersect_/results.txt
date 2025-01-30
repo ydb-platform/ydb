@@ -102,5 +102,109 @@
                 ]
             }
         ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "AndNotList";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "ListType";
+                                        [
+                                            "DataType";
+                                            "Uint32"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            [
+                                "2"
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "AndNotWithBinaryList";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "ListType";
+                                        [
+                                            "DataType";
+                                            "Uint32"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            [
+                                "3"
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "AndNotWithBinaryListEmpty";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "ListType";
+                                        [
+                                            "DataType";
+                                            "Uint32"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        #
+                    ]
+                ]
+            }
+        ]
     }
 ]

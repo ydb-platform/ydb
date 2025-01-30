@@ -73,8 +73,15 @@ Y_UNIT_TEST(DropRole) {
 
 Y_UNIT_TEST(CreateUser) {
     TCases cases = {
-        {"use plato;create user user;","USE plato;\n\nCREATE USER user;\n"},
-        {"use plato;create user user encrypted password 'foo';","USE plato;\n\nCREATE USER user ENCRYPTED PASSWORD 'foo';\n"},
+        {"use plato;create user user;", "USE plato;\n\nCREATE USER user;\n"},
+        {"use plato;create user user encrypted password 'foo';", "USE plato;\n\nCREATE USER user ENCRYPTED PASSWORD 'foo';\n"},
+        {"use plato;CREATE USER user1;", "USE plato;\n\nCREATE USER user1;\n"},
+        {"use plato;create user user1 encrypted password '123' login;", "USE plato;\n\nCREATE USER user1 ENCRYPTED PASSWORD '123' LOGIN;\n"},
+        {"use plato;cREATE USER user1 PASSWORD '123' NOLOGIN;", "USE plato;\n\nCREATE USER user1 PASSWORD '123' NOLOGIN;\n"},
+        {"use plato;CREATE USER user1 LOGIN;", "USE plato;\n\nCREATE USER user1 LOGIN;\n"},
+        {"use plato;CREATE USER user1 NOLOGIN;", "USE plato;\n\nCREATE USER user1 NOLOGIN;\n"},
+        {"use plato;CReATE UseR user1 HasH '{\"hash\": \"p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=\",\"salt\": \"U+tzBtgo06EBQCjlARA6Jg==\",\"type\": \"argon2id\"}'",
+            "USE plato;\n\nCREATE USER user1 HASH '{\"hash\": \"p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=\",\"salt\": \"U+tzBtgo06EBQCjlARA6Jg==\",\"type\": \"argon2id\"}';\n"},
     };
 
     TSetup setup;
@@ -97,6 +104,9 @@ Y_UNIT_TEST(AlterUser) {
         {"use plato;alter user user rename to user;","USE plato;\n\nALTER USER user RENAME TO user;\n"},
         {"use plato;alter user user encrypted password 'foo';","USE plato;\n\nALTER USER user ENCRYPTED PASSWORD 'foo';\n"},
         {"use plato;alter user user with encrypted password 'foo';","USE plato;\n\nALTER USER user WITH ENCRYPTED PASSWORD 'foo';\n"},
+        {"use plato;ALTER USER user1 NOLOGIN;", "USE plato;\n\nALTER USER user1 NOLOGIN;\n"},
+        {"use plato;alter UseR user1 HasH '{\"hash\": \"p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=\",\"salt\": \"U+tzBtgo06EBQCjlARA6Jg==\",\"type\": \"argon2id\"}'",
+            "USE plato;\n\nALTER USER user1 HASH '{\"hash\": \"p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=\",\"salt\": \"U+tzBtgo06EBQCjlARA6Jg==\",\"type\": \"argon2id\"}';\n"},
     };
 
     TSetup setup;
@@ -199,9 +209,20 @@ Y_UNIT_TEST(Declare) {
 
 Y_UNIT_TEST(NamedNode) {
     TCases cases = {
-        {"$x=1","$x = 1;\n"},
-        {"$x,$y=(2,3)","$x, $y = (2, 3);\n"},
-        {"$a = select 1 union all select 2","$a =\n\tSELECT\n\t\t1\n\tUNION ALL\n\tSELECT\n\t\t2\n;\n"},
+        {"$x=1",
+            "$x = 1;\n"},
+        {"$x,$y=(2,3)",
+            "$x, $y = (2, 3);\n"},
+        {"$a = select 1 union all select 2",
+            "$a = (\n\tSELECT\n\t\t1\n\tUNION ALL\n\tSELECT\n\t\t2\n);\n"},
+        {"$a = select 1 from $as;",
+            "$a = (\n\tSELECT\n\t\t1\n\tFROM\n\t\t$as\n);\n"},
+        {"$a = select * from $t -- comment",
+            "$a = (\n\tSELECT\n\t\t*\n\tFROM\n\t\t$t -- comment\n);\n"},
+        {"-- comment\r\r\r$a=1;",
+            "-- comment\r\n$a = 1;\n"},
+        {"$a=1;-- comment\n$b=2;/* comment */ /* comment */\n$c = 3;/* comment */ -- comment",
+            "$a = 1; -- comment\n$b = 2; /* comment */ /* comment */\n$c = 3; /* comment */ -- comment\n"},
     };
 
     TSetup setup;
@@ -329,20 +350,20 @@ Y_UNIT_TEST(TableStoreOperations) {
 Y_UNIT_TEST(ExternalDataSourceOperations) {
     TCases cases = {
         {"creAte exTernAl daTa SouRce usEr With (a = \"b\")",
-            "CREATE EXTERNAL DATA SOURCE usEr WITH (a = \"b\");\n"},
-            {"creAte exTernAl daTa SouRce if not exists usEr With (a = \"b\")",
-            "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS usEr WITH (a = \"b\");\n"},
-            {"creAte oR rePlaCe exTernAl daTa SouRce usEr With (a = \"b\")",
-            "CREATE OR REPLACE EXTERNAL DATA SOURCE usEr WITH (a = \"b\");\n"},
-            {"create external data source eds with (a=\"a\",b=\"b\",c = true)",
-            "CREATE EXTERNAL DATA SOURCE eds WITH (\n\ta = \"a\",\n\tb = \"b\",\n\tc = TRUE\n);\n"},
-            {"alter external data source eds set a true, reset (b, c), set (x=y, z=false)",
+            "CREATE EXTERNAL DATA SOURCE usEr WITH (a = 'b');\n"},
+        {"creAte exTernAl daTa SouRce if not exists usEr With (a = \"b\")",
+            "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS usEr WITH (a = 'b');\n"},
+        {"creAte oR rePlaCe exTernAl daTa SouRce usEr With (a = \"b\")",
+            "CREATE OR REPLACE EXTERNAL DATA SOURCE usEr WITH (a = 'b');\n"},
+        {"create external data source eds with (a=\"a\",b=\"b\",c = true)",
+            "CREATE EXTERNAL DATA SOURCE eds WITH (\n\ta = 'a',\n\tb = 'b',\n\tc = TRUE\n);\n"},
+        {"alter external data source eds set a true, reset (b, c), set (x=y, z=false)",
             "ALTER EXTERNAL DATA SOURCE eds\n\tSET a TRUE,\n\tRESET (b, c),\n\tSET (x = y, z = FALSE)\n;\n"},
-            {"alter external data source eds reset (a), set (x=y)",
+        {"alter external data source eds reset (a), set (x=y)",
             "ALTER EXTERNAL DATA SOURCE eds\n\tRESET (a),\n\tSET (x = y)\n;\n"},
         {"dRop exTerNal Data SouRce usEr",
             "DROP EXTERNAL DATA SOURCE usEr;\n"},
-            {"dRop exTerNal Data SouRce if exists usEr",
+        {"dRop exTerNal Data SouRce if exists usEr",
             "DROP EXTERNAL DATA SOURCE IF EXISTS usEr;\n"},
     };
 
@@ -366,16 +387,36 @@ Y_UNIT_TEST(AsyncReplication) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(Transfer) {
+    TCases cases = {
+        {"create transfer user from topic1 to table1 with (user='foo')",
+            "CREATE TRANSFER user FROM topic1 TO table1 WITH (user = 'foo');\n"},
+        {"alter transfer user set (user='foo')",
+            "ALTER TRANSFER user SET (user = 'foo');\n"},
+        {"drop transfer user",
+            "DROP TRANSFER user;\n"},
+        {"drop transfer user cascade",
+            "DROP TRANSFER user CASCADE;\n"},
+        {"create transfer user from topic1 to table1 using ($x) -> { $y = cast($x as String); return $y ; } with (user='foo')",
+            "CREATE TRANSFER user FROM topic1 TO table1 USING ($x) -> {\n    $y = CAST($x AS String);\n    RETURN $y;\n} WITH (user = 'foo');\n"},
+        {"create transfer user from topic1 to table1 using $xxx with (user='foo')",
+            "CREATE TRANSFER user FROM topic1 TO table1 USING $xxx WITH (user = 'foo');\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(ExternalTableOperations) {
     TCases cases = {
         {"creAte exTernAl TabLe usEr (a int) With (a = \"b\")",
-            "CREATE EXTERNAL TABLE usEr (\n\ta int\n)\nWITH (a = \"b\");\n"},
+            "CREATE EXTERNAL TABLE usEr (\n\ta int\n)\nWITH (a = 'b');\n"},
         {"creAte oR rePlaCe exTernAl TabLe usEr (a int) With (a = \"b\")",
-            "CREATE OR REPLACE EXTERNAL TABLE usEr (\n\ta int\n)\nWITH (a = \"b\");\n"},
+            "CREATE OR REPLACE EXTERNAL TABLE usEr (\n\ta int\n)\nWITH (a = 'b');\n"},
         {"creAte exTernAl TabLe iF NOt Exists usEr (a int) With (a = \"b\")",
-            "CREATE EXTERNAL TABLE IF NOT EXISTS usEr (\n\ta int\n)\nWITH (a = \"b\");\n"},
+            "CREATE EXTERNAL TABLE IF NOT EXISTS usEr (\n\ta int\n)\nWITH (a = 'b');\n"},
         {"create external table user (a int) with (a=\"b\",c=\"d\")",
-            "CREATE EXTERNAL TABLE user (\n\ta int\n)\nWITH (\n\ta = \"b\",\n\tc = \"d\"\n);\n"},
+            "CREATE EXTERNAL TABLE user (\n\ta int\n)\nWITH (\n\ta = 'b',\n\tc = 'd'\n);\n"},
         {"alter  external table user add column col1 int32, drop column col2, reset(prop), set (prop2 = 42, x=y), set a true",
             "ALTER EXTERNAL TABLE user\n\tADD COLUMN col1 int32,\n\tDROP COLUMN col2,\n\tRESET (prop),\n\tSET (prop2 = 42, x = y),\n\tSET a TRUE\n;\n"},
         {"dRop exTerNal taBlE usEr",
@@ -455,13 +496,13 @@ Y_UNIT_TEST(AlterTable) {
         {"alter table user add changefeed user with (initial_scan = FaLsE)",
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (initial_scan = FALSE)\n;\n"},
         {"alter table user add changefeed user with (retention_period = Interval(\"P1D\"))",
-            "ALTER TABLE user\n\tADD CHANGEFEED user WITH (retention_period = Interval(\"P1D\"))\n;\n"},
+            "ALTER TABLE user\n\tADD CHANGEFEED user WITH (retention_period = Interval('P1D'))\n;\n"},
         {"alter table user add changefeed user with (virtual_timestamps = TruE)",
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (virtual_timestamps = TRUE)\n;\n"},
         {"alter table user add changefeed user with (virtual_timestamps = fAlSe)",
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (virtual_timestamps = FALSE)\n;\n"},
-        {"alter table user add changefeed user with (resolved_timestamps = Interval(\"PT1S\"))",
-            "ALTER TABLE user\n\tADD CHANGEFEED user WITH (resolved_timestamps = Interval(\"PT1S\"))\n;\n"},
+        {"alter table user add changefeed user with (barriers_interval = Interval(\"PT1S\"))",
+            "ALTER TABLE user\n\tADD CHANGEFEED user WITH (barriers_interval = Interval('PT1S'))\n;\n"},
         {"alter table user add changefeed user with (topic_min_active_partitions = 1)",
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_min_active_partitions = 1)\n;\n"},
         {"alter table user add changefeed user with (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_max_active_partitions = 7)",
@@ -576,6 +617,14 @@ Y_UNIT_TEST(DefineActionOrSubquery) {
             "UNION ALL\n\t"
             "SELECT\n\t\t*\n\tFROM\n\t\t$t2\n\t;\n"
             "END DEFINE;\n"},
+        {"define subquery $s() as $t = select * from $a end define",
+            "DEFINE SUBQUERY $s() AS\n\t"
+            "$t = (\n\t\tSELECT\n\t\t\t*\n\t\tFROM\n\t\t\t$a\n\t);\n"
+            "END DEFINE;\n"},
+        {"define subquery $s() as; $t = select * from $a; end define",
+            "DEFINE SUBQUERY $s() AS\n\t"
+            "$t = (\n\t\tSELECT\n\t\t\t*\n\t\tFROM\n\t\t\t$a\n\t);\n"
+            "END DEFINE;\n"},
     };
 
     TSetup setup;
@@ -593,6 +642,13 @@ Y_UNIT_TEST(If) {
         {"evaluate if 1=1 do begin select 1; end do else do begin select 2; end do",
             "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1\n\t;\nEND DO "
             "ELSE DO BEGIN\n\tSELECT\n\t\t2\n\t;\nEND DO;\n"},
+        {"evaluate if 1=1 do begin; select 1 end do else do begin select 2;; select 3 end do",
+            "EVALUATE IF 1 == 1 DO BEGIN\n\tSELECT\n\t\t1\n\t;\nEND DO ELSE DO BEGIN\n\t"
+            "SELECT\n\t\t2\n\t;\n\n\tSELECT\n\t\t3\n\t;\nEND DO;\n"},
+        {"evaluate if 1=1 do begin (select 1) end do",
+            "EVALUATE IF 1 == 1 DO BEGIN\n\t(\n\t\tSELECT\n\t\t\t1\n\t);\nEND DO;\n"},
+        {"evaluate if 1=1 do begin $a = select * from $begin; $end = 1; end do",
+            "EVALUATE IF 1 == 1 DO BEGIN\n\t$a = (\n\t\tSELECT\n\t\t\t*\n\t\tFROM\n\t\t\t$begin\n\t);\n\t$end = 1;\nEND DO;\n"},
     };
 
     TSetup setup;
@@ -611,6 +667,12 @@ Y_UNIT_TEST(For) {
             "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x\n\t;\nEND DO ELSE DO BEGIN\n\tSELECT\n\t\t2\n\t;\nEND DO;\n"},
         {"evaluate parallel for $x in [] do $a($x)",
             "EVALUATE PARALLEL FOR $x IN [] DO\n\t$a($x)\n;\n"},
+        {"evaluate for $x in [] do begin; select $x;; select $y end do",
+            "EVALUATE FOR $x IN [] DO BEGIN\n\tSELECT\n\t\t$x\n\t;\n\n\tSELECT\n\t\t$y\n\t;\nEND DO;\n"},
+        {"evaluate for $x in [] do begin (select 1) end do",
+            "EVALUATE FOR $x IN [] DO BEGIN\n\t(\n\t\tSELECT\n\t\t\t1\n\t);\nEND DO;\n"},
+        {"evaluate for $x in [] do begin $a = select * from $begin; $end = 1; end do",
+            "EVALUATE FOR $x IN [] DO BEGIN\n\t$a = (\n\t\tSELECT\n\t\t\t*\n\t\tFROM\n\t\t\t$begin\n\t);\n\t$end = 1;\nEND DO;\n"},
     };
 
     TSetup setup;
@@ -867,8 +929,10 @@ Y_UNIT_TEST(Select) {
             "SELECT\n\t1\nLIMIT 10;\n"},
         {"select 1 limit 10 offset 5",
             "SELECT\n\t1\nLIMIT 10 OFFSET 5;\n"},
-        { "select 1 union all select 2",
+        {"select 1 union all select 2",
             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\n;\n" },
+        {"select * from $user where key == 1 -- comment",
+            "SELECT\n\t*\nFROM\n\t$user\nWHERE\n\tkey == 1 -- comment\n;\n"},
     };
 
     TSetup setup;
@@ -905,9 +969,11 @@ Y_UNIT_TEST(Lambda) {
 Y_UNIT_TEST(NestedSelect) {
     TCases cases = {
         {"$x=select 1",
-            "$x =\n\tSELECT\n\t\t1\n;\n"},
+            "$x = (\n\tSELECT\n\t\t1\n);\n"},
         {"$x=(select 1)",
             "$x = (\n\tSELECT\n\t\t1\n);\n"},
+        {"$x=((select 1))",
+            "$x = (\n\t(\n\t\tSELECT\n\t\t\t1\n\t)\n);\n"},
         {"select 1 in (select 1)",
             "SELECT\n\t1 IN (\n\t\tSELECT\n\t\t\t1\n\t)\n;\n"},
         {"select 1 in ((select 1))",
@@ -1387,7 +1453,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A, B as B
 );
 )",
-R"(PRAGMA FeatureR010 = "prototype";
+R"(PRAGMA FeatureR010 = 'prototype';
 
 USE plato;
 
@@ -1436,7 +1502,9 @@ Y_UNIT_TEST(Union) {
     TCases cases = {
         {"select 1 union all select 2 union select 3 union all select 4 union select 5",
             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION ALL\nSELECT\n\t4\nUNION\nSELECT\n\t5\n;\n"},
-            };
+        {"select 1 union all (select 2)",
+            "SELECT\n\t1\nUNION ALL\n(\n\tSELECT\n\t\t2\n);\n"},
+    };
 
     TSetup setup;
     setup.Run(cases);
@@ -1642,12 +1710,12 @@ Y_UNIT_TEST(DropView) {
 Y_UNIT_TEST(ResourcePoolOperations) {
     TCases cases = {
         {"creAte reSourCe poOl naMe With (a = \"b\")",
-            "CREATE RESOURCE POOL naMe WITH (a = \"b\");\n"},
-            {"create resource pool eds with (a=\"a\",b=\"b\",c = true)",
-            "CREATE RESOURCE POOL eds WITH (\n\ta = \"a\",\n\tb = \"b\",\n\tc = TRUE\n);\n"},
-            {"alTer reSOurcE poOl naMe resEt (b, c), seT (x=y, z=false)",
+            "CREATE RESOURCE POOL naMe WITH (a = 'b');\n"},
+        {"create resource pool eds with (a=\"a\",b=\"b\",c = true)",
+            "CREATE RESOURCE POOL eds WITH (\n\ta = 'a',\n\tb = 'b',\n\tc = TRUE\n);\n"},
+        {"alTer reSOurcE poOl naMe resEt (b, c), seT (x=y, z=false)",
             "ALTER RESOURCE POOL naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE)\n;\n"},
-            {"alter resource pool eds reset (a), set (x=y)",
+        {"alter resource pool eds reset (a), set (x=y)",
             "ALTER RESOURCE POOL eds\n\tRESET (a),\n\tSET (x = y)\n;\n"},
         {"dRop reSourCe poOl naMe",
             "DROP RESOURCE POOL naMe;\n"},
@@ -1660,11 +1728,11 @@ Y_UNIT_TEST(ResourcePoolOperations) {
 Y_UNIT_TEST(BackupCollectionOperations) {
     TCases cases = {
         {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")",
-            "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\");\n"},
-        {"creAte  BackuP colLection `-naMe`     DATabase wIth (a = \"b\")",
-            "CREATE BACKUP COLLECTION `-naMe` DATABASE WITH (a = \"b\");\n"},
+            "CREATE BACKUP COLLECTION `-naMe` WITH (a = 'b');\n"},
+        {"creAte  BackuP colLection `-naMe`     DATabase wIth (a = 'b')",
+            "CREATE BACKUP COLLECTION `-naMe` DATABASE WITH (a = 'b');\n"},
         {"creAte  BackuP colLection    `-naMe`   (   tabLe      `tbl1`      , TablE `tbl2`) wIth (a = \"b\")",
-            "CREATE BACKUP COLLECTION `-naMe` (TABLE `tbl1`, TABLE `tbl2`) WITH (a = \"b\");\n"},
+            "CREATE BACKUP COLLECTION `-naMe` (TABLE `tbl1`, TABLE `tbl2`) WITH (a = 'b');\n"},
         {"alTer bACKuP coLLECTION naMe resEt (b, c), seT (x=y, z=false)",
             "ALTER BACKUP COLLECTION naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE)\n;\n"},
         {"alTer bACKuP coLLECTION naMe aDD         DATAbase",
@@ -1685,7 +1753,7 @@ Y_UNIT_TEST(Analyze) {
     TCases cases = {
         {"analyze table (col1, col2, col3)",
             "ANALYZE table (col1, col2, col3);\n"},
-            {"analyze table",
+        {"analyze table",
             "ANALYZE table;\n"}
     };
 
@@ -1696,12 +1764,12 @@ Y_UNIT_TEST(Analyze) {
 Y_UNIT_TEST(ResourcePoolClassifierOperations) {
     TCases cases = {
         {"creAte reSourCe poOl ClaSsiFIer naMe With (a = \"b\")",
-            "CREATE RESOURCE POOL CLASSIFIER naMe WITH (a = \"b\");\n"},
-            {"create resource pool classifier eds with (a=\"a\",b=\"b\",c = true)",
-            "CREATE RESOURCE POOL CLASSIFIER eds WITH (\n\ta = \"a\",\n\tb = \"b\",\n\tc = TRUE\n);\n"},
-            {"alTer reSOurcE poOl ClaSsiFIer naMe resEt (b, c), seT (x=y, z=false)",
+            "CREATE RESOURCE POOL CLASSIFIER naMe WITH (a = 'b');\n"},
+        {"create resource pool classifier eds with (a=\"a\",b=\"b\",c = true)",
+            "CREATE RESOURCE POOL CLASSIFIER eds WITH (\n\ta = 'a',\n\tb = 'b',\n\tc = TRUE\n);\n"},
+        {"alTer reSOurcE poOl ClaSsiFIer naMe resEt (b, c), seT (x=y, z=false)",
             "ALTER RESOURCE POOL CLASSIFIER naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE)\n;\n"},
-            {"alter resource pool classifier eds reset (a), set (x=y)",
+        {"alter resource pool classifier eds reset (a), set (x=y)",
             "ALTER RESOURCE POOL CLASSIFIER eds\n\tRESET (a),\n\tSET (x = y)\n;\n"},
         {"dRop reSourCe poOl ClaSsiFIer naMe",
             "DROP RESOURCE POOL CLASSIFIER naMe;\n"},
@@ -1714,7 +1782,7 @@ Y_UNIT_TEST(ResourcePoolClassifierOperations) {
 Y_UNIT_TEST(Backup) {
     TCases cases = {
         {"\tBaCKup\n\n TestCollection      incremENTAl",
-         "BACKUP TestCollection INCREMENTAL;\n"},
+            "BACKUP TestCollection INCREMENTAL;\n"},
     };
 
     TSetup setup;
@@ -1724,9 +1792,19 @@ Y_UNIT_TEST(Backup) {
 Y_UNIT_TEST(Restore) {
     TCases cases = {
         {"resToRe\n\n\n TestCollection       aT\n  \t \n     '2024-06-16_20-14-02'",
-         "RESTORE TestCollection AT '2024-06-16_20-14-02';\n"},
+            "RESTORE TestCollection AT '2024-06-16_20-14-02';\n"},
     };
 
     TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(AnsiLexer) {
+    TCases cases = {
+        {"select 'a', \"a\" from (select 1 as \"a\")",
+            "SELECT\n\t'a',\n\t\"a\"\nFROM (\n\tSELECT\n\t\t1 AS \"a\"\n);\n"},
+    };
+
+    TSetup setup(/* ansiLexer = */ true);
     setup.Run(cases);
 }

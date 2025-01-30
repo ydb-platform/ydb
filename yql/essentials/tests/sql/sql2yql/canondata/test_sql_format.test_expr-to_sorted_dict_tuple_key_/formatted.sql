@@ -1,8 +1,8 @@
 /* postgres can not */
 $l = AsList(
-    AsTuple(AsTuple(), "foo"),
-    AsTuple(AsTuple(), "bar"),
-    AsTuple(AsTuple(), "baz")
+    AsTuple(AsTuple(), 'foo'),
+    AsTuple(AsTuple(), 'bar'),
+    AsTuple(AsTuple(), 'baz')
 );
 
 $d = ToSortedDict($l);
@@ -38,9 +38,9 @@ SELECT
 ;
 
 $l = AsList(
-    AsTuple(AsTuple(1), "foo"),
-    AsTuple(AsTuple(2), "bar"),
-    AsTuple(AsTuple(2), "baz")
+    AsTuple(AsTuple(1), 'foo'),
+    AsTuple(AsTuple(2), 'bar'),
+    AsTuple(AsTuple(2), 'baz')
 );
 
 $d = ToSortedDict($l);
@@ -80,9 +80,9 @@ SELECT
 ;
 
 $l = AsList(
-    AsTuple(AsTuple(1, 2), "foo"),
-    AsTuple(AsTuple(1, 3), "bar"),
-    AsTuple(AsTuple(1, 3), "baz")
+    AsTuple(AsTuple(1, 2), 'foo'),
+    AsTuple(AsTuple(1, 3), 'bar'),
+    AsTuple(AsTuple(1, 3), 'baz')
 );
 
 $d = ToSortedDict($l);

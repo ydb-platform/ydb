@@ -825,6 +825,8 @@ class InterfaceClass(_InterfaceClassBase):
                 # __firstlineno__: Python 3.13b1+
                 # https://github.com/python/cpython/pull/118475
                 '__firstlineno__',
+                # __classdictcell__: Python 3.14
+                '__classdictcell__',
             ) and
             aval is not _decorator_non_return  # noqa W503
         }

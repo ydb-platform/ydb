@@ -22,10 +22,6 @@ struct TResponseInfo;
 class TClient;
 using TClientPtr = ::TIntrusivePtr<TClient>;
 
-namespace NRawClient {
-    class TRawBatchRequest;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TBatchRequest
@@ -119,12 +115,12 @@ public:
     virtual void ExecuteBatch(const TExecuteBatchOptions& executeBatch) override;
 
 private:
-    TBatchRequest(NDetail::NRawClient::TRawBatchRequest* impl, ::TIntrusivePtr<TClient> client);
+    TBatchRequest(IRawBatchRequest* impl, ::TIntrusivePtr<TClient> client);
 
 private:
     TTransactionId DefaultTransaction_;
-    ::TIntrusivePtr<NDetail::NRawClient::TRawBatchRequest> Impl_;
-    THolder<TBatchRequest> TmpWithTransaction_;
+    IRawBatchRequestPtr Impl_;
+    std::unique_ptr<TBatchRequest> TmpWithTransaction_;
     ::TIntrusivePtr<TClient> Client_;
 
 private:

@@ -2,10 +2,6 @@
 
 #include <gtest/gtest.h>
 
-#include <library/cpp/testing/common/env.h>
-
-#include <library/cpp/yt/memory/new.h>
-
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
@@ -17,6 +13,10 @@
 #include <yt/yt/library/ytprof/symbolize.h>
 #include <yt/yt/library/ytprof/profile.h>
 #include <yt/yt/library/ytprof/external_pprof.h>
+
+#include <library/cpp/testing/common/env.h>
+
+#include <library/cpp/yt/memory/new.h>
 
 #include <util/string/cast.h>
 #include <util/stream/file.h>

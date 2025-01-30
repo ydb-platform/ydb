@@ -9,6 +9,8 @@
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
+#include <yt/cpp/mapreduce/http_client/raw_client.h>
+
 #include <util/generic/size_literals.h>
 
 namespace NYT {
@@ -102,11 +104,11 @@ void TRetryfulWriter::Send(const TBuffer& buffer)
     header.MergeParameters(Parameters_);
 
     auto streamMaker = [&buffer] () {
-        return MakeHolder<TBufferInput>(buffer);
+        return std::make_unique<TBufferInput>(buffer);
     };
 
     auto transactionId = (WriteTransaction_ ? WriteTransaction_->GetId() : ParentTransactionId_);
-    RetryHeavyWriteRequest(ClientRetryPolicy_, TransactionPinger_, Context_, transactionId, header, streamMaker);
+    RetryHeavyWriteRequest(RawClient_, ClientRetryPolicy_, TransactionPinger_, Context_, transactionId, header, streamMaker);
 
     Parameters_ = SecondaryParameters_; // all blocks except the first one are appended
 }

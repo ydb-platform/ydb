@@ -234,13 +234,16 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
     std::vector<TPortionAddress> pack;
     std::map<TPortionAddress, std::vector<TIterator>> iteration;
     const bool v0Usage = AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage();
-    const ui32 SourcesCount = v0Usage ? 4 : 3;
+    const bool v1Usage = AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage();
+    ui32 SourcesCount = 2;
     if (v0Usage) {
+        ++SourcesCount;
         if (v0Portions.size()) {
             iteration[v0Portions.begin()->first].emplace_back(v0Portions);
         }
     }
-    {
+    if (v1Usage) {
+        ++SourcesCount;
         if (v1Portions.size()) {
             iteration[v1Portions.begin()->first].emplace_back(v1Portions);
         }
@@ -312,7 +315,6 @@ private:
 TConclusion<std::vector<INormalizerTask::TPtr>> TCleanEmptyPortionsNormalizer::DoInit(
     const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     auto batchesToDelete = GetPortionsToDelete(txc, DsGroupSelector);
     if (!batchesToDelete) {
         return TConclusionStatus::Fail("Not ready");

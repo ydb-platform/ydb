@@ -38,22 +38,6 @@ def extract_macro_calls2(unit, macro_value_name):
     return calls
 
 
-def ongenerate_script(unit, *args):
-    """
-    heretic@ promised to make tutorial here
-    Don't forget
-    Feel free to remind
-    """
-    flat, kv = common.sort_by_keywords({'OUT': -1, 'TEMPLATE': -1, 'CUSTOM_PROPERTY': -1}, args)
-    if len(kv.get('TEMPLATE', [])) > len(kv.get('OUT', [])):
-        ymake.report_configure_error('To many arguments for TEMPLATE parameter')
-    prev = unit.get(['GENERATE_SCRIPT_VALUE']) or ''
-    new_val = (
-        prev + ' ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(list(args)), encoding='utf-8')))
-    ).strip()
-    unit.set(['GENERATE_SCRIPT_VALUE', new_val])
-
-
 def onjava_module(unit, *args):
     args_delim = unit.get('ARGS_DELIM')
 
@@ -88,7 +72,6 @@ def onjava_module(unit, *args):
         'IDEA_EXCLUDE': extract_macro_calls(unit, 'IDEA_EXCLUDE_DIRS_VALUE', args_delim),
         'IDEA_RESOURCE': extract_macro_calls(unit, 'IDEA_RESOURCE_DIRS_VALUE', args_delim),
         'IDEA_MODULE_NAME': extract_macro_calls(unit, 'IDEA_MODULE_NAME_VALUE', args_delim),
-        'GENERATE_SCRIPT': extract_macro_calls2(unit, 'GENERATE_SCRIPT_VALUE'),
         'FAKEID': extract_macro_calls(unit, 'FAKEID', args_delim),
         'TEST_DATA': extract_macro_calls(unit, 'TEST_DATA_VALUE', args_delim),
         'JAVA_FORBIDDEN_LIBRARIES': extract_macro_calls(unit, 'JAVA_FORBIDDEN_LIBRARIES_VALUE', args_delim),
@@ -269,22 +252,23 @@ def on_fill_jar_copy_resources_cmd(unit, *args):
 
 
 def on_fill_jar_gen_srcs(unit, *args):
-    varname, jar_type, srcdir, base_classes_dir, java_list, kt_list, groovy_list, res_list = tuple(args[0:8])
+    varname, jar_type, srcdir, base_classes_dir, java_list, kt_list, res_list = tuple(args[0:7])
     resolved_srcdir = unit.resolve_arc_path(srcdir)
     if not resolved_srcdir.startswith('$') or resolved_srcdir.startswith('$S'):
         return
+    if jar_type == 'SRC_JAR' and unit.get('SOURCES_JAR') != 'yes':
+        return
 
+    args_delim = unit.get('JAR_BUILD_SCRIPT_FLAGS_DELIM')
     exclude_pos = args.index('EXCLUDE')
-    globs = args[7:exclude_pos]
-    excludes = args[exclude_pos + 1 :]
+    globs = ' '.join(args[7:exclude_pos])
+    excludes = ' '.join(args[exclude_pos + 1 :])
     var = unit.get(varname)
-    var += ' && ${{cwd:BINDIR}} $YMAKE_PYTHON ${{input:"build/scripts/resolve_java_srcs.py"}} --append -d {} -s {} -k {} -g {} -r {} --include-patterns {}'.format(
-        srcdir, java_list, kt_list, groovy_list, res_list, ' '.join(globs)
-    )
+    var += f' {args_delim} --append -d {srcdir} -s {java_list} -k {kt_list} -r {res_list} --include-patterns {globs}'
     if jar_type == 'SRC_JAR':
         var += ' --all-resources'
     if len(excludes) > 0:
-        var += ' --exclude-patterns {}'.format(' '.join(excludes))
+        var += f' --exclude-patterns {excludes}'
     if unit.get('WITH_KOTLIN_VALUE') == 'yes':
         var += ' --resolve-kotlin'
     unit.set([varname, var])
@@ -349,7 +333,7 @@ def parse_words(words):
         yield o, templates[min(i, len(templates) - 1)], props
 
 
-def on_ymake_generate_script(unit, *args):
+def ongenerate_script(unit, *args):
     for out, tmpl, props in parse_words(list(args)):
         unit.on_add_gen_java_script([out, tmpl] + list(props))
 

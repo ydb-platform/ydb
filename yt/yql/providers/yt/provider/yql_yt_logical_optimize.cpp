@@ -354,7 +354,8 @@ protected:
 
         auto usePhases = State_->Configuration->UseAggPhases.Get().GetOrElse(false);
         auto usePartitionsByKeys = State_->Configuration->UsePartitionsByKeysForFinalAgg.Get().GetOrElse(true);
-        TAggregateExpander aggExpander(usePartitionsByKeys, false, node.Ptr(), ctx, *State_->Types, false, false,
+        auto compactForDistinct = State_->Configuration->CompactForDistinct.Get().GetOrElse(false);
+        TAggregateExpander aggExpander(usePartitionsByKeys, false, node.Ptr(), ctx, *State_->Types, false, compactForDistinct,
             usePhases, State_->Types->UseBlocks || State_->Types->BlockEngineMode == EBlockEngineMode::Force);
         return aggExpander.ExpandAggregate();
     }

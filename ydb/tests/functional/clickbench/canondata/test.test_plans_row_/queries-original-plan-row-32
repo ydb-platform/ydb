@@ -35,17 +35,26 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort",
+                                                "Node Type": "TopSort-Aggregate",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Limit": "10",
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": "argument.Count0"
+                                                    },
                                                     {
                                                         "Inputs": [
                                                             {
                                                                 "ExternalPlanNodeId": 2
                                                             }
                                                         ],
-                                                        "Limit": "10",
-                                                        "Name": "TopSort",
-                                                        "TopSortBy": "argument.Count0"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Final"
                                                     }
                                                 ],
                                                 "PlanNodeId": 3,
@@ -63,18 +72,20 @@
                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1,1),_yql_agg_2: SUM(item.IsRefresh,state._yql_agg_2)}",
-                                                                        "GroupBy": "",
+                                                                        "Aggregation": "{[SUM(item.ResolutionWidth),Inc()],SUM(1),SUM(item.IsRefresh)}",
+                                                                        "GroupBy": "[item.ClientIP,item.WatchID]",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
                                                                             }
                                                                         ],
-                                                                        "Name": "Aggregate"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
                                                                     },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                         "ReadColumns": [
                                                                             "ClientIP",
                                                                             "IsRefresh",

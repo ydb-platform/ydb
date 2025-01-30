@@ -7,7 +7,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 TYaMRTableWriter::TYaMRTableWriter(THolder<IProxyOutput> output)
-    : Output_(std::move(output))
+    : Output_(output.Release())
 { }
 
 TYaMRTableWriter::~TYaMRTableWriter()

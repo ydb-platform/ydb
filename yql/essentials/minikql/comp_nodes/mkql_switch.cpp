@@ -292,7 +292,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         ctx.Ctx = &*ctx.Func->arg_begin();
@@ -304,9 +303,6 @@ private:
         const auto statePtrType = PointerType::getUnqual(stateType);
 
         auto block = main;
-
-        const auto placeholder = NYql::NCodegen::ETarget::Windows == ctx.Codegen.GetEffectiveTarget() ?
-            new AllocaInst(valueType, 0U, "placeholder", block) : nullptr;
 
         const auto statePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, static_cast<const IComputationNode*>(this)->GetIndex())}, "state_ptr", block);
         const auto state = new LoadInst(valueType, statePtr, "state", block);
@@ -327,17 +323,9 @@ private:
 
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::Get));
 
-        Value* input;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto getType = FunctionType::get(valueType, {stateArg->getType(), pos->getType()}, false);
-            const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
-            input = CallInst::Create(getType, getPtr, {stateArg, pos}, "input", block);
-        } else {
-            const auto getType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), placeholder->getType(), pos->getType()}, false);
-            const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
-            CallInst::Create(getType, getPtr, {stateArg, placeholder, pos}, "", block);
-            input = new LoadInst(valueType, placeholder, "input", block);
-        }
+        const auto getType = FunctionType::get(valueType, {stateArg->getType(), pos->getType()}, false);
+        const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
+        const auto input = CallInst::Create(getType, getPtr, {stateArg, pos}, "input", block);
 
         const auto special = SwitchInst::Create(input, good, 2U, block);
         special->addCase(GetYield(context), back);
@@ -393,7 +381,7 @@ public:
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
         const auto result = PHINode::Create(valueType, Handlers.size() + 2U, "result", exit);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -457,8 +445,8 @@ public:
 
             const auto item = GetNodeValue(Flow, ctx, block);
 
-            const auto finsh = IsFinish(item, block);
-            const auto yield = IsYield(item, block);
+            const auto finsh = IsFinish(item, block, context);
+            const auto yield = IsYield(item, block, context);
             const auto special = BinaryOperator::CreateOr(finsh, yield, "special", block);
 
             const auto fin = SelectInst::Create(finsh, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "fin", block);
@@ -470,7 +458,7 @@ public:
             block = good;
 
             const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::Add));
-            const auto addArg = WrapArgumentForWindows(item, ctx, block);
+            const auto addArg = item;
             const auto addType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), addArg->getType()}, false);
             const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "add", block);
             CallInst::Create(addType, addPtr, {stateArg, addArg}, "", block);
@@ -512,7 +500,7 @@ public:
 
                 if (const auto offset = Handlers[i].ResultVariantOffset) {
                     const auto good = BasicBlock::Create(context, (TString("good_") += ToString(i)).c_str(), ctx.Func);
-                    BranchInst::Create(next, good, IsSpecial(output, block), block);
+                    BranchInst::Create(next, good, IsSpecial(output, block, context), block);
                     block = good;
 
                     const auto unpack = Handlers[i].IsOutputVariant ? GetVariantParts(output, ctx, block) : std::make_pair(ConstantInt::get(indexType, 0), output);
@@ -522,7 +510,7 @@ public:
                     BranchInst::Create(exit, block);
                 } else {
                     result->addIncoming(output, block);
-                    BranchInst::Create(next, exit, IsSpecial(output, block), block);
+                    BranchInst::Create(next, exit, IsSpecial(output, block, context), block);
                 }
             }
 
@@ -813,7 +801,7 @@ private:
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(ptrValueType) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(context);
@@ -826,7 +814,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -885,8 +872,7 @@ private:
 
             const auto used = GetMemoryUsed(MemLimit, ctx, block);
 
-            const auto stream = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-                new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+            const auto stream = static_cast<Value*>(containerArg);
 
             BranchInst::Create(loop, block);
 

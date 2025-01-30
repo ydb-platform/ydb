@@ -1,10 +1,10 @@
 /* syntax version 1 */
 /* postgres can not */
-$t =
+$t = (
     SELECT
         'john' AS name,
         42 AS age
-;
+);
 
 SELECT
     SUM(age) OVER w0 AS sumAge,

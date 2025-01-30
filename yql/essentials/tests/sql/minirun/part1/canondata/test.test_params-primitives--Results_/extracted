@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:25:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select 2 * $x1, -$x2 * 10, not $x3, -$x4, $x5 || "2018", -$x6, $x7 + 1, Length($x8),
+	^
+        <tmp_path>/program.sql:<main>:25:68: Warning: At function: +
+        	select 2 * $x1, -$x2 * 10, not $x3, -$x4, $x5 || "2018", -$x6, $x7 + 1, Length($x8),
+	                                                                   ^
+            <tmp_path>/program.sql:<main>:25:68: Warning: Integral type implicit bitcast: Uint64 and Int32
+            	select 2 * $x1, -$x2 * 10, not $x3, -$x4, $x5 || "2018", -$x6, $x7 + 1, Length($x8),
+	                                                                   ^

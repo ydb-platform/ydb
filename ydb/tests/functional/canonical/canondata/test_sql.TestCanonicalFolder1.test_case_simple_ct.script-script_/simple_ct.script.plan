@@ -24,6 +24,7 @@
                                             }
                                         ],
                                         "Name": "Upsert",
+                                        "Path": "/local/base_simple_ct_script_script/Questions",
                                         "Table": "base_simple_ct_script_script/Questions"
                                     },
                                     {

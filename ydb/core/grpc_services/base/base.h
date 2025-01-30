@@ -14,7 +14,7 @@
 #include <ydb/public/api/protos/ydb_common.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -732,10 +732,10 @@ inline TString MakeAuthError(const TString& in, NYql::TIssueManager& issues) {
     return out.Str();
 }
 
-template <ui32 TRpcId, typename TReq, typename TResp, TRateLimiterMode RlMode = TRateLimiterMode::Off>
+template <ui32 TRpcId, typename TReq, typename TResp>
 class TGRpcRequestBiStreamWrapper
     : public IRequestProxyCtx
-    , public TEventLocal<TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp, RlMode>, TRpcId>
+    , public TEventLocal<TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp>, TRpcId>
 {
 private:
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
@@ -748,12 +748,11 @@ public:
     using TRequest = TReq;
     using TResponse = TResp;
     using IStreamCtx = NGRpcServer::IGRpcStreamingContext<TRequest, TResponse>;
-    static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
-    TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx, bool rlAllowed = true)
+    TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx, TRequestAuxSettings auxSettings = {})
         : Ctx_(ctx)
-        , RlAllowed_(rlAllowed)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
+        , AuxSettings(std::move(auxSettings))
     {
         if (!TraceId) {
             TraceId = UlidGen.Next().ToString();
@@ -766,11 +765,29 @@ public:
     }
 
     TRateLimiterMode GetRlMode() const override {
-        return RlAllowed_ ? RateLimitMode : TRateLimiterMode::Off;
+        return AuxSettings.RlMode;
     }
 
-    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
-        return false;
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult& schemeData,
+        ICheckerIface* iface) override
+    {
+        if (!AuxSettings.CustomAttributeProcessor) {
+            return false;
+        } else {
+            AuxSettings.CustomAttributeProcessor(schemeData, iface);
+            return true;
+        }
+    }
+
+    NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
+        return {
+            .RequestType = AuxSettings.RequestType,
+            .Database = GetDatabaseName(),
+        };
+    }
+
+    bool IsAuditable() const override {
+        return (AuxSettings.AuditMode == TAuditMode::Auditable) && !this->IsInternalCall();
     }
 
     const TMaybe<TString> GetYdbToken() const override {
@@ -889,7 +906,7 @@ public:
     void SetDiskQuotaExceeded(bool) override {
     }
 
-    void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id);
+    void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id, NWilson::TTraceId traceId = {});
 
     void SetRespHook(TRespHook&&) override {
         /* cannot add hook to bidirect streaming */
@@ -933,12 +950,12 @@ private:
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager_;
     TMaybe<NRpcService::TRlPath> RlPath_;
-    bool RlAllowed_;
     IGRpcProxyCounters::TPtr Counters_;
     NWilson::TSpan Span_;
     bool IsTracingDecided_ = false;
     TULIDGenerator UlidGen;
     TMaybe<TString> TraceId;
+    const TRequestAuxSettings AuxSettings;
 };
 
 template <typename TDerived>

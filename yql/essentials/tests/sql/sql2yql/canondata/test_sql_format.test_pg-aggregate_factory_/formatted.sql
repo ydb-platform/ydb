@@ -23,7 +23,7 @@ FROM (
     x
 );
 
-$agg_string_agg = AggregationFactory("Pg::string_agg");
+$agg_string_agg = AggregationFactory('Pg::string_agg');
 
 SELECT
     AggregateBy((x, ','p), $agg_string_agg)
@@ -50,7 +50,7 @@ FROM (
     x
 );
 
-$agg_max = AggregationFactory("Pg::max");
+$agg_max = AggregationFactory('Pg::max');
 
 SELECT
     AggregateBy(x, $agg_max)

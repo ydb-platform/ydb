@@ -20,7 +20,7 @@ TConclusionStatus TReadMetadata::Init(
 
     SelectInfo = dataAccessor.Select(readDescription, !!LockId);
     if (LockId) {
-        for (auto&& i : SelectInfo->PortionsOrderedPK) {
+        for (auto&& i : SelectInfo->Portions) {
             if (i->HasInsertWriteId() && !i->HasCommitSnapshot()) {
                 if (owner->HasLongTxWrites(i->GetInsertWriteIdVerified())) {
                 } else {

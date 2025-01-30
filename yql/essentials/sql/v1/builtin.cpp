@@ -2954,6 +2954,7 @@ struct TBuiltinFuncData {
             {"emptydict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDict", 0, 0)},
             {"callable", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Callable", 2, 2)},
             {"way", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Way", 1, 1) },
+            {"dynamicvariant", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DynamicVariant", 3, 3) },
             {"variant", BuildSimpleBuiltinFactoryCallback<TYqlVariant>() },
             {"enum", BuildSimpleBuiltinFactoryCallback<TYqlEnum>() },
             {"asvariant", BuildSimpleBuiltinFactoryCallback<TYqlAsVariant>() },
@@ -3148,10 +3149,6 @@ struct TBuiltinFuncData {
             // Hopping intervals time functions
             {"hopstart", BuildSimpleBuiltinFactoryCallback<THoppingTime<true>>()},
             {"hopend", BuildSimpleBuiltinFactoryCallback<THoppingTime<false>>()},
-
-            //MatchRecognize navigation functions
-            {"first", BuildNamedBuiltinFactoryCallback<TMatchRecognizeNavigate>("FIRST")},
-            {"last", BuildNamedBuiltinFactoryCallback<TMatchRecognizeNavigate>("LAST")},
         };
         return builtinFuncs;
     }
@@ -3268,6 +3265,10 @@ struct TBuiltinFuncData {
             {"firstvalueignorenulls", BuildAggrFuncFactoryCallback("FirstValueIgnoreNulls", "first_value_ignore_nulls_traits_factory", {OverWindow})},
             {"lastvalueignorenulls", BuildAggrFuncFactoryCallback("LastValueIgnoreNulls", "last_value_ignore_nulls_traits_factory", {OverWindow})},
             {"nthvalueignorenulls", BuildAggrFuncFactoryCallback("NthValueIgnoreNulls", "nth_value_ignore_nulls_traits_factory", {OverWindow}, NTH_VALUE)},
+
+            // MatchRecognize navigation functions
+            {"first", BuildAggrFuncFactoryCallback("First", "first_traits_factory")},
+            {"last", BuildAggrFuncFactoryCallback("Last", "last_traits_factory")},
         };
         return aggrFuncs;
     }
@@ -3302,6 +3303,7 @@ struct TBuiltinFuncData {
             {"forcespreadmembers", { "ForceSpreadMembers", 2, 2}},
             {"listfromtuple", { "ListFromTuple", 1, 1}},
             {"listtotuple", { "ListToTuple", 2, 2}},
+            {"opaque", { "Opaque", 1, 1}},
         };
         return coreFuncs;
     }
@@ -3631,7 +3633,17 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"));
             }
 
-            return (*aggrCallback).second(pos, args, aggMode, true).Release();
+            switch (ctx.GetColumnReferenceState()) {
+            case EColumnRefState::MatchRecognizeMeasures:
+                [[fallthrough]];
+            case EColumnRefState::MatchRecognizeDefine:
+                return new TInvalidBuiltin(pos, "Cannot use aggregation factory inside the MATCH_RECOGNIZE context");
+            default:
+                if ("first" == aggNormalizedName || "last" == aggNormalizedName) {
+                    return new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context");
+                }
+                return (*aggrCallback).second(pos, args, aggMode, true);
+            }
         }
 
         if (normalizedName == "aggregateby" || normalizedName == "multiaggregateby") {
@@ -3649,7 +3661,19 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
         auto aggrCallback = aggrFuncs.find(normalizedName);
         if (aggrCallback != aggrFuncs.end()) {
-            return (*aggrCallback).second(pos, args, aggMode, false).Release();
+            switch (ctx.GetColumnReferenceState()) {
+            case EColumnRefState::MatchRecognizeMeasures: {
+                auto result = (*aggrCallback).second(pos, args, aggMode, false);
+                return BuildMatchRecognizeVarAccess(pos, std::move(result));
+            }
+            case EColumnRefState::MatchRecognizeDefine:
+                return BuildMatchRecognizeDefineAggregate(ctx.Pos(), normalizedName, args);
+            default:
+                if ("first" == normalizedName || "last" == normalizedName) {
+                    return new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context");
+                }
+                return (*aggrCallback).second(pos, args, aggMode, false);
+            }
         }
         if (aggMode == EAggregateMode::Distinct || aggMode == EAggregateMode::OverWindowDistinct) {
             return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");
@@ -3731,16 +3755,20 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                     dflt = positional.GetTupleElement(positional.GetTupleSize() - 1);
                 }
             } else {
+                size_t minArgs = withDefault ? 2 : 1;
+                if (args.size() < minArgs) {
+                    return new TInvalidBuiltin(pos, TStringBuilder() << name
+                        << " requires at least " << minArgs << " positional arguments");
+                }
                 variant = args[0];
-                size_t defaultSuffix = withDefault ? 1 : 0;
-                labels.reserve(args.size() - 1 - defaultSuffix);
-                handlers.reserve(args.size() - 1 - defaultSuffix);
-                for (size_t idx = 0; idx + 1 < args.size() - defaultSuffix; idx++) {
+                labels.reserve(args.size() - minArgs);
+                handlers.reserve(args.size() - minArgs);
+                for (size_t idx = 0; idx < args.size() - minArgs; idx++) {
                     labels.push_back(BuildQuotedAtom(pos, ToString(idx)));
-                    handlers.push_back(args[idx + 1]);
+                    handlers.push_back(args[minArgs + idx]);
                 }
                 if (withDefault) {
-                    dflt = args.back();
+                    dflt = args[1];
                 }
             }
             TVector<TNodePtr> resultArgs;
@@ -3812,9 +3840,6 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             namedArgs = BuildStructure(pos, {encodeUtf8});
             usedArgs = {positionalArgs, namedArgs};
         } else if (name.StartsWith("From")) {
-            if (usedArgs) {
-                usedArgs.resize(1U);
-            }
             name = "From";
         } else if (name == "GetLength" || name.StartsWith("ConvertTo") || name.StartsWith("Parse") || name.StartsWith("SerializeJson")) {
             if (usedArgs.size() < 2U) {

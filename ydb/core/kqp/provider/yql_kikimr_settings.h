@@ -153,7 +153,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
     bool EnableKqpScanQuerySourceRead = false;
-    bool EnableKqpScanQueryStreamLookup = false;
     bool EnableKqpDataQueryStreamLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnableKqpDataQueryStreamIdxLookupJoin = false;
@@ -173,11 +172,12 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOltpSink = false;
     bool EnableHtapTx = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
-    bool EnableSpillingGenericQuery = false;
+    bool EnableSpilling = true;
     ui32 DefaultCostBasedOptimizationLevel = 4;
     bool EnableConstantFolding = true;
     ui64 DefaultEnableSpillingNodes = 0;
     bool EnableAntlr4Parser = false;
+    bool EnableSnapshotIsolationRW = false;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

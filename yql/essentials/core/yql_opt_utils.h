@@ -168,6 +168,12 @@ TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExp
 // prefix should start with "_yql"
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count);
 
-bool CheckSupportedTypes(const TTypeAnnotationNode::TListType& typesToCheck, const TSet<TString>& typesSupported, const TSet<NUdf::EDataSlot>& dataSlotsSupported, std::function<void(const TString&)> unsupportedTypeHandler);
+bool CheckSupportedTypes(
+    const TTypeAnnotationNode::TListType& typesToCheck,
+    const TSet<TString>& typesSupported,
+    const TSet<NUdf::EDataSlot>& dataSlotsSupported,
+    std::function<void(const TString&)> unsupportedTypeHandler,
+    bool allowNestedOptionals = true
+);
 
 }

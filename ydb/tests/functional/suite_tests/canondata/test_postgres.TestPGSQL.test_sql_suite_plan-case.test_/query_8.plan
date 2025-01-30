@@ -49,6 +49,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_case.test_plan/CASE_TBL",
                                                         "ReadColumns": [
                                                             "i"
                                                         ],

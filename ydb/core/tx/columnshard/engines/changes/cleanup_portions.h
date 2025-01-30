@@ -1,5 +1,6 @@
 #pragma once
 #include "abstract/abstract.h"
+#include "abstract/remove_portions.h"
 
 namespace NKikimr::NOlap {
 
@@ -9,6 +10,7 @@ private:
     using TBase = TColumnEngineChanges;
     THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;
     std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
+    TRemovePortionsChange PortionsToRemove;
     THashSet<ui64> TablesToDrop;
 
 protected:
@@ -37,22 +39,18 @@ protected:
         return NDataLocks::ELockCategory::Cleanup;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
-        auto portionsLock = std::make_shared<NDataLocks::TListPortionsLock>(
-            TypeString() + "::PORTIONS::" + GetTaskIdentifier(), PortionsToDrop, NDataLocks::ELockCategory::Cleanup);
-        if (TablesToDrop.size()) {
-            auto tablesLock = std::make_shared<NDataLocks::TListTablesLock>(
-                TypeString() + "::TABLES::" + GetTaskIdentifier(), TablesToDrop, NDataLocks::ELockCategory::Tables);
-            return std::shared_ptr<NDataLocks::TCompositeLock>(
-                new NDataLocks::TCompositeLock(TypeString() + "::COMPOSITE::" + GetTaskIdentifier(), { portionsLock, tablesLock }));
-        } else {
-            return portionsLock;
-        }
+        auto portionsDropLock = std::make_shared<NDataLocks::TListPortionsLock>(
+            TypeString() + "::PORTIONS_DROP::" + GetTaskIdentifier(), PortionsToDrop, NDataLocks::ELockCategory::Cleanup);
+        auto portionsRemoveLock =
+            PortionsToRemove.BuildDataLock(TypeString() + "::REMOVE::" + GetTaskIdentifier(), NDataLocks::ELockCategory::Compaction);
+        auto tablesLock = std::make_shared<NDataLocks::TListTablesLock>(
+            TypeString() + "::TABLES::" + GetTaskIdentifier(), TablesToDrop, NDataLocks::ELockCategory::Tables);
+        return NDataLocks::TCompositeLock::Build(TypeString() + "::COMPOSITE::" + GetTaskIdentifier(), {portionsDropLock, portionsRemoveLock, tablesLock});
     }
 
 public:
     TCleanupPortionsColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
         : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS) {
-
     }
 
     void AddTableToDrop(const ui64 pathId) {
@@ -65,6 +63,11 @@ public:
 
     void AddPortionToDrop(const TPortionInfo::TConstPtr& portion) {
         PortionsToDrop.emplace_back(portion);
+        PortionsToAccess->AddPortion(portion);
+    }
+
+    void AddPortionToRemove(const TPortionInfo::TConstPtr& portion) {
+        PortionsToRemove.AddPortion(portion);
         PortionsToAccess->AddPortion(portion);
     }
 
@@ -87,4 +90,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

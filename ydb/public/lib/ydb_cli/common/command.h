@@ -2,8 +2,8 @@
 
 #include "common.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/colorizer/colors.h>
@@ -136,6 +136,7 @@ public:
         bool NeedToConnect = true;
         bool NeedToCheckForUpdate = true;
         bool ForceVersionCheck = false;
+        bool AllowEmptyDatabase = false;
 
         TCredentialsGetter CredentialsGetter;
 

@@ -2,7 +2,10 @@
 
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/scheme/scheme.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/core/ymq/actor/metering.h>
+#include <ydb/core/ymq/base/limits.h>
 
 #include <chrono>
 #include <thread>
@@ -118,6 +121,55 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
     }
 
+    Y_UNIT_TEST_F(TestCreateQueueWithTags, THttpProxyTestMock) {
+        auto tags = NJson::TJsonMap{
+            {"key1", "value1"},
+            {"key2", "value2"},
+        };
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", tags}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        json = ListQueueTags({{"QueueUrl", queueUrl}});
+        UNIT_ASSERT(json["Tags"] == tags);
+
+        // The next request asks to create a queue with the same name and the same set of tags.
+        // We must return a URL to an existing queue.
+        json = CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", tags}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetByPath<TString>(json, "QueueUrl"));
+
+        // In the next requests we try to create a queue with the same name as before,
+        // but with different sets of tags. All requests must be failed.
+
+        CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", NJson::TJsonMap{
+                {"key1", "value1"},
+            }}
+        }, 400);
+
+        CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", NJson::TJsonMap{
+                {"key1", "value1"},
+                {"key2", "value0"},
+            }}
+        }, 400);
+
+        CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", NJson::TJsonMap{
+                {"key1", "value1"},
+                {"key2", "value2"},
+                {"key3", "value3"},
+            }}
+        }, 400);
+    }
+
     Y_UNIT_TEST_F(TestGetQueueUrl, THttpProxyTestMock) {
         auto json = GetQueueUrl({}, 400);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");
@@ -179,6 +231,143 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             {"MessageBody", "MessageBody-1"},
             {"DelaySeconds", 900}
         });
+    }
+
+    Y_UNIT_TEST_F(BillingRecordsForJsonApi, THttpProxyTestMockWithMetering) {
+        auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
+
+        // loadBillingRecords was copied from metering_ut.cpp.
+        // Probably, that file is a better place for this test.
+        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
+            TString data = TFileInput(filepath).ReadAll();
+            auto rawRecords = SplitString(data, "\n");
+            TVector<NSc::TValue> records;
+            for (auto& record : rawRecords) {
+                records.push_back(NSc::TValue::FromJson(record));
+            }
+            return records;
+        };
+
+        TVector<NSc::TValue> records;
+        auto waitBillingRecords = [&]() {
+            static size_t expectedCount = 0;
+            expectedCount += 3;  // 2 traffic records, 1 request record
+            while (records.size() != expectedCount) {
+                Sleep(TDuration::Seconds(1));
+                records = loadBillingRecords(meteringLogFilePath);
+            }
+        };
+        auto queueTags = NJson::TJsonMap{
+            {"k1", "v1"},
+            {"k2", "v2"},
+        };
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", queueTags}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        waitBillingRecords();
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", TString(1_KB, 'x')},  // 1 request unit
+        });
+        waitBillingRecords();
+
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        waitBillingRecords();
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", TString(150_KB, 'x')},  // 3 request units
+        });
+        waitBillingRecords();
+
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        waitBillingRecords();
+
+        auto makeRecordTags = [](TVector<std::pair<TString, TString>> pairs) {
+            NSc::TValue tags;
+            tags.SetDict();
+            for (auto const& [k, v] : pairs) {
+                tags[k] = v;
+            }
+            return tags;
+        };
+        NSc::TValue queueTagsDict;
+        queueTagsDict.SetDict();
+        for (auto const& [k, v] : queueTags.GetMapSafe()) {
+            queueTagsDict[k] = v.GetString();
+        }
+        auto makeRecord = [&makeRecordTags](
+            TString type,
+            TString resourceId,
+            size_t quantity,
+            TVector<std::pair<TString, TString>> tags,
+            NSc::TValue queueTags = {}
+        ) {
+            return NKikimr::NSQS::CreateMeteringBillingRecord(
+                "folder4",
+                resourceId,
+                type,
+                "fqdn",
+                TInstant::Now(),
+                quantity,
+                type == "ymq.traffic.v1" ? "byte" : "request",
+                makeRecordTags(tags),
+                queueTags
+            );
+        };
+
+        TVector<NSc::TValue> expectedRecords{
+            // CreateQueue
+            makeRecord("ymq.traffic.v1", "", 0, {{"direction", "ingress"}, {"type", "inet"}}),
+            makeRecord("ymq.traffic.v1", "", 0, {{"direction", "egress"}, {"type", "inet"}}),
+            makeRecord("ymq.requests.v1", "", 1, {{"queue_type", "other"}}),
+
+            // SendMessage 1 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}, queueTagsDict),
+
+            // ReceiveMessage 1 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}, queueTagsDict),
+
+            // SendMessage 150 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}, queueTagsDict),
+
+            // ReceiveMessage 150 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}, queueTagsDict),
+        };
+
+        auto asExpected = [](NSc::TValue record, NSc::TValue expected) {
+            return record["folder_id"] == expected["folder_id"] &&
+                   record["resource_id"] == expected["resource_id"] &&
+                   record["schema"] == expected["schema"] &&
+                   record["usage"]["unit"] == expected["usage"]["unit"] &&
+                   (record["schema"] != "ymq.requests.v1" || record["usage"]["quantity"] == expected["usage"]["quantity"]) &&
+                   record["tags"]["direction"] == expected["tags"]["direction"] &&
+                   record["tags"]["queue_type"] == expected["tags"]["queue_type"] &&
+                   record["labels"]["k1"] == expected["labels"]["k1"] &&
+                   record["labels"]["k2"] == expected["labels"]["k2"];
+        };
+        for (size_t i = 0; i < records.size(); ++i) {
+            UNIT_ASSERT(asExpected(records[i], expectedRecords[i]));
+        }
     }
 
     Y_UNIT_TEST_F(TestSendMessageEmptyQueueUrl, THttpProxyTestMockForSQS) {
@@ -1009,4 +1198,151 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(json["Successful"][0]["Id"], "Id-0");
         UNIT_ASSERT_VALUES_EQUAL(json["Successful"][1]["Id"], "Id-1");
     }
+
+    Y_UNIT_TEST_F(TestListQueueTags, THttpProxyTestMock) {
+        auto queues = TVector{
+            CreateQueue({{"QueueName", "ExampleQueueName"}}),
+            CreateQueue({{"QueueName", "ExampleQueueName.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}}),
+        };
+        for (const auto& q : queues) {
+            auto queueUrl = GetByPath<TString>(q, "QueueUrl");
+            auto response = ListQueueTags({{"QueueUrl", queueUrl}});
+            UNIT_ASSERT_VALUES_EQUAL(response.GetMapSafe().size(), 0);
+        }
+    }
+
+    Y_UNIT_TEST_F(TestTagQueue, THttpProxyTestMock) {
+        using NJson::TJsonMap;
+        using NJson::TJsonArray;
+        auto queues = TVector{
+            CreateQueue({{"QueueName", "ExampleQueueName"}}),
+            CreateQueue({{"QueueName", "ExampleQueueName.fifo"}, {"Attributes", TJsonMap{{"FifoQueue", "true"}}}}),
+        };
+        for (const auto& q : queues) {
+            auto queueUrl = GetByPath<TString>(q, "QueueUrl");
+
+            {
+                // Check that we can update a value of an existing tag.
+
+                auto key = TString("key");
+
+                TagQueue({{"QueueUrl", queueUrl}, {"Tags", TJsonMap{{key, "x"}}}});
+                auto json = ListQueueTags({{"QueueUrl", queueUrl}});
+                UNIT_ASSERT((json["Tags"] == TJsonMap{{key, "x"}}));
+
+                TagQueue({{"QueueUrl", queueUrl}, {"Tags", TJsonMap{{key, "y"}}}});
+                json = ListQueueTags({{"QueueUrl", queueUrl}});
+                UNIT_ASSERT((json["Tags"] == TJsonMap{{key, "y"}}));
+
+                UntagQueue({{"QueueUrl", queueUrl}, {"TagKeys", TJsonArray{key}}});
+            }
+
+            {
+                // Multiple tags per query.
+
+                auto setTags = TJsonMap{
+                    {"key1", "value1"},
+                    {"key2", "value2"},
+                };
+                TagQueue({{"QueueUrl", queueUrl}, {"Tags", setTags}});
+                auto json = ListQueueTags({{"QueueUrl", queueUrl}});
+
+                UNIT_ASSERT_VALUES_EQUAL(json.GetMapSafe().size(), 1);
+                UNIT_ASSERT(json["Tags"] == setTags);
+            }
+
+            {
+                // Existing tags should not be lost after the next query.
+
+                TagQueue({{"QueueUrl", queueUrl}, {"Tags", TJsonMap{
+                    {"key3", "value3"},
+                }}});
+                auto json = ListQueueTags({{"QueueUrl", queueUrl}});
+
+                UNIT_ASSERT_VALUES_EQUAL(json.GetMapSafe().size(), 1);
+                UNIT_ASSERT((json["Tags"] == TJsonMap{
+                    {"key1", "value1"},
+                    {"key2", "value2"},
+                    {"key3", "value3"},
+                }));
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(TestUntagQueue, THttpProxyTestMock) {
+        auto queues = TVector{
+            CreateQueue({{"QueueName", "ExampleQueueName"}}),
+            CreateQueue({{"QueueName", "ExampleQueueName.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}}),
+        };
+        for (const auto& q : queues) {
+            auto queueUrl = GetByPath<TString>(q, "QueueUrl");
+
+            UntagQueue({{"QueueUrl", queueUrl}, {"TagKeys", NJson::TJsonArray{"key0"}}});
+
+            auto setTags = NJson::TJsonMap{
+                {"key1", "value1"},
+                {"key2", "value2"},
+                {"key3", "value3"},
+            };
+            TagQueue({{"QueueUrl", queueUrl}, {"Tags", setTags}});
+
+            auto json = ListQueueTags({{"QueueUrl", queueUrl}});
+            UNIT_ASSERT(json["Tags"] == setTags);
+
+            UntagQueue({{"QueueUrl", queueUrl}, {"TagKeys", NJson::TJsonArray{"key1"}}});
+            json = ListQueueTags({{"QueueUrl", queueUrl}});
+            UNIT_ASSERT((json["Tags"] == NJson::TJsonMap{
+                {"key2", "value2"},
+                {"key3", "value3"},
+            }));
+
+            UntagQueue({{"QueueUrl", queueUrl}, {"TagKeys", NJson::TJsonArray{"key1", "key2", "key3"}}});
+            json = ListQueueTags({{"QueueUrl", queueUrl}});
+            UNIT_ASSERT(json.GetMapSafe().empty());
+        }
+    }
+
+    Y_UNIT_TEST_F(TestTagQueueMultipleQueriesInflight, THttpProxyTestMock) {
+        // Without additional checks, a Tag/UntagQueue queries may overwrite
+        // changes made by a different query run in parallel.
+        // Current behavior: if there was a conflicting query, return 500 error.
+        // This test either stops after an internal error, or completes successfully,
+        // and the queue does not have any tags.
+
+        auto queues = TVector{
+            CreateQueue({{"QueueName", "ExampleQueueName"}}),
+            CreateQueue({{"QueueName", "ExampleQueueName.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}}),
+        };
+        for (const auto& q : queues) {
+            auto queueUrl = GetByPath<TString>(q, "QueueUrl");
+
+            std::atomic<bool> stop = false;
+            {
+                // Additional scope to wait for the async results before running ListQueueTags query.
+                TVector<std::future<void>> asyncResults;
+                for (size_t i = 0; i < NKikimr::NSQS::TLimits::MaxTagCount; ++i) {
+                    asyncResults.emplace_back(std::async(std::launch::async, [&, i]() {
+                        auto key = TStringBuilder() << "k" << i;
+                        for (size_t j = 0; j < 20 && !stop; ++j) {
+                            auto json = TagQueue({{"QueueUrl", queueUrl}, {"Tags", NJson::TJsonMap{{key, "v"}}}}, 0);
+                            auto map = json.GetMapSafe();
+                            if (!map.empty() && map["__type"] == "InternalFailure") {
+                                stop = true;
+                            }
+
+                            json = UntagQueue({{"QueueUrl", queueUrl}, {"TagKeys", NJson::TJsonArray{key}}}, 0);
+                            map = json.GetMapSafe();
+                            if (!map.empty() && map["__type"] == "InternalFailure") {
+                                stop = true;
+                            }
+                        }
+                    }));
+                }
+            }
+
+            auto json = ListQueueTags({{"QueueUrl", queueUrl}});
+            UNIT_ASSERT(stop || json.GetMapSafe().empty());
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(TestYmqHttpProxy)

@@ -320,7 +320,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             SetDatabase(proposal.get(), *this->Request_);
 
             if (this->Request_->GetSerializedToken().empty()) {
-                if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+                if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                     return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                           "Unauthenticated access is forbidden, please provide credentials");
                 }
@@ -344,7 +344,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 request->UserToken = new NACLib::TUserToken(token);
                 return true;
             }
-            return !(AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
+            return !(AppData()->EnforceUserTokenRequirement || AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
         }
 
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
@@ -572,7 +572,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         bool SetRequestToken(NSchemeCache::TSchemeCacheNavigate* request) const override {
             if (Request.Token.empty()) {
-                return !(AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
+                return !(AppData()->EnforceUserTokenRequirement || AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
             } else {
                 request->UserToken = new NACLib::TUserToken(Request.Token);
                 return true;

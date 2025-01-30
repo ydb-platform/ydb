@@ -31,6 +31,9 @@ app_main_class="str"
 jar_source_set="list"
 enable_preview="flag"
 use_annotation_processor="list"
+use_errorprone="flag"
+jdk_version="str"
+jdk_path="str"
 
 publish="flag"
 publish_group="str"
@@ -66,6 +69,13 @@ runs-out="list"
 runs-out_dir="list"
 runs-tool="list"
 
+custom_runs="list"
+custom_runs-depends="list"
+custom_runs-env="list"
+custom_runs-command="list"
+custom_runs-outputs="list"
+custom_runs-cwd="str"
+
 javac-flags="list"
 
 [attrs.root]
@@ -85,4 +95,5 @@ test=[
     "/src/test/java",
     "/src/test-integration",
     "/src/testFixtures",
+    "/src/intTest",
 ]

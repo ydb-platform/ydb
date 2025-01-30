@@ -14,7 +14,7 @@
 
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 namespace NYql {
 
@@ -78,6 +78,7 @@ public:
         bool Retriable = false;
         bool Truncated = false;
         ui64 RowsCount = 0;
+        bool Timeout = false;
 
         TOperationStatistics Statistics;
 

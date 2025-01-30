@@ -58,7 +58,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         };
 
         for (const auto& table : Record.GetTables()) {
-            const TPathId pathId = PathIdFromPathId(table.GetPathId());
+            const TPathId pathId = TPathId::FromProto(table.GetPathId());
             const TString columnTags = JoinVectorIntoString(TVector<ui32>{table.GetColumnTags().begin(),table.GetColumnTags().end()},",");
             const auto status = TForceTraversalTable::EStatus::None;
 

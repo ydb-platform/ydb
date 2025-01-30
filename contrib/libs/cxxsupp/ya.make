@@ -2,10 +2,9 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-# Proxy library
-LICENSE(Not-Applicable)
-
 VERSION(Service-proxy-version)
+
+LICENSE(Service-Sourceless-Library)
 
 NO_PLATFORM()
 

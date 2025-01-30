@@ -1,9 +1,10 @@
 #include "file_writer.h"
 
-#include <yt/cpp/mapreduce/io/helpers.h>
+#include <yt/cpp/mapreduce/common/helpers.h>
+
 #include <yt/cpp/mapreduce/interface/finish_or_die.h>
 
-#include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/io/helpers.h>
 
 namespace NYT {
 
@@ -11,6 +12,7 @@ namespace NYT {
 
 TFileWriter::TFileWriter(
     const TRichYPath& path,
+    const IRawClientPtr& rawClient,
     IClientRetryPolicyPtr clientRetryPolicy,
     ITransactionPingerPtr transactionPinger,
     const TClientContext& context,
@@ -18,6 +20,7 @@ TFileWriter::TFileWriter(
     const TFileWriterOptions& options)
     : AutoFinish_(options.AutoFinish_)
     , RetryfulWriter_(
+        rawClient,
         std::move(clientRetryPolicy),
         std::move(transactionPinger),
         context,

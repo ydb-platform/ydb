@@ -25,7 +25,8 @@ public:
         PREPARING,
         PREPARED,
         EXECUTING,
-        FINISHED
+        FINISHED,
+        ERROR,
     };
 
     enum EAction {
@@ -37,6 +38,8 @@ public:
 
     virtual void AddShard(ui64 shardId, bool isOlap, const TString& path) = 0;
     virtual void AddAction(ui64 shardId, ui8 action) = 0;
+    virtual void AddTopic(ui64 topicId, const TString& path) = 0;
+    virtual void AddTopicsToShards() = 0;
     virtual bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock) = 0;
 
     virtual void BreakLock(ui64 shardId) = 0;
@@ -47,7 +50,19 @@ public:
     virtual TVector<NKikimrDataEvents::TLock> GetLocks(ui64 shardId) const = 0;
 
     virtual EShardState GetState(ui64 shardId) const = 0;
-    virtual void SetState(ui64 shardId, EShardState state) = 0;
+    virtual void SetError(ui64 shardId) = 0;
+
+    virtual void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) = 0;
+    virtual std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> GetPartitioning(const TTableId tableId) const = 0;
+
+    virtual void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) = 0;
+    virtual const NTopic::TTopicOperations& GetTopicOperations() const = 0;
+
+    virtual void SetAllowVolatile(bool allowVolatile) = 0;
+
+    virtual void BuildTopicTxs(NTopic::TTopicOperationTransactions& txs) = 0;
+
+    virtual bool HasTopics() const = 0;
 
     virtual bool IsTxPrepared() const = 0;
     virtual bool IsTxFinished() const = 0;

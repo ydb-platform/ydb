@@ -152,15 +152,17 @@ private:
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
 
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
+    void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, NWilson::TSpan& span);
     void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                       NKikimrPQ::TError::EKind kind, const TString& reason);
     void ReplyErrorForStoredWrites(const TActorContext& ctx);
 
     void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset, const TInstant writeTimestamp, const TInstant createTimestamp);
     void ReplyOk(const TActorContext& ctx, const ui64 dst);
-    void ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& ownerCookie, ui64 seqNo);
+    void ReplyOk(const TActorContext& ctx, const ui64 dst, NWilson::TSpan& span);
+    void ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& ownerCookie, ui64 seqNo, NWilson::TSpan& span);
 
-    void ReplyWrite(const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, TDuration partitionQuotedTime, TDuration topicQuotedTime, TDuration queueTime, TDuration writeTime);
+    void ReplyWrite(const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, TDuration partitionQuotedTime, TDuration topicQuotedTime, TDuration queueTime, TDuration writeTime, NWilson::TSpan& span);
     void SendReadingFinished(const TString& consumer);
 
     void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx);
@@ -404,9 +406,10 @@ private:
     void InitSplitMergeSlidingWindow();
 
     template <typename T>
-    void EmplacePendingRequest(T&& body, const TActorContext& ctx) {
+    void EmplacePendingRequest(T&& body, NWilson::TSpan&& span, const TActorContext& ctx) {
         const auto now = ctx.Now();
-        PendingRequests.emplace_back(body, now - TInstant::Zero());
+        auto& msg = PendingRequests.emplace_back(body, std::move(span), now - TInstant::Zero());
+        AttachPersistRequestSpan(msg.Span);
      }
 
     void EmplaceResponse(TMessage&& message, const TActorContext& ctx);
@@ -754,6 +757,10 @@ private:
     TMaybe<TPartitionSourceManager::TModificationBatch> SourceIdBatch;
     TMaybe<ProcessParameters> Parameters;
     THolder<TEvKeyValue::TEvRequest> PersistRequest;
+    NWilson::TSpan PersistRequestSpan;
+    NWilson::TSpan CurrentPersistRequestSpan;
+
+    void AttachPersistRequestSpan(NWilson::TSpan& span); // create persist request span if we have non empty trace id in input span, then link it
 
     void BeginHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     void EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);

@@ -103,9 +103,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     TString BuildStreamPath() const {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
-            return CanonizePath(ChildPath(SplitPath(SrcPath), Changefeed.GetName()));
+            return CanonizePath(ChildPath(SplitPath(SrcPath), TString{Changefeed.GetName()}));
         case TReplication::ETargetKind::IndexTable:
-            return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", Changefeed.GetName()}));
+            return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", TString{Changefeed.GetName()}}));
         }
     }
 
@@ -134,7 +134,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         auto& result = ev->Get()->Result;
 
         if (result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
-            return Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYql::TIssues()));
+            return Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         }
 
         if (!result.IsSuccess()) {
@@ -217,9 +217,9 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
-    const auto& config = replication->GetConfig();
-    const auto resolvedTimestamps = config.HasStrongConsistency()
-        ? std::make_optional(TDuration::MilliSeconds(config.GetStrongConsistency().GetCommitIntervalMilliSeconds()))
+    const auto& config = replication->GetConfig().GetConsistencySettings();
+    const auto resolvedTimestamps = config.HasGlobal()
+        ? std::make_optional(TDuration::MilliSeconds(config.GetGlobal().GetCommitIntervalMilliSeconds()))
         : std::nullopt;
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),

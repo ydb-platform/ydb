@@ -227,7 +227,7 @@ TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t
             ss << "[";
             size_t i = 0;
             for (auto& [e, gen_e]: *columnOrder) {
-                
+
                 ss << "(" << e << "->" << gen_e << ")";
                 if (++i != columnOrder->Size()) {
                     ss << ", ";
@@ -341,6 +341,10 @@ TString TModuleResolver::NormalizeModuleName(const TString& path) {
         return path.substr(0, path.size() - 4);
     }
 
+    if (path.EndsWith(".yqls")) {
+        return path.substr(0, path.size() - 5);
+    }
+
     return path;
 }
 
@@ -366,6 +370,11 @@ const TExportTable* TModuleResolver::GetModule(const TString& module) const {
     }
 
     return Modules.FindPtr(normalizedModuleName);
+}
+
+void TModuleResolver::WriteStatistics(NYson::TYsonWriter& writer) {
+    writer.OnKeyedItem("UsedSuffixes");
+    writer.OnStringScalar(JoinRange(",", UsedSuffixes.begin(), UsedSuffixes.end()));
 }
 
 bool TModuleResolver::AddFromUrl(const std::string_view& file, const std::string_view& url, const std::string_view& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) {
@@ -405,11 +414,13 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
     const auto fullName = TUserDataStorage::MakeFullName(file);
     const bool isSql = file.ends_with(".sql");
     const bool isYql = file.ends_with(".yql");
-    if (!isSql && !isYql) {
-        ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported syntax of library file, expected one of (.sql, .yql): " << file));
+    const bool isYqls = file.ends_with(".yqls");
+    if (!isSql && !isYql && !isYqls) {
+        ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported syntax of library file, expected one of (.sql, .yql, .yqls): " << file));
         return false;
     }
 
+    UsedSuffixes.insert(TString(file.substr(1 + file.rfind('.'))));
     const TUserDataBlock* block = UserData->FindUserDataBlock(fullName);
 
     if (!block) {
@@ -450,7 +461,7 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
         }
     }
 
-    return AddFromMemory(fullName, moduleName, isYql, body, ctx, syntaxVersion, packageVersion, pos);
+    return AddFromMemory(fullName, moduleName, isYql || isYqls, body, ctx, syntaxVersion, packageVersion, pos);
 }
 
 bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) {
@@ -462,11 +473,13 @@ bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString&
     const auto fullName = TUserDataStorage::MakeFullName(file);
     const bool isSql = file.ends_with(".sql");
     const bool isYql = file.ends_with(".yql");
-    if (!isSql && !isYql) {
-        ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported syntax of library file, expected one of (.sql, .yql): " << file));
+    const bool isYqls = file.ends_with(".yqls");
+    if (!isSql && !isYql && !isYqls) {
+        ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported syntax of library file, expected one of (.sql, .yql, .yqls): " << file));
         return false;
     }
 
+    UsedSuffixes.insert(TString(file.substr(1 + file.rfind('.'))));
     moduleName = TModuleResolver::NormalizeModuleName(TString(file));
     if (GetModule(moduleName) || Libs.contains(moduleName)) {
         auto it = Libs.find(moduleName);
@@ -477,10 +490,10 @@ bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString&
         }
     }
 
-    return AddFromMemory(fullName, moduleName, isYql, body, ctx, syntaxVersion, packageVersion, pos, exports, imports);
+    return AddFromMemory(fullName, moduleName, isYql || isYqls, body, ctx, syntaxVersion, packageVersion, pos, exports, imports);
 }
 
-bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& moduleName, bool isYql, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports, std::vector<TString>* imports) {
+bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& moduleName, bool sExpr, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports, std::vector<TString>* imports) {
     auto query = body;
     if (QContext.CanRead()) {
         auto item = QContext.GetReader()->Get({ModuleResolverComponent, fullName}).GetValueSync();
@@ -501,7 +514,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
     };
 
     TAstParseResult astRes;
-    if (isYql) {
+    if (sExpr) {
         astRes = ParseAst(query, nullptr, fullName);
         if (!astRes.IsOk()) {
             ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to parse YQL: " << fullName), astRes.Issues));

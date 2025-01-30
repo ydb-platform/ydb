@@ -17,25 +17,27 @@ namespace {
 class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public ITopicFormatHandler, public TTypeParser {
     using TBase = NActors::TActor<TTopicFormatHandler>;
 
+    static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_FORMAT_HANDLER";
+
     struct TCounters {
-        const NMonitoring::TDynamicCounterPtr CountersRoot;
-        const NMonitoring::TDynamicCounterPtr CountersSubgroup;
+        TCountersDesc Desc;
 
         NMonitoring::TDynamicCounters::TCounterPtr ActiveFormatHandlers;
         NMonitoring::TDynamicCounters::TCounterPtr ActiveClients;
 
-        TCounters(NMonitoring::TDynamicCounterPtr counters, const TSettings& settings)
-            : CountersRoot(counters)
-            , CountersSubgroup(counters->GetSubgroup("format", settings.ParsingFormat))
+        TCounters(const TCountersDesc& counters, const TSettings& settings)
+            : Desc(counters)
         {
+            Desc.CountersSubgroup = Desc.CountersSubgroup->GetSubgroup("format", settings.ParsingFormat);
+
             Register();
         }
 
     private:
         void Register() {
-            ActiveFormatHandlers = CountersRoot->GetCounter("ActiveFormatHandlers", false);
+            ActiveFormatHandlers = Desc.CountersRoot->GetCounter("ActiveFormatHandlers", false);
 
-            ActiveClients = CountersSubgroup->GetCounter("ActiveClients", false);
+            ActiveClients = Desc.CountersSubgroup->GetCounter("ActiveClients", false);
         }
     };
 
@@ -186,7 +188,7 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
             return ColumnsIds;
         }
 
-        TMaybe<ui64> GetNextMessageOffset() const override {
+        std::optional<ui64> GetNextMessageOffset() const override {
             return Client->GetNextMessageOffset();
         }
 
@@ -205,6 +207,13 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
         void OnFilterStarted() override {
             ClientStarted = true;
             Client->StartClientSession();
+        }
+
+        void OnFilteredBatch(ui64 firstRow, ui64 lastRow) override {
+            LOG_ROW_DISPATCHER_TRACE("OnFilteredBatch, rows [" << firstRow << ", " << lastRow << "]");
+            for (ui64 rowId = firstRow; rowId <= lastRow; ++rowId) {
+                OnFilteredData(rowId);
+            }
         }
 
         void OnFilteredData(ui64 rowId) override {
@@ -282,9 +291,9 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
     };
 
 public:
-    TTopicFormatHandler(const TFormatHandlerConfig& config, const TSettings& settings, NMonitoring::TDynamicCounterPtr counters)
+    TTopicFormatHandler(const TFormatHandlerConfig& config, const TSettings& settings, const TCountersDesc& counters)
         : TBase(&TTopicFormatHandler::StateFunc)
-        , TTypeParser(__LOCATION__)
+        , TTypeParser(__LOCATION__, counters.CopyWithNewMkqlCountersName("row_dispatcher"))
         , Config(config)
         , Settings(settings)
         , LogPrefix(TStringBuilder() << "TTopicFormatHandler [" << Settings.ParsingFormat << "]: ")
@@ -326,8 +335,11 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvPoison::TPtr&) {
-        with_lock(Alloc) {
-            Clients.clear();
+        if (Filters) {
+            for (const auto& [clientId, _] : Clients) {
+                Filters->RemoveFilter(clientId);
+            }
+            Filters.Reset();
         }
         PassAway();
     }
@@ -338,8 +350,12 @@ public:
     }
 
 public:
-    void ParseMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
         LOG_ROW_DISPATCHER_TRACE("Send " << messages.size() << " messages to parser");
+
+        if (!messages.empty()) {
+            CurrentOffset = messages.back().GetOffset();
+        }
 
         if (Parser) {
             Parser->ParseMessages(messages);
@@ -359,6 +375,13 @@ public:
 
     TStatus AddClient(IClientDataConsumer::TPtr client) override {
         LOG_ROW_DISPATCHER_DEBUG("Add client with id " << client->GetClientId());
+
+        if (const auto clientOffset = client->GetNextMessageOffset()) {
+            if (Parser && CurrentOffset && *CurrentOffset > *clientOffset) {
+                LOG_ROW_DISPATCHER_DEBUG("Parser was flushed due to new historical offset " << *clientOffset << "(previous parser offset: " << *CurrentOffset << ")");
+                Parser->Refresh(true);
+            }
+        }
 
         auto clientHandler = MakeIntrusive<TClientHandler>(*this, client);
         if (!Clients.emplace(client->GetClientId(), clientHandler).second) {
@@ -487,18 +510,19 @@ private:
     }
 
     TValueStatus<ITopicParser::TPtr> CreateParserForFormat() const {
+        const auto& counters = Counters.Desc.CopyWithNewMkqlCountersName("row_dispatcher_parser");
         if (Settings.ParsingFormat == "raw") {
-            return CreateRawParser(ParserHandler);
+            return CreateRawParser(ParserHandler, counters);
         }
         if (Settings.ParsingFormat == "json_each_row") {
-            return CreateJsonParser(ParserHandler, Config.JsonParserConfig);
+            return CreateJsonParser(ParserHandler, Config.JsonParserConfig, counters);
         }
         return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Unsupported parsing format: " << Settings.ParsingFormat);
     }
 
     void CreateFilters() {
         if (!Filters) {
-            Filters = CreateTopicFilters(SelfId(), Config.FiltersConfig, Counters.CountersSubgroup);
+            Filters = CreateTopicFilters(SelfId(), Config.FiltersConfig, Counters.Desc.CountersSubgroup);
         }
     }
 
@@ -545,6 +569,7 @@ private:
     ITopicParser::TPtr Parser;
     TParserHandler::TPtr ParserHandler;
     ITopicFilters::TPtr Filters;
+    std::optional<ui64> CurrentOffset;
 
     // Parsed data
     const TVector<ui64>* Offsets;
@@ -567,7 +592,7 @@ void ITopicFormatHandler::TDestroy::Destroy(ITopicFormatHandler* handler) {
     }
 }
 
-ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, NMonitoring::TDynamicCounterPtr counters) {
+ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters) {
     const auto handler = new TTopicFormatHandler(config, settings, counters);
     owner.RegisterWithSameMailbox(handler);
     return ITopicFormatHandler::TPtr(handler);
@@ -585,7 +610,7 @@ TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConf
 namespace NTests {
 
 ITopicFormatHandler::TPtr CreateTestFormatHandler(const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings) {
-    const auto handler = new TTopicFormatHandler(config, settings, MakeIntrusive<NMonitoring::TDynamicCounters>());
+    const auto handler = new TTopicFormatHandler(config, settings, {});
     NActors::TActivationContext::ActorSystem()->Register(handler);
     return ITopicFormatHandler::TPtr(handler);
 }

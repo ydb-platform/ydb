@@ -168,6 +168,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     Y_UNIT_TEST(IsNull) {
@@ -252,8 +253,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             auto describeResult = session.DescribeTable("/Root/DecimalTest" , TDescribeTableSettings().WithKeyShardBoundary(true)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NYdb::EStatus::SUCCESS);
             const NYdb::NTable::TTableDescription& tableDescription = describeResult.GetTableDescription();
-            const TVector<NYdb::NTable::TKeyRange>& keyRanges = tableDescription.GetKeyRanges();
-            const TVector<NYdb::NTable::TTableColumn>& columns = tableDescription.GetTableColumns();
+            const std::vector<NYdb::NTable::TKeyRange>& keyRanges = tableDescription.GetKeyRanges();
+            const std::vector<NYdb::NTable::TTableColumn>& columns = tableDescription.GetTableColumns();
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Type.ToString(), "Decimal(22,9)?");
             UNIT_ASSERT_STRINGS_EQUAL(columns[1].Type.ToString(), "Decimal(35,10)?");
@@ -1350,8 +1351,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_EQUAL_C(part.GetStatus(), EStatus::PRECONDITION_FAILED, part.GetStatus());
         part.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(HasIssue(part.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-            [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Requested too many execution units");
+            [](const auto& issue) {
+                return issue.GetMessage().contains("Requested too many execution units");
             }));
 
         part = it.ReadNext().GetValueSync();
@@ -1734,7 +1735,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         for (auto v : {1, 2, 3, 42, 50, 100}) {
             pl.AddListItem().OptionalUint64(v);
         }
-        pl.AddListItem().OptionalUint64(Nothing());
+        pl.AddListItem().OptionalUint64(std::nullopt);
         pl.EndList().Build();
 
         auto it = db.StreamExecuteScanQuery(query, params.Build()).GetValueSync();
@@ -1791,9 +1792,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             UNIT_ASSERT_C(!streamPart.IsSuccess(), streamPart.GetIssues().ToString());
             UNIT_ASSERT_C(!streamPart.EOS(), streamPart.GetIssues().ToString());
             UNIT_ASSERT(
-                HasIssue(streamPart.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("Terminate was called")   // general termination prefix
-                           && issue.GetMessage().Contains("Bad filter value.");  // test specific UDF exception
+                HasIssue(streamPart.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const auto& issue) {
+                    return issue.GetMessage().contains("Terminate was called")   // general termination prefix
+                           && issue.GetMessage().contains("Bad filter value.");  // test specific UDF exception
                 }));
         };
 
@@ -1803,7 +1804,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(SecondaryIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2107,8 +2107,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto result = it.ReadNext().GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("ATOM evaluation is not supported in YDB queries.");
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const auto& issue) {
+            return issue.GetMessage().contains("ATOM evaluation is not supported in YDB queries.");
         }));
     }
 
@@ -2320,7 +2320,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(StreamLookupByFullPk) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
@@ -2470,7 +2469,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(LimitOverSecondaryIndexRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2510,7 +2508,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(TopSortOverSecondaryIndexRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

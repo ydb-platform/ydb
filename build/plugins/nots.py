@@ -295,8 +295,8 @@ def _with_report_configure_error(fn):
     return _wrapper
 
 
-def _build_directives(name: str, flags: list[str] | tuple[str], paths: list[str]) -> str:
-    parts = [p for p in [name] + (flags or []) if p]
+def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
+    parts = [p for p in (flags or []) if p]
     parts_str = ";".join(parts)
     expressions = ['${{{parts}:"{path}"}}'.format(parts=parts_str, path=path) for path in paths]
 
@@ -307,7 +307,7 @@ def _build_cmd_input_paths(paths: list[str] | tuple[str], hide=False, disable_in
     hide_part = "hide" if hide else ""
     disable_ip_part = "context=TEXT" if disable_include_processor else ""
 
-    return _build_directives("input", [hide_part, disable_ip_part], paths)
+    return _build_directives([hide_part, disable_ip_part, "input"], paths)
 
 
 def _create_erm_json(unit: NotsUnitType):
@@ -784,13 +784,13 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
 
     if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
         unit.set(["_PREPARE_DEPS_RESOURCES", " ".join([f'${{resource:"{uri}"}}' for uri in sorted(resources)])])
         unit.set(["_PREPARE_DEPS_USE_RESOURCES_FLAG", "--resource-root $(RESOURCE_ROOT)"])
 
     else:
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", [], sorted(outs)))
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["output"], sorted(outs)))
         unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
 
 
@@ -805,9 +805,9 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
         local_cli = unit.get("TS_LOCAL_CLI") == "yes"
         ins, outs = pm.calc_node_modules_inouts(local_cli, has_deps)
 
-        __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
+        __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
         if not unit.get("TS_TEST_FOR"):
-            __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+            __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
 
         if pj.get_use_prebuilder():
             unit.on_peerdir_ts_resource("@yatool/prebuilder")
@@ -935,7 +935,7 @@ def on_set_ts_test_for_vars(unit: NotsUnitType, for_mod: str) -> None:
 
 @_with_report_configure_error
 def on_ts_files(unit: NotsUnitType, *files: str) -> None:
-    new_cmds = ['$COPY_CMD ${{input;context=TEXT:"{0}"}} ${{output;noauto:"{0}"}}'.format(f) for f in files]
+    new_cmds = ['$COPY_CMD ${{context=TEXT;input:"{0}"}} ${{noauto;output:"{0}"}}'.format(f) for f in files]
     all_cmds = unit.get("_TS_FILES_COPY_CMD")
     if all_cmds:
         new_cmds.insert(0, all_cmds)
@@ -959,7 +959,7 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
     # TODO: FBP-1795
     # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
     new_cmds = [
-        '$COPY_CMD ${{input;context=TEXT:"${{BINDIR}}/{0}"}} ${{output;noauto:"{1}/{0}"}}'.format(f, destination)
+        '$COPY_CMD ${{context=TEXT;input:"${{BINDIR}}/{0}"}} ${{noauto;output:"{1}/{0}"}}'.format(f, destination)
         for f in files
     ]
     all_cmds = unit.get("_TS_FILES_COPY_CMD")

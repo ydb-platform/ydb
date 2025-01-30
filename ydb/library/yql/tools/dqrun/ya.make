@@ -12,13 +12,18 @@ ELSE()
     ENDIF()
 ENDIF()
 
+
+IF (OOM_HELPER)
+    PEERDIR(yql/essentials/utils/oom_helper)
+ENDIF()
+
     SRCS(
         dqrun.cpp
     )
 
     PEERDIR(
         contrib/libs/protobuf
-        ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+        ydb/public/sdk/cpp/src/client/persqueue_public/codecs
         ydb/library/actors/http
         library/cpp/getopt
         library/cpp/lfalloc/alloc_profiler
@@ -76,7 +81,7 @@ ENDIF()
         yql/essentials/core/url_lister
         yql/essentials/core/pg_ext
         ydb/library/yql/providers/yt/actors
-        yt/yql/providers/yt/comp_nodes/dq
+        yt/yql/providers/yt/comp_nodes/dq/llvm14
         ydb/library/yql/providers/yt/dq_task_preprocessor
         yt/yql/providers/yt/gateway/file
         yt/yql/providers/yt/gateway/native

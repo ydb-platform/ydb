@@ -4,6 +4,6 @@
 
 namespace NFq::NRowDispatcher {
 
-TValueStatus<ITopicParser::TPtr> CreateRawParser(IParsedDataConsumer::TPtr consumer);
+TValueStatus<ITopicParser::TPtr> CreateRawParser(IParsedDataConsumer::TPtr consumer, const TCountersDesc& counters);
 
 }  // namespace NFq::NRowDispatcher

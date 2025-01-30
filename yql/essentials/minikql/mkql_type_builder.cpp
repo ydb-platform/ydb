@@ -6,6 +6,7 @@
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/arrow/block_item_comparator.h>
 #include <yql/essentials/public/udf/arrow/block_item_hasher.h>
+#include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
@@ -1430,9 +1431,13 @@ private:
 
 namespace NMiniKQL {
 
-bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
+namespace {
+
+bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type, bool output) {
     switch (slot) {
     case NUdf::EDataSlot::Bool:
+        type = output ? arrow::boolean() : arrow::uint8();
+        return true;
     case NUdf::EDataSlot::Uint8:
         type = arrow::uint8();
         return true;
@@ -1517,9 +1522,18 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
     }
 }
 
-bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
+bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail, bool output) {
     bool isOptional;
     auto unpacked = UnpackOptional(itemType, isOptional);
+
+    if (output && !unpacked->IsData()) {
+        // output supports only data and optional data types
+        if (onFail) {
+            onFail(unpacked);
+        }
+        return false;
+    }
+
     if (unpacked->IsOptional() || isOptional && unpacked->IsPg()) {
         // at least 2 levels of optionals
         ui32 nestLevel = 0;
@@ -1538,7 +1552,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
 
         // previousType is always Optional
         std::shared_ptr<arrow::DataType> innerArrowType;
-        if (!ConvertArrowType(previousType, innerArrowType, onFail)) {
+        if (!ConvertArrowTypeImpl(previousType, innerArrowType, onFail, output)) {
             return false;
         }
 
@@ -1560,7 +1574,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
             std::shared_ptr<arrow::DataType> childType;
             const TString memberName(structType->GetMemberName(i));
             auto memberType = structType->GetMemberType(i);
-            if (!ConvertArrowType(memberType, childType, onFail)) {
+            if (!ConvertArrowTypeImpl(memberType, childType, onFail, output)) {
                 return false;
             }
             members.emplace_back(std::make_shared<arrow::Field>(memberName, childType, memberType->IsOptional()));
@@ -1576,7 +1590,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             std::shared_ptr<arrow::DataType> childType;
             auto elementType = tupleType->GetElementType(i);
-            if (!ConvertArrowType(elementType, childType, onFail)) {
+            if (!ConvertArrowTypeImpl(elementType, childType, onFail, output)) {
                 return false;
             }
 
@@ -1619,11 +1633,29 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
         return false;
     }
 
-    bool result = ConvertArrowType(*slot, type);
+    bool result = ConvertArrowTypeImpl(*slot, type, output);
     if (!result && onFail) {
         onFail(unpacked);
     }
     return result;
+}
+
+} // namespace
+
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
+    return ConvertArrowTypeImpl(itemType, type, onFail, false);
+}
+
+bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
+    return ConvertArrowTypeImpl(slot, type, false);
+}
+
+bool ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
+    return ConvertArrowTypeImpl(itemType, type, onFail, true);
+}
+
+bool ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
+    return ConvertArrowTypeImpl(slot, type, true);
 }
 
 void TArrowType::Export(ArrowSchema* out) const {
@@ -2521,6 +2553,8 @@ struct TComparatorTraits {
     template <typename T, bool Nullable>
     using TTzDateComparator = NUdf::TTzDateBlockItemComparator<T, Nullable>;
 
+    constexpr static bool PassType = false;
+
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
         return std::unique_ptr<TResult>(MakePgItemComparator(desc.TypeId).Release());
@@ -2553,6 +2587,8 @@ struct THasherTraits {
     template <typename T, bool Nullable>
     using TTzDateHasher = NYql::NUdf::TTzDateBlockItemHasher<T, Nullable>;
 
+    constexpr static bool PassType = false;
+
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
         return std::unique_ptr<TResult>(MakePgItemHasher(desc.TypeId).Release());
@@ -2562,7 +2598,7 @@ struct THasherTraits {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Hasher not implemented for block resources";
     }
-    
+
     template<typename TTzDate>
     static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
         if (isOptional) {
@@ -2574,11 +2610,11 @@ struct THasherTraits {
 };
 
 NUdf::IBlockItemComparator::TPtr TBlockTypeHelper::MakeComparator(NUdf::TType* type) const {
-    return NUdf::MakeBlockReaderImpl<TComparatorTraits>(TTypeInfoHelper(), type, nullptr).release();
+    return NUdf::DispatchByArrowTraits<TComparatorTraits>(TTypeInfoHelper(), type, nullptr).release();
 }
 
 NUdf::IBlockItemHasher::TPtr TBlockTypeHelper::MakeHasher(NUdf::TType* type) const {
-    return NUdf::MakeBlockReaderImpl<THasherTraits>(TTypeInfoHelper(), type, nullptr).release();
+    return NUdf::DispatchByArrowTraits<THasherTraits>(TTypeInfoHelper(), type, nullptr).release();
 }
 
 TType* TTypeBuilder::NewVoidType() const {

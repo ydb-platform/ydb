@@ -8,6 +8,7 @@
 #include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
@@ -63,6 +64,9 @@ bool FillTxSettings(const Ydb::Query::TransactionSettings& from, Ydb::Table::Tra
             break;
         case Ydb::Query::TransactionSettings::kSnapshotReadOnly:
             to.mutable_snapshot_read_only();
+            break;
+        case Ydb::Query::TransactionSettings::kSnapshotReadWrite:
+            to.mutable_snapshot_read_write();
             break;
         default:
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
@@ -211,6 +215,7 @@ private:
                 HFunc(TEvents::TEvWakeup, Handle);
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+                hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
                 HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
                 hFunc(NKikimr::NGRpcService::TEvSubscribeGrpcCancel, Handle);
                 default:
@@ -278,6 +283,8 @@ private:
             settings,
             req->pool_id());
 
+        ev->SetProgressStatsPeriod(TDuration::MilliSeconds(req->stats_period_ms()));
+
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId())) {
             NYql::TIssues issues;
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
@@ -322,13 +329,13 @@ private:
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
-        Ydb::Query::ExecuteQueryResponsePart response;
-        response.set_status(Ydb::StatusIds::SUCCESS);
-        response.set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
-        response.mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
+        Ydb::Query::ExecuteQueryResponsePart *response = ev->Get()->Arena->Allocate<Ydb::Query::ExecuteQueryResponsePart>();
+        response->set_status(Ydb::StatusIds::SUCCESS);
+        response->set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
+        response->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
         TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+        Y_PROTOBUF_SUPPRESS_NODISCARD response->SerializeToString(&out);
 
         FlowControl_.PushResponse(out.size());
         const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
@@ -348,6 +355,27 @@ private:
             << ", queue: " << FlowControl_.QueueSize());
 
         channel.SendAck(SelfId());
+    }
+
+    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+
+        Ydb::Query::ExecuteQueryResponsePart response;
+        response.set_status(Ydb::StatusIds::SUCCESS);
+
+        if (NeedReportStats(*Request_->GetProtoRequest())) {
+            if (record.HasQueryStats()) {
+                FillQueryStats(*response.mutable_exec_stats(), record.GetQueryStats());
+                response.mutable_exec_stats()->set_query_plan(NKqp::SerializeAnalyzePlan(record.GetQueryStats()));
+            }
+        }
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+
+        FlowControl_.PushResponse(out.size());
+
+        Request_->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {

@@ -31,8 +31,9 @@ public:
                            const std::shared_ptr<IPartitionChooser>& chooser,
                            NPersQueue::TTopicConverterPtr& fullConverter,
                            const TString& sourceId,
-                           std::optional<ui32> preferedPartition)
-        : TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition)
+                           std::optional<ui32> preferedPartition,
+                           NWilson::TTraceId traceId)
+        : TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId))
         , PQRBHelper(config.GetBalancerTabletID()) {
     }
 

@@ -127,7 +127,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
         return ExpandPgAggregationTraits(node->Pos(), *aggDescPtr, false, node->ChildPtr(2), argTypes, itemType, Ctx);
     }
 
-    const TString modulePath = "/lib/yql/aggregate.yql";
+    const TString modulePath = "/lib/yql/aggregate.yqls";
     auto exportsPtr = TypesCtx.Modules->GetModule(modulePath);
     YQL_ENSURE(exportsPtr, "Failed to get module " << modulePath);
     const auto& exports = exportsPtr->Symbols();
@@ -145,7 +145,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
         });
 
     Ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-    auto status = ExpandApply(traits, traits, Ctx);
+    auto status = ExpandApplyNoRepeat(traits, traits, Ctx);
     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
     return traits;
 }
@@ -709,8 +709,8 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     TExprNode::TPtr aggWideFlow;
     if (hashed) {
         aggWideFlow = Ctx.Builder(Node->Pos())
-            .Callable("WideFromBlocks")
-                .Callable(0, "ToFlow")
+            .Callable("ToFlow")
+                .Callable(0, "WideFromBlocks")
                     .Callable(0, "BlockCombineHashed")
                         .Callable(0, "FromFlow")
                             .Add(0, blocks)
@@ -2930,7 +2930,15 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
             .Build();
     }
 
-    auto aggWideFlow = Ctx.NewCallable(Node->Pos(), "WideFromBlocks", { aggBlocks });
+    auto aggWideFlow = Ctx.Builder(Node->Pos())
+        .Callable("ToFlow")
+            .Callable(0, "WideFromBlocks")
+                .Callable(0, "FromFlow")
+                    .Add(0, aggBlocks)
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
     auto finalFlow = MakeNarrowMap(Node->Pos(), outputColumns, aggWideFlow, Ctx);
     auto root = Ctx.NewCallable(Node->Pos(), "FromFlow", { finalFlow });
     auto lambdaStream = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), { streamArg }), std::move(root));

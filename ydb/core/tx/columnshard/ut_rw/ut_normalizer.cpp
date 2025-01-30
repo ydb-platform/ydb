@@ -124,9 +124,6 @@ public:
             db.Table<Schema::TableVersionInfo>().Key(1, 5, 1).Update(
                 NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(versionInfo.SerializeAsString()));
         }
-
-        db.Table<Schema::SchemaPresetInfo>().Key(10).Update(NIceDb::TUpdate<Schema::SchemaPresetInfo::Name>("default"));
-
     }
 };
 

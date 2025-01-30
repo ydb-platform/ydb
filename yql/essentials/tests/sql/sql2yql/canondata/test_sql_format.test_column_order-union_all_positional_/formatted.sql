@@ -1,7 +1,7 @@
 /* postgres can not */
 /* syntax version 1 */
 PRAGMA PositionalUnionAll;
-PRAGMA warning("disable", "1107");
+PRAGMA warning('disable', '1107');
 
 SELECT
     (1, 1u) AS z,

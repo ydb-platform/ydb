@@ -15,7 +15,7 @@ extern "C" {
 
 ssize_t BridgeGetAbiVersion()
 {
-    return 4; // EYqlPluginAbiVersion::TemporaryTokens
+    return 5; // EYqlPluginAbiVersion::Credentials
 }
 
 TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOptions)
@@ -135,13 +135,14 @@ TBridgeQueryResult* BridgeRun(
     TBridgeYqlPlugin* plugin,
     const char* queryId,
     const char* user,
-    const char* token,
     const char* queryText,
     const char* settings,
     int settingsLength,
     const TBridgeQueryFile* bridgeFiles,
     int bridgeFileCount,
-    int executeMode)
+    int executeMode,
+    const char* credentials,
+    int credentialsLength)
 {
     static const auto EmptyMap = TYsonString(TString("{}"));
 
@@ -161,7 +162,7 @@ TBridgeQueryResult* BridgeRun(
     auto result = nativePlugin->Run(
         NYT::TGuid::FromString(queryId),
         TString(user),
-        TString(token),
+        TYsonString(TString(credentials, credentialsLength)),
         TString(queryText),
         settings ? TYsonString(TString(settings, settingsLength)) : EmptyMap,
         files,

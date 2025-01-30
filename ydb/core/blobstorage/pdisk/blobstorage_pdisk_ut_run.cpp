@@ -4,7 +4,7 @@
 #include "blobstorage_pdisk_ut_base_test.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/core/util/random.h>
@@ -142,17 +142,21 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
 
         if (IsMonitoringEnabled) {
             // Monitoring startup
-            monitoring.Reset(new NActors::TSyncHttpMon({
+            monitoring.Reset(new NActors::TMon({
                 .Port = pm.GetPort(8081),
                 .Title = "TestYard monitoring"
             }));
             appData.Mon = monitoring.Get();
 
             monitoring->RegisterCountersPage("counters", "Counters", mainCounters);
-            monitoring->Start();
         }
 
         actorSystem1->Start();
+
+        if (IsMonitoringEnabled) {
+            monitoring->Start(actorSystem1.Get());
+        }
+
         Sleep(TDuration::MilliSeconds(runCfg.BeforeTestSleepMs));
 
         VERBOSE_COUT("Sending TEvBoot to test");
@@ -188,6 +192,9 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         AtomicSet(isLastExceptionSet, 1);
     }
 
+    if (IsMonitoringEnabled) {
+        monitoring->Stop();
+    }
     monitoring.Destroy();
     if (actorSystem1.Get()) {
         actorSystem1->Stop();

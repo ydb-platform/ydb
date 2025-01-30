@@ -14,7 +14,7 @@ struct TJsonParserConfig {
     ui64 BufferCellCount = 1000000;  // (number rows) * (number columns) limit
 };
 
-TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config);
+TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters);
 TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parserConfig);
 
 }  // namespace NFq::NRowDispatcher

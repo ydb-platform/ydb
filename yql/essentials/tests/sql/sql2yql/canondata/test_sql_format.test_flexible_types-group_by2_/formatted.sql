@@ -5,15 +5,15 @@
 /* yt can not */
 PRAGMA FlexibleTypes;
 
-$groupsrc =
+$groupsrc = (
     SELECT
-        "1" AS key,
-        "2" AS String
+        '1' AS key,
+        '2' AS String
     UNION ALL
     SELECT
-        "1" AS key,
-        "3" AS String
-;
+        '1' AS key,
+        '3' AS String
+);
 
 $foo = ($k, $t) -> (FormatType($t) || '_' || $k);
 

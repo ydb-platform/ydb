@@ -31,7 +31,8 @@ private:
     YDB_READONLY(ui32, IndexId, 0);
     YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
 protected:
-    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
+    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
+        const ui32 recordsCount, const TIndexInfo& indexInfo) const = 0;
     virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const = 0;
@@ -43,6 +44,10 @@ protected:
 public:
     using TFactory = NObjectFactory::TObjectFactory<IIndexMeta, TString>;
     using TProto = NKikimrSchemeOp::TOlapIndexDescription;
+
+    bool IsInplaceData() const {
+        return StorageId == NBlobOperations::TGlobal::LocalMetadataStorageId;
+    }
 
     IIndexMeta() = default;
     IIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId)
@@ -67,8 +72,8 @@ public:
 
     virtual ~IIndexMeta() = default;
 
-    std::shared_ptr<IPortionDataChunk> BuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
-        return DoBuildIndex(data, indexInfo);
+    std::shared_ptr<IPortionDataChunk> BuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
+        return DoBuildIndex(data, recordsCount, indexInfo);
     }
 
     void FillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {

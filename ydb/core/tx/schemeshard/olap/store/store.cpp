@@ -132,6 +132,11 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
         return false;
     }
 
+    if (descriptionProto.SchemaPresetsSize() > 1) {
+        errors.AddError("trying to create an OLAP store with multiple schema presets (not supported yet)");
+        return false;
+    }
+
     Name = descriptionProto.GetName();
     StorageConfig = descriptionProto.GetStorageConfig();
     // Make it easier by having data channel count always specified internally

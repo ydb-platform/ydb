@@ -2,8 +2,6 @@
 
 #include <yt/yt/core/misc/public.h>
 
-#include <library/cpp/yt/stockpile/stockpile.h>
-
 #include <library/cpp/getopt/last_getopt.h>
 
 #include <yt/yt/core/yson/string.h>
@@ -16,6 +14,7 @@ class TProgram
 {
 public:
     TProgram();
+    ~TProgram();
 
     TProgram(const TProgram&) = delete;
     TProgram(TProgram&&) = delete;
@@ -50,7 +49,7 @@ protected:
     bool PrintBuild_ = false;
     bool UseYson_ = false;
 
-    virtual void DoRun(const NLastGetopt::TOptsParseResult& parseResult) = 0;
+    virtual void DoRun() = 0;
 
     virtual void OnError(const TString& message) noexcept;
 
@@ -81,11 +80,14 @@ protected:
     [[noreturn]]
     void Exit(E exitCode) noexcept;
 
-private:
-    bool CrashOnError_ = false;
+    const NLastGetopt::TOptsParseResult& GetOptsParseResult() const;
 
+private:
     // Custom handler for option parsing errors.
     class TOptsParseResult;
+
+    std::unique_ptr<TOptsParseResult> OptsParseResult_;
+    bool CrashOnError_ = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -110,16 +112,19 @@ private:
 //! Helper for TOpt::StoreMappedResult to validate file paths for existence.
 TString CheckPathExistsArgMapper(const TString& arg);
 
-//! Helper for TOpt::StoreMappedResult to parse GUIDs.
-TGuid CheckGuidArgMapper(const TString& arg);
+//! Helper for TOpt::StoreMappedResult to parse types with #FromString.
+template <class T>
+T FromStringArgMapper(TStringBuf arg);
+
+//! Helper for TOpt::StoreMappedResult to parse enums.
+template <class T>
+T ParseEnumArgMapper(TStringBuf arg);
 
 //! Helper for TOpt::StoreMappedResult to parse YSON strings.
 NYson::TYsonString CheckYsonArgMapper(const TString& arg);
 
 //! Drop privileges and save them if running with suid-bit.
 void ConfigureUids();
-
-void ConfigureCoverageOutput();
 
 void ConfigureIgnoreSigpipe();
 

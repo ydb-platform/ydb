@@ -13,23 +13,25 @@
 
 namespace NKikimr::NOlap {
 
-void TGranuleMeta::AppendPortion(const TPortionDataAccessor& info, const bool addAsAccessor) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.GetPortionInfo().DebugString())(
+
+
+void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info->DebugString())(
         "path_id", GetPathId());
-    auto it = Portions.find(info.GetPortionInfo().GetPortionId());
-    AFL_VERIFY(info.GetPortionInfo().GetPathId() == GetPathId())("event", "incompatible_granule")(
-        "portion", info.GetPortionInfo().DebugString())("path_id", GetPathId());
+    AFL_VERIFY(!Portions.contains(info->GetPortionId()));
+    AFL_VERIFY(info->GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info->DebugString())(
+        "path_id", GetPathId());
 
-    AFL_VERIFY(info.GetPortionInfo().ValidSnapshotInfo())("event", "incorrect_portion_snapshots")(
-        "portion", info.GetPortionInfo().DebugString());
+    AFL_VERIFY(info->ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info->DebugString());
 
-    AFL_VERIFY(it == Portions.end());
     OnBeforeChangePortion(nullptr);
-    it = Portions.emplace(info.GetPortionInfo().GetPortionId(), info.MutablePortionInfoPtr()).first;
-    if (addAsAccessor) {
-        DataAccessorsManager->AddPortion(info);
-    }
-    OnAfterChangePortion(it->second, nullptr);
+    Portions.emplace(info->GetPortionId(), info);
+    OnAfterChangePortion(info, nullptr);
+}
+
+void TGranuleMeta::AppendPortion(const TPortionDataAccessor& info) {
+    AppendPortion(info.MutablePortionInfoPtr());
+    DataAccessorsManager->AddPortion(info);
 }
 
 bool TGranuleMeta::ErasePortion(const ui64 portion) {
@@ -146,7 +148,7 @@ TGranuleMeta::TGranuleMeta(
     NDataAccessorControl::TManagerConstructionContext mmContext(DataAccessorsManager->GetTabletActorId(), false);
     ResetAccessorsManager(versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor(), mmContext);
     AFL_VERIFY(!!OptimizerPlanner);
-    ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
+    ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex, StoragesManager);
 }
 
 void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion) {
@@ -243,9 +245,11 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
 
     {
         TPortionInfo::TSchemaCursor schema(versionedIndex);
-        if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV1&& loadContext) {
+        if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV2&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
-                constructor->LoadRecord(std::move(loadContext));
+                for (auto&& i : loadContext.BuildRecordsV1()) {
+                    constructor->LoadRecord(std::move(i));
+                }
             })) {
             return false;
         }
@@ -291,11 +295,11 @@ void TGranuleMeta::CommitPortionOnExecute(
 void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
     auto it = InsertedPortions.find(insertWriteId);
     AFL_VERIFY(it != InsertedPortions.end());
+    (static_cast<TColumnEngineForLogs*>(&engine))->AppendPortion(it->second);
     InsertedPortions.erase(it);
     {
         auto it = InsertedAccessors.find(insertWriteId);
         if (it != InsertedAccessors.end()) {
-            (static_cast<TColumnEngineForLogs*>(&engine))->AppendPortion(it->second, false);
             InsertedAccessors.erase(it);
         }
     }

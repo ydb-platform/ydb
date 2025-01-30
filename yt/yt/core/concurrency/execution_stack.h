@@ -2,6 +2,10 @@
 
 #include "public.h"
 
+#if defined(_win_)
+#include <windows.h>
+#endif
+
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -66,7 +70,6 @@ private:
     friend TExecutionContext CreateExecutionContext(
         TExecutionStack* stack,
         void (*trampoline)(void*));
-
 };
 
 #else

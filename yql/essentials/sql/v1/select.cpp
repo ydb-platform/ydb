@@ -124,6 +124,10 @@ public:
                     Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
                 } else {
                     ctx.Error(Pos) << "Source used in expression should contain one concrete column";
+                    if (RefPos) {
+                        ctx.Error(*RefPos) << "Source is used here";
+                    }
+
                     return false;
                 }
             }
@@ -261,10 +265,11 @@ TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom, bool inSubquery) {
 
 class TNodeSource: public ISource {
 public:
-    TNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList)
+    TNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList, bool wrapByTableSource)
         : ISource(pos)
         , Node(node)
         , WrapToList(wrapToList)
+        , WrapByTableSource(wrapByTableSource)
     {
         YQL_ENSURE(Node);
         FakeSource = BuildFakeSource(pos);
@@ -292,21 +297,27 @@ public:
         if (WrapToList) {
             nodeAst = Y("ToList", nodeAst);
         }
+
+        if (WrapByTableSource) {
+            nodeAst = Y("TableSource", nodeAst);
+        }
+
         return nodeAst;
     }
 
     TPtr DoClone() const final {
-        return new TNodeSource(Pos, SafeClone(Node), WrapToList);
+        return new TNodeSource(Pos, SafeClone(Node), WrapToList, WrapByTableSource);
     }
 
 private:
     TNodePtr Node;
-    bool WrapToList;
+    const bool WrapToList;
+    const bool WrapByTableSource;
     TSourcePtr FakeSource;
 };
 
-TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList) {
-    return new TNodeSource(pos, node, wrapToList);
+TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList, bool wrapByTableSource) {
+    return new TNodeSource(pos, node, wrapToList, wrapByTableSource);
 }
 
 class IProxySource: public ISource {
@@ -327,7 +338,10 @@ protected:
     }
 
     void GetInputTables(TTableList& tableList) const override {
-        Source->GetInputTables(tableList);
+        if (Source) {
+            Source->GetInputTables(tableList);
+        }
+
         ISource::GetInputTables(tableList);
     }
 
@@ -565,6 +579,10 @@ public:
                 Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
             } else {
                 ctx.Error(Pos) << "Source used in expression should contain one concrete column";
+                if (RefPos) {
+                    ctx.Error(*RefPos) << "Source is used here";
+                }
+
                 return false;
             }
         }
@@ -1858,6 +1876,10 @@ public:
     bool IsMissingInProjection(TContext& ctx, const TColumnNode& column) const {
         TString columnName = FullColumnName(column);
         if (Columns.Real.contains(columnName) || Columns.Artificial.contains(columnName)) {
+            return false;
+        }
+
+        if (!ctx.SimpleColumns && Columns.QualifiedAll && !columnName.Contains('.')) {
             return false;
         }
 

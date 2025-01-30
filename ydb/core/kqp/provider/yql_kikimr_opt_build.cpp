@@ -137,8 +137,6 @@ struct TKiExploreTxResults {
             YQL_ENSURE(indexIt != tableMeta->Indexes.end(), "Index not found");
 
             const auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, indexIt->Type, indexName);
-            YQL_ENSURE(indexTablePaths.size() == 1, "Only index with one impl table is supported");
-            const auto indexTablePath = indexTablePaths[0];
 
             THashSet<TString> indexColumns;
             indexColumns.reserve(indexIt->KeyColumns.size() + indexIt->DataColumns.size());
@@ -158,7 +156,13 @@ struct TKiExploreTxResults {
                 }
             }
 
-            uncommittedChangesRead = HasWriteOps(indexTablePath) || (needMainTableRead && HasWriteOps(tableMeta->Name));
+            uncommittedChangesRead = needMainTableRead && HasWriteOps(tableMeta->Name);
+            for (auto& indexTablePath : indexTablePaths) {
+                if (uncommittedChangesRead) {
+                    break;
+                }
+                uncommittedChangesRead = HasWriteOps(indexTablePath);
+            }
         } else {
             uncommittedChangesRead = HasWriteOps(tableMeta->Name);
         }

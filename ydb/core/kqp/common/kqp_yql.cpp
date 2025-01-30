@@ -509,10 +509,11 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
         .Done()
     );
 
-    if (AllowNullKeys) {
+    if (AllowNullKeysPrefixSize) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(AllowNullKeysSettingName)
+                .Value<TCoAtom>().Build(ToString(*AllowNullKeysPrefixSize))
             .Done()
         );
     }
@@ -543,7 +544,8 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.Strategy = getLookupStrategyType(tuple.Value().Cast<TCoAtom>().Value());
         } else if (name == AllowNullKeysSettingName) {
-            settings.AllowNullKeys = true;
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.AllowNullKeysPrefixSize = FromString<ui32>(tuple.Value().Cast<TCoAtom>().Value());
         } else {
             YQL_ENSURE(false, "Unknown KqpStreamLookup setting name '" << name << "'");
         }

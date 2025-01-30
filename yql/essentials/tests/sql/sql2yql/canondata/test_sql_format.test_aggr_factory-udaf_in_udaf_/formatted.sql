@@ -12,7 +12,7 @@ $create_single_item_dict = ($item, $_parent) -> {
 };
 
 $count_values = AGGREGATION_FACTORY(
-    "UDAF",
+    'UDAF',
     $create_single_item_dict,
     ($dict, $item, $parent) -> {
         RETURN $merge_dicts($create_single_item_dict($item, $parent), $dict);
@@ -29,7 +29,7 @@ $add_list_to_dict = ($dict, $list, $parent) -> {
 };
 
 $count_list_values = AGGREGATION_FACTORY(
-    "UDAF",
+    'UDAF',
     $create_dict_from_list,
     $add_list_to_dict,
     $merge_dicts

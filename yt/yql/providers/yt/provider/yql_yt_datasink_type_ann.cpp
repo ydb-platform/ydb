@@ -39,6 +39,26 @@ bool IsWideRepresentation(const TTypeAnnotationNode* leftType, const TTypeAnnota
     return true;
 }
 
+bool IsWideBlockRepresentation(const TTypeAnnotationNode* leftType, const TTypeAnnotationNode* rightType) {
+    const auto structType = dynamic_cast<const TStructExprType*>(leftType);
+    if (!structType || !IsWideBlockType(*rightType)){
+        return false;
+    }
+    const auto multiType = rightType->Cast<TMultiExprType>();
+
+    if (structType->GetSize() != multiType->GetSize() - 1)
+        return false;
+
+    const auto& structItems = structType->GetItems();
+    const auto& multiItems = multiType->GetItems();
+    for (auto i = 0U; i < structItems.size(); ++i) {
+        if (!IsSameAnnotation(*multiItems[i]->Cast<TBlockExprType>()->GetItemType(), *structItems[i]->GetItemType()))
+            return false;
+    }
+
+    return true;
+}
+
 const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, const TExprNode::TPtr& useFlowSetting, const TExprNode::TPtr& blockInputAppliedSetting, TExprContext& ctx) {
     if (!useFlowSetting) {
         return ctx.MakeType<TStreamExprType>(itemType);
@@ -95,6 +115,7 @@ public:
         AddHandler({TYtDqWideWrite::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDqWrite<true>));
         AddHandler({TYtTryFirst::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleTryFirst));
         AddHandler({TYtMaterialize::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleMaterialize));
+        AddHandler({TYtQLFilter::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleQLFilter));
     }
 
 private:
@@ -230,7 +251,7 @@ private:
         return TStatus::Ok;
     }
 
-    static bool ValidateOutputType(const TTypeAnnotationNode* itemType, TPositionHandle positionHandle, TYtOutSection outTables,
+    static bool ValidateOutputType(const TTypeAnnotationNode* itemType, TPositionHandle positionHandle, const TYtOutSection& outTables,
         size_t beginIdx, size_t endIdx, bool useExtendedType, TExprContext& ctx)
     {
         YQL_ENSURE(beginIdx <= endIdx);
@@ -239,7 +260,7 @@ private:
         const size_t outTablesSize = endIdx - beginIdx;
         TPosition pos = ctx.GetPosition(positionHandle);
 
-        if (!EnsurePersistableType(positionHandle, *itemType, ctx)) {
+        if (!IsWideBlockType(*itemType) && !EnsurePersistableType(positionHandle, *itemType, ctx)) {
             return false;
         }
 
@@ -322,7 +343,7 @@ private:
                 return false;
             }
 
-            if (!(IsSameAnnotation(*itemType, *tableItemType) || IsWideRepresentation(tableItemType, itemType))) {
+            if (!(IsSameAnnotation(*itemType, *tableItemType) || IsWideRepresentation(tableItemType, itemType) || IsWideBlockRepresentation(tableItemType, itemType))) {
                 ctx.AddError(TIssue(pos, TStringBuilder()
                     << "Output table row type differs from the write row type: "
                     << GetTypeDiff(*tableItemType, *itemType)));
@@ -332,13 +353,13 @@ private:
         return true;
     }
 
-    static bool ValidateOutputType(const TTypeAnnotationNode* itemType, TPositionHandle positionHandle, TYtOutSection outTables,
+    static bool ValidateOutputType(const TTypeAnnotationNode* itemType, TPositionHandle positionHandle, const TYtOutSection& outTables,
         TExprContext& ctx, bool useExtendedType = false)
     {
         return ValidateOutputType(itemType, positionHandle, outTables, 0, outTables.Ref().ChildrenSize(), useExtendedType, ctx);
     }
 
-    static bool ValidateOutputType(const TExprNode& list, TYtOutSection outTables, TExprContext& ctx, bool useExtendedType = false) {
+    static bool ValidateOutputType(const TExprNode& list, const TYtOutSection& outTables, TExprContext& ctx, bool useExtendedType = false) {
         const TTypeAnnotationNode* itemType = GetSequenceItemType(list.Pos(), list.GetTypeAnn(), true, ctx);
         if (nullptr == itemType) {
             return false;
@@ -993,7 +1014,7 @@ private:
 
         auto merge = TYtMerge(input);
 
-        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::TransformColGroups | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
+        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq | EYtSettingType::QLFilter, ctx)) {
             return TStatus::Error;
         }
 
@@ -1075,7 +1096,10 @@ private:
             | EYtSettingType::KeepSorted
             | EYtSettingType::NoDq
             | EYtSettingType::BlockInputReady
-            | EYtSettingType::BlockInputApplied;
+            | EYtSettingType::BlockInputApplied
+            | EYtSettingType::BlockOutputReady
+            | EYtSettingType::BlockOutputApplied
+            | EYtSettingType::QLFilter;
         if (!ValidateSettings(map.Settings().Ref(), accpeted, ctx)) {
             return TStatus::Error;
         }
@@ -1100,6 +1124,7 @@ private:
         const auto inputItemType = GetInputItemType(map.Input(), ctx);
         const auto useFlow = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::Flow);
         const auto blockInputApplied = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied);
+        const auto blockOutputApplied = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockOutputApplied);
         const auto lambdaInputType = MakeInputType(inputItemType, useFlow, blockInputApplied, ctx);
 
         auto& lambda = input->ChildRef(TYtMap::idx_Mapper);
@@ -1116,7 +1141,12 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateOutputType(*lambda, map.Output(), ctx, true)) {
+        TTypeAnnotationNode::TListType blockItemTypes;
+        if (blockOutputApplied && !EnsureWideFlowBlockType(*lambda, blockItemTypes, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateOutputType(*lambda, map.Output(), ctx, /*useExtendedType*/true)) {
             lambda->SetTypeAnn(nullptr);
             lambda->SetState(TExprNode::EState::Initial);
             return TStatus::Error;
@@ -1232,7 +1262,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateOutputType(*lambda, reduce.Output(), ctx)) {
+        if (!ValidateOutputType(*lambda, reduce.Output(), ctx, /*useExtendedType*/true)) {
             lambda->SetTypeAnn(nullptr);
             lambda->SetState(TExprNode::EState::Initial);
             return TStatus::Error;
@@ -1269,7 +1299,8 @@ private:
             | EYtSettingType::KeySwitch
             | EYtSettingType::MapOutputType
             | EYtSettingType::ReduceInputType
-            | EYtSettingType::NoDq;
+            | EYtSettingType::NoDq
+            | EYtSettingType::QLFilter;
         if (!ValidateSettings(mapReduce.Settings().Ref(), acceptedSettings, ctx)) {
             return TStatus::Error;
         }
@@ -1610,7 +1641,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateOutputType(lambda.Ref(), fill.Output(), ctx, true)) {
+        if (!ValidateOutputType(lambda.Ref(), fill.Output(), ctx, /*useExtendedType*/true)) {
             return TStatus::Error;
         }
 
@@ -2111,6 +2142,38 @@ private:
         }
 
         input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(&itemType));
+        return TStatus::Ok;
+    }
+
+    TStatus HandleQLFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto& type = input->Child(0);
+        if (!EnsureTypeWithStructType(*type, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& lambda = input->ChildRef(1);
+        const auto status = ConvertToLambda(lambda, ctx, 1);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {type->GetTypeAnn()->Cast<TTypeExprType>()->GetType()}, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!lambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (!EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
         return TStatus::Ok;
     }
 

@@ -147,7 +147,7 @@ namespace {
                 // Sender implementation is as recent as ours.
                 // Just copy two fields from the notify message (this branch is practically a stub)
 
-                auto subdomainPathId = PathIdFromPathId(record.GetPathSubdomainPathId());
+                auto subdomainPathId = TPathId::FromProto(record.GetPathSubdomainPathId());
                 auto pathAbandonedTenantsSchemeShards = TSet<ui64>(
                     record.GetPathAbandonedTenantsSchemeShards().begin(),
                     record.GetPathAbandonedTenantsSchemeShards().end()

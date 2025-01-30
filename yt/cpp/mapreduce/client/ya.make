@@ -20,7 +20,6 @@ SRCS(
     prepare_operation.cpp
     py_helpers.cpp
     retry_heavy_write_request.cpp
-    retry_transaction.cpp
     retryful_writer.cpp
     retryful_writer_v2.cpp
     retryless_writer.cpp
@@ -40,9 +39,9 @@ PEERDIR(
     library/cpp/yson
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/http
+    yt/cpp/mapreduce/http_client
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/io
-    yt/cpp/mapreduce/raw_client
 )
 
 PEERDIR(
@@ -62,7 +61,7 @@ IF (BUILD_TYPE == "PROFILE")
     ELSE()
         SRCS(
             job_profiler.cpp
-        )    
+        )
     ENDIF()
 ELSE()
     SRCS(

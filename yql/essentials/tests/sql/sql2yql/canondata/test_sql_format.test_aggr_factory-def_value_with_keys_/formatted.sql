@@ -1,4 +1,4 @@
-$my_table =
+$my_table = (
     SELECT
         1 AS id,
         1 AS ts,
@@ -34,7 +34,7 @@ $my_table =
         5 AS ts,
         2 AS value1,
         7 AS value2
-;
+);
 
 -- Эмуляция агрегационной функции COUNT
 $cnt_create = ($_item, $_parent) -> {
@@ -64,7 +64,7 @@ $cnt_deserialize = ($state) -> {
 $cnt_default = 0ul;
 
 $cnt_udaf_factory = AggregationFactory(
-    "UDAF",
+    'UDAF',
     $cnt_create,
     $cnt_add,
     $cnt_merge,

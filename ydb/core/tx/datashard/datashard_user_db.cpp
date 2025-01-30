@@ -321,6 +321,11 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const
     Y_VERIFY_S(localTid, "Unexpected failure to find table " << tableId << " in datashard " << Self.TabletID());
 
     if (!Db.HasOpenTx(localTid, lockId)) {
+        if (Db.HasRemovedTx(localTid, lockId)) {
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Committing removed changes lockId# " << lockId << " tid# " << localTid << " shard# " << Self.TabletID());
+            Self.IncCounter(COUNTER_REMOVED_COMMITTED_TXS);
+        }
         return;
     }
 

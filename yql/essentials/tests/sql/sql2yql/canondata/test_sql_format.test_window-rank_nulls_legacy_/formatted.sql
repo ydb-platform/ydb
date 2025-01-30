@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-PRAGMA warning("disable", "4520");
+PRAGMA warning('disable', '4520');
 PRAGMA DisableAnsiRankForNullableKeys;
 
 SELECT

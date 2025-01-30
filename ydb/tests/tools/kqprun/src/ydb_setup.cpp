@@ -9,6 +9,9 @@
 #include <ydb/core/testlib/test_client.h>
 
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+
+#include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
+
 #include <yql/essentials/utils/log/log.h>
 
 
@@ -22,7 +25,7 @@ public:
         : YqlToken_(yqlToken)
     {}
 
-    TString GetAuthInfo() const override {
+    std::string GetAuthInfo() const override {
         return YqlToken_;
     }
 
@@ -31,7 +34,7 @@ public:
     }
 
 private:
-    TString YqlToken_;
+    std::string YqlToken_;
 };
 
 class TStaticCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {
@@ -65,7 +68,7 @@ private:
 
 class TSessionState {
 public:
-    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId)
+    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId, ui8 verboseLevel)
         : Runtime_(runtime)
         , TargetNodeIndex_(targetNodeIndex)
     {
@@ -78,7 +81,8 @@ public:
         auto closePromise = NThreading::NewPromise<void>();
         SessionHolderActor_ = Runtime_->Register(CreateSessionHolderActor(TCreateSessionRequest{
             .Event = std::move(event),
-            .TargetNode = Runtime_->GetNodeId(targetNodeIndex)
+            .TargetNode = Runtime_->GetNodeId(targetNodeIndex),
+            .VerboseLevel = verboseLevel
         }, openPromise, closePromise));
 
         SessionId_ = openPromise.GetFuture().GetValueSync();
@@ -149,13 +153,8 @@ private:
                 }
             }
 
-            for (auto setting : Settings_.AppConfig.GetLogConfig().get_arr_entry()) {
-                NKikimrServices::EServiceKikimr service;
-                if (!NKikimrServices::EServiceKikimr_Parse(setting.GetComponent(), &service)) {
-                    ythrow yexception() << "Invalid kikimr service name " << setting.GetComponent();
-                }
-
-                runtime.SetLogPriority(service, NActors::NLog::EPriority(setting.GetLevel()));
+            for (const auto& setting : Settings_.AppConfig.GetLogConfig().get_arr_entry()) {
+                runtime.SetLogPriority(GetLogService(setting.GetComponent()), NActors::NLog::EPriority(setting.GetLevel()));
             }
 
             runtime.SetLogBackendFactory([this]() { return CreateLogBackend(); });
@@ -177,15 +176,56 @@ private:
     }
 
     void SetStorageSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
+        TString diskPath;
+        if (Settings_.PDisksPath && *Settings_.PDisksPath != "-") {
+            if (Settings_.PDisksPath->empty()) {
+                ythrow yexception() << "Storage directory path should not be empty";
+            }
+            diskPath = TStringBuilder() << Settings_.PDisksPath << (Settings_.PDisksPath->back() != '/' ? "/" : "");
+        }
+
+        bool formatDisk = true;
+        NKqpRun::TStorageMeta storageMeta;
+        if (diskPath) {
+            TFsPath storageMetaPath(diskPath);
+            storageMetaPath.MkDirs();
+
+            storageMetaPath = storageMetaPath.Child("kqprun_storage_meta.conf");
+            if (storageMetaPath.Exists() && !Settings_.FormatStorage) {
+                if (!google::protobuf::TextFormat::ParseFromString(TFileInput(storageMetaPath.GetPath()).ReadAll(), &storageMeta)) {
+                    ythrow yexception() << "Storage meta is corrupted, please use --format-storage";
+                }
+                storageMeta.SetStorageGeneration(storageMeta.GetStorageGeneration() + 1);
+                formatDisk = false;
+            }
+
+            if (Settings_.DiskSize && storageMeta.GetStorageSize() != *Settings_.DiskSize) {
+                if (!formatDisk) {
+                    ythrow yexception() << "Cannot change disk size without formatting storage, please use --format-storage";
+                }
+                storageMeta.SetStorageSize(*Settings_.DiskSize);
+            }
+
+            TString storageMetaStr;
+            google::protobuf::TextFormat::PrintToString(storageMeta, &storageMetaStr);
+
+            TFileOutput storageMetaOutput(storageMetaPath.GetPath());
+            storageMetaOutput.Write(storageMetaStr);
+            storageMetaOutput.Finish();
+        }
+
         const NKikimr::NFake::TStorage storage = {
-            .UseDisk = Settings_.UseRealPDisks,
+            .UseDisk = !!Settings_.PDisksPath,
             .SectorSize = NKikimr::TTestStorageFactory::SECTOR_SIZE,
-            .ChunkSize = Settings_.UseRealPDisks ? NKikimr::TTestStorageFactory::CHUNK_SIZE : NKikimr::TTestStorageFactory::MEM_CHUNK_SIZE,
-            .DiskSize = Settings_.DiskSize
+            .ChunkSize = Settings_.PDisksPath ? NKikimr::TTestStorageFactory::CHUNK_SIZE : NKikimr::TTestStorageFactory::MEM_CHUNK_SIZE,
+            .DiskSize = Settings_.DiskSize ? *Settings_.DiskSize : 32_GB,
+            .FormatDisk = formatDisk,
+            .DiskPath = diskPath
         };
 
-        serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.UseRealPDisks);
+        serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.PDisksPath);
         serverSettings.SetCustomDiskParams(storage);
+        serverSettings.SetStorageGeneration(storageMeta.GetStorageGeneration());
     }
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
@@ -210,7 +250,7 @@ private:
         serverSettings.SetYtGateway(Settings_.YtGateway);
         serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         serverSettings.SetInitializeFederatedQuerySetupFactory(true);
-        serverSettings.SetVerbose(false);
+        serverSettings.SetVerbose(Settings_.VerboseLevel >= 2);
 
         SetLoggerSettings(serverSettings);
         SetFunctionRegistry(serverSettings);
@@ -315,27 +355,19 @@ private:
             return;
         }
 
-        bool found = false;
-        for (auto& entry : *Settings_.AppConfig.MutableLogConfig()->MutableEntry()) {
-            if (entry.GetComponent() == "KQP_YQL") {
-                entry.SetLevel(NActors::NLog::PRI_TRACE);
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            auto entry = Settings_.AppConfig.MutableLogConfig()->AddEntry();
-            entry->SetComponent("KQP_YQL");
-            entry->SetLevel(NActors::NLog::PRI_TRACE);
-        }
-
+        ModifyLogPriorities({{NKikimrServices::EServiceKikimr::KQP_YQL, NActors::NLog::PRI_TRACE}}, *Settings_.AppConfig.MutableLogConfig());
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
     void WaitResourcesPublishing() const {
         auto promise = NThreading::NewPromise();
-        GetRuntime()->Register(CreateResourcesWaiterActor(promise, Settings_.NodeCount), 0, GetRuntime()->GetAppData().SystemPoolId);
+        const TWaitResourcesSettings settings = {
+            .ExpectedNodeCount = static_cast<i32>(Settings_.NodeCount),
+            .HealthCheckLevel = Settings_.HealthCheckLevel,
+            .VerboseLevel = Settings_.VerboseLevel,
+            .Database = NKikimr::CanonizePath(Settings_.DomainName)
+        };
+        GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), 0, GetRuntime()->GetAppData().SystemPoolId);
 
         try {
             promise.GetFuture().GetValue(Settings_.InitializationTimeout);
@@ -355,13 +387,13 @@ public:
         InitializeServer(grpcPort);
         WaitResourcesPublishing();
 
-        if (Settings_.MonitoringEnabled) {
+        if (Settings_.MonitoringEnabled && Settings_.VerboseLevel >= 1) {
             for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount; ++nodeIndex) {
                 Cout << CoutColors_.Cyan() << "Monitoring port" << (Settings_.NodeCount > 1 ? TStringBuilder() << " for node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
             }
         }
 
-        if (Settings_.GrpcEnabled) {
+        if (Settings_.GrpcEnabled && Settings_.VerboseLevel >= 1) {
             Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << grpcPort << Endl;
         }
     }
@@ -516,7 +548,7 @@ private:
 
         if (Settings_.SameSession) {
             if (!SessionState_) {
-                SessionState_ = TSessionState(GetRuntime(), targetNodeIndex, database, query.TraceId);
+                SessionState_ = TSessionState(GetRuntime(), targetNodeIndex, database, query.TraceId, Settings_.VerboseLevel);
             }
             request->SetSessionId(SessionState_->GetSessionId());
         }
@@ -535,7 +567,8 @@ private:
             .Event = std::move(event),
             .TargetNode = GetRuntime()->GetNodeId(targetNodeIndex),
             .ResultRowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit(),
-            .ResultSizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit()
+            .ResultSizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit(),
+            .QueryId = query.QueryId
         };
     }
 

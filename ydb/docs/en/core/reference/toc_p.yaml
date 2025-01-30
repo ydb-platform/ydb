@@ -59,3 +59,8 @@ items:
   include:
     mode: link
     path: ydbops/toc_p.yaml
+- name: Docker
+  href: docker/index.md
+  include:
+    mode: link
+    path: docker/toc_p.yaml

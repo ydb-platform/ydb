@@ -8,7 +8,7 @@ $round_period = ($day, $period) -> {
     END;
 };
 
-$data =
+$data = (
     SELECT
         $round_period(day, 'd') AS day,
         $round_period(day, 'w') AS week,
@@ -18,24 +18,24 @@ $data =
         user_id,
     FROM (
         SELECT
-            Date("2024-04-29") AS day,
-            "ALLO" AS mark,
-            "???" AS model,
+            Date('2024-04-29') AS day,
+            'ALLO' AS mark,
+            '???' AS model,
             5 AS user_card_cnt,
             'ACTIVE' AS status,
             999 AS user_id,
             1 AS is_proven_owner,
         UNION ALL
         SELECT
-            Date("2024-04-29") AS day,
-            "ALLO" AS mark,
-            "!!!!!!" AS model,
+            Date('2024-04-29') AS day,
+            'ALLO' AS mark,
+            '!!!!!!' AS model,
             50 AS user_card_cnt,
             'ACTIVE' AS status,
             1111 AS user_id,
             0 AS is_proven_owner,
     )
-;
+);
 
 SELECT
     day,

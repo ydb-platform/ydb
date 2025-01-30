@@ -1,8 +1,11 @@
 #pragma once
 
 #include <yt/yt/core/misc/public.h>
+#include <yt/yt/core/misc/configurable_singleton_decl.h>
 
 #include <library/cpp/yt/logging/public.h>
+
+#include <library/cpp/yt/misc/enum.h>
 
 namespace NYT::NLogging {
 
@@ -44,6 +47,8 @@ DECLARE_REFCOUNTED_STRUCT(ILogWriter)
 DECLARE_REFCOUNTED_STRUCT(IFileLogWriter)
 DECLARE_REFCOUNTED_STRUCT(IStreamLogOutput)
 DECLARE_REFCOUNTED_STRUCT(ILogCompressionCodec)
+
+YT_DECLARE_RECONFIGURABLE_SINGLETON(TLogManagerConfig, TLogManagerDynamicConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

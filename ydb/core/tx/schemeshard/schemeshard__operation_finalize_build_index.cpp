@@ -69,7 +69,7 @@ public:
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             auto* op = tx.MutableFinalizeBuildIndex();
-            PathIdFromPathId(pathId, op->MutablePathId());
+            pathId.ToProto(op->MutablePathId());
 
             op->SetSnapshotTxId(ui64(snapshotTxId));
             op->SetSnapshotStep(ui64(snapshotStepId));

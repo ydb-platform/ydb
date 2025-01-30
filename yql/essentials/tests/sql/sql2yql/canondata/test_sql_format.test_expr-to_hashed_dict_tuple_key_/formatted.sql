@@ -8,9 +8,9 @@ $second = ($x) -> {
 };
 
 $l = AsList(
-    AsTuple(AsTuple(), "foo"),
-    AsTuple(AsTuple(), "bar"),
-    AsTuple(AsTuple(), "baz")
+    AsTuple(AsTuple(), 'foo'),
+    AsTuple(AsTuple(), 'bar'),
+    AsTuple(AsTuple(), 'baz')
 );
 
 $d = ToDict($l);
@@ -45,7 +45,7 @@ SELECT
     DictContains($d, AsTuple())
 ;
 
-$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
+$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom('Compact'), AsAtom('Hashed'), AsAtom('One')));
 
 SELECT
     DictKeys($d),
@@ -61,7 +61,7 @@ SELECT
     DictContains($d, AsTuple())
 ;
 
-$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("Many")));
+$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom('Compact'), AsAtom('Hashed'), AsAtom('Many')));
 
 SELECT
     DictKeys($d),
@@ -78,9 +78,9 @@ SELECT
 ;
 
 $l = AsList(
-    AsTuple(AsTuple(1), "foo"),
-    AsTuple(AsTuple(2), "bar"),
-    AsTuple(AsTuple(2), "baz")
+    AsTuple(AsTuple(1), 'foo'),
+    AsTuple(AsTuple(2), 'bar'),
+    AsTuple(AsTuple(2), 'baz')
 );
 
 $d = ToDict($l);
@@ -119,7 +119,7 @@ SELECT
     DictContains($d, AsTuple(3))
 ;
 
-$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
+$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom('Compact'), AsAtom('Hashed'), AsAtom('One')));
 
 SELECT
     DictKeys($d),
@@ -137,7 +137,7 @@ SELECT
     DictContains($d, AsTuple(3))
 ;
 
-$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("Many")));
+$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom('Compact'), AsAtom('Hashed'), AsAtom('Many')));
 
 SELECT
     DictKeys($d),
@@ -156,9 +156,9 @@ SELECT
 ;
 
 $l = AsList(
-    AsTuple(AsTuple(1, 2), "foo"),
-    AsTuple(AsTuple(1, 3), "bar"),
-    AsTuple(AsTuple(1, 3), "baz")
+    AsTuple(AsTuple(1, 2), 'foo'),
+    AsTuple(AsTuple(1, 3), 'bar'),
+    AsTuple(AsTuple(1, 3), 'baz')
 );
 
 $d = ToDict($l);
@@ -197,7 +197,7 @@ SELECT
     DictContains($d, AsTuple(1, 4))
 ;
 
-$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
+$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom('Compact'), AsAtom('Hashed'), AsAtom('One')));
 
 SELECT
     DictKeys($d),
@@ -215,7 +215,7 @@ SELECT
     DictContains($d, AsTuple(1, 4))
 ;
 
-$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("Many")));
+$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom('Compact'), AsAtom('Hashed'), AsAtom('Many')));
 
 SELECT
     DictKeys($d),

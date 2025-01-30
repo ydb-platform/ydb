@@ -84,11 +84,14 @@ std::pair<NYT::TFormat, NYT::TFormat> TYqlUserJob::GetIOFormats(const NKikimr::N
     if (UseBlockInput) {
         specs.SetUseBlockInput();
     }
+    if (UseBlockOutput) {
+        specs.SetUseBlockOutput();
+    }
 
     if (!UseSkiff) {
         return std::make_pair(YamrInput ? MakeTableYaMRFormat(InputSpec) : specs.MakeInputFormat(AuxColumns), specs.MakeOutputFormat());
     }
-    
+
     TTypeEnvironment env(alloc);
     NCommon::TCodecContext codecCtx(env, *functionRegistry);
 
@@ -111,6 +114,7 @@ void TYqlUserJob::Save(IOutputStream& s) const {
     ::SaveMany(&s,
         UseSkiff,
         UseBlockInput,
+        UseBlockOutput,
         SkiffSysFields,
         YamrInput,
         LambdaCode,
@@ -128,6 +132,7 @@ void TYqlUserJob::Load(IInputStream& s) {
     ::LoadMany(&s,
         UseSkiff,
         UseBlockInput,
+        UseBlockOutput,
         SkiffSysFields,
         YamrInput,
         LambdaCode,
@@ -165,6 +170,9 @@ void TYqlUserJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
     }
     if (UseBlockInput) {
         MkqlIOSpecs->SetUseBlockInput();
+    }
+    if (UseBlockOutput) {
+        MkqlIOSpecs->SetUseBlockOutput();
     }
     MkqlIOSpecs->Init(*CodecCtx, InputSpec, InputGroups, TableNames, itemType, AuxColumns, OutSpec, JobStats.Get());
     if (!RowOffsets.empty()) {

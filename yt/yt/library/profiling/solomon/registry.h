@@ -129,6 +129,7 @@ public:
     void SetGridFactor(std::function<int(const std::string&)> gridFactor);
     void SetWindowSize(int windowSize);
     void SetProducerCollectionBatchSize(int batchSize);
+    void SetLabelSanitizationPolicy(ELabelSanitizationPolicy LabelSanitizationPolicy);
     void ProcessRegistrations();
     void Collect(IInvokerPtr offloadInvoker = GetSyncInvoker());
     void ReadSensors(

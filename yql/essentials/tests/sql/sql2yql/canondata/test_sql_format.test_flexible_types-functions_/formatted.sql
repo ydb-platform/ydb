@@ -4,7 +4,7 @@
 /* dqfile can not */
 /* yt can not */
 PRAGMA FlexibleTypes;
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 $x1 = () -> (Int32);
 $x2 = () -> (Tuple<Int32>);

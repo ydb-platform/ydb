@@ -91,6 +91,14 @@ void INode::MarkImplicitLabel(bool isImplicitLabel) {
     ImplicitLabel = isImplicitLabel;
 }
 
+void INode::SetRefPos(TPosition pos) {
+    RefPos = pos;
+}
+
+TMaybe<TPosition> INode::GetRefPos() const {
+    return RefPos;
+}
+
 void INode::SetCountHint(bool isCount) {
     State.Set(ENodeState::CountHint, isCount);
 }
@@ -696,6 +704,14 @@ TAstDirectNode::TAstDirectNode(TAstNode* node)
 TAstNode* TAstDirectNode::Translate(TContext& ctx) const {
     Y_UNUSED(ctx);
     return Node;
+}
+
+TNodePtr BuildList(TPosition pos, TVector<TNodePtr> nodes) {
+    return new TAstListNodeImpl(pos, std::move(nodes));
+}
+
+TNodePtr BuildQuote(TPosition pos, TNodePtr expr) {
+    return BuildList(pos, {BuildAtom(pos, "quote", TNodeFlags::Default), expr});
 }
 
 TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg) {
@@ -2659,10 +2675,6 @@ private:
 
 TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup) {
     return new TAccessNode(pos, ids, isLookup);
-}
-
-TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, const TString& var, const TString& column, bool theSameVar) {
-    return new TMatchRecognizeVarAccessNode(pos, var, column, theSameVar);
 }
 
 void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,

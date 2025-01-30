@@ -1,7 +1,6 @@
 import base64
 import hashlib
 import json
-import random
 import re
 import string
 
@@ -14,12 +13,12 @@ from moto.core.exceptions import RESTError
 from moto.core import BaseBackend, BaseModel, CloudFormationModel
 from moto.core.utils import (
     camelcase_to_underscores,
-    get_random_message_id,
     unix_time,
     unix_time_millis,
     tags_from_cloudformation_tags_list,
     BackendDict,
 )
+from moto.moto_api._internal import mock_random as random
 from moto.utilities.utils import md5_hash
 from .utils import generate_receipt_handle
 from .exceptions import (
@@ -37,8 +36,6 @@ from .exceptions import (
     OverLimit,
     InvalidAttributeValue,
 )
-
-from moto.core import get_account_id
 
 DEFAULT_SENDER_ID = "AIDAIT2UOQQY3AUEKVGXU"
 
@@ -144,10 +141,10 @@ class Message(BaseModel):
             )
 
     @staticmethod
-    def utf8(string):
-        if isinstance(string, str):
-            return string.encode("utf-8")
-        return string
+    def utf8(value):
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        return value
 
     @property
     def body(self):
@@ -250,9 +247,10 @@ class Queue(CloudFormationModel):
         "SendMessage",
     )
 
-    def __init__(self, name, region, **kwargs):
+    def __init__(self, name, region, account_id, **kwargs):
         self.name = name
         self.region = region
+        self.account_id = account_id
         self.tags = {}
         self.permissions = {}
 
@@ -262,9 +260,7 @@ class Queue(CloudFormationModel):
 
         now = unix_time()
         self.created_timestamp = now
-        self.queue_arn = "arn:aws:sqs:{0}:{1}:{2}".format(
-            self.region, get_account_id(), self.name
-        )
+        self.queue_arn = f"arn:aws:sqs:{region}:{account_id}:{name}"
         self.dead_letter_queue = None
 
         self.lambda_event_source_mappings = {}
@@ -389,7 +385,8 @@ class Queue(CloudFormationModel):
             self.redrive_policy["maxReceiveCount"]
         )
 
-        for queue in sqs_backends[self.region].queues.values():
+        sqs_backend = sqs_backends[self.account_id][self.region]
+        for queue in sqs_backend.queues.values():
             if queue.queue_arn == self.redrive_policy["deadLetterTargetArn"]:
                 self.dead_letter_queue = queue
 
@@ -418,7 +415,7 @@ class Queue(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = deepcopy(cloudformation_json["Properties"])
         # remove Tags from properties and convert tags list to dict
@@ -428,19 +425,24 @@ class Queue(CloudFormationModel):
         # Could be passed as an integer - just treat it as a string
         resource_name = str(resource_name)
 
-        sqs_backend = sqs_backends[region_name]
+        sqs_backend = sqs_backends[account_id][region_name]
         return sqs_backend.create_queue(
             name=resource_name, tags=tags_dict, region=region_name, **properties
         )
 
     @classmethod
     def update_from_cloudformation_json(
-        cls, original_resource, new_resource_name, cloudformation_json, region_name
+        cls,
+        original_resource,
+        new_resource_name,
+        cloudformation_json,
+        account_id,
+        region_name,
     ):
         properties = cloudformation_json["Properties"]
         queue_name = original_resource.name
 
-        sqs_backend = sqs_backends[region_name]
+        sqs_backend = sqs_backends[account_id][region_name]
         queue = sqs_backend.get_queue(queue_name)
         if "VisibilityTimeout" in properties:
             queue.visibility_timeout = int(properties["VisibilityTimeout"])
@@ -453,12 +455,12 @@ class Queue(CloudFormationModel):
 
     @classmethod
     def delete_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name
+        cls, resource_name, cloudformation_json, account_id, region_name
     ):
         # ResourceName will be the full queue URL - we only need the name
         # https://sqs.us-west-1.amazonaws.com/123456789012/queue_name
         queue_name = resource_name.split("/")[-1]
-        sqs_backend = sqs_backends[region_name]
+        sqs_backend = sqs_backends[account_id][region_name]
         sqs_backend.delete_queue(queue_name)
 
     @property
@@ -475,7 +477,7 @@ class Queue(CloudFormationModel):
 
     @property
     def physical_resource_id(self):
-        return f"https://sqs.{self.region}.amazonaws.com/{get_account_id()}/{self.name}"
+        return f"https://sqs.{self.region}.amazonaws.com/{self.account_id}/{self.name}"
 
     @property
     def attributes(self):
@@ -509,7 +511,7 @@ class Queue(CloudFormationModel):
 
     def url(self, request_url):
         return "{0}://{1}/{2}/{3}".format(
-            request_url.scheme, request_url.netloc, get_account_id(), self.name
+            request_url.scheme, request_url.netloc, self.account_id, self.name
         )
 
     @property
@@ -537,7 +539,7 @@ class Queue(CloudFormationModel):
         self._messages.append(message)
 
         for arn, esm in self.lambda_event_source_mappings.items():
-            backend = sqs_backends[self.region]
+            backend = sqs_backends[self.account_id][self.region]
 
             """
             Lambda polls the queue and invokes your function synchronously with an event
@@ -554,7 +556,7 @@ class Queue(CloudFormationModel):
 
             from moto.awslambda import lambda_backends
 
-            result = lambda_backends[self.region].send_sqs_batch(
+            result = lambda_backends[self.account_id][self.region].send_sqs_batch(
                 arn, messages, self.queue_arn
             )
 
@@ -650,7 +652,9 @@ class SQSBackend(BaseBackend):
             except KeyError:
                 pass
 
-            new_queue = Queue(name, region=self.region_name, **kwargs)
+            new_queue = Queue(
+                name, region=self.region_name, account_id=self.account_id, **kwargs
+            )
 
             queue_attributes = queue.attributes
             new_queue_attributes = new_queue.attributes
@@ -665,7 +669,9 @@ class SQSBackend(BaseBackend):
                 kwargs.pop("region")
             except KeyError:
                 pass
-            queue = Queue(name, region=self.region_name, **kwargs)
+            queue = Queue(
+                name, region=self.region_name, account_id=self.account_id, **kwargs
+            )
             self.queues[name] = queue
 
         if tags:
@@ -756,7 +762,7 @@ class SQSBackend(BaseBackend):
         else:
             delay_seconds = queue.delay_seconds
 
-        message_id = get_random_message_id()
+        message_id = str(random.uuid4())
         message = Message(message_id, message_body, system_attributes)
 
         # if content based deduplication is set then set sha256 hash of the message

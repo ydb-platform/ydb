@@ -280,7 +280,6 @@ private:
         auto &event = ev->Get()->Record;
 
         bool enableKqpDataQueryStreamLookup = TableServiceConfig.GetEnableKqpDataQueryStreamLookup();
-        bool enableKqpScanQueryStreamLookup = TableServiceConfig.GetEnableKqpScanQueryStreamLookup();
         bool enableKqpDataQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
         bool enableKqpScanQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
 
@@ -309,11 +308,12 @@ private:
 
         auto mkqlHeavyLimit = TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit();
 
-        bool enableQueryServiceSpilling = TableServiceConfig.GetEnableQueryServiceSpilling();
         ui64 defaultCostBasedOptimizationLevel = TableServiceConfig.GetDefaultCostBasedOptimizationLevel();
         bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
 
         TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
+
+        bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
@@ -323,7 +323,6 @@ private:
 
         if (TableServiceConfig.GetSqlVersion() != defaultSyntaxVersion ||
             TableServiceConfig.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
-            TableServiceConfig.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup ||
             TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
@@ -340,13 +339,13 @@ private:
             TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit ||
             TableServiceConfig.GetIdxLookupJoinPointsLimit() != idxLookupPointsLimit ||
             TableServiceConfig.GetEnableSpillingNodes() != enableSpillingNodes ||
-            TableServiceConfig.GetEnableQueryServiceSpilling() != enableQueryServiceSpilling ||
             TableServiceConfig.GetDefaultCostBasedOptimizationLevel() != defaultCostBasedOptimizationLevel ||
             TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding ||
             TableServiceConfig.GetEnableAstCache() != enableAstCache ||
             TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
             TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
-            TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution) {
+            TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
+            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW) {
 
             QueryCache->Clear();
 
@@ -1230,7 +1229,7 @@ void TKqpQueryCache::InsertQuery(const TKqpCompileResult::TConstPtr& compileResu
 
     auto queryIt = QueryIndex.emplace(query, compileResult->Uid);
     if (!queryIt.second) {
-        EraseByUid(compileResult->Uid);
+        EraseByUidImpl(compileResult->Uid);
         QueryIndex.erase(query);
     }
     Y_ENSURE(queryIt.second);

@@ -21,23 +21,23 @@ namespace NYql {
 
     namespace {
 
-        TString GetSourceType(NYql::NConnector::NApi::TDataSourceInstance dsi) {
+        TString GetSourceType(NYql::TGenericDataSourceInstance dsi) {
             switch (dsi.kind()) {
-                case NYql::NConnector::NApi::CLICKHOUSE:
+                case NYql::EGenericDataSourceKind::CLICKHOUSE:
                     return "ClickHouseGeneric";
-                case NYql::NConnector::NApi::POSTGRESQL:
+                case NYql::EGenericDataSourceKind::POSTGRESQL:
                     return "PostgreSqlGeneric";
-                case NYql::NConnector::NApi::MYSQL:
+                case NYql::EGenericDataSourceKind::MYSQL:
                     return "MySqlGeneric";
-                case NYql::NConnector::NApi::YDB:
+                case NYql::EGenericDataSourceKind::YDB:
                     return "YdbGeneric";
-                case NYql::NConnector::NApi::GREENPLUM:
+                case NYql::EGenericDataSourceKind::GREENPLUM:
                     return "GreenplumGeneric";
-                case NYql::NConnector::NApi::MS_SQL_SERVER:
+                case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
                     return "MsSQLServerGeneric";
-                case NYql::NConnector::NApi::ORACLE:
+                case NYql::EGenericDataSourceKind::ORACLE:
                     return "OracleGeneric";
-                case NYql::NConnector::NApi::LOGGING:
+                case NYql::EGenericDataSourceKind::LOGGING:
                     return "LoggingGeneric";
                 default:
                     ythrow yexception() << "Data source kind is unknown or not specified";
@@ -167,7 +167,7 @@ namespace NYql {
                     // Managed YDB (including YDB underlying Logging) supports access via IAM token.
                     // If exist, copy service account creds to obtain tokens during request execution phase.
                     // If exists, copy previously created token.
-                    if (IsIn({NConnector::NApi::EDataSourceKind::YDB, NConnector::NApi::EDataSourceKind::LOGGING}, clusterConfig.kind())) {
+                    if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING}, clusterConfig.kind())) {
                         source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                         source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                         source.SetToken(State_->Types->Credentials->FindCredentialContent(
@@ -198,36 +198,36 @@ namespace NYql {
                 properties["Table"] = table;
                 auto [tableMeta, issue] = State_->GetTable(clusterName, table);
                 if (!issue) {
-                    const NConnector::NApi::TDataSourceInstance& dataSourceInstance = tableMeta.value()->DataSourceInstance;
+                    const NYql::TGenericDataSourceInstance& dataSourceInstance = tableMeta.value()->DataSourceInstance;
                     switch (dataSourceInstance.kind()) {
-                        case NConnector::NApi::CLICKHOUSE:
+                        case NYql::EGenericDataSourceKind::CLICKHOUSE:
                             properties["SourceType"] = "ClickHouse";
                             break;
-                        case NConnector::NApi::POSTGRESQL:
+                        case NYql::EGenericDataSourceKind::POSTGRESQL:
                             properties["SourceType"] = "PostgreSql";
                             break;
-                        case NConnector::NApi::MYSQL:
+                        case NYql::EGenericDataSourceKind::MYSQL:
                             properties["SourceType"] = "MySql";
                             break;
-                        case NConnector::NApi::YDB:
+                        case NYql::EGenericDataSourceKind::YDB:
                             properties["SourceType"] = "Ydb";
                             break;
-                        case NConnector::NApi::GREENPLUM:
+                        case NYql::EGenericDataSourceKind::GREENPLUM:
                             properties["SourceType"] = "Greenplum";
                             break;
-                        case NConnector::NApi::MS_SQL_SERVER:
+                        case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
                             properties["SourceType"] = "MsSQLServer";
                             break;
-                        case NConnector::NApi::ORACLE:
+                        case NYql::EGenericDataSourceKind::ORACLE:
                             properties["SourceType"] = "Oracle";
                             break;
-                        case NConnector::NApi::LOGGING:
+                        case NYql::EGenericDataSourceKind::LOGGING:
                             properties["SourceType"] = "Logging";
                             break;
-                        case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
+                        case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
                         default:
-                            properties["SourceType"] = NConnector::NApi::EDataSourceKind_Name(dataSourceInstance.kind());
+                            properties["SourceType"] = NYql::EGenericDataSourceKind_Name(dataSourceInstance.kind());
                             break;
                     }
 
@@ -236,15 +236,15 @@ namespace NYql {
                     }
 
                     switch (dataSourceInstance.protocol()) {
-                        case NConnector::NApi::NATIVE:
+                        case NYql::EGenericProtocol::NATIVE:
                             properties["Protocol"] = "Native";
                             break;
-                        case NConnector::NApi::HTTP:
+                        case NYql::EGenericProtocol::HTTP:
                             properties["Protocol"] = "Http";
                             break;
-                        case NConnector::NApi::PROTOCOL_UNSPECIFIED:
+                        case NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED:
                         default:
-                            properties["Protocol"] = NConnector::NApi::EProtocol_Name(dataSourceInstance.protocol());
+                            properties["Protocol"] = NYql::EGenericProtocol_Name(dataSourceInstance.protocol());
                             break;
                     }
                 }
@@ -291,7 +291,7 @@ namespace NYql {
                 // Managed YDB supports access via IAM token.
                 // If exist, copy service account creds to obtain tokens during request execution phase.
                 // If exists, copy previously created token.
-                if (clusterConfig.kind() == NConnector::NApi::EDataSourceKind::YDB) {
+                if (clusterConfig.kind() == NYql::EGenericDataSourceKind::YDB) {
                     source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                     source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                     source.SetToken(State_->Types->Credentials->FindCredentialContent(

@@ -1,4 +1,4 @@
-PRAGMA CheckedOps = "true";
+PRAGMA CheckedOps = 'true';
 
 SELECT
     5 + 3,
@@ -29,5 +29,5 @@ SELECT
 ;
 
 SELECT
-    -CAST("-128" AS int8)
+    -CAST('-128' AS int8)
 ;

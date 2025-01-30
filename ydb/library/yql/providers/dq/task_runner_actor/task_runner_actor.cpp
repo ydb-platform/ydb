@@ -416,7 +416,7 @@ private:
         i64 space,
         bool finish) override
     {
-        auto* actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
+        auto* actorSystem = NActors::TActivationContext::ActorSystem();
         auto selfId = SelfId();
 
         YQL_ENSURE(!batch.IsWide());

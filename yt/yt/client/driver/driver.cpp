@@ -259,6 +259,7 @@ public:
         REGISTER    (TResumeOperationCommand,              "resume_op",                       Null,       Null,       true,  false, ApiVersion3);
         REGISTER    (TCompleteOperationCommand,            "complete_op",                     Null,       Null,       true,  false, ApiVersion3);
         REGISTER    (TUpdateOperationParametersCommand,    "update_op_parameters",            Null,       Null,       true,  false, ApiVersion3);
+        REGISTER    (TPatchOperationSpecCommand,           "patch_op_spec",                   Null,       Null,       true,  false, ApiVersion3);
 
         REGISTER    (TStartOperationCommand,               "start_operation",                 Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbortOperationCommand,               "abort_operation",                 Null,       Structured, true,  false, ApiVersion4);
@@ -266,6 +267,7 @@ public:
         REGISTER    (TResumeOperationCommand,              "resume_operation",                Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TCompleteOperationCommand,            "complete_operation",              Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TUpdateOperationParametersCommand,    "update_operation_parameters",     Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TPatchOperationSpecCommand,           "patch_operation_spec",            Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER_ALL(TParseYPathCommand,                   "parse_ypath",                     Null,       Structured, false, false);
 
@@ -397,9 +399,12 @@ public:
             REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, true,  false);
             REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, true,  false);
             REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, true,  false);
+
+            // TODO(arkady-e1ppa): flags past command name might be complete rubbish -- think them through later.
             REGISTER_ALL(TStartDistributedWriteSessionCommand,    "start_distributed_write_session",      Null,    Structured, true, false);
             REGISTER_ALL(TFinishDistributedWriteSessionCommand,   "finish_distributed_write_session",     Null,    Null,       true, false);
             REGISTER_ALL(TWriteTableFragmentCommand,               "distributed_write_table_partition",    Tabular, Structured, true, true );
+            REGISTER_ALL(TForsakeChaosCoordinator,         "forsake_chaos_coordinator",       Null,       Null,       true,  true);
         }
 
 #undef REGISTER

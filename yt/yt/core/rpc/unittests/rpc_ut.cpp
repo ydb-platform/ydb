@@ -77,7 +77,7 @@ TYPED_TEST(TRpcTest, RetryingSend)
 {
     auto config = New<TRetryingChannelConfig>();
     config->Load(ConvertTo<INodePtr>(TYsonString(TStringBuf(
-        "{retry_backoff_time=10}"))));
+        "{enable_exponential_retry_backoffs=true;retry_backoff={min_backoff=10}}"))));
 
     IChannelPtr channel = CreateRetryingChannel(
         std::move(config),
@@ -129,7 +129,7 @@ TYPED_TEST(TNotUdsTest, Address)
     {
         auto config = New<TRetryingChannelConfig>();
         config->Load(ConvertTo<INodePtr>(TYsonString(TStringBuf(
-            "{retry_backoff_time=10}"))));
+            "{enable_exponential_retry_backoffs=true;retry_backoff={min_backoff=10}}"))));
         testChannel(CreateRetryingChannel(
             std::move(config),
             this->CreateChannel()));
@@ -508,9 +508,9 @@ TYPED_TEST(TAttachmentsTest, RegularAttachments)
 
     const auto& attachments = rsp->Attachments();
     EXPECT_EQ(3u, attachments.size());
-    EXPECT_EQ("Hello_",     StringFromSharedRef(attachments[0]));
-    EXPECT_EQ("from_",      StringFromSharedRef(attachments[1]));
-    EXPECT_EQ("TTestProxy_",  StringFromSharedRef(attachments[2]));
+    EXPECT_EQ("Hello_", StringFromSharedRef(attachments[0]));
+    EXPECT_EQ("from_", StringFromSharedRef(attachments[1]));
+    EXPECT_EQ("TTestProxy_", StringFromSharedRef(attachments[2]));
 }
 
 TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
@@ -533,14 +533,16 @@ TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
     // Attachment allocator proactively allocate slice of 4 KB.
     // See NYT::NBus::TPacketDecoder::TChunkedMemoryTrackingAllocator::Allocate.
     // default stub = 4096.
-    // header + body = 103 bytes.
+    // header + body = 79 bytes.
     // attachments = 22 bytes.
-    // sum is 4221 bytes.
-    EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 4221 + 32768);
+    // sum is 4219 bytes.
+    if (TypeParam::MemoryUsageTrackingEnabled) {
+        EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 4197 + 32768 + std::ssize(GetRpcUserAgent()));
+    }
     EXPECT_EQ(3u, attachments.size());
-    EXPECT_EQ("Hello_",     StringFromSharedRef(attachments[0]));
-    EXPECT_EQ("from_",      StringFromSharedRef(attachments[1]));
-    EXPECT_EQ("TTestProxy_",  StringFromSharedRef(attachments[2]));
+    EXPECT_EQ("Hello_", StringFromSharedRef(attachments[0]));
+    EXPECT_EQ("from_", StringFromSharedRef(attachments[1]));
+    EXPECT_EQ("TTestProxy_", StringFromSharedRef(attachments[2]));
 }
 
 TYPED_TEST(TAttachmentsTest, NullAndEmptyAttachments)
@@ -602,7 +604,9 @@ TYPED_TEST(TNotGrpcTest, Compression)
     // attachmentStrings[1].size() = 36 * 2 bytes from decoder.
     // attachmentStrings[2].size() = 90 * 2 bytes from decoder.
     // sum is 4584 bytes.
-    EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 4584 + 32768);
+    if (TypeParam::MemoryUsageTrackingEnabled) {
+        EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 4562 + 32768 + std::ssize(GetRpcUserAgent()));
+    }
     EXPECT_TRUE(rsp->message() == message);
     EXPECT_GE(rsp->GetResponseMessage().Size(), static_cast<size_t>(2));
     const auto& serializedResponseBody = SerializeProtoToRefWithCompression(*rsp, responseCodecId);
@@ -828,12 +832,12 @@ TYPED_TEST(TNotGrpcTest, MemoryTracking)
 
     Sleep(TDuration::MilliSeconds(200));
 
-    {
+    if (TypeParam::MemoryUsageTrackingEnabled) {
         auto rpcUsage = memoryUsageTracker->GetTotalUsage();
 
-        // 1292468 = 32768 + 1228800 = 32768 + 4096 * 300 + 300 * 103 (header + body).
+        // 1285268 = 32768 + 1252500 = 32768 + 4096 * 300 + 300 * 79 (header + body).
         // 32768 - socket buffers, 4096 - default size per request.
-        EXPECT_GE(rpcUsage, 1292468);
+        EXPECT_GE(rpcUsage, 1285268 + 300 * std::ssize(GetRpcUserAgent()));
     }
 }
 
@@ -849,11 +853,11 @@ TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConnections)
         WaitFor(req->Invoke().AsVoid()).ThrowOnError();
     }
 
-    {
-        // 11059200 / 300 = 36974 = 32768 + 4096 + 103 (header + body).
+    if (TypeParam::MemoryUsageTrackingEnabled) {
+        // 11082900 / 300 = 36974 = 32768 + 4096 + 79 (header + body).
         // 4 KB - stub for request.
         // See NYT::NBus::TPacketDecoder::TChunkedMemoryTrackingAllocator::Allocate.
-        EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 11090100);
+        EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 11082900 + 300 * std::ssize(GetRpcUserAgent()));
     }
 }
 
@@ -877,7 +881,7 @@ TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConcurrent)
 
     Sleep(TDuration::MilliSeconds(100));
 
-    {
+    if (TypeParam::MemoryUsageTrackingEnabled) {
         auto rpcUsage = memoryUsageTracker->GetUsed();
 
         // connections count - per connection size.
@@ -901,15 +905,16 @@ TYPED_TEST(TNotGrpcTest, MemoryOvercommit)
     req->set_request_codec(ToProto(requestCodecId));
     req->Attachments().push_back(TSharedRef::FromString(TString(6_KB, 'x')));
     WaitFor(req->Invoke()).ThrowOnError();
-    {
+
+    if (TypeParam::MemoryUsageTrackingEnabled) {
         auto rpcUsage = memoryReferenceUsageTracker->GetTotalUsage();
 
         // Attachment allocator proactively allocate slice of 4 KB.
         // See NYT::NBus::TPacketDecoder::TChunkedMemoryTrackingAllocator::Allocate.
         // default stub = 4096.
-        // header + body = 103 bytes.
+        // header + body = 79 bytes.
         // attachments = 6_KB  kbytes.
-        EXPECT_GE(rpcUsage, 32768 + 4096 + 6144 + 103);
+        EXPECT_GE(rpcUsage, 32768 + 4096 + 6144 + 79 + std::ssize(GetRpcUserAgent()));
     }
 }
 

@@ -696,6 +696,12 @@ public:
         std::fill_n(Ctx->MutableValues.get(), PatternNodes->GetMutables().CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
     }
 
+    void InvalidateCaches() override {
+        for (const auto cachedIndex : Ctx->Mutables.CachedValues) {
+            Ctx->MutableValues[cachedIndex] = NUdf::TUnboxedValuePod::Invalid();
+        }
+    }
+
     const TComputationNodePtrDeque& GetNodes() const override {
         return PatternNodes->GetNodes();
     }
@@ -808,8 +814,8 @@ public:
         : Codegen((NYql::NCodegen::ICodegen::IsCodegenAvailable() && opts.OptLLVM != "OFF") || GetEnv(TString("MKQL_FORCE_USE_LLVM")) ? NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native) : NYql::NCodegen::ICodegen::TPtr())
 #endif
     {
-    /// TODO: Enable JIT for AARCH64
-#if defined(__aarch64__)
+    /// TODO: Enable JIT for AARCH64/Win
+#if defined(__aarch64__) || defined(_win_)
         Codegen = {};
 #endif
 

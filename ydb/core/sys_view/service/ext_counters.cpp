@@ -177,7 +177,7 @@ private:
                 ExecuteLatencyMsPrevValues[n] = value;
                 if (ExecuteLatencyMsBounds[n] == 0) {
                     NMonitoring::TBucketBound bound = snapshot->UpperBound(n);
-                    ExecuteLatencyMsBounds[n] = bound == Max<NMonitoring::TBucketBound>() ? Max<ui64>() : bound;
+                    ExecuteLatencyMsBounds[n] = bound == Max<NMonitoring::TBucketBound>() ? Max<ui64>() : ui64(bound);
                 }
             }
             metrics->AddMetric("queries.requests", total);

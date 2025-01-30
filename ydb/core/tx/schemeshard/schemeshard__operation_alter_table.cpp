@@ -80,8 +80,14 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             copyAlter.ColumnsSize() != 0 ||
             copyAlter.DropColumnsSize() != 0);
 
-    if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() !=  table->IsBackup) {
+    if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() != table->IsBackup) {
         errStr = Sprintf("Cannot add/remove 'IsBackup' property");
+        status = NKikimrScheme::StatusInvalidParameter;
+        return nullptr;
+    }
+
+    if (copyAlter.HasIsRestore() && copyAlter.GetIsRestore() != table->IsRestore) {
+        errStr = Sprintf("Cannot add/remove 'IsRestore' property");
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }
@@ -500,7 +506,7 @@ public:
         TPathId pathId;
         if (alter.HasId_Deprecated() || alter.HasPathId()) {
             pathId = alter.HasPathId()
-                ? PathIdFromPathId(alter.GetPathId())
+                ? TPathId::FromProto(alter.GetPathId())
                 : context.SS->MakeLocalId(alter.GetId_Deprecated());
         }
 
@@ -712,7 +718,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     const TString& parentPathStr = tx.GetWorkingDir();
     const TString& name = alter.GetName();
 
-    TPathId pathId = alter.HasPathId() ? PathIdFromPathId(alter.GetPathId()) : InvalidPathId;
+    TPathId pathId = alter.HasPathId() ? TPathId::FromProto(alter.GetPathId()) : InvalidPathId;
 
     if (!alter.HasName() && !pathId) {
         return {CreateAlterTable(id, tx)};

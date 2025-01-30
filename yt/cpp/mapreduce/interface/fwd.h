@@ -150,6 +150,7 @@ namespace NYT {
     // common.h
     ////////////////////////////////////////////////////////////////////////////////
 
+    using TMutationId = TGUID;
     using TTransactionId = TGUID;
     using TNodeId = TGUID;
     using TLockId = TGUID;
@@ -396,5 +397,19 @@ namespace NYT {
     struct TRetryConfig;
     class IRetryConfigProvider;
     using IRetryConfigProviderPtr = ::TIntrusivePtr<IRetryConfigProvider>;
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // raw_batch_request.h
+    ////////////////////////////////////////////////////////////////////////////////
+
+    class IRawBatchRequest;
+    using IRawBatchRequestPtr = ::TIntrusivePtr<IRawBatchRequest>;
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // raw_client.h
+    ////////////////////////////////////////////////////////////////////////////////
+
+    class IRawClient;
+    using IRawClientPtr = ::TIntrusivePtr<IRawClient>;
 }
 /// @endcond

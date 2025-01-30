@@ -2,7 +2,7 @@ IF (NOT OS_WINDOWS)
     PROGRAM()
 
     PEERDIR(
-        ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+        ydb/public/sdk/cpp/src/client/persqueue_public/codecs
         library/cpp/getopt
         yt/cpp/mapreduce/client
         ydb/library/yql/dq/actors/compute
@@ -31,7 +31,7 @@ IF (NOT OS_WINDOWS)
         yql/essentials/utils/failure_injector
         yql/essentials/utils/backtrace
         yql/essentials/utils/network
-        yt/yql/providers/yt/comp_nodes/dq
+        yt/yql/providers/yt/comp_nodes/dq/llvm14
         yt/yql/providers/yt/comp_nodes/llvm14
         yt/yql/providers/yt/codec/codegen
         yt/yql/providers/yt/mkql_dq

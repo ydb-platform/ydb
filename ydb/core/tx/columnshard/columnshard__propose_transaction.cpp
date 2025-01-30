@@ -146,7 +146,6 @@ private:
             }
 
             auto schemaSnapshot = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema();
-            auto schema = schemaSnapshot->GetSchema();
             auto index = schemaSnapshot->GetColumnIdOptional(columnName);
             if (!index) {
                 return TTxController::TProposeResult(

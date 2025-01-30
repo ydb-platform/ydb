@@ -7,7 +7,7 @@ namespace Ydb::View {
     class DescribeViewResult;
 }
 
-namespace NYdb {
+namespace NYdb::inline V2 {
     class TProtoAccessor;
 }
 
@@ -15,7 +15,7 @@ namespace NYql {
     class TIssues;
 }
 
-namespace NYdb::NView {
+namespace NYdb::inline V2::NView {
 
 class TDescribeViewResult;
 using TAsyncDescribeViewResult = NThreading::TFuture<TDescribeViewResult>;

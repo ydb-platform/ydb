@@ -404,6 +404,7 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
     }
 
     TKqpStreamLookupSettings settings;
+    settings.AllowNullKeysPrefixSize = rightLookup.PrefixSize;
     settings.Strategy = join.JoinType().Value() == "LeftSemi"
         ? EStreamLookupStrategyType::LookupSemiJoinRows
         : EStreamLookupStrategyType::LookupJoinRows;
@@ -616,8 +617,37 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         leftJoinKeys.emplace(leftKey);
     }
 
+    auto rightPKContainsAllJoinKeyColumns = [&](const auto& rightKeyColumns, const auto& rightJoinKeyColumns) {
+        ui32 lookupPrefixSize = 0;
+        TSet<TString> lookupKeyColumns;
+        for (const auto& rightKeyColumn : rightKeyColumns) {
+            auto leftColumn = rightJoinKeyToLeft.FindPtr(rightKeyColumn);
+
+            if (lookupPrefixSize < rightPrefixSize) {
+                ++lookupPrefixSize;
+            } else {
+                if (!leftColumn) {
+                    break;
+                }
+            }
+
+            lookupKeyColumns.insert(rightKeyColumn);
+        }
+
+        for (auto& rightJoinKeyColumn : rightJoinKeyColumns) {
+            if (!lookupKeyColumns.contains(rightJoinKeyColumn.Value())) {
+                // this join key is non-pk column
+                return false;
+            }
+        }
+
+        return true;
+    };
+
     const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
-        && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin;
+        && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin
+        // StreamIndexLookupJoin can't execute join using non-pk columns
+        && rightPKContainsAllJoinKeyColumns(rightTableDesc.Metadata->KeyColumnNames, rightKeyColumns);
 
     auto leftRowArg = Build<TCoArgument>(ctx, join.Pos())
         .Name("leftRowArg")

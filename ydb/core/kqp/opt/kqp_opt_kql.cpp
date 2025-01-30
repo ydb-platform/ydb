@@ -79,7 +79,7 @@ std::pair<TExprBase, TCoAtomList> CreateRowsToReplace(const TExprBase& input,
 
 bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
     bool hasIndexesToWrite = false;
-    YQL_ENSURE(tableData.Metadata->Indexes.size() == tableData.Metadata->SecondaryGlobalIndexMetadata.size());
+    YQL_ENSURE(tableData.Metadata->Indexes.size() == tableData.Metadata->ImplTables.size());
     for (const auto& index : tableData.Metadata->Indexes) {
         if (index.ItUsedForWrite()) {
             hasIndexesToWrite = true;
@@ -711,6 +711,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
 TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, const TKikimrTablesData& tablesData,
     bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
 {
+    Y_UNUSED(kqpCtx);
     TKikimrKey key(ctx);
     YQL_ENSURE(key.Extract(read.TableKey().Ref()));
     YQL_ENSURE(key.GetKeyType() == TKikimrKey::Type::Table);
@@ -720,12 +721,6 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
     if (view && !view->PrimaryFlag) {
         const auto& indexName = view->Name;
         if (!ValidateTableHasIndex(tableData.Metadata, ctx, read.Pos())) {
-            return nullptr;
-        }
-
-        if (kqpCtx->IsScanQuery() && !kqpCtx->Config->EnableKqpScanQueryStreamLookup) {
-            const TString err = "Secondary index is not supported for ScanQuery";
-            ctx.AddError(YqlIssue(ctx.GetPosition(read.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, err));
             return nullptr;
         }
 
@@ -893,7 +888,7 @@ TIntrusivePtr<TKikimrTableMetadata> GetIndexMetadata(const TKqlReadTableIndex& r
     const TKikimrTablesData& tables, TStringBuf cluster)
 {
     const auto& tableDesc = GetTableData(tables, cluster, read.Table().Path());
-    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(read.Index().StringValue());
+    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(read.Index().Value());
     return indexMeta;
 }
 

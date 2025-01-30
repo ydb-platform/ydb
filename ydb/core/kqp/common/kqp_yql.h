@@ -55,14 +55,14 @@ enum class EStreamLookupStrategyType {
 
 struct TKqpStreamLookupSettings {
     static constexpr TStringBuf StrategySettingName = "Strategy";
-    static constexpr TStringBuf AllowNullKeysSettingName = "AllowNullKeys";
+    static constexpr TStringBuf AllowNullKeysSettingName = "AllowNullKeysPrefixSize";
 
     // stream lookup strategy types
     static constexpr std::string_view LookupStrategyName = "LookupRows"sv;
     static constexpr std::string_view LookupJoinStrategyName = "LookupJoinRows"sv;
     static constexpr std::string_view LookupSemiJoinStrategyName = "LookupSemiJoinRows"sv;
 
-    bool AllowNullKeys = false;
+    TMaybe<ui32> AllowNullKeysPrefixSize;
     EStreamLookupStrategyType Strategy = EStreamLookupStrategyType::Unspecified;
 
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;

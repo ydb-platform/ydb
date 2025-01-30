@@ -4,7 +4,7 @@ $timeout = 60 * 30;
 $init = ($row) -> (AsTuple($row.unixtime, $row.unixtime, $row.video_content_id));
 
 $update = ($row, $state) -> {
-    $is_end_session = (($row.unixtime - $state.1) >= $timeout) OR ($row.video_content_id IS NOT NULL AND $row.video_content_id != ($state.2 ?? "-")) ?? FALSE;
+    $is_end_session = (($row.unixtime - $state.1) >= $timeout) OR ($row.video_content_id IS NOT NULL AND $row.video_content_id != ($state.2 ?? '-')) ?? FALSE;
     $new_state = AsTuple(
         IF($is_end_session, $row.unixtime, $state.0),
         $row.unixtime,
@@ -23,34 +23,34 @@ $calculate = ($row, $state) -> (
 
 $source = [
     <|
-        vsid: "v",
+        vsid: 'v',
         unixtime: 1650624253,
         video_content_id: NULL,
     |>,
     <|
-        vsid: "v",
+        vsid: 'v',
         unixtime: 1650624255,
-        video_content_id: "b",
+        video_content_id: 'b',
     |>,
     <|
-        vsid: "v",
+        vsid: 'v',
         unixtime: 1650624256,
         video_content_id: NULL,
     |>,
     <|
-        vsid: "v",
+        vsid: 'v',
         unixtime: 1650624257,
-        video_content_id: "b",
+        video_content_id: 'b',
     |>,
     <|
-        vsid: "v",
+        vsid: 'v',
         unixtime: 1650634257,
-        video_content_id: "b",
+        video_content_id: 'b',
     |>,
     <|
-        vsid: "v",
+        vsid: 'v',
         unixtime: 1650634258,
-        video_content_id: "c",
+        video_content_id: 'c',
     |>
 ];
 

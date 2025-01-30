@@ -1,0 +1,11 @@
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["key";["DataType";"String"]];
+        ["subkey";["DataType";"String"]];
+        ["value";["DataType";"Utf8"]]
+    ]];
+    "SortDirections"=[1;1;1;];
+    "SortedBy"=["key";"subkey";"value";];
+    "SortedByTypes"=[["DataType";"String";];["DataType";"String";];["DataType";"Utf8";];];
+    "SortMembers"=["key";"subkey";"value";];
+}}

@@ -190,7 +190,7 @@ IViablePeerRegistryPtr CreateTestRegistry(
 std::vector<std::string> AddressesFromChannels(const std::vector<IChannelPtr>& channels)
 {
     std::vector<std::string> result;
-    for (const auto& channel: channels) {
+    for (const auto& channel : channels) {
         result.push_back(channel->GetEndpointDescription());
     }
     return result;

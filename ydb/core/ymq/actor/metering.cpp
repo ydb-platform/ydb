@@ -102,11 +102,11 @@ bool TProcessedRequestsAggregator::Add(const TProcessedRequestAttributes& attrs)
     Y_ABORT_UNLESS(attrs.RequestSizeInBytes);
     Y_ABORT_UNLESS(attrs.ResponseSizeInBytes);
 
-    ReportedTraffic[attrs.FolderId][{resourceId, ETrafficType::ingress, networkClassLabel}] += attrs.RequestSizeInBytes;
-    ReportedTraffic[attrs.FolderId][{resourceId, ETrafficType::egress, networkClassLabel}] += attrs.ResponseSizeInBytes;
+    ReportedTraffic[attrs.FolderId][{resourceId, ETrafficType::ingress, networkClassLabel, attrs.QueueTags}] += attrs.RequestSizeInBytes;
+    ReportedTraffic[attrs.FolderId][{resourceId, ETrafficType::egress, networkClassLabel, attrs.QueueTags}] += attrs.ResponseSizeInBytes;
 
     static const ui64 defaultRequestBlockSize = 64 * 1024; // SQS-22
-    ReportedRequests[attrs.FolderId][{resourceId, queueType}] += CountBlocks(attrs.RequestSizeInBytes + attrs.ResponseSizeInBytes,
+    ReportedRequests[attrs.FolderId][{resourceId, queueType, attrs.QueueTags}] += CountBlocks(attrs.RequestSizeInBytes + attrs.ResponseSizeInBytes,
                                                                              defaultRequestBlockSize);
 
     return true;
@@ -120,7 +120,8 @@ NSc::TValue CreateMeteringBillingRecord(
     const TInstant& now,
     const ui64 quantity,
     const TString& unit,
-    const NSc::TValue& tags
+    const NSc::TValue& tags,
+    const NSc::TValue& labels
 ) {
     const TString& billingRecordVersion = "v1";
     const ui64 utcSeconds = now.Seconds();
@@ -142,7 +143,10 @@ NSc::TValue CreateMeteringBillingRecord(
     usage["unit"] = unit;
     usage["quantity"] = quantity;
 
-    record["tags"] = tags;
+    record["tags"] = tags;      // Billing record tags
+    if (!labels.DictEmpty()) {
+        record["labels"] = labels;  // Queue tags
+    }
 
     record["version"] = billingRecordVersion;
 
@@ -167,7 +171,8 @@ TVector<NSc::TValue> TProcessedRequestsAggregator::DumpReportedTrafficAsJsonArra
                                                  now,
                                                  trafficValue,
                                                  "byte",
-                                                 tags));
+                                                 tags,
+                                                 trafficKey.Labels));
         }
     }
 
@@ -191,7 +196,8 @@ TVector<NSc::TValue> TProcessedRequestsAggregator::DumpReportedRequestsAsJsonArr
                                                  now,
                                                  requestsValue,
                                                  "request",
-                                                 tags));
+                                                 tags,
+                                                 requestsKey.Labels));
         }
     }
 

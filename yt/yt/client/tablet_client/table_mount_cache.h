@@ -20,7 +20,7 @@
 
 #include <yt/yt/core/actions/future.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <util/datetime/base.h>
 
@@ -66,6 +66,7 @@ struct TIndexInfo
     ESecondaryIndexKind Kind;
     std::optional<TString> Predicate;
     std::optional<TString> UnfoldedColumn;
+    ETableToIndexCorrespondence Correspondence;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

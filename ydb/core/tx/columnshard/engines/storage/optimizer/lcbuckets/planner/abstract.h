@@ -116,7 +116,7 @@ public:
 class TCompactionTaskData {
 private:
     YDB_ACCESSOR_DEF(std::vector<TPortionInfo::TConstPtr>, Portions);
-    const ui64 TargetCompactionLevel = 0;
+    const TPositiveControlInteger TargetCompactionLevel;
     std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> Predictor =
         NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
     ui64 MemoryUsage = 0;
@@ -135,8 +135,7 @@ private:
 public:
     ui64 GetTargetCompactionLevel() const {
         if (MemoryUsage > ((ui64)1 << 30)) {
-            AFL_VERIFY(TargetCompactionLevel);
-            return TargetCompactionLevel - 1;
+            return TargetCompactionLevel.GetDec();
         } else {
             return TargetCompactionLevel;
         }
@@ -274,6 +273,7 @@ class IPortionsLevel {
 private:
     virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) = 0;
     virtual ui64 DoGetWeight() const = 0;
+    virtual TInstant DoGetWeightExpirationInstant() const = 0;
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
     virtual TCompactionTaskData DoGetOptimizationTask() const = 0;
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const = 0;
@@ -367,6 +367,10 @@ public:
 
     ui64 GetWeight() const {
         return DoGetWeight();
+    }
+
+    TInstant GetWeightExpirationInstant() const {
+        return DoGetWeightExpirationInstant();
     }
 
     NArrow::NMerger::TIntervalPositions GetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const {

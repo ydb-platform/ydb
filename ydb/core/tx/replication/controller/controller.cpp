@@ -82,6 +82,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvGetTxId, Handle);
         HFunc(TEvService::TEvHeartbeat, Handle);
         HFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
+        HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
     default:
         HandleDefaultEvents(ev, SelfId());
@@ -131,6 +132,10 @@ void TController::Reset() {
     SysParams.Reset();
     Replications.clear();
     ReplicationsByPathId.clear();
+    AssignedTxIds.clear();
+    Workers.clear();
+    WorkersWithHeartbeat.clear();
+    WorkersByHeartbeat.clear();
 }
 
 void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
@@ -517,7 +522,7 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
             return;
         }
         for (auto partitionId : record.GetChildPartitionsIds()) {
-            auto ev = MakeTEvRunWorker(replication, *target, partitionId);
+            auto ev = MakeRunWorkerEv(replication, *target, partitionId);
             Send(SelfId(), std::move(ev));
         }
     }
@@ -756,24 +761,29 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
         return;
     }
 
-    if (Replications.size() != 1) {
+    auto replication = GetSingle();
+    if (!replication) {
         CLOG_E(ctx, "Cannot assign tx id: ambiguous replication instance");
         return;
     }
 
-    const auto& config = Replications.begin()->second->GetConfig();
-    if (!config.HasStrongConsistency()) {
-        CLOG_E(ctx, "Cannot assign tx id: not in strong consistency mode");
+    const auto& config = replication->GetConfig().GetConsistencySettings();
+    switch (config.GetLevelCase()) {
+    case NKikimrReplication::TConsistencySettings::kGlobal:
+        break;
+    default:
+        CLOG_E(ctx, "Cannot assign tx id: consistency level is not global");
         return;
     }
 
-    const auto intervalMs = config.GetStrongConsistency().GetCommitIntervalMilliSeconds();
+    const auto intervalMs = config.GetGlobal().GetCommitIntervalMilliSeconds();
     for (const auto& version : ev->Get()->Record.GetVersions()) {
         const ui64 intervalNo = version.GetStep() / intervalMs;
         const auto adjustedVersion = TRowVersion(intervalMs * (intervalNo + 1), 0);
         PendingTxId[adjustedVersion].insert(nodeId);
     }
 
+    TabletCounters->Simple()[COUNTER_PENDING_VERSIONS] = PendingTxId.size();
     RunTxAssignTxId(ctx);
 }
 
@@ -787,9 +797,10 @@ void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext
 
     const auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
-    const auto version = TRowVersion::Parse(record.GetVersion());
+    const auto version = TRowVersion::FromProto(record.GetVersion());
     PendingHeartbeats[id] = version;
 
+    TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = PendingHeartbeats.size();
     RunTxHeartbeat(ctx);
 }
 
@@ -820,6 +831,14 @@ TReplication::TPtr TController::Find(const TPathId& pathId) const {
     }
 
     return it->second;
+}
+
+TReplication::TPtr TController::GetSingle() const {
+    if (Replications.size() != 1) {
+        return nullptr;
+    }
+
+    return Replications.begin()->second;
 }
 
 void TController::Remove(ui64 id) {

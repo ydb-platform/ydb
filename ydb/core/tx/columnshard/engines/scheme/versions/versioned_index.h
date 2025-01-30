@@ -1,5 +1,8 @@
 #pragma once
 #include "abstract_scheme.h"
+
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
+#include <ydb/core/tx/columnshard/engines/scheme/common/cache.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NOlap {
@@ -100,14 +103,14 @@ public:
     }
 
     ISnapshotSchema::TPtr GetLastSchemaBeforeOrEqualSnapshotOptional(const ui64 version) const {
-        ISnapshotSchema::TPtr res = nullptr;
-        for (auto it = SnapshotByVersion.rbegin(); it != SnapshotByVersion.rend(); ++it) {
-            if (it->first <= version) {
-                res = it->second;
-                break;
-            }
+        if (SnapshotByVersion.empty()) {
+            return nullptr;
         }
-        return res;
+        auto upperBound = SnapshotByVersion.upper_bound(version);
+        if (upperBound == SnapshotByVersion.begin()) {
+            return nullptr;
+        }
+        return std::prev(upperBound)->second;
     }
 
     ISnapshotSchema::TPtr GetLastSchema() const {
@@ -123,7 +126,7 @@ public:
         return PrimaryKey;
     }
 
-    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
+    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo);
 
     bool LoadShardingInfo(IDbWrapper& db);
 };

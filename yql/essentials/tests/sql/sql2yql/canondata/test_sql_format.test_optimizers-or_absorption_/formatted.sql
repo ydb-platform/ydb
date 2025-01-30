@@ -1,4 +1,4 @@
-PRAGMA config.flags("OptimizerFlags", "ExtractCommonPredicatesFromLogicalOps");
+PRAGMA config.flags('OptimizerFlags', 'ExtractCommonPredicatesFromLogicalOps');
 
 $a = 1 > 2;
 $b = 3 < 4;

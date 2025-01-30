@@ -206,10 +206,11 @@ void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager)
 TProgramPtr TProgramFactory::Create(
         const TFile& file,
         const TString& sessionId,
-        const TQContext& qContext)
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge)
 {
     TString sourceCode = TFileInput(file).ReadAll();
-    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext);
+    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext, gatewaysForMerge);
 }
 
 TProgramPtr TProgramFactory::Create(
@@ -217,7 +218,8 @@ TProgramPtr TProgramFactory::Create(
         const TString& sourceCode,
         const TString& sessionId,
         EHiddenMode hiddenMode,
-        const TQContext& qContext)
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge)
 {
     auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom && hiddenMode == EHiddenMode::Disable ?
         CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
@@ -235,7 +237,7 @@ TProgramPtr TProgramFactory::Create(
         UserDataTable_, Credentials_, moduleResolver, urlListerManager,
         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
-        qContext);
+        qContext, gatewaysForMerge);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -264,7 +266,8 @@ TProgram::TProgram(
         bool enableRangeComputeFor,
         const IArrowResolver::TPtr& arrowResolver,
         EHiddenMode hiddenMode,
-        const TQContext& qContext
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge
     )
     : FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
@@ -294,6 +297,7 @@ TProgram::TProgram(
     , ArrowResolver_(arrowResolver)
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
+    , GatewaysForMerge_(gatewaysForMerge)
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -376,6 +380,9 @@ TProgram::TProgram(
             auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();
             if (item) {
                 YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
+                if (GatewaysForMerge_) {
+                    YQL_ENSURE(LoadedGatewaysConfig_.MergeFromString(*GatewaysForMerge_));
+                }
                 GatewaysConfig_ = &LoadedGatewaysConfig_;
             }
         } else if (QContext_.CanWrite() && GatewaysConfig_) {
@@ -637,7 +644,7 @@ void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& fl
 }
 
 void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
-    const NSQLTranslation::TTranslationSettings*& currentSettings)
+    NSQLTranslation::TTranslationSettings*& currentSettings)
 {
     if (QContext_.CanWrite()) {
         auto clusterMappingsNode = NYT::TNode::CreateMap();
@@ -712,13 +719,15 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     NYql::TWarningRules warningRules;
     auto sourceCode = SourceCode_;
     HandleSourceCode(sourceCode);
-    const NSQLTranslation::TTranslationSettings* currentSettings = &settings;
+    NSQLTranslation::TTranslationSettings outerSettings = settings;
+    NSQLTranslation::TTranslationSettings* currentSettings = &outerSettings;
     NSQLTranslation::TTranslationSettings loadedSettings;
     loadedSettings.PgParser = settings.PgParser;
     if (QContext_) {
         HandleTranslationSettings(loadedSettings, currentSettings);
     }
 
+    currentSettings->EmitReadsForExists = true;
     return FillParseResult(SqlToYql(sourceCode, *currentSettings, &warningRules), &warningRules);
 }
 
@@ -1598,14 +1607,13 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out);
+    NYson::TYsonWriter writer(&out, OutputFormat_);
     // Header
     writer.OnBeginMap();
     writer.OnKeyedItem("ExecutionStatistics");
     writer.OnBeginMap();
 
     // Providers
-    bool hasStatistics = false;
     THashSet<TStringBuf> processed;
     for (auto& datasink : TypeCtx_->DataSinks) {
         TStringStream providerOut;
@@ -1613,7 +1621,6 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
         if (datasink->CollectStatistics(providerWriter, totalOnly)) {
             writer.OnKeyedItem(datasink->GetName());
             writer.OnRaw(providerOut.Str());
-            hasStatistics = true;
             processed.insert(datasink->GetName());
         }
     }
@@ -1624,7 +1631,6 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
             if (datasource->CollectStatistics(providerWriter, totalOnly)) {
                 writer.OnKeyedItem(datasource->GetName());
                 writer.OnRaw(providerOut.Str());
-                hasStatistics = true;
             }
         }
     }
@@ -1655,20 +1661,23 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
 
     writer.OnEndMap(); // system
 
+    if (TypeCtx_->Modules) {
+        writer.OnKeyedItem("moduleResolver");
+        writer.OnBeginMap();
+        TypeCtx_->Modules->WriteStatistics(writer);
+        writer.OnEndMap();
+    }
+
     // extra
     for (const auto &[k, extraYson] : extraYsons) {
         writer.OnKeyedItem(k);
         writer.OnRaw(extraYson);
-        hasStatistics = true;
     }
 
     // Footer
     writer.OnEndMap();
     writer.OnEndMap();
-    if (hasStatistics) {
-        return out.Str();
-    }
-    return Nothing();
+    return out.Str();
 }
 
 TMaybe<TString> TProgram::GetDiscoveredData() {
@@ -1677,7 +1686,7 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
     }
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out);
+    NYson::TYsonWriter writer(&out, OutputFormat_);
     writer.OnBeginMap();
     for (auto& datasource: TypeCtx_->DataSources) {
         TStringStream providerOut;
@@ -1916,6 +1925,10 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
 
     if (providerNames.contains(DqProviderName)) {
         resultProviderDataSources.push_back(TString(DqProviderName));
+    }
+
+    if (providerNames.contains(PureProviderName)) {
+        resultProviderDataSources.push_back(TString(PureProviderName));
     }
 
     if (!resultProviderDataSources.empty())

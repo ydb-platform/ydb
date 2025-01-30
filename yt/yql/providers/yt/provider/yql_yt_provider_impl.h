@@ -35,8 +35,9 @@ THolder<IGraphTransformer> CreateYtPhysicalFinalizingTransformer(TYtState::TPtr 
 THolder<IGraphTransformer> CreateYtPeepholeTransformer(TYtState::TPtr state, const THashMap<TString, TString>& settings);
 THolder<IGraphTransformer> CreateYtWideFlowTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtDqHybridTransformer(TYtState::TPtr state, THolder<IGraphTransformer>&& finalizer);
-THolder<IGraphTransformer> CreateYtBlockInputFilterTransformer(TYtState::TPtr state, THolder<IGraphTransformer>&& finalizer);
+THolder<IGraphTransformer> CreateYtBlockIOFilterTransformer(TYtState::TPtr state, THolder<IGraphTransformer>&& finalizer);
 THolder<IGraphTransformer> CreateYtBlockInputTransformer(TYtState::TPtr state);
+THolder<IGraphTransformer> CreateYtBlockOutputTransformer(TYtState::TPtr state);
 
 void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& children);
 TString MakeTableDisplayName(NNodes::TExprBase table, bool isOutput);

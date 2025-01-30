@@ -45,7 +45,7 @@ namespace NSQLTranslation {
     }
 
     TTranslationSettings::TTranslationSettings()
-        : ModuleMapping({{"core", "/lib/yql/core.yql"}})
+        : ModuleMapping({{"core", "/lib/yql/core.yqls"}})
         , BindingsMode(EBindingsMode::ENABLED)
         , Mode(ESqlMode::QUERY)
         , MaxErrors(SQL_MAX_PARSER_ERRORS)

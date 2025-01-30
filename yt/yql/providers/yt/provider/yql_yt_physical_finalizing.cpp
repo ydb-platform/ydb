@@ -2483,7 +2483,7 @@ private:
                             && outerMap.DataSink().Cluster().Value() == op.DataSink().Cluster().Value()
                             && NYql::HasSetting(op.Settings().Ref(), EYtSettingType::Flow) == NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)
                             && !NYql::HasSetting(op.Settings().Ref(), EYtSettingType::JobCount)
-                            && !NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount | EYtSettingType::BlockInputApplied)
+                            && !NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputApplied)
                             && !HasYtRowNumber(outerMap.Mapper().Body().Ref())
                             && IsYieldTransparent(outerMap.Mapper().Ptr(), *State_->Types)
                             && (!op.Maybe<TYtMapReduce>() || AllOf(outerMap.Output(), [](const auto& out) { return !TYtTableBaseInfo::GetRowSpec(out)->IsSorted(); }))) {
@@ -2815,9 +2815,15 @@ private:
                 } else {
                     const size_t pathNdx = uniquePaths.emplace(rawPath, uniquePaths.size()).first->second;
                     auto& cu = usage.ColumnUsage[outIndex];
+                    THashMap<TString, TString> renames;
+                    if (auto& colRenames = columns.GetRenames()) {
+                        for (auto& [k, v]: *colRenames) {
+                            renames[v] = k;
+                        }
+                    }
                     std::for_each(columns.GetColumns()->cbegin(), columns.GetColumns()->cend(),
-                        [&cu, pathNdx](const TYtColumnsInfo::TColumn& c) {
-                            cu[c.Name].insert(pathNdx);
+                        [&cu, pathNdx, &renames](const TYtColumnsInfo::TColumn& c) {
+                            cu[renames.Value(c.Name, c.Name)].insert(pathNdx);
                         }
                     );
                 }

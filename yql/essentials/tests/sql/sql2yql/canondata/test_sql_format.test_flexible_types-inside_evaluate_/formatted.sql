@@ -3,7 +3,7 @@ $do_safe_cast = ($x, $type) -> {
     $cast_code = EvaluateCode(
         LambdaCode(
             ($x_code) -> {
-                RETURN FuncCode("SafeCast", $x_code, $type_code);
+                RETURN FuncCode('SafeCast', $x_code, $type_code);
             }
         )
     );

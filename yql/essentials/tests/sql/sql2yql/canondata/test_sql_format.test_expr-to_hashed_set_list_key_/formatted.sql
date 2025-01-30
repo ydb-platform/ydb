@@ -31,7 +31,7 @@ SELECT
     DictContains($d, AsList(1, 3))
 ;
 
-$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom("Compact"), AsAtom("Hashed"), AsAtom("One")));
+$d = Yql::ToDict($l, $first, $second, AsTuple(AsAtom('Compact'), AsAtom('Hashed'), AsAtom('One')));
 
 SELECT
     DictKeys($d),

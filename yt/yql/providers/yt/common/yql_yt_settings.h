@@ -70,6 +70,12 @@ enum class EColumnGroupMode {
     PerUsage    /* "perusage", "per-usage" */,
 };
 
+enum class EBlockOutputMode {
+    Disable  /* "disable" */,
+    Auto     /* "auto" */,
+    Force    /* "force" */,
+};
+
 struct TYtSettings {
     using TConstPtr = std::shared_ptr<const TYtSettings>;
 
@@ -204,8 +210,6 @@ struct TYtSettings {
     NCommon::TConfSetting<TDuration, true> DQRPCReaderTimeout;
     NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
-    NCommon::TConfSetting<TSet<TString>, true> JobBlockInputSupportedTypes;
-    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> JobBlockInputSupportedDataTypes;
     NCommon::TConfSetting<TString, true> _BinaryCacheFolder;
 
     // Optimizers
@@ -223,6 +227,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui64, false> MapJoinShardMinRows;
     NCommon::TConfSetting<ui64, false> MapJoinShardCount; // [1-10]
     NCommon::TConfSetting<bool, false> MapJoinUseFlow;
+    NCommon::TConfSetting<bool, false> BlockMapJoin;
     NCommon::TConfSetting<NSize::TSize, false> LookupJoinLimit;
     NCommon::TConfSetting<ui64, false> LookupJoinMaxRows;
     NCommon::TConfSetting<NSize::TSize, false> EvaluationTableSizeLimit;
@@ -231,6 +236,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, false> MaxOutputTables;
     NCommon::TConfSetting<bool, false> DisableFuseOperations;
+    NCommon::TConfSetting<bool, false> EnableFuseMapToMapReduce;
     NCommon::TConfSetting<NSize::TSize, false> MaxExtraJobMemoryToFuseOperations;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseOperations;
     NCommon::TConfSetting<ui32, false> MaxOperationFiles;
@@ -269,6 +275,8 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> UseNewPredicateExtraction;
     NCommon::TConfSetting<bool, false> PruneKeyFilterLambda;
     NCommon::TConfSetting<bool, false> DqPruneKeyFilterLambda;
+    NCommon::TConfSetting<bool, false> UseQLFilter;
+    NCommon::TConfSetting<bool, false> PruneQLFilterLambda;
     NCommon::TConfSetting<bool, false> MergeAdjacentPointRanges;
     NCommon::TConfSetting<bool, false> KeyFilterForStartsWith;
     NCommon::TConfSetting<ui64, false> MaxKeyRangeCount;
@@ -286,7 +294,13 @@ struct TYtSettings {
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
     NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
     NCommon::TConfSetting<bool, false> JobBlockInput;
+    NCommon::TConfSetting<TSet<TString>, false> JobBlockInputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, false> JobBlockInputSupportedDataTypes;
+    NCommon::TConfSetting<EBlockOutputMode, false> JobBlockOutput;
+    NCommon::TConfSetting<TSet<TString>, false> JobBlockOutputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, false> JobBlockOutputSupportedDataTypes;
     NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
+    NCommon::TConfSetting<bool, false> CompactForDistinct;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);
@@ -343,7 +357,7 @@ public:
         : TYtConfiguration(types)
     {
     }
-    
+
     ~TYtVersionedConfiguration() = default;
 
     size_t FindNodeVer(const TExprNode& node);

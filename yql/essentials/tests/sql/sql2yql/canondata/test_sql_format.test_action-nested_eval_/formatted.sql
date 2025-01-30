@@ -10,11 +10,11 @@ $make_struct = CALLABLE (
 $kekify_struct = ($struct) -> {
     RETURN EvaluateCode(
         FuncCode(
-            "AsStruct",
+            'AsStruct',
             ListMap(
                 StructTypeComponents(TypeHandle(TypeOf($struct))),
                 ($_component) -> {
-                    RETURN ListCode(AtomCode("kek"), ReprCode(42));
+                    RETURN ListCode(AtomCode('kek'), ReprCode(42));
                 }
             )
         )

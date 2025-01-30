@@ -15,7 +15,7 @@ void Extend(TMatchedVar<R>& var, const R& r) {
         var.emplace_back(r);
     } else {
         MKQL_ENSURE(r.From() > var.back().To(), "Internal logic error");
-        if (var.back().To() + 1 == r.From()) {
+        if (var.back().To() + 1 == r.From() && var.back().NfaIndex() == r.NfaIndex()) {
             var.back().Extend();
         } else {
             var.emplace_back(r);

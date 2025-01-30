@@ -1,26 +1,27 @@
-pragma FeatureR010="prototype";
-pragma config.flags("MatchRecognizeStream", "disable");
+PRAGMA FeatureR010="prototype";
+PRAGMA config.flags("MatchRecognizeStream", "disable");
 
 $input = SELECT * FROM AS_TABLE([
-    <|time: 0,    id: 1, name: 'A'|>,
-    <|time: 200,  id: 2, name: 'B'|>,
-    <|time: 400,  id: 3, name: 'C'|>,
-    <|time: 600,  id: 4, name: 'B'|>,
-    <|time: 800,  id: 5, name: 'C'|>,
-    <|time: 1000, id: 6, name: 'W'|>,
+    <|time: 0,   name: 'A'|>,
+    <|time: 100, name: 'B'|>,
+    <|time: 200, name: 'C'|>,
+    <|time: 300, name: 'B'|>,
+    <|time: 400, name: 'C'|>,
+    <|time: 500, name: 'A'|>,
+    <|time: 600, name: 'B'|>,
+    <|time: 700, name: 'C'|>,
+    <|time: 800, name: 'W'|>,
 ]);
-
 
 SELECT * FROM $input MATCH_RECOGNIZE (
     ORDER BY CAST(time AS Timestamp)
     MEASURES
-        FIRST(A.id) as a_id,
-        LAST(B_OR_C.id) as bc_id,
-        LAST(C.id) as c_id
+        FIRST(A.time) AS a_time,
+        LAST(B_OR_C.time) AS bc_time,
+        LAST(C.time) AS c_time
     PATTERN (A B_OR_C* C)
     DEFINE
-        A  AS  A.name ='A',
-        B_OR_C AS (B_OR_C.name ='B' or B_OR_C.name ='C'),
-        C  AS  C.name ='C'
-    );
-
+        A AS A.name = 'A',
+        B_OR_C AS (B_OR_C.name = 'B' OR B_OR_C.name = 'C'),
+        C AS C.name = 'C'
+);

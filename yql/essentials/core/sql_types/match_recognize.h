@@ -33,9 +33,6 @@ enum class EOutputColumnSource {
     Other,
 };
 
-constexpr size_t MaxPatternNesting = 20; //Limit recursion for patterns
-constexpr size_t MaxPermutedItems = 6;
-
 //Mixin columns for calculating measures
 enum class EMeasureInputDataSpecialColumns {
     Classifier = 0,

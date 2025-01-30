@@ -27,6 +27,13 @@ struct TCreateSessionRequest {
     ui8 VerboseLevel;
 };
 
+struct TWaitResourcesSettings {
+    i32 ExpectedNodeCount;
+    ui8 HealthCheckLevel;
+    ui8 VerboseLevel;
+    TString Database;
+};
+
 struct TEvPrivate {
     enum EEv : ui32 {
         EvStartAsyncQuery = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -83,7 +90,7 @@ NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPr
 
 NActors::IActor* CreateAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings);
 
-NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount);
+NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, const TWaitResourcesSettings& settings);
 
 NActors::IActor* CreateSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise);
 

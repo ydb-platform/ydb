@@ -3279,6 +3279,182 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 11 } items { uint32_value: 11 } }");
     }
 
+    // Regression test for KIKIMR-22506
+    Y_UNIT_TEST(NotCachingAbortingDeletes) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        Cerr << "========= Creating table =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key uint32, value uint32, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (100));
+            )"),
+            "SUCCESS");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        // We need to fill table with some data
+        Cerr << "========= Upserting initial values =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value)
+                VALUES
+                    (1, 1), (2, 2), (3, 3), (4, 4), (5, 5),
+                    (6, 6), (7, 7), (8, 8), (9, 9), (10, 10),
+                    (11, 11), (12, 12), (13, 13), (14, 14), (15, 15),
+                    (16, 16), (17, 17), (18, 18), (19, 19), (20, 20);
+                )"),
+            "<empty>");
+
+        // We need to delete the first key (will be the trigger)
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                DELETE FROM `/Root/table` WHERE key = 1;
+                )"),
+            "<empty>");
+
+        // Start transaction that deletes many rows and reads the result
+        // It is not committed yet, so should not be cached
+        Cerr << "========= Deleting rows (uncommitted) =========" << Endl;
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                DELETE FROM `/Root/table` WHERE key < 20;
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+
+        // Make sure the lock is broken at the second shard
+        Cerr << "========= Upserting key 200 (breaking lock) =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value)
+                VALUES (200, 200);
+                )"),
+            "<empty>");
+
+        Cerr << "========= Validating table contents =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+                )"),
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
+            "{ items { uint32_value: 4 } items { uint32_value: 4 } }, "
+            "{ items { uint32_value: 5 } items { uint32_value: 5 } }, "
+            "{ items { uint32_value: 6 } items { uint32_value: 6 } }, "
+            "{ items { uint32_value: 7 } items { uint32_value: 7 } }, "
+            "{ items { uint32_value: 8 } items { uint32_value: 8 } }, "
+            "{ items { uint32_value: 9 } items { uint32_value: 9 } }, "
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 11 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 12 } items { uint32_value: 12 } }, "
+            "{ items { uint32_value: 13 } items { uint32_value: 13 } }, "
+            "{ items { uint32_value: 14 } items { uint32_value: 14 } }, "
+            "{ items { uint32_value: 15 } items { uint32_value: 15 } }, "
+            "{ items { uint32_value: 16 } items { uint32_value: 16 } }, "
+            "{ items { uint32_value: 17 } items { uint32_value: 17 } }, "
+            "{ items { uint32_value: 18 } items { uint32_value: 18 } }, "
+            "{ items { uint32_value: 19 } items { uint32_value: 19 } }, "
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } }, "
+            "{ items { uint32_value: 200 } items { uint32_value: 200 } }");
+
+        TBlockEvents<TEvDataShard::TEvProposeTransactionResult> blockedResults(runtime,
+            [&](const auto& ev) {
+                auto* msg = ev->Get();
+                if (msg->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED) {
+                    return false;
+                }
+                return true;
+            });
+
+        size_t otherReadSets = 0;
+        TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime,
+            [&otherReadSets, actor = ResolveTablet(runtime, shards.at(0))](const auto& ev) {
+                if (ev->GetRecipientRewrite() == actor) {
+                    return true;
+                }
+                ++otherReadSets;
+                return false;
+            });
+
+        Cerr << "========= Starting commit =========" << Endl;
+        auto commitFuture = KqpSimpleSendCommit(runtime, sessionId, txId, "SELECT 1");
+
+        runtime.WaitFor("blocked readsets", [&]{ return blockedReadSets.size() >= 1 && otherReadSets >= 1; });
+        UNIT_ASSERT_VALUES_EQUAL(blockedReadSets.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(otherReadSets, 1u);
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        TBlockEvents<TEvBlobStorage::TEvPut> blockedCommits(runtime,
+            [&](const auto& ev) {
+                auto* msg = ev->Get();
+                if (msg->Id.TabletID() == shards.at(0)) {
+                    Cerr << "... blocking put " << msg->Id << Endl;
+                    return true;
+                }
+                return false;
+            });
+
+        // Unblock readsets, but block commits, so abort can't commit
+        blockedReadSets.Stop().Unblock();
+        runtime.WaitFor("blocked commit", [&]{ return blockedCommits.size() >= 1; });
+
+        Cerr << "========= Starting a concurrent read =========" << Endl;
+        auto readFuture = KqpSimpleSend(runtime, R"(
+            SELECT key, value FROM `/Root/table` WHERE key <= 30 ORDER BY key;
+        )");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        Cerr << "========= Unblocking commits and checking results =========" << Endl;
+        blockedCommits.Stop().Unblock();
+
+        runtime.WaitFor("both results", [&]{ return blockedResults.size() >= 2; });
+        blockedResults.Stop().Unblock();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(runtime.WaitFuture(std::move(commitFuture))),
+            "ERROR: ABORTED");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(runtime.WaitFuture(std::move(readFuture))),
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
+            "{ items { uint32_value: 4 } items { uint32_value: 4 } }, "
+            "{ items { uint32_value: 5 } items { uint32_value: 5 } }, "
+            "{ items { uint32_value: 6 } items { uint32_value: 6 } }, "
+            "{ items { uint32_value: 7 } items { uint32_value: 7 } }, "
+            "{ items { uint32_value: 8 } items { uint32_value: 8 } }, "
+            "{ items { uint32_value: 9 } items { uint32_value: 9 } }, "
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 11 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 12 } items { uint32_value: 12 } }, "
+            "{ items { uint32_value: 13 } items { uint32_value: 13 } }, "
+            "{ items { uint32_value: 14 } items { uint32_value: 14 } }, "
+            "{ items { uint32_value: 15 } items { uint32_value: 15 } }, "
+            "{ items { uint32_value: 16 } items { uint32_value: 16 } }, "
+            "{ items { uint32_value: 17 } items { uint32_value: 17 } }, "
+            "{ items { uint32_value: 18 } items { uint32_value: 18 } }, "
+            "{ items { uint32_value: 19 } items { uint32_value: 19 } }, "
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)
 
 } // namespace NKikimr

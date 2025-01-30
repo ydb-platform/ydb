@@ -8,6 +8,8 @@
 namespace NKikimr::NKqp::NFederatedQueryTest {
     using namespace NKikimr::NKqp;
 
+    TString GetSymbolsString(char start, char end, const TString& skip = "");
+
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(
         const NYdb::TOperation::TOperationId& operationId,
         const NYdb::TDriver& ydbDriver);

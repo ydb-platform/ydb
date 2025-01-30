@@ -14,6 +14,7 @@ import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
 import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
+import "yt_proto/yt/client/scheduler/proto/spec_patch.proto";
 import "yt_proto/yt/client/table_client/proto/versioned_io_options.proto";
 import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
 
@@ -1682,6 +1683,7 @@ message TReqCopyNode
     optional bool lock_existing = 13 [default = false];
     optional bool pessimistic_quota_check = 9 [default = true];
     optional bool enable_cross_cell_copying = 15 [default = true];
+    optional bool allow_secondary_index_abandonment = 16 [default = false];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -1711,6 +1713,7 @@ message TReqMoveNode
     optional bool preserve_acl = 14 [default = false];
     optional bool pessimistic_quota_check = 7 [default = true];
     optional bool enable_cross_cell_copying = 13 [default = true];
+    optional bool allow_secondary_index_abandonment = 15 [default = false];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -2310,6 +2313,21 @@ message TReqUpdateOperationParameters
 }
 
 message TRspUpdateOperationParameters
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqPatchOperationSpec
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    repeated NYT.NScheduler.NProto.TSpecPatch patches = 3;
+}
+
+message TRspPatchOperationSpec
 {
 }
 
@@ -3305,6 +3323,7 @@ message TRspGetQueryResult
     optional TTableSchema schema = 4;
     required NYT.NChunkClient.NProto.TDataStatistics data_statistics = 5;
     required bool is_truncated = 6;
+    optional bytes full_result = 7; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////

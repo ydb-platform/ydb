@@ -249,7 +249,7 @@
 
 ### YQL {#yql}
 
-**YQL ({{ ydb-short-name }} Query Language)** — это высокоуровневый язык для работы с системой. Он является диалектом [ANSI SQL](https://en.wikipedia.org/wiki/SQL). Существует много материалов, посвящённых YQL, включая [туториал](../dev/yql-tutorial/index.md), [справочник](../yql/reference/syntax/index.md) и [рецепты](../recipes/yql/index.md).
+**YQL ({{ ydb-short-name }} Query Language)** — это высокоуровневый язык для работы с системой. Он является диалектом [ANSI SQL](https://en.wikipedia.org/wiki/SQL). Существует много материалов, посвящённых YQL, включая [туториал](../dev/yql-tutorial/index.md), [справочник](../yql/reference/syntax/index.md) и [рецепты](../yql/reference/recipes/index.md).
 
 ### Федеративные запросы {#federated-queries}
 

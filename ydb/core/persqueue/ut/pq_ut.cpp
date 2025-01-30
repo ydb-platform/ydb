@@ -2502,13 +2502,76 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
 
-    PQTabletPrepare({.partitions = 1}, {}, tc);
+    const TString sessionId = "session1";
+    const TString user = "user1";
+
+    PQTabletPrepare({.partitions = 1, .storageLimitBytes = 50_MB}, {{user, false}}, tc);
 
     for (size_t i = 0; i < 7; ++i) {
         TVector<std::pair<ui64, TString>> data;
         data.emplace_back(i + 1, TString(7_MB, 'x'));
         CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, i);
     }
+
+    auto keys = GetTabletKeys(tc);
+
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
+
+    TPQCmdSettings sessionSettings{0, user, sessionId};
+    sessionSettings.PartitionSessionId = 1;
+    sessionSettings.KeepPipe = true;
+
+    TPQCmdReadSettings readSettings{sessionId, 0, 2, 2, 16_MB, 2, false, {2, 3}, 0, 0, user};
+    readSettings.PartitionSessionId = 1;
+    readSettings.User = user;
+    readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+
+    TAutoPtr<IEventHandle> blobResponseEvent;
+    auto observe = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvBlobResponse>()) {
+            blobResponseEvent = ev;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observe);
+
+    BeginCmdRead(readSettings, tc);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return !!blobResponseEvent; };
+    tc.Runtime->DispatchEvents(options);
+
+    for (size_t i = 7; i < 14; ++i) {
+        TVector<std::pair<ui64, TString>> data;
+        data.emplace_back(i + 1, TString(7_MB, 'x'));
+        CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, i);
+    }
+
+    keys = GetTabletKeys(tc);
+
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
+
+    tc.Runtime->Send(blobResponseEvent);
+
+    UNIT_ASSERT_C(EndCmdRead(readSettings, tc), "CmdRead failed with an error");
+
+    for (size_t i = 14; i < 15; ++i) {
+        TVector<std::pair<ui64, TString>> data;
+        data.emplace_back(i + 1, TString(100_KB, 'x'));
+        CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, i);
+    }
+
+    keys = GetTabletKeys(tc);
+
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

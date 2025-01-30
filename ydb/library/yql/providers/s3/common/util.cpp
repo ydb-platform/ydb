@@ -53,7 +53,7 @@ TUrlBuilder::TUrlBuilder(const TString& uri)
 {}
 
 TUrlBuilder& TUrlBuilder::AddUrlParam(const TString& name, const TString& value) {
-    Params.emplace_back(name, value);
+    Params.emplace_back(TParam{name, value});
     return *this;
 }
 

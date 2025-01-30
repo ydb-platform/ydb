@@ -28,11 +28,12 @@ public:
 
     TPartitionChooserActor(TActorId parentId,
                            const NKikimrSchemeOp::TPersQueueGroupDescription& config,
-                           std::shared_ptr<IPartitionChooser>& chooser,
+                           const std::shared_ptr<IPartitionChooser>& chooser,
                            NPersQueue::TTopicConverterPtr& fullConverter,
                            const TString& sourceId,
-                           std::optional<ui32> preferedPartition)
-        : TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition)
+                           std::optional<ui32> preferedPartition,
+                           NWilson::TTraceId traceId)
+        : TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId))
         , PQRBHelper(config.GetBalancerTabletID()) {
     }
 
@@ -100,6 +101,7 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             SFunc(TEvents::TEvPoison, TThis::Die);
         }

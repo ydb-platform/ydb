@@ -10,6 +10,7 @@ static const THashSet<TString> DATABASE_SERVICES
     = {{ TString("compile"),
          TString("coordinator"),
          TString("dsproxy"),
+         TString("dsproxy_mon"),
          TString("dsproxynode"),
          TString("dsproxy_overview"),
          TString("dsproxy_percentile"),
@@ -39,6 +40,7 @@ static const THashSet<TString> DATABASE_SERVICES
          TString("pqproxy|readSession"),
          TString("pqproxy|schemecache"),
          TString("pqproxy|mirrorWriteTimeLag"),
+         TString("pqproxy|userAgents"),
          TString("datastreams"),
     }};
 

@@ -12,10 +12,10 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Validates that a string is a correct arithmetic formula variable name.
-void ValidateArithmeticFormulaVariable(const TString& variable);
+void ValidateArithmeticFormulaVariable(const std::string& variable);
 
 //! Validates that a string is a correct boolean formula variable name.
-void ValidateBooleanFormulaVariable(const TString& variable);
+void ValidateBooleanFormulaVariable(const std::string& variable);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -47,13 +47,13 @@ public:
     size_t GetHash() const;
 
     //! Returns a human-readable representation of the formula.
-    TString GetFormula() const;
+    std::string GetFormula() const;
 
     //! Evaluate the formula given values of variables.
-    i64 Eval(const THashMap<TString, i64>& values) const;
+    i64 Eval(const THashMap<std::string, i64>& values) const;
 
     //! Returns the list of variables used in the formula.
-    THashSet<TString> GetVariables() const;
+    THashSet<std::string> GetVariables() const;
 
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
@@ -63,11 +63,11 @@ private:
 
     explicit TArithmeticFormula(TIntrusivePtr<TGenericFormulaImpl> impl);
 
-    friend TArithmeticFormula MakeArithmeticFormula(const TString& formula);
+    friend TArithmeticFormula MakeArithmeticFormula(const std::string& formula);
 };
 
 //! Parse string and return arithmetic formula.
-TArithmeticFormula MakeArithmeticFormula(const TString& formula);
+TArithmeticFormula MakeArithmeticFormula(const std::string& formula);
 
 void Serialize(const TArithmeticFormula& arithmeticFormula, NYson::IYsonConsumer* consumer);
 void Deserialize(TArithmeticFormula& arithmeticFormula, NYTree::INodePtr node);
@@ -78,9 +78,9 @@ class TBooleanFormulaTags
 {
 public:
     TBooleanFormulaTags() = default;
-    explicit TBooleanFormulaTags(THashSet<TString> tags);
+    explicit TBooleanFormulaTags(THashSet<std::string> tags);
 
-    const THashSet<TString>& GetSourceTags() const;
+    const THashSet<std::string>& GetSourceTags() const;
 
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
@@ -88,8 +88,8 @@ public:
     bool operator==(const TBooleanFormulaTags& other) const;
 
 private:
-    THashSet<TString> Tags_;
-    THashMap<TString, i64> PreparedTags_;
+    THashSet<std::string> Tags_;
+    THashMap<std::string, i64> PreparedTags_;
 
     friend class TBooleanFormula;
 };
@@ -97,8 +97,7 @@ private:
 void Serialize(const TBooleanFormulaTags& tags, NYson::IYsonConsumer* consumer);
 void Deserialize(TBooleanFormulaTags& tags, NYTree::INodePtr node);
 
-TString ToString(const TBooleanFormulaTags& tags);
-void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*format*/);
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*spec*/);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -124,11 +123,11 @@ public:
     size_t GetHash() const;
 
     //! Returns a human-readable representation of the formula.
-    TString GetFormula() const;
+    std::string GetFormula() const;
 
     //! Check that a given set of true-variables satisfies the formula.
-    bool IsSatisfiedBy(const std::vector<TString>& value) const;
-    bool IsSatisfiedBy(const THashSet<TString>& value) const;
+    bool IsSatisfiedBy(const std::vector<std::string>& value) const;
+    bool IsSatisfiedBy(const THashSet<std::string>& value) const;
     bool IsSatisfiedBy(const TBooleanFormulaTags& tags) const;
 
     void Save(TStreamSaveContext& context) const;
@@ -139,11 +138,11 @@ private:
 
     explicit TBooleanFormula(TIntrusivePtr<TGenericFormulaImpl> impl);
 
-    friend TBooleanFormula MakeBooleanFormula(const TString& formula);
+    friend TBooleanFormula MakeBooleanFormula(const std::string& formula);
 };
 
 //! Parse string and return boolean formula.
-TBooleanFormula MakeBooleanFormula(const TString& formula);
+TBooleanFormula MakeBooleanFormula(const std::string& formula);
 
 //! Make conjunction, disjunction and negation of formulas.
 TBooleanFormula operator&(const TBooleanFormula& lhs, const TBooleanFormula& rhs);
@@ -153,6 +152,8 @@ TBooleanFormula operator!(const TBooleanFormula& formula);
 void Serialize(const TBooleanFormula& booleanFormula, NYson::IYsonConsumer* consumer);
 void Deserialize(TBooleanFormula& booleanFormula, NYTree::INodePtr node);
 void Deserialize(TBooleanFormula& booleanFormula, NYson::TYsonPullParserCursor* cursor);
+
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormula& booleanFormula, TStringBuf /*spec*/);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -178,7 +179,7 @@ public:
     size_t GetHash() const;
 
     //! Returns a human-readable representation of the formula.
-    TString GetFormula() const;
+    std::string GetFormula() const;
 
     //! Check that given time satisfies the formula.
     bool IsSatisfiedBy(TInstant time) const;
@@ -191,11 +192,11 @@ private:
 
     explicit TTimeFormula(TArithmeticFormula&& arithmeticFormula);
 
-    friend TTimeFormula MakeTimeFormula(const TString& formula);
+    friend TTimeFormula MakeTimeFormula(const std::string& formula);
 };
 
 //! Parse string and return time formula.
-TTimeFormula MakeTimeFormula(const TString& formula);
+TTimeFormula MakeTimeFormula(const std::string& formula);
 
 void Serialize(const TTimeFormula& timeFormula, NYson::IYsonConsumer* consumer);
 void Deserialize(TTimeFormula& timeFormula, NYTree::INodePtr node);

@@ -1,0 +1,20 @@
+--- a/src/lib/fy-accel.c    (index)
++++ b/src/lib/fy-accel.c    (working tree)
+@@ -19,6 +19,7 @@
+
+ #include "fy-accel.h"
+
++#define XXH_STATIC_LINKING_ONLY
+ #include "xxhash.h"
+
+ /* powers of two and the closest primes before
+--- a/src/lib/fy-doc.c      (index)
++++ b/src/lib/fy-doc.c      (working tree)
+@@ -24,6 +24,7 @@
+
+ #include "fy-utils.h"
+
++#define XXH_STATIC_LINKING_ONLY
+ #include "xxhash.h"
+
+ static const struct fy_hash_desc hd_anchor;

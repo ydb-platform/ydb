@@ -33,7 +33,7 @@ namespace orc {
    * for index bounds nor expand the bit set size if the specified index is greater than the size.
    */
   class BitSet {
-  public:
+   public:
     /**
      * Creates an empty BitSet
      *
@@ -47,7 +47,7 @@ namespace orc {
      * @param bits - serialized uint64_t buffer of bitset
      * @param numBits - number of bits used
      */
-    BitSet(const uint64_t * bits, uint64_t numBits);
+    BitSet(const uint64_t* bits, uint64_t numBits);
 
     /**
      * Sets the bit at specified index.
@@ -82,15 +82,15 @@ namespace orc {
     /**
      * Gets underlying raw data
      */
-    const uint64_t * getData() const;
+    const uint64_t* getData() const;
 
     /**
      * Compares two BitSets
      */
     bool operator==(const BitSet& other) const;
 
-  private:
-    std::vector<uint64_t> mData;
+   private:
+    std::vector<uint64_t> data_;
   };
 
   /**
@@ -120,14 +120,14 @@ namespace orc {
    * BloomFilterUtf8, which always uses UTF8 for the encoding.
    */
   class BloomFilterImpl : public BloomFilter {
-  public:
+   public:
     /**
      * Creates an empty BloomFilter
      *
      * @param expectedEntries - number of entries it will hold
      * @param fpp - false positive probability
      */
-    BloomFilterImpl(uint64_t expectedEntries, double fpp=DEFAULT_FPP);
+    BloomFilterImpl(uint64_t expectedEntries, double fpp = DEFAULT_FPP);
 
     /**
      * Creates a BloomFilter by deserializing the proto-buf version
@@ -139,14 +139,14 @@ namespace orc {
     /**
      * Adds a new element to the BloomFilter
      */
-    void addBytes(const char * data, int64_t length);
+    void addBytes(const char* data, int64_t length);
     void addLong(int64_t data);
     void addDouble(double data);
 
     /**
      * Test if the element exists in BloomFilter
      */
-    bool testBytes(const char * data, int64_t length) const override;
+    bool testBytes(const char* data, int64_t length) const override;
     bool testLong(int64_t data) const override;
     bool testDouble(double data) const override;
 
@@ -160,7 +160,7 @@ namespace orc {
 
     bool operator==(const BloomFilterImpl& other) const;
 
-  private:
+   private:
     friend struct BloomFilterUTF8Utils;
     friend class TestBloomFilter_testBloomFilterBasicOperations_Test;
 
@@ -172,11 +172,11 @@ namespace orc {
 
     void serialize(proto::BloomFilter& bloomFilter) const;
 
-  private:
+   private:
     static constexpr double DEFAULT_FPP = 0.05;
-    uint64_t mNumBits;
-    int32_t mNumHashFunctions;
-    std::unique_ptr<BitSet> mBitSet;
+    uint64_t numBits_;
+    int32_t numHashFunctions_;
+    std::unique_ptr<BitSet> bitSet_;
   };
 
   struct BloomFilterUTF8Utils {
@@ -186,25 +186,24 @@ namespace orc {
     }
 
     // deserialize BloomFilter from protobuf
-    static std::unique_ptr<BloomFilter>
-    deserialize(const proto::Stream_Kind& streamKind,
-                const proto::ColumnEncoding& columnEncoding,
-                const proto::BloomFilter& bloomFilter);
+    static std::unique_ptr<BloomFilter> deserialize(const proto::Stream_Kind& streamKind,
+                                                    const proto::ColumnEncoding& columnEncoding,
+                                                    const proto::BloomFilter& bloomFilter);
   };
 
   // Thomas Wang's integer hash function
   // http://web.archive.org/web/20071223173210/http://www.concentric.net/~Ttwang/tech/inthash.htm
   // Put this in header file so tests can use it as well.
   inline int64_t getLongHash(int64_t key) {
-    key = (~key) + (key << 21); // key = (key << 21) - key - 1;
+    key = (~key) + (key << 21);  // key = (key << 21) - key - 1;
     key = key ^ (key >> 24);
-    key = (key + (key << 3)) + (key << 8); // key * 265
+    key = (key + (key << 3)) + (key << 8);  // key * 265
     key = key ^ (key >> 14);
-    key = (key + (key << 2)) + (key << 4); // key * 21
+    key = (key + (key << 2)) + (key << 4);  // key * 21
     key = key ^ (key >> 28);
     key = key + (key << 31);
     return key;
   }
-}
+}  // namespace orc
 
-#endif //ORC_BLOOMFILTER_IMPL_HH
+#endif  // ORC_BLOOMFILTER_IMPL_HH

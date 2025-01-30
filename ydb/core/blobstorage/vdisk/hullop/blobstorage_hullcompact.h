@@ -30,6 +30,7 @@ namespace NKikimr {
         TIntrusivePtr<TFreshSegment> FreshSegment;
         // huge blobs to delete after compaction
         TDiskPartVec FreedHugeBlobs;
+        TDiskPartVec AllocatedHugeBlobs;
         // was the compaction process aborted by some reason?
         bool Aborted = false;
 
@@ -85,7 +86,8 @@ namespace NKikimr {
         // messages we have to send to Yard
         TVector<std::unique_ptr<IEventBase>> MsgsForYard;
 
-        TActorId SkeletonId;
+        const TActorId SkeletonId;
+        const TActorId HugeKeeperId;
 
         bool IsAborting = false;
         ui32 PendingResponses = 0;
@@ -119,10 +121,7 @@ namespace NKikimr {
             BarriersSnap.Destroy();
 
             // build handoff map (use LevelSnap by ref)
-            auto hProxyAid = Hmp->BuildMap(ctx, LevelSnap, It, ctx.SelfID);
-            if (hProxyAid) {
-                ActiveActors.Insert(hProxyAid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-            }
+            Hmp->BuildMap(LevelSnap, It);
 
             // build gc map (use LevelSnap by ref)
             Gcmp->BuildMap(ctx, brs, LevelSnap, It);
@@ -143,16 +142,21 @@ namespace NKikimr {
             // there are events, we send them to yard; worker internally controls all in flight limits and does not
             // generate more events than allowed; this function returns boolean status indicating whether compaction job
             // is finished or not
-            const bool done = Worker.MainCycle(MsgsForYard, ctx);
+            std::vector<ui32> *slotsToAllocate = nullptr;
+            const bool done = Worker.MainCycle(MsgsForYard, &slotsToAllocate);
             // check if there are messages we have for yard
             for (std::unique_ptr<IEventBase>& msg : MsgsForYard) {
                 ctx.Send(PDiskCtx->PDiskId, msg.release());
                 ++PendingResponses;
             }
             MsgsForYard.clear();
+            // send slots to allocate to huge keeper, if any
+            if (slotsToAllocate) {
+                ctx.Send(HugeKeeperId, new TEvHugeAllocateSlots(std::move(*slotsToAllocate)));
+            }
             // when done, continue with other state
             if (done) {
-                SwitchToWaitForHandoff(ctx);
+                Finalize(ctx);
             }
         }
 
@@ -170,7 +174,9 @@ namespace NKikimr {
         // the same logic for every yard response: apply response and restart main cycle
         void HandleYardResponse(NPDisk::TEvChunkReadResult::TPtr& ev, const TActorContext &ctx) {
             --PendingResponses;
-            HullCtx->VCtx->CostTracker->CountPDiskResponse();
+            if (HullCtx->VCtx->CostTracker) {
+                HullCtx->VCtx->CostTracker->CountPDiskResponse();
+            }
             if (ev->Get()->Status != NKikimrProto::CORRUPTED) {
                 CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
             }
@@ -203,7 +209,9 @@ namespace NKikimr {
 
         void HandleYardResponse(NPDisk::TEvChunkWriteResult::TPtr& ev, const TActorContext &ctx) {
             --PendingResponses;
-            HullCtx->VCtx->CostTracker->CountPDiskResponse();
+            if (HullCtx->VCtx->CostTracker) {
+                HullCtx->VCtx->CostTracker->CountPDiskResponse();
+            }
             CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
             if (FinalizeIfAborting(ctx)) {
                 return;
@@ -227,34 +235,20 @@ namespace NKikimr {
             MainCycle(ctx);
         }
 
+        void Handle(TEvHugeAllocateSlotsResult::TPtr ev, const TActorContext& ctx) {
+            Worker.Apply(ev->Get());
+            MainCycle(ctx);
+        }
+
         STRICT_STFUNC(WorkFunc,
             HFunc(NPDisk::TEvChunkReserveResult, HandleYardResponse)
             HFunc(NPDisk::TEvChunkWriteResult, HandleYardResponse)
             HFunc(NPDisk::TEvChunkReadResult, HandleYardResponse)
             HFunc(TEvRestoreCorruptedBlobResult, Handle)
+            HFunc(TEvHugeAllocateSlotsResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
         )
         ///////////////////////// WORK: END /////////////////////////////////////////////////
-
-
-        ///////////////////////// WAITFORHANDOFF: BEGIN /////////////////////////////////////
-        STRICT_STFUNC(WaitForHandoffFunc,
-            HFunc(TEvHandoffSyncLogFinished, WaitForHandoffHandle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
-
-        void SwitchToWaitForHandoff(const TActorContext &ctx) {
-            Hmp->Finish(ctx);
-            TThis::Become(&TThis::WaitForHandoffFunc);
-        }
-
-        void WaitForHandoffHandle(TEvHandoffSyncLogFinished::TPtr &ev, const TActorContext &ctx) {
-            if (ev->Get()->FromProxy) {
-                ActiveActors.Erase(ev->Sender);
-            }
-            Finalize(ctx); // SWITCH TO FINALIZE PHASE (write/load/commit)
-        }
-        ///////////////////////// WAITFORHANDOFF: END ///////////////////////////////////////
 
 
         ///////////////////////// FINALIZE: BEGIN ///////////////////////////////////////////
@@ -283,6 +277,11 @@ namespace NKikimr {
                             PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID,
                             (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
             msg->FreedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetFreedHugeBlobs();
+            msg->AllocatedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetAllocatedHugeBlobs();
+
+            if (IsAborting) { // release previously preallocated slots for huge blobs if we are aborting
+                ctx.Send(HugeKeeperId, new TEvHugeDropAllocatedSlots(Worker.GetAllocatedHugeBlobs().Vec));
+            }
 
             // chunks to commit
             msg->CommitChunks = IsAborting ? TVector<ui32>() : Worker.GetCommitChunks();
@@ -323,6 +322,8 @@ namespace NKikimr {
 
         THullCompaction(THullCtxPtr hullCtx,
                         const std::shared_ptr<TLevelIndexRunTimeCtx> &rtCtx,
+                        THugeBlobCtxPtr hugeBlobCtx,
+                        ui32 minHugeBlobInBytes,
                         TIntrusivePtr<TFreshSegment> freshSegment,
                         std::shared_ptr<TFreshSegmentSnapshot> freshSegmentSnap,
                         TBarriersSnapshot &&barriersSnap,
@@ -342,14 +343,14 @@ namespace NKikimr {
             , FreshSegmentSnap(std::move(freshSegmentSnap))
             , BarriersSnap(std::move(barriersSnap))
             , LevelSnap(std::move(levelSnap))
-            , Hmp(CreateHandoffMap<TKey, TMemRec>(HullCtx, rtCtx->HandoffDelegate, rtCtx->RunHandoff,
-                    rtCtx->SkeletonId))
+            , Hmp(CreateHandoffMap<TKey, TMemRec>(HullCtx, rtCtx->RunHandoff, rtCtx->SkeletonId))
             , Gcmp(CreateGcMap<TKey, TMemRec>(HullCtx, mergeElementsApproximation, allowGarbageCollection))
             , It(it)
-            , Worker(HullCtx, PDiskCtx, rtCtx->LevelIndex, it, (bool)FreshSegment, firstLsn, lastLsn, restoreDeadline,
-                    partitionKey)
+            , Worker(HullCtx, PDiskCtx, std::move(hugeBlobCtx), minHugeBlobInBytes, rtCtx->LevelIndex, it,
+                static_cast<bool>(FreshSegment), firstLsn, lastLsn, restoreDeadline, partitionKey)
             , CompactionID(TAppData::RandomProvider->GenRand64())
             , SkeletonId(rtCtx->SkeletonId)
+            , HugeKeeperId(rtCtx->HugeKeeperId)
         {}
     };
 

@@ -57,7 +57,7 @@ void TDefaultInvocationTimePolicy::SetOptions(std::optional<TDuration> period)
 
 TInstant TDefaultInvocationTimePolicy::NextDeadline()
 {
-    auto randomGenerator = [] () {
+    auto randomGenerator = [] {
         double rand = RandomNumber<double>();
 
         return 2.0 * rand - 1.0;

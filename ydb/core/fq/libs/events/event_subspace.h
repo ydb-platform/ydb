@@ -31,7 +31,8 @@ struct TYqEventSubspace {
         RateLimiter,
         ControlPlaneConfig,
         YdbCompute,
-
+        TableOverFq,
+        RowDispatcher,
         SubspacesEnd,
     };
 

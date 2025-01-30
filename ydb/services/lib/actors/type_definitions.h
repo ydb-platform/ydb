@@ -11,6 +11,10 @@
 
 namespace NKikimr::NGRpcProxy {
 
+struct TPartitionInfo {
+    ui64 TabletId;
+};
+
 struct TTopicInitInfo {
     NPersQueue::TTopicConverterPtr TopicNameConverter;
     ui64 TabletID;
@@ -20,7 +24,7 @@ struct TTopicInitInfo {
     bool IsServerless = false;
     TString FolderId;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
-    THashMap<ui32, ui64> PartitionIdToTabletId;
+    THashMap<ui32, TPartitionInfo> Partitions;
 };
 
 using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;
@@ -40,8 +44,7 @@ struct TTopicHolder {
     TMaybe<TString> CdcStreamPath;
 
     TVector<ui32> Groups;
-    TMap<ui64, ui64> Partitions;
-    THashMap<ui32, ui64> PartitionIdToTabletId;
+    THashMap<ui32, TPartitionInfo> Partitions;
 
 
     inline static TTopicHolder FromTopicInfo(const TTopicInitInfo& info) {
@@ -55,7 +58,7 @@ struct TTopicHolder {
             .FolderId = info.FolderId,
             .MeteringMode = info.MeteringMode,
             .FullConverter = info.TopicNameConverter,
-            .PartitionIdToTabletId = info.PartitionIdToTabletId,
+            .Partitions = info.Partitions,
         };
     }
 };

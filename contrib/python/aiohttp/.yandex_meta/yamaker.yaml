@@ -1,0 +1,10 @@
+requirements:
+  - contrib/restricted/llhttp
+exclude:
+  - aiohttp/.hash/*
+  - examples/*
+mark_as_cython_c:
+  - aiohttp/_helpers.pyx
+  - aiohttp/_http_parser.pyx
+  - aiohttp/_http_writer.pyx
+  - aiohttp/_websocket.pyx

@@ -19,12 +19,15 @@ public:
 
         const auto* msg = Ev->Get();
         const ui64 txId = msg->Record.GetTxId();
-        Self->ProgressTxController->CancelTx(txId, txc);
+        Self->ProgressTxController->ExecuteOnCancel(txId, txc);
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext& ctx) override {
         LOG_S_DEBUG("TTxProposeCancel.Complete");
+        const auto* msg = Ev->Get();
+        const ui64 txId = msg->Record.GetTxId();
+        Self->ProgressTxController->CompleteOnCancel(txId, ctx);
     }
 
 private:

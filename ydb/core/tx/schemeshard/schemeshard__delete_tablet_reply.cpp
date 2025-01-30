@@ -110,6 +110,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             case ETabletType::GraphShard:
                 Self->TabletCounters->Simple()[COUNTER_GRAPHSHARD_COUNT].Sub(1);
                 break;
+            case ETabletType::BackupController:
+                Self->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Sub(1);
+                break;
             default:
                 Y_FAIL_S("Unknown TabletType"
                          << ", ShardIdx " << ShardIdx
@@ -132,7 +135,7 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             path->DecShardsInside();
 
             auto domain = Self->ResolveDomainInfo(path);
-            domain->RemoveInternalShard(ShardIdx);
+            domain->RemoveInternalShard(ShardIdx, Self);
             switch (tabletType) {
             case ETabletType::SequenceShard:
                 domain->RemoveSequenceShard(ShardIdx);
@@ -161,7 +164,7 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             Self->PersistUnknownShardDeleted(db, ShardIdx);
         }
 
-        Self->ShardRemoved(ShardIdx);
+        Self->OnShardRemoved(ShardIdx);
     }
 
     void DoComplete(const TActorContext &ctx) override {

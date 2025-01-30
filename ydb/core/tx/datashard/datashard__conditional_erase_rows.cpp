@@ -465,34 +465,57 @@ static TIndexes GetIndexes(const NKikimrTxDataShard::TEvConditionalEraseRowsRequ
     return result;
 }
 
+static bool CheckUnit(bool isDateType, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& error) {
+    switch (unit) {
+    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
+        if (isDateType) {
+            error = "Unit cannot be specified for date type column";
+            return false;
+        } else {
+            return true;
+        }
+    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO:
+        if (isDateType) {
+            return true;
+        } else {
+            error = "Unit should be specified for integral type column";
+            return false;
+        }
+    default:
+        error = TStringBuilder() << "Unknown unit: " << static_cast<ui32>(unit);
+        return false;
+    }
+}
+
 static bool CheckUnit(NScheme::TTypeInfo type, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& error) {
     switch (type.GetTypeId()) {
     case NScheme::NTypeIds::Date:
     case NScheme::NTypeIds::Datetime:
     case NScheme::NTypeIds::Timestamp:
-        if (unit == NKikimrSchemeOp::TTTLSettings::UNIT_AUTO) {
-            return true;
-        } else {
-            error = "Unit cannot be specified for date type column";
-            return false;
-        }
-        break;
+    case NScheme::NTypeIds::Date32:
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
+        return CheckUnit(true, unit, error);
 
     case NScheme::NTypeIds::Uint32:
     case NScheme::NTypeIds::Uint64:
     case NScheme::NTypeIds::DyNumber:
-        switch (unit) {
-        case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-        case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-        case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-        case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
-            return true;
-        case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO:
-            error = "Unit should be specified for integral type column";
-            return false;
-        default:
-            error = TStringBuilder() << "Unknown unit: " << static_cast<ui32>(unit);
-            return false;
+        return CheckUnit(false, unit, error);
+    
+    case NScheme::NTypeIds::Pg:
+        switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
+            case DATEOID:
+            case TIMESTAMPOID:
+                return CheckUnit(true, unit, error);
+            case INT4OID:
+            case INT8OID:
+                return CheckUnit(false, unit, error);
+            default:
+                error = "Unsupported PG type";
+                return false;
         }
         break;
 

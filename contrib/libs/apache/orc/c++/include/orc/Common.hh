@@ -19,47 +19,49 @@
 #ifndef ORC_COMMON_HH
 #define ORC_COMMON_HH
 
-#include "orc/Vector.hh"
-#include "orc/Type.hh"
 #include "orc/Exceptions.hh"
+#include "orc/Type.hh"
+#include "orc/Vector.hh"
+
+#include <google/protobuf/message.h>
 
 #include <string>
 
 namespace orc {
 
+  using TProtobufString = decltype(std::declval<::google::protobuf::MessageLite>().GetTypeName());
+
   class FileVersion {
-  private:
-    uint32_t majorVersion;
-    uint32_t minorVersion;
-  public:
+   private:
+    uint32_t majorVersion_;
+    uint32_t minorVersion_;
+
+   public:
     static const FileVersion& v_0_11();
     static const FileVersion& v_0_12();
     static const FileVersion& UNSTABLE_PRE_2_0();
 
-    FileVersion(uint32_t major, uint32_t minor) :
-                majorVersion(major), minorVersion(minor) {
-    }
+    FileVersion(uint32_t major, uint32_t minor) : majorVersion_(major), minorVersion_(minor) {}
 
     /**
      * Get major version
      */
     uint32_t getMajor() const {
-        return this->majorVersion;
+      return this->majorVersion_;
     }
 
     /**
      * Get minor version
      */
     uint32_t getMinor() const {
-        return this->minorVersion;
+      return this->minorVersion_;
     }
 
-    bool operator == (const FileVersion & right) const {
-      return this->majorVersion == right.getMajor() &&
-              this->minorVersion == right.getMinor();
+    bool operator==(const FileVersion& right) const {
+      return this->majorVersion_ == right.getMajor() && this->minorVersion_ == right.getMinor();
     }
 
-    bool operator != (const FileVersion & right) const {
+    bool operator!=(const FileVersion& right) const {
       return !(*this == right);
     }
 
@@ -72,6 +74,7 @@ namespace orc {
     PRESTO_WRITER = 2,
     SCRITCHLEY_GO = 3,
     TRINO_WRITER = 4,
+    CUDF_WRITER = 5,
     UNKNOWN_WRITER = INT32_MAX
   };
 
@@ -140,7 +143,7 @@ namespace orc {
   std::string streamKindToString(StreamKind kind);
 
   class StreamInformation {
-  public:
+   public:
     virtual ~StreamInformation();
 
     virtual StreamKind getKind() const = 0;
@@ -159,7 +162,7 @@ namespace orc {
   std::string columnEncodingKindToString(ColumnEncodingKind kind);
 
   class StripeInformation {
-  public:
+   public:
     virtual ~StripeInformation();
 
     /**
@@ -184,7 +187,7 @@ namespace orc {
      * Get the length of the stripe's data.
      * @return the number of bytes in the stripe
      */
-    virtual uint64_t getDataLength()const = 0;
+    virtual uint64_t getDataLength() const = 0;
 
     /**
      * Get the length of the stripe's tail section, which contains its index.
@@ -206,8 +209,7 @@ namespace orc {
     /**
      * Get the StreamInformation for the given stream.
      */
-    virtual ORC_UNIQUE_PTR<StreamInformation>
-    getStreamInformation(uint64_t streamId) const = 0;
+    virtual std::unique_ptr<StreamInformation> getStreamInformation(uint64_t streamId) const = 0;
 
     /**
      * Get the column encoding for the given column.
@@ -238,10 +240,8 @@ namespace orc {
   template <>
   inline bool compare(Decimal val1, Decimal val2) {
     // compare integral parts
-    Int128 integral1 = scaleDownInt128ByPowerOfTen(val1.value,
-                                                   val1.scale);
-    Int128 integral2 = scaleDownInt128ByPowerOfTen(val2.value,
-                                                   val2.scale);
+    Int128 integral1 = scaleDownInt128ByPowerOfTen(val1.value, val1.scale);
+    Int128 integral2 = scaleDownInt128ByPowerOfTen(val2.value, val2.scale);
 
     if (integral1 < integral2) {
       return true;
@@ -253,25 +253,17 @@ namespace orc {
     // unnecessary to check overflow here because the scaled number will not
     // exceed original ones
     bool overflow = false, positive = val1.value >= 0;
-    val1.value -= scaleUpInt128ByPowerOfTen(integral1,
-                                            val1.scale,
-                                            overflow);
-    val2.value -= scaleUpInt128ByPowerOfTen(integral2,
-                                            val2.scale,
-                                            overflow);
+    val1.value -= scaleUpInt128ByPowerOfTen(integral1, val1.scale, overflow);
+    val2.value -= scaleUpInt128ByPowerOfTen(integral2, val2.scale, overflow);
 
     int32_t diff = val1.scale - val2.scale;
     if (diff > 0) {
-      val2.value = scaleUpInt128ByPowerOfTen(val2.value,
-                                             diff,
-                                             overflow);
+      val2.value = scaleUpInt128ByPowerOfTen(val2.value, diff, overflow);
       if (overflow) {
         return positive ? true : false;
       }
     } else {
-      val1.value = scaleUpInt128ByPowerOfTen(val1.value,
-                                             -diff,
-                                             overflow);
+      val1.value = scaleUpInt128ByPowerOfTen(val1.value, -diff, overflow);
       if (overflow) {
         return positive ? false : true;
       }
@@ -317,6 +309,6 @@ namespace orc {
     return !(lhs != rhs);
   }
 
-}
+}  // namespace orc
 
 #endif

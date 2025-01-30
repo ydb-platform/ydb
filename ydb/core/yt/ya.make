@@ -1,7 +1,5 @@
 LIBRARY()
 
-OWNER(g:kikimr)
-
 IF (OS_WINDOWS)
     CFLAGS(
         -DKIKIMR_DISABLE_YT
@@ -16,11 +14,11 @@ ELSE()
         yt_wrapper.h
     )
     PEERDIR(
-        contrib/ydb/library/actors/core
-        contrib/ydb/core/base
-        contrib/ydb/core/protos
-        contrib/ydb/library/aclib
-        contrib/ydb/library/binary_json
+        ydb/library/actors/core
+        ydb/core/base
+        ydb/core/protos
+        ydb/library/aclib
+        yql/essentials/types/binary_json
         yt/yt/client
     )
 ENDIF()

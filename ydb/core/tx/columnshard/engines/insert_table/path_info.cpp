@@ -29,7 +29,7 @@ void TPathInfo::AddInsertedSize(const i64 size, const ui64 overloadLimit) {
     SetInsertedOverload((ui64)InsertedSize > overloadLimit);
 }
 
-bool TPathInfo::EraseCommitted(const TInsertedData& data) {
+bool TPathInfo::EraseCommitted(const TCommittedData& data) {
     Summary->RemovePriority(*this);
     const bool result = Committed.erase(data);
     AddCommittedSize(-1 * (i64)data.BlobSize(), TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
@@ -39,11 +39,11 @@ bool TPathInfo::EraseCommitted(const TInsertedData& data) {
     return result;
 }
 
-bool TPathInfo::HasCommitted(const TInsertedData& data) {
+bool TPathInfo::HasCommitted(const TCommittedData& data) {
     return Committed.contains(data);
 }
 
-bool TPathInfo::AddCommitted(TInsertedData&& data, const bool load) {
+bool TPathInfo::AddCommitted(TCommittedData&& data, const bool load) {
     const ui64 dataSize = data.BlobSize();
     Summary->RemovePriority(*this);
     AddCommittedSize(data.BlobSize(), TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);

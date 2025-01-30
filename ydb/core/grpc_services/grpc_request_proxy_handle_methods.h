@@ -18,7 +18,6 @@ protected:
     static void Handle(TEvCommitOffsetRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
-    static void Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvNodeCheckRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvCoordinationSessionRequest::TPtr& ev, const TActorContext& ctx);
 };

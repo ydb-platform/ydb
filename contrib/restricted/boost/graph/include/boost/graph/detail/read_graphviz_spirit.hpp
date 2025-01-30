@@ -171,7 +171,7 @@ namespace detail
                         = construct_< std::string >(arg1, arg2)];
 
                     a_list = list_p(
-                        ID[(a_list.key = arg1), (a_list.value = "true")] >> !(
+                        ID[((a_list.key = arg1), (a_list.value = "true"))] >> !(
                             ch_p('=') >> ID[a_list.value = arg1])[phoenix::bind(
                             &definition::call_prop_actor)(
                             var(*this), a_list.key, a_list.value)],
@@ -213,8 +213,8 @@ namespace detail
                     // (directed/undirected)
                     edgeop = ch_p('-') >> ch_p(boost::ref(edge_head));
 
-                    edgeRHS = +(edgeop[(data_stmt.sources = data_stmt.dests),
-                                    (data_stmt.dests = construct_< nodes_t >())]
+                    edgeRHS = +(edgeop[((data_stmt.sources = data_stmt.dests),
+                                    (data_stmt.dests = construct_< nodes_t >()))]
                         >> (subgraph[data_stmt.dests = arg1]
                             | node_id[phoenix::bind(&definition::insert_node)(
                                 var(*this), data_stmt.dests, arg1)])
@@ -225,10 +225,10 @@ namespace detail
                     // To avoid backtracking, edge, node, and subgraph
                     // statements are processed as one nonterminal.
                     data_stmt
-                        = (subgraph[(data_stmt.dests
+                        = (subgraph[((data_stmt.dests
                                         = arg1), // will get moved in rhs
-                               (data_stmt.saw_node = false)]
-                              | node_id[(phoenix::bind(
+                               (data_stmt.saw_node = false))]
+                              | node_id[((phoenix::bind(
                                             &definition::insert_node)(
                                             var(*this), data_stmt.dests, arg1)),
                                   (data_stmt.saw_node = true),
@@ -236,7 +236,7 @@ namespace detail
                                   (std::cout << val("AcTive Node: ") << arg1
                                              << "\n"),
 #endif // BOOST_GRAPH_DEBUG
-                                  (data_stmt.active_node = arg1)])
+                                  (data_stmt.active_node = arg1))])
                         >> if_p(edgeRHS)[!attr_list(actor_t(phoenix::bind(
                                              &definition::edge_prop)(
                                              var(*this), arg1, arg2)))]
@@ -252,11 +252,11 @@ namespace detail
                     stmt_list = *(stmt >> !ch_p(';'));
 
                     subgraph = !(as_lower_d[keyword_p("subgraph")]
-                                   >> (!ID[(subgraph.name = arg1),
+                                   >> (!ID[((subgraph.name = arg1),
                                        (subgraph.nodes
                                            = (var(subgraph_nodes))[arg1]),
                                        (subgraph.edges
-                                           = (var(subgraph_edges))[arg1])]))
+                                           = (var(subgraph_edges))[arg1]))]))
                             >> ch_p('{')[++var(subgraph_depth)] >> stmt_list
                             >> ch_p('}')[--var(subgraph_depth)]
                                         [(var(subgraph_nodes))[subgraph.name]
@@ -265,19 +265,19 @@ namespace detail
                                             = subgraph.edges]
 
                         | as_lower_d[keyword_p("subgraph")]
-                            >> ID[(subgraph.nodes
+                            >> ID[((subgraph.nodes
                                       = (var(subgraph_nodes))[arg1]),
-                                (subgraph.edges = (var(subgraph_edges))[arg1])];
+                                (subgraph.edges = (var(subgraph_edges))[arg1]))];
 
                     the_grammar = (!as_lower_d[keyword_p("strict")])
                         >> (as_lower_d[keyword_p(
-                                "graph")][(var(edge_head) = '-'),
+                                "graph")][((var(edge_head) = '-'),
                                 (phoenix::bind(&definition::check_undirected)(
-                                    var(*this)))]
+                                    var(*this))))]
                             | as_lower_d[keyword_p(
-                                "digraph")][(var(edge_head) = '>'),
+                                "digraph")][((var(edge_head) = '>'),
                                 (phoenix::bind(&definition::check_directed)(
-                                    var(*this)))])
+                                    var(*this))))])
                         >> (!ID) >> ch_p('{') >> stmt_list >> ch_p('}');
 
                 } // definition()

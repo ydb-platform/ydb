@@ -3,6 +3,8 @@
 #include "defs.h"
 #include "blobstorage_groupinfo.h"
 
+#include <bit>
+
 namespace NKikimr {
 
     class TIngress;
@@ -84,7 +86,7 @@ namespace NKikimr {
         std::pair<ui32, ui32> GetMirror3of4State() const {
             const ui32 data = GetDisksWithPart(0) | GetDisksWithPart(1);
             const ui32 meta = GetDisksWithPart(2);
-            return std::make_tuple(PopCount(data), PopCount(data | meta));
+            return std::make_tuple<ui32, ui32>(std::popcount(data), std::popcount(data | meta));
         }
 
         template<typename F>
@@ -121,7 +123,7 @@ namespace NKikimr {
                             partMasks.push_back(1 << idxInSubgroup);
                         } else {
                             for (ui32 j = 1; j < 1 << gtype.TotalPartCount(); ++j) {
-                                if (PopCount(j) <= maxHandoffBits) {
+                                if (static_cast<ui32>(std::popcount(j)) <= maxHandoffBits) {
                                     partMasks.push_back(j);
                                 }
                             }

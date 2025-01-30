@@ -31,12 +31,11 @@ namespace archive {
 
 namespace serialization {
 
-//namespace detail {
 template<class Archive, class T>
 struct free_saver {
     static void invoke(
         Archive & ar,
-        const  T & t,
+        const T & t,
         const unsigned int file_version
     ){
         // use function overload (version_type) to workaround
@@ -58,7 +57,6 @@ struct free_loader {
         load(ar, t, v);
     }
 };
-//} // namespace detail
 
 template<class Archive, class T>
 inline void split_free(

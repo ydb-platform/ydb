@@ -1,0 +1,60 @@
+title: Release `ya tool python3`
+service: cc
+
+ci:
+  secret: sec-01e0d4agf6pfvwdjwxp61n3fvg
+  runtime:
+    sandbox:
+      owner: DTCC
+
+  releases:
+    release-ya-tool-python3:
+      title: Release `ya tool python3`
+      flow: release-ya-tool-python3
+
+  flows:
+    release-ya-tool-python3:
+      title: Release `ya tool python3`
+      jobs:
+        build:
+          title: Build
+          task: common/arcadia/build_arcadia_project_for_all
+          input:
+            platforms_list:
+              - linux
+              - linux-aarch64
+              - darwin
+              - darwin-arm64
+              - win32
+            checkout_arcadia_from_url: arcadia-arc:/#${context.target_revision.hash}
+            project: contrib/tools/python3/bin/python3
+            musl: true
+        create-pr:
+          title: Create PR
+          needs:
+            - build
+          task: projects/devtools/deploy_tools/deploy_tools
+          input:
+            config:
+              arc_revision_hash: ${context.target_revision.hash}
+              tools_array:
+                - source: contrib/tools/python3/bin/python3
+                  processor: resource_map
+                  output: build/platform/python/ymake_python3/resources.json
+              is_release: true
+              create_pr: true
+              branch_prefix: deploy-tools
+              branch_suffix: ${context.version_info.full}
+              push_from_user: false
+            sb_resources: ${(tasks.*.resources[])[?type == 'PLATFORM_MAPPING']}
+        write-info-comment:
+          title: Write comment about flow info
+          needs: create-pr
+          task: projects/devtools/write_pr_comment/write_pr_comment
+          input:
+            config:
+              data: "From hash: [${context.target_revision.hash}](https://a.yandex-team.ru/arcadia/commit/${context.target_revision.hash})\n
+              From revision: [${context.target_revision.number}](https://a.yandex-team.ru/arcadia/commit/${context.target_revision.number})\n
+              [CI flow](${context.ci_url})\n
+              Flow triggered by user: [${context.flow_triggered_by}](https://staff.yandex-team.ru/${context.flow_triggered_by})"
+              pr_id: ${tasks.create-pr.result.pr_id}

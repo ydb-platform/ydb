@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_data_provider.h>
 #include "yql_ydb_settings.h"
 
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 

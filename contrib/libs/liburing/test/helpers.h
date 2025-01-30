@@ -10,7 +10,9 @@ extern "C" {
 #endif
 
 #include "liburing.h"
+#include "../src/setup.h"
 #include <arpa/inet.h>
+#include <sys/time.h>
 
 enum t_setup_ret {
 	T_SETUP_OK	= 0,
@@ -87,9 +89,23 @@ bool t_probe_defer_taskrun(void);
 
 unsigned __io_uring_flush_sq(struct io_uring *ring);
 
+static inline int t_io_uring_init_sqarray(unsigned entries, struct io_uring *ring,
+					struct io_uring_params *p)
+{
+	int ret;
+
+	ret = __io_uring_queue_init_params(entries, ring, p, NULL, 0);
+	return ret >= 0 ? 0 : ret;
+}
+
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 void t_error(int status, int errnum, const char *format, ...);
+
+unsigned long long mtime_since(const struct timeval *s, const struct timeval *e);
+unsigned long long mtime_since_now(struct timeval *tv);
+unsigned long long utime_since(const struct timeval *s, const struct timeval *e);
+unsigned long long utime_since_now(struct timeval *tv);
 
 #ifdef __cplusplus
 }

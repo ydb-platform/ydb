@@ -3,6 +3,7 @@
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <library/cpp/json/yson/json2yson.h>
 
+#include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/metering/bill_record.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/public/lib/fq/scope.h>
@@ -161,42 +162,6 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
     return result;
 }
 
-void RemapValue(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& key) {
-    writer.OnKeyedItem(key);
-    if (auto* keyNode = node.GetValueByPath(key)) {
-        switch (keyNode->GetType()) {
-        case NJson::JSON_BOOLEAN:
-            writer.OnBooleanScalar(keyNode->GetBoolean());
-            break;
-        case NJson::JSON_INTEGER:
-            writer.OnInt64Scalar(keyNode->GetInteger());
-            break;
-        case NJson::JSON_DOUBLE:
-            writer.OnDoubleScalar(keyNode->GetDouble());
-            break;
-        case NJson::JSON_STRING:
-        default:
-            writer.OnStringScalar(keyNode->GetStringSafe());
-            break;
-        }
-    } else {
-        writer.OnStringScalar("-");
-    }
-}
-
-void RemapNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& path, const TString& key) {
-    if (auto* subNode = node.GetValueByPath(path)) {
-        writer.OnKeyedItem(key);
-        writer.OnBeginMap();
-            RemapValue(writer, *subNode, "sum");
-            RemapValue(writer, *subNode, "count");
-            RemapValue(writer, *subNode, "avg");
-            RemapValue(writer, *subNode, "max");
-            RemapValue(writer, *subNode, "min");
-        writer.OnEndMap();
-    }
-}
-
 void AggregateNode(const NJson::TJsonValue& node, const TString& path, ui64& min, ui64& max, ui64& sum, ui64& count) {
     if (node.GetType() == NJson::JSON_MAP) {
         if (auto* subNode = node.GetValueByPath(path)) {
@@ -251,66 +216,9 @@ void AggregateNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, co
     }
 }
 
-TString GetPrettyStatistics(const TString& statistics) {
-    TStringStream out;
-    NYson::TYsonWriter writer(&out);
-    writer.OnBeginMap();
-    NJson::TJsonReaderConfig jsonConfig;
-    NJson::TJsonValue stat;
-    if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
-
-        //  EXP 
-        if (stat.GetValueByPath("Columns")) {
-            return statistics;
-        }
-
-        for (const auto& p : stat.GetMap()) {
-            // YQv1
-            if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
-                writer.OnKeyedItem(p.first);
-                writer.OnBeginMap();
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.Tasks", "Tasks");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.CpuTimeUs", "CpuTimeUs");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressBytes", "IngressBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressRows", "IngressRows");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputBytes", "InputBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputRows", "InputRows");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputBytes", "OutputBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputRows", "OutputRows");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultBytes", "ResultBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultRows", "ResultRows");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
-                writer.OnEndMap();
-            }
-            // YQv2
-            // if (p.first.StartsWith("Query")) 
-            else {
-                writer.OnKeyedItem(p.first);
-                writer.OnBeginMap();
-                    RemapNode(writer, p.second, "Tasks", "Tasks");
-                    RemapNode(writer, p.second, "CpuTimeUs", "CpuTimeUs");
-                    RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
-                    RemapNode(writer, p.second, "IngressRows", "IngressRows");
-                    RemapNode(writer, p.second, "InputBytes", "InputBytes");
-                    RemapNode(writer, p.second, "InputRows", "InputRows");
-                    RemapNode(writer, p.second, "OutputBytes", "OutputBytes");
-                    RemapNode(writer, p.second, "OutputRows", "OutputRows");
-                    RemapNode(writer, p.second, "ResultBytes", "ResultBytes");
-                    RemapNode(writer, p.second, "ResultRows", "ResultRows");
-                    RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
-                    RemapNode(writer, p.second, "EgressRows", "EgressRows");
-                writer.OnEndMap();
-            }
-        }
-    }
-    writer.OnEndMap();
-    return NJson2Yson::ConvertYson2Json(out.Str());
-}
-
 namespace {
 
-void AggregateStatisticsBySources(const NJson::TJsonValue& root, std::unordered_map<TString, i64>& aggregatedStats) {
+void AggregateStatisticsBySources(const NJson::TJsonValue& root, THashMap<TString, i64>& aggregatedStats) {
     for (const auto& [stageName, stageStats] : root.GetMap()) {
         if (!stageStats.IsMap()) {
             continue;
@@ -336,40 +244,57 @@ void AggregateStatisticsBySources(const NJson::TJsonValue& root, std::unordered_
             }
             if (auto valuePtr = partStats.GetValueByPath(ingressPath)) {
                 TString valueKey{partKey, matchedPrefix.size(), partKey.size() - matchedPrefix.size()};
-                i64 value = valuePtr->GetIntegerSafe();
-                aggregatedStats[valueKey] += value;
+                aggregatedStats[valueKey] += valuePtr->GetIntegerSafe();
                 break;
             }
         }
     }
 }
 
-void CollectTotalStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
-    using namespace std::string_view_literals;
-    auto fieldToPath = {
-        std::make_pair(TString{"IngressBytes"}, "IngressBytes.sum"sv),
+constexpr std::initializer_list<std::pair<std::string_view, std::string_view>> FieldToPath = {
+        std::pair("IngressBytes"sv, "IngressBytes.sum"sv),
         {"EgressBytes", "EgressBytes.sum"},
         {"InputBytes", "InputBytes.sum"},
-        {"OutputBytes", "OutputBytes.sum"}};
+        {"OutputBytes", "OutputBytes.sum"},
+        {"CpuTimeUs", "CpuTimeUs.sum"},
+        {"ExecutionTimeUs", "ExecutionTimeUs.sum"}};
 
+void CollectTotalStatistics(const NJson::TJsonValue& stats, THashMap<TString, i64>& aggregatedStatistics) {
     for (const auto& [rootKey, graph] : stats.GetMap()) {
         bool isV1 = rootKey.find('=') != TString::npos;
-        for (auto [field, path] : fieldToPath) {
+        for (auto [field, path] : FieldToPath) {
             if (auto jsonField = graph.GetValueByPath(fmt::format("{}{}", (isV1 ? "TaskRunner.Stage=Total." : ""), path))) {
-                aggregatedStatistics[field] += jsonField->GetIntegerSafe();
+                if (jsonField->IsInteger()) {
+                    aggregatedStatistics[TString{field}] += jsonField->GetInteger();
+                } else {
+                    aggregatedStatistics[TString{field}] += ParseDuration(jsonField->GetStringSafe()).MicroSeconds();
+                }
             }
         }
     }
 }
 
-void CollectDetalizationStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
+void CollectDetalizationStatistics(const NJson::TJsonValue& stats, THashMap<TString, i64>& aggregatedStatistics) {
     for (const auto& [rootKey, graph] : stats.GetMap()) {
         AggregateStatisticsBySources(graph, aggregatedStatistics);
     }
 }
 }
 
-void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr) {
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest,
+                              const THashMap<TString, i64>& aggregatedStats,
+                              TDuration executionTime) {
+    for (const auto& [field, stat] : aggregatedStats) {
+        auto& newStat = *dest.Add();
+        newStat.set_name(field);
+        newStat.set_value(stat);
+    }
+    auto& execTime = *dest.Add();
+    execTime.set_name("ExecutionTimeUs");
+    execTime.set_value(executionTime.MicroSeconds());
+}
+
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr, TDuration executionTime) {
     NJson::TJsonValue statsJson;
     if (!NJson::ReadJsonFastTree(statsStr, &statsJson)) {
         return;
@@ -379,15 +304,11 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
         return;
     }
 
-    std::unordered_map<TString, i64> aggregatedStatistics;
+    THashMap<TString, i64> aggregatedStatistics;
     CollectTotalStatistics(statsJson, aggregatedStatistics);
     CollectDetalizationStatistics(statsJson, aggregatedStatistics);
 
-    for (auto [field, stat] : aggregatedStatistics) {
-        auto newStat = dest.Add();
-        newStat->set_name(TString{field});
-        newStat->set_value(stat);
-    }
+    PackStatisticsToProtobuf(dest, aggregatedStatistics, executionTime);
 }
 
 StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {
@@ -401,14 +322,25 @@ StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPt
 
 TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics) {
     bool first = true;
+    builder << '{';
     for (const auto& [field, value] : statistics.Stats) {
         if (!first) {
             builder << ", ";
         }
-        builder << field << ": [" << value << "]";
+        builder << '"' << field << "\": " << value;
         first = false;
     }
+    builder << '}';
     return builder;
+}
+
+void AddTransientIssues(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* protoIssues, NYql::TIssues&& issues) {
+    for (const auto& issue: *protoIssues) {
+        issues.AddIssue(NYql::IssueFromMessage(issue));
+    }
+    NYql::TIssues newIssues;
+    std::for_each_n(issues.begin(), std::min(static_cast<unsigned long long>(issues.Size()), 20ULL), [&](auto& issue){ newIssues.AddIssue(issue); });
+    NYql::IssuesToMessage(newIssues, protoIssues);
 }
 
 };

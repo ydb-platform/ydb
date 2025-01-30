@@ -39,7 +39,7 @@ public:
         CLOG_D(ctx, "Execute: " << PubEv->Get()->ToString());
 
         const auto& record = PubEv->Get()->Record;
-        const auto pathId = PathIdFromPathId(record.GetPathId());
+        const auto pathId = TPathId::FromProto(record.GetPathId());
         const auto& opId = record.GetOperationId();
         Replication = Self->Find(pathId);
 
@@ -81,10 +81,12 @@ public:
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
 
-            target->SetDstState(TReplication::EDstState::Removing); // TODO: configurable
-            db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
-                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
-            );
+            if (record.GetCascade()) {
+                target->SetDstState(TReplication::EDstState::Removing);
+                db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                    NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
+                );
+            }
         }
 
         CLOG_N(ctx, "Drop replication"

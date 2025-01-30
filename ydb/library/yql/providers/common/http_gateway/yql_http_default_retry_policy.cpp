@@ -2,31 +2,51 @@
 
 namespace NYql {
 
-IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries) {
+std::unordered_set<CURLcode> YqlRetriedCurlCodes() {
+    return {
+        CURLE_COULDNT_CONNECT,
+        CURLE_WEIRD_SERVER_REPLY,
+        CURLE_WRITE_ERROR,
+        CURLE_READ_ERROR,
+        CURLE_OPERATION_TIMEDOUT,
+        CURLE_SSL_CONNECT_ERROR,
+        CURLE_BAD_DOWNLOAD_RESUME,
+        CURLE_SEND_ERROR,
+        CURLE_RECV_ERROR,
+        CURLE_NO_CONNECTION_AVAILABLE
+    };
+}
+
+std::unordered_set<CURLcode> FqRetriedCurlCodes() {
+    return {
+        CURLE_COULDNT_CONNECT,
+        CURLE_WEIRD_SERVER_REPLY,
+        CURLE_WRITE_ERROR,
+        CURLE_READ_ERROR,
+        CURLE_OPERATION_TIMEDOUT,
+        CURLE_SSL_CONNECT_ERROR,
+        CURLE_BAD_DOWNLOAD_RESUME,
+        CURLE_SEND_ERROR,
+        CURLE_RECV_ERROR,
+        CURLE_NO_CONNECTION_AVAILABLE,
+        CURLE_GOT_NOTHING,
+        CURLE_COULDNT_RESOLVE_HOST
+    };
+}
+
+IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions&& options) {
+    auto maxTime = options.MaxTime;
+    auto maxRetries = options.MaxRetries;
     if (!maxTime) {
         maxTime = TDuration::Minutes(5);
     }
-    return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy([](CURLcode curlCode, long httpCode) {
-
-        switch (curlCode) {
-            case CURLE_OK:
-                // look to http code
-                break;
-            case CURLE_COULDNT_CONNECT:
-            case CURLE_WEIRD_SERVER_REPLY:
-            case CURLE_WRITE_ERROR:
-            case CURLE_READ_ERROR:
-            case CURLE_OPERATION_TIMEDOUT:
-            case CURLE_SSL_CONNECT_ERROR:
-            case CURLE_BAD_DOWNLOAD_RESUME:
-            case CURLE_SEND_ERROR:
-            case CURLE_RECV_ERROR:
-            case CURLE_NO_CONNECTION_AVAILABLE:
-                // retry small number of known errors
-                return ERetryErrorClass::ShortRetry;
-            default:
-                // do not retry others
-                return ERetryErrorClass::NoRetry;
+    return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy([options = std::move(options)](CURLcode curlCode, long httpCode) {
+        if (curlCode == CURLE_OK) {
+            // pass
+        } else if (options.RetriedCurlCodes.contains(curlCode)) {
+            return ERetryErrorClass::ShortRetry;
+        } else {
+            return ERetryErrorClass::NoRetry;
         }
 
         switch (httpCode) {
@@ -50,6 +70,10 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, si
     TDuration::Seconds(30), // maxDelay
     maxRetries, // maxRetries
     maxTime); // maxTime
+}
+
+IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries) {
+    return GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{.MaxTime = maxTime, .MaxRetries = maxRetries});
 }
 
 }

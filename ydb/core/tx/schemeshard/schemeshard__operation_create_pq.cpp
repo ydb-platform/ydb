@@ -1,6 +1,9 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
+
+#include "schemeshard_utils.h"  // for PQGroupReserve
 
 #include <library/cpp/int128/int128.h>
 
@@ -8,6 +11,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -103,7 +107,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         }
     }
 
-    bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
+    bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
 
     TString prevBound;
     for (ui32 i = 0; i < partitionCount; ++i) {
@@ -122,8 +126,8 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
                     TVector<TCell> cells;
                     TString error;
                     TVector<TString> memoryOwner;
-                    if (!NMiniKQL::CellsFromTuple(nullptr, op.GetPartitionBoundaries(i), pqGroupInfo->KeySchema, false,
-                                                  cells, error, memoryOwner)) {
+                    if (!NMiniKQL::CellsFromTuple(nullptr, op.GetPartitionBoundaries(i), pqGroupInfo->KeySchema, {},
+                                                  false, cells, error, memoryOwner)) {
                         status = NKikimrScheme::StatusSchemeError;
                         errStr = Sprintf("Invalid partition boundary at position: %u, error: %s", i, error.data());
                         return nullptr;
@@ -154,6 +158,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
 
     pqGroupInfo->TotalGroupCount = partitionCount;
     pqGroupInfo->TotalPartitionCount = partitionCount;
+    pqGroupInfo->ActivePartitionCount = partitionCount;
 
     ui32 tabletCount = pqGroupInfo->ExpectedShardCount();
     if (tabletCount > TSchemeShard::MaxPQGroupTabletsCount) {
@@ -243,7 +248,6 @@ void ApplySharding(TTxId txId,
     pqGroup->InitSplitMergeGraph();
 }
 
-
 class TCreatePQ: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -279,6 +283,11 @@ class TCreatePQ: public TSubOperation {
         }
     }
 
+    ui64 PqShardCountChange = 0;
+    ui64 StreamReservedThroughputChange = 0;
+    ui64 StreamReservedStorageChange = 0;
+    ui64 StreamShardsCountChange = 0;
+
 public:
     using TSubOperation::TSubOperation;
 
@@ -308,7 +317,8 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting();
+                .NotUnderDeleting()
+                .FailOnRestrictedCreateInTempZone();
 
             if (checks) {
                 if (parentPath.Base()->IsCdcStream()) {
@@ -467,12 +477,10 @@ public:
 
         ApplySharding(OperationId.GetTxId(), pathId, pqGroup, txState, tabletChannelsBinding, pqChannelsBinding, context.SS);
 
-        NIceDb::TNiceDb db(context.GetDB());
-
         for (auto& shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
             for (const auto& pqInfo : shard.second->Partitions) {
-                context.SS->PersistPersQueue(db, pathId, shardIdx, *pqInfo);
+                context.DbChanges.PersistPersQueue(pathId, shardIdx, *pqInfo);
             }
         }
 
@@ -483,16 +491,17 @@ public:
         context.SS->Topics[pathId]->AlterData = pqGroup;
         context.SS->IncrementPathDbRefCount(pathId);
 
-        context.SS->PersistPersQueueGroup(db, pathId, emptyGroup);
-        context.SS->PersistAddPersQueueGroupAlter(db, pathId, pqGroup);
+        context.DbChanges.PersistPersQueueGroup(pathId, emptyGroup);
+        context.DbChanges.PersistAddPersQueueGroupAlter(pathId, pqGroup);
 
         for (auto shard : txState.Shards) {
             Y_ABORT_UNLESS(shard.Operation == TTxState::CreateParts);
-            context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, OperationId.GetTxId(), shard.TabletType);
-            context.SS->PersistChannelsBinding(db, shard.Idx, tabletChannelsBinding);
+            context.DbChanges.PersistShard(shard.Idx);
         }
+
         Y_ABORT_UNLESS(txState.Shards.size() == shardsToCreate);
-        context.SS->TabletCounters->Simple()[COUNTER_PQ_SHARD_COUNT].Add(shardsToCreate-1);
+        PqShardCountChange = shardsToCreate - 1;
+        context.SS->TabletCounters->Simple()[COUNTER_PQ_SHARD_COUNT].Add(PqShardCountChange);
         context.SS->TabletCounters->Simple()[COUNTER_PQ_RB_SHARD_COUNT].Add(1);
 
         dstPath.Base()->CreateTxId = OperationId.GetTxId();
@@ -517,48 +526,51 @@ public:
             }
         }
 
-        context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
         context.OnComplete.ActivateTx(OperationId);
 
-        context.SS->PersistTxState(db, OperationId);
-
-        context.SS->PersistPath(db, dstPath.Base()->PathId);
+        context.DbChanges.PersistTxState(OperationId);
 
         if (!acl.empty()) {
             dstPath.Base()->ApplyACL(acl);
-            context.SS->PersistACL(db, dstPath.Base());
         }
-
-        context.SS->PersistUpdateNextPathId(db);
-        context.SS->PersistUpdateNextShardIdx(db);
+        context.MemChanges.GrabPath(context.SS, dstPath.Base()->PathId);
+        context.DbChanges.PersistPath(dstPath.Base()->PathId);
 
         ++parentPath.Base()->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
         context.SS->ClearDescribePathCaches(parentPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, parentPath.Base()->PathId);
 
         context.SS->ClearDescribePathCaches(dstPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
-        dstPath.DomainInfo()->IncPathsInside();
-        dstPath.DomainInfo()->AddInternalShards(txState);
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
         dstPath.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
         dstPath.DomainInfo()->IncPQReservedStorage(reserve.Storage);
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(reserve.Throughput);
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(reserve.Storage);
-
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionsToCreate);
+        StreamReservedThroughputChange = reserve.Throughput;
+        StreamReservedStorageChange = reserve.Storage;
+        StreamShardsCountChange = partitionsToCreate;
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(StreamReservedThroughputChange);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(StreamReservedStorageChange);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(StreamShardsCountChange);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TCreatePQ");
+    void AbortPropose(TOperationContext& context) override {
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(StreamReservedThroughputChange);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(StreamReservedStorageChange);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Sub(StreamShardsCountChange);
+
+        context.SS->TabletCounters->Simple()[COUNTER_PQ_SHARD_COUNT].Sub(PqShardCountChange);
+        context.SS->TabletCounters->Simple()[COUNTER_PQ_RB_SHARD_COUNT].Sub(1);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -575,6 +587,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreatePersQueueGroup().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreatePersQueueGroup()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewPQ(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreatePQ>(id, tx);

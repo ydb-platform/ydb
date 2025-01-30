@@ -293,8 +293,7 @@ void Lz4Decompress(TSource* source, TBlob* sink)
                     << TErrorAttribute("expected_size", inputSize)
                     << TErrorAttribute("actual_size", rv);
             }
-        }
-    );
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

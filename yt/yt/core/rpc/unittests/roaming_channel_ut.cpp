@@ -1,17 +1,11 @@
 #include <yt/yt/core/test_framework/framework.h>
 
-#include <yt/yt/core/logging/log.h>
-
 #include <yt/yt/core/rpc/roaming_channel.h>
 
 #include <yt/yt/core/rpc/unittests/lib/common.h>
 
 namespace NYT::NRpc {
 namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-const NLogging::TLogger Logger("RoamingChannelTest");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -23,7 +17,7 @@ public:
         : Channel_(std::move(channel))
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         YT_UNIMPLEMENTED();
     }
@@ -67,7 +61,7 @@ public:
         Channel_.Set(std::move(channel));
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         YT_UNIMPLEMENTED();
     }
@@ -105,7 +99,7 @@ class TNeverProvider
     : public IRoamingChannelProvider
 {
 public:
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         YT_UNIMPLEMENTED();
     }
@@ -140,7 +134,7 @@ private:
 };
 
 template <class TImpl>
-using TRpcTest = TTestBase<TImpl>;
+using TRpcTest = TRpcTestBase<TImpl>;
 TYPED_TEST_SUITE(TRpcTest, TAllTransports);
 
 TYPED_TEST(TRpcTest, RoamingChannelNever)

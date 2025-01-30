@@ -28,7 +28,9 @@ void TPQTabletMock::PrepareGetOwnershipResponse()
         partition->SetCookie(*cookie);
     }
 
-    partition->MutableCmdGetOwnershipResult()->SetOwnerCookie(OwnerCookie);
+    auto* result = partition->MutableCmdGetOwnershipResult();
+    result->SetOwnerCookie(OwnerCookie);
+    result->SetSupportivePartition(1'000'000); // fictitious number of the supportive partition
 }
 
 void TPQTabletMock::PrepareGetMaxSeqNoResponse()

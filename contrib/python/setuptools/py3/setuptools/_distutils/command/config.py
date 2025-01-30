@@ -9,13 +9,17 @@ configure-like tasks: "try to compile this C code", or "figure out where
 this header file lives".
 """
 
+from __future__ import annotations
+
 import os
+import pathlib
 import re
+from collections.abc import Sequence
+from distutils._log import log
 
 from ..core import Command
 from ..errors import DistutilsExecError
 from ..sysconfig import customize_compiler
-from distutils._log import log
 
 LANG_EXT = {"c": ".c", "c++": ".cxx"}
 
@@ -90,7 +94,7 @@ class config(Command):
 
         if not isinstance(self.compiler, CCompiler):
             self.compiler = new_compiler(
-                compiler=self.compiler, dry_run=self.dry_run, force=1
+                compiler=self.compiler, dry_run=self.dry_run, force=True
             )
             customize_compiler(self.compiler)
             if self.include_dirs:
@@ -102,10 +106,10 @@ class config(Command):
 
     def _gen_temp_sourcefile(self, body, headers, lang):
         filename = "_configtest" + LANG_EXT[lang]
-        with open(filename, "w") as file:
+        with open(filename, "w", encoding='utf-8') as file:
             if headers:
                 for header in headers:
-                    file.write("#include <%s>\n" % header)
+                    file.write(f"#include <{header}>\n")
                 file.write("\n")
             file.write(body)
             if body[-1] != "\n":
@@ -122,7 +126,7 @@ class config(Command):
     def _compile(self, body, headers, include_dirs, lang):
         src = self._gen_temp_sourcefile(body, headers, lang)
         if self.dump_source:
-            dump_file(src, "compiling '%s':" % src)
+            dump_file(src, f"compiling '{src}':")
         (obj,) = self.compiler.object_filenames([src])
         self.temp_files.extend([src, obj])
         self.compiler.compile([src], include_dirs=include_dirs)
@@ -199,15 +203,8 @@ class config(Command):
         if isinstance(pattern, str):
             pattern = re.compile(pattern)
 
-        with open(out) as file:
-            match = False
-            while True:
-                line = file.readline()
-                if line == '':
-                    break
-                if pattern.search(line):
-                    match = True
-                    break
+        with open(out, encoding='utf-8') as file:
+            match = any(pattern.search(line) for line in file)
 
         self._clean()
         return match
@@ -295,8 +292,8 @@ class config(Command):
         include_dirs=None,
         libraries=None,
         library_dirs=None,
-        decl=0,
-        call=0,
+        decl=False,
+        call=False,
     ):
         """Determine if function 'func' is available by constructing a
         source file that refers to 'func', and compiles and links it.
@@ -314,12 +311,12 @@ class config(Command):
         self._check_compiler()
         body = []
         if decl:
-            body.append("int %s ();" % func)
+            body.append(f"int {func} ();")
         body.append("int main () {")
         if call:
-            body.append("  %s();" % func)
+            body.append(f"  {func}();")
         else:
-            body.append("  %s;" % func)
+            body.append(f"  {func};")
         body.append("}")
         body = "\n".join(body) + "\n"
 
@@ -331,7 +328,7 @@ class config(Command):
         library_dirs=None,
         headers=None,
         include_dirs=None,
-        other_libraries=[],
+        other_libraries: Sequence[str] = [],
     ):
         """Determine if 'library' is available to be linked against,
         without actually checking that any particular symbols are provided
@@ -346,7 +343,7 @@ class config(Command):
             "int main (void) { }",
             headers,
             include_dirs,
-            [library] + other_libraries,
+            [library] + list(other_libraries),
             library_dirs,
         )
 
@@ -369,8 +366,4 @@ def dump_file(filename, head=None):
         log.info('%s', filename)
     else:
         log.info(head)
-    file = open(filename)
-    try:
-        log.info(file.read())
-    finally:
-        file.close()
+    log.info(pathlib.Path(filename).read_text(encoding='utf-8'))

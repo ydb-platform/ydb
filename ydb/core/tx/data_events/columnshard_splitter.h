@@ -1,6 +1,8 @@
 #pragma once
 
+#include "events.h"
 #include "shards_splitter.h"
+#include "payload_helper.h"
 
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -8,173 +10,60 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
-
 namespace NKikimr::NEvWrite {
 
-class TColumnShardShardsSplitter : public IShardsSplitter {
-    class TShardInfo : public IShardInfo {
+class TColumnShardShardsSplitter: public IShardsSplitter {
+    class TShardInfo: public IShardInfo {
     private:
         const TString SchemaData;
         const TString Data;
         const ui32 RowsCount;
+        const ui32 GranuleShardingVersion;
     public:
-        TShardInfo(const TString& schemaData, const TString& data, const ui32 rowsCount)
+        TShardInfo(const TString& schemaData, const TString& data, const ui32 rowsCount, const ui32 granuleShardingVersion)
             : SchemaData(schemaData)
             , Data(data)
             , RowsCount(rowsCount)
-        {}
+            , GranuleShardingVersion(granuleShardingVersion) {
+        }
 
-        ui64 GetBytes() const override {
+        virtual ui64 GetBytes() const override {
             return Data.size();
         }
 
-        ui32 GetRowsCount() const override {
+        virtual ui32 GetRowsCount() const override {
             return RowsCount;
         }
 
-        const TString& GetData() const override {
+        virtual const TString& GetData() const override {
             return Data;
         }
 
-        void Serialize(TEvWrite& evWrite) const override {
+        virtual void Serialize(TEvColumnShard::TEvWrite& evWrite) const override {
             evWrite.SetArrowData(SchemaData, Data);
+            evWrite.Record.SetGranuleShardingVersion(GranuleShardingVersion);
+        }
+        virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite, const ui64 tableId, const ui64 schemaVersion) const override {
+            TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(evWrite);
+            TString data = Data;
+            writer.AddDataToPayload(std::move(data));
+
+            auto* operation = evWrite.Record.AddOperations();
+            operation->SetPayloadSchema(SchemaData);
+            operation->SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE);
+            operation->SetPayloadFormat(NKikimrDataEvents::FORMAT_ARROW);
+            operation->SetPayloadIndex(0);
+            operation->MutableTableId()->SetTableId(tableId);
+            operation->MutableTableId()->SetSchemaVersion(schemaVersion);
         }
     };
 
 private:
-    TYdbConclusionStatus DoSplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) override {
-        if (schemeEntry.Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an column table");
-        }
-
-        if (!schemeEntry.ColumnTableInfo) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "Column table expected");
-        }
-
-        const auto& description = schemeEntry.ColumnTableInfo->Description;
-        if (!description.HasSharding()) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "Unknown sharding method is not supported");
-        }
-        if (!description.HasSchema()) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "Unknown schema for column table");
-        }
-
-        const auto& scheme = description.GetSchema();
-        const auto& sharding = description.GetSharding();
-
-        if (sharding.ColumnShardsSize() == 0) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "No shards to write to");
-        }
-        if (!scheme.HasEngine() || scheme.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_NONE) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "Wrong column table configuration");
-        }
-
-        if (sharding.HasRandomSharding()) {
-            return SplitRandom(data, scheme, sharding);
-        } else if (sharding.HasHashSharding()) {
-            return SplitByHash(data, scheme, sharding);
-        }
-        return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "Sharding method is not supported");
-    }
+    TYdbConclusionStatus DoSplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) override;
 
 private:
-    TYdbConclusionStatus SplitByHash(const IEvWriteDataAccessor& data, const NKikimrSchemeOp::TColumnTableSchema& scheme, const NKikimrSchemeOp::TColumnTableSharding& sharding) {
-        if (scheme.GetEngine() != NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "Wrong column table configuration fro hash sharding");
-        }
+    TYdbConclusionStatus SplitImpl(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<NSharding::IShardingBase>& sharding);
 
-        if (data.HasDeserializedBatch()) {
-            return SplitByHashImpl(data.GetDeserializedBatch(), sharding);
-        }
-
-        std::shared_ptr<arrow::Schema> arrowScheme = ExtractArrowSchema(scheme);
-        std::shared_ptr<arrow::RecordBatch> batch = NArrow::DeserializeBatch(data.GetSerializedData(), arrowScheme);
-        if (!batch) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, TString("cannot deserialize batch with schema ") + arrowScheme->ToString());
-        }
-
-        auto res = batch->ValidateFull();
-        if (!res.ok()) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, TString("deserialize batch is not valid: ") + res.ToString());
-        }
-        return SplitByHashImpl(batch, sharding);
-    }
-
-    TYdbConclusionStatus SplitRandom(const IEvWriteDataAccessor& data, const NKikimrSchemeOp::TColumnTableSchema& scheme, const NKikimrSchemeOp::TColumnTableSharding& sharding) {
-        const ui64 shardId = sharding.GetColumnShards(RandomNumber<ui32>(sharding.ColumnShardsSize()));
-        FullSplitData.emplace(sharding.ColumnShardsSize());
-        if (data.HasDeserializedBatch()) {
-            FullSplitData->AddShardInfo(shardId, std::make_shared<TShardInfo>(NArrow::SerializeSchema(*data.GetDeserializedBatch()->schema()), data.GetSerializedData(), 0));
-        } else {
-            FullSplitData->AddShardInfo(shardId, std::make_shared<TShardInfo>(NArrow::SerializeSchema(*ExtractArrowSchema(scheme)), data.GetSerializedData(), 0));
-        }
-        return TYdbConclusionStatus::Success();
-    }
-
-    TYdbConclusionStatus SplitByHashImpl(const std::shared_ptr<arrow::RecordBatch>& batch, const NKikimrSchemeOp::TColumnTableSharding& descSharding) {
-        Y_ABORT_UNLESS(descSharding.HasHashSharding());
-        Y_ABORT_UNLESS(batch);
-
-        TVector<ui64> tabletIds(descSharding.GetColumnShards().begin(), descSharding.GetColumnShards().end());
-        const ui32 numShards = tabletIds.size();
-        Y_ABORT_UNLESS(numShards);
-
-        TFullSplitData result(numShards);
-        if (numShards == 1) {
-            NArrow::TBatchSplitttingContext context(NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
-            NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(batch, context);
-            if (!blobsSplitted) {
-                return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "cannot split batch in according to limits: " + blobsSplitted.GetErrorMessage());
-            }
-            for (auto&& b : blobsSplitted.GetResult()) {
-                result.AddShardInfo(tabletIds.front(), std::make_shared<TShardInfo>(b.GetSchemaData(), b.GetData(), b.GetRowsCount()));
-            }
-            FullSplitData = result;
-            return TYdbConclusionStatus::Success();
-        }
-
-        auto sharding = NSharding::TShardingBase::BuildShardingOperator(descSharding);
-        std::vector<ui32> rowSharding;
-        if (sharding) {
-            rowSharding = sharding->MakeSharding(batch);
-        }
-        if (rowSharding.empty()) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "empty "
-                + NKikimrSchemeOp::TColumnTableSharding::THashSharding::EHashFunction_Name(descSharding.GetHashSharding().GetFunction())
-                + " sharding (" + (sharding ? sharding->DebugString() : "no sharding object") + ")");
-        }
-
-        std::vector<std::shared_ptr<arrow::RecordBatch>> sharded = NArrow::ShardingSplit(batch, rowSharding, numShards);
-        Y_ABORT_UNLESS(sharded.size() == numShards);
-
-        THashMap<ui64, TString> out;
-        for (size_t i = 0; i < sharded.size(); ++i) {
-            if (sharded[i]) {
-                NArrow::TBatchSplitttingContext context(NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
-                NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(sharded[i], context);
-                if (!blobsSplitted) {
-                    return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "cannot split batch in according to limits: " + blobsSplitted.GetErrorMessage());
-                }
-                for (auto&& b : blobsSplitted.GetResult()) {
-                    result.AddShardInfo(tabletIds[i], std::make_shared<TShardInfo>(b.GetSchemaData(), b.GetData(), b.GetRowsCount()));
-                }
-            }
-        }
-
-        Y_ABORT_UNLESS(result.GetShardsInfo().size());
-        FullSplitData = result;
-        return TYdbConclusionStatus::Success();
-    }
-
-    std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
-        TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
-        for (auto& col : schema.GetColumns()) {
-            Y_ABORT_UNLESS(col.HasTypeId());
-            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
-                col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
-            columns.emplace_back(col.GetName(), typeInfoMod.TypeInfo);
-        }
-        return NArrow::MakeArrowSchema(columns);
-    }
+    std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
 };
 }

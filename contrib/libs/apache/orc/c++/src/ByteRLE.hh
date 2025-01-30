@@ -27,7 +27,7 @@
 namespace orc {
 
   class ByteRleEncoder {
-  public:
+   public:
     virtual ~ByteRleEncoder();
 
     /**
@@ -37,8 +37,7 @@ namespace orc {
      * @param notNull If the pointer is null, all values are read. If the
      *    pointer is not null, positions that are false are skipped.
      */
-    virtual void add(const char* data, uint64_t numValues,
-                      const char* notNull) = 0;
+    virtual void add(const char* data, uint64_t numValues, const char* notNull) = 0;
 
     /**
      * Get size of buffer used so far.
@@ -60,10 +59,17 @@ namespace orc {
      * suppress the data and reset to initial state
      */
     virtual void suppress() = 0;
+
+    /**
+     * Finalize the encoding process. This function should be called after all data required for
+     * encoding has been added. It ensures that any remaining data is processed and the final state
+     * of the encoder is set.
+     */
+    virtual void finishEncode() = 0;
   };
 
   class ByteRleDecoder {
-  public:
+   public:
     virtual ~ByteRleDecoder();
 
     /**
@@ -90,22 +96,23 @@ namespace orc {
    * Create a byte RLE encoder.
    * @param output the output stream to write to
    */
-  std::unique_ptr<ByteRleEncoder> createByteRleEncoder
-                                 (std::unique_ptr<BufferedOutputStream> output);
+  std::unique_ptr<ByteRleEncoder> createByteRleEncoder(
+      std::unique_ptr<BufferedOutputStream> output);
 
   /**
    * Create a boolean RLE encoder.
    * @param output the output stream to write to
    */
-  std::unique_ptr<ByteRleEncoder> createBooleanRleEncoder
-                                 (std::unique_ptr<BufferedOutputStream> output);
+  std::unique_ptr<ByteRleEncoder> createBooleanRleEncoder(
+      std::unique_ptr<BufferedOutputStream> output);
 
   /**
    * Create a byte RLE decoder.
    * @param input the input stream to read from
+   * @param metrics the metrics of the decoder
    */
-  std::unique_ptr<ByteRleDecoder> createByteRleDecoder
-                                 (std::unique_ptr<SeekableInputStream> input);
+  std::unique_ptr<ByteRleDecoder> createByteRleDecoder(std::unique_ptr<SeekableInputStream> input,
+                                                       ReaderMetrics* metrics);
 
   /**
    * Create a boolean RLE decoder.
@@ -114,9 +121,10 @@ namespace orc {
    * if the value is masked by notNull. This is required for the notNull stream
    * processing to properly apply multiple masks from nested types.
    * @param input the input stream to read from
+   * @param metrics the metrics of the decoder
    */
-  std::unique_ptr<ByteRleDecoder> createBooleanRleDecoder
-                                 (std::unique_ptr<SeekableInputStream> input);
-}
+  std::unique_ptr<ByteRleDecoder> createBooleanRleDecoder(
+      std::unique_ptr<SeekableInputStream> input, ReaderMetrics* metrics);
+}  // namespace orc
 
 #endif

@@ -13,11 +13,19 @@ class TNodesManager {
     static constexpr TDuration RetryInternal = TDuration::Seconds(10);
 
 public:
+    struct TProcessResult {
+        THashSet<ui32> NewNodes;
+        THashSet<ui32> RemovedNodes;
+    };
+
+public:
     bool HasTenant(const TString& tenant) const;
+    bool HasNodes(const TString& tenant) const;
     const THashSet<ui32>& GetNodes(const TString& tenant) const;
+    ui32 GetRandomNode(const TString& tenant) const;
 
     void DiscoverNodes(const TString& tenant, const TActorId& cache, const TActorContext& ctx);
-    void ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx);
+    TProcessResult ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx);
     void ProcessResponse(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx);
 
     void Shutdown(const TActorContext& ctx);

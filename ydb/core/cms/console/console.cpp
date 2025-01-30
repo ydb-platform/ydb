@@ -161,6 +161,11 @@ void TConsole::ClearState()
     Counters->ResetCounters();
 }
 
+void TConsole::ForwardFromPipe(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) {
+    ev->Rewrite(ev->GetTypeRewrite(), ConfigsManager->SelfId());
+    ctx.Send(ev.Release());
+}
+
 void TConsole::ForwardToConfigsManager(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
 {
     ctx.Forward(ev, ConfigsManager->SelfId());

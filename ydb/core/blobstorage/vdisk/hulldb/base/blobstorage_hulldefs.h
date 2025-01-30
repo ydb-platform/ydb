@@ -132,11 +132,13 @@ namespace NKikimr {
         const ui32 HullSstSizeInChunksLevel;
         const double HullCompFreeSpaceThreshold;
         const ui32 FreshCompMaxInFlightWrites;
+        const ui32 FreshCompMaxInFlightReads;
         const ui32 HullCompMaxInFlightWrites;
         const ui32 HullCompMaxInFlightReads;
         const double HullCompReadBatchEfficiencyThreshold;
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
+        const bool AddHeader;
 
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup;
@@ -153,11 +155,13 @@ namespace NKikimr {
                 ui32 hullSstSizeInChunksLevel,
                 double hullCompFreeSpaceThreshold,
                 ui32 freshCompMaxInFlightWrites,
+                ui32 freshCompMaxInFlightReads,
                 ui32 hullCompMaxInFlightWrites,
                 ui32 hullCompMaxInFlightReads,
                 double hullCompReadBatchEfficiencyThreshold,
                 TDuration hullCompStorageRatioCalcPeriod,
-                TDuration hullCompStorageRatioMaxCalcDuration);
+                TDuration hullCompStorageRatioMaxCalcDuration,
+                bool addHeader);
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);
     };
@@ -180,6 +184,12 @@ namespace NKikimr {
         bool ParseFromArray(const TBlobStorageGroupType &gtype, const char* data, size_t size);
         TString ToString() const;
         void Output(IOutputStream &str) const;
+    };
+
+    // prepared data to insert to Hull Database
+    struct THullDbInsert {
+        TLogoBlobID Id;
+        TIngress Ingress;
     };
 
 } // NKikimr

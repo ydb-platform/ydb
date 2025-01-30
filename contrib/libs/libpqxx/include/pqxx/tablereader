@@ -1,6 +1,0 @@
-/** pqxx::tablereader class.
- *
- * pqxx::tablereader enables optimized batch reads from a database table.
- */
-// Actual definitions in .hxx file so editors and such recognize file type.
-#include "pqxx/tablereader.hxx"

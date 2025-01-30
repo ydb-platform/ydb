@@ -27,8 +27,9 @@ public:
             CallbackEventCount_,
             threadName,
             threadName,
-            NThreading::EThreadPriority::Normal,
-            /*shutdownPriority*/ shutdownPriority - 1))
+            NThreading::TThreadOptions{
+                .ShutdownPriority = shutdownPriority - 1,
+            }))
         , ShutdownCookie_(RegisterShutdownCallback(
             Format("SystemInvokerThread:%v", threadName),
             BIND_NO_PROPAGATE(&TSystemInvokerThread::Shutdown, this),

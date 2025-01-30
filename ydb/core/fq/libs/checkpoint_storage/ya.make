@@ -12,6 +12,7 @@ PEERDIR(
     contrib/libs/fmt
     ydb/library/actors/core
     ydb/core/fq/libs/actors/logging
+    ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/ydb
     ydb/core/fq/libs/checkpoint_storage/events
@@ -21,8 +22,9 @@ PEERDIR(
     ydb/library/security
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()
@@ -31,7 +33,6 @@ END()
 
 RECURSE(
     events
-    proto
 )
 
 RECURSE_FOR_TESTS(

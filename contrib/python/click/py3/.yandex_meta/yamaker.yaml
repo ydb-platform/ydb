@@ -1,0 +1,3 @@
+requirements:
+  - contrib/python/colorama
+  - library/python/symbols/python

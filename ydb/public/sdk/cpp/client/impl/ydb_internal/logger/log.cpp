@@ -4,7 +4,7 @@
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 static const TStringBuf LogPrioritiesStrings[] = {
     " :EMERG: ",
@@ -31,7 +31,7 @@ TLogFormatter GetPrefixLogFormatter(const TString& prefix) {
 
         const TStringBuf priorityString = LogPriorityToString(priority);
         TStringBuilder result;
-        const size_t toReserve = prefix.size() + message.Size() + timeLen + endlLen + priorityString.Size();
+        const size_t toReserve = prefix.size() + message.size() + timeLen + endlLen + priorityString.size();
         result.reserve(toReserve);
 
         result << TInstant::Now() << priorityString << prefix << message << Endl;

@@ -1071,7 +1071,7 @@ private:
     size_t ResultsReceivedCount = 0;
 
     ui64 PlanStep = 0;
-    ui64 SnapshotTxId = 0;   // SnaphotTxId overrides TxId in case using AcquireReadSnapshot
+    ui64 SnapshotTxId = 0;   // SnapshotTxId overrides TxId in case using AcquireReadSnapshot
     ui64 AggrMinStep = 0;
     ui64 AggrMaxStep = Max<ui64>();
 

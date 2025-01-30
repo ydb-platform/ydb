@@ -7,8 +7,10 @@ namespace NKikimr::NKqp::NOpt {
 
 struct TKqpOptimizeContext;
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpLogOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    NYql::TTypeAnnotationContext& typesCtx, const NYql::TKikimrConfiguration::TPtr& config, 
-    NKikimr::NKqp::NOpt::TKqpProviderContext& pctx);
+TAutoPtr<NYql::IGraphTransformer> CreateKqpLogOptTransformer(
+    TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
+    NYql::TTypeAnnotationContext& typesCtx, 
+    const NYql::TKikimrConfiguration::TPtr& config
+);
 
 } // namespace NKikimr::NKqp::NOpt

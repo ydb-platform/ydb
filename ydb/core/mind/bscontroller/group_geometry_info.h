@@ -86,7 +86,7 @@ namespace NKikimr::NBsController {
                 i64 requiredSpace) const {
             TString error;
             for (const bool requireOperational : {true, false}) {
-                if (mapper.AllocateGroup(groupId, group, constrainsts, replacedDisks, forbid, requiredSpace, requireOperational, error)) {
+                if (mapper.AllocateGroup(groupId.GetRawId(), group, constrainsts, replacedDisks, forbid, requiredSpace, requireOperational, error)) {
                     return;
                 }
             }

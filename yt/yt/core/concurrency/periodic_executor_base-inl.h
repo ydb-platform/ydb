@@ -40,6 +40,13 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::Start()
 }
 
 template <CInvocationTimePolicy TInvocationTimePolicy>
+bool TPeriodicExecutorBase<TInvocationTimePolicy>::IsStarted() const
+{
+    auto guard = Guard(SpinLock_);
+    return Started_;
+}
+
+template <CInvocationTimePolicy TInvocationTimePolicy>
 void TPeriodicExecutorBase<TInvocationTimePolicy>::DoStop(TGuard<NThreading::TSpinLock>& guard)
 {
     if (!Started_) {
@@ -138,7 +145,7 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::ScheduleOutOfBand()
 template <CInvocationTimePolicy TInvocationTimePolicy>
 void TPeriodicExecutorBase<TInvocationTimePolicy>::PostDelayedCallback(TInstant deadline)
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     TDelayedExecutor::CancelAndClear(Cookie_);
     Cookie_ = TDelayedExecutor::Submit(
         BIND_NO_PROPAGATE(&TThis::OnTimer, MakeWeak(this)),
@@ -151,8 +158,16 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::PostCallback()
 {
     GuardedInvoke(
         Invoker_,
-        BIND_NO_PROPAGATE(&TThis::RunCallback, MakeWeak(this)),
-        BIND_NO_PROPAGATE(&TThis::OnCallbackCancelled, MakeWeak(this)));
+        [this, weakThis = MakeWeak(this)] {
+            if (auto this_ = weakThis.Lock()) {
+                RunCallback();
+            }
+        },
+        [this, weakThis = MakeWeak(this)] {
+            if (auto this_ = weakThis.Lock()) {
+                OnCallbackCancelled();
+            }
+        });
 }
 
 template <CInvocationTimePolicy TInvocationTimePolicy>

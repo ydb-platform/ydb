@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
 
         auto eggs = TCompaction().Do(TMake(mass).Mem());
 
-        TCheckIt(eggs, { }).IsTheSame(mass.Saved);
+        TCheckIter(eggs, { }).IsTheSame(mass.Saved);
     }
 
     Y_UNIT_TEST(ManyParts)
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
         auto subset = TMake(mass).Mixed(0, 19, NTest::TMixerRnd(19));
         auto eggs = TCompaction().Do(*subset);
 
-        TCheckIt(eggs, { }).IsTheSame(mass.Saved);
+        TCheckIter(eggs, { }).IsTheSame(mass.Saved);
     }
 
     Y_UNIT_TEST(BootAbort)
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
 
             auto born = TCompaction(nullptr, { true, 7 * 1024 }).Do(eggs);
 
-            TCheckIt
+            TCheckIter
                 (born, { nullptr, 0 }, nullptr , false)
                 .To(10).Seek({ }, ESeek::Lower).Is(one)
                 .To(11).Next().IsN(2_u64, nullptr)  /* expllcit null */
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
 
             auto born = TCompaction(nullptr, { true, 7 * 1024 }).Do(eggs);
 
-            TCheckIt
+            TCheckIter
                 (born, { nullptr, 0 }, nullptr, true)
                 .To(20).Seek({ }, ESeek::Lower).Is(one)
                 .To(21).Next().IsN(2_u64, nullptr)
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
 
             auto born = make.Do(lower.Scheme, { &lower, &middle, &upper });
 
-            TCheckIt
+            TCheckIter
                 (born, { nullptr, 0 }, nullptr, true /* expand defaults */)
                 .To(20).Seek({ }, ESeek::Lower).Is(EReady::Data)
                 .To(21).IsOpN(ERowOp::Upsert, 1_u64, 1_u32, 1_u32)
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
 
             auto born = make.Do(lower.Scheme, { &middle, &upper });
 
-            TCheckIt
+            TCheckIter
                 (born, { nullptr, 0 }, nullptr, true /* expand defaults */)
                 .To(30).Seek({ }, ESeek::Lower).Is(EReady::Data)
                 .To(31).IsOpN(ERowOp::Erase, 2_u64, ECellOp::Empty, ECellOp::Empty)

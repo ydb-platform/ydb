@@ -2,7 +2,10 @@
     "Plan": {
         "Node Type": "Query",
         "PlanNodeType": "Query",
-        "Plans": []
+        "Plans": [],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

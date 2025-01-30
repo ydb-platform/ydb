@@ -1,32 +1,20 @@
 #pragma once
 
+#include "lightweight_schema.h"
+
 #include <ydb/core/change_exchange/change_record.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/core/scheme_types/scheme_type_info.h>
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
 
 #include <library/cpp/json/json_reader.h>
 
-#include <util/generic/hash.h>
 #include <util/generic/maybe.h>
-#include <util/generic/ptr.h>
-#include <util/generic/vector.h>
+#include <util/memory/pool.h>
+
+namespace NKikimrTxDataShard {
+    class TEvApplyReplicationChanges_TChange;
+}
 
 namespace NKikimr::NReplication::NService {
-
-struct TLightweightSchema: public TThrRefBase {
-    using TPtr = TIntrusivePtr<TLightweightSchema>;
-    using TCPtr = TIntrusiveConstPtr<TLightweightSchema>;
-
-    struct TColumn {
-        NTable::TTag Tag;
-        NScheme::TTypeInfo Type;
-    };
-
-    TVector<NScheme::TTypeInfo> KeyColumns;
-    THashMap<TString, TColumn> ValueColumns;
-};
 
 class TChangeRecordBuilder;
 
@@ -39,13 +27,18 @@ public:
     ui64 GetTxId() const override;
     EKind GetKind() const override;
 
-    void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const;
+    void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TMemoryPool& pool) const;
 
+    TConstArrayRef<TCell> GetKey(TMemoryPool& pool) const;
     TConstArrayRef<TCell> GetKey() const;
+
+    void Accept(NChangeExchange::IVisitor& visitor) const override;
+    void RewriteTxId(ui64 value) override;
 
 private:
     NJson::TJsonValue JsonBody;
     TLightweightSchema::TCPtr Schema;
+    ui64 WriteTxId = 0;
 
     mutable TMaybe<TOwnedCellVec> Key;
 
@@ -54,6 +47,11 @@ private:
 class TChangeRecordBuilder: public NChangeExchange::TChangeRecordBuilder<TChangeRecord, TChangeRecordBuilder> {
 public:
     using TBase::TBase;
+
+    TSelf& WithSourceId(const TString& sourceId) {
+        GetRecord()->SourceId = sourceId;
+        return static_cast<TSelf&>(*this);
+    }
 
     template <typename T>
     TSelf& WithBody(T&& body) {

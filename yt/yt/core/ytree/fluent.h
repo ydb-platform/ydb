@@ -88,7 +88,8 @@ namespace NYT::NYTree {
 //   and close map;
 // * DoList(TFuncList func) -> TAny, same as DoMap();
 // * DoListFor(TCollection collection, TFuncList func) -> TAny; same as DoMapFor().
-//
+// * DoAttributes(TFuncAttributes func) -> TAny, open attributes, delegate invocation
+//   to a separate procedure and close attributes;
 //
 // TFluentMap:
 // * Item(TStringBuf key) -> TAny, open an element keyed with `key`;
@@ -406,6 +407,14 @@ public:
             return TFluentAttributes<TAnyWithoutAttributes<TParent>>(
                 this->Consumer,
                 TAnyWithoutAttributes<TParent>(this->Consumer, std::move(this->Parent)));
+        }
+
+        TAnyWithoutAttributes<TParent> DoAttributes(auto funcMap)
+        {
+            this->Consumer->OnBeginAttributes();
+            InvokeFluentFunc<TFluentAttributes<TFluentYsonVoid>>(funcMap, this->Consumer);
+            this->Consumer->OnEndAttributes();
+            return TAnyWithoutAttributes<TParent>(this->Consumer, std::move(this->Parent));
         }
     };
 

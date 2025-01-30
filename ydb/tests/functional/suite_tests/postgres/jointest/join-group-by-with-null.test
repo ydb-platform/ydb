@@ -32,7 +32,7 @@ select a.x as x, count(b.q) from
    left join
    (select 2 as q, 5 as p) as b
    on b.q = a.y
-group by a.x
+group by a.x order by x desc
 
 statement query
 select t1.q2 as q2, count(t1.q1) as cnt

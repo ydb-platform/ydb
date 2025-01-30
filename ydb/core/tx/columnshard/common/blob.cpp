@@ -136,6 +136,21 @@ NKikimrColumnShardProto::TBlobRange TBlobRange::SerializeToProto() const {
     return result;
 }
 
+TString TBlobRange::GetData(const TString& blobData) const {
+    AFL_VERIFY(Offset + Size <= blobData.size())("offset", Offset)("size", Size)("blobDataSize", blobData.size());
+    return blobData.substr(Offset, Size);
+}
+
+TBlobRange::TBlobRange(const TUnifiedBlobId& blobId /*= TUnifiedBlobId()*/, ui32 offset /*= 0*/, ui32 size /*= 0*/)
+    : BlobId(blobId)
+    , Offset(offset)
+    , Size(size) {
+    if (Size > 0) {
+        AFL_VERIFY(Offset < BlobId.BlobSize())("offset", Offset)("size", Size)("blob", BlobId.ToStringNew());
+        AFL_VERIFY(Offset + Size <= BlobId.BlobSize())("offset", Offset)("size", Size)("blob", BlobId.ToStringNew());
+    }
+}
+
 NKikimr::TConclusionStatus TBlobRangeLink16::DeserializeFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto) {
     BlobIdx = proto.GetBlobIdx();
     Offset = proto.GetOffset();
@@ -166,8 +181,18 @@ ui16 TBlobRangeLink16::GetBlobIdxVerified() const {
     return *BlobIdx;
 }
 
-NKikimr::NOlap::TBlobRange TBlobRangeLink16::RestoreRange(const TUnifiedBlobId& blobId) const {
+TBlobRange TBlobRangeLink16::RestoreRange(const TUnifiedBlobId& blobId) const {
     return TBlobRange(blobId, Offset, Size);
 }
 
+bool TBlobRangeLink16::CheckBlob(const TUnifiedBlobId& blobId) const {
+    return Offset + Size <= blobId.BlobSize();
 }
+
+TString TBlobRangeLink16::GetBlobData(const TString& blob) const {
+    AFL_VERIFY(Offset < blob.size());
+    AFL_VERIFY(Offset + Size <= blob.size());
+    return blob.substr(Offset, Size);
+}
+
+}   // namespace NKikimr::NOlap

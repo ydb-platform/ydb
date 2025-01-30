@@ -1,4 +1,9 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
+
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blob_depot/agent/agent.h>
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -7,6 +12,11 @@ TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
     STLOG(PRI_DEBUG, BS_NODE, NW10, "StartErrorProxy", (GroupId, groupId));
     return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
 }
+
+#define ADD_CONTROLS_FOR_DEVICE_TYPES(prefix)   \
+    .prefix = prefix,                           \
+    .prefix##HDD = prefix##HDD,                 \
+    .prefix##SSD = prefix##SSD
 
 void TNodeWarden::StartLocalProxy(ui32 groupId) {
     STLOG(PRI_DEBUG, BS_NODE, NW12, "StartLocalProxy", (GroupId, groupId));
@@ -22,7 +32,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
 
     if (EnableProxyMock) {
         // create mock proxy
-        proxy.reset(CreateBlobStorageGroupProxyMockActor(groupId));
+        proxy.reset(CreateBlobStorageGroupProxyMockActor(TGroupId::FromValue(groupId)));
     } else if (auto info = NeedGroupInfo(groupId)) {
         if (info->BlobDepotId) {
             TActorId proxyActorId;
@@ -35,9 +45,17 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
                     // create proxy that will be used by blob depot agent to fetch underlying data
                     proxyActorId = as->Register(CreateBlobStorageGroupProxyConfigured(
-                        TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon,
-                        getCounters(info), EnablePutBatching, EnableVPatch), TMailboxType::ReadAsFilled,
-                        AppData()->SystemPoolId);
+                        TIntrusivePtr<TBlobStorageGroupInfo>(info), group.NodeLayoutInfo, false, DsProxyNodeMon,
+                        getCounters(info), TBlobStorageProxyParameters{
+                            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+                            .Controls = TBlobStorageProxyControlWrappers{
+                                .EnablePutBatching = EnablePutBatching,
+                                .EnableVPatch = EnableVPatch,
+                                ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
+                                ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
+                                ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
+                            }
+                        }), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                     [[fallthrough]];
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
                     proxy.reset(NBlobDepot::CreateBlobDepotAgent(groupId, info, proxyActorId));
@@ -50,12 +68,32 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             }
         } else {
             // create proxy with configuration
-            proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon, getCounters(info),
-                EnablePutBatching, EnableVPatch));
+            proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info),
+                group.NodeLayoutInfo, false, DsProxyNodeMon, getCounters(info), TBlobStorageProxyParameters{
+                        .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+                        .Controls = TBlobStorageProxyControlWrappers{
+                            .EnablePutBatching = EnablePutBatching,
+                            .EnableVPatch = EnableVPatch,
+                            ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
+                            ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
+                            ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
+                        }
+                    }
+                )
+            );
         }
     } else {
         // create proxy without configuration
-        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, EnablePutBatching, EnableVPatch));
+        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, TBlobStorageProxyParameters{
+            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+            .Controls = TBlobStorageProxyControlWrappers{
+                .EnablePutBatching = EnablePutBatching,
+                .EnableVPatch = EnableVPatch,
+                ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
+                ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
+                ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
+            }
+        }));
     }
 
     group.ProxyId = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
@@ -85,7 +123,7 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
     const TGroupID groupId(GroupIDFromBlobStorageProxyID(ev->GetForwardOnNondeliveryRecipient()));
     const ui32 id = groupId.GetRaw();
 
-    const bool noGroup = (groupId.ConfigurationType() == EGroupConfigurationType::Static && !Groups.count(id)) || EjectedGroups.count(id);
+    const bool noGroup = EjectedGroups.count(id);
     STLOG(PRI_DEBUG, BS_NODE, NW46, "HandleForwarded", (GroupId, id), (EnableProxyMock, EnableProxyMock), (NoGroup, noGroup));
 
     if (id == Max<ui32>()) {
@@ -94,6 +132,15 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
         const TActorId errorProxy = StartEjectedProxy(id);
         TActivationContext::Forward(ev, errorProxy);
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, errorProxy, {}, nullptr, 0));
+        return;
+    } else if (groupId.ConfigurationType() == EGroupConfigurationType::Static && !Groups.count(id)) {
+        const auto [it, inserted] = GroupPendingQueue.try_emplace(id);
+        auto& queue = it->second;
+        TMonotonic expiration = TActivationContext::Monotonic() + TDuration::Seconds(5);
+        if (queue.empty()) {
+            TimeoutToQueue.emplace(expiration, &*it);
+        }
+        queue.emplace_back(expiration, std::unique_ptr<IEventHandle>(ev.Release()));
         return;
     } else if (TGroupRecord& group = Groups[id]; !group.ProxyId) {
         if (TGroupID(id).ConfigurationType() == EGroupConfigurationType::Virtual) {
@@ -105,6 +152,43 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
     TActivationContext::Forward(ev, ev->GetForwardOnNondeliveryRecipient());
 }
 
+void TNodeWarden::HandleGroupPendingQueueTick() {
+    const TMonotonic now = TActivationContext::Monotonic();
+
+    std::set<std::tuple<TMonotonic, TGroupPendingQueue::value_type*>>::iterator it;
+    for (it = TimeoutToQueue.begin(); it != TimeoutToQueue.end(); ++it) {
+        const auto& [timestamp, ptr] = *it;
+        if (now < timestamp) {
+            break;
+        }
+
+        auto& [groupId, queue] = *ptr;
+        Y_ABORT_UNLESS(!queue.empty());
+
+        const TActorId errorProxy = StartEjectedProxy(groupId);
+        for (;;) {
+            auto& [timestamp, ev] = queue.front();
+            if (now < timestamp) {
+                TimeoutToQueue.emplace(timestamp, ptr);
+                break;
+            } else {
+                THolder<IEventHandle> tmp(ev.release());
+                TActivationContext::Forward(tmp, errorProxy);
+                queue.pop_front();
+                if (queue.empty()) {
+                    GroupPendingQueue.erase(groupId);
+                    break;
+                }
+            }
+        }
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, errorProxy, {}, nullptr, 0));
+    }
+    TimeoutToQueue.erase(TimeoutToQueue.begin(), it);
+
+    TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvGroupPendingQueueTick, 0,
+        SelfId(), {}, nullptr, 0));
+}
+
 void TNodeWarden::Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::TPtr ev) {
     const auto& record = ev->Get()->Record;
     const ui32 groupId = record.GetGroupID();
@@ -112,3 +196,5 @@ void TNodeWarden::Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::
         TActivationContext::Send(ev->Forward(WhiteboardId));
     }
 }
+
+#undef ADD_CONTROLS_FOR_DEVICE_TYPES

@@ -12,6 +12,8 @@
 #include <yt/yt/core/json/json_parser.h>
 #include <yt/yt/core/json/config.h>
 
+#include <yt/yt/core/net/address.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <util/stream/buffer.h>
@@ -25,38 +27,13 @@
 
 namespace NYT::NHttp {
 
-static const auto& Logger = HttpLogger;
+static constexpr auto& Logger = HttpLogger;
 
 using namespace NJson;
 using namespace NYson;
 using namespace NYTree;
 using namespace NConcurrency;
-
-////////////////////////////////////////////////////////////////////////////////
-
-static const TString XYTErrorHeaderName("X-YT-Error");
-static const TString XYTResponseCodeHeaderName("X-YT-Response-Code");
-static const TString XYTResponseMessageHeaderName("X-YT-Response-Message");
-static const TString AccessControlAllowCredentialsHeaderName("Access-Control-Allow-Credentials");
-static const TString AccessControlAllowOriginHeaderName("Access-Control-Allow-Origin");
-static const TString AccessControlAllowMethodsHeaderName("Access-Control-Allow-Methods");
-static const TString AccessControlMaxAgeHeaderName("Access-Control-Max-Age");
-static const TString AccessControlAllowHeadersHeaderName("Access-Control-Allow-Headers");
-static const TString AccessControlExposeHeadersHeaderName("Access-Control-Expose-Headers");
-static const TString XSourcePortYHeaderName("X-Source-Port-Y");
-static const TString XForwardedForYHeaderName("X-Forwarded-For-Y");
-static const TString ContentTypeHeaderName("Content-Type");
-static const TString ContentRangeHeaderName("Content-Range");
-static const TString PragmaHeaderName("Pragma");
-static const TString RangeHeaderName("Range");
-static const TString ExpiresHeaderName("Expires");
-static const TString CacheControlHeaderName("Cache-Control");
-static const TString XContentTypeOptionsHeaderName("X-Content-Type-Options");
-static const TString XFrameOptionsHeaderName("X-Frame-Options");
-static const TString XDnsPrefetchControlHeaderName("X-DNS-Prefetch-Control");
-static const TString XYTRequestIdHeaderName("X-YT-Request-Id");
-static const TString XYTTraceIdHeaderName("X-YT-Trace-Id");
-static const TString XYTSpanIdHeaderName("X-YT-Span-Id");
+using namespace NHeaders;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -189,6 +166,47 @@ static const auto HeadersWhitelist = JoinSeq(", ", std::vector<TString>{
     "X-YT-User-Tag",
 });
 
+static const std::vector<TString> KnownHeaders = {
+    AcceptHeaderName,
+    AccessControlAllowCredentialsHeaderName,
+    AccessControlAllowHeadersHeaderName,
+    AccessControlAllowMethodsHeaderName,
+    AccessControlAllowOriginHeaderName,
+    AccessControlExposeHeadersHeaderName,
+    AccessControlMaxAgeHeaderName,
+    AuthorizationHeaderName,
+    CacheControlHeaderName,
+    ContentRangeHeaderName,
+    ContentTypeHeaderName,
+    CookieHeaderName,
+    ExpiresHeaderName,
+    PragmaHeaderName,
+    RangeHeaderName,
+    RequestTimeoutHeaderName,
+    UserAgentHeaderName,
+    XContentTypeOptionsHeaderName,
+    XRequestTimeoutHeaderName,
+
+    UserTicketHeaderName,
+    XDnsPrefetchControlHeaderName,
+    XForwardedForYHeaderName,
+    XFrameOptionsHeaderName,
+    XSourcePortYHeaderName,
+
+    ProtocolVersionMajor,
+    ProtocolVersionMinor,
+    RequestFormatOptionsHeaderName,
+    RequestIdHeaderName,
+    ResponseFormatOptionsHeaderName,
+    UserNameHeaderName,
+    UserTagHeaderName,
+    XYTErrorHeaderName,
+    XYTResponseCodeHeaderName,
+    XYTResponseMessageHeaderName,
+    XYTSpanIdHeaderName,
+    XYTTraceIdHeaderName,
+};
+
 bool MaybeHandleCors(
     const IRequestPtr& req,
     const IResponseWriterPtr& rsp,
@@ -292,8 +310,9 @@ std::optional<TString> FindBalancerRealIP(const IRequestPtr& req)
     auto forwardedFor = headers->Find(XForwardedForYHeaderName);
     auto sourcePort = headers->Find(XSourcePortYHeaderName);
 
-    if (forwardedFor && sourcePort) {
-        return Format("[%v]:%v", *forwardedFor, *sourcePort);
+    int port = 0;
+    if (forwardedFor && sourcePort && TryIntFromString<10>(*sourcePort, port)) {
+        return NNet::FormatNetworkAddress(*forwardedFor, port);
     }
 
     return {};
@@ -359,7 +378,7 @@ void SetTraceId(const IResponseWriterPtr& rsp, NTracing::TTraceId traceId)
 void SetRequestId(const IResponseWriterPtr& rsp, NRpc::TRequestId requestId)
 {
     if (requestId) {
-        rsp->GetHeaders()->Set(XYTRequestIdHeaderName, ToString(requestId));
+        rsp->GetHeaders()->Set(RequestIdHeaderName, ToString(requestId));
     }
 }
 
@@ -382,7 +401,7 @@ bool TryParseTraceParent(const TString& traceParent, NTracing::TSpanContext& spa
         return false;
     }
 
-    // NB: we support three-part form in which version is assumed to be zero.
+    // NB: We support three-part form in which version is assumed to be zero.
     ui8 version = 0;
     if (parts.size() == 4) {
         if (parts[0].size() != 2) {
@@ -397,7 +416,7 @@ bool TryParseTraceParent(const TString& traceParent, NTracing::TSpanContext& spa
     // Now we have exactly three parts: traceId-spanId-options.
 
     // Parse trace context.
-    if (!TGuid::FromStringHex32(parts[0], &spanContext.TraceId)) {
+    if (!NTracing::TTraceId::FromStringHex32(parts[0], &spanContext.TraceId)) {
         return false;
     }
 
@@ -471,6 +490,12 @@ TString SanitizeUrl(const TString& url)
     } else {
         return Format("%v:%v%v", urlRef.Host, urlRef.PortStr, urlRef.Path);
     }
+}
+
+std::vector<std::pair<TString, TString>> DumpUnknownHeaders(const THeadersPtr& headers)
+{
+    static const THeaders::THeaderNames known(KnownHeaders.begin(), KnownHeaders.end());
+    return headers->Dump(&known);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

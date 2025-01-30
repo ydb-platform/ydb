@@ -119,7 +119,7 @@ namespace NMemInfo {
         result.RSS = FromString<ui64>(statsiter.NextTok(' ')) * pagesize;
 
         #if defined(_cygwin_)
-        //cygwin not very accurate
+        // cygwin not very accurate
         result.VMS = Max(result.VMS, result.RSS);
         #endif
     #elif defined(_freebsd_)
@@ -212,4 +212,4 @@ namespace NMemInfo {
 #endif
         return result;
     }
-}
+} // namespace NMemInfo

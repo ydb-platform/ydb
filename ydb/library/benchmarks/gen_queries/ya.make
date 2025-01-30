@@ -1,7 +1,5 @@
 PY3_PROGRAM(gen_queries)
 
-OWNER(g:yql)
-
 PY_SRCS(
     MAIN gen_queries.py
 )
@@ -20,6 +18,8 @@ RESOURCE(
     bindings_tpcds_pg.json bindings_ds_pg.json
     bindings_tpch.json bindings_h_yql.json
     bindings_tpch_pg.json bindings_h_pg.json
+    consts.yql consts.yql
+    consts_decimal.yql consts_decimal.yql
 )
 
 RESOURCE(

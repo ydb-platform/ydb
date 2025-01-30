@@ -78,6 +78,13 @@ message TDqConfig {
         optional bool CleanupOnShutdown = 7;
     }
 
+    message TDiskRequest {
+        optional uint64 DiskSpace = 1;
+        optional uint64 InodeCount = 2;
+        optional string Account = 3;
+        optional string MediumName = 4;
+    }
+
     message TYtBackend {
         optional string ClusterName = 1 [default = "hume"];
         optional string User = 2;      // default -- current user name
@@ -116,6 +123,8 @@ message TDqConfig {
         optional bool CanUseComputeActor = 32 [default = false];
         optional bool EnforceJobUtc = 33;
         optional TSpillingSettings SpillingSettings = 38;
+        optional TDiskRequest DiskRequest = 39;
+        optional bool EnforceJobYtIsolation = 40;
     }
 
     repeated TYtBackend YtBackends = 5;

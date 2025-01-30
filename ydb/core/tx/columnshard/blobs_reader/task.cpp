@@ -65,7 +65,7 @@ void ITask::StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress) {
         agent.second->Start(rangesInProgress);
         if (!agent.second->IsFinished()) {
             AgentsWaiting.emplace(agent.second->GetStorageId(), agent.second);
-            BlobsWaitingCount += agent.second->GetRangesForRead().size();
+            BlobsWaitingCount += agent.second->GetGroups().size();
         }
     }
     if (AgentsWaiting.empty()) {
@@ -89,7 +89,7 @@ ITask::ITask(const TReadActionsCollection& actions, const TString& taskCustomer,
     , TaskCustomer(taskCustomer)
 {
     Agents = actions;
-    AFL_VERIFY(!Agents.IsEmpty());
+//    AFL_VERIFY(!Agents.IsEmpty());
     for (auto&& i : Agents) {
         AFL_VERIFY(i.second->GetExpectedBlobsCount());
     }

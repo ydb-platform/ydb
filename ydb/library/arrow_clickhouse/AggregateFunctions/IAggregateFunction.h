@@ -181,7 +181,7 @@ protected:
 
 
 /// Implement method to obtain an address of 'add' function.
-template <typename Derived>
+template <typename Derived, bool skip_nulls = true>
 class IAggregateFunctionHelper : public IAggregateFunction
 {
 private:
@@ -204,7 +204,7 @@ public:
         const IColumn ** columns,
         Arena * arena) const override
     {
-        if (columns && columns[0]->null_bitmap_data())
+        if (skip_nulls && columns && columns[0]->null_bitmap_data())
         {
             for (size_t i = row_begin; i < row_end; ++i)
             {
@@ -240,7 +240,7 @@ public:
         const IColumn ** columns,
         Arena * arena) const override
     {
-        if (columns && columns[0]->null_bitmap_data())
+        if (skip_nulls && columns && columns[0]->null_bitmap_data())
         {
             for (size_t i = row_begin; i < row_end; ++i)
             {
@@ -340,9 +340,12 @@ public:
 
 
 /// Implements several methods for manipulation with data. T - type of structure with data for aggregation.
-template <typename T, typename Derived>
-class IAggregateFunctionDataHelper : public IAggregateFunctionHelper<Derived>
+template <typename T, typename Derived, bool skip_nulls = true>
+class IAggregateFunctionDataHelper : public IAggregateFunctionHelper<Derived, skip_nulls>
 {
+private:
+    using Base = IAggregateFunctionHelper<Derived, skip_nulls>;
+
 protected:
     using Data = T;
 
@@ -354,7 +357,7 @@ public:
     static constexpr bool DateTime64Supported = true;
 
     IAggregateFunctionDataHelper(const DataTypes & argument_types_, const Array & parameters_)
-        : IAggregateFunctionHelper<Derived>(argument_types_, parameters_) {}
+        : Base(argument_types_, parameters_) {}
 
     void create(AggregateDataPtr __restrict place) const override /// NOLINT
     {
@@ -397,7 +400,7 @@ public:
 
         if (func.allocatesMemoryInArena() || sizeof(Data) > 16 || func.sizeOfData() != sizeof(Data))
         {
-            IAggregateFunctionHelper<Derived>::addBatchLookupTable8(row_begin, row_end, map, place_offset, init, key, columns, arena);
+            Base::addBatchLookupTable8(row_begin, row_end, map, place_offset, init, key, columns, arena);
             return;
         }
 
@@ -493,6 +496,7 @@ enum class AggFunctionId {
     //AGG_QUANTILES = 14,
     //AGG_TOP_COUNT = 15,
     //AGG_TOP_SUM = 16,
+    AGG_NUM_ROWS = 17,
 };
 
 struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {

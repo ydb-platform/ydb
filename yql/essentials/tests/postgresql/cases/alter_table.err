@@ -1,0 +1,3455 @@
+Registering pre-existing tables
+	onek
+	tenk1
+	stud_emp
+<sql-statement>
+--
+-- ALTER_TABLE
+--
+-- Clean up in case a prior regression run failed
+SET client_min_messages TO 'warning';
+</sql-statement>
+<sql-statement>
+DROP ROLE IF EXISTS regress_alter_table_user1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 287
+    	DROP ROLE IF EXISTS regress_alter_table_user1;
+	^
+<sql-statement>
+RESET client_min_messages;
+</sql-statement>
+<sql-statement>
+CREATE USER regress_alter_table_user1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 285
+    	CREATE USER regress_alter_table_user1;
+	^
+<sql-statement>
+--
+-- add attribute
+--
+CREATE TABLE attmp (initial int4);
+</sql-statement>
+<sql-statement>
+COMMENT ON TABLE attmp_wrong IS 'table comment';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 258
+    	COMMENT ON TABLE attmp_wrong IS 'table comment';
+	^
+<sql-statement>
+COMMENT ON TABLE attmp IS 'table comment';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 258
+    	COMMENT ON TABLE attmp IS 'table comment';
+	^
+<sql-statement>
+COMMENT ON TABLE attmp IS NULL;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 258
+    	COMMENT ON TABLE attmp IS NULL;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN xmin integer; -- fails
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN xmin integer; -- fails
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN a int4 default 3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN a int4 default 3;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN b name;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN b name;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN c text;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN c text;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN d float8;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN d float8;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN e float4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN e float4;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN f int2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN f int2;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN g polygon;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN g polygon;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN i char;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN i char;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN k int4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN k int4;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN l tid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN l tid;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN m xid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN m xid;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN n oidvector;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN n oidvector;
+	^
+<sql-statement>
+--ALTER TABLE attmp ADD COLUMN o lock;
+ALTER TABLE attmp ADD COLUMN p boolean;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	--ALTER TABLE attmp ADD COLUMN o lock;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN q point;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN q point;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN r lseg;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN r lseg;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN s path;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN s path;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN t box;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN t box;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN v timestamp;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN v timestamp;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN w interval;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN w interval;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN x float8[];
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN x float8[];
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN y float4[];
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN y float4[];
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN z int2[];
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN z int2[];
+	^
+<sql-statement>
+INSERT INTO attmp (a, b, c, d, e, f, g,    i,    k, l, m, n, p, q, r, s, t,
+	v, w, x, y, z)
+   VALUES (4, 'name', 'text', 4.1, 4.1, 2, '(4.1,4.1,3.1,3.1)',
+	'c',
+	314159, '(1,1)', '512',
+	'1 2 3 4 5 6 7 8', true, '(1.1,1.1)', '(4.1,4.1,3.1,3.1)',
+	'(0,2,4.1,4.1,3.1,3.1)', '(4.1,4.1,3.1,3.1)',
+	'epoch', '01:00:10', '{1.0,2.0,3.0,4.0}', '{1.0,2.0,3.0,4.0}', '{1,2,3,4}');
+</sql-statement>
+<sql-statement>
+SELECT * FROM attmp;
+</sql-statement>
+<sql-statement>
+DROP TABLE attmp;
+</sql-statement>
+<sql-statement>
+-- the wolf bug - schema mods caused inconsistent row descriptors
+CREATE TABLE attmp (
+	initial 	int4
+);
+</sql-statement>
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN a int4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN a int4;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN b name;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN b name;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN c text;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN c text;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN d float8;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN d float8;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN e float4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN e float4;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN f int2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN f int2;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN g polygon;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN g polygon;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN i char;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN i char;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN k int4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN k int4;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN l tid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN l tid;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN m xid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN m xid;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN n oidvector;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN n oidvector;
+	^
+<sql-statement>
+--ALTER TABLE attmp ADD COLUMN o lock;
+ALTER TABLE attmp ADD COLUMN p boolean;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	--ALTER TABLE attmp ADD COLUMN o lock;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN q point;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN q point;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN r lseg;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN r lseg;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN s path;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN s path;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN t box;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN t box;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN v timestamp;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN v timestamp;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN w interval;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN w interval;
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN x float8[];
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN x float8[];
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN y float4[];
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN y float4[];
+	^
+<sql-statement>
+ALTER TABLE attmp ADD COLUMN z int2[];
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp ADD COLUMN z int2[];
+	^
+<sql-statement>
+INSERT INTO attmp (a, b, c, d, e, f, g,    i,   k, l, m, n, p, q, r, s, t,
+	v, w, x, y, z)
+   VALUES (4, 'name', 'text', 4.1, 4.1, 2, '(4.1,4.1,3.1,3.1)',
+        'c',
+	314159, '(1,1)', '512',
+	'1 2 3 4 5 6 7 8', true, '(1.1,1.1)', '(4.1,4.1,3.1,3.1)',
+	'(0,2,4.1,4.1,3.1,3.1)', '(4.1,4.1,3.1,3.1)',
+	'epoch', '01:00:10', '{1.0,2.0,3.0,4.0}', '{1.0,2.0,3.0,4.0}', '{1,2,3,4}');
+</sql-statement>
+<sql-statement>
+SELECT * FROM attmp;
+</sql-statement>
+<sql-statement>
+CREATE INDEX attmp_idx ON attmp (a, (d + e), b);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: index expression is not supported yet
+    	CREATE INDEX attmp_idx ON attmp (a, (d + e), b);
+	^
+<sql-statement>
+ALTER INDEX attmp_idx ALTER COLUMN 0 SET STATISTICS 1000;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:37: Error: ERROR:  column number must be in range from 1 to 32767
+
+    	ALTER INDEX attmp_idx ALTER COLUMN 0 SET STATISTICS 1000;
+	                                    ^
+<sql-statement>
+ALTER INDEX attmp_idx ALTER COLUMN 1 SET STATISTICS 1000;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER INDEX attmp_idx ALTER COLUMN 1 SET STATISTICS 1000;
+	^
+<sql-statement>
+ALTER INDEX attmp_idx ALTER COLUMN 2 SET STATISTICS 1000;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER INDEX attmp_idx ALTER COLUMN 2 SET STATISTICS 1000;
+	^
+<sql-statement>
+\d+ attmp_idx
+</sql-statement>
+Metacommand \d+ attmp_idx is not supported
+<sql-statement>
+ALTER INDEX attmp_idx ALTER COLUMN 3 SET STATISTICS 1000;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER INDEX attmp_idx ALTER COLUMN 3 SET STATISTICS 1000;
+	^
+<sql-statement>
+ALTER INDEX attmp_idx ALTER COLUMN 4 SET STATISTICS 1000;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER INDEX attmp_idx ALTER COLUMN 4 SET STATISTICS 1000;
+	^
+<sql-statement>
+ALTER INDEX attmp_idx ALTER COLUMN 2 SET STATISTICS -1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER INDEX attmp_idx ALTER COLUMN 2 SET STATISTICS -1;
+	^
+<sql-statement>
+DROP TABLE attmp;
+</sql-statement>
+<sql-statement>
+-- fails with incorrect object type
+CREATE VIEW at_v1 AS SELECT 1 as a;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	-- fails with incorrect object type
+	^
+<sql-statement>
+ALTER TABLE at_v1 ALTER COLUMN a SET STATISTICS 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE at_v1 ALTER COLUMN a SET STATISTICS 0;
+	^
+<sql-statement>
+DROP VIEW at_v1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: View not found: 'at_v1'
+    	DROP VIEW at_v1;
+	^
+<sql-statement>
+--
+-- rename - check on both non-temp and temp tables
+--
+CREATE TABLE attmp (regtable int);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE attmp (attmptable int);
+</sql-statement>
+<sql-statement>
+ALTER TABLE attmp RENAME TO attmp_new;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE attmp RENAME TO attmp_new;
+	^
+<sql-statement>
+SELECT * FROM attmp;
+</sql-statement>
+<sql-statement>
+SELECT * FROM attmp_new;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.attmp_new
+    
+<sql-statement>
+ALTER TABLE attmp RENAME TO attmp_new2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE attmp RENAME TO attmp_new2;
+	^
+<sql-statement>
+SELECT * FROM attmp;		-- should fail
+</sql-statement>
+<sql-statement>
+SELECT * FROM attmp_new;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.attmp_new
+    
+<sql-statement>
+SELECT * FROM attmp_new2;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.attmp_new2
+    
+<sql-statement>
+DROP TABLE attmp_new;
+</sql-statement>
+<sql-statement>
+DROP TABLE attmp_new2;
+</sql-statement>
+<sql-statement>
+-- check rename of partitioned tables and indexes also
+CREATE TABLE part_attmp (a int primary key) partition by range (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check rename of partitioned tables and indexes also
+	^
+<sql-statement>
+CREATE TABLE part_attmp1 PARTITION OF part_attmp FOR VALUES FROM (0) TO (100);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_attmp1 PARTITION OF part_attmp FOR VALUES FROM (0) TO (100);
+	^
+<sql-statement>
+ALTER INDEX part_attmp_pkey RENAME TO part_attmp_index;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX part_attmp_pkey RENAME TO part_attmp_index;
+	^
+<sql-statement>
+ALTER INDEX part_attmp1_pkey RENAME TO part_attmp1_index;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX part_attmp1_pkey RENAME TO part_attmp1_index;
+	^
+<sql-statement>
+ALTER TABLE part_attmp RENAME TO part_at2tmp;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE part_attmp RENAME TO part_at2tmp;
+	^
+<sql-statement>
+ALTER TABLE part_attmp1 RENAME TO part_at2tmp1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE part_attmp1 RENAME TO part_at2tmp1;
+	^
+<sql-statement>
+SET ROLE regress_alter_table_user1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: role
+    	SET ROLE regress_alter_table_user1;
+	^
+<sql-statement>
+ALTER INDEX part_attmp_index RENAME TO fail;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX part_attmp_index RENAME TO fail;
+	^
+<sql-statement>
+ALTER INDEX part_attmp1_index RENAME TO fail;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX part_attmp1_index RENAME TO fail;
+	^
+<sql-statement>
+ALTER TABLE part_at2tmp RENAME TO fail;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE part_at2tmp RENAME TO fail;
+	^
+<sql-statement>
+ALTER TABLE part_at2tmp1 RENAME TO fail;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE part_at2tmp1 RENAME TO fail;
+	^
+<sql-statement>
+RESET ROLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	RESET ROLE;
+	^
+<sql-statement>
+DROP TABLE part_at2tmp;
+</sql-statement>
+<sql-statement>
+--
+-- check renaming to a table's array type's autogenerated name
+-- (the array type's name should get out of the way)
+--
+CREATE TABLE attmp_array (id int);
+</sql-statement>
+<sql-statement>
+CREATE TABLE attmp_array2 (id int);
+</sql-statement>
+<sql-statement>
+SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "attmp_array[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
+<sql-statement>
+SELECT typname FROM pg_type WHERE oid = 'attmp_array2[]'::regtype;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = 'attmp_array2[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "attmp_array2[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = 'attmp_array2[]'::regtype;
+	^
+<sql-statement>
+ALTER TABLE attmp_array2 RENAME TO _attmp_array;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE attmp_array2 RENAME TO _attmp_array;
+	^
+<sql-statement>
+SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "attmp_array[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
+<sql-statement>
+SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "_attmp_array[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
+	^
+<sql-statement>
+DROP TABLE _attmp_array;
+</sql-statement>
+<sql-statement>
+DROP TABLE attmp_array;
+</sql-statement>
+<sql-statement>
+-- renaming to table's own array type's name is an interesting corner case
+CREATE TABLE attmp_array (id int);
+</sql-statement>
+<sql-statement>
+SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "attmp_array[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
+	^
+<sql-statement>
+ALTER TABLE attmp_array RENAME TO _attmp_array;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE attmp_array RENAME TO _attmp_array;
+	^
+<sql-statement>
+SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  type "_attmp_array[]" does not exist
+
+        	SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
+	^
+<sql-statement>
+DROP TABLE _attmp_array;
+</sql-statement>
+<sql-statement>
+-- ALTER TABLE ... RENAME on non-table relations
+-- renaming indexes (FIXME: this should probably test the index's functionality)
+ALTER INDEX IF EXISTS __onek_unique1 RENAME TO attmp_onek_unique1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	-- ALTER TABLE ... RENAME on non-table relations
+	^
+<sql-statement>
+ALTER INDEX IF EXISTS __attmp_onek_unique1 RENAME TO onek_unique1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX IF EXISTS __attmp_onek_unique1 RENAME TO onek_unique1;
+	^
+<sql-statement>
+ALTER INDEX onek_unique1 RENAME TO attmp_onek_unique1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX onek_unique1 RENAME TO attmp_onek_unique1;
+	^
+<sql-statement>
+ALTER INDEX attmp_onek_unique1 RENAME TO onek_unique1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX attmp_onek_unique1 RENAME TO onek_unique1;
+	^
+<sql-statement>
+SET ROLE regress_alter_table_user1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: role
+    	SET ROLE regress_alter_table_user1;
+	^
+<sql-statement>
+ALTER INDEX onek_unique1 RENAME TO fail;  -- permission denied
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX onek_unique1 RENAME TO fail;  -- permission denied
+	^
+<sql-statement>
+RESET ROLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	RESET ROLE;
+	^
+<sql-statement>
+-- rename statements with mismatching statement and object types
+CREATE TABLE alter_idx_rename_test (a INT);
+</sql-statement>
+<sql-statement>
+CREATE INDEX alter_idx_rename_test_idx ON alter_idx_rename_test (a);
+</sql-statement>
+<sql-statement>
+CREATE TABLE alter_idx_rename_test_parted (a INT) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE alter_idx_rename_test_parted (a INT) PARTITION BY LIST (a);
+	^
+<sql-statement>
+CREATE INDEX alter_idx_rename_test_parted_idx ON alter_idx_rename_test_parted (a);
+</sql-statement>
+<sql-statement>
+BEGIN;
+</sql-statement>
+<sql-statement>
+ALTER INDEX alter_idx_rename_test RENAME TO alter_idx_rename_test_2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX alter_idx_rename_test RENAME TO alter_idx_rename_test_2;
+	^
+<sql-statement>
+ALTER INDEX alter_idx_rename_test_parted RENAME TO alter_idx_rename_test_parted_2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX alter_idx_rename_test_parted RENAME TO alter_idx_rename_test_parted_2;
+	^
+<sql-statement>
+SELECT relation::regclass, mode FROM pg_locks
+WHERE pid = pg_backend_pid() AND locktype = 'relation'
+  AND relation::regclass::text LIKE 'alter\_idx%'
+ORDER BY relation::regclass::text COLLATE "C";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 365
+    	SELECT relation::regclass, mode FROM pg_locks
+	^
+<sql-statement>
+COMMIT;
+</sql-statement>
+<sql-statement>
+BEGIN;
+</sql-statement>
+<sql-statement>
+ALTER INDEX alter_idx_rename_test_idx RENAME TO alter_idx_rename_test_idx_2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX alter_idx_rename_test_idx RENAME TO alter_idx_rename_test_idx_2;
+	^
+<sql-statement>
+ALTER INDEX alter_idx_rename_test_parted_idx RENAME TO alter_idx_rename_test_parted_idx_2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX alter_idx_rename_test_parted_idx RENAME TO alter_idx_rename_test_parted_idx_2;
+	^
+<sql-statement>
+SELECT relation::regclass, mode FROM pg_locks
+WHERE pid = pg_backend_pid() AND locktype = 'relation'
+  AND relation::regclass::text LIKE 'alter\_idx%'
+ORDER BY relation::regclass::text COLLATE "C";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 365
+    	SELECT relation::regclass, mode FROM pg_locks
+	^
+<sql-statement>
+COMMIT;
+</sql-statement>
+<sql-statement>
+BEGIN;
+</sql-statement>
+<sql-statement>
+ALTER TABLE alter_idx_rename_test_idx_2 RENAME TO alter_idx_rename_test_idx_3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE alter_idx_rename_test_idx_2 RENAME TO alter_idx_rename_test_idx_3;
+	^
+<sql-statement>
+ALTER TABLE alter_idx_rename_test_parted_idx_2 RENAME TO alter_idx_rename_test_parted_idx_3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE alter_idx_rename_test_parted_idx_2 RENAME TO alter_idx_rename_test_parted_idx_3;
+	^
+<sql-statement>
+SELECT relation::regclass, mode FROM pg_locks
+WHERE pid = pg_backend_pid() AND locktype = 'relation'
+  AND relation::regclass::text LIKE 'alter\_idx%'
+ORDER BY relation::regclass::text COLLATE "C";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 365
+    	SELECT relation::regclass, mode FROM pg_locks
+	^
+<sql-statement>
+COMMIT;
+</sql-statement>
+<sql-statement>
+DROP TABLE alter_idx_rename_test_2;
+</sql-statement>
+<sql-statement>
+-- renaming views
+CREATE VIEW attmp_view (unique1) AS SELECT unique1 FROM tenk1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>: Error: Not all views have been dropped
+    
+<sql-statement>
+ALTER TABLE attmp_view RENAME TO attmp_view_new;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE attmp_view RENAME TO attmp_view_new;
+	^
+<sql-statement>
+SET ROLE regress_alter_table_user1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: role
+    	SET ROLE regress_alter_table_user1;
+	^
+<sql-statement>
+ALTER VIEW attmp_view_new RENAME TO fail;  -- permission denied
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER VIEW attmp_view_new RENAME TO fail;  -- permission denied
+	^
+<sql-statement>
+RESET ROLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	RESET ROLE;
+	^
+<sql-statement>
+-- hack to ensure we get an indexscan here
+set enable_seqscan to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_seqscan
+    	-- hack to ensure we get an indexscan here
+	^
+<sql-statement>
+set enable_bitmapscan to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_bitmapscan
+    	set enable_bitmapscan to off;
+	^
+<sql-statement>
+-- 5 values, sorted
+SELECT unique1 FROM tenk1 WHERE unique1 < 5;
+</sql-statement>
+<sql-statement>
+reset enable_seqscan;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_seqscan;
+	^
+<sql-statement>
+reset enable_bitmapscan;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_bitmapscan;
+	^
+<sql-statement>
+DROP VIEW attmp_view_new;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: View not found: 'attmp_view_new'
+    	DROP VIEW attmp_view_new;
+	^
+<sql-statement>
+-- toast-like relation name
+alter table stud_emp rename to pg_toast_stud_emp;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	-- toast-like relation name
+	^
+<sql-statement>
+alter table pg_toast_stud_emp rename to stud_emp;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	alter table pg_toast_stud_emp rename to stud_emp;
+	^
+<sql-statement>
+-- renaming index should rename constraint as well
+ALTER TABLE onek ADD CONSTRAINT onek_unique1_constraint UNIQUE (unique1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- renaming index should rename constraint as well
+	^
+<sql-statement>
+ALTER INDEX onek_unique1_constraint RENAME TO onek_unique1_constraint_foo;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER INDEX onek_unique1_constraint RENAME TO onek_unique1_constraint_foo;
+	^
+<sql-statement>
+ALTER TABLE onek DROP CONSTRAINT onek_unique1_constraint_foo;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE onek DROP CONSTRAINT onek_unique1_constraint_foo;
+	^
+<sql-statement>
+-- renaming constraint
+ALTER TABLE onek ADD CONSTRAINT onek_check_constraint CHECK (unique1 >= 0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- renaming constraint
+	^
+<sql-statement>
+ALTER TABLE onek RENAME CONSTRAINT onek_check_constraint TO onek_check_constraint_foo;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE onek RENAME CONSTRAINT onek_check_constraint TO onek_check_constraint_foo;
+	^
+<sql-statement>
+ALTER TABLE onek DROP CONSTRAINT onek_check_constraint_foo;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE onek DROP CONSTRAINT onek_check_constraint_foo;
+	^
+<sql-statement>
+-- renaming constraint should rename index as well
+ALTER TABLE onek ADD CONSTRAINT onek_unique1_constraint UNIQUE (unique1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- renaming constraint should rename index as well
+	^
+<sql-statement>
+DROP INDEX onek_unique1_constraint;  -- to see whether it's there
+</sql-statement>
+-stdin-:<main>: Error: Pre type annotation
+
+    -stdin-:<main>:1:1: Error: Unexpected tag: pgObject
+    	DROP INDEX onek_unique1_constraint;  -- to see whether it's there
+	^
+<sql-statement>
+ALTER TABLE onek RENAME CONSTRAINT onek_unique1_constraint TO onek_unique1_constraint_foo;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE onek RENAME CONSTRAINT onek_unique1_constraint TO onek_unique1_constraint_foo;
+	^
+<sql-statement>
+DROP INDEX onek_unique1_constraint_foo;  -- to see whether it's there
+</sql-statement>
+-stdin-:<main>: Error: Pre type annotation
+
+    -stdin-:<main>:1:1: Error: Unexpected tag: pgObject
+    	DROP INDEX onek_unique1_constraint_foo;  -- to see whether it's there
+	^
+<sql-statement>
+ALTER TABLE onek DROP CONSTRAINT onek_unique1_constraint_foo;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE onek DROP CONSTRAINT onek_unique1_constraint_foo;
+	^
+<sql-statement>
+-- renaming constraints vs. inheritance
+CREATE TABLE constraint_rename_test (a int CONSTRAINT con1 CHECK (a > 0), b int, c int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: column constraint not supported
+    	-- renaming constraints vs. inheritance
+	^
+<sql-statement>
+\d constraint_rename_test
+</sql-statement>
+Metacommand \d constraint_rename_test is not supported
+<sql-statement>
+CREATE TABLE constraint_rename_test2 (a int CONSTRAINT con1 CHECK (a > 0), d int) INHERITS (constraint_rename_test);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE constraint_rename_test2 (a int CONSTRAINT con1 CHECK (a > 0), d int) INHERITS (constraint_rename_test);
+	^
+<sql-statement>
+\d constraint_rename_test2
+</sql-statement>
+Metacommand \d constraint_rename_test2 is not supported
+<sql-statement>
+ALTER TABLE constraint_rename_test2 RENAME CONSTRAINT con1 TO con1foo; -- fail
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE constraint_rename_test2 RENAME CONSTRAINT con1 TO con1foo; -- fail
+	^
+<sql-statement>
+ALTER TABLE ONLY constraint_rename_test RENAME CONSTRAINT con1 TO con1foo; -- fail
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE ONLY constraint_rename_test RENAME CONSTRAINT con1 TO con1foo; -- fail
+	^
+<sql-statement>
+ALTER TABLE constraint_rename_test RENAME CONSTRAINT con1 TO con1foo; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE constraint_rename_test RENAME CONSTRAINT con1 TO con1foo; -- ok
+	^
+<sql-statement>
+\d constraint_rename_test
+</sql-statement>
+Metacommand \d constraint_rename_test is not supported
+<sql-statement>
+\d constraint_rename_test2
+</sql-statement>
+Metacommand \d constraint_rename_test2 is not supported
+<sql-statement>
+ALTER TABLE constraint_rename_test ADD CONSTRAINT con2 CHECK (b > 0) NO INHERIT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE constraint_rename_test ADD CONSTRAINT con2 CHECK (b > 0) NO INHERIT;
+	^
+<sql-statement>
+ALTER TABLE ONLY constraint_rename_test RENAME CONSTRAINT con2 TO con2foo; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE ONLY constraint_rename_test RENAME CONSTRAINT con2 TO con2foo; -- ok
+	^
+<sql-statement>
+ALTER TABLE constraint_rename_test RENAME CONSTRAINT con2foo TO con2bar; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE constraint_rename_test RENAME CONSTRAINT con2foo TO con2bar; -- ok
+	^
+<sql-statement>
+\d constraint_rename_test
+</sql-statement>
+Metacommand \d constraint_rename_test is not supported
+<sql-statement>
+\d constraint_rename_test2
+</sql-statement>
+Metacommand \d constraint_rename_test2 is not supported
+<sql-statement>
+ALTER TABLE constraint_rename_test ADD CONSTRAINT con3 PRIMARY KEY (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE constraint_rename_test ADD CONSTRAINT con3 PRIMARY KEY (a);
+	^
+<sql-statement>
+ALTER TABLE constraint_rename_test RENAME CONSTRAINT con3 TO con3foo; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE constraint_rename_test RENAME CONSTRAINT con3 TO con3foo; -- ok
+	^
+<sql-statement>
+\d constraint_rename_test
+</sql-statement>
+Metacommand \d constraint_rename_test is not supported
+<sql-statement>
+\d constraint_rename_test2
+</sql-statement>
+Metacommand \d constraint_rename_test2 is not supported
+<sql-statement>
+DROP TABLE constraint_rename_test2;
+</sql-statement>
+<sql-statement>
+DROP TABLE constraint_rename_test;
+</sql-statement>
+<sql-statement>
+ALTER TABLE IF EXISTS constraint_not_exist RENAME CONSTRAINT con3 TO con3foo; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE IF EXISTS constraint_not_exist RENAME CONSTRAINT con3 TO con3foo; -- ok
+	^
+<sql-statement>
+ALTER TABLE IF EXISTS constraint_rename_test ADD CONSTRAINT con4 UNIQUE (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE IF EXISTS constraint_rename_test ADD CONSTRAINT con4 UNIQUE (a);
+	^
+<sql-statement>
+-- renaming constraints with cache reset of target relation
+CREATE TABLE constraint_rename_cache (a int,
+  CONSTRAINT chk_a CHECK (a > 0),
+  PRIMARY KEY (a));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table constraint not supported
+    	-- renaming constraints with cache reset of target relation
+	^
+<sql-statement>
+ALTER TABLE constraint_rename_cache
+  RENAME CONSTRAINT chk_a TO chk_a_new;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE constraint_rename_cache
+	^
+<sql-statement>
+ALTER TABLE constraint_rename_cache
+  RENAME CONSTRAINT constraint_rename_cache_pkey TO constraint_rename_pkey_new;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	ALTER TABLE constraint_rename_cache
+	^
+<sql-statement>
+CREATE TABLE like_constraint_rename_cache
+  (LIKE constraint_rename_cache INCLUDING ALL);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: CreateStmt: alternative is not implemented yet : 389
+    	CREATE TABLE like_constraint_rename_cache
+	^
+<sql-statement>
+\d like_constraint_rename_cache
+</sql-statement>
+Metacommand \d like_constraint_rename_cache is not supported
+<sql-statement>
+DROP TABLE constraint_rename_cache;
+</sql-statement>
+<sql-statement>
+DROP TABLE like_constraint_rename_cache;
+</sql-statement>
+<sql-statement>
+-- FOREIGN KEY CONSTRAINT adding TEST
+CREATE TABLE attmp2 (a int primary key);
+</sql-statement>
+<sql-statement>
+CREATE TABLE attmp3 (a int, b int);
+</sql-statement>
+<sql-statement>
+CREATE TABLE attmp4 (a int, b int, unique(a,b));
+</sql-statement>
+<sql-statement>
+CREATE TABLE attmp5 (a int, b int);
+</sql-statement>
+<sql-statement>
+-- Insert rows into attmp2 (pktable)
+INSERT INTO attmp2 values (1);
+</sql-statement>
+<sql-statement>
+INSERT INTO attmp2 values (2);
+</sql-statement>
+<sql-statement>
+INSERT INTO attmp2 values (3);
+</sql-statement>
+<sql-statement>
+INSERT INTO attmp2 values (4);
+</sql-statement>
+<sql-statement>
+-- Insert rows into attmp3
+INSERT INTO attmp3 values (1,10);
+</sql-statement>
+<sql-statement>
+INSERT INTO attmp3 values (1,20);
+</sql-statement>
+<sql-statement>
+INSERT INTO attmp3 values (5,50);
+</sql-statement>
+<sql-statement>
+-- Try (and fail) to add constraint due to invalid source columns
+ALTER TABLE attmp3 add constraint attmpconstr foreign key(c) references attmp2 match full;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- Try (and fail) to add constraint due to invalid source columns
+	^
+<sql-statement>
+-- Try (and fail) to add constraint due to invalid destination columns explicitly given
+ALTER TABLE attmp3 add constraint attmpconstr foreign key(a) references attmp2(b) match full;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- Try (and fail) to add constraint due to invalid destination columns explicitly given
+	^
+<sql-statement>
+-- Try (and fail) to add constraint due to invalid data
+ALTER TABLE attmp3 add constraint attmpconstr foreign key (a) references attmp2 match full;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- Try (and fail) to add constraint due to invalid data
+	^
+<sql-statement>
+-- Delete failing row
+DELETE FROM attmp3 where a=5;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+-- Try (and succeed)
+ALTER TABLE attmp3 add constraint attmpconstr foreign key (a) references attmp2 match full;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- Try (and succeed)
+	^
+<sql-statement>
+ALTER TABLE attmp3 drop constraint attmpconstr;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 drop constraint attmpconstr;
+	^
+<sql-statement>
+INSERT INTO attmp3 values (5,50);
+</sql-statement>
+<sql-statement>
+-- Try NOT VALID and then VALIDATE CONSTRAINT, but fails. Delete failure then re-validate
+ALTER TABLE attmp3 add constraint attmpconstr foreign key (a) references attmp2 match full NOT VALID;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- Try NOT VALID and then VALIDATE CONSTRAINT, but fails. Delete failure then re-validate
+	^
+<sql-statement>
+ALTER TABLE attmp3 validate constraint attmpconstr;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 validate constraint attmpconstr;
+	^
+<sql-statement>
+-- Delete failing row
+DELETE FROM attmp3 where a=5;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+-- Try (and succeed) and repeat to show it works on already valid constraint
+ALTER TABLE attmp3 validate constraint attmpconstr;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- Try (and succeed) and repeat to show it works on already valid constraint
+	^
+<sql-statement>
+ALTER TABLE attmp3 validate constraint attmpconstr;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 validate constraint attmpconstr;
+	^
+<sql-statement>
+-- Try a non-verified CHECK constraint
+ALTER TABLE attmp3 ADD CONSTRAINT b_greater_than_ten CHECK (b > 10); -- fail
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- Try a non-verified CHECK constraint
+	^
+<sql-statement>
+ALTER TABLE attmp3 ADD CONSTRAINT b_greater_than_ten CHECK (b > 10) NOT VALID; -- succeeds
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 ADD CONSTRAINT b_greater_than_ten CHECK (b > 10) NOT VALID; -- succeeds
+	^
+<sql-statement>
+ALTER TABLE attmp3 VALIDATE CONSTRAINT b_greater_than_ten; -- fails
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 VALIDATE CONSTRAINT b_greater_than_ten; -- fails
+	^
+<sql-statement>
+DELETE FROM attmp3 WHERE NOT b > 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+ALTER TABLE attmp3 VALIDATE CONSTRAINT b_greater_than_ten; -- succeeds
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 VALIDATE CONSTRAINT b_greater_than_ten; -- succeeds
+	^
+<sql-statement>
+ALTER TABLE attmp3 VALIDATE CONSTRAINT b_greater_than_ten; -- succeeds
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 VALIDATE CONSTRAINT b_greater_than_ten; -- succeeds
+	^
+<sql-statement>
+-- Test inherited NOT VALID CHECK constraints
+select * from attmp3;
+</sql-statement>
+<sql-statement>
+CREATE TABLE attmp6 () INHERITS (attmp3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE attmp6 () INHERITS (attmp3);
+	^
+<sql-statement>
+CREATE TABLE attmp7 () INHERITS (attmp3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE attmp7 () INHERITS (attmp3);
+	^
+<sql-statement>
+INSERT INTO attmp6 VALUES (6, 30), (7, 16);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.attmp6
+    
+<sql-statement>
+ALTER TABLE attmp3 ADD CONSTRAINT b_le_20 CHECK (b <= 20) NOT VALID;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 ADD CONSTRAINT b_le_20 CHECK (b <= 20) NOT VALID;
+	^
+<sql-statement>
+ALTER TABLE attmp3 VALIDATE CONSTRAINT b_le_20;	-- fails
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 VALIDATE CONSTRAINT b_le_20;	-- fails
+	^
+<sql-statement>
+DELETE FROM attmp6 WHERE b > 20;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+ALTER TABLE attmp3 VALIDATE CONSTRAINT b_le_20;	-- succeeds
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 VALIDATE CONSTRAINT b_le_20;	-- succeeds
+	^
+<sql-statement>
+-- An already validated constraint must not be revalidated
+CREATE FUNCTION boo(int) RETURNS int IMMUTABLE STRICT LANGUAGE plpgsql AS $$ BEGIN RAISE NOTICE 'boo: %', $1; RETURN $1; END; $$;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- An already validated constraint must not be revalidated
+	^
+<sql-statement>
+INSERT INTO attmp7 VALUES (8, 18);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.attmp7
+    
+<sql-statement>
+ALTER TABLE attmp7 ADD CONSTRAINT identity CHECK (b = boo(b));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp7 ADD CONSTRAINT identity CHECK (b = boo(b));
+	^
+<sql-statement>
+ALTER TABLE attmp3 ADD CONSTRAINT IDENTITY check (b = boo(b)) NOT VALID;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 ADD CONSTRAINT IDENTITY check (b = boo(b)) NOT VALID;
+	^
+<sql-statement>
+ALTER TABLE attmp3 VALIDATE CONSTRAINT identity;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE attmp3 VALIDATE CONSTRAINT identity;
+	^
+<sql-statement>
+-- A NO INHERIT constraint should not be looked for in children during VALIDATE CONSTRAINT
+create table parent_noinh_convalid (a int);
+</sql-statement>
+<sql-statement>
+create table child_noinh_convalid () inherits (parent_noinh_convalid);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table child_noinh_convalid () inherits (parent_noinh_convalid);
+	^
+<sql-statement>
+insert into parent_noinh_convalid values (1);
+</sql-statement>
+<sql-statement>
+insert into child_noinh_convalid values (1);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.child_noinh_convalid
+    
+<sql-statement>
+alter table parent_noinh_convalid add constraint check_a_is_2 check (a = 2) no inherit not valid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table parent_noinh_convalid add constraint check_a_is_2 check (a = 2) no inherit not valid;
+	^
+<sql-statement>
+-- fail, because of the row in parent
+alter table parent_noinh_convalid validate constraint check_a_is_2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- fail, because of the row in parent
+	^
+<sql-statement>
+delete from only parent_noinh_convalid;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+-- ok (parent itself contains no violating rows)
+alter table parent_noinh_convalid validate constraint check_a_is_2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- ok (parent itself contains no violating rows)
+	^
+<sql-statement>
+select convalidated from pg_constraint where conrelid = 'parent_noinh_convalid'::regclass and conname = 'check_a_is_2';
+</sql-statement>
+<sql-statement>
+-- cleanup
+drop table parent_noinh_convalid, child_noinh_convalid;
+</sql-statement>
+<sql-statement>
+-- Try (and fail) to create constraint from attmp5(a) to attmp4(a) - unique constraint on
+-- attmp4 is a,b
+ALTER TABLE attmp5 add constraint attmpconstr foreign key(a) references attmp4(a) match full;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- Try (and fail) to create constraint from attmp5(a) to attmp4(a) - unique constraint on
+	^
+<sql-statement>
+DROP TABLE attmp7;
+</sql-statement>
+<sql-statement>
+DROP TABLE attmp6;
+</sql-statement>
+<sql-statement>
+DROP TABLE attmp5;
+</sql-statement>
+<sql-statement>
+DROP TABLE attmp4;
+</sql-statement>
+<sql-statement>
+DROP TABLE attmp3;
+</sql-statement>
+<sql-statement>
+DROP TABLE attmp2;
+</sql-statement>
+<sql-statement>
+-- NOT VALID with plan invalidation -- ensure we don't use a constraint for
+-- exclusion until validated
+set constraint_exclusion TO 'partition';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: constraint_exclusion
+    	-- NOT VALID with plan invalidation -- ensure we don't use a constraint for
+	^
+<sql-statement>
+create table nv_parent (d date, check (false) no inherit not valid);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table constraint not supported
+    	create table nv_parent (d date, check (false) no inherit not valid);
+	^
+<sql-statement>
+-- not valid constraint added at creation time should automatically become valid
+\d nv_parent
+</sql-statement>
+Metacommand \d nv_parent is not supported
+<sql-statement>
+create table nv_child_2010 () inherits (nv_parent);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table nv_child_2010 () inherits (nv_parent);
+	^
+<sql-statement>
+create table nv_child_2011 () inherits (nv_parent);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table nv_child_2011 () inherits (nv_parent);
+	^
+<sql-statement>
+alter table nv_child_2010 add check (d between '2010-01-01'::date and '2010-12-31'::date) not valid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table nv_child_2010 add check (d between '2010-01-01'::date and '2010-12-31'::date) not valid;
+	^
+<sql-statement>
+alter table nv_child_2011 add check (d between '2011-01-01'::date and '2011-12-31'::date) not valid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table nv_child_2011 add check (d between '2011-01-01'::date and '2011-12-31'::date) not valid;
+	^
+<sql-statement>
+explain (costs off) select * from nv_parent where d between '2011-08-01' and '2011-08-31';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off) select * from nv_parent where d between '2011-08-01' and '2011-08-31';
+	^
+<sql-statement>
+create table nv_child_2009 (check (d between '2009-01-01'::date and '2009-12-31'::date)) inherits (nv_parent);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table nv_child_2009 (check (d between '2009-01-01'::date and '2009-12-31'::date)) inherits (nv_parent);
+	^
+<sql-statement>
+explain (costs off) select * from nv_parent where d between '2011-08-01'::date and '2011-08-31'::date;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off) select * from nv_parent where d between '2011-08-01'::date and '2011-08-31'::date;
+	^
+<sql-statement>
+explain (costs off) select * from nv_parent where d between '2009-08-01'::date and '2009-08-31'::date;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off) select * from nv_parent where d between '2009-08-01'::date and '2009-08-31'::date;
+	^
+<sql-statement>
+-- after validation, the constraint should be used
+alter table nv_child_2011 VALIDATE CONSTRAINT nv_child_2011_d_check;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- after validation, the constraint should be used
+	^
+<sql-statement>
+explain (costs off) select * from nv_parent where d between '2009-08-01'::date and '2009-08-31'::date;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off) select * from nv_parent where d between '2009-08-01'::date and '2009-08-31'::date;
+	^
+<sql-statement>
+-- add an inherited NOT VALID constraint
+alter table nv_parent add check (d between '2001-01-01'::date and '2099-12-31'::date) not valid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add an inherited NOT VALID constraint
+	^
+<sql-statement>
+\d nv_child_2009
+</sql-statement>
+Metacommand \d nv_child_2009 is not supported
+<sql-statement>
+-- we leave nv_parent and children around to help test pg_dump logic
+-- Foreign key adding test with mixed types
+-- Note: these tables are TEMP to avoid name conflicts when this test
+-- is run in parallel with foreign_key.sql.
+CREATE TEMP TABLE PKTABLE (ptest1 int PRIMARY KEY);
+</sql-statement>
+<sql-statement>
+INSERT INTO PKTABLE VALUES(42);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE FKTABLE (ftest1 inet);
+</sql-statement>
+<sql-statement>
+-- This next should fail, because int=inet does not exist
+ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1) references pktable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- This next should fail, because int=inet does not exist
+	^
+<sql-statement>
+-- This should also fail for the same reason, but here we
+-- give the column name
+ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1) references pktable(ptest1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- This should also fail for the same reason, but here we
+	^
+<sql-statement>
+DROP TABLE FKTABLE;
+</sql-statement>
+<sql-statement>
+-- This should succeed, even though they are different types,
+-- because int=int8 exists and is a member of the integer opfamily
+CREATE TEMP TABLE FKTABLE (ftest1 int8);
+</sql-statement>
+<sql-statement>
+ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1) references pktable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1) references pktable;
+	^
+<sql-statement>
+-- Check it actually works
+INSERT INTO FKTABLE VALUES(42);		-- should succeed
+</sql-statement>
+<sql-statement>
+INSERT INTO FKTABLE VALUES(43);		-- should fail
+</sql-statement>
+<sql-statement>
+DROP TABLE FKTABLE;
+</sql-statement>
+<sql-statement>
+-- This should fail, because we'd have to cast numeric to int which is
+-- not an implicit coercion (or use numeric=numeric, but that's not part
+-- of the integer opfamily)
+CREATE TEMP TABLE FKTABLE (ftest1 numeric);
+</sql-statement>
+<sql-statement>
+ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1) references pktable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1) references pktable;
+	^
+<sql-statement>
+DROP TABLE FKTABLE;
+</sql-statement>
+<sql-statement>
+DROP TABLE PKTABLE;
+</sql-statement>
+<sql-statement>
+-- On the other hand, this should work because int implicitly promotes to
+-- numeric, and we allow promotion on the FK side
+CREATE TEMP TABLE PKTABLE (ptest1 numeric PRIMARY KEY);
+</sql-statement>
+<sql-statement>
+INSERT INTO PKTABLE VALUES(42);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE FKTABLE (ftest1 int);
+</sql-statement>
+<sql-statement>
+ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1) references pktable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1) references pktable;
+	^
+<sql-statement>
+-- Check it actually works
+INSERT INTO FKTABLE VALUES(42);		-- should succeed
+</sql-statement>
+<sql-statement>
+INSERT INTO FKTABLE VALUES(43);		-- should fail
+</sql-statement>
+<sql-statement>
+DROP TABLE FKTABLE;
+</sql-statement>
+<sql-statement>
+DROP TABLE PKTABLE;
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE PKTABLE (ptest1 int, ptest2 inet,
+                           PRIMARY KEY(ptest1, ptest2));
+</sql-statement>
+<sql-statement>
+-- This should fail, because we just chose really odd types
+CREATE TEMP TABLE FKTABLE (ftest1 cidr, ftest2 timestamp);
+</sql-statement>
+<sql-statement>
+ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1, ftest2) references pktable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1, ftest2) references pktable;
+	^
+<sql-statement>
+DROP TABLE FKTABLE;
+</sql-statement>
+<sql-statement>
+-- Again, so should this...
+CREATE TEMP TABLE FKTABLE (ftest1 cidr, ftest2 timestamp);
+</sql-statement>
+<sql-statement>
+ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1, ftest2)
+     references pktable(ptest1, ptest2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1, ftest2)
+	^
+<sql-statement>
+DROP TABLE FKTABLE;
+</sql-statement>
+<sql-statement>
+-- This fails because we mixed up the column ordering
+CREATE TEMP TABLE FKTABLE (ftest1 int, ftest2 inet);
+</sql-statement>
+<sql-statement>
+ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1, ftest2)
+     references pktable(ptest2, ptest1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest1, ftest2)
+	^
+<sql-statement>
+-- As does this...
+ALTER TABLE FKTABLE ADD FOREIGN KEY(ftest2, ftest1)
+     references pktable(ptest1, ptest2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- As does this...
+	^
+<sql-statement>
+DROP TABLE FKTABLE;
+</sql-statement>
+<sql-statement>
+DROP TABLE PKTABLE;
+</sql-statement>
+<sql-statement>
+-- Test that ALTER CONSTRAINT updates trigger deferrability properly
+CREATE TEMP TABLE PKTABLE (ptest1 int primary key);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE FKTABLE (ftest1 int);
+</sql-statement>
+<sql-statement>
+ALTER TABLE FKTABLE ADD CONSTRAINT fknd FOREIGN KEY(ftest1) REFERENCES pktable
+  ON DELETE CASCADE ON UPDATE NO ACTION NOT DEFERRABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD CONSTRAINT fknd FOREIGN KEY(ftest1) REFERENCES pktable
+	^
+<sql-statement>
+ALTER TABLE FKTABLE ADD CONSTRAINT fkdd FOREIGN KEY(ftest1) REFERENCES pktable
+  ON DELETE CASCADE ON UPDATE NO ACTION DEFERRABLE INITIALLY DEFERRED;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD CONSTRAINT fkdd FOREIGN KEY(ftest1) REFERENCES pktable
+	^
+<sql-statement>
+ALTER TABLE FKTABLE ADD CONSTRAINT fkdi FOREIGN KEY(ftest1) REFERENCES pktable
+  ON DELETE CASCADE ON UPDATE NO ACTION DEFERRABLE INITIALLY IMMEDIATE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD CONSTRAINT fkdi FOREIGN KEY(ftest1) REFERENCES pktable
+	^
+<sql-statement>
+ALTER TABLE FKTABLE ADD CONSTRAINT fknd2 FOREIGN KEY(ftest1) REFERENCES pktable
+  ON DELETE CASCADE ON UPDATE NO ACTION DEFERRABLE INITIALLY DEFERRED;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD CONSTRAINT fknd2 FOREIGN KEY(ftest1) REFERENCES pktable
+	^
+<sql-statement>
+ALTER TABLE FKTABLE ALTER CONSTRAINT fknd2 NOT DEFERRABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ALTER CONSTRAINT fknd2 NOT DEFERRABLE;
+	^
+<sql-statement>
+ALTER TABLE FKTABLE ADD CONSTRAINT fkdd2 FOREIGN KEY(ftest1) REFERENCES pktable
+  ON DELETE CASCADE ON UPDATE NO ACTION NOT DEFERRABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD CONSTRAINT fkdd2 FOREIGN KEY(ftest1) REFERENCES pktable
+	^
+<sql-statement>
+ALTER TABLE FKTABLE ALTER CONSTRAINT fkdd2 DEFERRABLE INITIALLY DEFERRED;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ALTER CONSTRAINT fkdd2 DEFERRABLE INITIALLY DEFERRED;
+	^
+<sql-statement>
+ALTER TABLE FKTABLE ADD CONSTRAINT fkdi2 FOREIGN KEY(ftest1) REFERENCES pktable
+  ON DELETE CASCADE ON UPDATE NO ACTION NOT DEFERRABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ADD CONSTRAINT fkdi2 FOREIGN KEY(ftest1) REFERENCES pktable
+	^
+<sql-statement>
+ALTER TABLE FKTABLE ALTER CONSTRAINT fkdi2 DEFERRABLE INITIALLY IMMEDIATE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE FKTABLE ALTER CONSTRAINT fkdi2 DEFERRABLE INITIALLY IMMEDIATE;
+	^
+<sql-statement>
+SELECT conname, tgfoid::regproc, tgtype, tgdeferrable, tginitdeferred
+FROM pg_trigger JOIN pg_constraint con ON con.oid = tgconstraint
+WHERE tgrelid = 'pktable'::regclass
+ORDER BY 1,2,3;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: Sort
+    	SELECT conname, tgfoid::regproc, tgtype, tgdeferrable, tginitdeferred
+	^
+        -stdin-:<main>:1:1: Error: Expected comparable type, but got: Tuple<pgname,pgregproc,pgint2>
+        	SELECT conname, tgfoid::regproc, tgtype, tgdeferrable, tginitdeferred
+	^
+<sql-statement>
+SELECT conname, tgfoid::regproc, tgtype, tgdeferrable, tginitdeferred
+FROM pg_trigger JOIN pg_constraint con ON con.oid = tgconstraint
+WHERE tgrelid = 'fktable'::regclass
+ORDER BY 1,2,3;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: Sort
+    	SELECT conname, tgfoid::regproc, tgtype, tgdeferrable, tginitdeferred
+	^
+        -stdin-:<main>:1:1: Error: Expected comparable type, but got: Tuple<pgname,pgregproc,pgint2>
+        	SELECT conname, tgfoid::regproc, tgtype, tgdeferrable, tginitdeferred
+	^
+<sql-statement>
+-- temp tables should go away by themselves, need not drop them.
+-- test check constraint adding
+create table atacc1 ( test int );
+</sql-statement>
+<sql-statement>
+-- add a check constraint
+alter table atacc1 add constraint atacc_test1 check (test>3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a check constraint
+	^
+<sql-statement>
+-- should fail
+insert into atacc1 (test) values (2);
+</sql-statement>
+<sql-statement>
+-- should succeed
+insert into atacc1 (test) values (4);
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- let's do one where the check fails when added
+create table atacc1 ( test int );
+</sql-statement>
+<sql-statement>
+-- insert a soon to be failing row
+insert into atacc1 (test) values (2);
+</sql-statement>
+<sql-statement>
+-- add a check constraint (fails)
+alter table atacc1 add constraint atacc_test1 check (test>3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a check constraint (fails)
+	^
+<sql-statement>
+insert into atacc1 (test) values (4);
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- let's do one where the check fails because the column doesn't exist
+create table atacc1 ( test int );
+</sql-statement>
+<sql-statement>
+-- add a check constraint (fails)
+alter table atacc1 add constraint atacc_test1 check (test1>3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a check constraint (fails)
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- something a little more complicated
+create table atacc1 ( test int, test2 int, test3 int);
+</sql-statement>
+<sql-statement>
+-- add a check constraint (fails)
+alter table atacc1 add constraint atacc_test1 check (test+test2<test3*4);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a check constraint (fails)
+	^
+<sql-statement>
+-- should fail
+insert into atacc1 (test,test2,test3) values (4,4,2);
+</sql-statement>
+<sql-statement>
+-- should succeed
+insert into atacc1 (test,test2,test3) values (4,4,5);
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- lets do some naming tests
+create table atacc1 (test int check (test>3), test2 int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: column constraint not supported
+    	-- lets do some naming tests
+	^
+<sql-statement>
+alter table atacc1 add check (test2>test);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 add check (test2>test);
+	^
+<sql-statement>
+-- should fail for $2
+insert into atacc1 (test2, test) values (3, 4);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.atacc1
+    
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- inheritance related tests
+create table atacc1 (test int);
+</sql-statement>
+<sql-statement>
+create table atacc2 (test2 int);
+</sql-statement>
+<sql-statement>
+create table atacc3 (test3 int) inherits (atacc1, atacc2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table atacc3 (test3 int) inherits (atacc1, atacc2);
+	^
+<sql-statement>
+alter table atacc2 add constraint foo check (test2>0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc2 add constraint foo check (test2>0);
+	^
+<sql-statement>
+-- fail and then succeed on atacc2
+insert into atacc2 (test2) values (-3);
+</sql-statement>
+<sql-statement>
+insert into atacc2 (test2) values (3);
+</sql-statement>
+<sql-statement>
+-- fail and then succeed on atacc3
+insert into atacc3 (test2) values (-3);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.atacc3
+    
+<sql-statement>
+insert into atacc3 (test2) values (3);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.atacc3
+    
+<sql-statement>
+drop table atacc3;
+</sql-statement>
+<sql-statement>
+drop table atacc2;
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- same things with one created with INHERIT
+create table atacc1 (test int);
+</sql-statement>
+<sql-statement>
+create table atacc2 (test2 int);
+</sql-statement>
+<sql-statement>
+create table atacc3 (test3 int) inherits (atacc1, atacc2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table atacc3 (test3 int) inherits (atacc1, atacc2);
+	^
+<sql-statement>
+alter table atacc3 no inherit atacc2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc3 no inherit atacc2;
+	^
+<sql-statement>
+-- fail
+alter table atacc3 no inherit atacc2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- fail
+	^
+<sql-statement>
+-- make sure it really isn't a child
+insert into atacc3 (test2) values (3);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.atacc3
+    
+<sql-statement>
+select test2 from atacc2;
+</sql-statement>
+<sql-statement>
+-- fail due to missing constraint
+alter table atacc2 add constraint foo check (test2>0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- fail due to missing constraint
+	^
+<sql-statement>
+alter table atacc3 inherit atacc2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc3 inherit atacc2;
+	^
+<sql-statement>
+-- fail due to missing column
+alter table atacc3 rename test2 to testx;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 264
+    	-- fail due to missing column
+	^
+<sql-statement>
+alter table atacc3 inherit atacc2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc3 inherit atacc2;
+	^
+<sql-statement>
+-- fail due to mismatched data type
+alter table atacc3 add test2 bool;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- fail due to mismatched data type
+	^
+<sql-statement>
+alter table atacc3 inherit atacc2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc3 inherit atacc2;
+	^
+<sql-statement>
+alter table atacc3 drop test2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc3 drop test2;
+	^
+<sql-statement>
+-- succeed
+alter table atacc3 add test2 int;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- succeed
+	^
+<sql-statement>
+update atacc3 set test2 = 4 where test2 is null;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+alter table atacc3 add constraint foo check (test2>0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc3 add constraint foo check (test2>0);
+	^
+<sql-statement>
+alter table atacc3 inherit atacc2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc3 inherit atacc2;
+	^
+<sql-statement>
+-- fail due to duplicates and circular inheritance
+alter table atacc3 inherit atacc2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- fail due to duplicates and circular inheritance
+	^
+<sql-statement>
+alter table atacc2 inherit atacc3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc2 inherit atacc3;
+	^
+<sql-statement>
+alter table atacc2 inherit atacc2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc2 inherit atacc2;
+	^
+<sql-statement>
+-- test that we really are a child now (should see 4 not 3 and cascade should go through)
+select test2 from atacc2;
+</sql-statement>
+<sql-statement>
+drop table atacc2 cascade;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: CASCADE is not implemented
+    	drop table atacc2 cascade;
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- adding only to a parent is allowed as of 9.2
+create table atacc1 (test int);
+</sql-statement>
+<sql-statement>
+create table atacc2 (test2 int) inherits (atacc1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table atacc2 (test2 int) inherits (atacc1);
+	^
+<sql-statement>
+-- ok:
+alter table atacc1 add constraint foo check (test>0) no inherit;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- ok:
+	^
+<sql-statement>
+-- check constraint is not there on child
+insert into atacc2 (test) values (-3);
+</sql-statement>
+<sql-statement>
+-- check constraint is there on parent
+insert into atacc1 (test) values (-3);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test) values (3);
+</sql-statement>
+<sql-statement>
+-- fail, violating row:
+alter table atacc2 add constraint foo check (test>0) no inherit;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- fail, violating row:
+	^
+<sql-statement>
+drop table atacc2;
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- test unique constraint adding
+create table atacc1 ( test int ) ;
+</sql-statement>
+<sql-statement>
+-- add a unique constraint
+alter table atacc1 add constraint atacc_test1 unique (test);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a unique constraint
+	^
+<sql-statement>
+-- insert first value
+insert into atacc1 (test) values (2);
+</sql-statement>
+<sql-statement>
+-- should fail
+insert into atacc1 (test) values (2);
+</sql-statement>
+<sql-statement>
+-- should succeed
+insert into atacc1 (test) values (4);
+</sql-statement>
+<sql-statement>
+-- try to create duplicates via alter table using - should fail
+alter table atacc1 alter column test type integer using 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- try to create duplicates via alter table using - should fail
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- let's do one where the unique constraint fails when added
+create table atacc1 ( test int );
+</sql-statement>
+<sql-statement>
+-- insert soon to be failing rows
+insert into atacc1 (test) values (2);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test) values (2);
+</sql-statement>
+<sql-statement>
+-- add a unique constraint (fails)
+alter table atacc1 add constraint atacc_test1 unique (test);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a unique constraint (fails)
+	^
+<sql-statement>
+insert into atacc1 (test) values (3);
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- let's do one where the unique constraint fails
+-- because the column doesn't exist
+create table atacc1 ( test int );
+</sql-statement>
+<sql-statement>
+-- add a unique constraint (fails)
+alter table atacc1 add constraint atacc_test1 unique (test1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a unique constraint (fails)
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- something a little more complicated
+create table atacc1 ( test int, test2 int);
+</sql-statement>
+<sql-statement>
+-- add a unique constraint
+alter table atacc1 add constraint atacc_test1 unique (test, test2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a unique constraint
+	^
+<sql-statement>
+-- insert initial value
+insert into atacc1 (test,test2) values (4,4);
+</sql-statement>
+<sql-statement>
+-- should fail
+insert into atacc1 (test,test2) values (4,4);
+</sql-statement>
+<sql-statement>
+-- should all succeed
+insert into atacc1 (test,test2) values (4,5);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test,test2) values (5,4);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test,test2) values (5,5);
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- lets do some naming tests
+create table atacc1 (test int, test2 int, unique(test));
+</sql-statement>
+<sql-statement>
+alter table atacc1 add unique (test2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 add unique (test2);
+	^
+<sql-statement>
+-- should fail for @@ second one @@
+insert into atacc1 (test2, test) values (3, 3);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test2, test) values (2, 3);
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- test primary key constraint adding
+create table atacc1 ( id serial, test int) ;
+</sql-statement>
+<sql-statement>
+-- add a primary key constraint
+alter table atacc1 add constraint atacc_test1 primary key (test);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a primary key constraint
+	^
+<sql-statement>
+-- insert first value
+insert into atacc1 (test) values (2);
+</sql-statement>
+<sql-statement>
+-- should fail
+insert into atacc1 (test) values (2);
+</sql-statement>
+<sql-statement>
+-- should succeed
+insert into atacc1 (test) values (4);
+</sql-statement>
+<sql-statement>
+-- inserting NULL should fail
+insert into atacc1 (test) values(NULL);
+</sql-statement>
+<sql-statement>
+-- try adding a second primary key (should fail)
+alter table atacc1 add constraint atacc_oid1 primary key(id);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- try adding a second primary key (should fail)
+	^
+<sql-statement>
+-- drop first primary key constraint
+alter table atacc1 drop constraint atacc_test1 restrict;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- drop first primary key constraint
+	^
+<sql-statement>
+-- try adding a primary key on oid (should succeed)
+alter table atacc1 add constraint atacc_oid1 primary key(id);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- try adding a primary key on oid (should succeed)
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- let's do one where the primary key constraint fails when added
+create table atacc1 ( test int );
+</sql-statement>
+<sql-statement>
+-- insert soon to be failing rows
+insert into atacc1 (test) values (2);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test) values (2);
+</sql-statement>
+<sql-statement>
+-- add a primary key (fails)
+alter table atacc1 add constraint atacc_test1 primary key (test);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a primary key (fails)
+	^
+<sql-statement>
+insert into atacc1 (test) values (3);
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- let's do another one where the primary key constraint fails when added
+create table atacc1 ( test int );
+</sql-statement>
+<sql-statement>
+-- insert soon to be failing row
+insert into atacc1 (test) values (NULL);
+</sql-statement>
+<sql-statement>
+-- add a primary key (fails)
+alter table atacc1 add constraint atacc_test1 primary key (test);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a primary key (fails)
+	^
+<sql-statement>
+insert into atacc1 (test) values (3);
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- let's do one where the primary key constraint fails
+-- because the column doesn't exist
+create table atacc1 ( test int );
+</sql-statement>
+<sql-statement>
+-- add a primary key constraint (fails)
+alter table atacc1 add constraint atacc_test1 primary key (test1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a primary key constraint (fails)
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- adding a new column as primary key to a non-empty table.
+-- should fail unless the column has a non-null default value.
+create table atacc1 ( test int );
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test) values (0);
+</sql-statement>
+<sql-statement>
+-- add a primary key column without a default (fails).
+alter table atacc1 add column test2 int primary key;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a primary key column without a default (fails).
+	^
+<sql-statement>
+-- now add a primary key column with a default (succeeds).
+alter table atacc1 add column test2 int default 0 primary key;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- now add a primary key column with a default (succeeds).
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- this combination used to have order-of-execution problems (bug #15580)
+create table atacc1 (a int);
+</sql-statement>
+<sql-statement>
+insert into atacc1 values(1);
+</sql-statement>
+<sql-statement>
+alter table atacc1
+  add column b float8 not null default random(),
+  add primary key(a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- additionally, we've seen issues with foreign key validation not being
+-- properly delayed until after a table rewrite.  Check that works ok.
+create table atacc1 (a int primary key);
+</sql-statement>
+<sql-statement>
+alter table atacc1 add constraint atacc1_fkey foreign key (a) references atacc1 (a) not valid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 add constraint atacc1_fkey foreign key (a) references atacc1 (a) not valid;
+	^
+<sql-statement>
+alter table atacc1 validate constraint atacc1_fkey, alter a type bigint;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 validate constraint atacc1_fkey, alter a type bigint;
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- we've also seen issues with check constraints being validated at the wrong
+-- time when there's a pending table rewrite.
+create table atacc1 (a bigint, b int);
+</sql-statement>
+<sql-statement>
+insert into atacc1 values(1,1);
+</sql-statement>
+<sql-statement>
+alter table atacc1 add constraint atacc1_chk check(b = 1) not valid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 add constraint atacc1_chk check(b = 1) not valid;
+	^
+<sql-statement>
+alter table atacc1 validate constraint atacc1_chk, alter a type int;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 validate constraint atacc1_chk, alter a type int;
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- same as above, but ensure the constraint violation is detected
+create table atacc1 (a bigint, b int);
+</sql-statement>
+<sql-statement>
+insert into atacc1 values(1,2);
+</sql-statement>
+<sql-statement>
+alter table atacc1 add constraint atacc1_chk check(b = 1) not valid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 add constraint atacc1_chk check(b = 1) not valid;
+	^
+<sql-statement>
+alter table atacc1 validate constraint atacc1_chk, alter a type int;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 validate constraint atacc1_chk, alter a type int;
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- something a little more complicated
+create table atacc1 ( test int, test2 int);
+</sql-statement>
+<sql-statement>
+-- add a primary key constraint
+alter table atacc1 add constraint atacc_test1 primary key (test, test2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- add a primary key constraint
+	^
+<sql-statement>
+-- try adding a second primary key - should fail
+alter table atacc1 add constraint atacc_test2 primary key (test);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- try adding a second primary key - should fail
+	^
+<sql-statement>
+-- insert initial value
+insert into atacc1 (test,test2) values (4,4);
+</sql-statement>
+<sql-statement>
+-- should fail
+insert into atacc1 (test,test2) values (4,4);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test,test2) values (NULL,3);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test,test2) values (3, NULL);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test,test2) values (NULL,NULL);
+</sql-statement>
+<sql-statement>
+-- should all succeed
+insert into atacc1 (test,test2) values (4,5);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test,test2) values (5,4);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test,test2) values (5,5);
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- lets do some naming tests
+create table atacc1 (test int, test2 int, primary key(test));
+</sql-statement>
+<sql-statement>
+-- only first should succeed
+insert into atacc1 (test2, test) values (3, 3);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test2, test) values (2, 3);
+</sql-statement>
+<sql-statement>
+insert into atacc1 (test2, test) values (1, NULL);
+</sql-statement>
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- alter table / alter column [set/drop] not null tests
+-- try altering system catalogs, should fail
+alter table pg_class alter column relname drop not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- alter table / alter column [set/drop] not null tests
+	^
+<sql-statement>
+alter table pg_class alter relname set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table pg_class alter relname set not null;
+	^
+<sql-statement>
+-- try altering non-existent table, should fail
+alter table non_existent alter column bar set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- try altering non-existent table, should fail
+	^
+<sql-statement>
+alter table non_existent alter column bar drop not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table non_existent alter column bar drop not null;
+	^
+<sql-statement>
+-- test setting columns to null and not null and vice versa
+-- test checking for null values and primary key
+create table atacc1 (test int not null);
+</sql-statement>
+<sql-statement>
+alter table atacc1 add constraint "atacc1_pkey" primary key (test);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 add constraint "atacc1_pkey" primary key (test);
+	^
+<sql-statement>
+alter table atacc1 alter column test drop not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter column test drop not null;
+	^
+<sql-statement>
+alter table atacc1 drop constraint "atacc1_pkey";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 drop constraint "atacc1_pkey";
+	^
+<sql-statement>
+alter table atacc1 alter column test drop not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter column test drop not null;
+	^
+<sql-statement>
+insert into atacc1 values (null);
+</sql-statement>
+<sql-statement>
+alter table atacc1 alter test set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter test set not null;
+	^
+<sql-statement>
+delete from atacc1;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+alter table atacc1 alter test set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter test set not null;
+	^
+<sql-statement>
+-- try altering a non-existent column, should fail
+alter table atacc1 alter bar set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- try altering a non-existent column, should fail
+	^
+<sql-statement>
+alter table atacc1 alter bar drop not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter bar drop not null;
+	^
+<sql-statement>
+-- try creating a view and altering that, should fail
+create view myview as select * from atacc1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	-- try creating a view and altering that, should fail
+	^
+<sql-statement>
+alter table myview alter column test drop not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table myview alter column test drop not null;
+	^
+<sql-statement>
+alter table myview alter column test set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table myview alter column test set not null;
+	^
+<sql-statement>
+drop view myview;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: View not found: 'myview'
+    	drop view myview;
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- set not null verified by constraints
+create table atacc1 (test_a int, test_b int);
+</sql-statement>
+<sql-statement>
+insert into atacc1 values (null, 1);
+</sql-statement>
+<sql-statement>
+-- constraint not cover all values, should fail
+alter table atacc1 add constraint atacc1_constr_or check(test_a is not null or test_b < 10);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- constraint not cover all values, should fail
+	^
+<sql-statement>
+alter table atacc1 alter test_a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter test_a set not null;
+	^
+<sql-statement>
+alter table atacc1 drop constraint atacc1_constr_or;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 drop constraint atacc1_constr_or;
+	^
+<sql-statement>
+-- not valid constraint, should fail
+alter table atacc1 add constraint atacc1_constr_invalid check(test_a is not null) not valid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- not valid constraint, should fail
+	^
+<sql-statement>
+alter table atacc1 alter test_a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter test_a set not null;
+	^
+<sql-statement>
+alter table atacc1 drop constraint atacc1_constr_invalid;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 drop constraint atacc1_constr_invalid;
+	^
+<sql-statement>
+-- with valid constraint
+update atacc1 set test_a = 1;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+alter table atacc1 add constraint atacc1_constr_a_valid check(test_a is not null);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 add constraint atacc1_constr_a_valid check(test_a is not null);
+	^
+<sql-statement>
+alter table atacc1 alter test_a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter test_a set not null;
+	^
+<sql-statement>
+delete from atacc1;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+insert into atacc1 values (2, null);
+</sql-statement>
+<sql-statement>
+alter table atacc1 alter test_a drop not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter test_a drop not null;
+	^
+<sql-statement>
+-- test multiple set not null at same time
+-- test_a checked by atacc1_constr_a_valid, test_b should fail by table scan
+alter table atacc1 alter test_a set not null, alter test_b set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- test multiple set not null at same time
+	^
+<sql-statement>
+-- commands order has no importance
+alter table atacc1 alter test_b set not null, alter test_a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- commands order has no importance
+	^
+<sql-statement>
+-- valid one by table scan, one by check constraints
+update atacc1 set test_b = 1;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+alter table atacc1 alter test_b set not null, alter test_a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter test_b set not null, alter test_a set not null;
+	^
+<sql-statement>
+alter table atacc1 alter test_a drop not null, alter test_b drop not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter test_a drop not null, alter test_b drop not null;
+	^
+<sql-statement>
+-- both column has check constraints
+alter table atacc1 add constraint atacc1_constr_b_valid check(test_b is not null);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- both column has check constraints
+	^
+<sql-statement>
+alter table atacc1 alter test_b set not null, alter test_a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table atacc1 alter test_b set not null, alter test_a set not null;
+	^
+<sql-statement>
+drop table atacc1;
+</sql-statement>
+<sql-statement>
+-- test inheritance
+create table parent (a int);
+</sql-statement>
+<sql-statement>
+create table child (b varchar(255)) inherits (parent);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table child (b varchar(255)) inherits (parent);
+	^
+<sql-statement>
+alter table parent alter a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table parent alter a set not null;
+	^
+<sql-statement>
+insert into parent values (NULL);
+</sql-statement>
+<sql-statement>
+insert into child (a, b) values (NULL, 'foo');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.child
+    
+<sql-statement>
+alter table parent alter a drop not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table parent alter a drop not null;
+	^
+<sql-statement>
+insert into parent values (NULL);
+</sql-statement>
+<sql-statement>
+insert into child (a, b) values (NULL, 'foo');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.child
+    
+<sql-statement>
+alter table only parent alter a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table only parent alter a set not null;
+	^
+<sql-statement>
+alter table child alter a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table child alter a set not null;
+	^
+<sql-statement>
+delete from parent;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+alter table only parent alter a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table only parent alter a set not null;
+	^
+<sql-statement>
+insert into parent values (NULL);
+</sql-statement>
+<sql-statement>
+alter table child alter a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table child alter a set not null;
+	^
+<sql-statement>
+insert into child (a, b) values (NULL, 'foo');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.child
+    
+<sql-statement>
+delete from child;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+alter table child alter a set not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table child alter a set not null;
+	^
+<sql-statement>
+insert into child (a, b) values (NULL, 'foo');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.child
+    
+<sql-statement>
+drop table child;
+</sql-statement>
+<sql-statement>
+drop table parent;
+</sql-statement>
+<sql-statement>
+-- test setting and removing default values
+create table def_test (
+	c1	int4 default 5,
+	c2	text default 'initial_default'
+);
+</sql-statement>
+<sql-statement>
+insert into def_test default values;
+</sql-statement>
+-stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'default_values' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+
+<sql-statement>
+alter table def_test alter column c1 drop default;
+</sql-statement>
+NSQLTranslationPG::TConverter::ParseAlterTableStmt(AlterTableStmt const*) at /-S/ydb/library/yql/sql/pg/pg_sql.cpp:2904:0
+NSQLTranslationPG::TConverter::ParseRawStmt(RawStmt const*) at /-S/ydb/library/yql/sql/pg/pg_sql.cpp:510:0
+NSQLTranslationPG::TConverter::ParseResult(List const*, TMaybe<unsigned int, NMaybe::TPolicyUndefinedExcept>) at /-S/ydb/library/yql/sql/pg/pg_sql.cpp:393:0
+NSQLTranslationPG::TConverter::OnResult(List const*) at /-S/ydb/library/yql/sql/pg/pg_sql.cpp:351:0
+NYql::PGParse(TBasicString<char, std::__y1::char_traits<char>> const&, NYql::IPGParseEvents&) at /-S/ydb/library/yql/parser/pg_wrapper/parser.cpp:217:0
+NSQLTranslationPG::PGToYql(TBasicString<char, std::__y1::char_traits<char>> const&, NSQLTranslation::TTranslationSettings const&, NYql::TStmtParseInfo*) at /-S/ydb/library/yql/sql/pg/pg_sql.cpp:5109:0
+NSQLTranslation::SqlToYql(TBasicString<char, std::__y1::char_traits<char>> const&, NSQLTranslation::TTranslationSettings const&, TVector<NYql::TWarningRule, std::__y1::allocator<NYql::TWarningRule>>*, NYql::TStmtParseInfo*) at /-S/ydb/library/yql/sql/sql.cpp:38:0
+NYql::TProgram::ParseSql(NSQLTranslation::TTranslationSettings const&) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:658:0
+Main(int, char**) at /-S/ydb/library/yql/tools/pgrun/pgrun.cpp:1239:0
+main at /-S/ydb/library/yql/tools/pgrun/pgrun.cpp:1341:0
+__libc_start_call_main at ../sysdeps/nptl/libc_start_call_main.h:58:0
+__libc_start_main_impl at ../csu/libc-start.c:392:0
+??? at ???:0:0

@@ -1,0 +1,135 @@
+{
+  "post": {
+    "consumes": [
+      "application/json"
+    ],
+    "deprecated": true,
+    "description": "precalculate billing plan for new datastream",
+    "parameters": [
+      {
+        "description": "database location",
+        "in": "path",
+        "name": "location",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "database to create stream in",
+        "in": "query",
+        "name": "databaseId",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "target shards count",
+        "in": "query",
+        "name": "shards",
+        "required": true,
+        "type": "integer"
+      },
+      {
+        "description": "retention period in hours",
+        "in": "query",
+        "name": "retentionHours",
+        "required": true,
+        "type": "integer"
+      },
+      {
+        "description": "write quota in kb per sec",
+        "in": "query",
+        "name": "writeQuota",
+        "required": true,
+        "type": "integer"
+      }
+    ],
+    "produces": [
+      "application/json"
+    ],
+    "responses": {
+      "200": {
+        "description": "successfull operation",
+        "schema": {
+          "properties": {
+            "cloud_id": {
+              "type": "string"
+            },
+            "folder_id": {
+              "type": "string"
+            },
+            "resource_id": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "schema": {
+              "type": "string"
+            },
+            "tags": {
+              "properties": {
+                "reserved_throughput_bps": {
+                  "type": "number"
+                },
+                "reserved_consumers_count": {
+                  "type": "number"
+                },
+                "reserved_storage_bytes": {
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            },
+            "usage": {
+              "properties": {
+                "quantity": {
+                  "type": "number"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "number"
+                },
+                "finish": {
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            },
+            "labels": {
+              "properties": {
+                "datastreams_stream_name": {
+                  "type": "string"
+                },
+                "ydb_database": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "version": {
+              "type": "string"
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "source_wt": {
+              "type": "number"
+            }
+          },
+          "type": "object",
+          "title": "simulate_datastream response"
+        }
+      },
+      "503": {
+        "description": "service unavailable (some errors occurred)"
+      }
+    },
+    "summary": [
+      "meter new datastream"
+    ],
+    "tags": [
+      "YDBC"
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+{"_yql_row_spec"={
+	"Type"=["StructType";[
+	    ["Bool";["OptionalType";["DataType";"Bool"]]];
+	    ["Int8";["OptionalType";["DataType";"Int8"]]];
+	    ["Uint8";["OptionalType";["DataType";"Uint8"]]];
+	    ["Int16";["OptionalType";["DataType";"Int16"]]];
+	    ["Uint16";["OptionalType";["DataType";"Uint16"]]];
+	    ["Int32";["OptionalType";["DataType";"Int32"]]];
+	    ["Uint32";["OptionalType";["DataType";"Uint32"]]];
+	    ["Int64";["OptionalType";["DataType";"Int64"]]];
+	    ["Uint64";["OptionalType";["DataType";"Uint64"]]];
+	    ["Double";["OptionalType";["DataType";"Double"]]];
+	    ["Float";["OptionalType";["DataType";"Float"]]];
+	    ["String";["OptionalType";["DataType";"String"]]];
+	    ["Utf8";["OptionalType";["DataType";"Utf8"]]];
+	    ["Yson";["OptionalType";["DataType";"Yson"]]];
+	    ["Json";["OptionalType";["DataType";"Json"]]];
+	    ["Uuid";["OptionalType";["DataType";"Uuid"]]];
+	    ["Date";["OptionalType";["DataType";"Date"]]];
+	    ["Datetime";["OptionalType";["DataType";"Datetime"]]];
+	    ["Timestamp";["OptionalType";["DataType";"Timestamp"]]];
+	    ["Interval";["OptionalType";["DataType";"Interval"]]];
+	    ["TzDate";["OptionalType";["DataType";"TzDate"]]];
+	    ["TzDatetime";["OptionalType";["DataType";"TzDatetime"]]];
+	    ["TzTimestamp";["OptionalType";["DataType";"TzTimestamp"]]];
+	    ["Decimal";["OptionalType";["DataType";"Decimal";"10";"1"]]];
+	    ["DyNumber";["OptionalType";["DataType";"DyNumber"]]];
+	    ["JsonDocument";["OptionalType";["DataType";"JsonDocument"]]];
+	    ["Date32";["OptionalType";["DataType";"Date32"]]];
+	    ["Datetime64";["OptionalType";["DataType";"Datetime64"]]];
+	    ["Timestamp64";["OptionalType";["DataType";"Timestamp64"]]];
+	    ["Interval64";["OptionalType";["DataType";"Interval64"]]];	    
+	]];
+}}
+

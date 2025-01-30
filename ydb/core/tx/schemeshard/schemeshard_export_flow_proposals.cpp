@@ -59,6 +59,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
 
     for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
         const auto& item = exportInfo->Items.at(itemIdx);
+        if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
+            continue;
+        }
 
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.SourcePathName);
@@ -71,16 +74,82 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     return propose;
 }
 
-static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) {
-    NKikimrSchemeOp::TDescribeOptions opts;
+static void SetTableDescriptionOptions(NKikimrSchemeOp::TDescribeOptions& opts) {
     opts.SetReturnPartitioningInfo(false);
     opts.SetReturnPartitionConfig(true);
     opts.SetReturnBoundaries(true);
+    opts.SetReturnIndexTableBoundaries(true);
+}
 
+static void SetChangefeedDescriptionOptions(NKikimrSchemeOp::TDescribeOptions& opts) {
+    SetTableDescriptionOptions(opts);
+    opts.SetShowPrivateTable(true);
+}
+
+static void SetTopicDescriptionOptions(NKikimrSchemeOp::TDescribeOptions& opts) {
+    SetTableDescriptionOptions(opts);
+    opts.SetShowPrivateTable(true);
+}
+
+static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const TPathId& pathId, NKikimrSchemeOp::TDescribeOptions& opts) {
     auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId, opts);
     auto record = desc->GetRecord();
 
     return record.GetPathDescription();
+}
+
+static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    SetTableDescriptionOptions(opts);
+    return GetDescription(ss, pathId, opts);
+}
+
+static NKikimrSchemeOp::TPathDescription GetChangefeedDescription(TSchemeShard* ss, const TPathId& pathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    SetChangefeedDescriptionOptions(opts);
+    return GetDescription(ss, pathId, opts);
+}
+
+static NKikimrSchemeOp::TPathDescription GetTopicDescription(TSchemeShard* ss, const TPathId& pathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    SetTopicDescriptionOptions(opts);
+    return GetDescription(ss, pathId, opts);
+}
+
+void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& description,
+        const TPathId& exportItemPathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    opts.SetReturnSetVal(true);
+
+    auto pathDescription = DescribePath(ss, TlsActivationContext->AsActorContext(), exportItemPathId, opts);
+    auto tableDescription = pathDescription->GetRecord().GetPathDescription().GetTable();
+
+    THashMap<TString, NKikimrSchemeOp::TSequenceDescription::TSetVal> setValForSequences;
+
+    for (const auto& sequenceDescription : tableDescription.GetSequences()) {
+        if (sequenceDescription.HasSetVal()) {
+            setValForSequences[sequenceDescription.GetName()] = sequenceDescription.GetSetVal();
+        }
+    }
+
+    for (auto& sequenceDescription : *description.MutableSequences()) {
+        auto it = setValForSequences.find(sequenceDescription.GetName());
+        if (it != setValForSequences.end()) {
+            *sequenceDescription.MutableSetVal() = it->second;
+        }
+    }
+}
+
+void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc, const TPathId& exportItemPathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    opts.SetReturnPartitionConfig(true);
+    opts.SetReturnBoundaries(true);
+
+    auto copiedPath = DescribePath(ss, TlsActivationContext->AsActorContext(), exportItemPathId, opts);
+    const auto& copiedTable = copiedPath->GetRecord().GetPathDescription().GetTable();
+
+    *desc.MutableSplitBoundary() = copiedTable.GetSplitBoundary();
+    *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
@@ -106,8 +175,23 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     task.SetNeedToBill(!exportInfo->UserSID || !ss->SystemBackupSIDs.contains(*exportInfo->UserSID));
 
     const TPath sourcePath = TPath::Init(exportInfo->Items[itemIdx].SourcePathId, ss);
-    if (sourcePath.IsResolved()) {
-        task.MutableTable()->CopyFrom(GetTableDescription(ss, sourcePath.Base()->PathId));
+    const TPath exportItemPath = exportPath.Child(ToString(itemIdx));
+    if (sourcePath.IsResolved() && exportItemPath.IsResolved()) {
+        auto sourceDescription = GetTableDescription(ss, sourcePath.Base()->PathId);
+        if (sourceDescription.HasTable()) {
+            FillSetValForSequences(
+                ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+            FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+            for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
+                auto cdcPathDesc =  GetChangefeedDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
+                for (const auto& child : cdcPathDesc.GetChildren()) {
+                    if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
+                        *task.AddChangefeedUnderlyingTopics() = GetTopicDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
+                    }
+                }
+            }
+        }
+        task.MutableTable()->CopyFrom(sourceDescription);
     }
 
     task.SetSnapshotStep(exportInfo->SnapshotStep);
@@ -162,6 +246,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             if (const auto compression = exportSettings.compression()) {
                 Y_ABORT_UNLESS(FillCompression(*task.MutableCompression(), compression));
             }
+
+            task.SetEnableChecksums(exportInfo->EnableChecksums);
         }
         break;
     }

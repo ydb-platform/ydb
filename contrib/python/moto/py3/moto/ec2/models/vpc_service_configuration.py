@@ -1,5 +1,5 @@
 from moto.core import CloudFormationModel
-from moto.core.utils import get_random_hex
+from moto.moto_api._internal import mock_random
 from .core import TaggedEC2Resource
 from ..exceptions import UnknownVpcEndpointService
 
@@ -8,7 +8,7 @@ class VPCServiceConfiguration(TaggedEC2Resource, CloudFormationModel):
     def __init__(
         self, load_balancers, region, acceptance_required, private_dns_name, ec2_backend
     ):
-        self.id = f"vpce-svc-{get_random_hex(length=8)}"
+        self.id = f"vpce-svc-{mock_random.get_random_hex(length=8)}"
         self.service_name = f"com.amazonaws.vpce.{region}.{self.id}"
         self.service_state = "Available"
 
@@ -44,7 +44,7 @@ class VPCServiceConfigurationBackend:
     def elbv2_backend(self):
         from moto.elbv2.models import elbv2_backends
 
-        return elbv2_backends[self.region_name]
+        return elbv2_backends[self.account_id][self.region_name]
 
     def get_vpc_endpoint_service(self, resource_id):
         return self.configurations.get(resource_id)

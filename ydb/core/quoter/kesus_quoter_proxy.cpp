@@ -8,7 +8,7 @@
 #include <ydb/core/kesus/tablet/quoter_constants.h>
 
 #include <ydb/library/time_series_vec/time_series_vec.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -41,7 +41,7 @@
 namespace NKikimr {
 namespace NQuoter {
 
-using NKesus::TEvKesus;
+namespace TEvKesus = NKesus::TEvKesus;
 
 class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     struct TResourceState {
@@ -1105,7 +1105,7 @@ public:
                     << ev->GetTypeRewrite()
                     << " event: "
                     << ev->ToString());
-                Y_DEBUG_ABORT_UNLESS(false, "Unknown event");
+                Y_DEBUG_ABORT("Unknown event");
                 break;
         }
 

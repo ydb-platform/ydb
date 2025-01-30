@@ -23,7 +23,7 @@ select
                from  (select s_state as s_state,
  			    rank() over ( partition by s_state order by sum(ss_net_profit) desc) as ranking
                       from   {{store_sales}}, {{store}}, {{date_dim}}
-                      where  d_month_seq between 1212 and 1212+11
+                      where  d_month_seq between 1200 and 1200+11
  			    and d_date_sk = ss_sold_date_sk
  			    and s_store_sk  = ss_store_sk
                       group by s_state
@@ -34,7 +34,7 @@ select
 ) as sub
  order by
    lochierarchy desc
-  ,case when lochierarchy = 0 then s_state end
+  ,case when lochierarchy = 0 then s_state else null end nulls first
   ,rank_within_parent
  limit 100;
 

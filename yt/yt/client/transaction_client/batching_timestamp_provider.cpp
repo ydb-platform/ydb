@@ -10,33 +10,37 @@
 namespace NYT::NTransactionClient {
 
 using namespace NConcurrency;
+using namespace NObjectClient;
 using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBatchingTimestampProvider
-    : public ITimestampProvider
+class TRequestBatcher
+    : public TRefCounted
 {
 public:
-    TBatchingTimestampProvider(
+    TRequestBatcher(
         ITimestampProviderPtr underlying,
-        TDuration batchPeriod)
+        TDuration batchPeriod,
+        TCellTag clockClusterTag)
         : Underlying_(std::move(underlying))
         , BatchPeriod_(batchPeriod)
+        , ClockClusterTag_(clockClusterTag)
     { }
 
-    TFuture<TTimestamp> GenerateTimestamps(int count) override
+    TFuture<TTimestamp> GenerateTimestamps(int count)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         TFuture<TTimestamp> result;
 
         {
             auto guard = Guard(SpinLock_);
-            PendingRequests_.emplace_back();
-            PendingRequests_.back().Count = count;
-            PendingRequests_.back().Promise = NewPromise<TTimestamp>();
-            result = PendingRequests_.back().Promise.ToFuture().ToUncancelable();
+
+            auto& request = PendingRequests_.emplace_back();
+            request.Count = count;
+            request.Promise = NewPromise<TTimestamp>();
+            result = request.Promise.ToFuture().ToUncancelable();
 
             BatchTrace_.Join();
 
@@ -45,18 +49,13 @@ public:
         }
 
         return result;
-    }
 
-    TTimestamp GetLatestTimestamp() override
-    {
-        VERIFY_THREAD_AFFINITY_ANY();
-
-        return Underlying_->GetLatestTimestamp();
     }
 
 private:
     const ITimestampProviderPtr Underlying_;
     const TDuration BatchPeriod_;
+    const TCellTag ClockClusterTag_;
 
     struct TRequest
     {
@@ -65,6 +64,7 @@ private:
     };
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+
     bool GenerateInProgress_ = false;
     bool FlushScheduled_ = false;
     std::vector<TRequest> PendingRequests_;
@@ -74,7 +74,7 @@ private:
 
     void MaybeScheduleSendGenerateRequest(TGuard<NThreading::TSpinLock>& guard)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         if (PendingRequests_.empty() || GenerateInProgress_) {
             return;
@@ -101,14 +101,15 @@ private:
 
     void SendGenerateRequest(TGuard<NThreading::TSpinLock>& guard)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         YT_VERIFY(!GenerateInProgress_);
-        GenerateInProgress_ = true;
         LastRequestTime_ = GetInstant();
 
         std::vector<TRequest> requests;
         requests.swap(PendingRequests_);
+
+        GenerateInProgress_ = true;
 
         auto [traceContext, _] = BatchTrace_.StartSpan("BatchingTimestampProvider:SendGenerateRequest");
 
@@ -121,8 +122,8 @@ private:
             count += request.Count;
         }
 
-        Underlying_->GenerateTimestamps(count).Subscribe(BIND(
-            &TBatchingTimestampProvider::OnGenerateResponse,
+        Underlying_->GenerateTimestamps(count, ClockClusterTag_).Subscribe(BIND(
+            &TRequestBatcher::OnGenerateResponse,
             MakeStrong(this),
             Passed(std::move(requests))));
     }
@@ -131,7 +132,7 @@ private:
         std::vector<TRequest> requests,
         const TErrorOr<TTimestamp>& firstTimestampOrError)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         {
             auto guard = Guard(SpinLock_);
@@ -154,6 +155,64 @@ private:
             }
         }
     }
+};
+
+DECLARE_REFCOUNTED_TYPE(TRequestBatcher)
+DEFINE_REFCOUNTED_TYPE(TRequestBatcher)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TBatchingTimestampProvider
+    : public ITimestampProvider
+{
+public:
+    TBatchingTimestampProvider(
+        ITimestampProviderPtr underlying,
+        TDuration batchPeriod)
+        : Underlying_(std::move(underlying))
+        , BatchPeriod_(batchPeriod)
+        , NativeRequestBatcher_(New<TRequestBatcher>(Underlying_, BatchPeriod_, InvalidCellTag))
+    { }
+
+    TFuture<TTimestamp> GenerateTimestamps(int count, TCellTag clockClusterTag) override
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        if (clockClusterTag == InvalidCellTag) {
+            return NativeRequestBatcher_->GenerateTimestamps(count);
+        }
+
+        TRequestBatcherPtr requestBatcher;
+        {
+            auto guard = Guard(SpinLock_);
+            auto byCellBatcherIterator = ByTagRequestBatchers_.find(clockClusterTag);
+            if (byCellBatcherIterator == ByTagRequestBatchers_.end()) {
+                byCellBatcherIterator = EmplaceOrCrash(ByTagRequestBatchers_, clockClusterTag, New<TRequestBatcher>(
+                    Underlying_,
+                    BatchPeriod_,
+                    clockClusterTag));
+            }
+
+            requestBatcher = byCellBatcherIterator->second;
+        }
+
+        return requestBatcher->GenerateTimestamps(count);
+    }
+
+    TTimestamp GetLatestTimestamp(TCellTag clockClusterTag) override
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        return Underlying_->GetLatestTimestamp(clockClusterTag);
+    }
+
+private:
+    const ITimestampProviderPtr Underlying_;
+    const TDuration BatchPeriod_;
+    const TRequestBatcherPtr NativeRequestBatcher_;
+
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    THashMap<TCellTag, TRequestBatcherPtr> ByTagRequestBatchers_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

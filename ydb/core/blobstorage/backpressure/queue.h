@@ -31,16 +31,7 @@ class TBlobStorageQueue {
         }
     };
 
-    template<typename TDerived>
-    struct TSenderNode : public TRbTreeItem<TSenderNode<TDerived>, TCompare<TActorId>> {
-        const TActorId& GetKey() const {
-            return static_cast<const TDerived&>(*this).Event.GetSender();
-        }
-    };
-
-    struct TItem
-        : public TSenderNode<TItem>
-    {
+    struct TItem {
         EItemQueue Queue;
         TCostModel::TMessageCostEssence CostEssence;
         NWilson::TSpan Span;
@@ -51,7 +42,8 @@ class TBlobStorageQueue {
         const ui64 QueueCookie;
         ui64 Cost;
         bool DirtyCost;
-        THPTimer ProcessingTimer;
+        TBSQueueTimer ProcessingTimer;
+
         TTrackableList<TItem>::iterator Iterator;
 
         template<typename TEvent>
@@ -59,7 +51,7 @@ class TBlobStorageQueue {
                 const ::NMonitoring::TDynamicCounters::TCounterPtr& serItems,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr& serBytes,
                 const TBSProxyContextPtr& bspctx, ui32 interconnectChannel,
-                bool local)
+                bool local, bool useActorSystemTime)
             : Queue(EItemQueue::NotSet)
             , CostEssence(*event->Get())
             , Span(TWilson::VDiskTopLevel, std::move(event->TraceId), "Backpressure.InFlight")
@@ -70,10 +62,13 @@ class TBlobStorageQueue {
             , QueueCookie(RandomNumber<ui64>())
             , Cost(0)
             , DirtyCost(true)
+            , ProcessingTimer(useActorSystemTime)
         {
-            Span
-                .Attribute("event", TypeName<TEvent>())
-                .Attribute("local", local);
+            if (Span) {
+                Span
+                    .Attribute("event", TypeName<TEvent>())
+                    .Attribute("local", local);
+            }
         }
 
         ~TItem() {
@@ -99,10 +94,7 @@ class TBlobStorageQueue {
         {}
     };
 
-    using TSenderMap = TRbTree<TSenderNode<TItem>, TCompare<TActorId>>;
-
     TQueues Queues;
-    TSenderMap SenderToItems;
     THashMap<std::pair<ui64, ui64>, TItemList::iterator> InFlightLookup;
 
     ui64 WindowSize;
@@ -126,6 +118,8 @@ class TBlobStorageQueue {
     ui64 BytesWaiting;
 
     const ui32 InterconnectChannel;
+
+    const bool UseActorSystemTime;
 
 public:
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueWaitingItems;
@@ -154,7 +148,8 @@ public:
     TBlobStorageQueue(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, TString& logPrefix,
             const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, ui32 interconnectChannel,
             const TBlobStorageGroupType &gType,
-            NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public);
+            NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public,
+            bool useActorSystemTime = false);
 
     ~TBlobStorageQueue();
 
@@ -211,7 +206,8 @@ public:
         TItemList::iterator newIt;
         if (Queues.Unused.empty()) {
             newIt = Queues.Waiting.emplace(Queues.Waiting.end(), event, deadline,
-                QueueSerializedItems, QueueSerializedBytes, BSProxyCtx, InterconnectChannel, local);
+                QueueSerializedItems, QueueSerializedBytes, BSProxyCtx, InterconnectChannel, local,
+                UseActorSystemTime);
             ++*QueueSize;
         } else {
             newIt = Queues.Unused.begin();
@@ -220,12 +216,11 @@ public:
             TItem& item = *newIt;
             item.~TItem();
             new(&item) TItem(event, deadline, QueueSerializedItems, QueueSerializedBytes, BSProxyCtx,
-                InterconnectChannel, local);
+                InterconnectChannel, local, UseActorSystemTime);
         }
 
         newIt->Iterator = newIt;
         SetItemQueue(*newIt, EItemQueue::Waiting);
-        SenderToItems.Insert(&*newIt);
 
         // count item
         ++*QueueItemsPut;

@@ -84,6 +84,17 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     exprt.SetId(exportInfo->Id);
     exprt.SetStatus(Ydb::StatusIds::SUCCESS);
 
+    if (exportInfo->StartTime != TInstant::Zero()) {
+        *exprt.MutableStartTime() = SecondsToProtoTimeStamp(exportInfo->StartTime.Seconds());
+    }
+    if (exportInfo->EndTime != TInstant::Zero()) {
+        *exprt.MutableEndTime() = SecondsToProtoTimeStamp(exportInfo->EndTime.Seconds());
+    }
+
+    if (exportInfo->UserSID) {
+        exprt.SetUserSID(*exportInfo->UserSID);
+    }
+
     switch (exportInfo->State) {
     case TExportInfo::EState::CreateExportDir:
     case TExportInfo::EState::CopyTables:
@@ -142,7 +153,8 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::T
         NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo->Settings),
         NIceDb::TUpdate<Schema::Exports::DomainPathOwnerId>(exportInfo->DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::Exports::DomainPathId>(exportInfo->DomainPathId.LocalPathId),
-        NIceDb::TUpdate<Schema::Exports::Items>(exportInfo->Items.size())
+        NIceDb::TUpdate<Schema::Exports::Items>(exportInfo->Items.size()),
+        NIceDb::TUpdate<Schema::Exports::EnableChecksums>(exportInfo->EnableChecksums)
     );
 
     if (exportInfo->UserSID) {
@@ -158,7 +170,8 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::T
             NIceDb::TUpdate<Schema::ExportItems::SourcePathName>(item.SourcePathName),
             NIceDb::TUpdate<Schema::ExportItems::SourceOwnerPathId>(item.SourcePathId.OwnerId),
             NIceDb::TUpdate<Schema::ExportItems::SourcePathId>(item.SourcePathId.LocalPathId),
-            NIceDb::TUpdate<Schema::ExportItems::State>(static_cast<ui8>(item.State))
+            NIceDb::TUpdate<Schema::ExportItems::State>(static_cast<ui8>(item.State)),
+            NIceDb::TUpdate<Schema::ExportItems::SourcePathType>(item.SourcePathType)
         );
     }
 }
@@ -182,7 +195,9 @@ void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo::TP
     db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
         NIceDb::TUpdate<Schema::Exports::State>(static_cast<ui8>(exportInfo->State)),
         NIceDb::TUpdate<Schema::Exports::WaitTxId>(exportInfo->WaitTxId),
-        NIceDb::TUpdate<Schema::Exports::Issue>(exportInfo->Issue)
+        NIceDb::TUpdate<Schema::Exports::Issue>(exportInfo->Issue),
+        NIceDb::TUpdate<Schema::Exports::StartTime>(exportInfo->StartTime.Seconds()),
+        NIceDb::TUpdate<Schema::Exports::EndTime>(exportInfo->EndTime.Seconds())
     );
 }
 
@@ -215,6 +230,10 @@ void TSchemeShard::Handle(TEvExport::TEvForgetExportRequest::TPtr& ev, const TAc
 
 void TSchemeShard::Handle(TEvExport::TEvListExportsRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxListExports(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressExport(ev), ctx);
 }
 
 void TSchemeShard::ResumeExports(const TVector<ui64>& exportIds, const TActorContext& ctx) {

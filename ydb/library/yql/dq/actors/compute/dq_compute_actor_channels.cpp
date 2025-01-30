@@ -3,6 +3,7 @@
 #include <util/string/join.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
 
 #define LOG_D(s) \
@@ -104,7 +105,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
     TChannelDataOOB channelData;
     channelData.Proto = std::move(*record.MutableChannelData());
     if (channelData.Proto.GetData().HasPayloadId()) {
-        channelData.Payload = ev->Get()->GetPayload(channelData.Proto.GetData().GetPayloadId());
+        channelData.Payload = MakeChunkedBuffer(ev->Get()->GetPayload(channelData.Proto.GetData().GetPayloadId()));
     }
 
     ui64 channelId = channelData.Proto.GetChannelId();
@@ -174,7 +175,12 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
     YQL_ENSURE(record.GetSeqNo() <= outputChannel.LastSentSeqNo);
 
     if (record.GetFinish()) {
-        outputChannel.InFlight.clear();
+        auto it = outputChannel.InFlight.begin();
+        while (it != outputChannel.InFlight.end()) {
+            outputChannel.PeerState.RemoveInFlight(it->second.Data.PayloadSize(), it->second.Data.RowCount());
+            it = outputChannel.InFlight.erase(it);
+        }
+        outputChannel.RetryState.reset();
         outputChannel.Finished = true;
         outputChannel.EarlyFinish = true;
         Cbs->PeerFinished(record.GetChannelId());
@@ -244,8 +250,8 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr
         auto* data = retryEv->Record.MutableChannelData();
         data->CopyFrom(inFlight.second.Data.Proto);
         data->MutableData()->ClearPayloadId();
-        if (!inFlight.second.Data.Payload.IsEmpty()) {
-            data->MutableData()->SetPayloadId(retryEv->AddPayload(TRope(inFlight.second.Data.Payload)));
+        if (!inFlight.second.Data.Payload.Empty()) {
+            data->MutableData()->SetPayloadId(retryEv->AddPayload(MakeReadOnlyRope(inFlight.second.Data.Payload)));
         }
         data->SetChannelId(msg->ChannelId);
         data->SetFinished(inFlight.second.Finished);
@@ -563,8 +569,8 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
     *dataEv->Record.MutableChannelData() = channelData.Proto;
     if (channelData.Proto.HasData()) {
         dataEv->Record.MutableChannelData()->MutableData()->ClearPayloadId();
-        if (!channelData.Payload.IsEmpty()) {
-            dataEv->Record.MutableChannelData()->MutableData()->SetPayloadId(dataEv->AddPayload(TRope(channelData.Payload)));
+        if (!channelData.Payload.Empty()) {
+            dataEv->Record.MutableChannelData()->MutableData()->SetPayloadId(dataEv->AddPayload(MakeReadOnlyRope(channelData.Payload)));
         }
     }
 
@@ -644,11 +650,11 @@ bool TDqComputeActorChannels::CheckInFlight(const TString& prefix) {
     for (auto& inputChannel: InputChannelsMap) {
         if (!inputChannel.second.InFlight.empty()) {
             if (inputChannel.second.Finished) {
-                LOG_D(prefix << ", don't wait for ack delivery in channelId: "
+                LOG_D(prefix << ", don't wait for ack delivery in input channelId: "
                     << inputChannel.first << ", seqNo: " << InFlightMessagesStr(inputChannel.second.InFlight));
                 continue;
             }
-            LOG_D(prefix << ", waiting for ack delivery in channelId: "
+            LOG_D(prefix << ", waiting for ack delivery in input channelId: "
                 << inputChannel.first << ", seqNo: " << InFlightMessagesStr(inputChannel.second.InFlight));
             return false;
         }
@@ -656,7 +662,7 @@ bool TDqComputeActorChannels::CheckInFlight(const TString& prefix) {
 
     for (auto& outputChannel : OutputChannelsMap) {
         if (!outputChannel.second.InFlight.empty()) {
-            LOG_D(prefix << ", waiting for chunk delivery in channelId: "
+            LOG_D(prefix << ", waiting for chunk delivery in output channelId: "
                 << outputChannel.first << ", seqNo: " << InFlightMessagesStr(outputChannel.second.InFlight));
             return false;
         }

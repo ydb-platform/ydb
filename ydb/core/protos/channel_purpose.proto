@@ -14,5 +14,6 @@ message TChannelPurpose {
 
 message TStorageRoom {
     optional uint32 RoomId = 1;
-    repeated TChannelPurpose Explanation = 2;
+    repeated TChannelPurpose Explanation = 2 [deprecated = true];
+    repeated TChannelPurpose Channels = 3;
 }

@@ -4,6 +4,10 @@
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjectResponse::TPtr& ev) {
+    if (!ev->Get()->IsSuccess()) {
+        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "s3_error")("storage_id",
+            GCTask->GetStorageId())("message", ev->Get()->GetError().GetMessage())("exception", ev->Get()->GetError().GetExceptionName());
+    }
     TLogoBlobID logoBlobId;
     TString errorMessage;
     Y_ABORT_UNLESS(ev->Get()->Key);
@@ -13,12 +17,12 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
 }
 
 void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actor", "TGarbageCollectionActor")("event", "starting");
-    for (auto&& i : GCTask->GetDraftBlobIds()) {
-        BlobIdsToRemove.emplace(i.GetLogoBlobId());
-    }
     for (auto i = GCTask->GetBlobsToRemove().GetDirect().GetIterator(); i.IsValid(); ++i) {
         BlobIdsToRemove.emplace(i.GetBlobId().GetLogoBlobId());
+    }
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "starting")("storage_id", GCTask->GetStorageId())("drafts", GCTask->GetDraftBlobIds().size())("to_delete", BlobIdsToRemove.size());
+    for (auto&& i : GCTask->GetDraftBlobIds()) {
+        BlobIdsToRemove.emplace(i.GetLogoBlobId());
     }
     for (auto&& i : BlobIdsToRemove) {
         auto awsRequest = Aws::S3::Model::DeleteObjectRequest().WithKey(i.ToString());
@@ -34,7 +38,7 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
 void TGarbageCollectionActor::CheckFinished() {
     if (SharedRemovingFinished && BlobIdsToRemove.empty()) {
         auto g = PassAwayGuard();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actor", "TGarbageCollectionActor")("event", "finished");
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "finished");
         TActorContext::AsActorContext().Send(TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask));
     }
 }

@@ -1,105 +1,64 @@
 from __future__ import annotations
 
+import collections.abc as c
+import inspect
 import typing as t
 from weakref import ref
+from weakref import WeakMethod
 
-from blinker._saferef import BoundMethodWeakref
-
-IdentityType = t.Union[t.Tuple[int, int], str, int]
-
-
-class _symbol:
-    def __init__(self, name):
-        """Construct a new named symbol."""
-        self.__name__ = self.name = name
-
-    def __reduce__(self):
-        return symbol, (self.name,)
-
-    def __repr__(self):
-        return self.name
+T = t.TypeVar("T")
 
 
-_symbol.__name__ = "symbol"
+class Symbol:
+    """A constant symbol, nicer than ``object()``. Repeated calls return the
+    same instance.
 
-
-class symbol:
-    """A constant symbol.
-
-    >>> symbol('foo') is symbol('foo')
+    >>> Symbol('foo') is Symbol('foo')
     True
-    >>> symbol('foo')
+    >>> Symbol('foo')
     foo
-
-    A slight refinement of the MAGICCOOKIE=object() pattern.  The primary
-    advantage of symbol() is its repr().  They are also singletons.
-
-    Repeated calls of symbol('name') will all return the same instance.
-
     """
 
-    symbols = {}  # type: ignore[var-annotated]
+    symbols: t.ClassVar[dict[str, Symbol]] = {}
 
-    def __new__(cls, name):
-        try:
+    def __new__(cls, name: str) -> Symbol:
+        if name in cls.symbols:
             return cls.symbols[name]
-        except KeyError:
-            return cls.symbols.setdefault(name, _symbol(name))
 
-
-def hashable_identity(obj: object) -> IdentityType:
-    if hasattr(obj, "__func__"):
-        return (id(obj.__func__), id(obj.__self__))  # type: ignore[attr-defined]
-    elif hasattr(obj, "im_func"):
-        return (id(obj.im_func), id(obj.im_self))  # type: ignore[attr-defined]
-    elif isinstance(obj, (int, str)):
+        obj = super().__new__(cls)
+        cls.symbols[name] = obj
         return obj
-    else:
-        return id(obj)
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def __repr__(self) -> str:
+        return self.name
+
+    def __getnewargs__(self) -> tuple[t.Any, ...]:
+        return (self.name,)
 
 
-WeakTypes = (ref, BoundMethodWeakref)
+def make_id(obj: object) -> c.Hashable:
+    """Get a stable identifier for a receiver or sender, to be used as a dict
+    key or in a set.
+    """
+    if inspect.ismethod(obj):
+        # The id of a bound method is not stable, but the id of the unbound
+        # function and instance are.
+        return id(obj.__func__), id(obj.__self__)
+
+    if isinstance(obj, (str, int)):
+        # Instances with the same value always compare equal and have the same
+        # hash, even if the id may change.
+        return obj
+
+    # Assume other types are not hashable but will always be the same instance.
+    return id(obj)
 
 
-class annotatable_weakref(ref):
-    """A weakref.ref that supports custom instance attributes."""
+def make_ref(obj: T, callback: c.Callable[[ref[T]], None] | None = None) -> ref[T]:
+    if inspect.ismethod(obj):
+        return WeakMethod(obj, callback)  # type: ignore[arg-type, return-value]
 
-    receiver_id: t.Optional[IdentityType]
-    sender_id: t.Optional[IdentityType]
-
-
-def reference(  # type: ignore[no-untyped-def]
-    object, callback=None, **annotations
-) -> annotatable_weakref:
-    """Return an annotated weak ref."""
-    if callable(object):
-        weak = callable_reference(object, callback)
-    else:
-        weak = annotatable_weakref(object, callback)
-    for key, value in annotations.items():
-        setattr(weak, key, value)
-    return weak  # type: ignore[no-any-return]
-
-
-def callable_reference(object, callback=None):
-    """Return an annotated weak ref, supporting bound instance methods."""
-    if hasattr(object, "im_self") and object.im_self is not None:
-        return BoundMethodWeakref(target=object, on_delete=callback)
-    elif hasattr(object, "__self__") and object.__self__ is not None:
-        return BoundMethodWeakref(target=object, on_delete=callback)
-    return annotatable_weakref(object, callback)
-
-
-class lazy_property:
-    """A @property that is only evaluated once."""
-
-    def __init__(self, deferred):
-        self._deferred = deferred
-        self.__doc__ = deferred.__doc__
-
-    def __get__(self, obj, cls):
-        if obj is None:
-            return self
-        value = self._deferred(obj)
-        setattr(obj, self._deferred.__name__, value)
-        return value
+    return ref(obj, callback)

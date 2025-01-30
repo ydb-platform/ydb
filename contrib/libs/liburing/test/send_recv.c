@@ -24,7 +24,7 @@ static char str[] = "This is a test of send and recv over io_uring!";
 #define HOST	"127.0.0.1"
 
 static int recv_prep(struct io_uring *ring, struct iovec *iov, int *sock,
-		     int registerfiles)
+		     int registerfiles, int async, int provide)
 {
 	struct sockaddr_in saddr;
 	struct io_uring_sqe *sqe;
@@ -65,6 +65,10 @@ static int recv_prep(struct io_uring *ring, struct iovec *iov, int *sock,
 	io_uring_prep_recv(sqe, use_fd, iov->iov_base, iov->iov_len, 0);
 	if (registerfiles)
 		sqe->flags |= IOSQE_FIXED_FILE;
+	if (async)
+		sqe->flags |= IOSQE_ASYNC;
+	if (provide)
+		sqe->flags |= IOSQE_BUFFER_SELECT;
 	sqe->user_data = 2;
 
 	ret = io_uring_submit(ring);
@@ -80,7 +84,7 @@ err:
 	return 1;
 }
 
-static int do_recv(struct io_uring *ring, struct iovec *iov)
+static int do_recv(struct io_uring *ring, struct iovec *iov, int enobufs)
 {
 	struct io_uring_cqe *cqe;
 	int ret;
@@ -88,11 +92,18 @@ static int do_recv(struct io_uring *ring, struct iovec *iov)
 	ret = io_uring_wait_cqe(ring, &cqe);
 	if (ret) {
 		fprintf(stdout, "wait_cqe: %d\n", ret);
-		goto err;
+		return 1;
 	}
 	if (cqe->res == -EINVAL) {
 		fprintf(stdout, "recv not supported, skipping\n");
-		return 0;
+		goto out;
+	}
+	if (cqe->res == -ENOBUFS && enobufs) {
+		if (cqe->flags & IORING_CQE_F_SOCK_NONEMPTY) {
+			fprintf(stdout, "NONEMPTY set on -ENOBUFS\n");
+			goto err;
+		}
+		goto out;
 	}
 	if (cqe->res < 0) {
 		fprintf(stderr, "failed cqe: %d\n", cqe->res);
@@ -110,8 +121,11 @@ static int do_recv(struct io_uring *ring, struct iovec *iov)
 		goto err;
 	}
 
+out:
+	io_uring_cqe_seen(ring, cqe);
 	return 0;
 err:
+	io_uring_cqe_seen(ring, cqe);
 	return 1;
 }
 
@@ -119,6 +133,8 @@ struct recv_data {
 	pthread_mutex_t mutex;
 	int use_sqthread;
 	int registerfiles;
+	int async;
+	int provide;
 };
 
 static void *recv_fn(void *data)
@@ -153,13 +169,14 @@ static void *recv_fn(void *data)
 		}
 	}
 
-	ret = recv_prep(&ring, &iov, &sock, rd->registerfiles);
+	ret = recv_prep(&ring, &iov, &sock, rd->registerfiles, rd->async,
+				rd->provide);
 	if (ret) {
 		fprintf(stderr, "recv_prep failed: %d\n", ret);
 		goto err;
 	}
 	pthread_mutex_unlock(&rd->mutex);
-	ret = do_recv(&ring, &iov);
+	ret = do_recv(&ring, &iov, rd->provide);
 
 	close(sock);
 	io_uring_queue_exit(&ring);
@@ -233,7 +250,7 @@ err2:
 	return 1;
 }
 
-static int test(int use_sqthread, int regfiles)
+static int test(int use_sqthread, int regfiles, int async, int provide)
 {
 	pthread_mutexattr_t attr;
 	pthread_t recv_thread;
@@ -247,6 +264,8 @@ static int test(int use_sqthread, int regfiles)
 	pthread_mutex_lock(&rd.mutex);
 	rd.use_sqthread = use_sqthread;
 	rd.registerfiles = regfiles;
+	rd.async = async;
+	rd.provide = provide;
 
 	ret = pthread_create(&recv_thread, NULL, recv_fn, &rd);
 	if (ret) {
@@ -269,9 +288,12 @@ static int test_invalid(void)
 	struct io_uring_cqe *cqe;
 	struct io_uring_sqe *sqe;
 
-	ret = t_create_ring(8, &ring, 0);
-	if (ret)
+	ret = t_create_ring(8, &ring, IORING_SETUP_SUBMIT_ALL);
+	if (ret) {
+		if (ret == -EINVAL)
+			return 0;
 		return ret;
+	}
 
 	ret = t_create_socket_pair(fds, true);
 	if (ret)
@@ -315,21 +337,75 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
-	ret = test(0, 0);
+	ret = test(0, 0, 1, 1);
 	if (ret) {
-		fprintf(stderr, "test sqthread=0 failed\n");
+		fprintf(stderr, "test sqthread=0 1 1 failed\n");
 		return ret;
 	}
 
-	ret = test(1, 1);
+	ret = test(1, 1, 1, 1);
 	if (ret) {
-		fprintf(stderr, "test sqthread=1 reg=1 failed\n");
+		fprintf(stderr, "test sqthread=1 reg=1 1 1 failed\n");
 		return ret;
 	}
 
-	ret = test(1, 0);
+	ret = test(1, 0, 1, 1);
 	if (ret) {
-		fprintf(stderr, "test sqthread=1 reg=0 failed\n");
+		fprintf(stderr, "test sqthread=1 reg=0 1 1 failed\n");
+		return ret;
+	}
+
+	ret = test(0, 0, 0, 1);
+	if (ret) {
+		fprintf(stderr, "test sqthread=0 0 1 failed\n");
+		return ret;
+	}
+
+	ret = test(1, 1, 0, 1);
+	if (ret) {
+		fprintf(stderr, "test sqthread=1 reg=1 0 1 failed\n");
+		return ret;
+	}
+
+	ret = test(1, 0, 0, 1);
+	if (ret) {
+		fprintf(stderr, "test sqthread=1 reg=0 0 1 failed\n");
+		return ret;
+	}
+
+	ret = test(0, 0, 1, 0);
+	if (ret) {
+		fprintf(stderr, "test sqthread=0 0 1 failed\n");
+		return ret;
+	}
+
+	ret = test(1, 1, 1, 0);
+	if (ret) {
+		fprintf(stderr, "test sqthread=1 reg=1 1 0 failed\n");
+		return ret;
+	}
+
+	ret = test(1, 0, 1, 0);
+	if (ret) {
+		fprintf(stderr, "test sqthread=1 reg=0 1 0 failed\n");
+		return ret;
+	}
+
+	ret = test(0, 0, 0, 0);
+	if (ret) {
+		fprintf(stderr, "test sqthread=0 0 0 failed\n");
+		return ret;
+	}
+
+	ret = test(1, 1, 0, 0);
+	if (ret) {
+		fprintf(stderr, "test sqthread=1 reg=1 0 0 failed\n");
+		return ret;
+	}
+
+	ret = test(1, 0, 0, 0);
+	if (ret) {
+		fprintf(stderr, "test sqthread=1 reg=0 0 0 failed\n");
 		return ret;
 	}
 

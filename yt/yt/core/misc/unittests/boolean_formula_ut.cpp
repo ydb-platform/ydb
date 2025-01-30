@@ -12,8 +12,9 @@ class TBooleanFormulaTest
     : public ::testing::Test
     , public ::testing::WithParamInterface<std::tuple<
         const char*,
-        std::vector<TString>,
-        bool>>
+        std::vector<std::string>,
+        bool
+    >>
 { };
 
 TEST_P(TBooleanFormulaTest, Test)
@@ -35,31 +36,31 @@ INSTANTIATE_TEST_SUITE_P(
     TBooleanFormulaTest,
     TBooleanFormulaTest,
     ::testing::Values(
-        std::tuple("", std::vector<TString>{}, true),
-        std::tuple("", std::vector<TString>{"b"}, true),
-        std::tuple("a", std::vector<TString>{"b"}, false),
-        std::tuple("!a", std::vector<TString>{"b"}, true),
-        std::tuple("b", std::vector<TString>{"b"}, true),
-        std::tuple("a|b", std::vector<TString>{"b"}, true),
-        std::tuple("a & b", std::vector<TString>{"b"}, false),
-        std::tuple("(b)", std::vector<TString>{"b"}, true),
-        std::tuple("a|(a|b)", std::vector<TString>{"b"}, true),
-        std::tuple("(a|b)&(!a&b)", std::vector<TString>{"b"}, true),
-        std::tuple("a&b", std::vector<TString>{"a", "b"}, true),
-        std::tuple("(a|c)&(b|c)", std::vector<TString>{"a", "b"}, true),
-        std::tuple("(a|b)&c", std::vector<TString>{"a", "b"}, false),
-        std::tuple("a|b|c", std::vector<TString>{"b"}, true),
-        std::tuple("!a & b & !c", std::vector<TString>{"b"}, true),
-        std::tuple("var-1 | !var/2", std::vector<TString>{"var-1"}, true),
-        std::tuple("var-1 | !var/2", std::vector<TString>{"var/2"}, false),
-        std::tuple("var-1 | !var/2", std::vector<TString>{}, true),
-        std::tuple("!in-", std::vector<TString>{}, true),
-        std::tuple("in/|x", std::vector<TString>{"in/"}, true),
-        std::tuple("%true", std::vector<TString>{""}, true),
-        std::tuple("%false", std::vector<TString>{"false"}, false),
-        std::tuple("%true|%false", std::vector<TString>{""}, true),
-        std::tuple("a.b.c-d.e:1234", std::vector<TString>{"a.b.c-d.e:1234"}, true),
-        std::tuple("!a.b.c-d.e:1234", std::vector<TString>{"a.b.c-d.e:1234"}, false)
+        std::tuple("", std::vector<std::string>{}, true),
+        std::tuple("", std::vector<std::string>{"b"}, true),
+        std::tuple("a", std::vector<std::string>{"b"}, false),
+        std::tuple("!a", std::vector<std::string>{"b"}, true),
+        std::tuple("b", std::vector<std::string>{"b"}, true),
+        std::tuple("a|b", std::vector<std::string>{"b"}, true),
+        std::tuple("a & b", std::vector<std::string>{"b"}, false),
+        std::tuple("(b)", std::vector<std::string>{"b"}, true),
+        std::tuple("a|(a|b)", std::vector<std::string>{"b"}, true),
+        std::tuple("(a|b)&(!a&b)", std::vector<std::string>{"b"}, true),
+        std::tuple("a&b", std::vector<std::string>{"a", "b"}, true),
+        std::tuple("(a|c)&(b|c)", std::vector<std::string>{"a", "b"}, true),
+        std::tuple("(a|b)&c", std::vector<std::string>{"a", "b"}, false),
+        std::tuple("a|b|c", std::vector<std::string>{"b"}, true),
+        std::tuple("!a & b & !c", std::vector<std::string>{"b"}, true),
+        std::tuple("var-1 | !var/2", std::vector<std::string>{"var-1"}, true),
+        std::tuple("var-1 | !var/2", std::vector<std::string>{"var/2"}, false),
+        std::tuple("var-1 | !var/2", std::vector<std::string>{}, true),
+        std::tuple("!in-", std::vector<std::string>{}, true),
+        std::tuple("in/|x", std::vector<std::string>{"in/"}, true),
+        std::tuple("%true", std::vector<std::string>{""}, true),
+        std::tuple("%false", std::vector<std::string>{"false"}, false),
+        std::tuple("%true|%false", std::vector<std::string>{""}, true),
+        std::tuple("a.b.c-d.e:1234", std::vector<std::string>{"a.b.c-d.e:1234"}, true),
+        std::tuple("!a.b.c-d.e:1234", std::vector<std::string>{"a.b.c-d.e:1234"}, false)
 ));
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -165,7 +166,7 @@ TEST(TBooleanFormulaTest, ExternalOperators)
     auto aOrB = formulaA | formulaB;
     auto notA = !formulaA;
 
-    for (auto vars : std::vector<std::vector<TString>>{{}, {"a"}, {"b"}, {"a", "b"}}) {
+    for (auto vars : std::vector<std::vector<std::string>>{{}, {"a"}, {"b"}, {"a", "b"}}) {
         bool resA = formulaA.IsSatisfiedBy(vars);
         bool resB = formulaB.IsSatisfiedBy(vars);
 
@@ -175,25 +176,25 @@ TEST(TBooleanFormulaTest, ExternalOperators)
     }
 
     EXPECT_FALSE((!MakeBooleanFormula("a | b"))
-        .IsSatisfiedBy(std::vector<TString>{"b"}));
+        .IsSatisfiedBy(std::vector<std::string>{"b"}));
 
     EXPECT_EQ((formulaA & formulaB).GetFormula(), "(a) & (b)");
     EXPECT_EQ((formulaA | formulaB).GetFormula(), "(a) | (b)");
     EXPECT_EQ((!formulaA).GetFormula(), "!(a)");
 
     auto empty = MakeBooleanFormula("");
-    EXPECT_TRUE(empty.IsSatisfiedBy(THashSet<TString>{}));
-    EXPECT_FALSE((!empty).IsSatisfiedBy(THashSet<TString>{}));
-    EXPECT_TRUE((empty | !empty).IsSatisfiedBy(THashSet<TString>{}));
+    EXPECT_TRUE(empty.IsSatisfiedBy(THashSet<std::string>{}));
+    EXPECT_FALSE((!empty).IsSatisfiedBy(THashSet<std::string>{}));
+    EXPECT_TRUE((empty | !empty).IsSatisfiedBy(THashSet<std::string>{}));
 
-    EXPECT_TRUE((empty | formulaA).IsSatisfiedBy(THashSet<TString>{}));
-    EXPECT_TRUE((empty | formulaA).IsSatisfiedBy(THashSet<TString>{"a"}));
-    EXPECT_TRUE((formulaA | empty).IsSatisfiedBy(THashSet<TString>{}));
-    EXPECT_TRUE((formulaA | empty).IsSatisfiedBy(THashSet<TString>{"a"}));
-    EXPECT_FALSE((empty & formulaA).IsSatisfiedBy(THashSet<TString>{}));
-    EXPECT_TRUE((empty & formulaA).IsSatisfiedBy(THashSet<TString>{"a"}));
-    EXPECT_FALSE((formulaA & empty).IsSatisfiedBy(THashSet<TString>{}));
-    EXPECT_TRUE((formulaA & empty).IsSatisfiedBy(THashSet<TString>{"a"}));
+    EXPECT_TRUE((empty | formulaA).IsSatisfiedBy(THashSet<std::string>{}));
+    EXPECT_TRUE((empty | formulaA).IsSatisfiedBy(THashSet<std::string>{"a"}));
+    EXPECT_TRUE((formulaA | empty).IsSatisfiedBy(THashSet<std::string>{}));
+    EXPECT_TRUE((formulaA | empty).IsSatisfiedBy(THashSet<std::string>{"a"}));
+    EXPECT_FALSE((empty & formulaA).IsSatisfiedBy(THashSet<std::string>{}));
+    EXPECT_TRUE((empty & formulaA).IsSatisfiedBy(THashSet<std::string>{"a"}));
+    EXPECT_FALSE((formulaA & empty).IsSatisfiedBy(THashSet<std::string>{}));
+    EXPECT_TRUE((formulaA & empty).IsSatisfiedBy(THashSet<std::string>{"a"}));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

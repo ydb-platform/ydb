@@ -2,13 +2,14 @@
 
 PY3_LIBRARY()
 
-VERSION(3.7.1)
+VERSION(4.8.0)
 
 LICENSE(MIT)
 
 PEERDIR(
     contrib/python/idna
     contrib/python/sniffio
+    contrib/python/typing-extensions
 )
 
 NO_LINT()
@@ -25,7 +26,7 @@ PY_SRCS(
     anyio/_backends/_asyncio.py
     anyio/_backends/_trio.py
     anyio/_core/__init__.py
-    anyio/_core/_compat.py
+    anyio/_core/_asyncio_selector_thread.py
     anyio/_core/_eventloop.py
     anyio/_core/_exceptions.py
     anyio/_core/_fileio.py
@@ -39,6 +40,7 @@ PY_SRCS(
     anyio/_core/_testing.py
     anyio/_core/_typedattr.py
     anyio/abc/__init__.py
+    anyio/abc/_eventloop.py
     anyio/abc/_resources.py
     anyio/abc/_sockets.py
     anyio/abc/_streams.py
@@ -55,6 +57,7 @@ PY_SRCS(
     anyio/streams/stapled.py
     anyio/streams/text.py
     anyio/streams/tls.py
+    anyio/to_interpreter.py
     anyio/to_process.py
     anyio/to_thread.py
 )

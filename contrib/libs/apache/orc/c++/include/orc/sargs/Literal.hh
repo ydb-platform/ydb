@@ -27,21 +27,19 @@ namespace orc {
   /**
    * Possible data types for predicates
    */
-  enum class PredicateDataType {
-    LONG = 0, FLOAT, STRING, DATE, DECIMAL, TIMESTAMP, BOOLEAN
-  };
+  enum class PredicateDataType { LONG = 0, FLOAT, STRING, DATE, DECIMAL, TIMESTAMP, BOOLEAN };
 
   /**
    * Represents a literal value in a predicate
    */
   class Literal {
-  public:
+   public:
     struct Timestamp {
       Timestamp() = default;
       Timestamp(const Timestamp&) = default;
       Timestamp(Timestamp&&) = default;
       ~Timestamp() = default;
-      Timestamp(int64_t second_, int32_t nanos_): second(second_), nanos(nanos_) {
+      Timestamp(int64_t second, int32_t nanos) : second(second), nanos(nanos) {
         // PASS
       }
       Timestamp& operator=(const Timestamp&) = default;
@@ -55,15 +53,23 @@ namespace orc {
       bool operator<=(const Timestamp& r) const {
         return second < r.second || (second == r.second && nanos <= r.nanos);
       }
-      bool operator!=(const Timestamp& r) const { return !(*this == r); }
-      bool operator>(const Timestamp& r) const { return r < *this; }
-      bool operator>=(const Timestamp& r) const { return r <= *this; }
-      int64_t getMillis() const { return second * 1000 + nanos / 1000000; }
+      bool operator!=(const Timestamp& r) const {
+        return !(*this == r);
+      }
+      bool operator>(const Timestamp& r) const {
+        return r < *this;
+      }
+      bool operator>=(const Timestamp& r) const {
+        return r <= *this;
+      }
+      int64_t getMillis() const {
+        return second * 1000 + nanos / 1000000;
+      }
       int64_t second;
       int32_t nanos;
     };
 
-    Literal(const Literal &r);
+    Literal(const Literal& r);
     ~Literal();
     Literal& operator=(const Literal& r);
     bool operator==(const Literal& r) const;
@@ -102,7 +108,7 @@ namespace orc {
     /**
      * Create a literal of STRING type
      */
-    Literal(const char * str, size_t size);
+    Literal(const char* str, size_t size);
 
     /**
      * Create a literal of DECIMAL type
@@ -123,38 +129,44 @@ namespace orc {
     /**
      * Check if a literal is null
      */
-    bool isNull() const { return mIsNull; }
+    bool isNull() const {
+      return isNull_;
+    }
 
-    PredicateDataType getType() const { return mType; }
+    PredicateDataType getType() const {
+      return type_;
+    }
     std::string toString() const;
-    size_t getHashCode() const { return mHashCode; }
+    size_t getHashCode() const {
+      return hashCode_;
+    }
 
-  private:
+   private:
     size_t hashCode() const;
 
     union LiteralVal {
       int64_t IntVal;
       double DoubleVal;
       int64_t DateVal;
-      char * Buffer;
+      char* Buffer;
       Timestamp TimeStampVal;
       Int128 DecimalVal;
       bool BooleanVal;
 
       // explicitly define default constructor
-      LiteralVal(): DecimalVal(0) {}
+      LiteralVal() : DecimalVal(0) {}
     };
 
-  private:
-    LiteralVal mValue;       // data value for this literal if not null
-    PredicateDataType mType; // data type of the literal
-    size_t mSize;            // size of mValue if it is Buffer
-    int32_t mPrecision;      // precision of decimal type
-    int32_t mScale;          // scale of decimal type
-    bool mIsNull;            // whether this literal is null
-    size_t mHashCode;        // precomputed hash code for the literal
+   private:
+    LiteralVal value_;        // data value for this literal if not null
+    PredicateDataType type_;  // data type of the literal
+    size_t size_;             // size of mValue if it is Buffer
+    int32_t precision_;       // precision of decimal type
+    int32_t scale_;           // scale of decimal type
+    bool isNull_;             // whether this literal is null
+    size_t hashCode_;         // precomputed hash code for the literal
   };
 
-} // namespace orc
+}  // namespace orc
 
-#endif //ORC_LITERAL_HH
+#endif  // ORC_LITERAL_HH

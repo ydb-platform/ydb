@@ -105,11 +105,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     const auto tagToPos = MakeTagToPos(tagsToSelect, [](const auto tag) { return tag; });
     const auto updatedTagToPos = MakeTagToPos(updates, [](const TUpdateOp& op) { return op.Tag; });
 
-    for (const auto& [pathId, index] : userTable->Indexes) {
-        if (index.Type != TUserTable::TTableIndex::EIndexType::EIndexTypeGlobalAsync) {
-            continue;
-        }
-
+    userTable->ForEachAsyncIndex([&](const auto& pathId, const TUserTable::TTableIndex& index) {
         if (generateDeletions) {
             bool needDeletion = rop == ERowOp::Erase || rop == ERowOp::Reset;
 
@@ -191,7 +187,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
 
             Clear();
         }
-    }
+    });
 
     return true;
 }
@@ -202,14 +198,10 @@ auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
 
     TCachedTagsBuilder builder;
 
-    for (const auto& [_, index] : userTable->Indexes) {
-        if (index.Type != TUserTable::TTableIndex::EIndexType::EIndexTypeGlobalAsync) {
-            continue;
-        }
-
+    userTable->ForEachAsyncIndex([&](const auto&, const TUserTable::TTableIndex& index) {
         builder.AddIndexTags(index.KeyColumnIds);
         builder.AddDataTags(index.DataColumnIds);
-    }
+    });
 
     return CachedTags.emplace(tableId, builder.Build()).first;
 }
@@ -240,11 +232,11 @@ void TAsyncIndexChangeCollector::AddRawValue(TVector<TUpdateOp>& out, TTag tag, 
     AddValue(out, TUpdateOp(tag, ECellOp::Set, value));
 }
 
-void TAsyncIndexChangeCollector::AddCellValue(TVector<TUpdateOp>& out, TTag tag, const TCell& cell, NScheme::TTypeInfo type) {
-    AddRawValue(out, tag, TRawTypeValue(cell.AsRef(), type));
+void TAsyncIndexChangeCollector::AddCellValue(TVector<TUpdateOp>& out, TTag tag, const TCell& cell, const NScheme::TTypeInfo& type) {
+    AddRawValue(out, tag, TRawTypeValue(cell.AsRef(), type.GetTypeId()));
 }
 
-void TAsyncIndexChangeCollector::AddNullValue(TVector<TUpdateOp>& out, TTag tag, NScheme::TTypeInfo type) {
+void TAsyncIndexChangeCollector::AddNullValue(TVector<TUpdateOp>& out, TTag tag, const NScheme::TTypeInfo& type) {
     AddCellValue(out, tag, {}, type);
 }
 

@@ -50,26 +50,7 @@ EExecutionStatus TMakeScanSnapshotUnit::Execute(TOperation::TPtr op,
         return EExecutionStatus::Executed;
     }
 
-    if (op->HasUsingSnapshotFlag() || DataShard.IsMvccEnabled()) {
-        // Already set for ReadTable from persistent snapshots
-        return EExecutionStatus::Executed;
-    }
-
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
-
-    const auto& record = tx->GetDataTx()->GetReadTableTransaction();
-
-    auto tid = record.GetTableId().GetTableId();
-    auto &info = *DataShard.GetUserTables().at(tid);
-
-    if (record.HasSnapshotStep() && record.HasSnapshotTxId()) {
-        Y_ABORT("Unexpected MakeScanSnapshot on ReadTable from a persistent snapshot");
-    }
-
-    tx->SetScanSnapshotId(DataShard.MakeScanSnapshot(info.LocalTid));
-    Pipeline.MarkOpAsUsingSnapshot(op);
-
+    // Already set for ReadTable from persistent snapshots
     return EExecutionStatus::Executed;
 }
 

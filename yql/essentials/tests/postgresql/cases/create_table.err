@@ -1,0 +1,2898 @@
+<sql-statement>
+--
+-- CREATE_TABLE
+--
+--
+-- CLASS DEFINITIONS
+--
+CREATE TABLE hobbies_r (
+	name		text,
+	person 		text
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE equipment_r (
+	name 		text,
+	hobby		text
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE onek (
+	unique1		int4,
+	unique2		int4,
+	two			int4,
+	four		int4,
+	ten			int4,
+	twenty		int4,
+	hundred		int4,
+	thousand	int4,
+	twothousand	int4,
+	fivethous	int4,
+	tenthous	int4,
+	odd			int4,
+	even		int4,
+	stringu1	name,
+	stringu2	name,
+	string4		name
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE tenk1 (
+	unique1		int4,
+	unique2		int4,
+	two			int4,
+	four		int4,
+	ten			int4,
+	twenty		int4,
+	hundred		int4,
+	thousand	int4,
+	twothousand	int4,
+	fivethous	int4,
+	tenthous	int4,
+	odd			int4,
+	even		int4,
+	stringu1	name,
+	stringu2	name,
+	string4		name
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE tenk2 (
+	unique1 	int4,
+	unique2 	int4,
+	two 	 	int4,
+	four 		int4,
+	ten			int4,
+	twenty 		int4,
+	hundred 	int4,
+	thousand 	int4,
+	twothousand int4,
+	fivethous 	int4,
+	tenthous	int4,
+	odd			int4,
+	even		int4,
+	stringu1	name,
+	stringu2	name,
+	string4		name
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE person (
+	name 		text,
+	age			int4,
+	location 	point
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE emp (
+	salary 		int4,
+	manager 	name
+) INHERITS (person);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE emp (
+	^
+<sql-statement>
+CREATE TABLE student (
+	gpa 		float8
+) INHERITS (person);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE student (
+	^
+<sql-statement>
+CREATE TABLE stud_emp (
+	percent 	int4
+) INHERITS (emp, student);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE stud_emp (
+	^
+<sql-statement>
+CREATE TABLE city (
+	name		name,
+	location 	box,
+	budget 		city_budget
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE dept (
+	dname		name,
+	mgrname 	text
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE slow_emp4000 (
+	home_base	 box
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE fast_emp4000 (
+	home_base	 box
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE road (
+	name		text,
+	thepath 	path
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE ihighway () INHERITS (road);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE ihighway () INHERITS (road);
+	^
+<sql-statement>
+CREATE TABLE shighway (
+	surface		text
+) INHERITS (road);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE shighway (
+	^
+<sql-statement>
+CREATE TABLE real_city (
+	pop			int4,
+	cname		text,
+	outline 	path
+);
+</sql-statement>
+<sql-statement>
+--
+-- test the "star" operators a bit more thoroughly -- this time,
+-- throw in lots of NULL fields...
+--
+-- a is the type root
+-- b and c inherit from a (one-level single inheritance)
+-- d inherits from b and c (two-level multiple inheritance)
+-- e inherits from c (two-level single inheritance)
+-- f inherits from e (three-level single inheritance)
+--
+CREATE TABLE a_star (
+	class		char,
+	a 			int4
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE b_star (
+	b 			text
+) INHERITS (a_star);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE b_star (
+	^
+<sql-statement>
+CREATE TABLE c_star (
+	c 			name
+) INHERITS (a_star);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE c_star (
+	^
+<sql-statement>
+CREATE TABLE d_star (
+	d 			float8
+) INHERITS (b_star, c_star);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE d_star (
+	^
+<sql-statement>
+CREATE TABLE e_star (
+	e 			int2
+) INHERITS (c_star);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE e_star (
+	^
+<sql-statement>
+CREATE TABLE f_star (
+	f 			polygon
+) INHERITS (e_star);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE f_star (
+	^
+<sql-statement>
+CREATE TABLE aggtest (
+	a 			int2,
+	b			float4
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE hash_i4_heap (
+	seqno 		int4,
+	random 		int4
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE hash_name_heap (
+	seqno 		int4,
+	random 		name
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE hash_txt_heap (
+	seqno 		int4,
+	random 		text
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE hash_f8_heap (
+	seqno		int4,
+	random 		float8
+);
+</sql-statement>
+<sql-statement>
+-- don't include the hash_ovfl_heap stuff in the distribution
+-- the data set is too large for what it's worth
+--
+-- CREATE TABLE hash_ovfl_heap (
+--	x			int4,
+--	y			int4
+-- );
+CREATE TABLE bt_i4_heap (
+	seqno 		int4,
+	random 		int4
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE bt_name_heap (
+	seqno 		name,
+	random 		int4
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE bt_txt_heap (
+	seqno 		text,
+	random 		int4
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE bt_f8_heap (
+	seqno 		float8,
+	random 		int4
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE array_op_test (
+	seqno		int4,
+	i			int4[],
+	t			text[]
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE array_index_op_test (
+	seqno		int4,
+	i			int4[],
+	t			text[]
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE testjsonb (
+       j jsonb
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE unknowntab (
+	u unknown    -- fail
+);
+</sql-statement>
+<sql-statement>
+CREATE TYPE unknown_comptype AS (
+	u unknown    -- fail
+);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 314
+    	CREATE TYPE unknown_comptype AS (
+	^
+<sql-statement>
+CREATE TABLE IF NOT EXISTS test_tsvector(
+	t text,
+	a tsvector
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE IF NOT EXISTS test_tsvector(
+	t text
+);
+</sql-statement>
+<sql-statement>
+-- invalid: non-lowercase quoted reloptions identifiers
+CREATE TABLE tas_case WITH ("Fillfactor" = 10) AS SELECT 1 a;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	-- invalid: non-lowercase quoted reloptions identifiers
+	^
+<sql-statement>
+CREATE TEMP TABLE explicitly_temp (a int primary key);			-- also OK
+</sql-statement>
+<sql-statement>
+CREATE TABLE as_select1 AS SELECT * FROM pg_class WHERE relkind = 'r';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE as_select1 AS SELECT * FROM pg_class WHERE relkind = 'r';
+	^
+<sql-statement>
+CREATE TABLE as_select1 AS SELECT * FROM pg_class WHERE relkind = 'r';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE as_select1 AS SELECT * FROM pg_class WHERE relkind = 'r';
+	^
+<sql-statement>
+CREATE TABLE IF NOT EXISTS as_select1 AS SELECT * FROM pg_class WHERE relkind = 'r';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE IF NOT EXISTS as_select1 AS SELECT * FROM pg_class WHERE relkind = 'r';
+	^
+<sql-statement>
+DROP TABLE as_select1;
+</sql-statement>
+<sql-statement>
+PREPARE select1 AS SELECT 1 as a;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 301
+    	PREPARE select1 AS SELECT 1 as a;
+	^
+<sql-statement>
+CREATE TABLE as_select1 AS EXECUTE select1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE as_select1 AS EXECUTE select1;
+	^
+<sql-statement>
+CREATE TABLE as_select1 AS EXECUTE select1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE as_select1 AS EXECUTE select1;
+	^
+<sql-statement>
+SELECT * FROM as_select1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.as_select1
+    
+<sql-statement>
+CREATE TABLE IF NOT EXISTS as_select1 AS EXECUTE select1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE IF NOT EXISTS as_select1 AS EXECUTE select1;
+	^
+<sql-statement>
+DROP TABLE as_select1;
+</sql-statement>
+<sql-statement>
+DEALLOCATE select1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 303
+    	DEALLOCATE select1;
+	^
+<sql-statement>
+-- create an extra wide table to test for issues related to that
+-- (temporarily hide query, to avoid the long CREATE TABLE stmt)
+\set ECHO none
+</sql-statement>
+Metacommand \set ECHO none is not supported
+<sql-statement>
+SELECT 'CREATE TABLE extra_wide_table(firstc text, '|| array_to_string(array_agg('c'||i||' bool'),',')||', lastc text);'
+FROM generate_series(1, 1100) g(i)
+\gexec
+</sql-statement>
+Metacommand \gexec is not supported
+<sql-statement>
+\set ECHO all
+</sql-statement>
+Metacommand \set ECHO all is not supported
+<sql-statement>
+INSERT INTO extra_wide_table(firstc, lastc) VALUES('first col', 'last col');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.extra_wide_table
+    
+<sql-statement>
+SELECT firstc, lastc FROM extra_wide_table;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.extra_wide_table
+    
+<sql-statement>
+-- check that tables with oids cannot be created anymore
+CREATE TABLE withoid() WITH OIDS;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:29: Error: ERROR:  syntax error at or near "OIDS"
+
+    	CREATE TABLE withoid() WITH OIDS;
+	                            ^
+<sql-statement>
+CREATE TABLE withoid() WITH (oids);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table options not supported
+    	CREATE TABLE withoid() WITH (oids);
+	^
+<sql-statement>
+CREATE TABLE withoid() WITH (oids = true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table options not supported
+    	CREATE TABLE withoid() WITH (oids = true);
+	^
+<sql-statement>
+-- but explicitly not adding oids is still supported
+CREATE TEMP TABLE withoutoid() WITHOUT OIDS;
+</sql-statement>
+<sql-statement>
+DROP TABLE withoutoid;
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE withoutoid() WITH (oids = false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table options not supported
+    	CREATE TEMP TABLE withoutoid() WITH (oids = false);
+	^
+<sql-statement>
+DROP TABLE withoutoid;
+</sql-statement>
+<sql-statement>
+-- check restriction with default expressions
+-- invalid use of column reference in default expressions
+CREATE TABLE default_expr_column (id int DEFAULT (id));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:51: Error: Columns are not allowed in: DEFAULT
+    	CREATE TABLE default_expr_column (id int DEFAULT (id));
+	                                                  ^
+<sql-statement>
+CREATE TABLE default_expr_column (id int DEFAULT (bar.id));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:51: Error: Columns are not allowed in: DEFAULT
+    	CREATE TABLE default_expr_column (id int DEFAULT (bar.id));
+	                                                  ^
+<sql-statement>
+CREATE TABLE default_expr_agg_column (id int DEFAULT (avg(id)));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:55: Error: Aggregate functions are not allowed in: DEFAULT
+    	CREATE TABLE default_expr_agg_column (id int DEFAULT (avg(id)));
+	                                                      ^
+<sql-statement>
+-- invalid column definition
+CREATE TABLE default_expr_non_column (a int DEFAULT (avg(non_existent)));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:54: Error: Aggregate functions are not allowed in: DEFAULT
+    	CREATE TABLE default_expr_non_column (a int DEFAULT (avg(non_existent)));
+	                                                     ^
+<sql-statement>
+-- invalid use of aggregate
+CREATE TABLE default_expr_agg (a int DEFAULT (avg(1)));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:47: Error: Aggregate functions are not allowed in: DEFAULT
+    	CREATE TABLE default_expr_agg (a int DEFAULT (avg(1)));
+	                                              ^
+<sql-statement>
+-- invalid use of subquery
+CREATE TABLE default_expr_agg (a int DEFAULT (select 1));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:46: Error: SubLinks are not allowed in: DEFAULT
+    	CREATE TABLE default_expr_agg (a int DEFAULT (select 1));
+	                                             ^
+<sql-statement>
+-- invalid use of set-returning function
+CREATE TABLE default_expr_agg (a int DEFAULT (generate_series(1,3)));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:47: Error: Generator functions are not allowed in: DEFAULT
+    	CREATE TABLE default_expr_agg (a int DEFAULT (generate_series(1,3)));
+	                                              ^
+<sql-statement>
+-- Verify that subtransaction rollback restores rd_createSubid.
+BEGIN;
+</sql-statement>
+<sql-statement>
+CREATE TABLE remember_create_subid (c int);
+</sql-statement>
+<sql-statement>
+SAVEPOINT q;
+</sql-statement>
+<sql-statement>
+DROP TABLE remember_create_subid;
+</sql-statement>
+<sql-statement>
+ROLLBACK TO q;
+</sql-statement>
+<sql-statement>
+COMMIT;
+</sql-statement>
+<sql-statement>
+DROP TABLE remember_create_subid;
+</sql-statement>
+<sql-statement>
+-- Verify that subtransaction rollback restores rd_firstRelfilenodeSubid.
+CREATE TABLE remember_node_subid (c int);
+</sql-statement>
+<sql-statement>
+BEGIN;
+</sql-statement>
+<sql-statement>
+ALTER TABLE remember_node_subid ALTER c TYPE bigint;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE remember_node_subid ALTER c TYPE bigint;
+	^
+<sql-statement>
+SAVEPOINT q;
+</sql-statement>
+<sql-statement>
+DROP TABLE remember_node_subid;
+</sql-statement>
+<sql-statement>
+ROLLBACK TO q;
+</sql-statement>
+<sql-statement>
+COMMIT;
+</sql-statement>
+<sql-statement>
+DROP TABLE remember_node_subid;
+</sql-statement>
+<sql-statement>
+--
+-- Partitioned tables
+--
+-- cannot combine INHERITS and PARTITION BY (although grammar allows)
+CREATE TABLE partitioned (
+	a int
+) INHERITS (some_table) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	--
+	^
+<sql-statement>
+-- cannot use more than 1 column as partition key for list partitioned table
+CREATE TABLE partitioned (
+	a1 int,
+	a2 int
+) PARTITION BY LIST (a1, a2);	-- fail
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- cannot use more than 1 column as partition key for list partitioned table
+	^
+<sql-statement>
+-- unsupported constraint type for partitioned tables
+CREATE TABLE partitioned (
+	a int,
+	EXCLUDE USING gist (a WITH &&)
+) PARTITION BY RANGE (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- unsupported constraint type for partitioned tables
+	^
+<sql-statement>
+-- prevent using prohibited expressions in the key
+CREATE FUNCTION retset (a int) RETURNS SETOF int AS $$ SELECT 1; $$ LANGUAGE SQL IMMUTABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- prevent using prohibited expressions in the key
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a int
+) PARTITION BY RANGE (retset(a));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+DROP FUNCTION retset(int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	DROP FUNCTION retset(int);
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a int
+) PARTITION BY RANGE ((avg(a)));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a int,
+	b int
+) PARTITION BY RANGE ((avg(a) OVER (PARTITION BY b)));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a int
+) PARTITION BY LIST ((a LIKE (SELECT 1)));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a int
+) PARTITION BY RANGE ((42));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+CREATE FUNCTION const_func () RETURNS int AS $$ SELECT 1; $$ LANGUAGE SQL IMMUTABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	CREATE FUNCTION const_func () RETURNS int AS $$ SELECT 1; $$ LANGUAGE SQL IMMUTABLE;
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a int
+) PARTITION BY RANGE (const_func());
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+DROP FUNCTION const_func();
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	DROP FUNCTION const_func();
+	^
+<sql-statement>
+-- only accept valid partitioning strategy
+CREATE TABLE partitioned (
+    a int
+) PARTITION BY MAGIC (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- only accept valid partitioning strategy
+	^
+<sql-statement>
+-- specified column must be present in the table
+CREATE TABLE partitioned (
+	a int
+) PARTITION BY RANGE (b);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- specified column must be present in the table
+	^
+<sql-statement>
+-- cannot use system columns in partition key
+CREATE TABLE partitioned (
+	a int
+) PARTITION BY RANGE (xmin);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- cannot use system columns in partition key
+	^
+<sql-statement>
+-- cannot use pseudotypes
+CREATE TABLE partitioned (
+	a int,
+	b int
+) PARTITION BY RANGE (((a, b)));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- cannot use pseudotypes
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a int,
+	b int
+) PARTITION BY RANGE (a, ('unknown'));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+-- functions in key must be immutable
+CREATE FUNCTION immut_func (a int) RETURNS int AS $$ SELECT a + random()::int; $$ LANGUAGE SQL;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- functions in key must be immutable
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a int
+) PARTITION BY RANGE (immut_func(a));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+DROP FUNCTION immut_func(int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	DROP FUNCTION immut_func(int);
+	^
+<sql-statement>
+-- prevent using columns of unsupported types in key (type must have a btree operator class)
+CREATE TABLE partitioned (
+	a point
+) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- prevent using columns of unsupported types in key (type must have a btree operator class)
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a point
+) PARTITION BY LIST (a point_ops);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a point
+) PARTITION BY RANGE (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a point
+) PARTITION BY RANGE (a point_ops);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+-- cannot add NO INHERIT constraints to partitioned tables
+CREATE TABLE partitioned (
+	a int,
+	CONSTRAINT check_a CHECK (a > 0) NO INHERIT
+) PARTITION BY RANGE (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- cannot add NO INHERIT constraints to partitioned tables
+	^
+<sql-statement>
+-- some checks after successful creation of a partitioned table
+CREATE FUNCTION plusone(a int) RETURNS INT AS $$ SELECT a+1; $$ LANGUAGE SQL;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- some checks after successful creation of a partitioned table
+	^
+<sql-statement>
+CREATE TABLE partitioned (
+	a int,
+	b int,
+	c text,
+	d text
+) PARTITION BY RANGE (a oid_ops, plusone(b), c collate "default", d collate "C");
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partitioned (
+	^
+<sql-statement>
+-- check relkind
+SELECT relkind FROM pg_class WHERE relname = 'partitioned';
+</sql-statement>
+<sql-statement>
+-- prevent a function referenced in partition key from being dropped
+DROP FUNCTION plusone(int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	-- prevent a function referenced in partition key from being dropped
+	^
+<sql-statement>
+-- partitioned table cannot participate in regular inheritance
+CREATE TABLE partitioned2 (
+	a int,
+	b text
+) PARTITION BY RANGE ((a+1), substr(b, 1, 5));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- partitioned table cannot participate in regular inheritance
+	^
+<sql-statement>
+CREATE TABLE fail () INHERITS (partitioned2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail () INHERITS (partitioned2);
+	^
+<sql-statement>
+-- Partition key in describe output
+\d partitioned
+</sql-statement>
+Metacommand \d partitioned is not supported
+<sql-statement>
+\d+ partitioned2
+</sql-statement>
+Metacommand \d+ partitioned2 is not supported
+<sql-statement>
+INSERT INTO partitioned2 VALUES (1, 'hello');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.partitioned2
+    
+<sql-statement>
+CREATE TABLE part2_1 PARTITION OF partitioned2 FOR VALUES FROM (-1, 'aaaaa') TO (100, 'ccccc');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part2_1 PARTITION OF partitioned2 FOR VALUES FROM (-1, 'aaaaa') TO (100, 'ccccc');
+	^
+<sql-statement>
+\d+ part2_1
+</sql-statement>
+Metacommand \d+ part2_1 is not supported
+<sql-statement>
+DROP TABLE partitioned, partitioned2;
+</sql-statement>
+<sql-statement>
+-- check reference to partitioned table's rowtype in partition descriptor
+create table partitioned (a int, b int)
+  partition by list ((row(a, b)::partitioned));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check reference to partitioned table's rowtype in partition descriptor
+	^
+<sql-statement>
+create table partitioned1
+  partition of partitioned for values in ('(1,2)'::partitioned);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table partitioned1
+	^
+<sql-statement>
+create table partitioned2
+  partition of partitioned for values in ('(2,4)'::partitioned);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table partitioned2
+	^
+<sql-statement>
+explain (costs off)
+select * from partitioned where row(a,b)::partitioned = '(1,2)'::partitioned;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+drop table partitioned;
+</sql-statement>
+<sql-statement>
+-- whole-row Var in partition key works too
+create table partitioned (a int, b int)
+  partition by list ((partitioned));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- whole-row Var in partition key works too
+	^
+<sql-statement>
+create table partitioned1
+  partition of partitioned for values in ('(1,2)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table partitioned1
+	^
+<sql-statement>
+create table partitioned2
+  partition of partitioned for values in ('(2,4)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table partitioned2
+	^
+<sql-statement>
+explain (costs off)
+select * from partitioned where partitioned = '(1,2)'::partitioned;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+\d+ partitioned1
+</sql-statement>
+Metacommand \d+ partitioned1 is not supported
+<sql-statement>
+drop table partitioned;
+</sql-statement>
+<sql-statement>
+-- check that dependencies of partition columns are handled correctly
+create domain intdom1 as int;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 272
+    	-- check that dependencies of partition columns are handled correctly
+	^
+<sql-statement>
+create table partitioned (
+	a intdom1,
+	b text
+) partition by range (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	create table partitioned (
+	^
+<sql-statement>
+alter table partitioned drop column a;  -- fail
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table partitioned drop column a;  -- fail
+	^
+<sql-statement>
+drop domain intdom1;  -- fail, requires cascade
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 373
+    	drop domain intdom1;  -- fail, requires cascade
+	^
+<sql-statement>
+drop domain intdom1 cascade;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 373
+    	drop domain intdom1 cascade;
+	^
+<sql-statement>
+table partitioned;  -- gone
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.partitioned
+    
+<sql-statement>
+-- likewise for columns used in partition expressions
+create domain intdom1 as int;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 272
+    	-- likewise for columns used in partition expressions
+	^
+<sql-statement>
+create table partitioned (
+	a intdom1,
+	b text
+) partition by range (plusone(a));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	create table partitioned (
+	^
+<sql-statement>
+alter table partitioned drop column a;  -- fail
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table partitioned drop column a;  -- fail
+	^
+<sql-statement>
+drop domain intdom1;  -- fail, requires cascade
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 373
+    	drop domain intdom1;  -- fail, requires cascade
+	^
+<sql-statement>
+drop domain intdom1 cascade;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 373
+    	drop domain intdom1 cascade;
+	^
+<sql-statement>
+table partitioned;  -- gone
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.partitioned
+    
+<sql-statement>
+--
+-- Partitions
+--
+-- check partition bound syntax
+CREATE TABLE list_parted (
+	a int
+) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	--
+	^
+<sql-statement>
+CREATE TABLE part_p1 PARTITION OF list_parted FOR VALUES IN ('1');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_p1 PARTITION OF list_parted FOR VALUES IN ('1');
+	^
+<sql-statement>
+CREATE TABLE part_p2 PARTITION OF list_parted FOR VALUES IN (2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_p2 PARTITION OF list_parted FOR VALUES IN (2);
+	^
+<sql-statement>
+CREATE TABLE part_p3 PARTITION OF list_parted FOR VALUES IN ((2+1));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_p3 PARTITION OF list_parted FOR VALUES IN ((2+1));
+	^
+<sql-statement>
+CREATE TABLE part_null PARTITION OF list_parted FOR VALUES IN (null);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_null PARTITION OF list_parted FOR VALUES IN (null);
+	^
+<sql-statement>
+\d+ list_parted
+</sql-statement>
+Metacommand \d+ list_parted is not supported
+<sql-statement>
+-- forbidden expressions for partition bound with list partitioned table
+CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (somename);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- forbidden expressions for partition bound with list partitioned table
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (somename.somename);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (somename.somename);
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (a);
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (sum(a));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (sum(a));
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (sum(somename));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (sum(somename));
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (sum(1));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (sum(1));
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN ((select 1));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN ((select 1));
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (generate_series(4, 6));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN (generate_series(4, 6));
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN ((1+1) collate "POSIX");
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF list_parted FOR VALUES IN ((1+1) collate "POSIX");
+	^
+<sql-statement>
+-- syntax does not allow empty list of values for list partitions
+CREATE TABLE fail_part PARTITION OF list_parted FOR VALUES IN ();
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:64: Error: ERROR:  syntax error at or near ")"
+
+    	CREATE TABLE fail_part PARTITION OF list_parted FOR VALUES IN ();
+	                                                               ^
+<sql-statement>
+-- trying to specify range for list partitioned table
+CREATE TABLE fail_part PARTITION OF list_parted FOR VALUES FROM (1) TO (2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- trying to specify range for list partitioned table
+	^
+<sql-statement>
+-- trying to specify modulus and remainder for list partitioned table
+CREATE TABLE fail_part PARTITION OF list_parted FOR VALUES WITH (MODULUS 10, REMAINDER 1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:66: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE fail_part PARTITION OF list_parted FOR VALUES WITH (MODULUS 10, REMAINDER 1);
+	                                                                 ^
+<sql-statement>
+-- check default partition cannot be created more than once
+CREATE TABLE part_default PARTITION OF list_parted DEFAULT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- check default partition cannot be created more than once
+	^
+<sql-statement>
+CREATE TABLE fail_default_part PARTITION OF list_parted DEFAULT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_default_part PARTITION OF list_parted DEFAULT;
+	^
+<sql-statement>
+-- specified literal can't be cast to the partition column data type
+CREATE TABLE bools (
+	a bool
+) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- specified literal can't be cast to the partition column data type
+	^
+<sql-statement>
+CREATE TABLE bools_true PARTITION OF bools FOR VALUES IN (1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE bools_true PARTITION OF bools FOR VALUES IN (1);
+	^
+<sql-statement>
+DROP TABLE bools;
+</sql-statement>
+<sql-statement>
+-- specified literal can be cast, and the cast might not be immutable
+CREATE TABLE moneyp (
+	a money
+) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- specified literal can be cast, and the cast might not be immutable
+	^
+<sql-statement>
+CREATE TABLE moneyp_10 PARTITION OF moneyp FOR VALUES IN (10);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE moneyp_10 PARTITION OF moneyp FOR VALUES IN (10);
+	^
+<sql-statement>
+CREATE TABLE moneyp_11 PARTITION OF moneyp FOR VALUES IN ('11');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE moneyp_11 PARTITION OF moneyp FOR VALUES IN ('11');
+	^
+<sql-statement>
+CREATE TABLE moneyp_12 PARTITION OF moneyp FOR VALUES IN (to_char(12, '99')::int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE moneyp_12 PARTITION OF moneyp FOR VALUES IN (to_char(12, '99')::int);
+	^
+<sql-statement>
+DROP TABLE moneyp;
+</sql-statement>
+<sql-statement>
+-- cast is immutable
+CREATE TABLE bigintp (
+	a bigint
+) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- cast is immutable
+	^
+<sql-statement>
+CREATE TABLE bigintp_10 PARTITION OF bigintp FOR VALUES IN (10);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE bigintp_10 PARTITION OF bigintp FOR VALUES IN (10);
+	^
+<sql-statement>
+-- fails due to overlap:
+CREATE TABLE bigintp_10_2 PARTITION OF bigintp FOR VALUES IN ('10');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- fails due to overlap:
+	^
+<sql-statement>
+DROP TABLE bigintp;
+</sql-statement>
+<sql-statement>
+CREATE TABLE range_parted (
+	a date
+) PARTITION BY RANGE (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE range_parted (
+	^
+<sql-statement>
+-- forbidden expressions for partition bounds with range partitioned table
+CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+  FOR VALUES FROM (somename) TO ('2019-01-01');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- forbidden expressions for partition bounds with range partitioned table
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+  FOR VALUES FROM (somename.somename) TO ('2019-01-01');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+  FOR VALUES FROM (a) TO ('2019-01-01');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+  FOR VALUES FROM (max(a)) TO ('2019-01-01');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+  FOR VALUES FROM (max(somename)) TO ('2019-01-01');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+  FOR VALUES FROM (max('2019-02-01'::date)) TO ('2019-01-01');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+  FOR VALUES FROM ((select 1)) TO ('2019-01-01');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+	^
+<sql-statement>
+CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+  FOR VALUES FROM (generate_series(1, 3)) TO ('2019-01-01');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_bogus_expr_fail PARTITION OF range_parted
+	^
+<sql-statement>
+-- trying to specify list for range partitioned table
+CREATE TABLE fail_part PARTITION OF range_parted FOR VALUES IN ('a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- trying to specify list for range partitioned table
+	^
+<sql-statement>
+-- trying to specify modulus and remainder for range partitioned table
+CREATE TABLE fail_part PARTITION OF range_parted FOR VALUES WITH (MODULUS 10, REMAINDER 1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:67: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE fail_part PARTITION OF range_parted FOR VALUES WITH (MODULUS 10, REMAINDER 1);
+	                                                                  ^
+<sql-statement>
+-- each of start and end bounds must have same number of values as the
+-- length of the partition key
+CREATE TABLE fail_part PARTITION OF range_parted FOR VALUES FROM ('a', 1) TO ('z');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- each of start and end bounds must have same number of values as the
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF range_parted FOR VALUES FROM ('a') TO ('z', 1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF range_parted FOR VALUES FROM ('a') TO ('z', 1);
+	^
+<sql-statement>
+-- cannot specify null values in range bounds
+CREATE TABLE fail_part PARTITION OF range_parted FOR VALUES FROM (null) TO (maxvalue);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- cannot specify null values in range bounds
+	^
+<sql-statement>
+-- trying to specify modulus and remainder for range partitioned table
+CREATE TABLE fail_part PARTITION OF range_parted FOR VALUES WITH (MODULUS 10, REMAINDER 1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:67: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE fail_part PARTITION OF range_parted FOR VALUES WITH (MODULUS 10, REMAINDER 1);
+	                                                                  ^
+<sql-statement>
+-- check partition bound syntax for the hash partition
+CREATE TABLE hash_parted (
+	a int
+) PARTITION BY HASH (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check partition bound syntax for the hash partition
+	^
+<sql-statement>
+CREATE TABLE hpart_1 PARTITION OF hash_parted FOR VALUES WITH (MODULUS 10, REMAINDER 0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:65: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE hpart_1 PARTITION OF hash_parted FOR VALUES WITH (MODULUS 10, REMAINDER 0);
+	                                                                ^
+<sql-statement>
+CREATE TABLE hpart_2 PARTITION OF hash_parted FOR VALUES WITH (MODULUS 50, REMAINDER 1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:65: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE hpart_2 PARTITION OF hash_parted FOR VALUES WITH (MODULUS 50, REMAINDER 1);
+	                                                                ^
+<sql-statement>
+CREATE TABLE hpart_3 PARTITION OF hash_parted FOR VALUES WITH (MODULUS 200, REMAINDER 2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:65: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE hpart_3 PARTITION OF hash_parted FOR VALUES WITH (MODULUS 200, REMAINDER 2);
+	                                                                ^
+<sql-statement>
+CREATE TABLE hpart_4 PARTITION OF hash_parted FOR VALUES WITH (MODULUS 10, REMAINDER 3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:65: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE hpart_4 PARTITION OF hash_parted FOR VALUES WITH (MODULUS 10, REMAINDER 3);
+	                                                                ^
+<sql-statement>
+-- modulus 25 is factor of modulus of 50 but 10 is not a factor of 25.
+CREATE TABLE fail_part PARTITION OF hash_parted FOR VALUES WITH (MODULUS 25, REMAINDER 3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:66: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE fail_part PARTITION OF hash_parted FOR VALUES WITH (MODULUS 25, REMAINDER 3);
+	                                                                 ^
+<sql-statement>
+-- previous modulus 50 is factor of 150 but this modulus is not a factor of next modulus 200.
+CREATE TABLE fail_part PARTITION OF hash_parted FOR VALUES WITH (MODULUS 150, REMAINDER 3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:66: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE fail_part PARTITION OF hash_parted FOR VALUES WITH (MODULUS 150, REMAINDER 3);
+	                                                                 ^
+<sql-statement>
+-- overlapping remainders
+CREATE TABLE fail_part PARTITION OF hash_parted FOR VALUES WITH (MODULUS 100, REMAINDER 3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:66: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE fail_part PARTITION OF hash_parted FOR VALUES WITH (MODULUS 100, REMAINDER 3);
+	                                                                 ^
+<sql-statement>
+-- trying to specify range for the hash partitioned table
+CREATE TABLE fail_part PARTITION OF hash_parted FOR VALUES FROM ('a', 1) TO ('z');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- trying to specify range for the hash partitioned table
+	^
+<sql-statement>
+-- trying to specify list value for the hash partitioned table
+CREATE TABLE fail_part PARTITION OF hash_parted FOR VALUES IN (1000);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- trying to specify list value for the hash partitioned table
+	^
+<sql-statement>
+-- trying to create default partition for the hash partitioned table
+CREATE TABLE fail_default_part PARTITION OF hash_parted DEFAULT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- trying to create default partition for the hash partitioned table
+	^
+<sql-statement>
+-- check if compatible with the specified parent
+-- cannot create as partition of a non-partitioned table
+CREATE TABLE unparted (
+	a int
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF unparted FOR VALUES IN ('a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF unparted FOR VALUES IN ('a');
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF unparted FOR VALUES WITH (MODULUS 2, REMAINDER 1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:64: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE fail_part PARTITION OF unparted FOR VALUES WITH (MODULUS 2, REMAINDER 1);
+	                                                               ^
+<sql-statement>
+DROP TABLE unparted;
+</sql-statement>
+<sql-statement>
+-- cannot create a permanent rel as partition of a temp rel
+CREATE TEMP TABLE temp_parted (
+	a int
+) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- cannot create a permanent rel as partition of a temp rel
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF temp_parted FOR VALUES IN ('a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF temp_parted FOR VALUES IN ('a');
+	^
+<sql-statement>
+DROP TABLE temp_parted;
+</sql-statement>
+<sql-statement>
+-- check for partition bound overlap and other invalid specifications
+CREATE TABLE list_parted2 (
+	a varchar
+) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check for partition bound overlap and other invalid specifications
+	^
+<sql-statement>
+CREATE TABLE part_null_z PARTITION OF list_parted2 FOR VALUES IN (null, 'z');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_null_z PARTITION OF list_parted2 FOR VALUES IN (null, 'z');
+	^
+<sql-statement>
+CREATE TABLE part_ab PARTITION OF list_parted2 FOR VALUES IN ('a', 'b');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_ab PARTITION OF list_parted2 FOR VALUES IN ('a', 'b');
+	^
+<sql-statement>
+CREATE TABLE list_parted2_def PARTITION OF list_parted2 DEFAULT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE list_parted2_def PARTITION OF list_parted2 DEFAULT;
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF list_parted2 FOR VALUES IN (null);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF list_parted2 FOR VALUES IN (null);
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF list_parted2 FOR VALUES IN ('b', 'c');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF list_parted2 FOR VALUES IN ('b', 'c');
+	^
+<sql-statement>
+-- check default partition overlap
+INSERT INTO list_parted2 VALUES('X');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.list_parted2
+    
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF list_parted2 FOR VALUES IN ('W', 'X', 'Y');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF list_parted2 FOR VALUES IN ('W', 'X', 'Y');
+	^
+<sql-statement>
+CREATE TABLE range_parted2 (
+	a int
+) PARTITION BY RANGE (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE range_parted2 (
+	^
+<sql-statement>
+-- trying to create range partition with empty range
+CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (1) TO (0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- trying to create range partition with empty range
+	^
+<sql-statement>
+-- note that the range '[1, 1)' has no elements
+CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (1) TO (1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- note that the range '[1, 1)' has no elements
+	^
+<sql-statement>
+CREATE TABLE part0 PARTITION OF range_parted2 FOR VALUES FROM (minvalue) TO (1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part0 PARTITION OF range_parted2 FOR VALUES FROM (minvalue) TO (1);
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (minvalue) TO (2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (minvalue) TO (2);
+	^
+<sql-statement>
+CREATE TABLE part1 PARTITION OF range_parted2 FOR VALUES FROM (1) TO (10);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part1 PARTITION OF range_parted2 FOR VALUES FROM (1) TO (10);
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (-1) TO (1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (-1) TO (1);
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (9) TO (maxvalue);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (9) TO (maxvalue);
+	^
+<sql-statement>
+CREATE TABLE part2 PARTITION OF range_parted2 FOR VALUES FROM (20) TO (30);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part2 PARTITION OF range_parted2 FOR VALUES FROM (20) TO (30);
+	^
+<sql-statement>
+CREATE TABLE part3 PARTITION OF range_parted2 FOR VALUES FROM (30) TO (40);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part3 PARTITION OF range_parted2 FOR VALUES FROM (30) TO (40);
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (10) TO (30);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (10) TO (30);
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (10) TO (50);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (10) TO (50);
+	^
+<sql-statement>
+-- Create a default partition for range partitioned table
+CREATE TABLE range2_default PARTITION OF range_parted2 DEFAULT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- Create a default partition for range partitioned table
+	^
+<sql-statement>
+-- More than one default partition is not allowed, so this should give error
+CREATE TABLE fail_default_part PARTITION OF range_parted2 DEFAULT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- More than one default partition is not allowed, so this should give error
+	^
+<sql-statement>
+-- Check if the range for default partitions overlap
+INSERT INTO range_parted2 VALUES (85);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.range_parted2
+    
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (80) TO (90);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF range_parted2 FOR VALUES FROM (80) TO (90);
+	^
+<sql-statement>
+CREATE TABLE part4 PARTITION OF range_parted2 FOR VALUES FROM (90) TO (100);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part4 PARTITION OF range_parted2 FOR VALUES FROM (90) TO (100);
+	^
+<sql-statement>
+-- now check for multi-column range partition key
+CREATE TABLE range_parted3 (
+	a int,
+	b int
+) PARTITION BY RANGE (a, (b+1));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- now check for multi-column range partition key
+	^
+<sql-statement>
+CREATE TABLE part00 PARTITION OF range_parted3 FOR VALUES FROM (0, minvalue) TO (0, maxvalue);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part00 PARTITION OF range_parted3 FOR VALUES FROM (0, minvalue) TO (0, maxvalue);
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF range_parted3 FOR VALUES FROM (0, minvalue) TO (0, 1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF range_parted3 FOR VALUES FROM (0, minvalue) TO (0, 1);
+	^
+<sql-statement>
+CREATE TABLE part10 PARTITION OF range_parted3 FOR VALUES FROM (1, minvalue) TO (1, 1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part10 PARTITION OF range_parted3 FOR VALUES FROM (1, minvalue) TO (1, 1);
+	^
+<sql-statement>
+CREATE TABLE part11 PARTITION OF range_parted3 FOR VALUES FROM (1, 1) TO (1, 10);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part11 PARTITION OF range_parted3 FOR VALUES FROM (1, 1) TO (1, 10);
+	^
+<sql-statement>
+CREATE TABLE part12 PARTITION OF range_parted3 FOR VALUES FROM (1, 10) TO (1, maxvalue);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part12 PARTITION OF range_parted3 FOR VALUES FROM (1, 10) TO (1, maxvalue);
+	^
+<sql-statement>
+CREATE TABLE fail_part PARTITION OF range_parted3 FOR VALUES FROM (1, 10) TO (1, 20);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE fail_part PARTITION OF range_parted3 FOR VALUES FROM (1, 10) TO (1, 20);
+	^
+<sql-statement>
+CREATE TABLE range3_default PARTITION OF range_parted3 DEFAULT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE range3_default PARTITION OF range_parted3 DEFAULT;
+	^
+<sql-statement>
+-- cannot create a partition that says column b is allowed to range
+-- from -infinity to +infinity, while there exist partitions that have
+-- more specific ranges
+CREATE TABLE fail_part PARTITION OF range_parted3 FOR VALUES FROM (1, minvalue) TO (1, maxvalue);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- cannot create a partition that says column b is allowed to range
+	^
+<sql-statement>
+-- check for partition bound overlap and other invalid specifications for the hash partition
+CREATE TABLE hash_parted2 (
+	a varchar
+) PARTITION BY HASH (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check for partition bound overlap and other invalid specifications for the hash partition
+	^
+<sql-statement>
+CREATE TABLE h2part_1 PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 4, REMAINDER 2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:67: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE h2part_1 PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 4, REMAINDER 2);
+	                                                                  ^
+<sql-statement>
+CREATE TABLE h2part_2 PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 8, REMAINDER 0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:67: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE h2part_2 PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 8, REMAINDER 0);
+	                                                                  ^
+<sql-statement>
+CREATE TABLE h2part_3 PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 8, REMAINDER 4);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:67: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE h2part_3 PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 8, REMAINDER 4);
+	                                                                  ^
+<sql-statement>
+CREATE TABLE h2part_4 PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 8, REMAINDER 5);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:67: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE h2part_4 PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 8, REMAINDER 5);
+	                                                                  ^
+<sql-statement>
+-- overlap with part_4
+CREATE TABLE fail_part PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 2, REMAINDER 1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:67: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE fail_part PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 2, REMAINDER 1);
+	                                                                  ^
+<sql-statement>
+-- modulus must be greater than zero
+CREATE TABLE fail_part PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 0, REMAINDER 1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:67: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE fail_part PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 0, REMAINDER 1);
+	                                                                  ^
+<sql-statement>
+-- remainder must be greater than or equal to zero and less than modulus
+CREATE TABLE fail_part PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 8, REMAINDER 8);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:67: Error: ERROR:  unrecognized hash partition bound specification "MODULUS"
+
+    	CREATE TABLE fail_part PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 8, REMAINDER 8);
+	                                                                  ^
+<sql-statement>
+-- check schema propagation from parent
+CREATE TABLE parted (
+	a text,
+	b int NOT NULL DEFAULT 0,
+	CONSTRAINT check_a CHECK (length(a) > 0)
+) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check schema propagation from parent
+	^
+<sql-statement>
+CREATE TABLE part_a PARTITION OF parted FOR VALUES IN ('a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_a PARTITION OF parted FOR VALUES IN ('a');
+	^
+<sql-statement>
+-- able to specify column default, column constraint, and table constraint
+-- first check the "column specified more than once" error
+CREATE TABLE part_b PARTITION OF parted (
+	b NOT NULL,
+	b DEFAULT 1,
+	b CHECK (b >= 0),
+	CONSTRAINT check_a CHECK (length(a) > 0)
+) FOR VALUES IN ('b');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- able to specify column default, column constraint, and table constraint
+	^
+<sql-statement>
+CREATE TABLE part_b PARTITION OF parted (
+	b NOT NULL DEFAULT 1,
+	CONSTRAINT check_a CHECK (length(a) > 0),
+	CONSTRAINT check_b CHECK (b >= 0)
+) FOR VALUES IN ('b');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_b PARTITION OF parted (
+	^
+<sql-statement>
+-- conislocal should be false for any merged constraints, true otherwise
+SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_b'::regclass ORDER BY conislocal, coninhcount;
+</sql-statement>
+<sql-statement>
+-- Once check_b is added to the parent, it should be made non-local for part_b
+ALTER TABLE parted ADD CONSTRAINT check_b CHECK (b >= 0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- Once check_b is added to the parent, it should be made non-local for part_b
+	^
+<sql-statement>
+SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_b'::regclass;
+</sql-statement>
+<sql-statement>
+-- Neither check_a nor check_b are droppable from part_b
+ALTER TABLE part_b DROP CONSTRAINT check_a;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- Neither check_a nor check_b are droppable from part_b
+	^
+<sql-statement>
+ALTER TABLE part_b DROP CONSTRAINT check_b;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE part_b DROP CONSTRAINT check_b;
+	^
+<sql-statement>
+-- And dropping it from parted should leave no trace of them on part_b, unlike
+-- traditional inheritance where they will be left behind, because they would
+-- be local constraints.
+ALTER TABLE parted DROP CONSTRAINT check_a, DROP CONSTRAINT check_b;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	-- And dropping it from parted should leave no trace of them on part_b, unlike
+	^
+<sql-statement>
+SELECT conislocal, coninhcount FROM pg_constraint WHERE conrelid = 'part_b'::regclass;
+</sql-statement>
+<sql-statement>
+-- specify PARTITION BY for a partition
+CREATE TABLE fail_part_col_not_found PARTITION OF parted FOR VALUES IN ('c') PARTITION BY RANGE (c);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- specify PARTITION BY for a partition
+	^
+<sql-statement>
+CREATE TABLE part_c PARTITION OF parted (b WITH OPTIONS NOT NULL DEFAULT 0) FOR VALUES IN ('c') PARTITION BY RANGE ((b));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE part_c PARTITION OF parted (b WITH OPTIONS NOT NULL DEFAULT 0) FOR VALUES IN ('c') PARTITION BY RANGE ((b));
+	^
+<sql-statement>
+-- create a level-2 partition
+CREATE TABLE part_c_1_10 PARTITION OF part_c FOR VALUES FROM (1) TO (10);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- create a level-2 partition
+	^
+<sql-statement>
+-- check that NOT NULL and default value are inherited correctly
+create table parted_notnull_inh_test (a int default 1, b int not null default 0) partition by list (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check that NOT NULL and default value are inherited correctly
+	^
+<sql-statement>
+create table parted_notnull_inh_test1 partition of parted_notnull_inh_test (a not null, b default 1) for values in (1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table parted_notnull_inh_test1 partition of parted_notnull_inh_test (a not null, b default 1) for values in (1);
+	^
+<sql-statement>
+insert into parted_notnull_inh_test (b) values (null);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.parted_notnull_inh_test
+    
+<sql-statement>
+-- note that while b's default is overriden, a's default is preserved
+\d parted_notnull_inh_test1
+</sql-statement>
+Metacommand \d parted_notnull_inh_test1 is not supported
+<sql-statement>
+drop table parted_notnull_inh_test;
+</sql-statement>
+<sql-statement>
+-- check that collations are assigned in partition bound expressions
+create table parted_boolean_col (a bool, b text) partition by list(a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check that collations are assigned in partition bound expressions
+	^
+<sql-statement>
+create table parted_boolean_less partition of parted_boolean_col
+  for values in ('foo' < 'bar');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table parted_boolean_less partition of parted_boolean_col
+	^
+<sql-statement>
+create table parted_boolean_greater partition of parted_boolean_col
+  for values in ('foo' > 'bar');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table parted_boolean_greater partition of parted_boolean_col
+	^
+<sql-statement>
+drop table parted_boolean_col;
+</sql-statement>
+<sql-statement>
+-- check for a conflicting COLLATE clause
+create table parted_collate_must_match (a text collate "C", b text collate "C")
+  partition by range (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check for a conflicting COLLATE clause
+	^
+<sql-statement>
+-- on the partition key
+create table parted_collate_must_match1 partition of parted_collate_must_match
+  (a collate "POSIX") for values from ('a') to ('m');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- on the partition key
+	^
+<sql-statement>
+-- on another column
+create table parted_collate_must_match2 partition of parted_collate_must_match
+  (b collate "POSIX") for values from ('m') to ('z');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- on another column
+	^
+<sql-statement>
+drop table parted_collate_must_match;
+</sql-statement>
+<sql-statement>
+-- check that non-matching collations for partition bound
+-- expressions are coerced to the right collation
+create table test_part_coll_posix (a text) partition by range (a collate "POSIX");
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check that non-matching collations for partition bound
+	^
+<sql-statement>
+-- ok, collation is implicitly coerced
+create table test_part_coll partition of test_part_coll_posix for values from ('a' collate "C") to ('g');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- ok, collation is implicitly coerced
+	^
+<sql-statement>
+-- ok
+create table test_part_coll2 partition of test_part_coll_posix for values from ('g') to ('m');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- ok
+	^
+<sql-statement>
+-- ok, collation is implicitly coerced
+create table test_part_coll_cast partition of test_part_coll_posix for values from (name 'm' collate "C") to ('s');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- ok, collation is implicitly coerced
+	^
+<sql-statement>
+-- ok; partition collation silently overrides the default collation of type 'name'
+create table test_part_coll_cast2 partition of test_part_coll_posix for values from (name 's') to ('z');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- ok; partition collation silently overrides the default collation of type 'name'
+	^
+<sql-statement>
+drop table test_part_coll_posix;
+</sql-statement>
+<sql-statement>
+-- Partition bound in describe output
+\d+ part_b
+</sql-statement>
+Metacommand \d+ part_b is not supported
+<sql-statement>
+-- Both partition bound and partition key in describe output
+\d+ part_c
+</sql-statement>
+Metacommand \d+ part_c is not supported
+<sql-statement>
+-- a level-2 partition's constraint will include the parent's expressions
+\d+ part_c_1_10
+</sql-statement>
+Metacommand \d+ part_c_1_10 is not supported
+<sql-statement>
+-- Show partition count in the parent's describe output
+-- Tempted to include \d+ output listing partitions with bound info but
+-- output could vary depending on the order in which partition oids are
+-- returned.
+\d parted
+</sql-statement>
+Metacommand \d parted is not supported
+<sql-statement>
+\d hash_parted
+</sql-statement>
+Metacommand \d hash_parted is not supported
+<sql-statement>
+-- check that we get the expected partition constraints
+CREATE TABLE range_parted4 (a int, b int, c int) PARTITION BY RANGE (abs(a), abs(b), c);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check that we get the expected partition constraints
+	^
+<sql-statement>
+CREATE TABLE unbounded_range_part PARTITION OF range_parted4 FOR VALUES FROM (MINVALUE, MINVALUE, MINVALUE) TO (MAXVALUE, MAXVALUE, MAXVALUE);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE unbounded_range_part PARTITION OF range_parted4 FOR VALUES FROM (MINVALUE, MINVALUE, MINVALUE) TO (MAXVALUE, MAXVALUE, MAXVALUE);
+	^
+<sql-statement>
+\d+ unbounded_range_part
+</sql-statement>
+Metacommand \d+ unbounded_range_part is not supported
+<sql-statement>
+DROP TABLE unbounded_range_part;
+</sql-statement>
+<sql-statement>
+CREATE TABLE range_parted4_1 PARTITION OF range_parted4 FOR VALUES FROM (MINVALUE, MINVALUE, MINVALUE) TO (1, MAXVALUE, MAXVALUE);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE range_parted4_1 PARTITION OF range_parted4 FOR VALUES FROM (MINVALUE, MINVALUE, MINVALUE) TO (1, MAXVALUE, MAXVALUE);
+	^
+<sql-statement>
+\d+ range_parted4_1
+</sql-statement>
+Metacommand \d+ range_parted4_1 is not supported
+<sql-statement>
+CREATE TABLE range_parted4_2 PARTITION OF range_parted4 FOR VALUES FROM (3, 4, 5) TO (6, 7, MAXVALUE);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE range_parted4_2 PARTITION OF range_parted4 FOR VALUES FROM (3, 4, 5) TO (6, 7, MAXVALUE);
+	^
+<sql-statement>
+\d+ range_parted4_2
+</sql-statement>
+Metacommand \d+ range_parted4_2 is not supported
+<sql-statement>
+CREATE TABLE range_parted4_3 PARTITION OF range_parted4 FOR VALUES FROM (6, 8, MINVALUE) TO (9, MAXVALUE, MAXVALUE);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE range_parted4_3 PARTITION OF range_parted4 FOR VALUES FROM (6, 8, MINVALUE) TO (9, MAXVALUE, MAXVALUE);
+	^
+<sql-statement>
+\d+ range_parted4_3
+</sql-statement>
+Metacommand \d+ range_parted4_3 is not supported
+<sql-statement>
+DROP TABLE range_parted4;
+</sql-statement>
+<sql-statement>
+-- user-defined operator class in partition key
+CREATE FUNCTION my_int4_sort(int4,int4) RETURNS int LANGUAGE sql
+  AS $$ SELECT CASE WHEN $1 = $2 THEN 0 WHEN $1 > $2 THEN 1 ELSE -1 END; $$;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- user-defined operator class in partition key
+	^
+<sql-statement>
+CREATE OPERATOR CLASS test_int4_ops FOR TYPE int4 USING btree AS
+  OPERATOR 1 < (int4,int4), OPERATOR 2 <= (int4,int4),
+  OPERATOR 3 = (int4,int4), OPERATOR 4 >= (int4,int4),
+  OPERATOR 5 > (int4,int4), FUNCTION 1 my_int4_sort(int4,int4);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 298
+    	CREATE OPERATOR CLASS test_int4_ops FOR TYPE int4 USING btree AS
+	^
+<sql-statement>
+CREATE TABLE partkey_t (a int4) PARTITION BY RANGE (a test_int4_ops);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	CREATE TABLE partkey_t (a int4) PARTITION BY RANGE (a test_int4_ops);
+	^
+<sql-statement>
+CREATE TABLE partkey_t_1 PARTITION OF partkey_t FOR VALUES FROM (0) TO (1000);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE partkey_t_1 PARTITION OF partkey_t FOR VALUES FROM (0) TO (1000);
+	^
+<sql-statement>
+INSERT INTO partkey_t VALUES (100);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.partkey_t
+    
+<sql-statement>
+INSERT INTO partkey_t VALUES (200);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.partkey_t
+    
+<sql-statement>
+-- cleanup
+DROP TABLE parted, list_parted, range_parted, list_parted2, range_parted2, range_parted3;
+</sql-statement>
+<sql-statement>
+DROP TABLE partkey_t, hash_parted, hash_parted2;
+</sql-statement>
+<sql-statement>
+DROP OPERATOR CLASS test_int4_ops USING btree;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: Not supported object type for DROP
+    	DROP OPERATOR CLASS test_int4_ops USING btree;
+	^
+<sql-statement>
+DROP FUNCTION my_int4_sort(int4,int4);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	DROP FUNCTION my_int4_sort(int4,int4);
+	^
+<sql-statement>
+-- comments on partitioned tables columns
+CREATE TABLE parted_col_comment (a int, b text) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- comments on partitioned tables columns
+	^
+<sql-statement>
+COMMENT ON TABLE parted_col_comment IS 'Am partitioned table';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 258
+    	COMMENT ON TABLE parted_col_comment IS 'Am partitioned table';
+	^
+<sql-statement>
+COMMENT ON COLUMN parted_col_comment.a IS 'Partition key';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 258
+    	COMMENT ON COLUMN parted_col_comment.a IS 'Partition key';
+	^
+<sql-statement>
+SELECT obj_description('parted_col_comment'::regclass);
+</sql-statement>
+<sql-statement>
+\d+ parted_col_comment
+</sql-statement>
+Metacommand \d+ parted_col_comment is not supported
+<sql-statement>
+DROP TABLE parted_col_comment;
+</sql-statement>
+<sql-statement>
+-- list partitioning on array type column
+CREATE TABLE arrlp (a int[]) PARTITION BY LIST (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- list partitioning on array type column
+	^
+<sql-statement>
+CREATE TABLE arrlp12 PARTITION OF arrlp FOR VALUES IN ('{1}', '{2}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TABLE arrlp12 PARTITION OF arrlp FOR VALUES IN ('{1}', '{2}');
+	^
+<sql-statement>
+\d+ arrlp12
+</sql-statement>
+Metacommand \d+ arrlp12 is not supported
+<sql-statement>
+DROP TABLE arrlp;
+</sql-statement>
+<sql-statement>
+-- partition on boolean column
+create table boolspart (a bool) partition by list (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- partition on boolean column
+	^
+<sql-statement>
+create table boolspart_t partition of boolspart for values in (true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table boolspart_t partition of boolspart for values in (true);
+	^
+<sql-statement>
+create table boolspart_f partition of boolspart for values in (false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table boolspart_f partition of boolspart for values in (false);
+	^
+<sql-statement>
+\d+ boolspart
+</sql-statement>
+Metacommand \d+ boolspart is not supported
+<sql-statement>
+drop table boolspart;
+</sql-statement>
+<sql-statement>
+-- partitions mixing temporary and permanent relations
+create table perm_parted (a int) partition by list (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- partitions mixing temporary and permanent relations
+	^
+<sql-statement>
+create temporary table temp_parted (a int) partition by list (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	create temporary table temp_parted (a int) partition by list (a);
+	^
+<sql-statement>
+create table perm_part partition of temp_parted default; -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table perm_part partition of temp_parted default; -- error
+	^
+<sql-statement>
+create temp table temp_part partition of perm_parted default; -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create temp table temp_part partition of perm_parted default; -- error
+	^
+<sql-statement>
+create temp table temp_part partition of temp_parted default; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create temp table temp_part partition of temp_parted default; -- ok
+	^
+<sql-statement>
+drop table perm_parted cascade;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: CASCADE is not implemented
+    	drop table perm_parted cascade;
+	^
+<sql-statement>
+drop table temp_parted cascade;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: CASCADE is not implemented
+    	drop table temp_parted cascade;
+	^
+<sql-statement>
+-- check that adding partitions to a table while it is being used is prevented
+create table tab_part_create (a int) partition by list (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- check that adding partitions to a table while it is being used is prevented
+	^
+<sql-statement>
+create or replace function func_part_create() returns trigger
+  language plpgsql as $$
+  begin
+    execute 'create table tab_part_create_1 partition of tab_part_create for values in (1)';
+    return null;
+  end $$;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	create or replace function func_part_create() returns trigger
+	^
+<sql-statement>
+create trigger trig_part_create before insert on tab_part_create
+  for each statement execute procedure func_part_create();
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 283
+    	create trigger trig_part_create before insert on tab_part_create
+	^
+<sql-statement>
+insert into tab_part_create values (1);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tab_part_create
+    
+<sql-statement>
+drop table tab_part_create;
+</sql-statement>
+<sql-statement>
+drop function func_part_create();
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	drop function func_part_create();
+	^
+<sql-statement>
+-- test using a volatile expression as partition bound
+create table volatile_partbound_test (partkey timestamp) partition by range (partkey);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- test using a volatile expression as partition bound
+	^
+<sql-statement>
+create table volatile_partbound_test1 partition of volatile_partbound_test for values from (minvalue) to (current_timestamp);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table volatile_partbound_test1 partition of volatile_partbound_test for values from (minvalue) to (current_timestamp);
+	^
+<sql-statement>
+create table volatile_partbound_test2 partition of volatile_partbound_test for values from (current_timestamp) to (maxvalue);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table volatile_partbound_test2 partition of volatile_partbound_test for values from (current_timestamp) to (maxvalue);
+	^
+<sql-statement>
+-- this should go into the partition volatile_partbound_test2
+insert into volatile_partbound_test values (current_timestamp);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.volatile_partbound_test
+    
+<sql-statement>
+select tableoid::regclass from volatile_partbound_test;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.volatile_partbound_test
+    
+<sql-statement>
+drop table volatile_partbound_test;
+</sql-statement>
+<sql-statement>
+-- test the case where a check constraint on default partition allows
+-- to avoid scanning it when adding a new partition
+create table defcheck (a int, b int) partition by list (b);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- test the case where a check constraint on default partition allows
+	^
+<sql-statement>
+create table defcheck_def (a int, c int, b int);
+</sql-statement>
+<sql-statement>
+alter table defcheck_def drop c;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table defcheck_def drop c;
+	^
+<sql-statement>
+alter table defcheck attach partition defcheck_def default;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table defcheck attach partition defcheck_def default;
+	^
+<sql-statement>
+alter table defcheck_def add check (b <= 0 and b is not null);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table defcheck_def add check (b <= 0 and b is not null);
+	^
+<sql-statement>
+create table defcheck_1 partition of defcheck for values in (1, null);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table defcheck_1 partition of defcheck for values in (1, null);
+	^
+<sql-statement>
+-- test that complex default partition constraints are enforced correctly
+insert into defcheck_def values (0, 0);
+</sql-statement>
+<sql-statement>
+create table defcheck_0 partition of defcheck for values in (0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table defcheck_0 partition of defcheck for values in (0);
+	^
+<sql-statement>
+drop table defcheck;
+</sql-statement>
+<sql-statement>
+-- tests of column drop with partition tables and indexes using
+-- predicates and expressions.
+create table part_column_drop (
+  useless_1 int,
+  id int,
+  useless_2 int,
+  d int,
+  b int,
+  useless_3 int
+) partition by range (id);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- tests of column drop with partition tables and indexes using
+	^
+<sql-statement>
+alter table part_column_drop drop column useless_1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table part_column_drop drop column useless_1;
+	^
+<sql-statement>
+alter table part_column_drop drop column useless_2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table part_column_drop drop column useless_2;
+	^
+<sql-statement>
+alter table part_column_drop drop column useless_3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table part_column_drop drop column useless_3;
+	^
+<sql-statement>
+create index part_column_drop_b_pred on part_column_drop(b) where b = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: partial index is not supported yet
+    	create index part_column_drop_b_pred on part_column_drop(b) where b = 1;
+	^
+<sql-statement>
+create index part_column_drop_b_expr on part_column_drop((b = 1));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: index expression is not supported yet
+    	create index part_column_drop_b_expr on part_column_drop((b = 1));
+	^
+<sql-statement>
+create index part_column_drop_d_pred on part_column_drop(d) where d = 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: partial index is not supported yet
+    	create index part_column_drop_d_pred on part_column_drop(d) where d = 2;
+	^
+<sql-statement>
+create index part_column_drop_d_expr on part_column_drop((d = 2));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: index expression is not supported yet
+    	create index part_column_drop_d_expr on part_column_drop((d = 2));
+	^
+<sql-statement>
+create table part_column_drop_1_10 partition of
+  part_column_drop for values from (1) to (10);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table part_column_drop_1_10 partition of
+	^
+<sql-statement>
+\d part_column_drop
+</sql-statement>
+Metacommand \d part_column_drop is not supported
+<sql-statement>
+\d part_column_drop_1_10
+</sql-statement>
+Metacommand \d part_column_drop_1_10 is not supported
+<sql-statement>
+drop table part_column_drop;
+</sql-statement>

@@ -9,10 +9,42 @@ void TTestTableDescription::TColumn::SerializeTo(NKikimrSchemeOp::TColumnDescrip
     proto.SetType(Type);
 }
 
+void TTestTableDescription::TReplicationConfig::SerializeTo(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
+    switch (Mode) {
+    case MODE_NONE:
+        proto.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+        break;
+    case MODE_READ_ONLY:
+        proto.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        break;
+    default:
+        Y_ABORT("Unexpected mode");
+    }
+
+    switch (ConsistencyLevel) {
+    case CONSISTENCY_LEVEL_UNKNOWN:
+        proto.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN);
+        break;
+    case CONSISTENCY_LEVEL_GLOBAL:
+        proto.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL);
+        break;
+    case CONSISTENCY_LEVEL_ROW:
+        proto.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+        break;
+    default:
+        Y_ABORT("Unexpected consistency");
+    }
+}
+
+TTestTableDescription::TReplicationConfig TTestTableDescription::TReplicationConfig::Default() {
+    return TReplicationConfig{
+        .Mode = MODE_READ_ONLY,
+        .ConsistencyLevel = CONSISTENCY_LEVEL_ROW,
+    };
+}
+
 void TTestTableDescription::SerializeTo(NKikimrSchemeOp::TTableDescription& proto) const {
     proto.SetName(Name);
-    proto.MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-    proto.MutableReplicationConfig()->SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
 
     for (const auto& keyColumn : KeyColumns) {
         proto.AddKeyColumnNames(keyColumn);
@@ -20,6 +52,14 @@ void TTestTableDescription::SerializeTo(NKikimrSchemeOp::TTableDescription& prot
 
     for (const auto& column : Columns) {
         column.SerializeTo(*proto.AddColumns());
+    }
+
+    if (ReplicationConfig) {
+        ReplicationConfig->SerializeTo(*proto.MutableReplicationConfig());
+    }
+
+    if (UniformPartitions) {
+        proto.SetUniformPartitionsCount(*UniformPartitions);
     }
 }
 

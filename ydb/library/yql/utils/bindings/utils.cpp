@@ -1,6 +1,6 @@
 #include "utils.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/yson/writer.h>
@@ -34,6 +34,8 @@ void LoadBindings(THashMap<TString, NSQLTranslation::TTableBindingSettings>& dst
                 binding.ClusterType = v.GetString();
             } else if (k == "schema") {
                 binding.Settings["schema"] = SerializeJsonValueAsYsonText(v);
+            } else if (k == "constraints") {
+                binding.Settings["constraints"] = SerializeJsonValueAsYsonText(v);
             } else {
                 YQL_ENSURE(v.IsString());
                 binding.Settings.emplace(k, v.GetString());

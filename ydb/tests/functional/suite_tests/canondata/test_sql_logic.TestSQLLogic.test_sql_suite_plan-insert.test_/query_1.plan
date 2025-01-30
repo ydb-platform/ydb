@@ -5,11 +5,11 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 4,
+                "PlanNodeId": 5,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
-                        "Node Type": "Aggregate-Limit",
+                        "Node Type": "Aggregate-Limit-Aggregate",
                         "Operators": [
                             {
                                 "Inputs": [
@@ -17,51 +17,73 @@
                                         "InternalOperatorId": 1
                                     }
                                 ],
-                                "Name": "Aggregate"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
                             },
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 2
+                                        "InternalOperatorId": 2
                                     }
                                 ],
                                 "Limit": "1",
                                 "Name": "Limit"
+                            },
+                            {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 3
+                                    }
+                                ],
+                                "Name": "Aggregate",
+                                "Phase": "Final"
                             }
                         ],
-                        "PlanNodeId": 3,
+                        "PlanNodeId": 4,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 2,
+                                "PlanNodeId": 3,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-TableFullScan",
+                                        "Node Type": "Aggregate",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 1
+                                                        "ExternalPlanNodeId": 1
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "TableFullScan",
-                                                "ReadColumns": null,
-                                                "ReadRanges": [
-                                                    "a (-\u221e, +\u221e)",
-                                                    "b (-\u221e, +\u221e)",
-                                                    "c (-\u221e, +\u221e)"
-                                                ],
-                                                "Table": "sqllogictest_insert.test_plan/a2"
+                                                "Name": "Aggregate",
+                                                "Phase": "Intermediate"
                                             }
                                         ],
-                                        "PlanNodeId": 1,
-                                        "Tables": [
-                                            "sqllogictest_insert.test_plan/a2"
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "Path": "/Root/sqllogictest_insert.test_plan/a2",
+                                                        "ReadColumns": null,
+                                                        "ReadRanges": [
+                                                            "a (-\u221e, +\u221e)",
+                                                            "b (-\u221e, +\u221e)",
+                                                            "c (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "sqllogictest_insert.test_plan/a2"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "sqllogictest_insert.test_plan/a2"
+                                                ]
+                                            }
                                         ]
                                     }
                                 ]
@@ -70,7 +92,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

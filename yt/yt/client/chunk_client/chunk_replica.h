@@ -2,7 +2,14 @@
 
 #include "public.h"
 
+#include <yt/yt/client/hydra/public.h>
+
 #include <yt/yt/client/node_tracker_client/public.h>
+
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
+
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 namespace NYT::NChunkClient {
 
@@ -30,7 +37,7 @@ public:
     int GetMediumIndex() const;
 
     TChunkReplica ToChunkReplica() const;
-    static TChunkReplicaList ToChunkReplicas(const TChunkReplicaWithMediumList& replicasWithMedia);
+    static TChunkReplicaList ToChunkReplicas(TRange<TChunkReplicaWithMedium> replicasWithMedia);
 
 private:
     /*!
@@ -54,7 +61,6 @@ void ToProto(ui32* value, TChunkReplicaWithMedium replica) = delete;
 void FromProto(TChunkReplicaWithMedium* replica, ui32 value) = delete;
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithMedium replica, TStringBuf spec);
-TString ToString(TChunkReplicaWithMedium replica);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -86,7 +92,15 @@ private:
 };
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithLocation replica, TStringBuf spec);
-TString ToString(TChunkReplicaWithLocation replica);
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TWrittenChunkReplicasInfo
+{
+    TChunkReplicaWithLocationList Replicas;
+    // Revision upon confirmation of the chunk. Not every writer is expected to set this field.
+    NHydra::TRevision ConfirmationRevision = NHydra::NullRevision;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -112,10 +126,15 @@ private:
 
     friend void ToProto(ui32* value, TChunkReplica replica);
     friend void FromProto(TChunkReplica* replica, ui32 value);
+
+    using TLoadContext = NPhoenix::TLoadContext;
+    using TSaveContext = NPhoenix::TSaveContext;
+    using TPersistenceContext = NPhoenix::TPersistenceContext;
+
+    PHOENIX_DECLARE_TYPE(TChunkReplica, 0x004d1b8a);
 };
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplica replica, TStringBuf spec);
-TString ToString(TChunkReplica replica);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -154,13 +173,13 @@ struct TChunkIdWithIndexes
 
 bool operator<(const TChunkIdWithIndex& lhs, const TChunkIdWithIndex& rhs);
 
-TString ToString(const TChunkIdWithIndex& id);
+void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndex& id, TStringBuf spec = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
 bool operator<(const TChunkIdWithIndexes& lhs, const TChunkIdWithIndexes& rhs);
 
-TString ToString(const TChunkIdWithIndexes& id);
+void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndexes& id, TStringBuf spec = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -169,6 +188,9 @@ bool IsArtifactChunkId(TChunkId id);
 
 //! Returns |true| iff this is a chunk or any type (journal or blob, replicated or erasure-coded).
 bool IsPhysicalChunkType(NObjectClient::EObjectType type);
+
+//! Returns |true| iff this is a chunk or any type (journal or blob, replicated or erasure-coded).
+bool IsPhysicalChunkId(TChunkId id);
 
 //! Returns |true| iff this is a journal chunk type.
 bool IsJournalChunkType(NObjectClient::EObjectType type);
@@ -187,6 +209,9 @@ bool IsErasureChunkType(NObjectClient::EObjectType type);
 
 //! Returns |true| iff this is an erasure chunk.
 bool IsErasureChunkId(TChunkId id);
+
+//! Returns |true| iff this is an erasure chunk part.
+bool IsErasureChunkPartType(NObjectClient::EObjectType type);
 
 //! Returns |true| iff this is an erasure chunk part.
 bool IsErasureChunkPartId(TChunkId id);
@@ -222,16 +247,35 @@ public:
     explicit TChunkReplicaAddressFormatter(NNodeTrackerClient::TNodeDirectoryPtr nodeDirectory);
 
     void operator()(TStringBuilderBase* builder, TChunkReplicaWithMedium replica) const;
-
     void operator()(TStringBuilderBase* builder, TChunkReplica replica) const;
 
 private:
-    NNodeTrackerClient::TNodeDirectoryPtr NodeDirectory_;
+    const NNodeTrackerClient::TNodeDirectoryPtr NodeDirectory_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChunkClient
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct TProtoTraits<NChunkClient::TChunkReplica>
+{
+    using TSerialized = ui32;
+};
+
+template <>
+struct TProtoTraits<NChunkClient::TChunkReplicaWithMedium>
+{
+    using TSerialized = ui64;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
 
 //! A hasher for TChunkIdWithIndex.
 template <>

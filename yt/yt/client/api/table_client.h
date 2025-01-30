@@ -135,6 +135,7 @@ struct TAlterTableReplicaOptions
     std::optional<bool> PreserveTimestamps;
     std::optional<NTransactionClient::EAtomicity> Atomicity;
     std::optional<bool> EnableReplicatedTableTracker;
+    std::optional<NYPath::TYPath> ReplicaPath;
 };
 
 struct TGetTablePivotKeysOptions
@@ -278,6 +279,7 @@ struct TAlterReplicationCardOptions
     NTabletClient::TReplicatedTableOptionsPtr ReplicatedTableOptions;
     std::optional<bool> EnableReplicatedTableTracker;
     std::optional<NChaosClient::TReplicationCardCollocationId> ReplicationCardCollocationId;
+    NTabletClient::TReplicationCollocationOptionsPtr CollocationOptions;
 };
 
 struct TGetReplicationCardOptions

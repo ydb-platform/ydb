@@ -4,6 +4,8 @@ from ydb.apps.dstool.lib.arg_parser import ArgumentParser
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.commands as commands
 
+import sys
+
 
 def main():
     parser = ArgumentParser(description='YDB Distributed Storage Administration Tool')
@@ -15,8 +17,12 @@ def main():
     subparsers = parser.add_subparsers(help='Subcommands', dest='global_command', required=True)
     command_map = commands.make_command_map_by_structure(subparsers)
     args = parser.parse_args()
-    common.apply_args(args)
-    commands.run_command(command_map, args)
+    try:
+        common.apply_args(args)
+        commands.run_command(command_map, args)
+    except common.InvalidParameterError as e:
+        e.print()
+        sys.exit(1)
 
 
 if __name__ == '__main__':

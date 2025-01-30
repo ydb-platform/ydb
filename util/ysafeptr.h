@@ -7,18 +7,18 @@
 #include <util/system/tls.h>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-//   There are different templates of pointers:
-//     1. Simple pointers.
-//     2. TPtr with refereces.
-//     3. TObj/TMObj with ownership. After destruction of a TObj the object it referenced to is
-//        cleaned up and marked as non valid. Similarly does TMobj organizing the parallel ownership
-//        of an object.
+// There are different templates of pointers:
+//   1. Simple pointers.
+//   2. TPtr with refereces.
+//   3. TObj/TMObj with ownership. After destruction of a TObj the object it referenced to is
+//      cleaned up and marked as non valid. Similarly does TMobj organizing the parallel ownership
+//      of an object.
 //
-//   Limitations:
-//     1. It may be necessary to use BASIC_REGISTER_CLASS() in .cpp files to be able to use a
-//        pointer to a forward declared class.
-//     2. It's prohibited to override the 'new' operator, since the standard 'delete' will be used
-//        for destruction of objects (because of 'delete this').
+// Limitations:
+//   1. It may be necessary to use BASIC_REGISTER_CLASS() in .cpp files to be able to use a
+//      pointer to a forward declared class.
+//   2. It's prohibited to override the 'new' operator, since the standard 'delete' will be used
+//      for destruction of objects (because of 'delete this').
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if defined(_MSC_VER) && defined(_DEBUG)
@@ -33,10 +33,11 @@ private:
 #ifdef CHECK_YPTR2
     static Y_POD_THREAD(bool) DisableThreadCheck;
     void CheckThreadId() {
-        if (dwThreadId == 0)
+        if (dwThreadId == 0) {
             dwThreadId = GetCurrentThreadId();
-        else
+        } else {
             Y_ASSERT(dwThreadId == GetCurrentThreadId() || DisableThreadCheck);
+        }
     }
     void AddRef() {
         CheckThreadId();
@@ -69,14 +70,16 @@ private:
     void ReleaseRef() {
         CheckThreadId();
         --RefData;
-        if (RefData == 0)
+        if (RefData == 0) {
             ReleaseRefComplete();
+        }
     }
     void ReleaseObj(int nRef, int nMask) {
         CheckThreadId();
         ObjData -= nRef;
-        if ((ObjData & nMask) == 0)
+        if ((ObjData & nMask) == 0) {
             ReleaseObjComplete(nMask);
+        }
     }
 
 protected:
@@ -262,18 +265,21 @@ private:
 
     void AddRef(TUserObj* _ptr) {
         TRef p;
-        if (_ptr)
+        if (_ptr) {
             p.AddRef(CastToObjectBase(_ptr));
+        }
     }
     void DecRef(TUserObj* _ptr) {
         TRef p;
-        if (_ptr)
+        if (_ptr) {
             p.DecRef(CastToObjectBase(_ptr));
+        }
     }
     void Release(TUserObj* _ptr) {
         TRef p;
-        if (_ptr)
+        if (_ptr) {
             p.Release(CastToObjectBase(_ptr));
+        }
     }
 
 protected:

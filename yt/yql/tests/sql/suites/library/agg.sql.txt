@@ -1,0 +1,7 @@
+-- Агрегационные функции, создаваемые с помощью
+-- AggregationFactory, удобно выносить в библиотеку
+$Agg_sum = AggregationFactory("SUM");
+$Agg_max = AggregationFactory("MAX");
+
+EXPORT $Agg_sum, $Agg_max;
+

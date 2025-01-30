@@ -12,7 +12,7 @@ $join = (
     from
         `{path}orders` as o
         join `{path}lineitem` as l
-        on o.o_orderkey == l.l_orderkey
+        on o.o_orderkey = l.l_orderkey
 );
 
 $border = Date("1994-01-01");
@@ -36,8 +36,8 @@ where
     (l_shipmode = 'MAIL' or l_shipmode = 'TRUCK')
     and l_commitdate < l_receiptdate
     and l_shipdate < l_commitdate
-    and cast(l_receiptdate as timestamp) >= $border
-    and cast(l_receiptdate as timestamp) < ($border + Interval("P365D"))
+    and l_receiptdate >= $border
+    and l_receiptdate < ($border + Interval("P365D"))
 group by
     l_shipmode
 order by

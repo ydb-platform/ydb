@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <memory>

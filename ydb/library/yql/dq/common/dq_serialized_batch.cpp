@@ -1,7 +1,6 @@
 #include "dq_serialized_batch.h"
 
-#include <ydb/library/yql/utils/rope_over_buffer.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <util/system/unaligned_mem.h>
 
@@ -10,9 +9,9 @@ namespace NYql::NDq {
 namespace {
 
 template<typename T>
-void AppendNumber(TRope& rope, T data) {
+void AppendNumber(TChunkedBuffer& rope, T data) {
     static_assert(std::is_integral_v<T>);
-    rope.Insert(rope.End(), TRope(TString(reinterpret_cast<const char*>(&data), sizeof(T))));
+    rope.Append(TString(reinterpret_cast<const char*>(&data), sizeof(T)));
 }
 
 template<typename T>
@@ -26,35 +25,55 @@ T ReadNumber(TStringBuf& src) {
 
 }
 
-void TDqSerializedBatch::SetPayload(TRope&& payload) {
+void TDqSerializedBatch::SetPayload(TChunkedBuffer&& payload) {
     Proto.ClearRaw();
     if (IsOOBTransport((NDqProto::EDataTransportVersion)Proto.GetTransportVersion())) {
         Payload = std::move(payload);
     } else {
-        Payload.clear();
-        Proto.MutableRaw()->reserve(payload.size());
-        while (!payload.IsEmpty()) {
-            auto it = payload.Begin();
-            Proto.MutableRaw()->append(it.ContiguousData(), it.ContiguousSize());
-            payload.Erase(it, it + it.ContiguousSize());
-        }
+        Payload.Clear();
+        Proto.MutableRaw()->reserve(payload.Size());
+        TStringOutput sout(*Proto.MutableRaw());
+        payload.CopyTo(sout);
+        payload.Clear();
     }
- }
+}
 
-TRope SaveForSpilling(TDqSerializedBatch&& batch) {
-    TRope result;
+void TDqSerializedBatch::ConvertToNoOOB() {
+    if (!IsOOB()) {
+        return;
+    }
+
+    YQL_ENSURE(Proto.GetRaw().empty());
+    Proto.MutableRaw()->reserve(Payload.Size());
+    TStringOutput sout(*Proto.MutableRaw());
+    Payload.CopyTo(sout);
+    Payload.Clear();
+    switch ((NDqProto::EDataTransportVersion)Proto.GetTransportVersion()) {
+    case NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0:
+        Proto.SetTransportVersion(NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0);
+        break;
+    case NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0:
+        Proto.SetTransportVersion(NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0);
+        break;
+    default:
+        YQL_ENSURE(false, "Unexpected transport version" << Proto.GetTransportVersion());
+    }
+}
+
+TChunkedBuffer SaveForSpilling(TDqSerializedBatch&& batch) {
+    TChunkedBuffer result;
 
     ui32 transportversion = batch.Proto.GetTransportVersion();
     ui32 rowCount = batch.Proto.GetRows();
 
-    TRope protoPayload(std::move(*batch.Proto.MutableRaw()));
+    TChunkedBuffer protoPayload(std::move(*batch.Proto.MutableRaw()));
 
     AppendNumber(result, transportversion);
     AppendNumber(result, rowCount);
-    AppendNumber(result, protoPayload.size());
-    result.Insert(result.End(), std::move(protoPayload));
-    AppendNumber(result, batch.Payload.GetSize());
-    result.Insert(result.End(), std::move(batch.Payload));
+    AppendNumber(result, protoPayload.Size());
+    result.Append(std::move(protoPayload));
+    AppendNumber(result, batch.Payload.Size());
+    result.Append(std::move(batch.Payload));
 
     return result;
 }
@@ -75,7 +94,7 @@ TDqSerializedBatch LoadSpilled(TBuffer&& blob) {
 
     size_t ropeSize = ReadNumber<size_t>(source);
     YQL_ENSURE(ropeSize == source.size(), "Spilled data is corrupted");
-    result.Payload = MakeReadOnlyRope(sharedBuf, source.data(), source.size());
+    result.Payload = TChunkedBuffer(source, sharedBuf);
     return result;
 }
 

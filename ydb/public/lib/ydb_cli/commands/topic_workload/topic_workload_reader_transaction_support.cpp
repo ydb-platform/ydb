@@ -81,6 +81,7 @@ void TTransactionSupport::CreateSession()
 TDuration TTransactionSupport::SelectFromTable()
 {
     Y_ABORT_UNLESS(Transaction);
+    Y_ABORT_UNLESS(ReadOnlyTableName);
 
     ui64 left = RandomNumber<ui64>();
     ui64 right = RandomNumber<ui64>();
@@ -125,6 +126,7 @@ TDuration TTransactionSupport::SelectFromTable()
 TDuration TTransactionSupport::UpsertIntoTable()
 {
     Y_ABORT_UNLESS(Transaction);
+    Y_ABORT_UNLESS(WriteOnlyTableName);
 
     TString query = "                                                                     \
         DECLARE $rows AS List<Struct<                                                     \

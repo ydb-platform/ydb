@@ -1,0 +1,41 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let list1 (AsList
+  '((Just (Int32 '1)) (String 'A))
+  '((Just (Int32 '7)) (String 'B))
+  '((Nothing (OptionalType (DataType 'Int32))) (String 'C))
+  '((Just (Int32 '4)) (String 'D))
+  '((Just (Int32 '4)) (String 'E))
+))
+
+(let list2 (AsList
+  '((Int64 '9) (String 'Z))
+  '((Int64 '4) (String 'Y))
+  '((Int64 '3) (String 'X))
+  '((Int64 '4) (String 'W))
+  '((Int64 '8) (String 'V))
+))
+
+(let keyExtractor (lambda '(x) (Nth x '0)))
+(let payloadExtractor (lambda '(x) x))
+
+(let dictOne (ToDict list2 keyExtractor payloadExtractor '('Hashed 'One 'Compact)))
+(let dictMany (ToDict list2 keyExtractor payloadExtractor '('Hashed 'Many 'Compact)))
+(let joinLeftSemi (MapJoinCore (ToFlow list1) dictOne 'LeftSemi '('0) '('0) '('0 '0 '1 '1) '() '() '()))
+(let joinLeftOnly (MapJoinCore (ToFlow list1) dictOne 'LeftOnly '('0) '('0) '('0 '0 '0 '1 '0 '2) '() '() '()))
+(let joinInnerUnique (MapJoinCore (ToFlow list1) dictOne 'Inner '('0) '('0) '('0 '2 '1 '1) '('1 '0) '() '()))
+(let joinLeftUnique (MapJoinCore (ToFlow list1) dictOne 'Left '('0) '('0) '('0 '0) '('0 '1 '1 '2) '() '()))
+(let joinInner (MapJoinCore (ToFlow list1) dictMany 'Inner '('0) '('0) '('0 '0 '1 '1) '('0 '2) '() '()))
+(let joinLeft (MapJoinCore (ToFlow list1) dictMany 'Left '('0) '('0) '('0 '2) '('0 '1 '1 '0) '() '()))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (Collect joinLeftSemi) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinLeftOnly) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinInnerUnique) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinLeftUnique) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinInner) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinLeft) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

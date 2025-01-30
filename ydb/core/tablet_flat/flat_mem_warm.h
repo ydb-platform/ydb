@@ -171,14 +171,14 @@ namespace NMem {
 
 } // namespace NMem
 
-    class TMemIt;
+    class TMemIter;
 
     struct TMemTableSnapshot;
 
     struct TMemTableRollbackState;
 
     class TMemTable : public TThrRefBase {
-        friend class TMemIt;
+        friend class TMemIter;
 
     public:
         struct TTxIdStat {

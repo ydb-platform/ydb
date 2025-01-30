@@ -1,8 +1,6 @@
 IF (OS_LINUX AND NOT WITH_VALGRIND)
     UNITTEST()
 
-    TIMEOUT(1200)
-
     SIZE(LARGE)
 
     TAG(ya:fat)
@@ -16,6 +14,7 @@ IF (OS_LINUX AND NOT WITH_VALGRIND)
     ENDIF ()
 
     PEERDIR(
+        ydb/apps/version
         ydb/core/blobstorage
         ydb/core/blobstorage/ut_pdiskfit/lib
     )

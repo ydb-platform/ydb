@@ -55,11 +55,13 @@ public:
         } else {
             const auto& status = Ev->Get()->Status;
 
-            Replication->SetState(TReplication::EState::Error);
             target->SetStreamState(TReplication::EStreamState::Error);
             target->SetIssue(TStringBuilder() << "Create stream error"
                 << ": " << status.GetStatus()
                 << ", " << status.GetIssues().ToOneLineString());
+
+            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
+                << ": " << target->GetIssue());
 
             CLOG_E(ctx, "Create stream error"
                 << ": rid# " << rid
@@ -71,7 +73,10 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());
         db.Table<Schema::Targets>().Key(rid, tid).Update<Schema::Targets::Issue>(target->GetIssue());
-        db.Table<Schema::Replications>().Key(rid).Update<Schema::Replications::State>(Replication->GetState());
+        db.Table<Schema::Replications>().Key(rid).Update(
+            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
+        );
 
         return true;
     }

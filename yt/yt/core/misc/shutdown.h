@@ -76,6 +76,17 @@ FILE* TryGetShutdownLogFile();
 //! the id of the thread invoking shutdown callbacks.
 size_t GetShutdownThreadId();
 
+//! Some actions that are required for proper shutdown
+//! may only happen during the shutdown when they are
+//! no longer safe to be executed, e.g. system invokers
+//! creation.
+//! Call this method before |Shutdown| to make sure everything is going to work safely.
+//! This method can be called multiple times. No-op after the first call.
+//! If you encounter build timeout during codegen phase or something similar,
+//! try calling any other method from this header prior as it would break
+//! any possible recursive behaviors of static variables.
+void EnsureSafeShutdown();
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

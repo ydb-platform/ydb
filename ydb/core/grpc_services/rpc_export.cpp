@@ -37,10 +37,12 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         auto ev = MakeHolder<TEvExport::TEvCreateExportRequest>();
         ev->Record.SetTxId(this->TxId);
-        ev->Record.SetDatabaseName(this->DatabaseName);
+        ev->Record.SetDatabaseName(this->GetDatabaseName());
         if (this->UserToken) {
             ev->Record.SetUserSID(this->UserToken->GetUserSID());
+            ev->Record.SetSanitizedToken(this->UserToken->GetSanitizedToken());
         }
+        ev->Record.SetPeerName(this->Request->GetPeerName());
 
         auto& createExport = *ev->Record.MutableRequest();
         *createExport.MutableOperationParams() = request.operation_params();
@@ -64,7 +66,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     TVector<TString> ExtractPaths() {
         TVector<TString> paths;
 
-        paths.emplace_back(this->DatabaseName); // first entry is database
+        paths.emplace_back(this->GetDatabaseName()); // first entry is database
         ExtractPaths(paths, this->GetProtoRequest()->settings());
 
         return paths;
@@ -74,7 +76,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         Y_ABORT_UNLESS(!paths.empty());
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = this->DatabaseName;
+        request->DatabaseName = this->GetDatabaseName();
 
         for (const auto& path : paths) {
             auto& entry = request->ResultSet.emplace_back();

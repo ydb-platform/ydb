@@ -23,6 +23,8 @@ struct TSchemaSnapshot {
 };
 
 class TSchemaSnapshotManager {
+    using TSnapshots = TMap<TSchemaSnapshotKey, TSchemaSnapshot, TLess<void>>;
+
 public:
     explicit TSchemaSnapshotManager(const TDataShard* self);
 
@@ -31,11 +33,13 @@ public:
 
     bool AddSnapshot(NTable::TDatabase& db, const TSchemaSnapshotKey& key, const TSchemaSnapshot& snapshot);
     const TSchemaSnapshot* FindSnapshot(const TSchemaSnapshotKey& key) const;
-    void RemoveShapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key);
+    void RemoveShapshot(NTable::TDatabase& db, const TSchemaSnapshotKey& key);
     void RenameSnapshots(NTable::TDatabase& db, const TPathId& prevTableId, const TPathId& newTableId);
+    const TSnapshots& GetSnapshots() const;
 
     bool AcquireReference(const TSchemaSnapshotKey& key);
     bool ReleaseReference(const TSchemaSnapshotKey& key);
+    bool HasReference(const TSchemaSnapshotKey& key) const;
 
 private:
     void PersistAddSnapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key, const TSchemaSnapshot& snapshot);
@@ -43,7 +47,7 @@ private:
 
 private:
     const TDataShard* Self;
-    TMap<TSchemaSnapshotKey, TSchemaSnapshot, TLess<void>> Snapshots;
+    TSnapshots Snapshots;
     THashMap<TSchemaSnapshotKey, size_t> References;
 
 }; // TSchemaSnapshotManager

@@ -20,6 +20,10 @@ namespace NTable {
 
         }
 
+        void Pause() noexcept {
+            OnPause = true;
+        }
+
         void Resume(EScan op) noexcept
         {
             Y_DEBUG_ABORT_UNLESS(op == EScan::Feed || op == EScan::Reset);
@@ -311,13 +315,13 @@ namespace NTable {
 
             Y_ABORT_UNLESS(Lead.Key.GetCells().size() <= keyDefaults->Size(), "TLead key is too large");
 
-            Iter = new TTableIt(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion, Subset.CommittedTransactions);
+            Iter = new TTableIter(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion, Subset.CommittedTransactions);
 
             CurrentEnv = MakeEnv();
 
             for (auto &mem: Subset.Frozen)
                 Iter->Push(
-                    TMemIt::Make(
+                    TMemIter::Make(
                         *mem, mem.Snapshot, Lead.Key.GetCells(), Lead.Relation, keyDefaults, &Iter->Remap, CurrentEnv));
 
             if (Lead.StopKey.GetCells()) {
@@ -334,7 +338,7 @@ namespace NTable {
             }
 
             PrepareBoots();
-            SeekState = ESeekState::LoadIndexes;
+            SeekState = ESeekState::SeekBoots;
             return true;
         }
 
@@ -354,24 +358,6 @@ namespace NTable {
             }
 
             return LoadingParts == 0;
-        }
-
-        bool LoadIndexes() noexcept
-        {
-            bool ready = true;
-            if (Levels) {
-                for (const auto &run: *Levels) {
-                    for (const auto &item : run) {
-                        for (auto indexPageId : item.Part->IndexPages.Groups) {
-                            ready &= bool(CurrentEnv->TryGetPage(item.Part.Get(), indexPageId));
-                        }
-                        for (auto indexPageId : item.Part->IndexPages.Historic) {
-                            ready &= bool(CurrentEnv->TryGetPage(item.Part.Get(), indexPageId));
-                        }
-                    }
-                }
-            }
-            return ready;
         }
 
         void PrepareBoots() noexcept
@@ -407,7 +393,7 @@ namespace NTable {
                 Boots.reserve(Levels->size());
                 for (auto &run: *Levels) {
                     Boots.push_back(
-                        MakeHolder<TRunIt>(run, Lead.Tags, keyDefaults, CurrentEnv));
+                        MakeHolder<TRunIter>(run, Lead.Tags, keyDefaults, CurrentEnv));
                 }
             }
         }
@@ -465,12 +451,6 @@ namespace NTable {
                     [[fallthrough]];
                 case ESeekState::PrepareBoots:
                     PrepareBoots();
-                    SeekState = ESeekState::LoadIndexes;
-                    [[fallthrough]];
-                case ESeekState::LoadIndexes:
-                    if (!LoadIndexes()) {
-                        return true;
-                    }
                     SeekState = ESeekState::SeekBoots;
                     [[fallthrough]];
                 case ESeekState::SeekBoots:
@@ -500,7 +480,6 @@ namespace NTable {
         enum class ESeekState {
             LoadColdParts,
             PrepareBoots,
-            LoadIndexes,
             SeekBoots,
             Finished,
         };
@@ -522,7 +501,7 @@ namespace NTable {
         TRowVersion NextRowVersion;
 
     private:
-        using TBoots = TVector<THolder<TRunIt>>;
+        using TBoots = TVector<THolder<TRunIter>>;
 
         IPages* CurrentEnv = nullptr;
 
@@ -532,7 +511,7 @@ namespace NTable {
         THolder<TLevels> Levels;
         TLead Lead;
         TBoots Boots;
-        TAutoPtr<TTableIt> Iter;
+        TAutoPtr<TTableIter> Iter;
         ui64 Seeks = Max<ui64>();
         ESeekState SeekState;
         bool OnPause = false;

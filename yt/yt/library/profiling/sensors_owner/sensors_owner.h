@@ -23,7 +23,7 @@ namespace NYT::NProfiling {
 class TSensorsOwner
 {
 public:
-    //! Returns no-op sensors owner, should be singleton to avoid memory leaks.
+    //! Returns no-op sensors owner. Note that is still holds the owned structs created with Get* methods.
     TSensorsOwner();
     explicit TSensorsOwner(const TProfiler& profiler);
 
@@ -53,14 +53,16 @@ public:
     //! Gets owned TSensorsOwner with profiler=Profiler.WithTags(...).
     //! Result of WithTags(tags) is always the same with fixed *this and tags.Tags().
     const TSensorsOwner& WithTags(const TTagSet& tags) const;
-    const TSensorsOwner& WithTag(const TString& name, const TString& value) const;
-    const TSensorsOwner& WithRequiredTag(const TString& name, const TString& value) const;
-    const TSensorsOwner& WithExcludedTag(const TString& name, const TString& value) const;
-    const TSensorsOwner& WithAlternativeTag(const TString& name, const TString& value, int alternativeTo) const;
+    const TSensorsOwner& WithTag(const std::string& name, const std::string& value) const;
+    const TSensorsOwner& WithRequiredTag(const std::string& name, const std::string& value) const;
+    const TSensorsOwner& WithExcludedTag(const std::string& name, const std::string& value) const;
+    const TSensorsOwner& WithAlternativeTag(const std::string& name, const std::string& value, int alternativeTo) const;
 
     //! Gets owned TSensorsOwner with profiler=Profiler.WithPrefix(...).
     //! Result of WithPrefix(prefix) is always the same with fixed *this and prefix.
-    const TSensorsOwner& WithPrefix(const TString& prefix) const;
+    const TSensorsOwner& WithPrefix(const std::string& prefix) const;
+
+    const TSensorsOwner& WithGlobal() const;
 
     const TProfiler& GetProfiler() const;
 
@@ -68,29 +70,38 @@ public:
      *  Note that it is generally better to have a structure storing all the sensors
      *  you need and access it through the Get method. Avoid using methods below
      *  unless you only need a single sensor and lookup by your key is not
-     *  cheaper than by TString, or you don't care about performance.
+     *  cheaper than by std::string, or you don't care about performance.
      */
 
     //! Gets owned counter with given metric suffix.
-    const TCounter& GetCounter(TStringBuf name) const;
+    const TCounter& GetCounter(const std::string& name) const;
 
     //! ~ .Counter(str).Increment(delta)
-    void Inc(TStringBuf name, i64 delta) const;
+    void Increment(const std::string& name, i64 delta) const;
 
     //! Gets owned gauge with given metric suffix.
-    const TGauge& GetGauge(TStringBuf name) const;
+    const TGauge& GetGauge(const std::string& name) const;
+
+    //! Gets owned time gauge with given metric suffix.
+    const TTimeGauge& GetTimeGauge(const std::string& name) const;
+
+    //! Gets owned timer with given metric suffix.
+    const TEventTimer& GetTimer(const std::string& name) const;
 
     //! Gets owned TimeHistogram with given metric suffix using bounds as a constructor argument.
-    const TEventTimer& GetTimeHistogram(TStringBuf name, std::vector<TDuration> bounds) const;
+    const TEventTimer& GetTimeHistogram(const std::string& name, std::vector<TDuration> bounds) const;
 
     //! Gets owned TimeHistogram with given metric suffix using min/max as a constructor arguments.
-    const TEventTimer& GetTimeHistogram(TStringBuf name, TDuration min, TDuration max) const;
+    const TEventTimer& GetTimeHistogram(const std::string& name, TDuration min, TDuration max) const;
 
     //! Gets owned GaugeHistogram with given metric suffix using buckets as a constructor.
-    const TGaugeHistogram& GetGaugeHistogram(TStringBuf name, std::vector<double> buckets) const;
+    const TGaugeHistogram& GetGaugeHistogram(const std::string& name, std::vector<double> buckets) const;
 
     //! Gets owned RateHistogram with given metric suffix using buckets as a constructor.
-    const TRateHistogram& GetRateHistogram(TStringBuf name, std::vector<double> buckets) const;
+    const TRateHistogram& GetRateHistogram(const std::string& name, std::vector<double> buckets) const;
+
+    //! Gets owned Summary with given metric suffix using summary policy as a constructor.
+    const TSummary& GetSummary(const std::string& name, ESummaryPolicy policy) const;
 
 private:
     struct TState final

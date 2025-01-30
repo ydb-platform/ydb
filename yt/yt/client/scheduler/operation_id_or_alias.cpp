@@ -28,7 +28,7 @@ TOperationIdOrAlias TOperationIdOrAlias::FromString(TString operationIdOrAlias)
     }
 }
 
-void FormatValue(TStringBuilderBase* builder, const TOperationIdOrAlias& operationIdOrAlias, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TOperationIdOrAlias& operationIdOrAlias, TStringBuf /*spec*/)
 {
     Visit(operationIdOrAlias.Payload,
         [&] (const TString& alias) {
@@ -37,11 +37,6 @@ void FormatValue(TStringBuilderBase* builder, const TOperationIdOrAlias& operati
         [&] (const TOperationId& operationId) {
             builder->AppendFormat("%v", operationId);
         });
-}
-
-TString ToString(const TOperationIdOrAlias& operationIdOrAlias)
-{
-    return ToStringViaBuilder(operationIdOrAlias);
 }
 
 TOperationIdOrAlias::operator size_t() const

@@ -25,7 +25,7 @@ with v1 as(
  group by i_category, i_brand,
           cc_name , d_year, d_moy),
  v2 as(
- select v1.cc_name
+ select v1.i_category, v1.i_brand, v1.cc_name
         ,v1.d_year, v1.d_moy
         ,v1.avg_monthly_sales
         ,v1.sum_sales, v1_lag.sum_sales psum, v1_lead.sum_sales nsum
@@ -41,9 +41,9 @@ with v1 as(
   select  *
  from v2
  where  d_year = 1999 and
-        avg_monthly_sales > 0::numeric and
-        case when avg_monthly_sales > 0::numeric then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null::numeric end > 0.1::numeric
- order by sum_sales - avg_monthly_sales, nsum
+        avg_monthly_sales > 0 and
+        case when avg_monthly_sales > 0 then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1
+ order by sum_sales - avg_monthly_sales, cc_name
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query57.tpl

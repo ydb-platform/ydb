@@ -3,10 +3,9 @@ option java_package = "ru.yandex.kikimr.proto";
 
 message TNodeLimitsConfig {
     message TPersQueueNodeConfig {
-        optional uint64 SharedCacheSizeMb = 1 [default = 8192];
+        optional uint64 SharedCacheSizeMb = 1 [default = 1024];
         optional uint32 CacheKeepTimeSec = 2 [default = 10];
     }
 
     optional TPersQueueNodeConfig PersQueueNodeConfig = 1;
 }
-

@@ -34,14 +34,15 @@ bool HasIssue(const TIssues& issues, ui32 code, TStringBuf message, std::functio
 
 class TLocalFixture {
 public:
-    TLocalFixture() {
+    TLocalFixture(bool enableResourcePools = true) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        app.MutableFeatureFlags()->SetEnableResourcePools(enableResourcePools);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
             .SetUseRealThreads(false)
+            .SetEnableResourcePools(enableResourcePools)
             .SetAppConfig(app);
 
         Server = new TServer(serverSettings);
@@ -83,7 +84,8 @@ public:
 Y_UNIT_TEST_SUITE(KqpErrors) {
 
 Y_UNIT_TEST(ResolveTableError) {
-    TLocalFixture fixture;
+    // Disable resource pool, because workload manager also got TEvNavigateKeySetResult for default pool creation
+    TLocalFixture fixture(false);
     auto mitm = [&](TAutoPtr<IEventHandle> &ev) {
         if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
             auto event = ev.Get()->Get<TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
@@ -98,7 +100,7 @@ Y_UNIT_TEST(ResolveTableError) {
     SendRequest(*fixture.Runtime, fixture.Client, MakeSQLRequest("select * from `/Root/table-1`"));
 
     auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(fixture.Client);
-    auto& record = ev->Get()->Record.GetRef();
+    auto& record = ev->Get()->Record;
 
     // Cerr << record.DebugString() << Endl;
 
@@ -135,10 +137,10 @@ Y_UNIT_TEST(ProposeError) {
         };
         fixture.Runtime->SetObserverFunc(mitm);
 
-        SendRequest(*fixture.Runtime, client, MakeSQLRequest(Q_("select * from `/Root/table-1`")));
+        SendRequest(*fixture.Runtime, client, MakeSQLRequest(Q_("upsert into `/Root/table-1` (key, value) values (5, 5);")));
 
         auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(client);
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), ydbStatus, record.DebugString());
 
         // Cerr << record.DebugString() << Endl;
@@ -225,45 +227,13 @@ Y_UNIT_TEST(ProposeError) {
             "Error executing transaction: transaction failed.");
 }
 
-Y_UNIT_TEST(ProposeRequestUndelivered) {
-    TLocalFixture fixture;
-    auto mitm = [&](TAutoPtr<IEventHandle> &ev) {
-        if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
-            auto forwardEvent = ev.Get()->Get<TEvPipeCache::TEvForward>();
-            if (forwardEvent->Ev->Type() == TEvDataShard::TEvProposeTransaction::EventType) {
-                fixture.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient, new TEvPipeCache::TEvDeliveryProblem(forwardEvent->TabletId, /* NotDelivered */ true)));
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    fixture.Runtime->SetObserverFunc(mitm);
-
-    SendRequest(*fixture.Runtime, fixture.Client, MakeSQLRequest(Q_("select * from `/Root/table-1`")));
-
-    auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(fixture.Client);
-    auto& record = ev->Get()->Record.GetRef();
-    UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE, record.DebugString());
-
-    Cerr << record.DebugString() << Endl;
-
-    TIssues issues;
-    IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-    UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-        "Kikimr cluster or one of its subsystems was unavailable."), record.GetResponse().DebugString());
-
-    UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
-            return issue.GetMessage().StartsWith("Tx state unknown for shard");
-        }), record.GetResponse().DebugString());
-}
-
 void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TString& query,
                            std::function<void(const NKikimrKqp::TEvQueryResponse& resp)> fn)
 {
     TActorId executer;
     ui32 droppedEvents = 0;
 
-    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+    auto prev = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto* fe = ev.Get()->Get<TEvPipeCache::TEvForward>();
             if (fe->Ev->Type() == TEvDataShard::TEvProposeTransaction::EventType) {
@@ -293,9 +263,11 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(client);
     UNIT_ASSERT(droppedEvents > 0 && droppedEvents < 4);
 
-    auto& record = ev->Get()->Record.GetRef();
+    auto& record = ev->Get()->Record;
     // Cerr << record.DebugString() << Endl;
     fn(record);
+
+    runtime.SetObserverFunc(prev);
 }
 
 Y_UNIT_TEST(ProposeResultLost_RwTx) {
@@ -303,20 +275,26 @@ Y_UNIT_TEST(ProposeResultLost_RwTx) {
     TestProposeResultLost(*fixture.Runtime, fixture.Client,
         Q_(R"(
             upsert into `/Root/table-1` (key, value) VALUES
-                (1, 1), (1073741823, 1073741823), (2147483647, 2147483647), (4294967295, 4294967295)
+                (1, 11), (1073741823, 1073741823), (2147483647, 2147483647), (4294967295, 4294967295)
            )"),
         [](const NKikimrKqp::TEvQueryResponse& record) {
-               UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), Ydb::StatusIds::UNDETERMINED, record.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE, record.DebugString());
 
-               TIssues issues;
-               IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-               UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-               "State of operation is unknown."), record.GetResponse().DebugString());
-
-               UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
-               return issue.GetMessage().StartsWith("Tx state unknown for shard ");
-           }), record.GetResponse().DebugString());
+            TIssues issues;
+            IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+            UNIT_ASSERT_C(
+                HasIssue(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                    "Kikimr cluster or one of its subsystems was unavailable."),
+                record.GetResponse().DebugString());
         });
+
+    // Verify that the transaction didn't commit
+    UNIT_ASSERT_VALUES_EQUAL(
+        KqpSimpleExec(*fixture.Runtime,
+            Q_("SELECT key, value FROM `/Root/table-1` ORDER BY key")),
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+        "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+        "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
 }
 
 } // suite

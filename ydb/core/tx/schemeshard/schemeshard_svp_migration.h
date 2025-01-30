@@ -10,6 +10,7 @@ struct TMigrationInfo {
     TString DbName;
     bool CreateSVP = false;
     bool CreateSA = false;
+    bool CreateBCT = false;
 };
 
 THolder<NActors::IActor> CreateTabletMigrator(ui64 ssTabletId, NActors::TActorId ssActorId,

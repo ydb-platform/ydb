@@ -35,10 +35,12 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         auto ev = MakeHolder<TEvImport::TEvCreateImportRequest>();
         ev->Record.SetTxId(this->TxId);
-        ev->Record.SetDatabaseName(this->DatabaseName);
+        ev->Record.SetDatabaseName(this->GetDatabaseName());
         if (this->UserToken) {
             ev->Record.SetUserSID(this->UserToken->GetUserSID());
+            ev->Record.SetSanitizedToken(this->UserToken->GetSanitizedToken());
         }
+        ev->Record.SetPeerName(this->Request->GetPeerName());
 
         auto& createImport = *ev->Record.MutableRequest();
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());

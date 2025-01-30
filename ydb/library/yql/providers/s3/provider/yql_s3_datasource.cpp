@@ -1,17 +1,17 @@
 #include "yql_s3_provider_impl.h"
 #include "yql_s3_dq_integration.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/config/yql_setting.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -61,7 +61,7 @@ public:
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (node.IsCallable(TCoDataSource::CallableName())) {
             if (node.Head().Content() == S3ProviderName) {
-                if (const auto& clusterName = node.Tail().Content(); NCommon::ALL_CLUSTERS != clusterName && !State_->Configuration->HasCluster(clusterName)) {
+                if (const auto& clusterName = node.Child(1)->Content(); NCommon::ALL_CLUSTERS != clusterName && !State_->Configuration->HasCluster(clusterName)) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Tail().Pos()), TStringBuilder() <<
                         "Unknown s3 cluster name: " << clusterName));
                     return false;
@@ -141,9 +141,11 @@ public:
         return false;
     }
 
-    void GetInputs(const TExprNode& node, TVector<TPinInfo>&) override {
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>&, bool withLimits) override {
+        Y_UNUSED(withLimits);
         if (auto maybeRead = TMaybeNode<TS3ReadObject>(&node)) {
         }
+        return 0;
     }
 
     IDqIntegration* GetDqIntegration() override {

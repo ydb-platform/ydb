@@ -10,18 +10,18 @@ constexpr uint32_t MAX_PROTOBUF_SIZE = 2 * 1024 * 1024; // 2 MiB
 bool ValidateLocationAndInstallation(const TString& location,
                                      const TString& installation,
                                      TString& errStr) {
-    if (location.Size() > MAX_FIELD_SIZE) {
+    if (location.size() > MAX_FIELD_SIZE) {
         errStr =
             Sprintf("Maximum length of location must be less or equal equal to %u but got %lu",
                     MAX_FIELD_SIZE,
-                    location.Size());
+                    location.size());
         return false;
     }
-    if (installation.Size() > MAX_FIELD_SIZE) {
+    if (installation.size() > MAX_FIELD_SIZE) {
         errStr = Sprintf(
             "Maximum length of installation must be less or equal equal to %u but got %lu",
             MAX_FIELD_SIZE,
-            installation.Size());
+            installation.size());
         return false;
     }
     return true;
@@ -74,6 +74,8 @@ bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth,
             return CheckAuth("BASIC", availableAuthMethods, errStr);
         case NKikimrSchemeOp::TAuth::kAws:
             return CheckAuth("AWS", availableAuthMethods, errStr);
+        case NKikimrSchemeOp::TAuth::kToken:
+            return CheckAuth("TOKEN", availableAuthMethods, errStr);
         case NKikimrSchemeOp::TAuth::kNone:
             return CheckAuth("NONE", availableAuthMethods, errStr);
     }

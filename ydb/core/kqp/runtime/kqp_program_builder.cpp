@@ -3,8 +3,8 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_runtime_version.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_runtime_version.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -17,26 +17,22 @@ TType* GetRowType(const TProgramBuilder& builder, const TArrayRef<TKqpTableColum
         TType* type = nullptr;
         switch (column.Type) {
             case NUdf::TDataType<NUdf::TDecimal>::Id: {
-                type = TDataDecimalType::Create(
-                    NScheme::DECIMAL_PRECISION,
-                    NScheme::DECIMAL_SCALE,
-                    builder.GetTypeEnvironment()
-                );
+                const NScheme::TDecimalType& decimal = column.TypeInfo.GetDecimalType();
+                type = TDataDecimalType::Create(decimal.GetPrecision(), decimal.GetScale(), builder.GetTypeEnvironment());
+                if (!column.NotNull)
+                    type = TOptionalType::Create(type, builder.GetTypeEnvironment());
                 break;
             }
             case NKikimr::NScheme::NTypeIds::Pg: {
-                Y_ABORT_UNLESS(column.TypeDesc, "No pg type description");
-                type = TPgType::Create(NPg::PgTypeIdFromTypeDesc(column.TypeDesc), builder.GetTypeEnvironment());
+                type = TPgType::Create(NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()), builder.GetTypeEnvironment());
                 break;
             }
             default: {
                 type = TDataType::Create(column.Type, builder.GetTypeEnvironment());
+                if (!column.NotNull)
+                    type = TOptionalType::Create(type, builder.GetTypeEnvironment());
                 break;
             }
-        }
-
-        if (!column.NotNull && column.Type != NKikimr::NScheme::NTypeIds::Pg) {
-            type = TOptionalType::Create(type, builder.GetTypeEnvironment());
         }
 
         rowTypeBuilder.Add(column.Name, type);
@@ -160,7 +156,7 @@ EJoinKind GetIndexLookupJoinKind(const TString& joinKind) {
 }
 
 bool RightJoinSideAllowed(const TString& joinType) {
-    return joinType != "LeftOnly";
+    return joinType != "LeftOnly" && joinType != "LeftSemi";
 }
 
 bool RightJoinSideOptional(const TString& joinType) {
@@ -348,12 +344,17 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
 
     TStructTypeBuilder rowTypeBuilder(GetTypeEnvironment());
 
+    TVector<TString> leftRowColumns;
+    leftRowColumns.reserve(leftRowType->GetMembersCount());
     for (ui32 i = 0; i < leftRowType->GetMembersCount(); ++i) {
         TString newMemberName = leftLabel.empty() ? TString(leftRowType->GetMemberName(i))
             : TString::Join(leftLabel, ".", leftRowType->GetMemberName(i));
         rowTypeBuilder.Add(newMemberName, leftRowType->GetMemberType(i));
+        leftRowColumns.push_back(newMemberName);
     }
 
+    TVector<TString> rightRowColumns;
+    rightRowColumns.reserve(rightRowType->GetMembersCount());
     if (RightJoinSideAllowed(joinType)) {
         for (ui32 i = 0; i < rightRowType->GetMembersCount(); ++i) {
             TString newMemberName = rightLabel.empty() ? TString(rightRowType->GetMemberName(i))
@@ -368,16 +369,39 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
                 : rightRowType->GetMemberType(i);
 
             rowTypeBuilder.Add(newMemberName, memberType);
+            rightRowColumns.push_back(newMemberName);
         }
     }
 
-    auto returnType = NewStreamType(rowTypeBuilder.Build());
+    auto resultRowStruct = rowTypeBuilder.Build();
+
+    TDictLiteralBuilder leftIndicesMap(GetTypeEnvironment(),
+        TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment()),
+        TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment())
+    );
+
+    for (ui32 i = 0; i < leftRowColumns.size(); ++i) {
+        auto resultIndex = resultRowStruct->GetMemberIndex(leftRowColumns[i]);
+        leftIndicesMap.Add(NewDataLiteral<ui32>(i), NewDataLiteral<ui32>(resultIndex));
+    }
+
+    TDictLiteralBuilder rightIndicesMap(GetTypeEnvironment(),
+        TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment()),
+        TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment())
+    );
+
+    for (ui32 i = 0; i < rightRowColumns.size(); ++i) {
+        auto resultIndex = resultRowStruct->GetMemberIndex(rightRowColumns[i]);
+        rightIndicesMap.Add(NewDataLiteral<ui32>(i), NewDataLiteral<ui32>(resultIndex));
+    }
+
+    auto returnType = NewStreamType(resultRowStruct);
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(input);
     callableBuilder.Add(NewDataLiteral<ui32>((ui32)GetIndexLookupJoinKind(joinType)));
-    callableBuilder.Add(NewDataLiteral<ui64>(leftRowType->GetMembersCount()));
-    callableBuilder.Add(NewDataLiteral<ui64>(rightRowType->GetMembersCount()));
+    callableBuilder.Add(TRuntimeNode(leftIndicesMap.Build(), true));
+    callableBuilder.Add(TRuntimeNode(rightIndicesMap.Build(), true));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

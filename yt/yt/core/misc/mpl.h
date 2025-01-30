@@ -72,4 +72,24 @@ inline constexpr bool IsSpecialization<T<Args...>, T> = true;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TNeedle, class... THayStack>
+concept COneOf = (std::same_as<TNeedle, THayStack> || ...);
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+template <typename... Ts>
+inline constexpr bool DistinctImpl = true;
+
+template <typename T, typename... Ts>
+inline constexpr bool DistinctImpl<T, Ts...> = DistinctImpl<Ts...> && !COneOf<T, Ts...>;
+
+} // namespace NDetail
+
+template <typename... Ts>
+concept CDistinct = NDetail::DistinctImpl<Ts...>;
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NMpl

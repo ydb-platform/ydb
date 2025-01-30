@@ -1,5 +1,4 @@
 #include <yt/yt/client/hedging/penalty_provider.h>
-#include <yt/yt_proto/yt/client/hedging/proto/config.pb.h>
 
 #include <yt/yt/client/transaction_client/helpers.h>
 
@@ -22,21 +21,21 @@ using TStrictMockClient = StrictMock<NApi::TMockClient>;
 namespace {
     const auto CheckPeriod = TDuration::Seconds(1);
 
-    TReplicationLagPenaltyProviderConfig GenerateReplicationLagPenaltyProviderConfig(
-            const NYPath::TYPath& path,
-            const TString& cluster,
-            const ui32 maxLagInSeconds = 10,
-            const bool clearPenaltiesOnErrors = false,
-            const TDuration checkPeriod = CheckPeriod)
+    TReplicationLagPenaltyProviderOptionsPtr GenerateReplicationLagPenaltyProviderConfig(
+        const NYPath::TYPath& path,
+        const std::string& cluster,
+        const TDuration maxLagInSeconds = TDuration::Seconds(10),
+        const bool clearPenaltiesOnErrors = false,
+        const TDuration checkPeriod = CheckPeriod)
     {
-        TReplicationLagPenaltyProviderConfig config;
+        auto config = New<TReplicationLagPenaltyProviderOptions>();
 
-        config.SetTablePath(path);
-        config.AddReplicaClusters(cluster);
-        config.SetMaxTabletsWithLagFraction(0.5);
-        config.SetMaxTabletLag(maxLagInSeconds);
-        config.SetCheckPeriod(checkPeriod.Seconds());
-        config.SetClearPenaltiesOnErrors(clearPenaltiesOnErrors);
+        config->TablePath = path;
+        config->ReplicaClusters.push_back(TString(cluster));
+        config->MaxTabletsWithLagFraction = 0.5;
+        config->MaxTabletLag = maxLagInSeconds;
+        config->CheckPeriod = checkPeriod;
+        config->ClearPenaltiesOnErrors = clearPenaltiesOnErrors;
 
         return config;
     }
@@ -52,8 +51,8 @@ TEST(TLagPenaltyProviderTest, UpdateExternalPenaltyWhenReplicaHasLag)
     NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-vla\"}}"));
     NYson::TYsonString tabletCountResult(TStringBuf("1"));
 
-    ui32 maxLagInSeconds = 10;
-    TReplicationLagPenaltyProviderConfig config = GenerateReplicationLagPenaltyProviderConfig(path, cluster, maxLagInSeconds);
+    auto maxLagInSeconds = TDuration::Seconds(10);
+    auto config = GenerateReplicationLagPenaltyProviderConfig(path, cluster, maxLagInSeconds);
 
     auto client = New<TStrictMockClient>();
 
@@ -67,7 +66,8 @@ TEST(TLagPenaltyProviderTest, UpdateExternalPenaltyWhenReplicaHasLag)
     tabletInfos[0].TableReplicaInfos = std::make_optional(std::vector<NApi::TTabletInfo::TTableReplicaInfo>());
     auto& replicaTabletsInfo = tabletInfos[0].TableReplicaInfos->emplace_back();
     replicaTabletsInfo.ReplicaId = NTabletClient::TTableReplicaId::FromString("575f-131-40502c5-201b420f");
-    replicaTabletsInfo.LastReplicationTimestamp = NTransactionClient::TimestampFromUnixTime(TInstant::Now().Seconds() - 2 * maxLagInSeconds);
+    replicaTabletsInfo.LastReplicationTimestamp = NTransactionClient::TimestampFromUnixTime(
+        (TInstant::Now() - 2 * maxLagInSeconds).Seconds());
 
     EXPECT_CALL(*client, GetTabletInfos(path, _, _))
         .WillRepeatedly(Return(MakeFuture(tabletInfos)));
@@ -75,7 +75,7 @@ TEST(TLagPenaltyProviderTest, UpdateExternalPenaltyWhenReplicaHasLag)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(2 * CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), NProfiling::DurationToCpuDuration(TDuration::MilliSeconds(config.GetLagPenalty())));
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), config->LagPenalty);
 }
 
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenReplicaHasNoLag)
@@ -86,7 +86,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenReplicaHasNoLag)
     NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-vla\"}}"));
     NYson::TYsonString tabletCountResult(TStringBuf("1"));
 
-    TReplicationLagPenaltyProviderConfig config = GenerateReplicationLagPenaltyProviderConfig(path, cluster);
+    auto config = GenerateReplicationLagPenaltyProviderConfig(path, cluster);
 
     auto client = New<TStrictMockClient>();
 
@@ -108,7 +108,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenReplicaHasNoLag)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(2 * CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), 0);
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::Zero());
 }
 
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetReplicaIdFailed)
@@ -116,7 +116,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetReplicaIdFailed)
     NYPath::TYPath path = "/test/1234";
     TString cluster = "seneca-vla";
 
-    NClient::NHedging::NRpc::TReplicationLagPenaltyProviderConfig config = GenerateReplicationLagPenaltyProviderConfig(path, cluster);
+    auto config = GenerateReplicationLagPenaltyProviderConfig(path, cluster);
 
     auto client = New<TStrictMockClient>();
 
@@ -126,7 +126,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetReplicaIdFailed)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(2 * CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), 0);
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::Zero());
 }
 
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsCountFailed)
@@ -136,7 +136,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsCountFailed)
 
     NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-vla\"}}"));
 
-    TReplicationLagPenaltyProviderConfig config = GenerateReplicationLagPenaltyProviderConfig(path, cluster);
+    auto config = GenerateReplicationLagPenaltyProviderConfig(path, cluster);
 
     auto client = New<TStrictMockClient>();
 
@@ -149,7 +149,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsCountFailed)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(2 * CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), 0);
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::Zero());
 }
 
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsInfoFailed)
@@ -160,8 +160,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsInfoFailed)
     NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-vla\"}}"));
     NYson::TYsonString tabletCountResult(TStringBuf("1"));
 
-    NClient::NHedging::NRpc::TReplicationLagPenaltyProviderConfig config =
-        GenerateReplicationLagPenaltyProviderConfig(path, cluster);
+    auto config = GenerateReplicationLagPenaltyProviderConfig(path, cluster);
 
     auto client = New<TStrictMockClient>();
 
@@ -177,7 +176,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsInfoFailed)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(2 * CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), 0);
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::Zero());
 }
 
 TEST(TLagPenaltyProviderTest, ClearPenaltiesAfterError)
@@ -188,7 +187,7 @@ TEST(TLagPenaltyProviderTest, ClearPenaltiesAfterError)
     NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-vla\"}}"));
     NYson::TYsonString tabletCountResult(TStringBuf("1"));
 
-    ui32 maxLagInSeconds = 10;
+    TDuration maxLagInSeconds = TDuration::Seconds(10);
     auto config =
         GenerateReplicationLagPenaltyProviderConfig(path, cluster, maxLagInSeconds, true, 2 * CheckPeriod);
 
@@ -205,7 +204,8 @@ TEST(TLagPenaltyProviderTest, ClearPenaltiesAfterError)
     tabletInfos[0].TableReplicaInfos = std::make_optional(std::vector<NApi::TTabletInfo::TTableReplicaInfo>());
     auto& replicaTabletsInfo = tabletInfos[0].TableReplicaInfos->emplace_back();
     replicaTabletsInfo.ReplicaId = NTabletClient::TTableReplicaId::FromString("575f-131-40502c5-201b420f");
-    replicaTabletsInfo.LastReplicationTimestamp = NTransactionClient::TimestampFromUnixTime(TInstant::Now().Seconds() - 2 * maxLagInSeconds);
+    replicaTabletsInfo.LastReplicationTimestamp = NTransactionClient::TimestampFromUnixTime(
+        (TInstant::Now() - 2 * maxLagInSeconds).Seconds());
 
     EXPECT_CALL(*client, GetTabletInfos(path, _, _))
         .WillRepeatedly(Return(MakeFuture(tabletInfos)));
@@ -213,10 +213,10 @@ TEST(TLagPenaltyProviderTest, ClearPenaltiesAfterError)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), NProfiling::DurationToCpuDuration(TDuration::MilliSeconds(config.GetLagPenalty())));
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), config->LagPenalty);
 
     Sleep(2 * CheckPeriod);
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), 0);
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::Zero());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

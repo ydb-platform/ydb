@@ -32,15 +32,18 @@ private:
     const TDuration RpcTimeout_;
     const TCellTag ClockClusterTag_;
 
-    TFuture<NTransactionClient::TTimestamp> DoGenerateTimestamps(int count) override
+    TFuture<NTransactionClient::TTimestamp> DoGenerateTimestamps(int count, TCellTag clockClusterTag) override
     {
         TApiServiceProxy proxy(Channel_);
 
         auto req = proxy.GenerateTimestamps();
         req->SetTimeout(RpcTimeout_);
         req->set_count(count);
-        if (ClockClusterTag_ != InvalidCellTag) {
-            req->set_clock_cluster_tag(ToProto<int>(ClockClusterTag_));
+        if (clockClusterTag == InvalidCellTag) {
+            clockClusterTag = ClockClusterTag_;
+        }
+        if (clockClusterTag != InvalidCellTag) {
+            req->set_clock_cluster_tag(ToProto(clockClusterTag));
         }
 
         return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGenerateTimestampsPtr& rsp) {

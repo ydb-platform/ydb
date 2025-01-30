@@ -1,9 +1,9 @@
 #include "yql_ch_read_actor.h"
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/yql/providers/clickhouse/proto/range.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -72,8 +72,8 @@ public:
     static constexpr char ActorName[] = "ClickHouse_READ_ACTOR";
 
 private:
-    void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
-    void LoadState(const NDqProto::TSourceState&) final {}
+    void SaveState(const NDqProto::TCheckpoint&, NDq::TSourceState&) final {}
+    void LoadState(const NDq::TSourceState&) final {}
     void CommitState(const NDqProto::TCheckpoint&) final {}
 
     ui64 GetInputIndex() const final {

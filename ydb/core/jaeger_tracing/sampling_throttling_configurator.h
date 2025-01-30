@@ -11,29 +11,39 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
 #include <util/generic/vector.h>
+#include <util/system/mutex.h>
 
 namespace NKikimr::NJaegerTracing {
 
-class TSamplingThrottlingConfigurator {
+// Used to represent shared limits in throttlers and samplers
+template<class T>
+struct TWithTag {
+    T Value;
+    size_t Tag;
+};
+
+class TSamplingThrottlingConfigurator: public TRefCounted<TSamplingThrottlingConfigurator, TAtomicCounter> {
 public:
     TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider,
                                     TIntrusivePtr<IRandomProvider>& randomProvider);
 
     TIntrusivePtr<TSamplingThrottlingControl> GetControl();
 
-    void UpdateSettings(TSettings<double, TThrottlingSettings> settings);
+    void UpdateSettings(TSettings<double, TWithTag<TThrottlingSettings>> settings);
 
 private:
     TSettings<double, TIntrusivePtr<TThrottler>> GenerateThrottlers(
-        TSettings<double, TThrottlingSettings> settings);
-    
+        TSettings<double, TWithTag<TThrottlingSettings>> settings);
+
     std::unique_ptr<TSamplingThrottlingControl::TSamplingThrottlingImpl> GenerateSetup();
 
     TVector<TIntrusivePtr<TSamplingThrottlingControl>> IssuedControls;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TFastRng64 Rng;
-    TSettings<double, TIntrusivePtr<TThrottler>> CurrentSettings;  
+    TSettings<double, TIntrusivePtr<TThrottler>> CurrentSettings;
+    TMutex ControlMutex;
 };
 
 } // namespace NKikimr::NJaegerTracing

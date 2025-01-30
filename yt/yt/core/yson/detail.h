@@ -8,6 +8,7 @@
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/parser_helpers.h>
 #include <yt/yt/core/misc/property.h>
+#include <yt/yt/core/misc/static_ring_queue.h>
 
 #include <library/cpp/yt/coding/varint.h>
 #include <library/cpp/yt/coding/zig_zag.h>
@@ -63,7 +64,7 @@ public:
         Offset += end - begin;
         for (auto current = begin; current != end; ++current) {
             ++Column;
-            if (*current == '\n') { //TODO: memchr
+            if (*current == '\n') { // TODO: memchr
                 ++Line;
                 Column = 1;
             }
@@ -101,57 +102,6 @@ public:
         return {
             TErrorAttribute("offset", other.Offset),
         };
-    }
-};
-
-template <class T, size_t Capacity>
-class TStaticRingQueue
-{
-private:
-    static_assert(std::is_standard_layout_v<T> && std::is_trivial_v<T>, "T must be POD.");
-
-    T Buffer_[Capacity];
-    size_t EndOffset_ = 0;
-    size_t Size_ = 0;
-
-public:
-    void Append(const T* begin, const T* end)
-    {
-        if (std::distance(begin, end) > static_cast<i64>(Capacity)) {
-            begin = end - Capacity;
-        }
-
-        size_t appendSize = std::distance(begin, end);
-        Size_ = std::min(Capacity, Size_ + appendSize);
-
-        EndOffset_ += appendSize;
-        if (EndOffset_ >= Capacity) {
-            EndOffset_ -= Capacity;
-            YT_VERIFY(EndOffset_ < Capacity);
-        }
-
-        size_t tailSize = std::min<size_t>(EndOffset_, appendSize);
-        std::copy(end - tailSize, end, Buffer_ + EndOffset_ - tailSize);
-        end -= tailSize;
-        std::copy(begin, end, Buffer_ + Capacity - (end - begin));
-    }
-
-    void CopyTailTo(size_t copySize, T* begin) const
-    {
-        YT_VERIFY(copySize <= Size_);
-
-        if (copySize > EndOffset_) {
-            size_t tailSize = copySize - EndOffset_;
-            std::copy(Buffer_ + Capacity - tailSize, Buffer_ + Capacity, begin);
-            std::copy(Buffer_, Buffer_ + EndOffset_, begin + tailSize);
-        } else {
-            std::copy(Buffer_ + EndOffset_ - copySize, Buffer_ + EndOffset_, begin);
-        }
-    }
-
-    size_t Size() const
-    {
-        return Size_;
     }
 };
 
@@ -654,7 +604,7 @@ public:
                     Buffer_.back());
         }
 
-        for (int i = 1; i < static_cast<int>(expectedString.size()); ++i) {
+        for (int i = 1; i < std::ssize(expectedString); ++i) {
             PushBack(TBaseStream::template GetChar<AllowFinish>());
             TBaseStream::Advance(1);
             if (Buffer_.back() != expectedString[i]) {
@@ -771,7 +721,7 @@ public:
         PushBack(TBaseStream::template GetChar<AllowFinish>());
         TBaseStream::Advance(1);
         if (Buffer_[0] == trueString[0]) {
-            for (int i = 1; i < static_cast<int>(trueString.size()); ++i) {
+            for (int i = 1; i < std::ssize(trueString); ++i) {
                 PushBack(TBaseStream::template GetChar<AllowFinish>());
                 TBaseStream::Advance(1);
                 if (Buffer_.back() != trueString[i]) {
@@ -780,7 +730,7 @@ public:
             }
             return true;
         } else if (Buffer_[0] == falseString[0]) {
-            for (int i = 1; i < static_cast<int>(falseString.size()); ++i) {
+            for (int i = 1; i < std::ssize(falseString); ++i) {
                 PushBack(TBaseStream::template GetChar<AllowFinish>());
                 TBaseStream::Advance(1);
                 if (Buffer_.back() != falseString[i]) {

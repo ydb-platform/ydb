@@ -1,0 +1,168 @@
+name: Build-YDB-DSTool
+run-name: Build YDB DSTool
+on:
+  workflow_dispatch:
+    inputs:
+      build-linux:
+        type: boolean
+        description: Build YDB DSTool for Linux
+        default: true
+      build-darwin-amd:
+        type: boolean
+        description: Build YDB DSTool for Darwin amd64
+        default: true
+      build-windows:
+        type: boolean
+        description: Build YDB DSTool for Windows
+        default: true
+      commit_sha:
+        type: string
+        default: ""
+      s3_host:
+        type: string
+        default: "storage.yandexcloud.net"
+        description: "S3 endpoint. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
+      s3_bucket:
+        type: string
+        default: "yandexcloud-ydb-dstool"
+        description: "S3 bucket. S3Uri (without hostname). Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
+      s3_dns_host_bucket:
+        type: string
+        default: "%(bucket)s.storage.yandexcloud.net"
+        description: "S3 DNS-style bucket+hostname:port template for accessing a bucket. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
+      s3_region:
+        type: string
+        default: "ru-central1"
+        description: "S3 region. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-matrix:
+    name: Build platform matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Create file with future platform list
+        id: set-matrix
+        run: |
+          MATRIX='{"include":[]}'
+          if [ "${{ inputs.build-linux }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "linux", "runner": "ubuntu-latest", "shell": "bash", "binary": "ydb-dstool"}]')
+            echo "Matrix after adding linux: $MATRIX"
+          fi
+          if [ "${{ inputs.build-darwin-amd }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-amd", "runner": "macos-13", "shell": "bash", "binary": "ydb-dstool"}]')
+            echo "Matrix after adding darwin-amd: $MATRIX"
+          fi
+          if [ "${{ inputs.build-windows }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "windows", "runner": "windows-latest", "shell": "bash", "binary": "ydb-dstool.exe"}]')
+            echo "Matrix after adding windows: $MATRIX"
+          fi
+
+          echo "Final output matrix: $MATRIX"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          MATRIX=$(echo $MATRIX | jq '.')
+          echo "Final pretty printed matrix: $MATRIX"
+          echo "Platform matrix: $MATRIX" >> "$GITHUB_STEP_SUMMARY"
+
+  build-platform-specific-binary:
+    strategy:
+      matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
+    name: Build ${{ matrix.os }} YDB CLI binary
+    needs: build-matrix
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.commit_sha }}
+
+    - name: Print debug information
+      run: |
+        uname -a
+        cat ydb/apps/dstool/version.txt
+
+    # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
+    - name: Prepare Visual Studio environment and build windows binary with ya make
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && python ya make ydb/apps/dstool -r -DUSE_SSE4=no -o ./
+    
+    - name: Build unix binary with ya make
+      if: ${{ matrix.os != 'windows' }}
+      run: ./ya make ydb/apps/dstool -r -DUSE_SSE4=no
+
+    - name: Upload binary to artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.os }}-binary
+        path: ydb/apps/dstool/${{ matrix.binary }}
+        if-no-files-found: error
+        retention-days: 1
+
+  gather-and-push-to-s3:
+    name: Gather built binaries and push to s3
+    needs: build-platform-specific-binary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+      - name: Get YDB CLI version from ydb/apps/dstool/version.txt
+        id: getver
+        run: echo "dstool_version=$(cat ydb/apps/dstool/version.txt)" >> $GITHUB_OUTPUT
+      - name: Print YDB CLI version ${{ steps.getver.outputs.dstool_version }}
+        run: echo ${{ steps.getver.outputs.dstool_version }}
+
+      - name: Prepare directory for linux binary
+        if: ${{ inputs.build-linux }}
+        run: mkdir -p ${{ steps.getver.outputs.dstool_version }}/linux/amd64
+      - name: Prepare directory for Darwin amd binary
+        if: ${{ inputs.build-darwin-amd }}
+        run: mkdir -p ${{ steps.getver.outputs.dstool_version }}/darwin/amd64
+      - name: Prepare directory for Windows binary
+        if: ${{ inputs.build-windows }}
+        run: mkdir -p ${{ steps.getver.outputs.dstool_version }}/windows/amd64/unsigned
+
+      - name: Copy linux binary
+        if: ${{ inputs.build-linux }}
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binary
+          path: ${{ steps.getver.outputs.dstool_version }}/linux/amd64/
+      - name: Copy darwin amd64 binary
+        if: ${{ inputs.build-darwin-amd }}
+        uses: actions/download-artifact@v4
+        with:
+          name: darwin-amd-binary
+          path: ${{ steps.getver.outputs.dstool_version }}/darwin/amd64/
+      - name: Copy windows binary (unsigned)
+        if: ${{ inputs.build-windows }}
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binary
+          path: ${{ steps.getver.outputs.dstool_version }}/windows/amd64/unsigned/
+
+      - name: Print resulting file hierarchy
+        run: find ${{ steps.getver.outputs.dstool_version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
+
+      - name: Download s3
+        run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
+      - name: Unzip s3
+        run: tar -xf s3cmd-2.4.0.tar.gz
+      - name: Install s3
+        run: |
+          cd s3cmd-2.4.0
+          sudo python3 setup.py install
+          cd ..
+
+      - name: Upload to S3
+        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host=${{ inputs.s3_host }} --host-bucket="${{ inputs.s3_dns_host_bucket }}" --region=${{ inputs.s3_region }} sync --recursive ${{ steps.getver.outputs.dstool_version }} s3://${{ inputs.s3_bucket }}/release/
+      

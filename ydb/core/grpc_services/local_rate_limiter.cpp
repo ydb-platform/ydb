@@ -13,7 +13,8 @@ TActorId RateLimiterAcquireUseSameMailbox(
     const TDuration& duration,
     std::function<void()>&& onSuccess,
     std::function<void()>&& onTimeout,
-    const TActorContext& ctx)
+    const TActorContext& ctx,
+    NWilson::TTraceId traceId)
 {
     auto cb = [onSuccess{std::move(onSuccess)}, onTimeout{std::move(onTimeout)}]
         (const Ydb::RateLimiter::AcquireResourceResponse& resp)
@@ -23,6 +24,7 @@ TActorId RateLimiterAcquireUseSameMailbox(
                 onSuccess();
             break;
             case Ydb::StatusIds::TIMEOUT:
+            case Ydb::StatusIds::CANCELLED:
                 onTimeout();
             break;
             default:
@@ -32,7 +34,8 @@ TActorId RateLimiterAcquireUseSameMailbox(
     };
 
     Ydb::RateLimiter::AcquireResourceRequest request;
-    SetDuration(duration, *request.mutable_operation_params()->mutable_operation_timeout());
+    SetDuration(duration * 10, *request.mutable_operation_params()->mutable_operation_timeout());
+    SetDuration(duration, *request.mutable_operation_params()->mutable_cancel_after());
     request.set_coordination_node_path(fullPath.CoordinationNode);
     request.set_resource_path(fullPath.ResourcePath);
     request.set_required(required);
@@ -41,7 +44,8 @@ TActorId RateLimiterAcquireUseSameMailbox(
         fullPath.DatabaseName,
         fullPath.Token,
         std::move(cb),
-        ctx);
+        ctx,
+        std::move(traceId));
 }
 
 TActorId RateLimiterAcquireUseSameMailbox(
@@ -49,10 +53,11 @@ TActorId RateLimiterAcquireUseSameMailbox(
     const TString& database,
     const TString& token,
     std::function<void(Ydb::RateLimiter::AcquireResourceResponse resp)>&& cb,
-    const TActorContext& ctx)
+    const TActorContext& ctx,
+    NWilson::TTraceId traceId)
 {
     return DoLocalRpcSameMailbox<NKikimr::NGRpcService::TEvAcquireRateLimiterResource>(
-        std::move(request), std::move(cb), database, token, ctx);
+        std::move(request), std::move(cb), database, token, ctx, false, std::move(traceId));
 }
 
 TActorId RateLimiterAcquireUseSameMailbox(
@@ -61,7 +66,8 @@ TActorId RateLimiterAcquireUseSameMailbox(
     const TDuration& duration,
     std::function<void()>&& onSuccess,
     std::function<void()>&& onTimeout,
-    const TActorContext& ctx)
+    const TActorContext& ctx,
+    NWilson::TTraceId traceId)
 {
     if (const auto maybeRlPath = reqCtx.GetRlPath()) {
         auto cb = [onSuccess{std::move(onSuccess)}, onTimeout{std::move(onTimeout)}]
@@ -72,6 +78,7 @@ TActorId RateLimiterAcquireUseSameMailbox(
                     onSuccess();
                 break;
                 case Ydb::StatusIds::TIMEOUT:
+                case Ydb::StatusIds::CANCELLED:
                     onTimeout();
                 break;
                 default:
@@ -82,7 +89,8 @@ TActorId RateLimiterAcquireUseSameMailbox(
 
         const auto& rlPath = maybeRlPath.GetRef();
         Ydb::RateLimiter::AcquireResourceRequest request;
-        SetDuration(duration, *request.mutable_operation_params()->mutable_operation_timeout());
+        SetDuration(duration * 10, *request.mutable_operation_params()->mutable_operation_timeout());
+        SetDuration(duration, *request.mutable_operation_params()->mutable_cancel_after());
         request.set_coordination_node_path(rlPath.CoordinationNode);
         request.set_resource_path(rlPath.ResourcePath);
         request.set_required(required);
@@ -91,7 +99,8 @@ TActorId RateLimiterAcquireUseSameMailbox(
             reqCtx.GetDatabaseName().GetOrElse(""),
             reqCtx.GetSerializedToken(),
             std::move(cb),
-            ctx);
+            ctx,
+            std::move(traceId));
     }
     return {};
 }

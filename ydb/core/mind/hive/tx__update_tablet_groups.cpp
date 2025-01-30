@@ -23,6 +23,28 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_GROUPS; }
 
+    static bool MaySkipChannelReassign(const TLeaderTabletInfo* tablet, const TTabletChannelInfo* channel, const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* group) {
+        if (tablet->ChannelProfileReassignReason == NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_BALANCE) {
+            // Only a reassign for balancing may be skipped
+            if (channel->History.back().GroupID == group->GetGroupID()) {
+                // We decided to keep the group the same
+                return true;
+            }
+            auto channelId = channel->Channel;
+            auto tabletChannel = tablet->GetChannel(channelId);
+            auto oldGroupId = channel->History.back().GroupID;
+            auto& pool = tablet->GetStoragePool(channelId);
+            auto& oldGroup = pool.GetStorageGroup(oldGroupId);
+            auto& newGroup = pool.GetStorageGroup(group->GetGroupID());
+            auto usageBefore = oldGroup.GetUsageForChannel(tabletChannel);
+            auto usageAfter = newGroup.GetUsageForChannel(tabletChannel);
+            if (usageAfter > usageBefore) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         SideEffects.Reset(Self->SelfId());
 
@@ -135,14 +157,19 @@ public:
             if (channelId < tabletChannels.size()) {
                 channel = &tabletChannels[channelId];
                 Y_ABORT_UNLESS(channel->Channel == channelId);
-                if (!tablet->ReleaseAllocationUnit(channelId)) {
-                    BLOG_W("Failed to release AU for tablet " << tablet->Id << " channel " << channelId);
-                }
             } else {
                 // increasing number of tablet channels
                 tabletChannels.emplace_back();
                 channel = &tabletChannels.back();
                 channel->Channel = channelId;
+            }
+
+            if (MaySkipChannelReassign(tablet, channel, group)) {
+                BLOG_D("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
+                    << tablet->Id
+                    << " skipped reassign of channel "
+                    << channelId);
+                continue;
             }
 
             if (group->HasStoragePoolName()) {
@@ -160,9 +187,6 @@ public:
             ui32 fromGeneration;
             if (channel->History.empty()) {
                 fromGeneration = 0;
-            } else if (channel->History.back().GroupID == group->GetGroupID()) {
-                // We decided to keep the group the same
-                continue;
             } else {
                 needToIncreaseGeneration = true;
                 fromGeneration = tablet->KnownGeneration + 1;
@@ -178,11 +202,17 @@ public:
                         NIceDb::TUpdate<Schema::TabletChannelGen::Group>(group->GetGroupID()),
                         NIceDb::TUpdate<Schema::TabletChannelGen::Version>(tabletStorageInfo->Version),
                         NIceDb::TUpdate<Schema::TabletChannelGen::Timestamp>(timestamp.MilliSeconds()));
+            tablet->ReleaseAllocationUnit(channelId);
             if (!channel->History.empty() && fromGeneration == channel->History.back().FromGeneration) {
                 channel->History.back().GroupID = group->GetGroupID(); // we overwrite history item when generation is the same as previous one (so the tablet didn't run yet)
                 channel->History.back().Timestamp = timestamp;
             } else {
+                auto& histogram = Self->TabletCounters->Percentile()[NHive::COUNTER_TABLET_CHANNEL_HISTORY_SIZE];
+                if (channel->History.size() > 0) {
+                    histogram.DecrementFor(channel->History.size());
+                }
                 channel->History.emplace_back(fromGeneration, group->GetGroupID(), timestamp);
+                histogram.IncrementFor(channel->History.size());
             }
             if (channel->History.size() > 1) {
                 // now we block storage for every change of a group's history

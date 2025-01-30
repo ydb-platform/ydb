@@ -1,19 +1,26 @@
 #pragma once
 
-#include <library/cpp/yt/misc/enum.h>
-#include <library/cpp/yt/misc/guid.h>
-#include <library/cpp/yt/misc/hash.h>
-
 #include <yt/yt/client/election/public.h>
 #include <yt/yt/client/job_tracker_client/public.h>
 
+#include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/guid.h>
+#include <library/cpp/yt/misc/hash.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/string/string_builder.h>
 
 namespace NYT::NObjectClient {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NProto {
+
+class TUserDirectory;
+
+} // namespace NProto
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -27,6 +34,7 @@ YT_DEFINE_ERROR_ENUM(
     ((InvalidObjectType)                         (1006))
     ((RequestInvolvesSequoia)                    (1007))
     ((RequestInvolvesCypress)                    (1008))
+    ((BeginCopyDeprecated)                       (1009))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -48,7 +56,7 @@ using TObjectId = TGuid;
 constexpr TObjectId NullObjectId = {};
 
 //! |#|-prefix.
-extern const TStringBuf ObjectIdPathPrefix;
+inline const TStringBuf ObjectIdPathPrefix = "#";
 
 //! Used to mark counters for well-known ids.
 constexpr ui64 WellKnownCounterMask = 0x8000000000000000;
@@ -112,6 +120,7 @@ DEFINE_ENUM(EObjectType,
     ((TransactionMap)                               (407))
     ((TopmostTransactionMap)                        (418))
     ((LockMap)                                      (422))
+    ((ForeignTransactionMap)                        (437))
 
     // Chunk Manager stuff
     ((Chunk)                                        (100))
@@ -223,6 +232,7 @@ DEFINE_ENUM(EObjectType,
 
     // Sequoia nodes
     ((SequoiaMapNode)                              (1504))
+    ((SequoiaLink)                                 (1505))
 
     // Cypress shards
     ((CypressShard)                               (11004))
@@ -289,6 +299,7 @@ DEFINE_ENUM(EObjectType,
     ((HunkStorage)                                  (715))
     ((HunkTablet)                                   (716))
     ((VirtualTabletCellMap)                         (717))
+    ((CellOrchidNode)                               (718))
 
     // Node Tracker stuff
     ((Rack)                                         (800))
@@ -333,11 +344,15 @@ DEFINE_ENUM(EObjectType,
     ((ClusterProxyNode)                            (1500))
 
     // Zookeeper stuff
-    ((ZookeeperShard)                              (1400))
+    // COMPAT(babenko): drop completely
     ((ZookeeperShardMap)                           (1401))
 
     // Flow stuff
     ((Pipeline)                                    (1600))
+
+    // Queue stuff
+    ((QueueConsumer)                               (1700))
+    ((QueueProducer)                               (1701))
 );
 
 //! A bit mask marking schema types.
@@ -392,9 +407,6 @@ struct TVersionedObjectId
 //! Formats id into a string (for debugging and logging purposes mainly).
 void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStringBuf spec);
 
-//! Converts id into a string (for debugging and logging purposes mainly).
-TString ToString(const TVersionedObjectId& id);
-
 //! Compares TVersionedNodeId s for equality.
 bool operator == (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
 
@@ -403,8 +415,8 @@ bool operator <  (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
 
 class TObjectServiceProxy;
 
-struct TDirectObjectIdHash;
-struct TDirectVersionedObjectIdHash;
+struct TObjectIdEntropyHash;
+struct TVersionedObjectIdEntropyHash;
 
 ////////////////////////////////////////////////////////////////////////////////
 

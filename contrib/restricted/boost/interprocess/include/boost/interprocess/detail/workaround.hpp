@@ -37,7 +37,7 @@
    //////////////////////////////////////////////////////
    //Check for XSI shared memory objects. They are available in nearly all UNIX platforms
    //////////////////////////////////////////////////////
-   #if !defined(__QNXNTO__) && !defined(__ANDROID__) && !defined(__HAIKU__) && !(__VXWORKS__)
+   #if !defined(__QNXNTO__) && !defined(__ANDROID__) && !defined(__HAIKU__) && !(__VXWORKS__) && !(__EMSCRIPTEN__)
       #define BOOST_INTERPROCESS_XSI_SHARED_MEMORY_OBJECTS
    #endif
 
@@ -226,8 +226,11 @@
 #elif defined(BOOST_MSVC) && (_MSC_VER < 1900 || defined(_DEBUG))
    //"__forceinline" and MSVC seems to have some bugs in old versions and in debug mode
    #define BOOST_INTERPROCESS_FORCEINLINE inline
-#elif defined(BOOST_GCC) && (__GNUC__ <= 5)
+#elif defined(BOOST_CLANG) || (defined(BOOST_GCC) && ((__GNUC__ <= 5) || defined(__MINGW32__)))
    //Older GCCs have problems with forceinline
+   //Clang can have code bloat issues with forceinline, see
+   //https://lists.boost.org/boost-users/2023/04/91445.php and
+   //https://github.com/llvm/llvm-project/issues/62202
    #define BOOST_INTERPROCESS_FORCEINLINE inline
 #else
    #define BOOST_INTERPROCESS_FORCEINLINE BOOST_FORCEINLINE

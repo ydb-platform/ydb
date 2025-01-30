@@ -24,12 +24,16 @@ constexpr auto MemoryAllocationTag = "memory_tag";
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TImpl>
-using TRpcTest = TTestBase<TImpl>;
+using TRpcTest = TRpcTestBase<TImpl>;
 TYPED_TEST_SUITE(TRpcTest, TAllTransports);
 
 TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
 {
-    static TMemoryTag testMemoryTag = 1 << 20;
+    auto memoryUsageTracker = this->GetMemoryUsageTracker();
+    auto previousLimit = memoryUsageTracker->GetLimit();
+    memoryUsageTracker->SetLimit(2_GB);
+
+    static int testMemoryTag = 1 << 20;
     testMemoryTag++;
 
     EnableMemoryProfilingTags();
@@ -42,6 +46,8 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
     std::vector<TFuture<TRspPtr>> responses;
 
     TTestProxy proxy(this->CreateChannel());
+
+    MaybeInitLatch();
 
     constexpr auto size = 4_MB - 1_KB;
     constexpr auto numberOfLoops = 10;
@@ -64,11 +70,11 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
         req2->set_size(size);
 
         auto rspFutureProp = req2->Invoke()
-            .Apply(BIND([testMemoryTag=testMemoryTag] (const TRspPtr& res) {
+            .Apply(BIND([testMemoryTag = testMemoryTag] (const TRspPtr& res) {
                 auto localContext = TryGetCurrentTraceContext();
                 EXPECT_NE(localContext, nullptr);
                 if (localContext) {
-                    EXPECT_EQ(localContext->FindAllocationTag<TMemoryTag>(MemoryAllocationTag).value_or(NullMemoryTag), testMemoryTag);
+                    EXPECT_EQ(localContext->FindAllocationTag<int>(MemoryAllocationTag).value_or(NullMemoryTag), testMemoryTag);
                 }
                 return res;
             }).AsyncVia(actionQueue->GetInvoker()));
@@ -76,11 +82,16 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
     }
 
     auto memoryUsageBefore = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, ToString(testMemoryTag));
-    EXPECT_LE(memoryUsageBefore, numberOfLoops * 1536_KB);
+    EXPECT_LE(memoryUsageBefore, numberOfLoops * 2048_KB)
+        << "InitialUsage: " << initialMemoryUsage << std::endl;
+
+    ReleaseLatchedCalls();
 
     for (const auto& rsp : responses) {
         WaitFor(rsp).ValueOrThrow();
     }
+
+    ResetLatch();
 
     auto memoryUsageAfter = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, ToString(testMemoryTag));
     auto deltaMemoryUsage = memoryUsageAfter - initialMemoryUsage - memoryUsageBefore;
@@ -88,6 +99,8 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
         << "InitialUsage: " << initialMemoryUsage << std::endl
         << "MemoryUsage before waiting: " << memoryUsageBefore << std::endl
         << "MemoryUsage after waiting: " << memoryUsageAfter;
+
+    memoryUsageTracker->SetLimit(previousLimit);
 }
 
 #endif

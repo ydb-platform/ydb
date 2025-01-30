@@ -5,11 +5,11 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 6,
+                "PlanNodeId": 7,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
-                        "Node Type": "Aggregate-Limit",
+                        "Node Type": "Aggregate-Limit-Aggregate",
                         "Operators": [
                             {
                                 "Inputs": [
@@ -17,38 +17,58 @@
                                         "InternalOperatorId": 1
                                     }
                                 ],
-                                "Name": "Aggregate"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
                             },
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 4
+                                        "InternalOperatorId": 2
                                     }
                                 ],
                                 "Limit": "1",
                                 "Name": "Limit"
+                            },
+                            {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 5
+                                    }
+                                ],
+                                "Name": "Aggregate",
+                                "Phase": "Final"
                             }
                         ],
-                        "PlanNodeId": 5,
+                        "PlanNodeId": 6,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 4,
+                                "PlanNodeId": 5,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate",
+                                        "Node Type": "Aggregate-Aggregate",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 2
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
+                                                "Name": "Aggregate",
+                                                "Phase": "Intermediate"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 3
+                                                    }
+                                                ],
+                                                "Name": "Aggregate",
+                                                "Phase": "Final"
                                             }
                                         ],
-                                        "PlanNodeId": 3,
+                                        "PlanNodeId": 4,
                                         "Plans": [
                                             {
                                                 "KeyColumns": [
@@ -56,39 +76,51 @@
                                                     "two"
                                                 ],
                                                 "Node Type": "HashShuffle",
-                                                "PlanNodeId": 2,
+                                                "PlanNodeId": 3,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Aggregate-TableFullScan",
+                                                        "Node Type": "Aggregate",
                                                         "Operators": [
                                                             {
                                                                 "Aggregation": "state",
-                                                                "GroupBy": "",
+                                                                "GroupBy": "[item.four,item.two]",
                                                                 "Inputs": [
                                                                     {
-                                                                        "InternalOperatorId": 1
+                                                                        "ExternalPlanNodeId": 1
                                                                     }
                                                                 ],
-                                                                "Name": "Aggregate"
-                                                            },
-                                                            {
-                                                                "Inputs": [],
-                                                                "Name": "TableFullScan",
-                                                                "ReadColumns": [
-                                                                    "four",
-                                                                    "two"
-                                                                ],
-                                                                "ReadRanges": [
-                                                                    "unique1 (-\u221e, +\u221e)",
-                                                                    "unique2 (-\u221e, +\u221e)"
-                                                                ],
-                                                                "Table": "postgres_select_distinct.test_plan/tenk1"
+                                                                "Name": "Aggregate",
+                                                                "Phase": "Intermediate"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 1,
-                                                        "Tables": [
-                                                            "postgres_select_distinct.test_plan/tenk1"
+                                                        "PlanNodeId": 2,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "TableFullScan",
+                                                                "Operators": [
+                                                                    {
+                                                                        "Inputs": [],
+                                                                        "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_select_distinct.test_plan/tenk1",
+                                                                        "ReadColumns": [
+                                                                            "four",
+                                                                            "two"
+                                                                        ],
+                                                                        "ReadRanges": [
+                                                                            "unique1 (-\u221e, +\u221e)",
+                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                        ],
+                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                        "Scan": "Parallel",
+                                                                        "Table": "postgres_select_distinct.test_plan/tenk1"
+                                                                    }
+                                                                ],
+                                                                "PlanNodeId": 1,
+                                                                "Tables": [
+                                                                    "postgres_select_distinct.test_plan/tenk1"
+                                                                ]
+                                                            }
                                                         ]
                                                     }
                                                 ]
@@ -101,7 +133,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

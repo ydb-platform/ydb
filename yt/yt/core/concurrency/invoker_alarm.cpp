@@ -12,12 +12,12 @@ namespace NYT::NConcurrency {
 TInvokerAlarm::TInvokerAlarm(IInvokerPtr invoker)
     : Invoker_(std::move(invoker))
 {
-    VERIFY_INVOKER_THREAD_AFFINITY(Invoker_, HomeThread);
+    YT_ASSERT_INVOKER_THREAD_AFFINITY(Invoker_, HomeThread);
 }
 
 void TInvokerAlarm::Arm(TClosure callback, TInstant deadline)
 {
-    VERIFY_THREAD_AFFINITY(HomeThread);
+    YT_ASSERT_THREAD_AFFINITY(HomeThread);
     YT_VERIFY(callback);
 
     auto epoch = ++Epoch_;
@@ -26,12 +26,12 @@ void TInvokerAlarm::Arm(TClosure callback, TInstant deadline)
 
     TDelayedExecutor::Submit(
         BIND([=, this, weakThis = MakeWeak(this)] {
-            auto strongThis = weakThis.Lock();
-            if (!strongThis) {
+            auto this_ = weakThis.Lock();
+            if (!this_) {
                 return;
             }
 
-            VERIFY_THREAD_AFFINITY(HomeThread);
+            YT_ASSERT_THREAD_AFFINITY(HomeThread);
 
             if (Epoch_ != epoch || !Callback_) {
                 return;
@@ -45,14 +45,14 @@ void TInvokerAlarm::Arm(TClosure callback, TInstant deadline)
 
 void TInvokerAlarm::Arm(TClosure callback, TDuration delay)
 {
-    VERIFY_THREAD_AFFINITY(HomeThread);
+    YT_ASSERT_THREAD_AFFINITY(HomeThread);
 
     Arm(std::move(callback), delay.ToDeadLine());
 }
 
 void TInvokerAlarm::Disarm()
 {
-    VERIFY_THREAD_AFFINITY(HomeThread);
+    YT_ASSERT_THREAD_AFFINITY(HomeThread);
 
     ++Epoch_;
     Callback_.Reset();
@@ -66,7 +66,7 @@ bool TInvokerAlarm::IsArmed() const
 
 bool TInvokerAlarm::Check()
 {
-    VERIFY_THREAD_AFFINITY(HomeThread);
+    YT_ASSERT_THREAD_AFFINITY(HomeThread);
 
     if (!Callback_) {
         return false;
@@ -82,7 +82,7 @@ bool TInvokerAlarm::Check()
 
 void TInvokerAlarm::InvokeCallback()
 {
-    VERIFY_THREAD_AFFINITY(HomeThread);
+    YT_ASSERT_THREAD_AFFINITY(HomeThread);
 
     // Beware of recursion, reset the state before invoking the callback.
     auto callback = std::move(Callback_);

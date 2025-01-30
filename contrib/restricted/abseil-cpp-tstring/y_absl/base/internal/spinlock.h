@@ -53,7 +53,7 @@ namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
-class Y_ABSL_LOCKABLE SpinLock {
+class Y_ABSL_LOCKABLE Y_ABSL_ATTRIBUTE_WARN_UNUSED SpinLock {
  public:
   SpinLock() : lockword_(kSpinLockCooperative) {
     Y_ABSL_TSAN_MUTEX_CREATE(this, __tsan_mutex_not_static);
@@ -89,7 +89,8 @@ class Y_ABSL_LOCKABLE SpinLock {
   // acquisition was successful.  If the lock was not acquired, false is
   // returned.  If this SpinLock is free at the time of the call, TryLock
   // will return true with high probability.
-  inline bool TryLock() Y_ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true) {
+  Y_ABSL_MUST_USE_RESULT inline bool TryLock()
+      Y_ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true) {
     Y_ABSL_TSAN_MUTEX_PRE_LOCK(this, __tsan_mutex_try_lock);
     bool res = TryLockImpl();
     Y_ABSL_TSAN_MUTEX_POST_LOCK(
@@ -120,7 +121,7 @@ class Y_ABSL_LOCKABLE SpinLock {
   // Determine if the lock is held.  When the lock is held by the invoking
   // thread, true will always be returned. Intended to be used as
   // CHECK(lock.IsHeld()).
-  inline bool IsHeld() const {
+  Y_ABSL_MUST_USE_RESULT inline bool IsHeld() const {
     return (lockword_.load(std::memory_order_relaxed) & kSpinLockHeld) != 0;
   }
 
@@ -202,6 +203,15 @@ class Y_ABSL_LOCKABLE SpinLock {
 
 // Corresponding locker object that arranges to acquire a spinlock for
 // the duration of a C++ scope.
+//
+// TODO(b/176172494): Use only [[nodiscard]] when baseline is raised.
+// TODO(b/6695610): Remove forward declaration when #ifdef is no longer needed.
+#if Y_ABSL_HAVE_CPP_ATTRIBUTE(nodiscard)
+class [[nodiscard]] SpinLockHolder;
+#else
+class Y_ABSL_MUST_USE_RESULT Y_ABSL_ATTRIBUTE_TRIVIAL_ABI SpinLockHolder;
+#endif
+
 class Y_ABSL_SCOPED_LOCKABLE SpinLockHolder {
  public:
   inline explicit SpinLockHolder(SpinLock* l) Y_ABSL_EXCLUSIVE_LOCK_FUNCTION(l)

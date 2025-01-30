@@ -4,6 +4,10 @@ TEST_SRCS(
     test.py
 )
 
+IF (SANITIZER_TYPE OR NOT OPENSOURCE)
+    REQUIREMENTS(ram:32)
+ENDIF()
+
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(1800)
     SIZE(LARGE)
@@ -19,27 +23,24 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 DEPENDS(
-    ydb/library/yql/tools/astdiff
+    yql/essentials/tools/astdiff
     ydb/library/yql/tools/dqrun
-    ydb/library/yql/tools/yqlrun
-    ydb/library/yql/tests/common/test_framework/udfs_deps
-    ydb/library/yql/udfs/test/test_import
+    yql/tools/yqlrun
+    yql/essentials/tests/common/test_framework/udfs_deps
+    yql/essentials/udfs/test/test_import
 )
 DATA(
     arcadia/ydb/library/yql/tests/sql # python files
-    arcadia/ydb/library/yql/mount
-    arcadia/ydb/library/yql/cfg/tests
+    arcadia/yt/yql/tests/sql/suites
+    arcadia/yql/essentials/mount
+    arcadia/yql/essentials/cfg/tests
 )
 PEERDIR(
-    ydb/library/yql/tests/common/test_framework
+    yql/essentials/tests/common/test_framework
     library/python/testing/swag/lib
 )
 
 NO_CHECK_IMPORTS()
-
-REQUIREMENTS(
-    ram:32
-)
 
 IF (SANITIZER_TYPE == "memory")
     TAG(ya:not_autocheck) # YQL-15385

@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.5.0)
+VERSION(2.5.2)
 
-ORIGINAL_SOURCE(https://github.com/uclouvain/openjpeg/archive/v2.5.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/uclouvain/openjpeg/archive/v2.5.2.tar.gz)
 
 ADDINCL(
     contrib/libs/openjpeg

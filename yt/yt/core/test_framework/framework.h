@@ -51,6 +51,8 @@ struct TWaitForPredicateOptions
     int IterationCount = 300;
     TDuration Period = TDuration::MilliSeconds(100);
     bool IgnoreExceptions = false;
+    TString Message = "<no-message>";
+    TSourceLocation SourceLocation = YT_CURRENT_SOURCE_LOCATION;
 };
 
 void WaitForPredicate(
@@ -59,8 +61,14 @@ void WaitForPredicate(
 
 void WaitForPredicate(
     std::function<bool()> predicate,
+    const TString& message,
+    TSourceLocation = YT_CURRENT_SOURCE_LOCATION);
+
+void WaitForPredicate(
+    std::function<bool()> predicate,
     int iterationCount = 300,
-    TDuration period = TDuration::MilliSeconds(100));
+    TDuration period = TDuration::MilliSeconds(100),
+    TSourceLocation = YT_CURRENT_SOURCE_LOCATION);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -115,8 +123,7 @@ template <class T>
 #define MAKE_PREDICATE_MATCHER(type, arg, capture, predicate) \
     MakePredicateMatcher<type>( \
         PP_DEPAREN(capture) (type arg) { return (predicate); }, \
-        #predicate \
-    )
+        #predicate)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -142,15 +149,13 @@ template <class T>
     EXPECT_CALL_WITH_MESSAGE( \
         mock, \
         RPC_MOCK_CALL(mock, method), \
-        #method \
-    )
+        #method)
 
 #define EXPECT_RPC_CALL_WITH_PREDICATE(mock, method, capture, predicate) \
     EXPECT_CALL_WITH_MESSAGE( \
         mock, \
         RPC_MOCK_CALL_WITH_PREDICATE(mock, method, capture, predicate), \
-        #method "(" #predicate ")" \
-    )
+        #method "(" #predicate ")")
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -164,8 +169,7 @@ template <class T>
     ON_CALL_WITH_MESSAGE( \
         mock, \
         RPC_MOCK_CALL(mock, method), \
-        #method \
-    )
+        #method)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -196,7 +200,7 @@ public:\
 private:\
   virtual void TestBody();\
   void TestInnerBody();\
-  static ::testing::TestInfo* const test_info_ GTEST_ATTRIBUTE_UNUSED_;\
+  [[maybe_unused]] static ::testing::TestInfo* const test_info_;\
 };\
 \
 ::testing::TestInfo* const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)\

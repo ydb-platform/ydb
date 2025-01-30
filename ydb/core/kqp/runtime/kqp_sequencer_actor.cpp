@@ -12,7 +12,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
@@ -26,11 +26,7 @@ namespace {
 
 NScheme::TTypeInfo BuildTypeInfo(const ::NKikimrKqp::TKqpColumnMetadataProto& proto) {
     NScheme::TTypeId typeId = static_cast<NScheme::TTypeId>(proto.GetTypeId());
-    if (typeId != NKikimr::NScheme::NTypeIds::Pg) {
-        return NScheme::TTypeInfo(typeId);
-    } else {
-        return NScheme::TTypeInfo(typeId, NPg::TypeDescFromPgTypeId(proto.GetTypeInfo().GetPgTypeId()));
-    }
+    return NScheme::TypeInfoFromProto(typeId, proto.GetTypeInfo());
 }
 
 using namespace NKikimr::NSequenceProxy;
@@ -43,6 +39,7 @@ class TKqpSequencerActor : public NActors::TActorBootstrapped<TKqpSequencerActor
         using TCProto = NKikimrKqp::TKqpColumnMetadataProto;
 
         TString DefaultFromSequence;
+        TPathId DefaultFromSequencePathId;
         std::set<i64> AllocatedSequenceValues;
         NScheme::TTypeInfo TypeInfo;
         NUdf::TUnboxedValue UvLiteral;
@@ -56,6 +53,8 @@ class TKqpSequencerActor : public NActors::TActorBootstrapped<TKqpSequencerActor
         {
             if (DefaultKind == TCProto::DEFAULT_KIND_SEQUENCE) {
                 DefaultFromSequence = proto.GetDefaultFromSequence();
+                DefaultFromSequencePathId = TPathId(proto.GetDefaultFromSequencePathId().GetOwnerId(), 
+                    proto.GetDefaultFromSequencePathId().GetTableId());
             }
 
             if (DefaultKind == TCProto::DEFAULT_KIND_LITERAL) {
@@ -144,8 +143,8 @@ public:
     }
 
 private:
-    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDqProto::TSourceState&) final {}
-    void LoadState(const NYql::NDqProto::TSourceState&) final {}
+    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) final {}
+    void LoadState(const NYql::NDq::TSourceState&) final {}
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {}
 
     ui64 GetInputIndex() const final {
@@ -264,7 +263,11 @@ private:
                     continue;
                 }
 
-                Send(SequenceProxyId, new TEvSequenceProxy::TEvNextVal(Settings.GetDatabase(), col.DefaultFromSequence), 0, colIdx);
+                if (col.DefaultFromSequencePathId != TPathId()) {
+                    Send(SequenceProxyId, new TEvSequenceProxy::TEvNextVal(Settings.GetDatabase(), col.DefaultFromSequencePathId), 0, colIdx);
+                } else {
+                    Send(SequenceProxyId, new TEvSequenceProxy::TEvNextVal(Settings.GetDatabase(), col.DefaultFromSequence), 0, colIdx);
+                }
                 WaitingReplies++;
             }
         }

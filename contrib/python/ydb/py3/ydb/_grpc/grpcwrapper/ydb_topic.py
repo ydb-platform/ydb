@@ -32,7 +32,7 @@ from .common_utils import (
 )
 
 
-class Codec(int, IToPublic):
+class Codec(int, IToPublic, IFromPublic):
     CODEC_UNSPECIFIED = 0
     CODEC_RAW = 1
     CODEC_GZIP = 2
@@ -46,9 +46,13 @@ class Codec(int, IToPublic):
     def to_public(self) -> ydb_topic_public_types.PublicCodec:
         return ydb_topic_public_types.PublicCodec(int(self))
 
+    @staticmethod
+    def from_public(codec: Union[ydb_topic_public_types.PublicCodec, int]) -> "Codec":
+        return Codec(int(codec))
+
 
 @dataclass
-class SupportedCodecs(IToProto, IFromProto, IToPublic):
+class SupportedCodecs(IToProto, IFromProto, IToPublic, IFromPublic):
     codecs: List[Codec]
 
     def to_proto(self) -> ydb_topic_pb2.SupportedCodecs:
@@ -67,6 +71,15 @@ class SupportedCodecs(IToProto, IFromProto, IToPublic):
 
     def to_public(self) -> List[ydb_topic_public_types.PublicCodec]:
         return list(map(Codec.to_public, self.codecs))
+
+    @staticmethod
+    def from_public(
+        codecs: Optional[List[Union[ydb_topic_public_types.PublicCodec, int]]]
+    ) -> Optional["SupportedCodecs"]:
+        if codecs is None:
+            return None
+
+        return SupportedCodecs(codecs=[Codec.from_public(codec) for codec in codecs])
 
 
 @dataclass(order=True)
@@ -194,6 +207,7 @@ class StreamWriteMessage:
             data: bytes
             uncompressed_size: int
             partitioning: "StreamWriteMessage.PartitioningType"
+            metadata_items: Dict[str, bytes]
 
             def to_proto(
                 self,
@@ -203,6 +217,10 @@ class StreamWriteMessage:
                 proto.created_at.FromDatetime(self.created_at)
                 proto.data = self.data
                 proto.uncompressed_size = self.uncompressed_size
+
+                for key, value in self.metadata_items.items():
+                    item = ydb_topic_pb2.MetadataItem(key=key, value=value)
+                    proto.metadata_items.append(item)
 
                 if self.partitioning is None:
                     pass
@@ -475,16 +493,19 @@ class StreamReadMessage:
             data: bytes
             uncompresed_size: int
             message_group_id: str
+            metadata_items: Dict[str, bytes]
 
             @staticmethod
             def from_proto(
                 msg: ydb_topic_pb2.StreamReadMessage.ReadResponse.MessageData,
             ) -> "StreamReadMessage.ReadResponse.MessageData":
+                metadata_items = {meta.key: meta.value for meta in msg.metadata_items}
                 return StreamReadMessage.ReadResponse.MessageData(
                     offset=msg.offset,
                     seq_no=msg.seq_no,
                     created_at=msg.created_at.ToDatetime(),
                     data=msg.data,
+                    metadata_items=metadata_items,
                     uncompresed_size=msg.uncompressed_size,
                     message_group_id=msg.message_group_id,
                 )
@@ -883,6 +904,41 @@ class Consumer(IToProto, IFromProto, IFromPublic, IToPublic):
 
 
 @dataclass
+class AlterConsumer(IToProto, IFromPublic):
+    name: str
+    set_important: Optional[bool]
+    set_read_from: Optional[datetime.datetime]
+    set_supported_codecs: Optional[SupportedCodecs]
+    alter_attributes: Optional[Dict[str, str]]
+
+    def to_proto(self) -> ydb_topic_pb2.AlterConsumer:
+        supported_codecs = None
+        if self.set_supported_codecs is not None:
+            supported_codecs = self.set_supported_codecs.to_proto()
+
+        return ydb_topic_pb2.AlterConsumer(
+            name=self.name,
+            set_important=self.set_important,
+            set_read_from=proto_timestamp_from_datetime(self.set_read_from),
+            set_supported_codecs=supported_codecs,
+            alter_attributes=self.alter_attributes,
+        )
+
+    @staticmethod
+    def from_public(alter_consumer: ydb_topic_public_types.PublicAlterConsumer) -> AlterConsumer:
+        if not alter_consumer:
+            return None
+
+        return AlterConsumer(
+            name=alter_consumer.name,
+            set_important=alter_consumer.set_important,
+            set_read_from=alter_consumer.set_read_from,
+            set_supported_codecs=SupportedCodecs.from_public(alter_consumer.set_supported_codecs),
+            alter_attributes=alter_consumer.alter_attributes,
+        )
+
+
+@dataclass
 class PartitioningSettings(IToProto, IFromProto):
     min_active_partitions: int
     partition_count_limit: int
@@ -898,6 +954,18 @@ class PartitioningSettings(IToProto, IFromProto):
         return ydb_topic_pb2.PartitioningSettings(
             min_active_partitions=self.min_active_partitions,
             partition_count_limit=self.partition_count_limit,
+        )
+
+
+@dataclass
+class AlterPartitioningSettings(IToProto):
+    set_min_active_partitions: Optional[int]
+    set_partition_count_limit: Optional[int]
+
+    def to_proto(self) -> ydb_topic_pb2.AlterPartitioningSettings:
+        return ydb_topic_pb2.AlterPartitioningSettings(
+            set_min_active_partitions=self.set_min_active_partitions,
+            set_partition_count_limit=self.set_partition_count_limit,
         )
 
 
@@ -992,6 +1060,78 @@ class CreateTopicRequest(IToProto, IFromPublic):
 @dataclass
 class CreateTopicResult:
     pass
+
+
+@dataclass
+class AlterTopicRequest(IToProto, IFromPublic):
+    path: str
+    add_consumers: Optional[List["Consumer"]]
+    alter_partitioning_settings: Optional[AlterPartitioningSettings]
+    set_retention_period: Optional[datetime.timedelta]
+    set_retention_storage_mb: Optional[int]
+    set_supported_codecs: Optional[SupportedCodecs]
+    set_partition_write_burst_bytes: Optional[int]
+    set_partition_write_speed_bytes_per_second: Optional[int]
+    alter_attributes: Optional[Dict[str, str]]
+    alter_consumers: Optional[List[AlterConsumer]]
+    drop_consumers: Optional[List[str]]
+    set_metering_mode: Optional["MeteringMode"]
+
+    def to_proto(self) -> ydb_topic_pb2.AlterTopicRequest:
+        supported_codecs = None
+        if self.set_supported_codecs is not None:
+            supported_codecs = self.set_supported_codecs.to_proto()
+
+        return ydb_topic_pb2.AlterTopicRequest(
+            path=self.path,
+            add_consumers=[consumer.to_proto() for consumer in self.add_consumers],
+            alter_partitioning_settings=self.alter_partitioning_settings.to_proto(),
+            set_retention_period=proto_duration_from_timedelta(self.set_retention_period),
+            set_retention_storage_mb=self.set_retention_storage_mb,
+            set_supported_codecs=supported_codecs,
+            set_partition_write_burst_bytes=self.set_partition_write_burst_bytes,
+            set_partition_write_speed_bytes_per_second=self.set_partition_write_speed_bytes_per_second,
+            alter_attributes=self.alter_attributes,
+            alter_consumers=[consumer.to_proto() for consumer in self.alter_consumers],
+            drop_consumers=list(self.drop_consumers),
+            set_metering_mode=self.set_metering_mode,
+        )
+
+    @staticmethod
+    def from_public(req: ydb_topic_public_types.AlterTopicRequestParams) -> AlterTopicRequest:
+        add_consumers = []
+        if req.add_consumers:
+            for consumer in req.add_consumers:
+                if isinstance(consumer, str):
+                    consumer = ydb_topic_public_types.PublicConsumer(name=consumer)
+                add_consumers.append(Consumer.from_public(consumer))
+
+        alter_consumers = []
+        if req.alter_consumers:
+            for consumer in req.alter_consumers:
+                if isinstance(consumer, str):
+                    consumer = ydb_topic_public_types.PublicAlterConsumer(name=consumer)
+                alter_consumers.append(AlterConsumer.from_public(consumer))
+
+        drop_consumers = req.drop_consumers if req.drop_consumers else []
+
+        return AlterTopicRequest(
+            path=req.path,
+            alter_partitioning_settings=AlterPartitioningSettings(
+                set_min_active_partitions=req.set_min_active_partitions,
+                set_partition_count_limit=req.set_partition_count_limit,
+            ),
+            add_consumers=add_consumers,
+            set_retention_period=req.set_retention_period,
+            set_retention_storage_mb=req.set_retention_storage_mb,
+            set_supported_codecs=SupportedCodecs.from_public(req.set_supported_codecs),
+            set_partition_write_burst_bytes=req.set_partition_write_burst_bytes,
+            set_partition_write_speed_bytes_per_second=req.set_partition_write_speed_bytes_per_second,
+            alter_attributes=req.alter_attributes,
+            alter_consumers=alter_consumers,
+            drop_consumers=drop_consumers,
+            set_metering_mode=MeteringMode.from_public(req.set_metering_mode),
+        )
 
 
 @dataclass

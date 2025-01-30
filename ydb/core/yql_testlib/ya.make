@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/regex/pcre
     library/cpp/testing/unittest
     ydb/core/base
@@ -20,12 +20,12 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/testlib/actors
     ydb/core/testlib/basics
-    ydb/library/yql/core/facade
-    ydb/library/yql/public/udf
+    yql/essentials/core/facade
+    yql/essentials/public/udf
     ydb/public/lib/base
-    ydb/library/yql/core
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/udf_resolve
+    yql/essentials/core
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/udf_resolve
 )
 
 YQL_LAST_ABI_VERSION()

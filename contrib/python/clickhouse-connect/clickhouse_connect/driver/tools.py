@@ -2,7 +2,7 @@ from typing import Optional, Sequence, Dict, Any
 
 from clickhouse_connect.driver import Client
 from clickhouse_connect.driver.summary import QuerySummary
-from clickhouse_connect.driver.query import quote_identifier
+from clickhouse_connect.driver.binding import quote_identifier
 
 
 def insert_file(client: Client,
@@ -13,7 +13,12 @@ def insert_file(client: Client,
                 database: Optional[str] = None,
                 settings: Optional[Dict[str, Any]] = None,
                 compression: Optional[str] = None) -> QuerySummary:
-    full_table = f'{quote_identifier(database)}.{quote_identifier(table)}' if database else quote_identifier(table)
+    if not database and table[0] not in ('`', "'") and table.find('.') > 0:
+        full_table = table
+    elif database:
+        full_table = f'{quote_identifier(database)}.{quote_identifier(table)}'
+    else:
+        full_table = quote_identifier(table)
     if not fmt:
         fmt = 'CSV' if column_names else 'CSVWithNames'
     if compression is None:

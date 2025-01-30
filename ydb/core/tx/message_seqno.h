@@ -3,6 +3,11 @@
 #include "defs.h"
 
 #include <util/stream/output.h>
+#include <ydb/library/conclusion/status.h>
+
+namespace NKikimrTx {
+class TMessageSeqNo;
+}
 
 namespace NKikimr {
     // A helper for check the order of messages sent by a tablet
@@ -61,6 +66,11 @@ namespace NKikimr {
         void Out(IOutputStream& o) const {
             o << Generation << ":" << Round;
         }
+
+        TString SerializeToString() const;
+        TConclusionStatus DeserializeFromString(const TString& data);
+        NKikimrTx::TMessageSeqNo SerializeToProto() const;
+        TConclusionStatus DeserializeFromProto(const NKikimrTx::TMessageSeqNo& proto);
     };
 
 }

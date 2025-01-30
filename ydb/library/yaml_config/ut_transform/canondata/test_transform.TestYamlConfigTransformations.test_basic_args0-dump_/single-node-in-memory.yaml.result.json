@@ -86,14 +86,6 @@
           {
             "DomainId":1,
             "SchemeRoot":72057594046678944,
-            "SSId":
-              [
-                1
-              ],
-            "HiveUid":
-              [
-                1
-              ],
             "PlanResolution":10,
             "Name":"Root",
             "StoragePoolTypes":
@@ -157,7 +149,6 @@
       "HiveConfig":
         [
           {
-            "HiveUid":1,
             "Hive":72057594037968897
           }
         ],
@@ -243,7 +234,7 @@
               "+(DS|RA):METADATA-READERS",
               "+(SR):DATA-READERS",
               "+(UR|ER):DATA-WRITERS",
-              "+(CD|CT|WA|AS|RS):DDL-ADMINS",
+              "+(CD|CT|CQ|WA|AS|RS):DDL-ADMINS",
               "+(GAR):ACCESS-ADMINS",
               "+(CDB|DDB):DATABASE-ADMINS"
             ],
@@ -315,6 +306,30 @@
           "AvailabilityDomains":
             [
               1
+            ]
+        },
+      "DefineHostConfig":
+        [
+          {
+            "HostConfigId":1,
+            "Drive":
+              [
+                {
+                  "Path":"SectorMap:1:64",
+                  "Type":"SSD"
+                }
+              ]
+          }
+        ],
+      "DefineBox":
+        {
+          "BoxId":1,
+          "Host":
+            [
+              {
+                "HostConfigId":1,
+                "EnforcedNodeId":1
+              }
             ]
         }
     },

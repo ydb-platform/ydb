@@ -24,11 +24,6 @@ void FormatValue(TStringBuilderBase* builder, TReachableState state, TStringBuf 
     builder->AppendFormat("%v:%v", state.SegmentId, state.SequenceNumber);
 }
 
-TString ToString(TReachableState state)
-{
-    return ToStringViaBuilder(state);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TElectionPriority::TElectionPriority(int lastMutationTerm, int segmentId, i64 sequenceNumber) noexcept
@@ -56,11 +51,6 @@ void FormatValue(TStringBuilderBase* builder, TElectionPriority priority, TStrin
         priority.ReachableState);
 }
 
-TString ToString(TElectionPriority state)
-{
-    return ToStringViaBuilder(state);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TVersion::TVersion(int segmentId, int recordId) noexcept
@@ -68,22 +58,22 @@ TVersion::TVersion(int segmentId, int recordId) noexcept
     , RecordId(recordId)
 { }
 
-std::strong_ordering TVersion::operator <=> (const TVersion& other) const
-{
-    if (SegmentId != other.SegmentId) {
-        return SegmentId <=> other.SegmentId;
-    }
-    return RecordId <=> other.RecordId;
-}
+// std::strong_ordering TVersion::operator <=> (const TVersion& other) const
+// {
+//     if (SegmentId != other.SegmentId) {
+//         return SegmentId <=> other.SegmentId;
+//     }
+//     return RecordId <=> other.RecordId;
+// }
 
 TRevision TVersion::ToRevision() const
 {
-    return (static_cast<TRevision>(SegmentId) << 32) | static_cast<TRevision>(RecordId);
+    return TRevision((static_cast<ui64>(SegmentId) << 32) | static_cast<ui64>(RecordId));
 }
 
 TVersion TVersion::FromRevision(TRevision revision)
 {
-    return TVersion(revision >> 32, revision & 0xffffffff);
+    return TVersion(revision.Underlying() >> 32, revision.Underlying() & 0xffffffff);
 }
 
 TVersion TVersion::Advance(int delta) const
@@ -100,11 +90,6 @@ TVersion TVersion::Rotate() const
 void FormatValue(TStringBuilderBase* builder, TVersion version, TStringBuf /* spec */)
 {
     builder->AppendFormat("%v:%v", version.SegmentId, version.RecordId);
-}
-
-TString ToString(TVersion version)
-{
-    return ToStringViaBuilder(version);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

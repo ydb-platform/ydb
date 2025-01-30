@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import copy
+import typing
 from concurrent import futures
 import uuid
 import threading
@@ -61,7 +62,11 @@ def _log_request(rpc_state, request):
         logger.debug("%s: request = { %s }", rpc_state, _message_to_string(request))
 
 
-def _rpc_error_handler(rpc_state, rpc_error, on_disconnected=None):
+def _rpc_error_handler(
+    rpc_state,
+    rpc_error: typing.Union[grpc.RpcError, grpc.aio.AioRpcError, grpc.Call, grpc.aio.Call],
+    on_disconnected: typing.Callable[[], None] = None,
+):
     """
     RPC call error handler, that translates gRPC error into YDB issue
     :param rpc_state: A state of rpc
@@ -69,7 +74,7 @@ def _rpc_error_handler(rpc_state, rpc_error, on_disconnected=None):
     :param on_disconnected: a handler to call on disconnected connection
     """
     logger.info("%s: received error, %s", rpc_state, rpc_error)
-    if isinstance(rpc_error, grpc.Call):
+    if isinstance(rpc_error, (grpc.RpcError, grpc.aio.AioRpcError, grpc.Call, grpc.aio.Call)):
         if rpc_error.code() == grpc.StatusCode.UNAUTHENTICATED:
             return issues.Unauthenticated(rpc_error.details())
         elif rpc_error.code() == grpc.StatusCode.DEADLINE_EXCEEDED:

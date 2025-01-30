@@ -1213,12 +1213,8 @@ _elementtree_Element_extend_impl(ElementObject *self, PyTypeObject *cls,
     PyObject* seq;
     Py_ssize_t i;
 
-    seq = PySequence_Fast(elements, "");
+    seq = PySequence_Fast(elements, "'elements' must be an iterable");
     if (!seq) {
-        PyErr_Format(
-            PyExc_TypeError,
-            "expected sequence, not \"%.200s\"", Py_TYPE(elements)->tp_name
-            );
         return NULL;
     }
 
@@ -1504,7 +1500,7 @@ element_bool(PyObject* self_)
 {
     ElementObject* self = (ElementObject*) self_;
     if (PyErr_WarnEx(PyExc_DeprecationWarning,
-                     "Testing an element's truth value will raise an exception "
+                     "Testing an element's truth value will always return True "
                      "in future versions.  Use specific 'len(elem)' or "
                      "'elem is not None' test instead.",
                      1) < 0) {
@@ -1920,12 +1916,8 @@ element_ass_subscr(PyObject* self_, PyObject* item, PyObject* value)
         }
 
         /* A new slice is actually being assigned */
-        seq = PySequence_Fast(value, "");
+        seq = PySequence_Fast(value, "assignment expects an iterable");
         if (!seq) {
-            PyErr_Format(
-                PyExc_TypeError,
-                "expected sequence, not \"%.200s\"", Py_TYPE(value)->tp_name
-                );
             return -1;
         }
         newlen = PySequence_Fast_GET_SIZE(seq);
@@ -3896,6 +3888,40 @@ _elementtree_XMLParser_close_impl(XMLParserObject *self)
 }
 
 /*[clinic input]
+_elementtree.XMLParser.flush
+
+[clinic start generated code]*/
+
+static PyObject *
+_elementtree_XMLParser_flush_impl(XMLParserObject *self)
+/*[clinic end generated code: output=42fdb8795ca24509 input=effbecdb28715949]*/
+{
+    if (!_check_xmlparser(self)) {
+        return NULL;
+    }
+
+    elementtreestate *st = self->state;
+
+    if (EXPAT(st, SetReparseDeferralEnabled) == NULL) {
+        Py_RETURN_NONE;
+    }
+
+    // NOTE: The Expat parser in the C implementation of ElementTree is not
+    //       exposed to the outside; as a result we known that reparse deferral
+    //       is currently enabled, or we would not even have access to function
+    //       XML_SetReparseDeferralEnabled in the first place (which we checked
+    //       for, a few lines up).
+
+    EXPAT(st, SetReparseDeferralEnabled)(self->parser, XML_FALSE);
+
+    PyObject *res = expat_parse(st, self, "", 0, XML_FALSE);
+
+    EXPAT(st, SetReparseDeferralEnabled)(self->parser, XML_TRUE);
+
+    return res;
+}
+
+/*[clinic input]
 _elementtree.XMLParser.feed
 
     data: object
@@ -4289,6 +4315,7 @@ static PyType_Spec treebuilder_spec = {
 static PyMethodDef xmlparser_methods[] = {
     _ELEMENTTREE_XMLPARSER_FEED_METHODDEF
     _ELEMENTTREE_XMLPARSER_CLOSE_METHODDEF
+    _ELEMENTTREE_XMLPARSER_FLUSH_METHODDEF
     _ELEMENTTREE_XMLPARSER__PARSE_WHOLE_METHODDEF
     _ELEMENTTREE_XMLPARSER__SETEVENTS_METHODDEF
     {NULL, NULL}

@@ -147,6 +147,10 @@ class MergeTree(TableEngine):
         super().__init__(locals())
 
 
+class SharedMergeTree(MergeTree):
+    pass
+
+
 class SummingMergeTree(MergeTree):
     pass
 
@@ -223,6 +227,26 @@ class ReplicatedAggregatingMergeTree(ReplicatedMergeTree):
 
 
 class ReplicatedSummingMergeTree(ReplicatedMergeTree):
+    pass
+
+
+class SharedReplacingMergeTree(ReplacingMergeTree):
+    pass
+
+
+class SharedAggregatingMergeTree(AggregatingMergeTree):
+    pass
+
+
+class SharedSummingMergeTree(SummingMergeTree):
+    pass
+
+
+class SharedVersionedCollapsingMergeTree(VersionedCollapsingMergeTree):
+    pass
+
+
+class SharedGraphiteMergeTree(GraphiteMergeTree):
     pass
 
 

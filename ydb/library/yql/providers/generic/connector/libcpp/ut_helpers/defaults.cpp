@@ -18,6 +18,5 @@ namespace NYql::NConnector::NTest {
     extern const TString DEFAULT_CH_SERVICE_ACCOUNT_ID_SIGNATURE = "sa_signature";
 
     extern const TString DEFAULT_YDB_HOST = "localhost";
-    extern const TString DEFAULT_YDB_DATABASE = "local";
     extern const TString DEFAULT_YDB_ENDPOINT = TStringBuilder() << DEFAULT_YDB_HOST << ':' << DEFAULT_YDB_PORT;
 } // namespace NYql::NConnector::NTest

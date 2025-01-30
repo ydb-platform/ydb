@@ -5,8 +5,8 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 Y_UNIT_TEST_SUITE(YdbWorkloadTransferTopicToTable) {
 
@@ -81,7 +81,7 @@ TString ExecYdb(const TList<TString>& args, bool checkExitCode = true)
     //
     // ydb -e grpc://${YDB_ENDPOINT} -d /${YDB_DATABASE} workload transfer topic-to-table ${args}
     //
-    return RunYdb({"--user", "root", "--no-password", "workload", "transfer", "topic-to-table"}, args,
+    return RunYdb({"workload", "transfer", "topic-to-table"}, args,
                   checkExitCode);
 }
 
@@ -94,9 +94,8 @@ void RunYdb(const TList<TString>& args,
     ExpectTable({.Name=table, .Partitions=tablePartitions});
 }
 
-Y_UNIT_TEST(Default_Run) {
-    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
-
+Y_UNIT_TEST(Default_Run)
+{
     ExecYdb({"init"});
     auto output = ExecYdb({"run", "-s", "10"});
     ExecYdb({"clean"});
@@ -149,8 +148,6 @@ void EnsureStatisticsColumns(const TList<TString>& args,
                              const TVector<TString>& columns1,
                              const TVector<TString>& columns2)
 {
-    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
-
     ExecYdb({"init"});
     auto output = ExecYdb(args, false);
 

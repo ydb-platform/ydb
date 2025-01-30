@@ -6,44 +6,35 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSchedulerThreadBase
+class TSchedulerThread
     : public TFiberSchedulerThread
 {
 public:
-    ~TSchedulerThreadBase();
-
     void Stop(bool graceful);
     void Stop();
 
 protected:
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
+
     std::atomic<bool> GracefulStop_ = false;
 
-    TSchedulerThreadBase(
+    TSchedulerThread(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const TString& threadGroupName,
-        const TString& threadName,
-        NThreading::EThreadPriority threadPriority = NThreading::EThreadPriority::Normal,
-        int shutdownPriority = 0);
+        TString threadGroupName,
+        TString threadName,
+        NThreading::TThreadOptions options = {});
 
+    ~TSchedulerThread();
+
+    // NB(arkady-e1ppa): We don't need a customisation point OnStop
+    // because the only sensible case when we need to do something
+    // after stop is a graceful shutdown for which we might want
+    // to clear the queue. Now, every shutdownable queue is
+    // either drained automatically (graceful = false) or
+    // the Shutdown is graceful (TSchedulerThread::Stop(true)) will
+    // be called. In the latter case |OnExecute| loop will
+    // continue working until the queue is empty anyway. So we are safe.
     virtual void OnStart();
-    virtual void OnStop();
-
-private:
-    void StartEpilogue() override;
-    void StopPrologue() override;
-    void StopEpilogue() override;
-};
-
-DEFINE_REFCOUNTED_TYPE(TSchedulerThreadBase)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TSchedulerThread
-    : public TSchedulerThreadBase
-{
-protected:
-    using TSchedulerThreadBase::TSchedulerThreadBase;
 
     TClosure OnExecute() override;
 
@@ -57,7 +48,13 @@ private:
 
     void MaybeRunMaintenance(TCpuInstant now);
     void RunMaintenance();
+
+    void StartEpilogue() override;
+    void StopPrologue() override;
+    void StopEpilogue() override;
 };
+
+DEFINE_REFCOUNTED_TYPE(TSchedulerThread)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -12,7 +12,8 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
-    ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/providers/s3/actors
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

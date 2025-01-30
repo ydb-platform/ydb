@@ -323,11 +323,18 @@ private:
     }
 
     bool DoFullScanTx(TDbWrapper& db) {
+        const std::array<ui32, 2> tags{{ 1 /* Id */, 2 /* value */ }};
+
         try {
-            const std::array<ui32, 2> tags{{ 1 /* Id */, 2 /* value */ }};
-
             db->Precharge(Table, { }, { }, tags, 0);
+        } catch (NTable::TIteratorNotReady&) {
+            Restarts++;
+            Cerr << "Precharge restarts " << Restarts << " times" << Endl;
+            Y_ABORT_UNLESS(Restarts < 5, "Too many precharge restarts");
+            return false;
+        }
 
+        try {
             TAutoPtr<NTable::ITestIterator> it = db->Iterate(Table, { }, tags, ELookup::GreaterOrEqualThan);
 
             while (it->Next(NTable::ENext::All) == NTable::EReady::Data) {
@@ -335,13 +342,10 @@ private:
             }
 
             Y_ABORT_UNLESS(LastKey + 1 == RowCount /* incomplete read */);
-            Y_ABORT_UNLESS(Restarts == 1 /* exactly one precharge */);
 
             return true;
         } catch (NTable::TIteratorNotReady&) {
-            Restarts++;
-            Cerr << "Full scan restart at id = " << LastKey << Endl;
-            return false;
+            Y_ABORT_UNLESS(false, "All the data should be precharged");
         }
     }
 

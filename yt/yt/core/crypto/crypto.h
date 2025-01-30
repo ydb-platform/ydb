@@ -27,9 +27,9 @@ public:
     TMD5Hasher& Append(TStringBuf data);
     TMD5Hasher& Append(TRef data);
 
-    TMD5Hash GetDigest();
-    TString GetHexDigestLowerCase();
-    TString GetHexDigestUpperCase();
+    TMD5Hash GetDigest() const;
+    TString GetHexDigestLowerCase() const;
+    TString GetHexDigestUpperCase() const;
 
     const TMD5State& GetState() const;
 
@@ -58,9 +58,9 @@ public:
 
     TSha1Hasher& Append(TStringBuf data);
 
-    TSha1Hash GetDigest();
-    TString GetHexDigestLowerCase();
-    TString GetHexDigestUpperCase();
+    TSha1Hash GetDigest() const;
+    TString GetHexDigestLowerCase() const;
+    TString GetHexDigestUpperCase() const;
 
 private:
     std::array<char, 96> CtxStorage_;
@@ -76,13 +76,13 @@ public:
     TSha256Hasher& Append(TStringBuf data);
 
     using TDigest = std::array<char, 32>;
-    TDigest GetDigest();
 
-    TString GetHexDigestLowerCase();
-    TString GetHexDigestUpperCase();
+    TDigest GetDigest() const;
+    TString GetHexDigestLowerCase() const;
+    TString GetHexDigestUpperCase() const;
 
 private:
-    constexpr static int CtxSize = 112;
+    static constexpr int CtxSize = 112;
     std::array<char, CtxSize> CtxStorage_;
 };
 
@@ -120,6 +120,9 @@ namespace NProto {
 
 void ToProto(NCrypto::NProto::TMD5Hasher* protoHasher, const std::optional<NYT::NCrypto::TMD5Hasher>& hasher);
 void FromProto(std::optional<NYT::NCrypto::TMD5Hasher>* hasher, const NCrypto::NProto::TMD5Hasher& protoHasher);
+
+void ToProto(NCrypto::NProto::TMD5Hash* protoHash, const std::optional<NYT::NCrypto::TMD5Hash>& hash);
+void FromProto(std::optional<NYT::NCrypto::TMD5Hash>* hash, const NCrypto::NProto::TMD5Hash& protoHash);
 
 } // namespace NProto
 

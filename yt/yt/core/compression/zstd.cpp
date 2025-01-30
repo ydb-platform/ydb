@@ -6,6 +6,8 @@
 #include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/finally.h>
 
+#include <library/cpp/yt/system/exit.h>
+
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
 
 #include <contrib/libs/zstd/lib/zstd_errors.h>
@@ -18,7 +20,7 @@ namespace NYT::NCompression::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = CompressionLogger;
+static constexpr auto& Logger = CompressionLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,8 +31,17 @@ struct TZstdCompressBufferTag
 
 void VerifyError(size_t result)
 {
-    YT_LOG_FATAL_IF(ZSTD_isError(result),
-        "Zstd compression failed (Error: %v)",
+    if (!ZSTD_isError(result)) {
+        return;
+    }
+
+    if (result == ZSTD_error_memory_allocation) {
+        AbortProcessDramatically(
+            EProcessExitCode::OutOfMemory,
+            "Zstd codec failed with memory allocation error");
+    }
+
+    YT_LOG_FATAL("Zstd compression failed (Error: %v)",
         ZSTD_getErrorName(result));
 }
 
@@ -50,7 +61,7 @@ void ZstdCompress(int level, TSource* source, TBlob* output)
     }
 
     auto context = ZSTD_createCCtx();
-    auto contextGuard = Finally([&] () {
+    auto contextGuard = Finally([&] {
         ZSTD_freeCCtx(context);
     });
 
@@ -209,7 +220,12 @@ TDictionaryCompressionFrameInfo ZstdGetFrameInfo(TRef input)
         input.Begin(),
         input.Size(),
         ZSTD_f_zstd1_magicless);
-    YT_VERIFY(result == 0);
+    if (result != 0) {
+        THROW_ERROR_EXCEPTION("Failed to get frame header")
+            << TErrorAttribute("code", result)
+            << TErrorAttribute("is_error", ZSTD_isError(result))
+            << TErrorAttribute("error", ZSTD_getErrorName(result));
+    }
 
     return {
         .ContentSize = frameHeader.frameContentSize,
@@ -225,15 +241,14 @@ class TDigestedCompressionDictionary
     , private TNonCopyable
 {
 public:
-    explicit TDigestedCompressionDictionary(ZSTD_CDict* digestedDictionary)
-        : DigestedDictionary_(digestedDictionary)
+    explicit TDigestedCompressionDictionary(
+        TSharedRef storage,
+        const ZSTD_CDict* digestedDictionary)
+        : Storage_(std::move(storage))
+        , DigestedDictionary_(digestedDictionary)
     {
+        YT_VERIFY(Storage_);
         YT_VERIFY(DigestedDictionary_);
-    }
-
-    ~TDigestedCompressionDictionary()
-    {
-        ZSTD_freeCDict(DigestedDictionary_);
     }
 
     i64 GetMemoryUsage() const override
@@ -241,13 +256,16 @@ public:
         return ZSTD_sizeof_CDict(DigestedDictionary_);
     }
 
-    ZSTD_CDict* GetDigestedDictionary() const
+    const ZSTD_CDict* GetDigestedDictionary() const
     {
         return DigestedDictionary_;
     }
 
 private:
-    ZSTD_CDict* const DigestedDictionary_;
+    //! NB: DigestedDictionary is initialized over preallocated memory referenced by Storage.
+    //! For that reason we must assure that Storage lifetime is longer and also do not need to call ZSTD_freeCDict.
+    const TSharedRef Storage_;
+    const ZSTD_CDict* const DigestedDictionary_;
 };
 
 DEFINE_REFCOUNTED_TYPE(TDigestedCompressionDictionary)
@@ -261,15 +279,14 @@ class TDigestedDecompressionDictionary
     , private TNonCopyable
 {
 public:
-    explicit TDigestedDecompressionDictionary(ZSTD_DDict* digestedDictionary)
-        : DigestedDictionary_(digestedDictionary)
+    explicit TDigestedDecompressionDictionary(
+        TSharedRef storage,
+        const ZSTD_DDict* digestedDictionary)
+        : Storage_(std::move(storage))
+        , DigestedDictionary_(digestedDictionary)
     {
+        YT_VERIFY(Storage_);
         YT_VERIFY(DigestedDictionary_);
-    }
-
-    ~TDigestedDecompressionDictionary()
-    {
-        ZSTD_freeDDict(DigestedDictionary_);
     }
 
     i64 GetMemoryUsage() const override
@@ -277,13 +294,16 @@ public:
         return ZSTD_sizeof_DDict(DigestedDictionary_);
     }
 
-    ZSTD_DDict* GetDigestedDictionary() const
+    const ZSTD_DDict* GetDigestedDictionary() const
     {
         return DigestedDictionary_;
     }
 
 private:
-    ZSTD_DDict* const DigestedDictionary_;
+    //! NB: DigestedDictionary is initialized over preallocated memory referenced by Storage.
+    //! For that reason we must assure that Storage lifetime is longer and also do not need to call ZSTD_freeDDict.
+    const TSharedRef Storage_;
+    const ZSTD_DDict* const DigestedDictionary_;
 };
 
 DEFINE_REFCOUNTED_TYPE(TDigestedDecompressionDictionary)
@@ -472,28 +492,76 @@ TErrorOr<TSharedRef> ZstdTrainCompressionDictionary(i64 dictionarySize, const st
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IDigestedCompressionDictionaryPtr ZstdCreateDigestedCompressionDictionary(
+i64 ZstdEstimateDigestedCompressionDictionarySize(i64 dictionarySize, int compressionLevel)
+{
+    return ZSTD_estimateCDictSize(dictionarySize, compressionLevel);
+}
+
+i64 ZstdEstimateDigestedDecompressionDictionarySize(i64 dictionarySize)
+{
+    return ZSTD_estimateDDictSize(dictionarySize, ZSTD_dlm_byCopy);
+}
+
+IDigestedCompressionDictionaryPtr ZstdConstructDigestedCompressionDictionary(
     const TSharedRef& compressionDictionary,
+    TSharedMutableRef storage,
     int compressionLevel)
 {
     YT_VERIFY(compressionDictionary);
+    YT_VERIFY(storage);
+    YT_VERIFY(compressionLevel >= 0 && compressionLevel <= ZstdGetMaxCompressionLevel());
+    YT_VERIFY(AlignUp(storage.Begin(), 8ull) == storage.Begin());
 
-    auto* digestedDictionary = ZSTD_createCDict(
+    // XXX(akozhikhov): We have to assign #srcSizeHint here to 1 instead of 0 (as a default unknown value)
+    // because of the mode that this function sets upon calling its internal implementation.
+    // According to documentation 'ZSTD_cParamMode_e::ZSTD_cpm_createCDict' and 'ZSTD_cParamMode_e::ZSTD_cpm_unknown' seems to
+    // have the same effect, however for some reason this is not true in case of zero #srcSizeHint.
+    auto compressionParams = ZSTD_getCParams(
+        compressionLevel,
+        /*srcSizeHint*/ 1,
+        compressionDictionary.Size());
+
+    auto* digestedDictionary = ZSTD_initStaticCDict(
+        storage.Begin(),
+        storage.Size(),
         compressionDictionary.Begin(),
         compressionDictionary.Size(),
-        compressionLevel);
-    return New<TDigestedCompressionDictionary>(digestedDictionary);
+        ZSTD_dlm_byCopy,
+        ZSTD_dct_auto,
+        compressionParams);
+
+    if (!digestedDictionary) {
+        THROW_ERROR_EXCEPTION("Failed to create digested compression dictionary")
+            << TErrorAttribute("compression_level", compressionLevel)
+            << TErrorAttribute("dictionary_size", compressionDictionary.Size())
+            << TErrorAttribute("storage_size", storage.Size());
+    }
+
+    return New<TDigestedCompressionDictionary>(std::move(storage), digestedDictionary);
 }
 
-IDigestedDecompressionDictionaryPtr ZstdCreateDigestedDecompressionDictionary(
-    const TSharedRef& compressionDictionary)
+IDigestedDecompressionDictionaryPtr ZstdConstructDigestedDecompressionDictionary(
+    const TSharedRef& decompressionDictionary,
+    TSharedMutableRef storage)
 {
-    YT_VERIFY(compressionDictionary);
+    YT_VERIFY(decompressionDictionary);
+    YT_VERIFY(storage);
 
-    auto* digestedDictionary = ZSTD_createDDict(
-        compressionDictionary.Begin(),
-        compressionDictionary.Size());
-    return New<TDigestedDecompressionDictionary>(digestedDictionary);
+    auto* digestedDictionary = ZSTD_initStaticDDict(
+        storage.Begin(),
+        storage.Size(),
+        decompressionDictionary.Begin(),
+        decompressionDictionary.Size(),
+        ZSTD_dlm_byCopy,
+        ZSTD_dct_auto);
+
+    if (!digestedDictionary) {
+        THROW_ERROR_EXCEPTION("Failed to create digested decompression dictionary")
+            << TErrorAttribute("dictionary_size", decompressionDictionary.Size())
+            << TErrorAttribute("storage_size", storage.Size());
+    }
+
+    return New<TDigestedDecompressionDictionary>(std::move(storage), digestedDictionary);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

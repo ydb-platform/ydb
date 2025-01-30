@@ -1,0 +1,45 @@
+libpng 1.6.45 - January 7, 2025
+===============================
+
+This is a public release of libpng, intended for use in production code.
+
+
+Files available for download
+----------------------------
+
+Source files with LF line endings (for Unix/Linux):
+
+ * libpng-1.6.45.tar.xz (LZMA-compressed, recommended)
+ * libpng-1.6.45.tar.gz (deflate-compressed)
+
+Source files with CRLF line endings (for Windows):
+
+ * lpng1645.7z (LZMA-compressed, recommended)
+ * lpng1645.zip (deflate-compressed)
+
+Other information:
+
+ * README.md
+ * LICENSE.md
+ * AUTHORS.md
+ * TRADEMARK.md
+
+
+Changes from version 1.6.44 to version 1.6.45
+---------------------------------------------
+
+ * Added support for the cICP chunk.
+   (Contributed by Lucas Chollet and John Bowler)
+ * Adjusted and improved various checks in colorspace calculations.
+   (Contributed by John Bowler)
+ * Rearranged the write order of colorspace chunks for better conformance
+   with the PNG v3 draft specification.
+   (Contributed by John Bowler)
+ * Raised the minimum required CMake version from 3.6 to 3.14.
+ * Forked off a development branch for libpng version 1.8.
+
+
+Send comments/corrections/commendations to png-mng-implement at lists.sf.net.
+Subscription is required; visit
+https://lists.sourceforge.net/lists/listinfo/png-mng-implement
+to subscribe.

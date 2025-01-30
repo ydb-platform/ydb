@@ -1,9 +1,7 @@
 #pragma once
-
 #include "viewer.h"
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 
@@ -38,6 +36,6 @@ union ViewerWhiteboardCookie {
 };
 
 IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request);
+bool IsPostContent(const NMon::TEvHttpInfo::TPtr& event);
 
-}
 }

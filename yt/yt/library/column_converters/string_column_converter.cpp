@@ -20,7 +20,7 @@ using namespace NTableClient;
 namespace {
 
 void FillColumnarStringValues(
-    NTableClient::IUnversionedColumnarRowBatch::TColumn* column,
+    IUnversionedColumnarRowBatch::TColumn* column,
     i64 startIndex,
     i64 valueCount,
     ui32 avgLength,
@@ -30,12 +30,14 @@ void FillColumnarStringValues(
     column->StartIndex = startIndex;
     column->ValueCount = valueCount;
 
-    auto& values = column->Values.emplace();
+    column->Values = IUnversionedColumnarRowBatch::TValueBuffer{};
+    auto& values = *column->Values;
     values.BitWidth = 32;
     values.ZigZagEncoded = true;
     values.Data = offsets;
 
-    auto& strings = column->Strings.emplace();
+    column->Strings = IUnversionedColumnarRowBatch::TStringBuffer{};
+    auto& strings = *column->Strings;
     strings.AvgLength = avgLength;
     strings.Data = stringData;
 }
@@ -126,9 +128,7 @@ private:
         auto offsets = GetDirectDenseOffsets();
 
         // Save offsets as diff from expected.
-        ui32 expectedLength;
-        ui32 maxDiff;
-        PrepareDiffFromExpected(&offsets, &expectedLength, &maxDiff);
+        auto [expectedLength, maxDiff] = PrepareDiffFromExpected(&offsets);
 
         auto directDataSize = DirectBuffer_->GetSize();
         auto directData = DirectBuffer_->Finish();
@@ -211,9 +211,7 @@ private:
         auto idsRef = TSharedRef::MakeCopy<TConverterTag>(TRef(ids.data(), sizeof(ui32) * ids.size()));
 
         // 2. Dictionary offsets.
-        ui32 expectedLength;
-        ui32 maxDiff;
-        PrepareDiffFromExpected(&dictionaryOffsets, &expectedLength, &maxDiff);
+        auto [expectedLength, maxDiff] = PrepareDiffFromExpected(&dictionaryOffsets);
         auto dictionaryOffsetsRef = TSharedRef::MakeCopy<TConverterTag>(TRef(dictionaryOffsets.data(), sizeof(ui32) * dictionaryOffsets.size()));
 
         auto primaryColumn = std::make_shared<TBatchColumn>();
@@ -230,7 +228,7 @@ private:
         FillColumnarDictionary(
             primaryColumn.get(),
             dictionaryColumn.get(),
-            NTableClient::IUnversionedColumnarRowBatch::GenerateDictionaryId(),
+            IUnversionedColumnarRowBatch::GenerateDictionaryId(),
             primaryColumn->Type,
             0,
             RowCount_,
@@ -301,8 +299,7 @@ private:
     {
         for (const auto& rowValues : rowsValues) {
             auto unversionedValue = rowValues[ColumnOffset_];
-            YT_VERIFY(unversionedValue);
-            auto value = CaptureValue(*unversionedValue);
+            auto value = CaptureValue(unversionedValue ? *unversionedValue : MakeUnversionedNullValue());
             Values_.push_back(value);
             ++RowCount_;
         }
@@ -370,7 +367,7 @@ private:
 
 IColumnConverterPtr CreateStringConverter(
     int columnId,
-    const NTableClient::TColumnSchema& columnSchema,
+    const TColumnSchema& columnSchema,
     int columnOffset)
 {
     return std::make_unique<TStringConverter<EValueType::String>>(columnId, columnSchema, columnOffset);
@@ -378,7 +375,7 @@ IColumnConverterPtr CreateStringConverter(
 
 IColumnConverterPtr CreateAnyConverter(
     int columnId,
-    const NTableClient::TColumnSchema& columnSchema,
+    const TColumnSchema& columnSchema,
     int columnOffset)
 {
     return std::make_unique<TStringConverter<EValueType::Any>>(columnId, columnSchema, columnOffset);
@@ -386,7 +383,7 @@ IColumnConverterPtr CreateAnyConverter(
 
 IColumnConverterPtr CreateCompositeConverter(
     int columnId,
-    const NTableClient::TColumnSchema& columnSchema,
+    const TColumnSchema& columnSchema,
     int columnOffset)
 {
     return std::make_unique<TStringConverter<EValueType::Composite>>(columnId, columnSchema, columnOffset);

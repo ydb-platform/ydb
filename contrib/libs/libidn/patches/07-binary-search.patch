@@ -1,0 +1,76 @@
+--- contrib/libs/libidn/lib/stringprep.c	(index)
++++ contrib/libs/libidn/lib/stringprep.c	(working tree)
+@@ -86,18 +86,40 @@ stringprep_find_character_in_table (uint32_t ucs4,
+ }
+ 
+ static ssize_t
++stringprep_find_character_in_table_fast (uint32_t ucs4,
++				    const Stringprep_table_element * table, size_t table_size)
++{
++  int l = 0;
++  int r = table_size - 1;
++  int pivot = (l + r) / 2;
++
++  while (l <= r) {
++    if (ucs4 >= table[pivot].start &&
++      ucs4 <= (table[pivot].end ? table[pivot].end : table[pivot].start))
++        return pivot;
++    else if (ucs4 < table[pivot].start)
++      r = pivot - 1;
++    else
++      l = pivot + 1;
++    pivot = (l + r) / 2;
++  }
++  if (l > r)
++    return -1;
++}
++
++static ssize_t
+ stringprep_find_string_in_table (uint32_t *ucs4,
+ 				 size_t ucs4len,
+ 				 size_t *tablepos,
+ 				 const Stringprep_table_element *table,
+-				 size_t table_size)
++				 const size_t table_size)
+ {
+   size_t j;
+   ssize_t pos;
+ 
+   for (j = 0; j < ucs4len; j++)
+     if ((pos =
+-	 stringprep_find_character_in_table (ucs4[j], table,
++	 stringprep_find_character_in_table_fast (ucs4[j], table,
+ 					     table_size)) != -1)
+       {
+ 	if (tablepos)
+@@ -113,7 +135,7 @@ stringprep_apply_table_to_string (uint32_t *ucs4,
+ 				  size_t *ucs4len,
+ 				  size_t maxucs4len,
+ 				  const Stringprep_table_element *table,
+-				  size_t table_size)
++				  const size_t table_size)
+ {
+   ssize_t pos;
+   size_t i, maplen;
+@@ -302,16 +324,12 @@ stringprep_4i (uint32_t *ucs4, size_t *len, size_t maxucs4len,
+ 
+ 	    if (contains_ral != SIZE_MAX)
+ 	      {
+-		if (!(stringprep_find_character_in_table
++		if (!(stringprep_find_character_in_table_fast
+ 		      (ucs4[0], profile[contains_ral].table,
+-		       profile[contains_ral].table_size) != -1
+-		      &&
+-		      stringprep_find_character_in_table (ucs4[ucs4len - 1],
+-							  profile
+-							  [contains_ral].table,
+-							  profile
+-							  [contains_ral].table_size)
+-		      != -1))
++		       profile[contains_ral].table_size) != -1 &&
++		      stringprep_find_character_in_table_fast
++		      (ucs4[ucs4len - 1], profile[contains_ral].table,
++		       profile[contains_ral].table_size) != -1))
+ 		  return STRINGPREP_BIDI_LEADTRAIL_NOT_RAL;
+ 	      }
+ 	  }

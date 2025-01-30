@@ -159,7 +159,7 @@ template <
 #endif  // !Y_ABSL_HAVE_BUILTIN(__builtin_bit_cast)
                             ,
                             int>::type = 0>
-#if Y_ABSL_HAVE_BUILTIN(__builtin_bit_cast) && (!defined(__CUDACC__) || CUDA_VERSION >= 11010)
+#if Y_ABSL_HAVE_BUILTIN(__builtin_bit_cast)
 inline constexpr Dest bit_cast(const Source& source) {
   return __builtin_bit_cast(Dest, source);
 }

@@ -1,0 +1,24 @@
+diff --git a/include/__support/win32/limits_msvc_win32.h b/include/__support/win32/limits_msvc_win32.h
+index 87e4e7d..9f693d9 100644
+--- a/include/__support/win32/limits_msvc_win32.h
++++ b/include/__support/win32/limits_msvc_win32.h
+@@ -20,7 +20,6 @@
+ #include <float.h> // limit constants
+ #include <limits.h> // CHAR_BIT
+ #include <math.h> // HUGE_VAL
+-#include <ymath.h> // internal MSVC header providing the needed functionality
+ 
+ #define __CHAR_BIT__       CHAR_BIT
+ 
+@@ -64,8 +63,8 @@
+ #define __LDBL_DENORM_MIN__ 3.64519953188247460253e-4951L
+ 
+ // __builtin replacements/workarounds
+-#define __builtin_huge_vall()    _LInf._Long_double
+-#define __builtin_nanl(__dummmy) _LNan._Long_double
+-#define __builtin_nansl(__dummy) _LSnan._Long_double
++#define __builtin_huge_vall()    ((long double)__builtin_huge_val())
++#define __builtin_nanl(__dummy)  ((long double)__builtin_nan(__dummy))
++#define __builtin_nansl(__dummy) ((long double)__builtin_nans(__dummy))
+ 
+ #endif // _LIBCPP_SUPPORT_WIN32_LIMITS_MSVC_WIN32_H

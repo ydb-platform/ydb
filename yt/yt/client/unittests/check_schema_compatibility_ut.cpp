@@ -34,8 +34,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("foo", EValueType::Int64),
             }),
-            /*ignoreSortOrder*/ true).first
-    );
+            {.IgnoreSortOrder = true}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::FullyCompatible,
@@ -46,8 +45,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("foo", EValueType::Int64),
             }),
-            /*ignoreSortOrder*/ true).first
-    );
+            {.IgnoreSortOrder = true}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::Incompatible,
@@ -59,8 +57,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("foo", EValueType::Int64),
             }),
-            /*ignoreSortOrder*/ true).first
-    );
+            {.IgnoreSortOrder = true}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::Incompatible,
@@ -71,8 +68,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("foo", EValueType::Uint64),
             }),
-            /*ignoreSortOrder*/ true ).first
-    );
+            {.IgnoreSortOrder = true}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::FullyCompatible,
@@ -83,8 +79,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("foo", ESimpleLogicalValueType::Int64),
             }),
-            /*ignoreSortOrder*/ true).first
-    );
+            {.IgnoreSortOrder = true}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::RequireValidation,
@@ -95,8 +90,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("foo", ESimpleLogicalValueType::Int8),
             }),
-        /*ignoreSortOrder*/ true).first
-    );
+        {.IgnoreSortOrder = true}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::FullyCompatible,
@@ -107,8 +101,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("foo", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))),
             }),
-        /*ignoreSortOrder*/ true).first
-    );
+        {.IgnoreSortOrder = true}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::RequireValidation,
@@ -119,8 +112,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)),
             }),
-            /*ignoreSortOrder*/ true).first
-    );
+            {.IgnoreSortOrder = true}).first);
 
     // Missing "foo" values are filled with nulls that's OK.
     EXPECT_EQ(
@@ -130,8 +122,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("foo", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))),
             }),
-        /*ignoreSortOrder*/ true).first
-    );
+        {.IgnoreSortOrder = true}).first);
 
     // First table might have column foo with value of any type
     EXPECT_EQ(
@@ -141,8 +132,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("foo", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))),
             }),
-            /*ignoreSortOrder*/ true).first
-    );
+            {.IgnoreSortOrder = true}).first);
 
     // Missing "foo" values are filled with nulls that's OK.
     EXPECT_EQ(
@@ -152,8 +142,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("foo", ESimpleLogicalValueType::Int64),
             }),
-            /*ignoreSortOrder*/ true).first
-    );
+            {.IgnoreSortOrder = true}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::Incompatible,
@@ -165,8 +154,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TTableSchema({
                 TColumnSchema("b", ESimpleLogicalValueType::Int64),
             }, /*strict*/ false),
-            /*ignoreSortOrder*/ true).first
-    );
+            {.IgnoreSortOrder = true}).first);
 
     //
     // ignoreSortOrder = false
@@ -181,8 +169,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
                 TColumnSchema("a", ESimpleLogicalValueType::Int64, ESortOrder::Ascending),
                 TColumnSchema("b", ESimpleLogicalValueType::Int64, ESortOrder::Ascending),
             }),
-            /*ignoreSortOrder*/ false).first
-    );
+            {.IgnoreSortOrder = false}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::Incompatible,
@@ -195,8 +182,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
                 TColumnSchema("a", ESimpleLogicalValueType::Int64, ESortOrder::Ascending),
                 TColumnSchema("b", ESimpleLogicalValueType::Int64, ESortOrder::Ascending),
             }),
-            /*ignoreSortOrder*/ false).first
-    );
+            {.IgnoreSortOrder = false}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::FullyCompatible,
@@ -209,8 +195,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
                 TColumnSchema("a", ESimpleLogicalValueType::Int64, ESortOrder::Ascending),
                 TColumnSchema("b", ESimpleLogicalValueType::Int64),
             }),
-            /*ignoreSortOrder*/ false).first
-    );
+            {.IgnoreSortOrder = false}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::Incompatible,
@@ -223,8 +208,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
                 TColumnSchema("a", ESimpleLogicalValueType::Int64, ESortOrder::Ascending),
                 TColumnSchema("b", ESimpleLogicalValueType::Int64),
             }, /*strict*/ true, /*uniqueKeys*/ true),
-            /*ignoreSortOrder*/ false).first
-    );
+            {.IgnoreSortOrder = false}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::FullyCompatible,
@@ -237,8 +221,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
                 TColumnSchema("a", ESimpleLogicalValueType::Int64, ESortOrder::Ascending),
                 TColumnSchema("b", ESimpleLogicalValueType::Int64, ESortOrder::Ascending),
             }, /*strict*/ true, /*uniqueKeys*/ true),
-            /*ignoreSortOrder*/ false).first
-    );
+            {.IgnoreSortOrder = false}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::Incompatible,
@@ -251,8 +234,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
             TColumnSchema("b", ESimpleLogicalValueType::Int64, ESortOrder::Ascending),
             TColumnSchema("a", ESimpleLogicalValueType::Int64, ESortOrder::Ascending),
         }),
-        /*ignoreSortOrder*/ false).first
-    );
+        {.IgnoreSortOrder = false}).first);
 }
 
 TEST_F(TTableSchemaCompatibilityTest, TestCheckTableSchemaCompatibility)
@@ -269,7 +251,7 @@ TEST_F(TTableSchemaCompatibilityTest, TestCheckTableSchemaCompatibility)
             TColumnSchema("key2", ESimpleLogicalValueType::String, ESortOrder::Descending),
             TColumnSchema("value", ESimpleLogicalValueType::String),
         }),
-        false).first);
+        {.IgnoreSortOrder = false}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::FullyCompatible,
@@ -284,7 +266,7 @@ TEST_F(TTableSchemaCompatibilityTest, TestCheckTableSchemaCompatibility)
                 TColumnSchema("key2", ESimpleLogicalValueType::String),
                 TColumnSchema("value", ESimpleLogicalValueType::String),
             }),
-            false).first);
+            {.IgnoreSortOrder = false}).first);
 
     EXPECT_EQ(
         ESchemaCompatibility::Incompatible,
@@ -299,7 +281,7 @@ TEST_F(TTableSchemaCompatibilityTest, TestCheckTableSchemaCompatibility)
                 TColumnSchema("key2", ESimpleLogicalValueType::String, ESortOrder::Descending),
                 TColumnSchema("value", ESimpleLogicalValueType::String),
             }),
-            false).first);
+            {.IgnoreSortOrder = false}).first);
 }
 
 TEST_F(TTableSchemaCompatibilityTest, DeletedColumns)
@@ -317,7 +299,7 @@ TEST_F(TTableSchemaCompatibilityTest, DeletedColumns)
                 TColumnSchema("value", ESimpleLogicalValueType::String),
                 TColumnSchema("value1", ESimpleLogicalValueType::String),
             }, true, true, {}),
-        false);
+        {.IgnoreSortOrder = false});
 
     EXPECT_EQ(ESchemaCompatibility::Incompatible, comp.first);
     EXPECT_EQ("Column \"value1\" in output schema was deleted in the input schema",
@@ -336,7 +318,7 @@ TEST_F(TTableSchemaCompatibilityTest, DeletedColumns)
             {
                 TDeletedColumn(TColumnStableName("value1")),
             }),
-        false);
+        {.IgnoreSortOrder = false});
 
     EXPECT_EQ(ESchemaCompatibility::Incompatible, comp.first);
     EXPECT_EQ("Deleted column \"value1\" is missing in the input schema",

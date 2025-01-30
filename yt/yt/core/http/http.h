@@ -75,6 +75,7 @@ namespace NYT::NHttp {
   XX(428, PreconditionRequired,            Precondition Required)           \
   XX(429, TooManyRequests,                 Too Many Requests)               \
   XX(431, RequestHeaderFieldsTooLarge,     Request Header Fields Too Large) \
+  XX(434, RequestedHostUnavailable,        Requested Host Unavailable)      \
   XX(451, UnavailableForLegalReasons,      Unavailable For Legal Reasons)   \
   XX(499, ClientClosedRequest,             Client Closed Request)           \
   XX(500, InternalServerError,             Internal Server Error)           \
@@ -177,6 +178,8 @@ class THeaders
     : public virtual TRefCounted
 {
 public:
+    using THeaderNames = THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
+
     void Add(const TString& header, TString value);
     void Set(const TString& header, TString value);
     void Remove(TStringBuf header);
@@ -190,15 +193,13 @@ public:
 
     const TCompactVector<TString, 1>& GetAll(TStringBuf header) const;
 
-    void WriteTo(
-        IOutputStream* out,
-        const THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>* filtered = nullptr) const;
+    void WriteTo(IOutputStream* out, const THeaderNames* filtered = nullptr) const;
 
     THeadersPtr Duplicate() const;
 
     void MergeFrom(const THeadersPtr& headers);
 
-    std::vector<std::pair<TString, TString>> Dump() const;
+    std::vector<std::pair<TString, TString>> Dump(const THeaderNames* filtered = nullptr) const;
 
 private:
     struct TEntry
@@ -233,8 +234,9 @@ struct IRequest
 
     virtual const NNet::TNetworkAddress& GetRemoteAddress() const = 0;
 
-    virtual TGuid GetConnectionId() const = 0;
-    virtual TGuid GetRequestId() const = 0;
+    virtual TConnectionId GetConnectionId() const = 0;
+    virtual TRequestId GetRequestId() const = 0;
+
     virtual i64 GetReadByteCount() const = 0;
     virtual TInstant GetStartTime() const = 0;
 

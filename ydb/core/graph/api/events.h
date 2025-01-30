@@ -36,6 +36,20 @@ struct TEvGraph {
             metric->MutableHistogramBounds()->Add(bounds.begin(), bounds.end());
             metric->MutableHistogramValues()->Add(values.begin(), values.end());;
         }
+
+        void AddArithmeticMetric(const TString& name, double valueA, char op, double valueB) {
+            NKikimrGraph::TArithmeticMetric* metric = Record.AddArithmeticMetrics();
+            metric->SetName(name);
+            switch (op) {
+                case '/':
+                    metric->SetOp(NKikimrGraph::TArithmeticMetric::EOP_DIVISION);
+                    break;
+                default:
+                    break;
+            }
+            metric->SetValueA(valueA);
+            metric->SetValueB(valueB);
+        }
     };
 
     struct TEvGetMetrics : TEventPB<TEvGetMetrics, NKikimrGraph::TEvGetMetrics, EvGetMetrics> {

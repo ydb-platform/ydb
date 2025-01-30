@@ -75,7 +75,7 @@ using ::y_absl::cord_internal::kMinFlatLength;
 using ::y_absl::cord_internal::kInlinedVectorSize;
 using ::y_absl::cord_internal::kMaxBytesToCopy;
 
-static void DumpNode(y_absl::Nonnull<CordRep*> rep, bool include_data,
+static void DumpNode(y_absl::Nonnull<CordRep*> nonnull_rep, bool include_data,
                      y_absl::Nonnull<std::ostream*> os, int indent = 0);
 static bool VerifyNode(y_absl::Nonnull<CordRep*> root,
                        y_absl::Nonnull<CordRep*> start_node);
@@ -425,8 +425,8 @@ Cord& Cord::operator=(y_absl::string_view src) {
 // we keep it here to make diffs easier.
 void Cord::InlineRep::AppendArray(y_absl::string_view src,
                                   MethodIdentifier method) {
-  MaybeRemoveEmptyCrcNode();
   if (src.empty()) return;  // memcpy(_, nullptr, 0) is undefined.
+  MaybeRemoveEmptyCrcNode();
 
   size_t appended = 0;
   CordRep* rep = tree();
@@ -1062,6 +1062,15 @@ void CopyCordToString(const Cord& src, y_absl::Nonnull<TString*> dst) {
   }
 }
 
+void AppendCordToString(const Cord& src, y_absl::Nonnull<TString*> dst) {
+  const size_t cur_dst_size = dst->size();
+  const size_t new_dst_size = cur_dst_size + src.size();
+  y_absl::strings_internal::STLStringResizeUninitializedAmortized(dst,
+                                                                new_dst_size);
+  char* append_ptr = &(*dst)[cur_dst_size];
+  src.CopyToArrayImpl(append_ptr);
+}
+
 void Cord::CopyToArraySlowPath(y_absl::Nonnull<char*> dst) const {
   assert(contents_.is_tree());
   y_absl::string_view fragment;
@@ -1448,14 +1457,13 @@ y_absl::string_view Cord::FlattenSlowPath() {
   }
 }
 
-static void DumpNode(y_absl::Nonnull<CordRep*> rep, bool include_data,
+static void DumpNode(y_absl::Nonnull<CordRep*> nonnull_rep, bool include_data,
                      y_absl::Nonnull<std::ostream*> os, int indent) {
+  CordRep* rep = nonnull_rep;
   const int kIndentStep = 1;
-  y_absl::InlinedVector<CordRep*, kInlinedVectorSize> stack;
-  y_absl::InlinedVector<int, kInlinedVectorSize> indents;
   for (;;) {
-    *os << std::setw(3) << rep->refcount.Get();
-    *os << " " << std::setw(7) << rep->length;
+    *os << std::setw(3) << (rep == nullptr ? 0 : rep->refcount.Get());
+    *os << " " << std::setw(7) << (rep == nullptr ? 0 : rep->length);
     *os << " [";
     if (include_data) *os << static_cast<void*>(rep);
     *os << "]";
@@ -1477,26 +1485,23 @@ static void DumpNode(y_absl::Nonnull<CordRep*> rep, bool include_data,
       if (rep->IsExternal()) {
         *os << "EXTERNAL [";
         if (include_data)
-          *os << y_absl::CEscape(TString(rep->external()->base, rep->length));
+          *os << y_absl::CEscape(
+              y_absl::string_view(rep->external()->base, rep->length));
         *os << "]\n";
       } else if (rep->IsFlat()) {
         *os << "FLAT cap=" << rep->flat()->Capacity() << " [";
         if (include_data)
-          *os << y_absl::CEscape(TString(rep->flat()->Data(), rep->length));
+          *os << y_absl::CEscape(
+              y_absl::string_view(rep->flat()->Data(), rep->length));
         *os << "]\n";
       } else {
         CordRepBtree::Dump(rep, /*label=*/"", include_data, *os);
       }
     }
     if (leaf) {
-      if (stack.empty()) break;
-      rep = stack.back();
-      stack.pop_back();
-      indent = indents.back();
-      indents.pop_back();
+      break;
     }
   }
-  Y_ABSL_INTERNAL_CHECK(indents.empty(), "");
 }
 
 static TString ReportError(y_absl::Nonnull<CordRep*> root,

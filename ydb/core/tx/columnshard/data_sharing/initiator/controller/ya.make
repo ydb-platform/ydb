@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     abstract.cpp
     GLOBAL test.cpp
+    GLOBAL schemeshard.cpp
 )
 
 PEERDIR(

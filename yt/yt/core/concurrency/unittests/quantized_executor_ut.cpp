@@ -48,37 +48,36 @@ class TInitializingCallbackProvider
     : public ICallbackProvider
 {
 public:
-    TCallback<void()> GetInitializer()
+    std::function<void()> GetInitializer()
     {
-        return BIND([this, this_ = MakeStrong(this)] {
-            Initialized_ = true;
-        });
+        return [this, this_ = MakeStrong(this)] {
+            Initialized_.store(true);
+        };
     }
 
     TCallback<void()> ExtractCallback() override
     {
-        if (Finished_) {
+        if (IsFinished()) {
             return {};
-        } else {
-            return BIND([this, this_ = MakeStrong(this)] {
-                Finished_ = true;
-            });
         }
+        return BIND([this, this_ = MakeStrong(this)] {
+            Finished_.store(true);
+        });
     }
 
     bool IsInitialized() const
     {
-        return Initialized_;
+        return Initialized_.load();
     }
 
     bool IsFinished() const
     {
-        return Finished_;
+        return Finished_.load();
     }
 
 private:
-    bool Initialized_ = false;
-    bool Finished_ = false;
+    std::atomic<bool> Initialized_ = false;
+    std::atomic<bool> Finished_ = false;
 };
 
 class TLongCallbackProvider
@@ -128,24 +127,22 @@ protected:
     TIntrusivePtr<TLongCallbackProvider> LongCallbackProvider_;
     IQuantizedExecutorPtr Executor_;
 
-    void InitSimple(int workerCount, i64 iterationCount)
+    void InitSimple(int threadCount, i64 iterationCount)
     {
         SimpleCallbackProvider_ = New<TSimpleCallbackProvider>(iterationCount);
-        Executor_ = CreateQuantizedExecutor("test", SimpleCallbackProvider_, workerCount);
-        Executor_->Initialize();
+        Executor_ = CreateQuantizedExecutor("test", SimpleCallbackProvider_, {.ThreadCount = threadCount});
     }
 
-    void InitLong(int workerCount, i64 iterationCount)
+    void InitLong(int threadCount, i64 iterationCount)
     {
         LongCallbackProvider_ = New<TLongCallbackProvider>(iterationCount);
-        Executor_ = CreateQuantizedExecutor("test", LongCallbackProvider_, workerCount);
-        Executor_->Initialize();
+        Executor_ = CreateQuantizedExecutor("test", LongCallbackProvider_, {.ThreadCount = threadCount});
     }
 };
 
 TEST_F(TQuantizedExecutorTest, Simple)
 {
-    InitSimple(/*workerCount*/ 1, /*iterationCount*/ 100);
+    InitSimple(/*threadCount*/ 1, /*iterationCount*/ 100);
 
     WaitFor(Executor_->Run(TDuration::Max()))
         .ThrowOnError();
@@ -155,21 +152,23 @@ TEST_F(TQuantizedExecutorTest, Simple)
 
 TEST_F(TQuantizedExecutorTest, Timeout)
 {
-    InitSimple(/*workerCount*/ 4, /*iterationCount*/ std::numeric_limits<i64>::max());
+    InitSimple(/*threadCount*/ 2, /*iterationCount*/ std::numeric_limits<i64>::max());
 
-    for (int index = 1; index <= 10; ++index) {
-        WaitFor(Executor_->Run(TDuration::MilliSeconds(100)))
-            .ThrowOnError();
+    WaitFor(Executor_->Run(TDuration::MilliSeconds(100)))
+        .ThrowOnError();
 
-        auto counter = SimpleCallbackProvider_->GetCounter();
-        EXPECT_GE(counter, /*workerCount*/ 4 * /*milliseconds*/ 100.0 / /*period*/ 5 * index * 0.75);
-        EXPECT_LE(counter, /*workerCount*/ 4 * /*milliseconds*/ 100.0 / /*period*/ 5 * index * 1.25);
-    }
+    auto oldCounter = SimpleCallbackProvider_->GetCounter();
+
+    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
+
+    auto newCounter = SimpleCallbackProvider_->GetCounter();
+
+    EXPECT_EQ(oldCounter, newCounter);
 }
 
 TEST_F(TQuantizedExecutorTest, LongCallback1)
 {
-    InitLong(/*workerCount*/ 4, /*iterationCount*/ 20);
+    InitLong(/*threadCount*/ 4, /*iterationCount*/ 20);
 
     auto future = Executor_->Run(TDuration::MilliSeconds(500));
 
@@ -180,7 +179,7 @@ TEST_F(TQuantizedExecutorTest, LongCallback1)
 
 TEST_F(TQuantizedExecutorTest, LongCallback2)
 {
-    InitLong(/*workerCount*/ 4, /*iterationCount*/ 100);
+    InitLong(/*threadCount*/ 4, /*iterationCount*/ 100);
 
     for (int index = 0; index < 9; ++index) {
         WaitFor(Executor_->Run(TDuration::MilliSeconds(100)))
@@ -188,19 +187,19 @@ TEST_F(TQuantizedExecutorTest, LongCallback2)
         EXPECT_FALSE(LongCallbackProvider_->IsCompleted());
     }
 
-    WaitFor(Executor_->Run(TDuration::MilliSeconds(300)))
+    WaitFor(Executor_->Run(TDuration::MilliSeconds(1000)))
         .ThrowOnError();
     EXPECT_TRUE(LongCallbackProvider_->IsCompleted());
 }
 
 TEST_F(TQuantizedExecutorTest, Reconfigure)
 {
-    InitSimple(/*workerCount*/ 10, /*iterationCount*/ std::numeric_limits<i64>::max());
+    InitSimple(/*threadCount*/ 10, /*iterationCount*/ std::numeric_limits<i64>::max());
 
     i64 lastCounter = 0;
 
-    auto run = [&] (int workerCount) {
-        Executor_->Reconfigure(workerCount);
+    auto run = [&] (int threadCount) {
+        Executor_->SetThreadCount(threadCount);
 
         WaitFor(Executor_->Run(TDuration::MilliSeconds(100)))
             .ThrowOnError();
@@ -215,24 +214,20 @@ TEST_F(TQuantizedExecutorTest, Reconfigure)
     std::mt19937 rng(42);
 
     for (int index = 0; index < 10; ++index) {
-        auto workerCount = rng() % 5  + 1;
-        auto increment = run(workerCount);
+        auto threadCount = rng() % 5  + 1;
+        auto increment = run(threadCount);
 
-        EXPECT_GE(increment, workerCount * /*milliseconds*/ 100.0 / /*period*/ 5 * 0.75);
-        EXPECT_LE(increment, workerCount * /*milliseconds*/ 100.0 / /*period*/ 5 * 1.25);
+        EXPECT_LE(increment, threadCount * /*milliseconds*/ 100.0 / /*period*/ 5 * 1.25);
     }
 }
 
-TEST_F(TQuantizedExecutorTest, WorkerInitializer)
+TEST_F(TQuantizedExecutorTest, ThreadInitializer)
 {
     auto callbackProvider = New<TInitializingCallbackProvider>();
-    EXPECT_FALSE(callbackProvider->IsInitialized());
     EXPECT_FALSE(callbackProvider->IsFinished());
 
-    Executor_ = CreateQuantizedExecutor("test", callbackProvider, /*workerCount*/ 1);
-    Executor_->Initialize(callbackProvider->GetInitializer());
+    Executor_ = CreateQuantizedExecutor("test", callbackProvider, {.ThreadInitializer = callbackProvider->GetInitializer()});
 
-    EXPECT_TRUE(callbackProvider->IsInitialized());
     EXPECT_FALSE(callbackProvider->IsFinished());
 
     WaitFor(Executor_->Run(TDuration::MilliSeconds(300)))

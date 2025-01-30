@@ -4,6 +4,8 @@
 #include "dq_compute_actor_metrics.h"
 #include "dq_compute_actor_watermarks.h"
 
+#include <yql/essentials/minikql/mkql_program_builder.h>
+
 //must be included the last
 #include "dq_compute_actor_log.h"
 
@@ -13,14 +15,16 @@ constexpr ui32 IssuesBufferSize = 16;
 
 struct TComputeActorAsyncInputHelper {
     TString Type;
-    const TString LogPrefix;
+    TString LogPrefix;
     ui64 Index;
     IDqComputeActorAsyncInput* AsyncInput = nullptr;
     NActors::IActor* Actor = nullptr;
     TIssuesBuffer IssuesBuffer;
     bool Finished = false;
     const NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
+    const NKikimr::NMiniKQL::TType* ValueType = nullptr;
     TMaybe<TInstant> PendingWatermark = Nothing();
+    TMaybe<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
 public:
     TComputeActorAsyncInputHelper(
         const TString& logPrefix,
@@ -31,7 +35,7 @@ public:
         , IssuesBuffer(IssuesBufferSize)
         , WatermarksMode(watermarksMode) {}
 
-    bool IsPausedByWatermark() {
+    bool IsPausedByWatermark() const {
         return PendingWatermark.Defined();
     }
 
@@ -62,7 +66,7 @@ public:
         const i64 freeSpace = GetFreeSpace();
         if (freeSpace > 0) {
             TMaybe<TInstant> watermark;
-            NKikimr::NMiniKQL::TUnboxedValueBatch batch;
+            NKikimr::NMiniKQL::TUnboxedValueBatch batch(ValueType);
             Y_ABORT_UNLESS(AsyncInput);
             bool finished = false;
             const i64 space = AsyncInput->GetAsyncInputData(batch, watermark, finished, std::min(freeSpace, asyncInputPushLimit));
@@ -98,7 +102,30 @@ public:
         }
         return {};
     }
+
+    void SetLogPrefix(const TString& logPrefix) {
+        LogPrefix = logPrefix;
+    }
+};
+
+//Used for inputs in Sync ComputeActor and for a base for input transform in both sync and async ComputeActors
+struct TComputeActorAsyncInputHelperSync: public TComputeActorAsyncInputHelper
+{
+public:
+    using TComputeActorAsyncInputHelper::TComputeActorAsyncInputHelper;
+
+    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, bool finished) override {
+        Buffer->Push(std::move(batch), space);
+        if (finished) {
+            Buffer->Finish();
+            Finished = true;
+        }
+    }
+    i64 GetFreeSpace() const override{
+        return Buffer->GetFreeSpace();
+    }
+
+    IDqAsyncInputBuffer::TPtr Buffer;
 };
 
 } //namespace NYql::NDq
-

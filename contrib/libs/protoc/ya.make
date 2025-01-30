@@ -9,9 +9,31 @@ LICENSE(
 
 PROVIDES(protoc)
 
-VERSION(3.19.0)
+VERSION(3.22.5)
 
-ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.19.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.22.5.tar.gz)
+
+IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
+    OPENSOURCE_EXPORT_REPLACEMENT(
+        CMAKE
+        Protobuf
+        CMAKE_TARGET
+        protobuf::libprotobuf
+        protobuf::libprotoc
+        CONAN
+        protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+        CONAN_ADDITIONAL_SEMS
+        "&& conan_require_tool"
+        protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+        "&& conan-tool_requires"
+        protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+        "&& conan_import \"bin, protoc* -> ./bin\" && conan-imports 'bin, protoc* -> ./bin' && vanilla_protobuf"
+    )
+ELSE()
+    ADDINCL(
+        GLOBAL contrib/libs/protoc/src
+    )
+ENDIF()
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
@@ -20,7 +42,7 @@ PEERDIR(
 )
 
 ADDINCL(
-    GLOBAL contrib/libs/protoc/src
+    contrib/libs/protobuf/third_party/utf8_range
 )
 
 NO_COMPILER_WARNINGS()
@@ -28,29 +50,29 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 CFLAGS(
-    -DHAVE_CONFIG_H
-    -DHAVE_PTHREAD=1
-    -DHAVE_ZLIB=1
+    -DGOOGLE_PROTOBUF_CMAKE_BUILD
+    -DHAVE_ZLIB
 )
 
 SRCS(
     src/google/protobuf/compiler/code_generator.cc
     src/google/protobuf/compiler/command_line_interface.cc
-    src/google/protobuf/compiler/cpp/cpp_enum.cc
-    src/google/protobuf/compiler/cpp/cpp_enum_field.cc
-    src/google/protobuf/compiler/cpp/cpp_extension.cc
-    src/google/protobuf/compiler/cpp/cpp_field.cc
-    src/google/protobuf/compiler/cpp/cpp_file.cc
-    src/google/protobuf/compiler/cpp/cpp_generator.cc
-    src/google/protobuf/compiler/cpp/cpp_helpers.cc
-    src/google/protobuf/compiler/cpp/cpp_map_field.cc
-    src/google/protobuf/compiler/cpp/cpp_message.cc
-    src/google/protobuf/compiler/cpp/cpp_message_field.cc
-    src/google/protobuf/compiler/cpp/cpp_padding_optimizer.cc
-    src/google/protobuf/compiler/cpp/cpp_parse_function_generator.cc
-    src/google/protobuf/compiler/cpp/cpp_primitive_field.cc
-    src/google/protobuf/compiler/cpp/cpp_service.cc
-    src/google/protobuf/compiler/cpp/cpp_string_field.cc
+    src/google/protobuf/compiler/cpp/enum.cc
+    src/google/protobuf/compiler/cpp/extension.cc
+    src/google/protobuf/compiler/cpp/field.cc
+    src/google/protobuf/compiler/cpp/field_generators/enum_field.cc
+    src/google/protobuf/compiler/cpp/field_generators/map_field.cc
+    src/google/protobuf/compiler/cpp/field_generators/message_field.cc
+    src/google/protobuf/compiler/cpp/field_generators/primitive_field.cc
+    src/google/protobuf/compiler/cpp/field_generators/string_field.cc
+    src/google/protobuf/compiler/cpp/file.cc
+    src/google/protobuf/compiler/cpp/generator.cc
+    src/google/protobuf/compiler/cpp/helpers.cc
+    src/google/protobuf/compiler/cpp/message.cc
+    src/google/protobuf/compiler/cpp/padding_optimizer.cc
+    src/google/protobuf/compiler/cpp/parse_function_generator.cc
+    src/google/protobuf/compiler/cpp/service.cc
+    src/google/protobuf/compiler/cpp/tracker.cc
     src/google/protobuf/compiler/csharp/csharp_doc_comment.cc
     src/google/protobuf/compiler/csharp/csharp_enum.cc
     src/google/protobuf/compiler/csharp/csharp_enum_field.cc
@@ -67,57 +89,64 @@ SRCS(
     src/google/protobuf/compiler/csharp/csharp_repeated_primitive_field.cc
     src/google/protobuf/compiler/csharp/csharp_source_generator_base.cc
     src/google/protobuf/compiler/csharp/csharp_wrapper_field.cc
+    src/google/protobuf/compiler/csharp/names.cc
     src/google/protobuf/compiler/importer.cc
-    src/google/protobuf/compiler/java/java_context.cc
-    src/google/protobuf/compiler/java/java_doc_comment.cc
-    src/google/protobuf/compiler/java/java_enum.cc
-    src/google/protobuf/compiler/java/java_enum_field.cc
-    src/google/protobuf/compiler/java/java_enum_field_lite.cc
-    src/google/protobuf/compiler/java/java_enum_lite.cc
-    src/google/protobuf/compiler/java/java_extension.cc
-    src/google/protobuf/compiler/java/java_extension_lite.cc
-    src/google/protobuf/compiler/java/java_field.cc
-    src/google/protobuf/compiler/java/java_file.cc
-    src/google/protobuf/compiler/java/java_generator.cc
-    src/google/protobuf/compiler/java/java_generator_factory.cc
-    src/google/protobuf/compiler/java/java_helpers.cc
-    src/google/protobuf/compiler/java/java_kotlin_generator.cc
-    src/google/protobuf/compiler/java/java_map_field.cc
-    src/google/protobuf/compiler/java/java_map_field_lite.cc
-    src/google/protobuf/compiler/java/java_message.cc
-    src/google/protobuf/compiler/java/java_message_builder.cc
-    src/google/protobuf/compiler/java/java_message_builder_lite.cc
-    src/google/protobuf/compiler/java/java_message_field.cc
-    src/google/protobuf/compiler/java/java_message_field_lite.cc
-    src/google/protobuf/compiler/java/java_message_lite.cc
-    src/google/protobuf/compiler/java/java_name_resolver.cc
-    src/google/protobuf/compiler/java/java_primitive_field.cc
-    src/google/protobuf/compiler/java/java_primitive_field_lite.cc
-    src/google/protobuf/compiler/java/java_service.cc
-    src/google/protobuf/compiler/java/java_shared_code_generator.cc
-    src/google/protobuf/compiler/java/java_string_field.cc
-    src/google/protobuf/compiler/java/java_string_field_lite.cc
-    src/google/protobuf/compiler/js/js_generator.cc
-    src/google/protobuf/compiler/js/well_known_types_embed.cc
-    src/google/protobuf/compiler/objectivec/objectivec_enum.cc
-    src/google/protobuf/compiler/objectivec/objectivec_enum_field.cc
-    src/google/protobuf/compiler/objectivec/objectivec_extension.cc
-    src/google/protobuf/compiler/objectivec/objectivec_field.cc
-    src/google/protobuf/compiler/objectivec/objectivec_file.cc
-    src/google/protobuf/compiler/objectivec/objectivec_generator.cc
-    src/google/protobuf/compiler/objectivec/objectivec_helpers.cc
-    src/google/protobuf/compiler/objectivec/objectivec_map_field.cc
-    src/google/protobuf/compiler/objectivec/objectivec_message.cc
-    src/google/protobuf/compiler/objectivec/objectivec_message_field.cc
-    src/google/protobuf/compiler/objectivec/objectivec_oneof.cc
-    src/google/protobuf/compiler/objectivec/objectivec_primitive_field.cc
+    src/google/protobuf/compiler/java/context.cc
+    src/google/protobuf/compiler/java/doc_comment.cc
+    src/google/protobuf/compiler/java/enum.cc
+    src/google/protobuf/compiler/java/enum_field.cc
+    src/google/protobuf/compiler/java/enum_field_lite.cc
+    src/google/protobuf/compiler/java/enum_lite.cc
+    src/google/protobuf/compiler/java/extension.cc
+    src/google/protobuf/compiler/java/extension_lite.cc
+    src/google/protobuf/compiler/java/field.cc
+    src/google/protobuf/compiler/java/file.cc
+    src/google/protobuf/compiler/java/generator.cc
+    src/google/protobuf/compiler/java/generator_factory.cc
+    src/google/protobuf/compiler/java/helpers.cc
+    src/google/protobuf/compiler/java/kotlin_generator.cc
+    src/google/protobuf/compiler/java/map_field.cc
+    src/google/protobuf/compiler/java/map_field_lite.cc
+    src/google/protobuf/compiler/java/message.cc
+    src/google/protobuf/compiler/java/message_builder.cc
+    src/google/protobuf/compiler/java/message_builder_lite.cc
+    src/google/protobuf/compiler/java/message_field.cc
+    src/google/protobuf/compiler/java/message_field_lite.cc
+    src/google/protobuf/compiler/java/message_lite.cc
+    src/google/protobuf/compiler/java/message_serialization.cc
+    src/google/protobuf/compiler/java/name_resolver.cc
+    src/google/protobuf/compiler/java/names.cc
+    src/google/protobuf/compiler/java/primitive_field.cc
+    src/google/protobuf/compiler/java/primitive_field_lite.cc
+    src/google/protobuf/compiler/java/service.cc
+    src/google/protobuf/compiler/java/shared_code_generator.cc
+    src/google/protobuf/compiler/java/string_field.cc
+    src/google/protobuf/compiler/java/string_field_lite.cc
+    src/google/protobuf/compiler/objectivec/enum.cc
+    src/google/protobuf/compiler/objectivec/enum_field.cc
+    src/google/protobuf/compiler/objectivec/extension.cc
+    src/google/protobuf/compiler/objectivec/field.cc
+    src/google/protobuf/compiler/objectivec/file.cc
+    src/google/protobuf/compiler/objectivec/generator.cc
+    src/google/protobuf/compiler/objectivec/helpers.cc
+    src/google/protobuf/compiler/objectivec/import_writer.cc
+    src/google/protobuf/compiler/objectivec/line_consumer.cc
+    src/google/protobuf/compiler/objectivec/map_field.cc
+    src/google/protobuf/compiler/objectivec/message.cc
+    src/google/protobuf/compiler/objectivec/message_field.cc
+    src/google/protobuf/compiler/objectivec/names.cc
+    src/google/protobuf/compiler/objectivec/oneof.cc
+    src/google/protobuf/compiler/objectivec/primitive_field.cc
+    src/google/protobuf/compiler/objectivec/text_format_decode_data.cc
     src/google/protobuf/compiler/parser.cc
-    src/google/protobuf/compiler/perlxs/perlxs_generator.cc
-    src/google/protobuf/compiler/perlxs/perlxs_helpers.cc
+    src/google/protobuf/compiler/php/names.cc
     src/google/protobuf/compiler/php/php_generator.cc
     src/google/protobuf/compiler/plugin.cc
     src/google/protobuf/compiler/plugin.pb.cc
-    src/google/protobuf/compiler/python/python_generator.cc
+    src/google/protobuf/compiler/python/generator.cc
+    src/google/protobuf/compiler/python/helpers.cc
+    src/google/protobuf/compiler/python/pyi_generator.cc
+    src/google/protobuf/compiler/retention.cc
     src/google/protobuf/compiler/ruby/ruby_generator.cc
     src/google/protobuf/compiler/subprocess.cc
     src/google/protobuf/compiler/zip_writer.cc

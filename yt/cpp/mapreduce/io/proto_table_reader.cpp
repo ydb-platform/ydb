@@ -4,6 +4,8 @@
 
 #include "proto_helpers.h"
 
+#include <yt/yt/core/misc/protobuf_helpers.h>
+
 #include <yt/yt_proto/yt/formats/extension.pb.h>
 
 #include <util/string/escape.h>
@@ -15,16 +17,19 @@ using ::google::protobuf::Descriptor;
 using ::google::protobuf::FieldDescriptor;
 using ::google::protobuf::EnumValueDescriptor;
 
-const TString& GetFieldColumnName(const FieldDescriptor* fieldDesc) {
-    const auto& columnName = fieldDesc->options().GetExtension(column_name);
+using NYT::FromProto;
+
+TString GetFieldColumnName(const FieldDescriptor* fieldDesc)
+{
+    auto columnName = FromProto<TString>(fieldDesc->options().GetExtension(column_name));
     if (!columnName.empty()) {
         return columnName;
     }
-    const auto& keyColumnName = fieldDesc->options().GetExtension(key_column_name);
+    auto keyColumnName = FromProto<TString>(fieldDesc->options().GetExtension(key_column_name));
     if (!keyColumnName.empty()) {
         return keyColumnName;
     }
-    return fieldDesc->name();
+    return FromProto<TString>(fieldDesc->name());
 }
 
 void ReadMessageFromNode(const TNode& node, Message* row)
@@ -48,10 +53,10 @@ void ReadMessageFromNode(const TNode& node, Message* row)
             continue; // null field
         }
 
-        auto checkType = [&columnName] (TNode::EType expected, TNode::EType actual) {
+        auto checkType = [fieldDesc] (TNode::EType expected, TNode::EType actual) {
             if (expected != actual) {
                 ythrow TNode::TTypeError() << "expected node type " << expected
-                    << ", actual " << actual << " for node " << columnName.data();
+                    << ", actual " << actual << " for node " << GetFieldColumnName(fieldDesc);
             }
         };
 
@@ -233,8 +238,8 @@ void TLenvalProtoTableReader::ReadRow(Message* row)
             Input_.ResetRetries();
 
             break;
-        } catch (const std::exception& ) {
-            if (!TLenvalTableReader::Retry()) {
+        } catch (const std::exception& ex) {
+            if (!TLenvalTableReader::Retry(std::make_exception_ptr(ex))) {
                 throw;
             }
         }
@@ -295,8 +300,8 @@ void TLenvalProtoTableReader::SkipRow()
                 ythrow yexception() << "Premature end of stream";
             }
             break;
-        } catch (const std::exception& ) {
-            if (!TLenvalTableReader::Retry()) {
+        } catch (const std::exception& ex) {
+            if (!TLenvalTableReader::Retry(std::make_exception_ptr(ex))) {
                 throw;
             }
         }

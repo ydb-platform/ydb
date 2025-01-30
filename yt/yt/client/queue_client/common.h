@@ -13,7 +13,7 @@ namespace NYT::NQueueClient {
 // TODO(achulkov2): Replace this with TRichYPath in YT-18038.
 struct TCrossClusterReference
 {
-    TString Cluster;
+    std::string Cluster;
     NYPath::TYPath Path;
 
     bool operator==(const TCrossClusterReference& other) const;
@@ -25,7 +25,7 @@ struct TCrossClusterReference
     static TCrossClusterReference FromRichYPath(const NYPath::TRichYPath& path);
 };
 
-TString ToString(const TCrossClusterReference& queueRef);
+void FormatValue(TStringBuilderBase* builder, const TCrossClusterReference& queueRef, TStringBuf spec);
 
 void Serialize(const TCrossClusterReference& queueRef, NYson::IYsonConsumer* consumer);
 
@@ -33,9 +33,9 @@ void Serialize(const TCrossClusterReference& queueRef, NYson::IYsonConsumer* con
 
 struct TProfilingTags
 {
-    TString Cluster;
+    std::string Cluster;
     TString LeadingStatus;
-    TString QueueAgentStage;
+    std::string QueueAgentStage;
     TString ObjectType;
 
     bool operator==(const TProfilingTags& other) const = default;

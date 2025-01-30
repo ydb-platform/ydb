@@ -1,5 +1,7 @@
 #pragma once
 
+#include "partition_id.h"
+
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/actor.h>
 
@@ -67,7 +69,7 @@ private:
 };
 
 struct TCacheBlobL2 {
-    ui32 Partition;
+    TPartitionId Partition;
     ui64 Offset;
     ui16 PartNo;
     TCacheValue::TPtr Value;

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.18.3)
+VERSION(1.0.0)
 
 LICENSE(MIT)
 
@@ -100,6 +100,7 @@ PY_SRCS(
     future/moves/http/cookies.py
     future/moves/http/server.py
     future/moves/itertools.py
+    future/moves/multiprocessing.py
     future/moves/pickle.py
     future/moves/queue.py
     future/moves/reprlib.py

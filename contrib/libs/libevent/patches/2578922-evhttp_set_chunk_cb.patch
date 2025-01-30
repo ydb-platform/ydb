@@ -1,0 +1,211 @@
+commit 62429424b8f71bef8b37f565bae64de4ceb93378
+author: aozeritsky
+date: 2016-12-02T13:26:22+03:00
+revision: 2578922
+
+    [LOGBROKER-2064] evhttp_set_chunk_cb patch from here
+    http://archives.seul.org/libevent/users/Apr-2011/msg00038.html
+    REVIEW: 216641
+
+commit 04044a6dfe9a9665a46526024d2056af848d3ea8
+author: aozeritsky
+date: 2016-12-09T15:13:12+03:00
+revision: 2587034
+
+    [LOGBROKER-2064] follow up for http chunked
+    REVIEW: 218703
+
+--- libevent/http-internal.h	(a2df0aadb743a91ec4876eed1b9678939de28570)
++++ libevent/http-internal.h	(index)
+@@ -112,6 +112,7 @@ struct evhttp_cb {
+ 	TAILQ_ENTRY(evhttp_cb) next;
+ 
+ 	char *what;
++	int chunked;
+ 
+ 	void (*cb)(struct evhttp_request *req, void *);
+ 	void *cbarg;
+--- libevent/http.c	(a2df0aadb743a91ec4876eed1b9678939de28570)
++++ libevent/http.c	(index)
+@@ -200,6 +200,9 @@ static void evhttp_write_buffer(struct evhttp_connection *,
+     void (*)(struct evhttp_connection *, void *), void *);
+ static void evhttp_make_header(struct evhttp_connection *, struct evhttp_request *);
+ 
++static struct evhttp_cb *
++evhttp_dispatch_callback(struct httpcbq *callbacks, struct evhttp_request *req, int chunked);
++
+ /* callbacks for bufferevent */
+ static void evhttp_read_cb(struct bufferevent *, void *);
+ static void evhttp_write_cb(struct bufferevent *, void *);
+@@ -971,7 +974,7 @@ evhttp_handle_chunked_read(struct evhttp_request *req, struct evbuffer *buf)
+ 		req->ntoread = -1;
+ 		if (req->chunk_cb != NULL) {
+ 			req->flags |= EVHTTP_REQ_DEFER_FREE;
+-			(*req->chunk_cb)(req, req->cb_arg);
++			(*req->chunk_cb)(req, req->chunk_cb_arg);
+ 			evbuffer_drain(req->input_buffer,
+ 			    evbuffer_get_length(req->input_buffer));
+ 			req->flags &= ~EVHTTP_REQ_DEFER_FREE;
+@@ -981,6 +984,12 @@ evhttp_handle_chunked_read(struct evhttp_request *req, struct evbuffer *buf)
+ 		}
+ 	}
+ 
++	if (req->chunk_cb != NULL) {
++		req->flags |= EVHTTP_REQ_PROCESS_CHUNKS_END;
++		(*req->chunk_cb)(req, req->chunk_cb_arg);
++		req->flags &= ~EVHTTP_REQ_PROCESS_CHUNKS_END;
++	}
++
+ 	return (MORE_DATA_EXPECTED);
+ }
+ 
+@@ -1094,7 +1103,7 @@ evhttp_read_body(struct evhttp_connection *evcon, struct evhttp_request *req)
+ 
+ 	if (evbuffer_get_length(req->input_buffer) > 0 && req->chunk_cb != NULL) {
+ 		req->flags |= EVHTTP_REQ_DEFER_FREE;
+-		(*req->chunk_cb)(req, req->cb_arg);
++		(*req->chunk_cb)(req, req->chunk_cb_arg);
+ 		req->flags &= ~EVHTTP_REQ_DEFER_FREE;
+ 		evbuffer_drain(req->input_buffer,
+ 		    evbuffer_get_length(req->input_buffer));
+@@ -1900,6 +1909,14 @@ evhttp_parse_request_line(struct evhttp_request *req, char *line, size_t len)
+ 	    !evhttp_find_vhost(req->evcon->http_server, NULL, hostname))
+ 		req->flags |= EVHTTP_PROXY_REQUEST;
+ 
++	{
++		struct evhttp_cb * chunkcb = evhttp_dispatch_callback(&req->evcon->http_server->callbacks, req, 1);
++		if (chunkcb) {
++			req->chunk_cb = chunkcb->cb;
++			req->chunk_cb_arg = chunkcb->cbarg;
++		}
++	}
++
+ 	return 0;
+ }
+ 
+@@ -3361,7 +3378,7 @@ evhttp_parse_query_str(const char *uri, struct evkeyvalq *headers)
+ }
+ 
+ static struct evhttp_cb *
+-evhttp_dispatch_callback(struct httpcbq *callbacks, struct evhttp_request *req)
++evhttp_dispatch_callback(struct httpcbq *callbacks, struct evhttp_request *req, int chunked)
+ {
+ 	struct evhttp_cb *cb;
+ 	size_t offset = 0;
+@@ -3378,8 +3395,13 @@ evhttp_dispatch_callback(struct httpcbq *callbacks, struct evhttp_request *req)
+ 
+ 	TAILQ_FOREACH(cb, callbacks, next) {
+ 		if (!strcmp(cb->what, translated)) {
+-			mm_free(translated);
+-			return (cb);
++			if (chunked < 0) {
++				mm_free(translated);
++				return (cb);
++			} else if (chunked == cb->chunked) {
++				mm_free(translated);
++				return (cb);
++			}
+ 		}
+ 	}
+ 
+@@ -3520,7 +3542,7 @@ evhttp_handle_request(struct evhttp_request *req, void *arg)
+ 		evhttp_find_vhost(http, &http, hostname);
+ 	}
+ 
+-	if ((cb = evhttp_dispatch_callback(&http->callbacks, req)) != NULL) {
++	if ((cb = evhttp_dispatch_callback(&http->callbacks, req, -1)) != NULL) {
+ 		(*cb->cb)(req, cb->cbarg);
+ 		return;
+ 	}
+@@ -3940,8 +3962,8 @@ evhttp_set_allowed_methods(struct evhttp* http, ev_uint16_t methods)
+ }
+ 
+ int
+-evhttp_set_cb(struct evhttp *http, const char *uri,
+-    void (*cb)(struct evhttp_request *, void *), void *cbarg)
++evhttp_set_cb_internal(struct evhttp *http, const char *uri,
++    void (*cb)(struct evhttp_request *, void *), void *cbarg, int chunked)
+ {
+ 	struct evhttp_cb *http_cb;
+ 
+@@ -3963,6 +3985,7 @@ evhttp_set_cb(struct evhttp *http, const char *uri,
+ 	}
+ 	http_cb->cb = cb;
+ 	http_cb->cbarg = cbarg;
++	http_cb->chunked = chunked;
+ 
+ 	TAILQ_INSERT_TAIL(&http->callbacks, http_cb, next);
+ 
+@@ -3970,6 +3993,19 @@ evhttp_set_cb(struct evhttp *http, const char *uri,
+ }
+ 
+ int
++evhttp_set_cb(struct evhttp *http, const char *uri,
++    void (*cb)(struct evhttp_request *, void *), void *cbarg)
++{
++	return evhttp_set_cb_internal(http, uri, cb, cbarg, 0);
++}
++
++int evhttp_set_chunk_cb(struct evhttp *http, const char *path,
++    void (*chunk_cb)(struct evhttp_request *, void *), void *cb_arg)
++{
++	return evhttp_set_cb_internal(http, path, chunk_cb, cb_arg, 1);
++}
++
++int
+ evhttp_del_cb(struct evhttp *http, const char *uri)
+ {
+ 	struct evhttp_cb *http_cb;
+@@ -4118,9 +4154,10 @@ evhttp_connection_get_base(struct evhttp_connection *conn)
+ 
+ void
+ evhttp_request_set_chunked_cb(struct evhttp_request *req,
+-    void (*cb)(struct evhttp_request *, void *))
++    void (*cb)(struct evhttp_request *, void *), void *arg)
+ {
+ 	req->chunk_cb = cb;
++	req->chunk_cb_arg = arg;
+ }
+ 
+ void
+--- libevent/include/event2/http.h	(a2df0aadb743a91ec4876eed1b9678939de28570)
++++ libevent/include/event2/http.h	(index)
+@@ -264,6 +264,10 @@ EVENT2_EXPORT_SYMBOL
+ int evhttp_set_cb(struct evhttp *http, const char *path,
+     void (*cb)(struct evhttp_request *, void *), void *cb_arg);
+ 
++EVENT2_EXPORT_SYMBOL
++int evhttp_set_chunk_cb(struct evhttp *http, const char *path,
++    void (*chunk_cb)(struct evhttp_request *, void *), void *cb_arg);
++
+ /** Removes the callback for a specified URI */
+ EVENT2_EXPORT_SYMBOL
+ int evhttp_del_cb(struct evhttp *, const char *);
+@@ -594,7 +598,7 @@ struct evhttp_request *evhttp_request_new(
+  */
+ EVENT2_EXPORT_SYMBOL
+ void evhttp_request_set_chunked_cb(struct evhttp_request *,
+-    void (*cb)(struct evhttp_request *, void *));
++    void (*cb)(struct evhttp_request *, void *), void *arg);
+ 
+ /**
+  * Register callback for additional parsing of request headers.
+--- libevent/include/event2/http_struct.h	(a2df0aadb743a91ec4876eed1b9678939de28570)
++++ libevent/include/event2/http_struct.h	(index)
+@@ -78,6 +78,8 @@ struct {
+ /** The request should be freed upstack */
+ #define EVHTTP_REQ_NEEDS_FREE		0x0010
+ 
++#define EVHTTP_REQ_PROCESS_CHUNKS_END 0x0024
++
+ 	struct evkeyvalq *input_headers;
+ 	struct evkeyvalq *output_headers;
+ 
+@@ -120,6 +122,7 @@ struct {
+ 	 * the regular callback.
+ 	 */
+ 	void (*chunk_cb)(struct evhttp_request *, void *);
++	void *chunk_cb_arg;
+ 
+ 	/*
+ 	 * Callback added for forked-daapd so they can collect ICY

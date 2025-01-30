@@ -80,6 +80,18 @@ namespace NTi {
     /// Create new `Uuid` type using the default heap factory.
     TUuidTypePtr Uuid();
 
+    /// Create new `Date32` type using the default heap factory.
+    TDate32TypePtr Date32();
+
+    /// Create new `Datetime64` type using the default heap factory.
+    TDatetime64TypePtr Datetime64();
+
+    /// Create new `Timestamp64` type using the default heap factory.
+    TTimestamp64TypePtr Timestamp64();
+
+    /// Create new `Interval64` type using the default heap factory.
+    TInterval64TypePtr Interval64();
+
     /// Create new `Optional` type using the default heap factory.
     TOptionalTypePtr Optional(TTypePtr item);
 

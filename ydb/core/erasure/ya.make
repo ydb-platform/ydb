@@ -3,8 +3,6 @@ LIBRARY()
 SRCS(
     erasure.cpp
     erasure.h
-    erasure_rope.cpp
-    erasure_rope.h
     erasure_perf_test.cpp
     erasure_split.cpp
     erasure_restore.cpp
@@ -28,6 +26,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
-    ut_rope
     ut_perf
 )

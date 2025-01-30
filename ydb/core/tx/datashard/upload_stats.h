@@ -3,9 +3,10 @@
 #include "defs.h"
 
 #include <ydb/core/base/counters.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 class IStatHolder {
 public:
@@ -42,4 +43,43 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr MonBytes;
 };
 
-}}
+struct TUploadStatus {
+    Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    NYql::TIssues Issues;
+
+    bool IsNone() const {
+        return StatusCode == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    }
+
+    bool IsSuccess() const {
+        return StatusCode == Ydb::StatusIds::SUCCESS;
+    }
+
+    bool IsRetriable() const {
+        return StatusCode == Ydb::StatusIds::UNAVAILABLE || StatusCode == Ydb::StatusIds::OVERLOADED;
+    }
+
+    TString ToString() const {
+        return TStringBuilder()
+               << "Status {"
+               << " Code: " << Ydb::StatusIds_StatusCode_Name(StatusCode)
+               << " Issues: " << Issues.ToString()
+               << " }";
+    }
+};
+
+struct TUploadRetryLimits {
+    ui32 MaxUploadRowsRetryCount = 50;
+    ui32 BackoffCeiling = 3;
+
+    TDuration GetTimeoutBackouff(ui32 retryNo) const {
+        return TDuration::Seconds(1u << Max(retryNo, BackoffCeiling));
+    }
+};
+
+struct TUploadLimits: TUploadRetryLimits {
+    ui64 BatchRowsLimit = 500;
+    ui64 BatchBytesLimit = 1u << 23; // 8MB
+};
+
+}

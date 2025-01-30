@@ -20,13 +20,13 @@ TS3Mock::TSettings::TSettings()
 }
 
 TS3Mock::TSettings::TSettings(ui16 port)
-    : HttpOptions(TOptions(port).SetThreads(1))
+    : HttpOptions(THttpServer::TOptions(port).SetThreads(1))
     , CorruptETags(false)
     , RejectUploadParts(false)
 {
 }
 
-TS3Mock::TSettings& TS3Mock::TSettings::WithHttpOptions(const TOptions& opts) {
+TS3Mock::TSettings& TS3Mock::TSettings::WithHttpOptions(const THttpServer::TOptions& opts) {
     HttpOptions = opts;
     return *this;
 }
@@ -388,23 +388,31 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     }
 }
 
+bool TS3Mock::Start() {
+    return HttpServer.Start();
+}
+
+const char* TS3Mock::GetError() {
+    return HttpServer.GetError();
+}
+
 TS3Mock::TS3Mock(const TSettings& settings)
-    : THttpServer(this, settings.HttpOptions)
-    , Settings(settings)
+    : Settings(settings)
+    , HttpServer(this, settings.HttpOptions)
 {
 }
 
 TS3Mock::TS3Mock(THashMap<TString, TString>&& data, const TSettings& settings)
-    : THttpServer(this, settings.HttpOptions)
-    , Settings(settings)
+    : Settings(settings)
     , Data(std::move(data))
+    , HttpServer(this, settings.HttpOptions)
 {
 }
 
 TS3Mock::TS3Mock(const THashMap<TString, TString>& data, const TSettings& settings)
-    : THttpServer(this, settings.HttpOptions)
-    , Settings(settings)
+    : Settings(settings)
     , Data(data)
+    , HttpServer(this, settings.HttpOptions)
 {
 }
 

@@ -2,6 +2,7 @@
 #include "guid_recovery.h"
 #include "syncer_job_task.h"
 #include "blobstorage_syncer_dataserdes.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/base/utility.h>
 
 using namespace NKikimrServices;
@@ -412,7 +413,7 @@ namespace NKikimr {
                 TSyncNeighbors::TOldDes des(str);
                 n.GenericParse(des);
                 // recover groupId and groupGen for further conversion
-                ui32 groupId = des.GetGroupId();
+                TGroupId groupId = des.GetGroupId();
                 ui32 groupGen = des.GetGroupGeneration();
                 // serialize into current format
                 TStringStream output;
@@ -450,7 +451,7 @@ namespace NKikimr {
                 TSyncNeighbors::TOldDes des(str);
                 n.GenericParse(des);
                 // recover groupId and groupGen for further conversion
-                ui32 groupId = des.GetGroupId();
+                TGroupId groupId = des.GetGroupId();
                 ui32 groupGen = des.GetGroupGeneration();
                 // serialize into current format
                 TStringStream output;

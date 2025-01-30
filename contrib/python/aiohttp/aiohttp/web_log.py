@@ -3,6 +3,7 @@ import functools
 import logging
 import os
 import re
+import time as time_mod
 from collections import namedtuple
 from typing import Any, Callable, Dict, Iterable, List, Tuple  # noqa
 
@@ -57,7 +58,7 @@ class AccessLogger(AbstractAccessLogger):
     LOG_FORMAT = '%a %t "%r" %s %b "%{Referer}i" "%{User-Agent}i"'
     FORMAT_RE = re.compile(r"%(\{([A-Za-z0-9\-_]+)\}([ioe])|[atPrsbOD]|Tf?)")
     CLEANUP_RE = re.compile(r"(%[^s])")
-    _FORMAT_CACHE = {}  # type: Dict[str, Tuple[str, List[KeyMethod]]]
+    _FORMAT_CACHE: Dict[str, Tuple[str, List[KeyMethod]]] = {}
 
     def __init__(self, logger: logging.Logger, log_format: str = LOG_FORMAT) -> None:
         """Initialise the logger.
@@ -142,9 +143,10 @@ class AccessLogger(AbstractAccessLogger):
 
     @staticmethod
     def _format_t(request: BaseRequest, response: StreamResponse, time: float) -> str:
-        now = datetime.datetime.utcnow()
+        tz = datetime.timezone(datetime.timedelta(seconds=-time_mod.timezone))
+        now = datetime.datetime.now(tz)
         start_time = now - datetime.timedelta(seconds=time)
-        return start_time.strftime("[%d/%b/%Y:%H:%M:%S +0000]")
+        return start_time.strftime("[%d/%b/%Y:%H:%M:%S %z]")
 
     @staticmethod
     def _format_P(request: BaseRequest, response: StreamResponse, time: float) -> str:
@@ -187,6 +189,9 @@ class AccessLogger(AbstractAccessLogger):
         return [(key, method(request, response, time)) for key, method in self._methods]
 
     def log(self, request: BaseRequest, response: StreamResponse, time: float) -> None:
+        if not self.logger.isEnabledFor(logging.INFO):
+            # Avoid formatting the log line if it will not be emitted.
+            return
         try:
             fmt_info = self._format_line(request, response, time)
 

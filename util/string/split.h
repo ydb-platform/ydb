@@ -47,7 +47,7 @@ namespace NStringSplitPrivate {
         return nullptr;
     }
 
-}
+} // namespace NStringSplitPrivate
 
 template <class I, class TDelim, class TConsumer>
 std::enable_if_t<::NStringSplitPrivate::TIsConsumerV<TConsumer, I>>
@@ -205,8 +205,9 @@ struct TFindFirstOf {
     inline Char* FindFirstOf(Char* b, Char* e) const noexcept {
         Char* ret = b;
         for (; ret != e; ++ret) {
-            if (NStringSplitPrivate::Find(Set, *ret))
+            if (NStringSplitPrivate::Find(Set, *ret)) {
                 break;
+            }
         }
         return ret;
     }
@@ -262,7 +263,7 @@ struct TSetDelimiter: private TFindFirstOf<const Char> {
 
 namespace NSplitTargetHasPushBack {
     Y_HAS_MEMBER(push_back, PushBack);
-}
+} // namespace NSplitTargetHasPushBack
 
 template <class T, class = void>
 struct TConsumerBackInserter;
@@ -398,8 +399,9 @@ struct TSimplePusher {
 template <class T>
 static inline void Split(char* buf, char ch, T* res) {
     res->resize(0);
-    if (*buf == 0)
+    if (*buf == 0) {
         return;
+    }
 
     TCharDelimiter<char> delim(ch);
     TSimplePusher<T> pusher = {res};
@@ -660,6 +662,15 @@ namespace NStringSplitPrivate {
         using TIterator = TIteratorOf<String>;
         friend class TStringSplitter<String>;
 
+        template <typename S = String, std::enable_if_t<THasData<S>::value, int> = 0>
+        TIterState(const String& string) noexcept
+            : TStringBufType()
+            , DelimiterEnd_(string.data())
+            , OriginEnd_(string.data() + string.size())
+        {
+        }
+
+        template <typename S = String, std::enable_if_t<!THasData<S>::value, int> = 0>
         TIterState(const String& string) noexcept
             : TStringBufType()
             , DelimiterEnd_(std::begin(string))
@@ -698,6 +709,11 @@ namespace NStringSplitPrivate {
 
         bool DelimiterIsEmpty() const noexcept {
             return TokenDelim() == DelimiterEnd_;
+        }
+
+        void MarkExhausted() noexcept {
+            UpdateParentBuf(OriginEnd_, OriginEnd_);
+            DelimiterEnd_ = OriginEnd_;
         }
 
     private:
@@ -782,7 +798,7 @@ namespace NStringSplitPrivate {
             size_t successfullyFilled = 0;
             auto it = this->begin();
 
-            //FIXME: actually, some kind of TryApplyToMany is needed in order to stop iteration upon first failure
+            // FIXME: actually, some kind of TryApplyToMany is needed in order to stop iteration upon first failure
             ApplyToMany([&](auto&& arg) {
                 if (it != this->end()) {
                     if (TryDoFromString(it->Token(), arg)) {
@@ -844,6 +860,24 @@ namespace NStringSplitPrivate {
                 , Delimiter_(std::forward<Args>(args)...)
             {
             }
+
+            TSplitRangeBase(const TSplitRangeBase& other)
+                : String_(other.String_)
+                , State_(String_)
+                , Delimiter_(other.Delimiter_)
+            {
+            }
+
+            TSplitRangeBase(TSplitRangeBase&& other)
+                : String_(std::move(other.String_))
+                , State_(String_)
+                , Delimiter_(std::move(other.Delimiter_))
+            {
+                other.State_.MarkExhausted();
+            }
+
+            TSplitRangeBase& operator=(const TSplitRangeBase& other) = delete;
+            TSplitRangeBase& operator=(TSplitRangeBase&& other) = delete;
 
             inline TIteratorState* Next() {
                 if (State_.DelimiterIsEmpty()) {
@@ -1007,7 +1041,7 @@ namespace NStringSplitPrivate {
         {
         }
 
-        //does not own TDelim
+        // does not own TDelim
         template <class TDelim>
         inline TIt<TPtrPolicy<const TDelim>> Split(const TDelim& d) const noexcept {
             return {String_, &d};
@@ -1038,7 +1072,7 @@ namespace NStringSplitPrivate {
     auto MakeStringSplitter(String&& s) {
         return TStringSplitter<std::remove_reference_t<String>>(std::forward<String>(s));
     }
-}
+} // namespace NStringSplitPrivate
 
 template <class Iterator>
 auto StringSplitter(Iterator begin, Iterator end) {

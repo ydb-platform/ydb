@@ -11,18 +11,17 @@ namespace NKikimr {
 
 // TODO: Both block and get block must operate in terms of FailDomains, not VDisks
 // TODO: Get response should wait for 2 copies on mirror, not 1
-class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupBlockRequest> {
+class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     const ui64 TabletId;
     const ui32 Generation;
     const TInstant Deadline;
     const ui64 IssuerGuid;
-    TInstant StartTime;
     bool SeenAlready = false;
 
     TGroupQuorumTracker QuorumTracker;
 
     void Handle(TEvBlobStorage::TEvVBlockResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         const NKikimrBlobStorage::TEvVBlockResult &record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();
@@ -38,7 +37,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
         // You can't call GetActorId before calling IsValidId
         Y_ABORT_UNLESS(Info->IsValidId(shortId), "Invalid VDiskId VDiskId# %s", shortId.ToString().c_str());
 
-        A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPB01", "Handle TEvVBlockResult"
+        DSP_LOG_LOG_S(PriorityForStatusInbound(status), "DSPB01", "Handle TEvVBlockResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " From# " << vdisk.ToString()
             << " NodeId# " << Info->GetActorId(vdisk).NodeId());
@@ -47,7 +46,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         const auto& record = ev->Get()->Record;
         if (record.HasStatus() && record.HasVDiskID()) {
             Process(record.GetStatus(), VDiskIDFromVDiskID(record.GetVDiskID()), record.HasIncarnationGuid()
@@ -95,19 +94,18 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
         }
     }
 
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupBlockRequest>;
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         std::unique_ptr<TEvBlobStorage::TEvBlockResult> result(new TEvBlobStorage::TEvBlockResult(status));
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(true, PriorityForStatusResult(status), "DSPB04", "Result# " << result->Print(false));
-        Mon->CountBlockResponseTime(TActivationContext::Now() - StartTime);
+        DSP_LOG_LOG_S(PriorityForStatusResult(status), "DSPB04", "Result# " << result->Print(false));
+        Mon->CountBlockResponseTime(TActivationContext::Monotonic() - RequestStartTime);
         return SendResponseAndDie(std::move(result));
     }
 
     void SendBlockRequest(const TVDiskID& vdiskId) {
         const ui64 cookie = TVDiskIdShort(vdiskId).GetRaw();
 
-        A_LOG_DEBUG_S("DSPB03", "Sending TEvVBlock Tablet# " << TabletId
+        DSP_LOG_DEBUG_S("DSPB03", "Sending TEvVBlock Tablet# " << TabletId
             << " Generation# " << Generation
             << " vdiskId# " << vdiskId
             << " node# " << Info->GetActorId(vdiskId).NodeId());
@@ -116,7 +114,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
         SendToQueue(std::move(msg), cookie);
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartBlock;
         auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, Deadline, IssuerGuid);
         ev->RestartCounter = counter;
@@ -124,32 +122,26 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_GROUP_BLOCK;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveBlock;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveBlock;
+    ERequestType GetRequestType() const override {
+        return ERequestType::Block;
     }
 
-    TBlobStorageGroupBlockRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvBlock *ev,
-            ui64 cookie, NWilson::TTraceId traceId, TInstant now,
-            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
-                NKikimrServices::BS_PROXY_BLOCK, false, {}, now, storagePoolCounters, ev->RestartCounter,
-                "DSProxy.Block", std::move(ev->ExecutionRelay))
-        , TabletId(ev->TabletId)
-        , Generation(ev->Generation)
-        , Deadline(ev->Deadline)
-        , IssuerGuid(ev->IssuerGuid)
-        , StartTime(now)
+    TBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , TabletId(params.Common.Event->TabletId)
+        , Generation(params.Common.Event->Generation)
+        , Deadline(params.Common.Event->Deadline)
+        , IssuerGuid(params.Common.Event->IssuerGuid)
         , QuorumTracker(Info.Get())
     {}
 
-    void Bootstrap() {
-        A_LOG_DEBUG_S("DSPB05", "bootstrap"
+    void Bootstrap() override {
+        DSP_LOG_DEBUG_S("DSPB05", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " TabletId# " << TabletId
@@ -161,7 +153,7 @@ public:
             SendBlockRequest(Info->GetVDiskId(vdisk.OrderNumber));
         }
 
-        Become(&TThis::StateWait);
+        Become(&TBlobStorageGroupBlockRequest::StateWait);
     }
 
     STATEFN(StateWait) {
@@ -175,11 +167,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupBlockRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvBlock *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupBlockRequest(info, state, source, mon, ev, cookie, std::move(traceId), now, storagePoolCounters);
+IActor* CreateBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters params) {
+    return new TBlobStorageGroupBlockRequest(params);
 }
 
 } // NKikimr

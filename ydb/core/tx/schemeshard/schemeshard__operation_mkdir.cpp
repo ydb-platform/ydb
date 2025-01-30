@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 namespace {
 
@@ -14,7 +15,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "MkDir::TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -115,6 +116,19 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
+        if (Transaction.HasTempDirOwnerActorId() && !context.SS->EnableTempTables) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                TStringBuilder() << "It is not allowed to create temporary objects: " << name);
+            return result;
+        }
+
+        if (Transaction.HasTempDirOwnerActorId() && Transaction.GetAllowCreateInTempDir()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                TStringBuilder() << "Can't create temporary directory while flag AllowCreateInTempDir is set."
+                    << " Temporary directory can't be created in another temporary directory.");
+            return result;
+        }
+
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
@@ -125,7 +139,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -216,6 +231,10 @@ public:
         newDir->UserAttrs->AlterData = userAttrs;
         newDir->DirAlterVersion = 1;
 
+        if (Transaction.HasTempDirOwnerActorId()) {
+            newDir->TempDirOwnerActorId = ActorIdFromProto(Transaction.GetTempDirOwnerActorId());
+        }
+
         if (!acl.empty()) {
             newDir->ApplyACL(acl);
         }
@@ -230,8 +249,18 @@ public:
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
-        dstPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
+        if (Transaction.HasTempDirOwnerActorId()) {
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Processing create temp directory with Name: " << name
+                    << ", WorkingDir: " << parentPathStr
+                    << ", TempDirOwnerActorId: " << newDir->TempDirOwnerActorId
+                    << ", PathId: " << newDir->PathId);
+            context.OnComplete.UpdateTempDirsToMakeState(
+                newDir->TempDirOwnerActorId, newDir->PathId);
+        }
+
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         context.OnComplete.ActivateTx(OperationId);
 
@@ -260,6 +289,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMkDir>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetMkDir().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableMkDir()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateMkDir(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TMkDir>(id, tx);

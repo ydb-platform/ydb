@@ -23,7 +23,6 @@ PY_SRCS(
 PEERDIR(
     ydb/tools/cfg
     ydb/public/sdk/python
-    ydb/public/sdk/python/enable_v3_new_behavior
     contrib/python/PyYAML
     contrib/python/ruamel.yaml
     contrib/python/kubernetes
@@ -40,6 +39,13 @@ RESOURCE(
     kube/templates/8-node-block-4-2/storage.yaml /ydbd_slice/templates/8-node-block-4-2/storage.yaml
     kube/templates/legacy-cms-config-items/table-profile.txt /ydbd_slice/templates/legacy-cms-config-items/table-profile.txt
     kube/templates/legacy-cms-config-items/unified-agent.txt /ydbd_slice/templates/legacy-cms-config-items/unified-agent.txt
+
+    baremetal/templates/block-4-2-8-nodes.yaml /ydbd_slice/baremetal/templates/block-4-2-8-nodes.yaml
+    baremetal/templates/block-4-2-4-nodes.yaml /ydbd_slice/baremetal/templates/block-4-2-4-nodes.yaml
+    baremetal/templates/block-4-2-2-nodes.yaml /ydbd_slice/baremetal/templates/block-4-2-2-nodes.yaml
+    baremetal/templates/mirror-3-dc-9-nodes.yaml /ydbd_slice/baremetal/templates/mirror-3-dc-9-nodes.yaml
+    baremetal/templates/mirror-3-dc-3-nodes.yaml /ydbd_slice/baremetal/templates/mirror-3-dc-3-nodes.yaml
+    baremetal/templates/none-1-node.yaml /ydbd_slice/baremetal/templates/none-1-node.yaml
 )
 
 END()

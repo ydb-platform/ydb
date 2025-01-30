@@ -6,7 +6,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/config/init
-	ydb/library/yql/sql/pg_dummy
+    yql/essentials/sql/pg_dummy
+    yql/essentials/public/udf/service/stub
 )
 
 YQL_LAST_ABI_VERSION()

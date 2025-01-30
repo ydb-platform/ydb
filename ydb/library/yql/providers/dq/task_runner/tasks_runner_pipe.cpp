@@ -2,15 +2,15 @@
 
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/rope_over_buffer.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -66,27 +66,32 @@ void Load(IInputStream& input, void* buf, size_t size) {
 
 } // namespace {
 
-i64 SaveRopeToPipe(IOutputStream& output, const TRope& rope) {
+i64 SaveRopeToPipe(IOutputStream& output, const TChunkedBuffer& rope) {
+    // TODO: can this function recieve rope by rvalue?
+    TChunkedBuffer toSave(rope);
     i64 total = 0;
-    for (const auto& [data, size] : rope) {
+    while (!toSave.Empty()) {
+        TStringBuf buf = toSave.Front().Buf;
+        size_t size = buf.size();
         output.Write(&size, sizeof(size_t));
         YQL_ENSURE(size != 0);
-        output.Write(data, size);
+        output.Write(buf.data(), size);
         total += size;
+        toSave.Erase(size);
     }
     size_t zero = 0;
     output.Write(&zero, sizeof(size_t));
     return total;
 }
 
-void LoadRopeFromPipe(IInputStream& input, TRope& rope) {
+void LoadRopeFromPipe(IInputStream& input, TChunkedBuffer& rope) {
     size_t size;
     do {
         Load(input, &size, sizeof(size_t));
         if (size) {
             auto buffer = std::shared_ptr<char[]>(new char[size]);
-            Load(input, buffer.get(), size);            
-            rope.Insert(rope.End(), NYql::MakeReadOnlyRope(buffer, buffer.get(), size));
+            Load(input, buffer.get(), size);
+            rope.Append(TStringBuf(buffer.get(), size), buffer);
         }
     } while (size != 0);
 }
@@ -128,7 +133,9 @@ public:
     virtual ~TChildProcess() {
         try {
             NFs::RemoveRecursive(WorkDir);
-        } catch (...) { }
+        } catch (...) {
+            YQL_CLOG(DEBUG, ProviderDq) << "Error on WorkDir cleanup: " << CurrentExceptionMessage();
+        }
     }
 
     virtual TString ExternalWorkDir() {
@@ -395,7 +402,7 @@ public:
             ContainerName = portoSettings.ContainerNamePrefix + "/" + ContainerName;
         }
 
-        YQL_CLOG(DEBUG, ProviderDq) << "HardLink " << ExeName << "'" << WorkDir << "/" << name << "'";
+        YQL_CLOG(DEBUG, ProviderDq) << "HardLink " << ExeName << " -> '" << WorkDir << "/" << name << "'";
         if (NFs::HardLink(ExeName, WorkDir + "/" + name)) {
             ExeName = WorkDir + "/" + name;
         } else {
@@ -410,7 +417,9 @@ public:
     ~TPortoProcess() {
         try {
             NFs::RemoveRecursive(TmpDir);
-        } catch (...) { }
+        } catch (...) {
+            YQL_CLOG(DEBUG, ProviderDq) << "Error on TmpDir cleanup: " << CurrentExceptionMessage();
+        }
     }
 
 private:
@@ -529,6 +538,7 @@ private:
 void LoadFromProto(TDqAsyncStats& stats, const NYql::NDqProto::TDqAsyncBufferStats& f)
 {
     stats.Bytes = f.GetBytes();
+    stats.DecompressedBytes = f.GetDecompressedBytes();
     stats.Rows = f.GetRows();
     stats.Chunks = f.GetChunks();
     stats.Splits = f.GetSplits();
@@ -556,7 +566,7 @@ public:
 
 class TInputChannel : public IInputChannel {
 public:
-    TInputChannel(const ITaskRunner::TPtr& taskRunner, ui64 taskId, ui64 channelId, IInputStream& input, IOutputStream& output, i64 channelBufferSize)
+    TInputChannel(ITaskRunner* taskRunner, ui64 taskId, ui64 channelId, IInputStream& input, IOutputStream& output, i64 channelBufferSize)
         : TaskId(taskId)
         , ChannelId(channelId)
         , Input(input)
@@ -630,7 +640,7 @@ private:
     IInputStream& Input;
     IOutputStream& Output;
 
-    ITaskRunner::TPtr TaskRunner;
+    ITaskRunner* TaskRunner; // this channel is owned by TaskRunner
 
     i64 FreeSpace;
 };
@@ -1287,6 +1297,7 @@ private:
 class TTaskRunner: public IPipeTaskRunner {
 public:
     TTaskRunner(
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NDqProto::TDqTask& task,
         TFilesHolder::TPtr&& filesHolder,
         THolder<TChildProcess>&& command,
@@ -1295,8 +1306,7 @@ public:
         : TraceId(traceId)
         , Task(task)
         , FilesHolder(std::move(filesHolder))
-        , Alloc(new NKikimr::NMiniKQL::TScopedAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true),
-            [](NKikimr::NMiniKQL::TScopedAlloc* ptr) { ptr->Acquire(); delete ptr; })
+        , Alloc(alloc)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>(*Alloc, "TDqTaskRunnerProxy"))
         , Running(true)
         , Command(std::move(command))
@@ -1306,16 +1316,14 @@ public:
         , TaskId(Task.GetId())
         , StageId(stageId)
     {
-        Alloc->Release();
         StderrReader->Start();
         InitTaskMeta();
         InitChannels();
     }
 
     ~TTaskRunner() {
-        Alloc->Acquire();
+        auto guard = Guard(*Alloc);
         AllocatedHolder.reset();
-        Alloc->Release();
         Command->Kill();
         Command->Wait(TDuration::Seconds(0));
     }
@@ -1366,6 +1374,20 @@ public:
 
         NYql::NDqProto::TPrepareResponse ret;
         ret.Load(&Input);
+
+        auto state = TFailureInjector::GetCurrentState();
+        for (auto& [k, v]: state) {
+            NDqProto::TCommandHeader header;
+            header.SetVersion(1);
+            header.SetCommand(NDqProto::TCommandHeader::CONFIGURE_FAILURE_INJECTOR);
+            header.Save(&Output);
+            NYql::NDqProto::TConfigureFailureInjectorRequest request;
+            request.SetName(k);
+            request.SetSkip(v.Skip);
+            request.SetFail(v.CountOfFails);
+            request.Save(&Output);
+        }
+
         return ret;
     }
 
@@ -1625,17 +1647,21 @@ private:
 class TDqTaskRunner: public NDq::IDqTaskRunner {
 public:
     TDqTaskRunner(
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NDqProto::TDqTask& task,
         TFilesHolder::TPtr&& filesHolder,
         THolder<TChildProcess>&& command,
         ui64 stageId,
         const TString& traceId)
-        : Delegate(new TTaskRunner(task, std::move(filesHolder), std::move(command), stageId, traceId))
+        : Delegate(new TTaskRunner(alloc, task, std::move(filesHolder), std::move(command), stageId, traceId))
         , Task(task)
     { }
 
     ui64 GetTaskId() const override {
         return Task.GetId();
+    }
+
+    void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
     }
 
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
@@ -1708,7 +1734,7 @@ public:
         return sink;
     }
 
-    std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr> GetInputTransform(ui64 /*inputIndex*/) override {
+    std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 /*inputIndex*/) override {
         return {};
     }
 
@@ -1907,17 +1933,17 @@ public:
         TaskScheduler.Start();
     }
 
-    ITaskRunner::TPtr GetOld(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& tmp, const TString& traceId) override {
+    ITaskRunner::TPtr GetOld(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& tmp, const TString& traceId) override {
         Y_UNUSED(alloc);
         Yql::DqsProto::TTaskMeta taskMeta;
         tmp.GetMeta().UnpackTo(&taskMeta);
         ui64 stageId = taskMeta.GetStageId();
         auto result = GetExecutorForTask(taskMeta.GetFiles(), taskMeta.GetSettings());
         auto [task, filesHolder] = PrepareTask(tmp, result.Get());
-        return new TTaskRunner(task, std::move(filesHolder), std::move(result), stageId, traceId);
+        return new TTaskRunner(alloc, task, std::move(filesHolder), std::move(result), stageId, traceId);
     }
 
-    TIntrusivePtr<NDq::IDqTaskRunner> Get(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& tmp, NDqProto::EDqStatsMode statsMode, const TString& traceId) override
+    TIntrusivePtr<NDq::IDqTaskRunner> Get(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& tmp, NDqProto::EDqStatsMode statsMode, const TString& traceId) override
     {
         Y_UNUSED(statsMode);
         Y_UNUSED(alloc);
@@ -1926,7 +1952,7 @@ public:
 
         auto result = GetExecutorForTask(taskMeta.GetFiles(), taskMeta.GetSettings());
         auto [task, filesHolder] = PrepareTask(tmp, result.Get());
-        return new TDqTaskRunner(task, std::move(filesHolder), std::move(result), taskMeta.GetStageId(), traceId);
+        return new TDqTaskRunner(alloc, task, std::move(filesHolder), std::move(result), taskMeta.GetStageId(), traceId);
     }
 
 private:

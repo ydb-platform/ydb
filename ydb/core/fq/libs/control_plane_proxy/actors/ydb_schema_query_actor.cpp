@@ -9,7 +9,9 @@
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/lib/fq/scope.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 namespace NFq::NPrivate {
 
@@ -312,7 +314,7 @@ public:
 
     void SaveIssues(const TString& message, const TStatus& status) {
         auto issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, message);
-        for (const auto& subIssue : RemoveDatabaseFromIssues(status.GetIssues(), DBPath)) {
+        for (const auto& subIssue : RemoveDatabaseFromIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()), DBPath)) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
         }
 
@@ -331,7 +333,7 @@ public:
         try {
             return std::move(future.GetValueSync()); // can throw an exception
         } catch (...) {
-            return TStatus{EStatus::BAD_REQUEST, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}};
+            return TStatus{EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}};
         }
     }
 
@@ -405,7 +407,7 @@ public:
 
     IEventBase* MakeTimeoutEventImpl(NYql::TIssue issue) override {
         return new TEvPrivate::TEvRecoveryResponse(
-            Nothing(), TStatus{EStatus::TIMEOUT, NYql::TIssues{std::move(issue)}});
+            Nothing(), TStatus{EStatus::TIMEOUT, NYdb::NIssue::TIssues{NYdb::NAdapters::ToSdkIssue(std::move(issue))}});
     };
 
     void CheckConnectionExistenceInCPS() {
@@ -418,7 +420,7 @@ public:
 
         event->IsExactNameMatch = true;
 
-        TBase::Send(NFq::ControlPlaneStorageServiceActorId(), event);
+        TBase::Send(::NFq::ControlPlaneStorageServiceActorId(), event);
     }
 
     STRICT_STFUNC(StateFunc, cFunc(NActors::TEvents::TSystem::Wakeup, TBase::HandleTimeout);
@@ -480,7 +482,7 @@ public:
 
     IEventBase* MakeTimeoutEventImpl(NYql::TIssue issue) override {
         return new TEvPrivate::TEvRecoveryResponse(
-            Nothing(), TStatus{EStatus::TIMEOUT, NYql::TIssues{std::move(issue)}});
+            Nothing(), TStatus{EStatus::TIMEOUT, NYdb::NIssue::TIssues{NYdb::NAdapters::ToSdkIssue(std::move(issue))}});
     }
 
     void CheckBindingExistenceInCPS() {
@@ -493,7 +495,7 @@ public:
 
         event->IsExactNameMatch = true;
 
-        TBase::Send(NFq::ControlPlaneStorageServiceActorId(), event);
+        TBase::Send(::NFq::ControlPlaneStorageServiceActorId(), event);
     }
 
     STRICT_STFUNC(StateFunc, cFunc(NActors::TEvents::TSystem::Wakeup, TBase::HandleTimeout);
@@ -526,11 +528,11 @@ private:
 
 bool IsPathDoesNotExistIssue(const TStatus& status) {
     auto oneLineError = status.GetIssues().ToOneLineString();
-    return oneLineError.Contains("Path does not exist") || oneLineError.Contains("path hasn't been resolved");
+    return oneLineError.contains("Path does not exist") || oneLineError.contains("path hasn't been resolved");
 }
 
 bool IsPathExistsIssue(const TStatus& status) {
-    return status.GetIssues().ToOneLineString().Contains("error: path exist");
+    return status.GetIssues().ToOneLineString().contains("error: path exist");
 }
 
 } // namespace
@@ -543,7 +545,7 @@ IActor* MakeCreateConnectionActor(
     TCounters& counters,
     TPermissions permissions,
     const TCommonConfig& commonConfig,
-    const NFq::TComputeConfig& computeConfig,
+    const ::NFq::TComputeConfig& computeConfig,
     TSigner::TPtr signer,
     bool withoutRollback,
     TMaybe<TString> connectionId) {
@@ -557,10 +559,14 @@ IActor* MakeCreateConnectionActor(
          computeConfig](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& req)
         -> std::vector<TSchemaQueryTask> {
         auto& connectionContent = req->Get()->Request.content();
+        const auto& scope = req->Get()->Scope;
+        const TString folderId = NYdb::NFq::TScope{scope}.ParseFolder();
 
         auto createSecretStatement = CreateSecretObjectQuery(connectionContent.setting(),
                                                              connectionContent.name(),
-                                                             signer);
+                                                             signer,
+                                                             folderId,
+                                                             computeConfig.GetExternalSourcesAccessSIDs(scope));
 
         std::vector<TSchemaQueryTask> statements;
         if (createSecretStatement) {
@@ -582,7 +588,7 @@ IActor* MakeCreateConnectionActor(
              &counters,
              permissions](TActorId sender, const TStatus& status) {
                 if (status.GetStatus() == EStatus::ALREADY_EXISTS ||
-                    status.GetIssues().ToOneLineString().Contains("error: path exist")) {
+                    status.GetIssues().ToOneLineString().contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
                         new TGenerateRecoverySQLIfExternalDataSourceAlreadyExistsActor(
                             sender,
@@ -603,7 +609,7 @@ IActor* MakeCreateConnectionActor(
         statements.push_back(TSchemaQueryTask{
             .SQL = MakeCreateExternalDataSourceQuery(
                 connectionContent, signer, commonConfig,
-                computeConfig.IsReplaceIfExistsSyntaxSupported()),
+                computeConfig.IsReplaceIfExistsSyntaxSupported(), folderId),
                              .ScheduleErrorRecoverySQLGeneration =
                                  withoutRollback
                                      ? NoRecoverySQLGeneration()
@@ -647,7 +653,7 @@ IActor* MakeModifyConnectionActor(
     TDuration requestTimeout,
     TCounters& counters,
     const TCommonConfig& commonConfig,
-    const NFq::TComputeConfig& computeConfig,
+    const ::NFq::TComputeConfig& computeConfig,
     TSigner::TPtr signer) {
     auto queryFactoryMethod =
         [signer = std::move(signer),
@@ -659,13 +665,18 @@ IActor* MakeModifyConnectionActor(
         auto& oldConnectionContent = (*request->Get()->OldConnectionContent);
         auto& oldBindings          = request->Get()->OldBindingContents;
         auto& newConnectionContent = request->Get()->Request.content();
+        const auto& scope = request->Get()->Scope;
+        const TString folderId = NYdb::NFq::TScope{scope}.ParseFolder();
+        const auto externalSourcesAccessSIDs = computeConfig.GetExternalSourcesAccessSIDs(scope);
 
         auto dropOldSecret =
-            DropSecretObjectQuery(oldConnectionContent.name());
+            DropSecretObjectQuery(oldConnectionContent.name(), folderId, externalSourcesAccessSIDs);
         auto createNewSecret =
             CreateSecretObjectQuery(newConnectionContent.setting(),
                                     newConnectionContent.name(),
-                                    signer);
+                                    signer,
+                                    folderId,
+                                    externalSourcesAccessSIDs);
 
         bool replaceSupported = computeConfig.IsReplaceIfExistsSyntaxSupported();
         if (replaceSupported &&
@@ -673,7 +684,8 @@ IActor* MakeModifyConnectionActor(
             // CREATE OR REPLACE
             auto createSecretStatement =
                 CreateSecretObjectQuery(newConnectionContent.setting(),
-                                        newConnectionContent.name(), signer);
+                                        newConnectionContent.name(), signer, folderId, 
+                                        externalSourcesAccessSIDs);
 
             std::vector<TSchemaQueryTask> statements;
             if (createSecretStatement) {
@@ -683,7 +695,7 @@ IActor* MakeModifyConnectionActor(
 
             statements.push_back(TSchemaQueryTask{
                 .SQL = MakeCreateExternalDataSourceQuery(
-                    newConnectionContent, signer, commonConfig, replaceSupported)});
+                    newConnectionContent, signer, commonConfig, replaceSupported, folderId)});
             return statements;
         }
 
@@ -712,7 +724,7 @@ IActor* MakeModifyConnectionActor(
         statements.push_back(TSchemaQueryTask{
             .SQL = TString{MakeDeleteExternalDataSourceQuery(oldConnectionContent.name())},
             .RollbackSQL           = TString{MakeCreateExternalDataSourceQuery(
-                oldConnectionContent, signer, commonConfig, false)},
+                oldConnectionContent, signer, commonConfig, false, folderId)},
             .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
 
         if (dropOldSecret) {
@@ -720,18 +732,19 @@ IActor* MakeModifyConnectionActor(
                 .SQL         = *dropOldSecret,
                 .RollbackSQL = CreateSecretObjectQuery(oldConnectionContent.setting(),
                                                        oldConnectionContent.name(),
-                                                       signer),
+                                                       signer, folderId, 
+                                                       externalSourcesAccessSIDs),
                 .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
         }
         if (createNewSecret) {
             statements.push_back(TSchemaQueryTask{.SQL         = *createNewSecret,
                                                   .RollbackSQL = DropSecretObjectQuery(
-                                                      newConnectionContent.name())});
+                                                      newConnectionContent.name(), folderId, externalSourcesAccessSIDs)});
         }
 
         statements.push_back(
             TSchemaQueryTask{.SQL         = TString{MakeCreateExternalDataSourceQuery(
-                                 newConnectionContent, signer, commonConfig, false)},
+                                 newConnectionContent, signer, commonConfig, false, folderId)},
                              .RollbackSQL = TString{MakeDeleteExternalDataSourceQuery(
                                  newConnectionContent.name())}});
 
@@ -780,22 +793,26 @@ IActor* MakeDeleteConnectionActor(
     TDuration requestTimeout,
     TCounters& counters,
     const TCommonConfig& commonConfig,
+    const ::NFq::TComputeConfig& computeConfig,
     TSigner::TPtr signer) {
     auto queryFactoryMethod =
         [signer = std::move(signer),
-         commonConfig](
+         commonConfig, computeConfig](
             const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto& connectionContent = *request->Get()->ConnectionContent;
+        const auto& scope = request->Get()->Scope;
+        const TString folderId = NYdb::NFq::TScope{scope}.ParseFolder();
+        const auto externalSourcesAccessSIDs = computeConfig.GetExternalSourcesAccessSIDs(scope);
 
         auto dropSecret =
-            DropSecretObjectQuery(connectionContent.name());
+            DropSecretObjectQuery(connectionContent.name(), folderId, externalSourcesAccessSIDs);
 
         std::vector statements = {
             TSchemaQueryTask{.SQL = TString{MakeDeleteExternalDataSourceQuery(
                                  connectionContent.name())},
                              .RollbackSQL = MakeCreateExternalDataSourceQuery(
-                                 connectionContent, signer, commonConfig, false),
+                                 connectionContent, signer, commonConfig, false, folderId),
                              .ShouldSkipStepOnError = IsPathDoesNotExistIssue}};
         if (dropSecret) {
             statements.push_back(
@@ -803,7 +820,8 @@ IActor* MakeDeleteConnectionActor(
                                  .RollbackSQL =
                                      CreateSecretObjectQuery(connectionContent.setting(),
                                                              connectionContent.name(),
-                                                             signer),
+                                                             signer, folderId,
+                                                             externalSourcesAccessSIDs),
                                  .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
         }
         return statements;
@@ -832,7 +850,7 @@ IActor* MakeCreateBindingActor(const TActorId& proxyActorId,
                                TDuration requestTimeout,
                                TCounters& counters,
                                TPermissions permissions,
-                               const NFq::TComputeConfig& computeConfig,bool withoutRollback,
+                               const ::NFq::TComputeConfig& computeConfig,bool withoutRollback,
                                TMaybe<TString> bindingId) {
     auto queryFactoryMethod =
         [requestTimeout, &counters, permissions, withoutRollback, computeConfig](
@@ -854,7 +872,7 @@ IActor* MakeCreateBindingActor(const TActorId& proxyActorId,
              &counters,
              permissions](TActorId sender, const TStatus& status) {
                 if (status.GetStatus() == EStatus::ALREADY_EXISTS ||
-                    status.GetIssues().ToOneLineString().Contains("error: path exist")) {
+                    status.GetIssues().ToOneLineString().contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
                         new TGenerateRecoverySQLIfExternalDataTableAlreadyExistsActor(
                             sender,
@@ -916,7 +934,7 @@ IActor* MakeModifyBindingActor(const TActorId& proxyActorId,
                                TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr request,
                                TDuration requestTimeout,
                                TCounters& counters,
-    const NFq::TComputeConfig& computeConfig) {
+    const ::NFq::TComputeConfig& computeConfig) {
     auto queryFactoryMethod =
         [computeConfig](const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {

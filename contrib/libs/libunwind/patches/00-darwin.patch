@@ -1,0 +1,12 @@
+From: Антон Самохвалов <pg@yandex-team.ru>
+Date: Sat, 19 Dec 2015 20:19:48 +0000
+Subject: [PATCH] use new unwinder for darwin __BYPASS_CHECKS__
+
+git-svn-id: svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia/contrib/libs/libunwind_master@2014199 41d65440-b5be-11dd-afe3-b2e846d9b4f8
+--- a/include/unwind.h
++++ b/include/unwind.h
+@@ -26,3 +26,3 @@
+ #if defined(__APPLE__)
+-#define LIBUNWIND_UNAVAIL __attribute__ (( unavailable ))
++#define LIBUNWIND_UNAVAIL __attribute__ (( deprecated ))
+ #else

@@ -84,9 +84,21 @@ namespace NKikimr::NTable::NPage {
         static_assert(sizeof(TIsNullBitmap) == 1, "Invalid TBtreeIndexNode TIsNullBitmap size");
 
         struct TShortChild {
-            TPageId PageId;
-            TRowId RowCount;
-            ui64 DataSize;
+            TPageId PageId_;
+            TRowId RowCount_;
+            ui64 DataSize_;
+
+            inline TPageId GetPageId() const noexcept {
+                return PageId_;
+            }
+
+            inline TRowId GetRowCount() const noexcept {
+                return RowCount_;
+            }
+
+            inline ui64 GetDataSize() const noexcept {
+                return DataSize_;
+            }
 
             auto operator<=>(const TShortChild&) const = default;
         } Y_PACKED;
@@ -94,27 +106,58 @@ namespace NKikimr::NTable::NPage {
         static_assert(sizeof(TShortChild) == 20, "Invalid TBtreeIndexNode TShortChild size");
 
         struct TChild {
-            TPageId PageId;
-            TRowId RowCount;
-            ui64 DataSize;
-            TRowId ErasedRowCount;
+            TPageId PageId_;
+            TRowId RowCount_;
+            ui64 DataSize_;
+            ui64 GroupDataSize_;
+            TRowId ErasedRowCount_;
 
             auto operator<=>(const TChild&) const = default;
 
-            TRowId GetNonErasedRowCount() const noexcept {
-                return RowCount - ErasedRowCount;
+            inline TPageId GetPageId() const noexcept {
+                return PageId_;
+            }
+
+            inline TRowId GetRowCount() const noexcept {
+                return RowCount_;
+            }
+
+            inline ui64 GetDataSize() const noexcept {
+                return DataSize_;
+            }
+
+            inline ui64 GetGroupDataSize() const noexcept {
+                return GroupDataSize_;
+            }
+
+            inline TRowId GetErasedRowCount() const noexcept {
+                return ErasedRowCount_;
+            }
+
+            inline TRowId GetNonErasedRowCount() const noexcept {
+                return RowCount_ - ErasedRowCount_;
+            }
+
+            inline ui64 GetTotalDataSize() const noexcept {
+                return DataSize_ + GroupDataSize_;
             }
 
             TString ToString() const noexcept {
-                return TStringBuilder() << "PageId: " << PageId << " RowCount: " << RowCount << " DataSize: " << DataSize << " ErasedRowCount: " << ErasedRowCount;
+                TStringBuilder result;
+                result << "PageId: " << GetPageId() << " RowCount: " << GetRowCount() << " DataSize: " << GetDataSize();
+                if (GetGroupDataSize()) {
+                    result << " GroupDataSize: " << GetGroupDataSize();
+                }
+                result << " ErasedRowCount: " << GetErasedRowCount();
+                return result;
             }
         } Y_PACKED;
 
-        static_assert(sizeof(TChild) == 28, "Invalid TBtreeIndexNode TChild size");
+        static_assert(sizeof(TChild) == 36, "Invalid TBtreeIndexNode TChild size");
 
-        static_assert(offsetof(TChild, PageId) == offsetof(TShortChild, PageId));
-        static_assert(offsetof(TChild, RowCount) == offsetof(TShortChild, RowCount));
-        static_assert(offsetof(TChild, DataSize) == offsetof(TShortChild, DataSize));
+        static_assert(offsetof(TChild, PageId_) == offsetof(TShortChild, PageId_));
+        static_assert(offsetof(TChild, RowCount_) == offsetof(TShortChild, RowCount_));
+        static_assert(offsetof(TChild, DataSize_) == offsetof(TShortChild, DataSize_));
 
 #pragma pack(pop)
 
@@ -234,18 +277,27 @@ namespace NKikimr::NTable::NPage {
                 return Iter().CompareTo(key, keyDefaults);
             }
 
+            explicit operator bool() const noexcept
+            {
+                return Count() > 0;
+            }
+
         private:
-            const TIsNullBitmap* const IsNullBitmap;
-            const TColumns Columns;
+            const TIsNullBitmap* IsNullBitmap;
+            TColumns Columns;
             const char* Ptr;
         };
 
     public:
+        // Version = 0 didn't have GroupDataSize field
+        static const ui16 FormatVersion = 1;
+
         TBtreeIndexNode(TSharedData raw)
             : Raw(std::move(raw))
         {
             const auto data = NPage::TLabelWrapper().Read(Raw, EPage::BTreeIndex);
-            Y_ABORT_UNLESS(data == ECodec::Plain && data.Version == 0);
+
+            Y_ABORT_UNLESS(data == ECodec::Plain && data.Version == FormatVersion);
 
             Header = TDeref<const THeader>::At(data.Page.data());
             size_t offset = sizeof(THeader);
@@ -331,25 +383,25 @@ namespace NKikimr::NTable::NPage {
         {
             const TRecIdx childrenCount = GetChildrenCount();
             if (on && on >= childrenCount) {
-                Y_DEBUG_ABORT_UNLESS(false, "Should point to some child");
+                Y_DEBUG_ABORT("Should point to some child");
                 on = { };
             }
 
             auto range = xrange(0u, childrenCount);
             const auto cmp = [this](TRowId rowId, TPos pos) {
-                return rowId < GetShortChild(pos).RowCount;
+                return rowId < GetShortChild(pos).GetRowCount();
             };
 
             TRecIdx result;
             if (!on) {
                 // Will do a full binary search on full range
-            } else if (GetShortChild(*on).RowCount <= rowId) {
+            } else if (GetShortChild(*on).GetRowCount() <= rowId) {
                 // Try a short linear search first
                 result = *on;
                 for (int linear = 0; linear < 4; ++linear) {
                     result++;
                     Y_ABORT_UNLESS(result < childrenCount, "Should always seek some child");
-                    if (GetShortChild(result).RowCount > rowId) {
+                    if (GetShortChild(result).GetRowCount() > rowId) {
                         return result;
                     }
                 }
@@ -363,7 +415,7 @@ namespace NKikimr::NTable::NPage {
                     if (result == 0) {
                         return 0;
                     }
-                    if (GetShortChild(result - 1).RowCount <= rowId) {
+                    if (GetShortChild(result - 1).GetRowCount() <= rowId) {
                         return result;
                     }
                     result--;
@@ -384,8 +436,8 @@ namespace NKikimr::NTable::NPage {
             Y_ABORT_UNLESS(key);
             Y_UNUSED(seek);
 
-            return (!beginKey.Count() || beginKey.CompareTo(key, keyDefaults) <= 0)
-                && (!endKey.Count() || endKey.CompareTo(key, keyDefaults) > 0);
+            return (!beginKey || beginKey.CompareTo(key, keyDefaults) <= 0)
+                && (!endKey || endKey.CompareTo(key, keyDefaults) > 0);
         }
 
         /**
@@ -415,8 +467,8 @@ namespace NKikimr::NTable::NPage {
 
             // ESeek::Upper can skip a page with given key
             const bool endKeyExclusive = seek != ESeek::Upper;
-            return (!beginKey.Count() || beginKey.CompareTo(key, keyDefaults) <= 0)
-                && (!endKey.Count() || endKey.CompareTo(key, keyDefaults) >= endKeyExclusive);
+            return (!beginKey || beginKey.CompareTo(key, keyDefaults) <= 0)
+                && (!endKey || endKey.CompareTo(key, keyDefaults) >= endKeyExclusive);
         }
 
         /**

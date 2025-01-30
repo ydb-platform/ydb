@@ -1,0 +1,6 @@
+log-levels:
+  YFM001: 'error' # Inline code length
+
+# Inline code length
+YFM001:
+  maximum: 140

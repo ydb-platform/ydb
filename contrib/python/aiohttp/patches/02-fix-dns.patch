@@ -1,0 +1,11 @@
+--- contrib/python/aiohttp/aiohttp/resolver.py	(index)
++++ contrib/python/aiohttp/aiohttp/resolver.py	(working tree)
+@@ -35,7 +35,7 @@ class ThreadedResolver(AbstractResolver):
+             port,
+             type=socket.SOCK_STREAM,
+             family=family,
+-            flags=socket.AI_ADDRCONFIG,
++            # flags=socket.AI_ADDRCONFIG,
+         )
+ 
+         hosts = []

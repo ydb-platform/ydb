@@ -1,4 +1,5 @@
 #include "yql_pq_dummy_gateway.h"
+#include "yql_pq_file_topic_client.h"
 
 #include <util/generic/is_in.h>
 #include <util/generic/yexception.h>
@@ -57,6 +58,14 @@ TDummyPqGateway& TDummyPqGateway::AddDummyTopic(const TDummyTopic& topic) {
         Y_ENSURE(Topics.emplace(key, topic).second, "Already inserted dummy topic {" << topic.Cluster << ", " << topic.Path << "}");
         return *this;
     }
+}
+
+IPqGateway::TPtr CreatePqFileGateway() {
+    return MakeIntrusive<TDummyPqGateway>();
+}
+
+ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const NYdb::TDriver&, const NYdb::NTopic::TTopicClientSettings&) {
+    return MakeIntrusive<TFileTopicClient>(Topics);
 }
 
 void TDummyPqGateway::UpdateClusterConfigs(

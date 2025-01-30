@@ -6,35 +6,36 @@
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 namespace NKikimr::NSQS {
 
 struct TAuthActorData {
     // Used by both private and public API
 
+    enum ESqsRequestFormat {
+        Xml = 0,
+        Json
+    };
+
     THolder<NKikimrClient::TSqsRequest> SQSRequest;
     THolder<IReplyCallback> HTTPCallback;
     std::function<void(TString)> UserSidCallback;
-
     bool EnableQueueLeader;
-
     // Used by private API only
-
     EAction Action;
-
     ui32 ExecutorPoolID;
     TStringBuf CloudID;
     TStringBuf ResourceID;
-
     TCloudAuthCounters * Counters; //nullptr when constructed from public API
-
     THolder<TAwsRequestSignV4> AWSSignature;
-
     // Used only by private API for which AWSSignature is empty.
 
     TStringBuf IAMToken;
     TStringBuf FolderID;
+
+    ESqsRequestFormat RequestFormat = Xml;
+    TActorId Requester;
 };
 
 /**

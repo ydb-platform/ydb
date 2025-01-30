@@ -1,7 +1,11 @@
 UNITTEST()
 
-TIMEOUT(600)
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 DEPENDS(
     ydb/apps/ydb
@@ -14,11 +18,15 @@ SRCS(
     workload-topic.cpp
     workload-transfer-topic-to-table.cpp
     run_ydb.cpp
+    supported_codecs.cpp
+    supported_codecs_fixture.cpp
+    ydb-dump.cpp
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_topic
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/lib/ydb_cli/commands/topic_workload
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

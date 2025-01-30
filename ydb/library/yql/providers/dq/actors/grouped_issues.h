@@ -1,4 +1,4 @@
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/time_provider/time_provider.h>
 

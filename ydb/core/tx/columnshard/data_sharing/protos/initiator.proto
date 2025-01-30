@@ -7,8 +7,13 @@ message TInitiator {
         message TTest {
         }
 
+        message TSchemeShard {
+            optional uint64 TabletId = 1;
+        }
+
         oneof Implementation {
             TTest Test = 40;
+            TSchemeShard SS = 41;
         }
     }
 

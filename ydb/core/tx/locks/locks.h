@@ -25,7 +25,7 @@ protected:
 
 public:
     struct TLockRange {
-        ui64 RangeId;
+        ui64 RangeId = -1;
         TPathId TableId;
         ui64 Flags;
         TString Data;
@@ -42,6 +42,11 @@ public:
         TVector<TLockRange> Ranges;
         TVector<ui64> Conflicts;
         TVector<ui64> VolatileDependencies;
+
+        // In-memory migration only (not persistent)
+        TRowVersion BreakVersion = TRowVersion::Max();
+        TVector<TPathId> ReadTables;
+        TVector<TPathId> WriteTables;
     };
 
     virtual bool Load(TVector<TLockRow>& rows) = 0;
@@ -153,6 +158,9 @@ struct TPointKey {
     TOwnedTableRange ToOwnedTableRange() const {
         return TOwnedTableRange(Key);
     }
+
+    ILocksDb::TLockRange ToSerializedLockRange() const;
+    bool ParseSerializedLockRange(const ILocksDb::TLockRange&);
 };
 
 ///
@@ -166,6 +174,9 @@ struct TRangeKey {
     TOwnedTableRange ToOwnedTableRange() const {
         return TOwnedTableRange(From, InclusiveFrom, To, InclusiveTo);
     }
+
+    ILocksDb::TLockRange ToSerializedLockRange() const;
+    bool ParseSerializedLockRange(const ILocksDb::TLockRange&);
 };
 
 struct TVersionedLockId {
@@ -202,6 +213,9 @@ struct TPendingSubscribeLock {
 enum class ELockFlags : ui64 {
     None = 0,
     Frozen = 1,
+    WholeShard = 2,
+    Persistent = 4,
+    PersistentMask = Frozen,
 };
 
 using ELockFlagsRaw = std::underlying_type<ELockFlags>::type;
@@ -210,6 +224,7 @@ inline ELockFlags operator|(ELockFlags a, ELockFlags b) { return ELockFlags(ELoc
 inline ELockFlags operator&(ELockFlags a, ELockFlags b) { return ELockFlags(ELockFlagsRaw(a) & ELockFlagsRaw(b)); }
 inline ELockFlags& operator|=(ELockFlags& a, ELockFlags b) { return a = a | b; }
 inline ELockFlags& operator&=(ELockFlags& a, ELockFlags b) { return a = a & b; }
+inline ELockFlags operator~(ELockFlags c) { return ELockFlags(~ELockFlagsRaw(c)); }
 inline bool operator!(ELockFlags c) { return ELockFlagsRaw(c) == 0; }
 
 // ELockConflictFlags type safe enum
@@ -226,6 +241,7 @@ inline ELockConflictFlags operator|(ELockConflictFlags a, ELockConflictFlags b) 
 inline ELockConflictFlags operator&(ELockConflictFlags a, ELockConflictFlags b) { return ELockConflictFlags(ELockConflictFlagsRaw(a) & ELockConflictFlagsRaw(b)); }
 inline ELockConflictFlags& operator|=(ELockConflictFlags& a, ELockConflictFlags b) { return a = a | b; }
 inline ELockConflictFlags& operator&=(ELockConflictFlags& a, ELockConflictFlags b) { return a = a & b; }
+inline ELockConflictFlags operator~(ELockConflictFlags c) { return ELockConflictFlags(~ELockConflictFlagsRaw(c)); }
 inline bool operator!(ELockConflictFlags c) { return ELockConflictFlagsRaw(c) == 0; }
 
 // ELockRangeFlags type safe enum
@@ -234,14 +250,17 @@ enum class ELockRangeFlags : ui8 {
     None = 0,
     Read = 1,
     Write = 2,
+    SerializedPointKey = 4,
+    SerializedRangeKey = 8,
 };
 
 using ELockRangeFlagsRaw = std::underlying_type<ELockRangeFlags>::type;
 
 inline ELockRangeFlags operator|(ELockRangeFlags a, ELockRangeFlags b) { return ELockRangeFlags(ELockRangeFlagsRaw(a) | ELockRangeFlagsRaw(b)); }
-inline ELockRangeFlags operator&(ELockRangeFlags a, ELockRangeFlags b) { return ELockRangeFlags(ELockRangeFlagsRaw(a) | ELockRangeFlagsRaw(b)); }
+inline ELockRangeFlags operator&(ELockRangeFlags a, ELockRangeFlags b) { return ELockRangeFlags(ELockRangeFlagsRaw(a) & ELockRangeFlagsRaw(b)); }
 inline ELockRangeFlags& operator|=(ELockRangeFlags& a, ELockRangeFlags b) { return a = a | b; }
 inline ELockRangeFlags& operator&=(ELockRangeFlags& a, ELockRangeFlags b) { return a = a & b; }
+inline ELockRangeFlags operator~(ELockRangeFlags c) { return ELockRangeFlags(~ELockRangeFlagsRaw(c)); }
 inline bool operator!(ELockRangeFlags c) { return ELockRangeFlagsRaw(c) == 0; }
 
 // Tags for various intrusive lists
@@ -252,6 +271,7 @@ struct TLockInfoWriteConflictListTag {};
 struct TLockInfoBrokenListTag {};
 struct TLockInfoBrokenPersistentListTag {};
 struct TLockInfoExpireListTag {};
+struct TLockInfoRangesListTag {};
 
 /// Aggregates shard, point and range locks
 class TLockInfo
@@ -263,6 +283,7 @@ class TLockInfo
     , public TIntrusiveListItem<TLockInfo, TLockInfoBrokenListTag>
     , public TIntrusiveListItem<TLockInfo, TLockInfoBrokenPersistentListTag>
     , public TIntrusiveListItem<TLockInfo, TLockInfoExpireListTag>
+    , public TIntrusiveListItem<TLockInfo, TLockInfoRangesListTag>
 {
     friend class TTableLocks;
     friend class TLockLocker;
@@ -296,18 +317,20 @@ public:
     }
 
     ui32 GetGeneration() const { return Generation; }
+    ui64 GetRawCounter() const { return Counter; }
     ui64 GetCounter(const TRowVersion& at = TRowVersion::Max()) const { return !BreakVersion || at < *BreakVersion ? Counter : Max<ui64>(); }
     bool IsBroken(const TRowVersion& at = TRowVersion::Max()) const { return GetCounter(at) == Max<ui64>(); }
+    const std::optional<TRowVersion>& GetBreakVersion() const { return BreakVersion; }
 
     size_t NumPoints() const { return Points.size(); }
     size_t NumRanges() const { return Ranges.size(); }
-    bool IsShardLock() const { return ShardLock; }
+    bool IsShardLock() const { return !!(Flags & ELockFlags::WholeShard); }
     bool IsWriteLock() const { return !WriteTables.empty(); }
-    bool IsPersistent() const { return Persistent; }
+    bool IsPersistent() const { return !!(Flags & ELockFlags::Persistent); }
     bool HasUnpersistedRanges() const { return UnpersistedRanges; }
     //ui64 MemorySize() const { return 1; } // TODO
 
-    bool MayHavePointsAndRanges() const { return !ShardLock && (!BreakVersion || *BreakVersion); }
+    bool MayHavePointsAndRanges() const { return !IsShardLock() && (!BreakVersion || *BreakVersion); }
 
     ui64 GetLockId() const { return LockId; }
     ui32 GetLockNodeId() const { return LockNodeId; }
@@ -333,19 +356,32 @@ public:
     void PersistConflicts(ILocksDb* db);
     void CleanupConflicts();
 
+    void RestoreInMemoryState(const ILocksDb::TLockRow& lockRow);
+    bool RestoreInMemoryRange(const ILocksDb::TLockRange& rangeRow);
     void RestorePersistentRange(const ILocksDb::TLockRange& rangeRow);
+    void RestoreInMemoryConflict(TLockInfo* otherLock);
     void RestorePersistentConflict(TLockInfo* otherLock);
+    void RestoreInMemoryVolatileDependency(ui64 txId);
     void RestorePersistentVolatileDependency(ui64 txId);
 
     template<class TCallback>
-    void ForAllConflicts(TCallback&& callback) {
+    void ForAllConflicts(TCallback&& callback) const {
         for (auto& pr : ConflictLocks) {
             callback(pr.first);
         }
     }
 
     template<class TCallback>
-    void ForAllVolatileDependencies(TCallback&& callback) {
+    void ForAllConflicts(TCallback&& callback, ELockConflictFlags mask) const {
+        for (auto& pr : ConflictLocks) {
+            if (!!(pr.second & mask)) {
+                callback(pr.first);
+            }
+        }
+    }
+
+    template<class TCallback>
+    void ForAllVolatileDependencies(TCallback&& callback) const {
         for (auto& item : VolatileDependencies) {
             callback(item);
         }
@@ -387,8 +423,6 @@ private:
     THashSet<TPathId> WriteTables;
     TVector<TPointKey> Points;
     TVector<TRangeKey> Ranges;
-    bool ShardLock = false;
-    bool Persistent = false;
     bool UnpersistedRanges = false;
     bool InBrokenLocks = false;
 
@@ -508,16 +542,19 @@ class TLockLocker {
     friend class TSysLocks;
 
 public:
-    /// Prevent unlimited lock's count growth
-    static constexpr ui64 LockLimit() {
-        // Valgrind and sanitizers are too slow
-        // Some tests cannot exhaust default limit in under 5 minutes
-        return NValgrind::PlainOrUnderValgrind(
-            NSan::PlainOrUnderSanitizer(
-                16 * 1024,
-                1024),
-            1024);
-    }
+    /// Prevent unlimited locks count growth
+    static ui64 LockLimit();
+
+    /// Prevent unlimited range count growth
+    static ui64 LockRangesLimit();
+
+    /// Prevent unlimited number of total ranges
+    static ui64 TotalRangesLimit();
+
+    /// Make it possible to override defaults (e.g. for tests)
+    static void SetLockLimit(ui64 newLimit);
+    static void SetLockRangesLimit(ui64 newLimit);
+    static void SetTotalRangesLimit(ui64 newLimit);
 
     /// We don't expire locks until this time limit after they are created
     static constexpr TDuration LockTimeLimit() { return TDuration::Minutes(5); }
@@ -533,8 +570,10 @@ public:
         Tables.clear();
     }
 
-    void AddPointLock(const TLockInfo::TPtr& lock, const TPointKey& key);
-    void AddRangeLock(const TLockInfo::TPtr& lock, const TRangeKey& key);
+    void AddPointLock(TLockInfo* lock, const TPointKey& key);
+    void AddRangeLock(TLockInfo* lock, const TRangeKey& key);
+    void MakeShardLock(TLockInfo* lock);
+    void UndoShardLock(TLockInfo* lock);
     void AddShardLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables);
     void AddWriteLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksWriteListTag>& writeTables);
 
@@ -591,9 +630,11 @@ public:
     }
 
     void UpdateSchema(const TPathId& tableId, const TVector<NScheme::TTypeInfo>& keyColumnTypes);
-    void RemoveSchema(const TPathId& tableId);
-    bool ForceShardLock(const TPathId& tableId) const;
-    bool ForceShardLock(const TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) const;
+    void RemoveSchema(const TPathId& tableId, ILocksDb* db);
+    bool ForceShardLock(
+        const TLockInfo::TPtr& lock,
+        const TIntrusiveList<TTableLocks,
+        TTableLocksReadListTag>& readTables, ui64 newRanges);
 
     void ScheduleBrokenLock(TLockInfo* lock);
     void ScheduleRemoveBrokenRanges(ui64 lockId, const TRowVersion& at);
@@ -633,6 +674,8 @@ private:
     THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId
     THashMap<TPathId, TTableLocks::TPtr> Tables;
     THashSet<ui64> ShardLocks;
+    // A list of locks that have ranges (from oldest to newest)
+    TIntrusiveList<TLockInfo, TLockInfoRangesListTag> LocksWithRanges;
     // A list of locks that may be removed when enough time passes
     TIntrusiveList<TLockInfo, TLockInfoExpireListTag> ExpireQueue;
     // A list of broken, but not yet removed locks
@@ -655,6 +698,7 @@ private:
 
     TLockInfo::TPtr GetOrAddLock(ui64 lockId, ui32 lockNodeId);
     TLockInfo::TPtr AddLock(const ILocksDb::TLockRow& row);
+    TLockInfo::TPtr RestoreInMemoryLock(const ILocksDb::TLockRow& row);
     void RemoveOneLock(ui64 lockId, ILocksDb* db = nullptr);
 
     void SaveBrokenPersistentLocks(ILocksDb* db);
@@ -830,8 +874,8 @@ public:
         Locker.UpdateSchema(tableId, keyColumnTypes);
     }
 
-    void RemoveSchema(const TPathId& tableId) {
-        Locker.RemoveSchema(tableId);
+    void RemoveSchema(const TPathId& tableId, ILocksDb* db) {
+        Locker.RemoveSchema(tableId, db);
     }
 
     TVector<TLock> ApplyLocks();
@@ -895,6 +939,8 @@ public:
     void UpdateCounters(ui64 counter);
 
     bool Load(ILocksDb& db);
+
+    void RestoreInMemoryLocks(THashMap<ui64, ILocksDb::TLockRow>&& rows);
 
     const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
         return Locker.GetLocks();

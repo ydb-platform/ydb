@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
+import pytest
 import time
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
@@ -11,8 +13,9 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 
 def start_yds_query(kikimr, client, sql, streaming_disposition) -> str:
-    query_id = client.create_query("simple", sql, streaming_disposition=streaming_disposition,
-                                   type=fq.QueryContent.QueryType.STREAMING).result.query_id
+    query_id = client.create_query(
+        "simple", sql, streaming_disposition=streaming_disposition, type=fq.QueryContent.QueryType.STREAMING
+    ).result.query_id
     client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
     kikimr.compute_plane.wait_zero_checkpoint(query_id)
     return query_id
@@ -25,6 +28,7 @@ def stop_yds_query(client, query_id):
 
 class TestWatermarks(TestYdsBase):
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_pq_watermarks(self, kikimr, client):
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
         self.init_topics("pq_test_pq_watermarks")
@@ -68,16 +72,14 @@ class TestWatermarks(TestYdsBase):
         ]
         self.write_stream(data2)
 
-        expected = [
-            '{"data" = ["row1"]}',
-            '{"data" = ["row1"]}'
-        ]
+        expected = ['{"data" = ["row1"]}', '{"data" = ["row1"]}']
 
         assert self.read_stream(len(expected)) == expected
 
         stop_yds_query(client, query_id)
 
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_idle_watermarks(self, kikimr, client):
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
         self.init_topics("pq_test_idle_watermarks")
@@ -114,10 +116,7 @@ class TestWatermarks(TestYdsBase):
         ]
         self.write_stream(data1)
 
-        expected = [
-            '{"data" = ["row1"]}',
-            '{"data" = ["row1"]}'
-        ]
+        expected = ['{"data" = ["row1"]}', '{"data" = ["row1"]}']
 
         assert self.read_stream(len(expected)) == expected
 

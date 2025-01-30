@@ -1,12 +1,17 @@
 RECURSE(
     apps
+    docs
     core
     library
+    mvp
     public
     services
-    tests
     tools
-    docs
-    docs/ru/core
-    docs/en/core
+    yql_docs
 )
+
+IF(NOT EXPORT_CMAKE)
+  RECURSE(
+    tests
+  )
+ENDIF()

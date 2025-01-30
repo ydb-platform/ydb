@@ -1,7 +1,7 @@
 Requests-OAuthlib |build-status| |coverage-status| |docs|
 =========================================================
 
-This project provides first-class OAuth library support for `Requests <http://python-requests.org>`_.
+This project provides first-class OAuth library support for `Requests <https://requests.readthedocs.io>`_.
 
 The OAuth 1 workflow
 --------------------
@@ -46,7 +46,7 @@ To install requests and requests_oauthlib you can use pip:
 
 .. code-block:: bash
 
-    $ pip install requests requests_oauthlib
+    pip install requests requests-oauthlib
 
 .. |build-status| image:: https://github.com/requests/requests-oauthlib/actions/workflows/run-tests.yml/badge.svg
    :target: https://github.com/requests/requests-oauthlib/actions

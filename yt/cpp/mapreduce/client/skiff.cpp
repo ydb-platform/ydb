@@ -14,8 +14,7 @@
 #include <library/cpp/yson/node/node_builder.h>
 #include <library/cpp/yson/node/node_io.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <yt/cpp/mapreduce/skiff/skiff_schema.h>
 
@@ -78,6 +77,7 @@ NSkiff::EWireType ValueTypeToSkiffType(EValueType valueType)
         case VT_STRING:
         case VT_UTF8:
         case VT_JSON:
+        case VT_UUID:
             return EWireType::String32;
 
         case VT_ANY:
@@ -93,6 +93,12 @@ NSkiff::EWireType ValueTypeToSkiffType(EValueType valueType)
             return EWireType::Uint64;
 
         case VT_INTERVAL:
+            return EWireType::Int64;
+
+        case VT_DATE32:
+        case VT_DATETIME64:
+        case VT_TIMESTAMP64:
+        case VT_INTERVAL64:
             return EWireType::Int64;
     };
     ythrow yexception() << "Cannot convert EValueType '" << valueType << "' to NSkiff::EWireType";
@@ -272,8 +278,7 @@ TFormat CreateSkiffFormat(const NSkiff::TSkiffSchemaPtr& schema) {
 }
 
 NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
-    const TClientContext& context,
-    const IClientRetryPolicyPtr& clientRetryPolicy,
+    const IRawClientPtr& rawClient,
     const TTransactionId& transactionId,
     ENodeReaderFormat nodeReaderFormat,
     const TVector<TRichYPath>& tablePaths,
@@ -297,10 +302,9 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
     }
 
     auto nodes = NRawClient::BatchTransform(
-        clientRetryPolicy->CreatePolicyForGenericRequest(),
-        context,
-        NRawClient::CanonizeYPaths(clientRetryPolicy->CreatePolicyForGenericRequest(), context, tablePaths),
-        [&] (TRawBatchRequest& batch, const TRichYPath& path) {
+        rawClient,
+        NRawClient::CanonizeYPaths(rawClient, tablePaths),
+        [&] (IRawBatchRequestPtr batch, const TRichYPath& path) {
             auto getOptions = TGetOptions()
                 .AttributeFilter(
                     TAttributeFilter()
@@ -308,7 +312,7 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
                         .AddAttribute("dynamic")
                         .AddAttribute("type")
                 );
-            return batch.Get(transactionId, path.Path_, getOptions);
+            return batch->Get(transactionId, path.Path_, getOptions);
         });
 
     TVector<NSkiff::TSkiffSchemaPtr> schemas;

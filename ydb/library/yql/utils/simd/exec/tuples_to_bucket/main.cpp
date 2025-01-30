@@ -3,6 +3,8 @@
 #include <util/system/cpu_id.h>
 #include <util/system/types.h>
 
+#include <cstdlib>
+
 #include <ydb/library/yql/utils/simd/simd.h>
 
 struct TPerfomancer {
@@ -134,6 +136,14 @@ struct TPerfomancer {
         return MakeHolder<TWorker<TTraits>>();
     };
 };
+
+template
+__attribute__((target("avx2")))
+int TPerfomancer::TWorker<NSimd::TSimdAVX2Traits>::TuplesToBucket(bool);
+
+template
+__attribute__((target("sse4.2")))
+int TPerfomancer::TWorker<NSimd::TSimdSSE42Traits>::TuplesToBucket(bool);
 
 int main() {
     TPerfomancer tp;

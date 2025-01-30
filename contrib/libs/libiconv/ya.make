@@ -35,8 +35,10 @@ ELSEIF (USE_ICONV == "dynamic")
     )
 ELSEIF (USE_ICONV == "local")
     GLOBAL_CFLAGS(${USE_LOCAL_ICONV_CFLAGS})
-
-    # Opensource code is compatible with libc provided iconv API on major linux distributions and macos.
+    IF (OS_DARWIN)
+        LDFLAGS(-liconv)
+    ENDIF()
+# Opensource code is compatible with libc provided iconv API on major linux distributions and macos.
 ELSE()
     PEERDIR(
         contrib/libs/libiconv/static

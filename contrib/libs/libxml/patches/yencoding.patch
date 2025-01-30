@@ -1,0 +1,26 @@
+--- a/encoding.c	2014-11-21 16:04:38.000045651 +0300
++++ b/encoding.c	2014-11-21 16:07:21.529988060 +0300
+@@ -45,6 +45,10 @@
+ #include <libxml/globals.h>
+ #include <libxml/xmlerror.h>
+ 
++#ifndef ARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS
++#include "yencoding.h"
++#endif
++
+ #include "buf.h"
+ #include "enc.h"
+ 
+@@ -1424,6 +1428,12 @@ xmlInitCharEncodingHandlers(void) {
+     xmlNewCharEncodingHandler("ISO-8859-1", isolat1ToUTF8, UTF8Toisolat1);
+     xmlNewCharEncodingHandler("ASCII", asciiToUTF8, UTF8Toascii);
+     xmlNewCharEncodingHandler("US-ASCII", asciiToUTF8, UTF8Toascii);
++
++#ifndef ARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS
++    xmlNewCharEncodingHandler("windows-1251", win1251ToUTF8, UTF8Towin1251);
++    xmlNewCharEncodingHandler("koi8-r", koi8ToUTF8, UTF8Tokoi8);
++#endif
++
+ #ifdef LIBXML_HTML_ENABLED
+     xmlNewCharEncodingHandler("HTML", NULL, UTF8ToHtml);
+ #endif

@@ -7,6 +7,7 @@ Some backward-compatible usability improvements have been made.
 .. [1] http://docs.python.org/library/itertools.html#recipes
 
 """
+
 import math
 import operator
 
@@ -74,6 +75,7 @@ __all__ = [
     'totient',
     'transpose',
     'triplewise',
+    'unique',
     'unique_everseen',
     'unique_justseen',
 ]
@@ -198,7 +200,7 @@ def nth(iterable, n, default=None):
     return next(islice(iterable, n, None), default)
 
 
-def all_equal(iterable):
+def all_equal(iterable, key=None):
     """
     Returns ``True`` if all the elements are equal to each other.
 
@@ -207,9 +209,21 @@ def all_equal(iterable):
         >>> all_equal('aaab')
         False
 
+    A function that accepts a single argument and returns a transformed version
+    of each input item can be specified with *key*:
+
+        >>> all_equal('AaaA', key=str.casefold)
+        True
+        >>> all_equal([1, 2, 3], key=lambda x: x < 10)
+        True
+
     """
-    g = groupby(iterable)
-    return next(g, True) and not next(g, False)
+    iterator = groupby(iterable, key)
+    for first in iterator:
+        for second in iterator:
+            return False
+        return True
+    return True
 
 
 def quantify(iterable, pred=bool):
@@ -410,16 +424,11 @@ def roundrobin(*iterables):
     iterables is small).
 
     """
-    # Recipe credited to George Sakkis
-    pending = len(iterables)
-    nexts = cycle(iter(it).__next__ for it in iterables)
-    while pending:
-        try:
-            for next in nexts:
-                yield next()
-        except StopIteration:
-            pending -= 1
-            nexts = cycle(islice(nexts, pending))
+    # Algorithm credited to George Sakkis
+    iterators = map(iter, iterables)
+    for num_active in range(len(iterables), 0, -1):
+        iterators = cycle(islice(iterators, num_active))
+        yield from map(next, iterators)
 
 
 def partition(pred, iterable):
@@ -458,16 +467,14 @@ def powerset(iterable):
 
     :func:`powerset` will operate on iterables that aren't :class:`set`
     instances, so repeated elements in the input will produce repeated elements
-    in the output. Use :func:`unique_everseen` on the input to avoid generating
-    duplicates:
+    in the output.
 
         >>> seq = [1, 1, 0]
         >>> list(powerset(seq))
         [(), (1,), (1,), (0,), (1, 1), (1, 0), (1, 0), (1, 1, 0)]
-        >>> from more_itertools import unique_everseen
-        >>> list(powerset(unique_everseen(seq)))
-        [(), (1,), (0,), (1, 0)]
 
+    For a variant that efficiently yields actual :class:`set` instances, see
+    :func:`powerset_of_sets`.
     """
     s = list(iterable)
     return chain.from_iterable(combinations(s, r) for r in range(len(s) + 1))
@@ -531,6 +538,25 @@ def unique_justseen(iterable, key=None):
         return map(operator.itemgetter(0), groupby(iterable))
 
     return map(next, map(operator.itemgetter(1), groupby(iterable, key)))
+
+
+def unique(iterable, key=None, reverse=False):
+    """Yields unique elements in sorted order.
+
+    >>> list(unique([[1, 2], [3, 4], [1, 2]]))
+    [[1, 2], [3, 4]]
+
+    *key* and *reverse* are passed to :func:`sorted`.
+
+    >>> list(unique('ABBcCAD', str.casefold))
+    ['A', 'B', 'c', 'D']
+    >>> list(unique('ABBcCAD', str.casefold, reverse=True))
+    ['D', 'c', 'B', 'A']
+
+    The elements in *iterable* need not be hashable, but they must be
+    comparable for sorting to work.
+    """
+    return unique_justseen(sorted(iterable, key=key, reverse=reverse), key=key)
 
 
 def iter_except(func, exception, first=None):
@@ -774,8 +800,30 @@ def triplewise(iterable):
     [('A', 'B', 'C'), ('B', 'C', 'D'), ('C', 'D', 'E')]
 
     """
-    for (a, _), (b, c) in pairwise(pairwise(iterable)):
-        yield a, b, c
+    # This deviates from the itertools documentation reciple - see
+    # https://github.com/more-itertools/more-itertools/issues/889
+    t1, t2, t3 = tee(iterable, 3)
+    next(t3, None)
+    next(t3, None)
+    next(t2, None)
+    return zip(t1, t2, t3)
+
+
+def _sliding_window_islice(iterable, n):
+    # Fast path for small, non-zero values of n.
+    iterators = tee(iterable, n)
+    for i, iterator in enumerate(iterators):
+        next(islice(iterator, i, i), None)
+    return zip(*iterators)
+
+
+def _sliding_window_deque(iterable, n):
+    # Normal path for other values of n.
+    it = iter(iterable)
+    window = deque(islice(it, n - 1), maxlen=n)
+    for x in it:
+        window.append(x)
+        yield tuple(window)
 
 
 def sliding_window(iterable, n):
@@ -791,11 +839,16 @@ def sliding_window(iterable, n):
 
     For a variant with more features, see :func:`windowed`.
     """
-    it = iter(iterable)
-    window = deque(islice(it, n - 1), maxlen=n)
-    for x in it:
-        window.append(x)
-        yield tuple(window)
+    if n > 20:
+        return _sliding_window_deque(iterable, n)
+    elif n > 2:
+        return _sliding_window_islice(iterable, n)
+    elif n == 2:
+        return pairwise(iterable)
+    elif n == 1:
+        return zip(iterable)
+    else:
+        raise ValueError(f'n should be at least one, not {n}')
 
 
 def subslices(iterable):
@@ -827,8 +880,6 @@ def iter_index(iterable, value, start=0, stop=None):
     """Yield the index of each place in *iterable* that *value* occurs,
     beginning with index *start* and ending before index *stop*.
 
-    See :func:`locate` for a more general means of finding the indexes
-    associated with particular values.
 
     >>> list(iter_index('AABCADEAF', 'A'))
     [0, 1, 4, 7]
@@ -836,6 +887,19 @@ def iter_index(iterable, value, start=0, stop=None):
     [1, 4, 7]
     >>> list(iter_index('AABCADEAF', 'A', 1, 7))  # stop index is not inclusive
     [1, 4]
+
+    The behavior for non-scalar *values* matches the built-in Python types.
+
+    >>> list(iter_index('ABCDABCD', 'AB'))
+    [0, 4]
+    >>> list(iter_index([0, 1, 2, 3, 0, 1, 2, 3], [0, 1]))
+    []
+    >>> list(iter_index([[0, 1], [2, 3], [0, 1], [2, 3]], [0, 1]))
+    [0, 2]
+
+    See :func:`locate` for a more general means of finding the indexes
+    associated with particular values.
+
     """
     seq_index = getattr(iterable, 'index', None)
     if seq_index is None:
@@ -1006,7 +1070,6 @@ def totient(n):
     >>> totient(12)
     4
     """
-    for p in unique_justseen(factor(n)):
-        n = n // p * (p - 1)
-
+    for prime in set(factor(n)):
+        n -= n // prime
     return n

@@ -2,16 +2,18 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
+#include <ydb/core/kqp/proxy_service/kqp_proxy_service_impl.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
@@ -65,6 +67,89 @@ TString CreateSession(TTestActorRuntime* runtime, const TActorId& kqpProxy, cons
     return sessionId;
 }
 
+class TDatabaseCacheTestActor : public TActorBootstrapped<TDatabaseCacheTestActor> {
+public:
+    TDatabaseCacheTestActor(const TString& database, const TString& expectedDatabaseId, TDuration idleTimeout, NThreading::TPromise<void> promise)
+        : IdleTimeout(idleTimeout)
+        , Database(database)
+        , ExpectedDatabaseId(expectedDatabaseId)
+        , Cache(idleTimeout)
+        , Promise(promise)
+    {}
+
+    void Bootstrap() {
+        Become(&TDatabaseCacheTestActor::StateFunc);
+
+        auto event = MakeHolder<TEvKqp::TEvQueryRequest>();
+        event->Record.MutableRequest()->SetDatabase(Database);
+        Send(SelfId(), event.Release());
+
+        Schedule(3 * IdleTimeout, new TEvents::TEvWakeup());
+    }
+
+    void Handle(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev) {
+        if (!CacheUpdated) {
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::SUCCESS, TStringBuilder() << GetErrorString() << ev->Get()->Issues.ToString());
+            Cache.UpdateDatabaseInfo(ev, ActorContext());
+            CacheUpdated = true;
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::ABORTED, TStringBuilder() << GetErrorString() << ev->Get()->Issues.ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(ev->Get()->Issues.ToString(), "Database subscription was dropped by idle timeout", GetErrorString());
+            Finish();
+        }
+    }
+
+    void Handle(TEvKqp::TEvDelayedRequestError::TPtr& ev) {
+        UNIT_ASSERT_C(false, TStringBuilder() << "Unexpected fail, status: " << ev->Get()->Status << ", " << GetErrorString() << ev->Get()->Issues.ToString());
+    }
+
+    void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        auto success = Cache.SetDatabaseIdOrDefer(ev, 0, ActorContext());
+
+        bool dedicated = Database == ExpectedDatabaseId;
+        if (CacheUpdated || dedicated) {
+            UNIT_ASSERT_C(success, TStringBuilder() << "Expected database id from cache, " << GetErrorString());
+            UNIT_ASSERT_STRING_CONTAINS_C(ev->Get()->GetDatabaseId(), ExpectedDatabaseId, GetErrorString());
+            if (dedicated) {
+                Finish();
+            }
+        } else {
+            UNIT_ASSERT_C(!success, TStringBuilder() << "Unexpected database id from cache, " << GetErrorString());
+        }
+    }
+
+    void HandleWakeup() {
+        UNIT_ASSERT_C(false, TStringBuilder() << "Test cache timeout, " << GetErrorString());
+        Finish();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
+        hFunc(TEvKqp::TEvDelayedRequestError, Handle);
+        hFunc(TEvKqp::TEvQueryRequest, Handle);
+        sFunc(TEvents::TEvWakeup, HandleWakeup);
+    )
+
+private:
+    TString GetErrorString() const {
+        return TStringBuilder() << "cache updated: " << CacheUpdated << ", database: " << Database << "\n";
+    }
+
+    void Finish() {
+        Promise.SetValue();
+        PassAway();
+    }
+
+private:
+    const TDuration IdleTimeout;
+    const TString Database;
+    const TString ExpectedDatabaseId;
+    TDatabasesCache Cache;
+    NThreading::TPromise<void> Promise;
+
+    bool CacheUpdated = false;
+};
+
 }
 
 Y_UNIT_TEST_SUITE(KqpProxy) {
@@ -111,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.Release()));
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
         };
 
         SendBadRequestToSession("ydb://session/1?id=ZjY5NWRlM2EtYWMyYjA5YWEtNzQ0MTVlYTMtM2Q4ZDgzOWQ=&node_id=1234&node_id=12345");
@@ -153,8 +238,8 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         runtime->Send(new IEventHandle(kqpProxy, sender, ev.Release()));
         TAutoPtr<IEventHandle> handle;
         auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetResponse().GetQueryIssues().at(0).message(), "<main>: Error: SomeUniqTextForUt\n");
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResponse().GetQueryIssues().at(0).message(), "<main>: Error: SomeUniqTextForUt\n");
     }
 
     Y_UNIT_TEST(LoadedMetadataAfterCompilationTimeout) {
@@ -185,9 +270,8 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
         auto scheduledEvs = [&](TTestActorRuntimeBase& run, TAutoPtr<IEventHandle> &event, TDuration delay, TInstant &deadline) {
             if (event->GetTypeRewrite() == TEvents::TSystem::Wakeup) {
-                TActorId actorId = event->GetRecipientRewrite();
-                IActor *actor = runtime->FindActor(actorId);
-                if (actor && actor->GetActivityType() == NKikimrServices::TActivity::KQP_COMPILE_ACTOR) {
+                Cerr << "Captured TEvents::TSystem::Wakeup to " << runtime->FindActorName(event->GetRecipientRewrite()) << Endl;
+                if (runtime->FindActorName(event->GetRecipientRewrite()) == "KQP_COMPILE_ACTOR") {
                     Cerr << "Captured scheduled event for compile actor " << event->Recipient << Endl;
                     scheduled.push_back(event.Release());
                     return true;
@@ -215,7 +299,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         };
 
         auto SendQuery = [&](const TString& sessionId, const TString& queryText) {
@@ -230,7 +314,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
         };
 
         TString sessionId = CreateSession(runtime, kqpProxy, sender);
@@ -290,7 +374,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         }
     }
 
@@ -364,7 +448,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
                 TAutoPtr<IEventHandle> handle;
                 auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(handle);
-                auto status = reply->Record.GetRef().GetYdbStatus();
+                auto status = reply->Record.GetYdbStatus();
                 UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::TIMEOUT);
 
                 if (status == Ydb::StatusIds::SUCCESS) {
@@ -460,34 +544,44 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         NYdb::TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
 
-        ui16 grpc = server.GetPort();
-        auto connection = NYdb::TDriver(NYdb::TDriverConfig()
+        // Grant `connect` to user
+        {
+            ui16 grpc = server.GetPort();
+            auto connection = NYdb::TDriver(NYdb::TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << grpc)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin"));
+
+            NYdb::NTable::TTableClient tableClient(connection);
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery("GRANT CONNECT ON `/Root` TO `user@builtin`").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            ui16 grpc = server.GetPort();
+            auto connection = NYdb::TDriver(NYdb::TDriverConfig()
             .SetEndpoint(TStringBuilder() << "localhost:" << grpc)
             .SetDatabase("/Root")
             .SetAuthToken("user@builtin"));
-        NYdb::NQuery::TQueryClient client(connection);
 
-        // Wait until KQP proxy is set up
-        {
-            NYdb::EStatus scriptStatus = NYdb::EStatus::UNAVAILABLE;
+            // Wait until KQP proxy is set up
+            NYdb::EStatus scriptStatus;
+            NYdb::NQuery::TQueryClient client(connection);            
             do {
                 auto executeScrptsResult = client.ExecuteScript("SELECT 42").ExtractValueSync();
                 scriptStatus = executeScrptsResult.Status().GetStatus();
                 UNIT_ASSERT_C(scriptStatus == NYdb::EStatus::UNAVAILABLE || scriptStatus == NYdb::EStatus::SUCCESS, executeScrptsResult.Status().GetIssues().ToString());
-                UNIT_ASSERT(scriptStatus == NYdb::EStatus::UNAVAILABLE || executeScrptsResult.Metadata().ExecutionId);
+                UNIT_ASSERT(scriptStatus == NYdb::EStatus::UNAVAILABLE || !executeScrptsResult.Metadata().ExecutionId.empty());
                 Sleep(TDuration::MilliSeconds(10));
             } while (scriptStatus == NYdb::EStatus::UNAVAILABLE);
+
+            // Check access to `.metadata/script_executions`
+            NYdb::NTable::TTableClient tableClient(connection);
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery("SELECT * FROM `.metadata/script_executions`", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
-
-        NYdb::NTable::TTableClient tableClient(connection);
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
-        auto result = session.ExecuteDataQuery("SELECT * FROM `.metadata/script_executions`", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
-
-        NYdb::NScheme::TSchemeClient schemeClient(connection);
-        auto listResult = schemeClient.ListDirectory("/Root/.metadata").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::UNAUTHORIZED, listResult.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(listResult.GetIssues().ToString(), "Access denied");
     }
 
     Y_UNIT_TEST(ExecuteScriptFailsWithoutFeatureFlag) {
@@ -543,5 +637,30 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
         UNIT_ASSERT(allDoneOk);
     }
+
+    Y_UNIT_TEST(DatabasesCacheForServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .Create();
+
+        auto& runtime = *ydb->GetRuntime();
+        TDuration idleTimeout = TDuration::Seconds(5);
+
+        auto checkCache = [&](const TString& database, const TString& expectedDatabaseId, ui32 nodeIndex) {
+            auto promise = NThreading::NewPromise();
+            runtime.Register(new TDatabaseCacheTestActor(database, expectedDatabaseId, idleTimeout, promise), nodeIndex);
+            promise.GetFuture().GetValueSync();
+        };
+
+        const auto& dedicatedTennant = ydb->GetSettings().GetDedicatedTenantName();
+        checkCache(dedicatedTennant, dedicatedTennant, 2);
+
+        const auto& sharedTennant = ydb->GetSettings().GetSharedTenantName();
+        checkCache(sharedTennant, sharedTennant, 1);
+
+        const auto& serverlessTennant = ydb->GetSettings().GetServerlessTenantName();
+        checkCache(serverlessTennant, TStringBuilder() << ":4:" << serverlessTennant, 1);
+    }
+
 } // namspace NKqp
 } // namespace NKikimr

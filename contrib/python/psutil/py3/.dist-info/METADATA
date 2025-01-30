@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: psutil
-Version: 5.9.8
+Version: 6.1.1
 Summary: Cross-platform lib for process and system monitoring in Python.
 Home-page: https://github.com/giampaolo/psutil
 Author: Giampaolo Rodola
@@ -55,12 +55,30 @@ Classifier: Topic :: Utilities
 Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*
 Description-Content-Type: text/x-rst
 License-File: LICENSE
+Provides-Extra: dev
+Requires-Dist: abi3audit ; extra == 'dev'
+Requires-Dist: black ; extra == 'dev'
+Requires-Dist: check-manifest ; extra == 'dev'
+Requires-Dist: coverage ; extra == 'dev'
+Requires-Dist: packaging ; extra == 'dev'
+Requires-Dist: pylint ; extra == 'dev'
+Requires-Dist: pyperf ; extra == 'dev'
+Requires-Dist: pypinfo ; extra == 'dev'
+Requires-Dist: pytest-cov ; extra == 'dev'
+Requires-Dist: requests ; extra == 'dev'
+Requires-Dist: rstcheck ; extra == 'dev'
+Requires-Dist: ruff ; extra == 'dev'
+Requires-Dist: sphinx ; extra == 'dev'
+Requires-Dist: sphinx-rtd-theme ; extra == 'dev'
+Requires-Dist: toml-sort ; extra == 'dev'
+Requires-Dist: twine ; extra == 'dev'
+Requires-Dist: virtualenv ; extra == 'dev'
+Requires-Dist: vulture ; extra == 'dev'
+Requires-Dist: wheel ; extra == 'dev'
 Provides-Extra: test
-Requires-Dist: ipaddress ; (python_version < "3.0") and extra == 'test'
-Requires-Dist: mock ; (python_version < "3.0") and extra == 'test'
-Requires-Dist: enum34 ; (python_version <= "3.4") and extra == 'test'
-Requires-Dist: pywin32 ; (sys_platform == "win32") and extra == 'test'
-Requires-Dist: wmi ; (sys_platform == "win32") and extra == 'test'
+Requires-Dist: pytest ; extra == 'test'
+Requires-Dist: pytest-xdist ; extra == 'test'
+Requires-Dist: setuptools ; extra == 'test'
 
 |  |downloads| |stars| |forks| |contributors| |coverage|
 |  |version| |py-versions| |packages| |license|
@@ -82,11 +100,11 @@ Requires-Dist: wmi ; (sys_platform == "win32") and extra == 'test'
     :target: https://github.com/giampaolo/psutil/graphs/contributors
     :alt: Contributors
 
-.. |github-actions-wheels| image:: https://img.shields.io/github/actions/workflow/status/giampaolo/psutil/.github/workflows/build.yml?label=Linux%2C%20macOS%2C%20Windows
+.. |github-actions-wheels| image:: https://img.shields.io/github/actions/workflow/status/giampaolo/psutil/.github/workflows/build.yml.svg?label=Linux%2C%20macOS%2C%20Windows
     :target: https://github.com/giampaolo/psutil/actions?query=workflow%3Abuild
     :alt: Linux, macOS, Windows
 
-.. |github-actions-bsd| image:: https://img.shields.io/github/actions/workflow/status/giampaolo/psutil/.github/workflows/bsd.yml?label=FreeBSD,%20NetBSD,%20OpenBSD
+.. |github-actions-bsd| image:: https://img.shields.io/github/actions/workflow/status/giampaolo/psutil/.github/workflows/bsd.yml.svg?label=FreeBSD,%20NetBSD,%20OpenBSD
     :target: https://github.com/giampaolo/psutil/actions?query=workflow%3Absd-tests
     :alt: FreeBSD, NetBSD, OpenBSD
 
@@ -251,8 +269,8 @@ Disks
 .. code-block:: python
 
     >>> psutil.disk_partitions()
-    [sdiskpart(device='/dev/sda1', mountpoint='/', fstype='ext4', opts='rw,nosuid', maxfile=255, maxpath=4096),
-     sdiskpart(device='/dev/sda2', mountpoint='/home', fstype='ext', opts='rw', maxfile=255, maxpath=4096)]
+    [sdiskpart(device='/dev/sda1', mountpoint='/', fstype='ext4', opts='rw,nosuid'),
+     sdiskpart(device='/dev/sda2', mountpoint='/home', fstype='ext', opts='rw')]
     >>>
     >>> psutil.disk_usage('/')
     sdiskusage(total=21378641920, used=4809781248, free=15482871808, percent=22.5)
@@ -405,7 +423,7 @@ Process management
     [popenfile(path='/home/giampaolo/monit.py', fd=3, position=0, mode='r', flags=32768),
      popenfile(path='/var/log/monit.log', fd=4, position=235542, mode='a', flags=33793)]
     >>>
-    >>> p.connections(kind='tcp')
+    >>> p.net_connections(kind='tcp')
     [pconn(fd=115, family=<AddressFamily.AF_INET: 2>, type=<SocketType.SOCK_STREAM: 1>, laddr=addr(ip='10.0.0.1', port=48776), raddr=addr(ip='93.186.135.91', port=80), status='ESTABLISHED'),
      pconn(fd=117, family=<AddressFamily.AF_INET: 2>, type=<SocketType.SOCK_STREAM: 1>, laddr=addr(ip='10.0.0.1', port=43761), raddr=addr(ip='72.14.234.100', port=80), status='CLOSING')]
     >>>

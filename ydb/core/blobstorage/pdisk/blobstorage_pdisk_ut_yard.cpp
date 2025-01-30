@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/crypto/default.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/util/random.h>
 
 namespace NKikimr {
 
@@ -16,7 +17,7 @@ Y_UNIT_TEST_SUITE(TYardTest) {
 
 /*
 YARD_UNIT_TEST(TestLotsOfNonceJumps) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestInit<true, 1>>(&tc, 1, MIN_CHUNK_SIZE);
     // for (size_t i = 0; i < 3 * MIN_CHUNK_SIZE / 4096 / 5; ++i) {
     for (size_t i = 0; i < 204; ++i) {
@@ -47,12 +48,12 @@ YARD_UNIT_TEST(TestLotsOfNonceJumps) {
 */
 
 YARD_UNIT_TEST(TestBadDeviceInit) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestInitCorruptedError>(&tc, 1, MIN_CHUNK_SIZE, true);
 }
 
 YARD_UNIT_TEST(TestInit) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestInit<true, 1>>(&tc, 1, MIN_CHUNK_SIZE);
     Run<TTestInit<false, 2>>(&tc, 1, MIN_CHUNK_SIZE);
@@ -60,7 +61,7 @@ YARD_UNIT_TEST(TestInit) {
 }
 
 YARD_UNIT_TEST(TestInitOnIncompleteFormat) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     TTestRunConfig cfg(&tc);
     cfg.ChunkSize = MIN_CHUNK_SIZE;
     cfg.TestContext = &tc;
@@ -71,51 +72,51 @@ YARD_UNIT_TEST(TestInitOnIncompleteFormat) {
 }
 
 YARD_UNIT_TEST(TestInitOwner) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestInitOwner>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestIncorrectRequests) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestIncorrectRequests>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestEmptyLogRead) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestEmptyLogRead>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestWholeLogRead) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestWholeLogRead>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestLogWriteRead) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestLogWriteRead<17>>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestLogWriteReadMedium) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestLogWriteRead<6000>>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestLogWriteReadMediumWithHddSectorMap) {
-    TTestContext tc(false, true, NPDisk::NSectorMap::DM_HDD);
+    TTestContext tc(true, NPDisk::NSectorMap::DM_HDD);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestLogWriteRead<6000>>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestLogWriteReadLarge) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestLogWriteRead<9000>>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestLogWriteCutEqual) {
     for (int i = 0; i < 10; ++i) {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
         Run<TTestLogWriteCut<true>>(&tc, 2, MIN_CHUNK_SIZE);
         TTestLogWriteCut<true>::Reset();
@@ -125,7 +126,7 @@ YARD_UNIT_TEST(TestLogWriteCutEqual) {
 
 YARD_UNIT_TEST(TestLogWriteCutEqualRandomWait) {
     for (int i = 0; i < 10; ++i) {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         tc.SectorMap->ImitateRandomWait = {TDuration::MicroSeconds(500), TDuration::MicroSeconds(1000)};
         FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
         Run<TTestLogWriteCut<true>>(&tc, 2, MIN_CHUNK_SIZE);
@@ -136,7 +137,7 @@ YARD_UNIT_TEST(TestLogWriteCutEqualRandomWait) {
 
 YARD_UNIT_TEST(TestSysLogReordering) {
     for (int i = 0; i < 10; ++i) {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
         Run<TTestSysLogReordering>(&tc, 5, MIN_CHUNK_SIZE);
         TTestSysLogReordering::VDiskNum = 0;
@@ -145,48 +146,24 @@ YARD_UNIT_TEST(TestSysLogReordering) {
     }
 }
 
-YARD_UNIT_TEST(TestLogWriteReaDifferentHashers) {
-    for (ui32 i = 0; i < 4; ++i) {
-        TTestContext tc(false, true);
-        TTestRunConfig cfg(&tc);
-
-        cfg.UseT1ha0Hasher = i / 2;
-        Run<TTestLogWriteRead<6000>>(cfg);
-        cfg.UseT1ha0Hasher = i % 2;
-        Run<TTestWholeLogRead>(cfg);
-    }
-}
-
-YARD_UNIT_TEST(TestChunkWriteReadDifferentHashers) {
-    for (ui32 i = 0; i < 2; ++i) {
-        TTestContext tc(false, true);
-        TTestRunConfig cfg(&tc);
-
-        cfg.UseT1ha0Hasher = i;
-        Run<TTestChunkWriteRead<1000000, 1500000>>(cfg);
-    }
-}
-
 YARD_UNIT_TEST(TestLogWriteCutUnequal) {
-    if constexpr (KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE) {
-        TTestContext tc(false, true);
-        FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
-        Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
-        TTestLogWriteCut<false>::Reset();
-        Run<TTestWholeLogRead>(&tc, 2, MIN_CHUNK_SIZE);
+    TTestContext tc(true);
+    FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
+    Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
+    TTestLogWriteCut<false>::Reset();
+    Run<TTestWholeLogRead>(&tc, 2, MIN_CHUNK_SIZE);
 
-        Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
-        TTestLogWriteCut<false>::Reset();
-    }
+    Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
+    TTestLogWriteCut<false>::Reset();
 }
 
 YARD_UNIT_TEST(TestChunkReadRandomOffset) {
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestChunkReadRandomOffset<4096, 117, 10>>(&tc, 1, 8 << 20, false);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         constexpr ui32 sectorPayload = 4064;
         NPDisk::TDiskFormat format;
         format.Clear();
@@ -195,95 +172,95 @@ YARD_UNIT_TEST(TestChunkReadRandomOffset) {
         Run<TTestChunkReadRandomOffset<sizeWithHalfOfBlockSize, 217, 20>>(&tc, 1, 8 << 20, false);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestChunkReadRandomOffset<1 << 20, 1525, 10>>(&tc, 1, 8 << 20, false);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestChunkReadRandomOffset<2079573, 1450, 10>>(&tc, 1, 8 << 20, false);
     }
 }
 
 YARD_UNIT_TEST(TestChunkWriteRead) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunkWriteRead<30000, 2 << 20>>(&tc, 1, 5 << 20);
 }
 
 YARD_UNIT_TEST(TestChunkWriteReadWithHddSectorMap) {
-    TTestContext tc(false, true, NPDisk::NSectorMap::DM_HDD);
+    TTestContext tc(true, NPDisk::NSectorMap::DM_HDD);
     Run<TTestChunkWriteRead<30000, 2 << 20>>(&tc, 1, 5 << 20);
 }
 
 YARD_UNIT_TEST(TestChunkWriteReadMultiple) {
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestChunkWriteRead<6000000, 6500000>>(&tc, 1, 16 << 20, false);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestChunkWriteRead<3000000, 3500000>>(&tc, 1, 8 << 20, false);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestChunkWriteRead<2 << 20, 2 << 20>>(&tc, 1, 8 << 20, false);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestChunkWriteRead<1000000, 1500000>>(&tc, 1, 4 << 20, false);
     }
 }
 
 YARD_UNIT_TEST(TestChunkWriteReadMultipleWithHddSectorMap) {
     {
-        TTestContext tc(false, true, NPDisk::NSectorMap::DM_HDD);
+        TTestContext tc(true, NPDisk::NSectorMap::DM_HDD);
         Run<TTestChunkWriteRead<6000000, 6500000>>(&tc, 1, 16 << 20, false);
     }
     {
-        TTestContext tc(false, true, NPDisk::NSectorMap::DM_HDD);
+        TTestContext tc(true, NPDisk::NSectorMap::DM_HDD);
         Run<TTestChunkWriteRead<3000000, 3500000>>(&tc, 1, 8 << 20, false);
     }
     {
-        TTestContext tc(false, true, NPDisk::NSectorMap::DM_HDD);
+        TTestContext tc(true, NPDisk::NSectorMap::DM_HDD);
         Run<TTestChunkWriteRead<2 << 20, 2 << 20>>(&tc, 1, 8 << 20, false);
     }
     {
-        TTestContext tc(false, true, NPDisk::NSectorMap::DM_HDD);
+        TTestContext tc(true, NPDisk::NSectorMap::DM_HDD);
         Run<TTestChunkWriteRead<1000000, 1500000>>(&tc, 1, 4 << 20, false);
     }
 }
 
 YARD_UNIT_TEST(TestChunkWriteReadWhole) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestChunkWriteReadWhole>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkWriteReadWholeWithHddSectorMap) {
-    TTestContext tc(false, true, NPDisk::NSectorMap::DM_HDD);
+    TTestContext tc(true, NPDisk::NSectorMap::DM_HDD);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestChunkWriteReadWhole>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkWrite20Read02) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     // 2 << 20 is the read/write burst size, that's why.
     Run<TTestChunkWrite20Read02>(&tc, 1, 2 << 20);
 }
 
 YARD_UNIT_TEST(TestStartingPoints) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestLogStartingPoint>(&tc, 1, MIN_CHUNK_SIZE);
     Run<TTestInitStartingPoints>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestLogMultipleWriteRead) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestLogMultipleWriteRead<4000, 4100, 5000>>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestLogContinuityPersistence) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestLogWrite<9000, 123>>(&tc, 1, MIN_CHUNK_SIZE);
     Run<TTestLogWrite<1000, 124>>(&tc, 1, MIN_CHUNK_SIZE);
     Run<TTestLogWrite<7000, 125>>(&tc, 1, MIN_CHUNK_SIZE);
@@ -291,7 +268,7 @@ YARD_UNIT_TEST(TestLogContinuityPersistence) {
 }
 
 YARD_UNIT_TEST(TestLogContinuityPersistenceLarge) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     for (int i = 0; i < 4; ++i) {
         Run<TTestLogWrite<20000, 123>>(&tc, 1, MIN_CHUNK_SIZE);
@@ -303,161 +280,161 @@ YARD_UNIT_TEST(TestLogContinuityPersistenceLarge) {
 }
 
 YARD_UNIT_TEST(TestLogWriteLsnConsistency) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestLogWriteLsnConsistency<150>>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkContinuity2) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunk3WriteRead<2>>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkContinuity3000) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestChunk3WriteRead<3000>>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkContinuity9000) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunk3WriteRead<9000>>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkLock) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunkLock>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkUnlock) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunkUnlock>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkUnlockHarakiri) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunkUnlockHarakiri>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkUnlockRestart) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunkUnlockRestart>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkReserve) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunkReserve>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestCheckSpace) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestCheckSpace>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestHttpInfo) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestHttpInfo>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestHttpInfoFileDoesntExist) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestHttpInfoFileDoesntExist>(&tc, 1, MIN_CHUNK_SIZE, true);
 }
 
 YARD_UNIT_TEST(TestBootingState) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestBootingState>(&tc, 1, MIN_CHUNK_SIZE, false, TString(), 5);
 }
 
 YARD_UNIT_TEST(TestWhiteboard) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestWhiteboard>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(Test3AsyncLog) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestLog3Write<100, 101, 102>>(&tc, 1, MIN_CHUNK_SIZE);
     Run<TTestLog3Read<100, 101, 102>>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestFirstRecordToKeep) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestFirstRecordToKeepWriteAB>(&tc, 1, MIN_CHUNK_SIZE);
     Run<TTestFirstRecordToKeepReadB>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkRecommit) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunkRecommit>(&tc);
 }
 
 YARD_UNIT_TEST(TestChunkRestartRecommit) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestChunkRestartRecommit1>(&tc, 1, MIN_CHUNK_SIZE);
     Run<TTestChunkRestartRecommit2>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkDelete) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunkDelete1>(&tc, 1, MIN_CHUNK_SIZE);
     Run<TTestChunkDelete2>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkForget) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunkForget1>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(Test3HugeAsyncLog) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     constexpr ui32 chunkSize = MIN_CHUNK_SIZE;
     Run<TTestLog3Write<chunkSize / 2, chunkSize / 2, chunkSize * 2>>(&tc, 1, chunkSize);
     Run<TTestLog3Read<chunkSize / 2, chunkSize / 2, chunkSize * 2>>(&tc, 1, chunkSize);
 }
 
 YARD_UNIT_TEST(TestLotsOfTinyAsyncLogLatency) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestLotsOfTinyAsyncLogLatency>(&tc);
 }
 
 YARD_UNIT_TEST(TestHugeChunkAndLotsOfTinyAsyncLogOrder) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, 128 << 20);
     Run<TTestHugeChunkAndLotsOfTinyAsyncLogOrder>(&tc);
 }
 
 YARD_UNIT_TEST(TestLogLatency) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestLogLatency>(&tc);
 }
 
 YARD_UNIT_TEST(TestMultiYardLogLatency) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestLogLatency>(&tc, 4);
 }
 
 YARD_UNIT_TEST(TestMultiYardFirstRecordToKeep) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestFirstRecordToKeepWriteAB>(&tc, 4, MIN_CHUNK_SIZE);
     Run<TTestFirstRecordToKeepReadB>(&tc, 4, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestMultiYardStartingPoints) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
     Run<TTestLogStartingPoint>(&tc, 4, MIN_CHUNK_SIZE);
     Run<TTestInitStartingPoints>(&tc, 4, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestMultiYardLogMultipleWriteRead) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestLogMultipleWriteRead<4000, 4100, 5000>>(&tc, 4);
 }
 
 YARD_UNIT_TEST(TestSysLogOverwrite) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = 128 << 10;
 
     TString dataPath;
@@ -466,7 +443,7 @@ YARD_UNIT_TEST(TestSysLogOverwrite) {
         dataPath = MakePDiskPath((*tc.TempDir)().c_str());
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
-    EntropyPool().Read(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
+    SafeEntropyPoolRead(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 2048ull << 20, false, tc.SectorMap);
 
     Run<TTestInit<true, 1>>(&tc, 1, chunkSize, false);
@@ -501,7 +478,7 @@ YARD_UNIT_TEST(TestSysLogOverwrite) {
 
 /*
 YARD_UNIT_TEST(TestDamagedLogContinuityPersistence) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = 8 << 20;
     Run<TTestInit<true, 1>>(&tc, 1, chunkSize, false, true);
 
@@ -522,7 +499,7 @@ YARD_UNIT_TEST(TestDamagedLogContinuityPersistence) {
 */
 
 YARD_UNIT_TEST(TestDamagedFirstRecordToKeep) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     Run<TTestLogFillChunkPlus1>(&tc, 1, chunkSize);
 
@@ -555,25 +532,25 @@ YARD_UNIT_TEST(TestDamagedFirstRecordToKeep) {
 YARD_UNIT_TEST(TestUpsAndDownsAtTheBoundary) {
     ui32 chunkSize = 8 << 20;
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestLogWrite<7009 << 10, 1>>(&tc, 1, chunkSize);
         Run<TTestLogWrite<4000, 2>>(&tc, 1, chunkSize);
         Run<TTestLogWrite<4000, 3>>(&tc, 1, chunkSize);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestLogWrite<7014 << 10, 4>>(&tc, 1, chunkSize);
         Run<TTestLogWrite<4000, 5>>(&tc, 1, chunkSize);
         Run<TTestLogWrite<4000, 6>>(&tc, 1, chunkSize);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestLogWrite<7019 << 10, 7>>(&tc, 1, chunkSize);
         Run<TTestLogWrite<4000, 8>>(&tc, 1, chunkSize);
         Run<TTestLogWrite<4000, 9>>(&tc, 1, chunkSize);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestLogWrite<7024 << 10, 10>>(&tc, 1, chunkSize);
         Run<TTestLogWrite<4000, 11>>(&tc, 1, chunkSize);
         Run<TTestLogWrite<4000, 12>>(&tc, 1, chunkSize);
@@ -586,7 +563,7 @@ YARD_UNIT_TEST(TestDamageAtTheBoundary) {
     NPDisk::TAlignedData dataBefore(dataSize);
     NPDisk::TAlignedData dataAfter(dataSize);
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestLogWrite<4000, 1>>(&tc, 1, chunkSize);
         ReadPdiskFile(&tc, dataSize, dataBefore);
         Run<TTestLogWrite<7009 << 10, 2>>(&tc, 1, chunkSize);
@@ -596,7 +573,7 @@ YARD_UNIT_TEST(TestDamageAtTheBoundary) {
         Run<TTestLogWrite<4000, 4>>(&tc, 1, chunkSize);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestLogWrite<4000, 5>>(&tc, 1, chunkSize);
         ReadPdiskFile(&tc, dataSize, dataBefore);
         Run<TTestLogWrite<7014 << 10, 6>>(&tc, 1, chunkSize);
@@ -606,7 +583,7 @@ YARD_UNIT_TEST(TestDamageAtTheBoundary) {
         Run<TTestLogWrite<4000, 8>>(&tc, 1, chunkSize);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestLogWrite<4000, 9>>(&tc, 1, chunkSize);
         ReadPdiskFile(&tc, dataSize, dataBefore);
         Run<TTestLogWrite<7019 << 10, 10>>(&tc, 1, chunkSize);
@@ -616,7 +593,7 @@ YARD_UNIT_TEST(TestDamageAtTheBoundary) {
         Run<TTestLogWrite<4000, 12>>(&tc, 1, chunkSize);
     }
     {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         Run<TTestLogWrite<4000, 13>>(&tc, 1, chunkSize);
         ReadPdiskFile(&tc, dataSize, dataBefore);
         Run<TTestLogWrite<7024 << 10, 14>>(&tc, 1, chunkSize);
@@ -628,7 +605,7 @@ YARD_UNIT_TEST(TestDamageAtTheBoundary) {
 }
 
 YARD_UNIT_TEST(TestUnflushedChunk) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     Run<TTestWriteAndReleaseChunk2A>(&tc, 1, chunkSize);
 
@@ -647,7 +624,7 @@ YARD_UNIT_TEST(TestUnflushedChunk) {
 }
 
 YARD_UNIT_TEST(TestLogOverwriteRestarts) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     Run<TTestWriteAndCutLogChunk>(&tc, 1, chunkSize);
     for (ui32 i = 0; i < 15; ++i) {
@@ -668,13 +645,13 @@ YARD_UNIT_TEST(TestLogOverwriteRestarts) {
 }
 
 YARD_UNIT_TEST(TestChunkFlushReboot) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunkFlush>(&tc);
     Run<TTestChunkUnavailable>(&tc);
 }
 
 YARD_UNIT_TEST(TestRedZoneSurvivability) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     Ctest << "TestRedZoneSurvivability chunkSize# " << chunkSize << Endl;
     Run<TTestRedZoneSurvivability>(&tc, 1, chunkSize);
@@ -682,7 +659,7 @@ YARD_UNIT_TEST(TestRedZoneSurvivability) {
 
 /*
 YARD_UNIT_TEST(TestNonceJumpRewriteMin) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     ui32 dataSize = 6 * chunkSize;
     NPDisk::TAlignedData data0(dataSize);
@@ -718,7 +695,7 @@ YARD_UNIT_TEST(TestNonceJumpRewriteMin) {
 
 /*
 YARD_UNIT_TEST(TestNonceJumpRewrite) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     ui32 dataSize = 6 * chunkSize;
     NPDisk::TAlignedData data0(dataSize);
@@ -757,32 +734,32 @@ YARD_UNIT_TEST(TestNonceJumpRewrite) {
 */
 
 YARD_UNIT_TEST(TestSlay) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     FillDeviceWithZeroes(&tc, chunkSize);
     Run<TTestSlay>(&tc, 1, chunkSize);
 }
 
 YARD_UNIT_TEST(TestSlayRace) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     Run<TTestSlayRace>(&tc, 1, chunkSize);
 }
 
 YARD_UNIT_TEST(TestSlayRecreate) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     Run<TTestSlayRecreate>(&tc, 1, chunkSize);
 }
 
 YARD_UNIT_TEST(TestSlayLogWriteRaceActor) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     Run<TActorTestSlayLogWriteRace>(&tc, 1, chunkSize);
 }
 
 YARD_UNIT_TEST(TestMultiYardHarakiri) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     Ctest << Endl << "Fill with zeroes" << Endl;
     FillDeviceWithZeroes(&tc, chunkSize * 2);
@@ -801,7 +778,7 @@ YARD_UNIT_TEST(TestMultiYardHarakiri) {
 }
 
 YARD_UNIT_TEST(TestDestroySystem) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     Run<TTestInit<true, 1>>(&tc, 1, chunkSize);
 
@@ -817,18 +794,18 @@ YARD_UNIT_TEST(TestDestroySystem) {
 }
 
 YARD_UNIT_TEST(TestAllocateAllChunks) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestAllocateAllChunks>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestChunkDeletionWhileWriting) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = 16 << 20;
     Run<TTestChunkDeletionWhileWritingIt>(&tc, 1, chunkSize);
 }
 
 YARD_UNIT_TEST(TestCutMultipleLogChunks) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     FillDeviceWithZeroes(&tc, chunkSize);
     Run<TTestCutMultipleLogChunks1>(&tc, 1, chunkSize);
@@ -836,38 +813,38 @@ YARD_UNIT_TEST(TestCutMultipleLogChunks) {
 }
 
 YARD_UNIT_TEST(TestLogOwerwrite) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     Run<TTestLogOwerwrite1>(&tc, 1, chunkSize);
     Run<TTestLogOwerwrite2>(&tc, 1, chunkSize);
 }
 
 YARD_UNIT_TEST(TestDestructionWhileWritingChunk) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = 8 << 20;
     FillDeviceWithZeroes(&tc, chunkSize);
     Run<TTestDestructionWhileWritingChunk>(&tc, 1, chunkSize);
 }
 
 YARD_UNIT_TEST(TestDestructionWhileReadingChunk) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = 8 << 20;
     Run<TTestDestructionWhileReadingChunk>(&tc, 1, chunkSize);
 }
 
 YARD_UNIT_TEST(TestDestructionWhileReadingLog) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = 8 << 20;
     Run<TTestDestructionWhileReadingLog>(&tc, 1, chunkSize);
 }
 
 YARD_UNIT_TEST(TestChunkPriorityBlock) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     Run<TTestChunkPriorityBlock>(&tc);
 }
 
 YARD_UNIT_TEST(TestFormatInfo) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     TString dataPath;
     if (tc.TempDir) {
@@ -877,7 +854,7 @@ YARD_UNIT_TEST(TestFormatInfo) {
             MakeDirIfNotExist(databaseDirectory.c_str());
         }
     }
-    EntropyPool().Read(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
+    SafeEntropyPoolRead(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 1 << 30, false, tc.SectorMap);
 
     TPDiskInfo info;
@@ -888,7 +865,7 @@ YARD_UNIT_TEST(TestFormatInfo) {
 }
 
 YARD_UNIT_TEST(TestStartingPointReboots) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     TString dataPath;
     if (tc.TempDir) {
@@ -896,7 +873,7 @@ YARD_UNIT_TEST(TestStartingPointReboots) {
         dataPath = MakePDiskPath((*tc.TempDir)().c_str());
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
-    EntropyPool().Read(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
+    SafeEntropyPoolRead(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 1 << 30, false, tc.SectorMap);
     for (ui32 i = 0; i < 32; ++i) {
         Run<TTestStartingPointRebootsIteration>(&tc, 1, chunkSize);
@@ -904,7 +881,7 @@ YARD_UNIT_TEST(TestStartingPointReboots) {
 }
 
 YARD_UNIT_TEST(TestRestartAtNonceJump) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     // Write a full chunk of logs (assume it's chunk# SystemChunkCount)
     Run<TTestContinueWriteLogChunk>(&tc, 1, chunkSize, false);
@@ -934,7 +911,7 @@ YARD_UNIT_TEST(TestRestartAtNonceJump) {
 }
 
 YARD_UNIT_TEST(TestRestartAtChunkEnd) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     // Write a full chunk of logs (assume it's chunk# SystemChunkCount)
     Run<TTestContinueWriteLogChunk>(&tc, 1, chunkSize, false);
@@ -963,12 +940,12 @@ YARD_UNIT_TEST(TestRestartAtChunkEnd) {
 }
 
 YARD_UNIT_TEST(TestEnormousDisk) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = 512 << 20;
     ui64 diskSize = 100ull << 40;
 
     TString dataPath;
-    EntropyPool().Read(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
+    SafeEntropyPoolRead(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, diskSize, false, tc.SectorMap);
 
     Run<TTestInit<true, 1>>(&tc, 1, chunkSize, false);
@@ -982,7 +959,7 @@ YARD_UNIT_TEST(TestEnormousDisk) {
 /*
 // TODO(cthulhu): Shorten test data, move it to a proper place
 YARD_UNIT_TEST(TestInitOnOldDisk) {
-    TTestContext tc(false, true);
+    TTestContext tc(true);
     ui32 chunkSize = 134217728;
     ui32 dataSize = 8 * chunkSize;
     NPDisk::TAlignedData data0(dataSize);

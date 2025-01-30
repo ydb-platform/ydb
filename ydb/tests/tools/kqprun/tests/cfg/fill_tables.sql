@@ -1,0 +1,2 @@
+INSERT INTO test_table
+SELECT 42 AS Key;

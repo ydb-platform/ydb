@@ -1,0 +1,181 @@
+INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
+INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/invoke_builtins/header.ya.make.inc)
+
+SET(ORIG_SRC_DIR ${ARCADIA_ROOT}/yql/essentials/minikql/comp_nodes)
+
+SET(ORIG_SOURCES
+    mkql_addmember.cpp
+    mkql_aggrcount.cpp
+    mkql_append.cpp
+    mkql_apply.cpp
+    mkql_block_agg.cpp
+    mkql_block_agg_count.cpp
+    mkql_block_agg_factory.cpp
+    mkql_block_agg_minmax.cpp
+    mkql_block_agg_some.cpp
+    mkql_block_agg_sum.cpp
+    mkql_block_coalesce.cpp
+    mkql_block_container.cpp
+    mkql_block_decimal.cpp
+    mkql_block_exists.cpp
+    mkql_block_getelem.cpp
+    mkql_block_if.cpp
+    mkql_block_just.cpp
+    mkql_block_logical.cpp
+    mkql_block_map_join.cpp
+    mkql_block_compress.cpp
+    mkql_block_func.cpp
+    mkql_block_skiptake.cpp
+    mkql_block_top.cpp
+    mkql_blocks.cpp
+    mkql_callable.cpp
+    mkql_chain_map.cpp
+    mkql_chain1_map.cpp
+    mkql_check_args.cpp
+    mkql_chopper.cpp
+    mkql_coalesce.cpp
+    mkql_collect.cpp
+    mkql_combine.cpp
+    mkql_contains.cpp
+    mkql_decimal_div.cpp
+    mkql_decimal_mod.cpp
+    mkql_decimal_mul.cpp
+    mkql_dictitems.cpp
+    mkql_discard.cpp
+    mkql_dynamic_variant.cpp
+    mkql_element.cpp
+    mkql_ensure.cpp
+    mkql_enumerate.cpp
+    mkql_exists.cpp
+    mkql_extend.cpp
+    mkql_factory.cpp
+    mkql_filter.cpp
+    mkql_flatmap.cpp
+    mkql_flow.cpp
+    mkql_fold.cpp
+    mkql_fold1.cpp
+    mkql_frombytes.cpp
+    mkql_fromstring.cpp
+    mkql_fromyson.cpp
+    mkql_group.cpp
+    mkql_grace_join.cpp
+    mkql_grace_join_imp.cpp
+    mkql_guess.cpp
+    mkql_hasitems.cpp
+    mkql_heap.cpp
+    mkql_hopping.cpp
+    mkql_if.cpp
+    mkql_ifpresent.cpp
+    mkql_invoke.cpp
+    mkql_iterable.cpp
+    mkql_iterator.cpp
+    mkql_join.cpp
+    mkql_join_dict.cpp
+    mkql_lazy_list.cpp
+    mkql_length.cpp
+    mkql_listfromrange.cpp
+    mkql_logical.cpp
+    mkql_lookup.cpp
+    mkql_map.cpp
+    mkql_mapnext.cpp
+    mkql_map_join.cpp
+    mkql_match_recognize.cpp
+    mkql_match_recognize_list.cpp
+    mkql_match_recognize_measure_arg.cpp
+    mkql_match_recognize_rows_formatter.cpp
+    mkql_multihopping.cpp
+    mkql_multimap.cpp
+    mkql_next_value.cpp
+    mkql_nop.cpp
+    mkql_now.cpp
+    mkql_null.cpp
+    mkql_pickle.cpp
+    mkql_prepend.cpp
+    mkql_queue.cpp
+    mkql_random.cpp
+    mkql_range.cpp
+    mkql_reduce.cpp
+    mkql_removemember.cpp
+    mkql_replicate.cpp
+    mkql_reverse.cpp
+    mkql_rh_hash.cpp
+    mkql_round.cpp
+    mkql_safe_circular_buffer.cpp
+    mkql_scalar_apply.cpp
+    mkql_seq.cpp
+    mkql_size.cpp
+    mkql_skip.cpp
+    mkql_sort.cpp
+    mkql_source.cpp
+    mkql_squeeze_state.cpp
+    mkql_squeeze_to_list.cpp
+    mkql_condense.cpp
+    mkql_condense1.cpp
+    mkql_switch.cpp
+    mkql_take.cpp
+    mkql_time_order_recover.cpp
+    mkql_timezone.cpp
+    mkql_tobytes.cpp
+    mkql_todict.cpp
+    mkql_toindexdict.cpp
+    mkql_tooptional.cpp
+    mkql_tostring.cpp
+    mkql_udf.cpp
+    mkql_unwrap.cpp
+    mkql_varitem.cpp
+    mkql_visitall.cpp
+    mkql_way.cpp
+    mkql_weakmember.cpp
+    mkql_while.cpp
+    mkql_wide_chain_map.cpp
+    mkql_wide_chopper.cpp
+    mkql_wide_combine.cpp
+    mkql_wide_condense.cpp
+    mkql_wide_filter.cpp
+    mkql_wide_map.cpp
+    mkql_wide_top_sort.cpp
+    mkql_withcontext.cpp
+    mkql_zip.cpp
+)
+
+ADDINCL(
+    ${ORIG_SRC_DIR}
+)
+
+COPY(
+    WITH_CONTEXT
+    AUTO
+    FROM ${ORIG_SRC_DIR}
+    ${ORIG_SOURCES}
+    OUTPUT_INCLUDES
+    ${BINDIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
+    ${BINDIR}/yql/essentials/minikql/computation/mkql_block_impl_codegen.h
+    ${BINDIR}/yql/essentials/minikql/computation/mkql_llvm_base.h
+    ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_codegen.h
+    ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h
+    llvm/Support/raw_ostream.h
+)
+
+PEERDIR(
+    contrib/libs/apache/arrow
+    contrib/libs/xxhash
+    yql/essentials/types/binary_json
+    yql/essentials/minikql
+    yql/essentials/minikql/arrow
+    yql/essentials/public/udf/arrow
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/utils
+    yql/essentials/public/issue/protos
+)
+
+IF (ARCH_X86_64)
+
+CFLAGS(
+    -mprfchw
+)
+
+ENDIF()
+
+YQL_LAST_ABI_VERSION()
+
+PROVIDES(MINIKQL_COMP_NODES)

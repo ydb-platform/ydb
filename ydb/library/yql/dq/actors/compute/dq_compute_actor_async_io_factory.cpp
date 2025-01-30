@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NYql::NDq {
 
@@ -21,6 +21,22 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> TDqAsyncIoFactory::Creat
 void TDqAsyncIoFactory::RegisterSource(const TString& type, TSourceCreatorFunction creator)
 {
     auto [_, registered] = SourceCreatorsByType.emplace(type, std::move(creator));
+    Y_ABORT_UNLESS(registered);
+}
+
+std::pair<IDqAsyncLookupSource*, NActors::IActor*> TDqAsyncIoFactory::CreateDqLookupSource(TStringBuf type, TLookupSourceArguments&& args) const
+{
+    YQL_ENSURE(!type.empty(), "Attempt to create LookupSource of empty type");
+    const auto* creatorFunc = LookupSourceCreatorsByType.FindPtr(type);
+    YQL_ENSURE(creatorFunc, "Unknown type of source: \"" << type << "\"");
+    auto lookupSource = (*creatorFunc)(std::move(args));
+    Y_ABORT_UNLESS(lookupSource.first);
+    Y_ABORT_UNLESS(lookupSource.second);
+    return lookupSource;
+}
+
+void TDqAsyncIoFactory::RegisterLookupSource(const TString& type, TLookupSourceCreatorFunction creator) {
+    auto [_, registered] = LookupSourceCreatorsByType.emplace(type, std::move(creator));
     Y_ABORT_UNLESS(registered);
 }
 

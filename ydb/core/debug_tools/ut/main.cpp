@@ -83,12 +83,13 @@ Y_UNIT_TEST_SUITE(OperationLog) {
         std::thread reader([&]() {
             for (ui32 i = 0; i < readsNum; ++i) {
                 ui32 logIdx = RandomNumber<ui32>() % logSize;
-                if (logIdx > log.Size()) {
-                    auto record = log.BorrowByIdx(i);
-                    UNIT_ASSERT(record);
-                    TString copyRecord = *record;
-                    ui32 recordNum = IntFromString<ui32, 10>(copyRecord);
-                    UNIT_ASSERT_LE(recordNum, recordIdx.load());
+                if (logIdx < log.Size()) {
+                    NKikimr::TOperationLog<logSize>::BorrowedRecord record = log.BorrowByIdx(logIdx);
+                    if (record) {
+                        ui32 recordNum = IntFromString<ui32, 10>(*record);
+                        Y_ABORT_UNLESS(recordNum <= recordIdx.load());
+                    }
+                    log.ReturnBorrowedRecord(record);
                 }
             }
         });

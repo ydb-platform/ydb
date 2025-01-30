@@ -42,11 +42,15 @@ elif [[ $1 = "disk" ]]; then
     echo Data file ydb.data not found, creating ...
     fallocate -l 80G ydb.data
     if [[ $? -ge 1 ]]; then
-      if [ -f ydb.data ]; then
-        rm ydb.data
+      echo fallocate failed. Proably not supported by FS, trying to use dd ...
+      dd if=/dev/zero of=ydb.data bs=1G count=0 seek=80
+      if [[ $? -ge 1 ]]; then
+        if [ -f ydb.data ]; then
+          rm ydb.data
+        fi
+        echo Error creating data file
+        exit
       fi
-      echo Error creating data file
-      exit
     fi
     need_init=1
   fi
@@ -56,7 +60,7 @@ else
 fi
 echo Starting storage process... takes ~10 seconds
 mkdir -p "$LOGS_PATH"
-$YDBD_PATH server --yaml-config "$CONFIG_PATH/$cfg" --node 1 --grpc-port 2136 --ic-port 19001 --mon-port 8765 \
+$YDBD_PATH server --yaml-config "$CONFIG_PATH/$cfg" --node 1 \
   --log-file-name "$LOGS_PATH/storage_start.log" > "$LOGS_PATH/storage_start_output.log" 2>"$LOGS_PATH/storage_start_err.log" &
 sleep 10
 grep "$LOGS_PATH/storage_start_err.log" -v -f "$CONFIG_PATH/exclude_err.txt"

@@ -15,5 +15,6 @@
 #include <boost/config/header_deprecated.hpp>
 #include <boost/core/swap.hpp>
 
+BOOST_HEADER_DEPRECATED("boost/core/invoke_swap.hpp")
 
 #endif

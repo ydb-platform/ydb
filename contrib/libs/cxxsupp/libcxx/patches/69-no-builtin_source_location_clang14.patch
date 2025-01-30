@@ -1,0 +1,29 @@
+diff --git a/include/source_location b/include/source_location
+index d16e3c4..958c16f 100644
+--- a/include/source_location
++++ b/include/source_location
+@@ -52,12 +52,23 @@ class source_location {
+   // in constant evaluation, so we don't want to use `void*` as the argument
+   // type unless the builtin returned that, anyhow, and the invalid cast is
+   // unavoidable.
++#  if __has_builtin(__builtin_source_location)
+   using __bsl_ty = decltype(__builtin_source_location());
++#  else
++  using __bsl_ty = __impl*;
++#  endif
+ 
+ public:
+   // The defaulted __ptr argument is necessary so that the builtin is evaluated
+   // in the context of the caller. An explicit value should never be provided.
+-  static consteval source_location current(__bsl_ty __ptr = __builtin_source_location()) noexcept {
++  static consteval source_location
++  current(__bsl_ty __ptr =
++#  if __has_builtin(__builtin_source_location)
++              __builtin_source_location()
++#  else
++              nullptr
++#  endif
++              ) noexcept {
+     source_location __sl;
+     __sl.__ptr_ = static_cast<const __impl*>(__ptr);
+     return __sl;

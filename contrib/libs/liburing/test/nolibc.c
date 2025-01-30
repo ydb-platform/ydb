@@ -7,11 +7,13 @@
  *   1) x86
  *   2) x86-64
  *   3) aarch64
+ *   4) riscv64
  *
  */
 #include "helpers.h"
 
-#if !defined(__x86_64__) && !defined(__i386__) && !defined(__aarch64__)
+#if !defined(__x86_64__) && !defined(__i386__) && !defined(__aarch64__) && (!defined(__riscv) && __riscv_xlen != 64)
+
 
 /*
  * This arch doesn't support nolibc.
@@ -21,7 +23,7 @@ int main(void)
 	return T_EXIT_SKIP;
 }
 
-#else /* #if !defined(__x86_64__) && !defined(__i386__) && !defined(__aarch64__) */
+#else /* #if !defined(__x86_64__) && !defined(__i386__) && !defined(__aarch64__) && (!defined(__riscv) && __riscv_xlen != 64) */
 
 #ifndef CONFIG_NOLIBC
 #define CONFIG_NOLIBC
@@ -58,4 +60,4 @@ int main(int argc, char *argv[])
 	return T_EXIT_PASS;
 }
 
-#endif /* #if !defined(__x86_64__) && !defined(__i386__) && !defined(__aarch64__) */
+#endif /* #if !defined(__x86_64__) && !defined(__i386__) && !defined(__aarch64__) && (!defined(__riscv) && __riscv_xlen != 64) */

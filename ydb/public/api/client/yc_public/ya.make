@@ -1,7 +1,7 @@
 RECURSE(
-    iam
-    events
-    logging
     common
+    events
+    iam
+    logging
 )
 

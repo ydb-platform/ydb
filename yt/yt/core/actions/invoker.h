@@ -1,9 +1,11 @@
 #pragma once
 
 #include "callback.h"
-#include "bind.h"
+#include "signal.h"
 
 #include <yt/yt/core/threading/public.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <type_traits>
 
@@ -38,11 +40,11 @@ struct IInvoker
      */
     virtual bool IsSerialized() const = 0;
 
-    using TWaitTimeObserver = std::function<void(TDuration waitTime)>;
-    //! Registers a callback that could be invoked to inform
-    //! of the current wait time for invocations via this invoker.
+    //! Invoked to inform of the current wait time for invocations via this invoker.
     //! These invocations, however, are not guaranteed.
-    virtual void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) = 0;
+    using TWaitTimeObserver = TCallback<void(TDuration waitTime)>;
+
+    DECLARE_INTERFACE_SIGNAL(TWaitTimeObserver::TSignature, WaitTimeObserved);
 };
 
 DEFINE_REFCOUNTED_TYPE(IInvoker)
@@ -66,6 +68,25 @@ struct IPrioritizedInvoker
 };
 
 DEFINE_REFCOUNTED_TYPE(IPrioritizedInvoker)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct IBoundedConcurrencyInvoker
+    : public virtual IInvoker
+{
+    using IInvoker::Invoke;
+
+    //! Updates invoker's max concurrent invocations value.
+    //!
+    //! Does nothing, if the value stays the same.
+    //! If the value increases, pending closures are invoked until #maxConcurrentInvocations is reached.
+    //! If the value decreases, value is scheduled to be changed, but only changes once
+    //! number of outstanding requests is less or equal to #maxConcurrentInvocations, and
+    //! then the value actually changes.
+    virtual void SetMaxConcurrentInvocations(int maxConcurrentInvocations) = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IBoundedConcurrencyInvoker);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -99,8 +120,3 @@ DEFINE_REFCOUNTED_TYPE(ISuspendableInvoker)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-
-#define INVOKER_INL_H_
-#include "invoker-inl.h"
-#undef INVOKER_INL_H_
-

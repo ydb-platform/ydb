@@ -10,19 +10,21 @@ SRCS(
     command.cpp
     config.cpp
     cypress_commands.cpp
+    distributed_table_commands.cpp
     driver.cpp
     etc_commands.cpp
     file_commands.cpp
+    flow_commands.cpp
     helpers.cpp
+    internal_commands.cpp
     journal_commands.cpp
     proxy_discovery_cache.cpp
     query_commands.cpp
     queue_commands.cpp
     scheduler_commands.cpp
+    shuffle_commands.cpp
     table_commands.cpp
     transaction_commands.cpp
-    internal_commands.cpp
-    flow_commands.cpp
 )
 
 PEERDIR(

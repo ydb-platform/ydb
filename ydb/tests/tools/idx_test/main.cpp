@@ -4,38 +4,17 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/resource/resource.h>
 
 #include <ydb/public/lib/idx_test/idx_test.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NYdb::NScheme;
 using namespace NIdxTest;
 using namespace NLastGetopt;
-
-class TYdbErrorException : public yexception {
-    mutable TString StrBuf_;
-public:
-    TYdbErrorException(const NYdb::TStatus& status)
-        : Status(status) {}
-
-    NYdb::TStatus Status;
-    const char* what() const noexcept override {
-        TStringStream ss;
-        ss << "Status: " << Status.GetStatus() << "\n";
-        ss << "Issues: " << Status.GetIssues().ToString() << "\n";
-        StrBuf_ = ss.Str();
-        return StrBuf_.c_str();
-    }
-};
-
-static void ThrowOnError(const TStatus& status) {
-    if (!status.IsSuccess()) {
-        throw TYdbErrorException(status) << status;
-    }
-}
 
 static TMap<TString, IWorkLoader::ELoadCommand> Cmds {
     {"upsert", IWorkLoader::LC_UPSERT},
@@ -75,7 +54,7 @@ static ui32 ParseCmd(int argc, char** argv) {
 
 static void ExecuteDDL(TTableClient client, const TString& sql) {
     Cerr << "Try to execute DDL query: " << sql << Endl;
-    ThrowOnError(client.RetryOperationSync([sql](TSession session) {
+    NStatusHelpers::ThrowOnError(client.RetryOperationSync([sql](TSession session) {
         return session.ExecuteSchemeQuery(sql).GetValueSync();
     }));
 }
@@ -91,7 +70,7 @@ static void CreatePath(TSchemeClient scheme, const TString& database, const TStr
         if (pos == prefix.npos)
             break;
         curPath += prefix.substr(prevPos, pos - prevPos);
-        ThrowOnError(scheme.MakeDirectory(curPath, TMakeDirectorySettings()
+        NStatusHelpers::ThrowOnError(scheme.MakeDirectory(curPath, TMakeDirectorySettings()
             .ClientTimeout(TDuration::Seconds(10))).GetValueSync());
     }
 }
@@ -108,7 +87,7 @@ static void ExecuteCreateUniformTable(TTableClient client, const TString& tableP
 
     auto desc = builder.Build();
 
-    ThrowOnError(client.RetryOperationSync([tablePath, desc, shardsCount](TSession session) {
+    NStatusHelpers::ThrowOnError(client.RetryOperationSync([tablePath, desc, shardsCount](TSession session) {
         auto d = desc;
         return session.CreateTable(tablePath,
             std::move(d),
@@ -243,9 +222,9 @@ int main(int argc, char** argv) {
         driver.Stop(true);
         Cerr << "Test failed: " << ex.what() << Endl;
         Cerr << "..." << Endl;
-        auto ydbEx = dynamic_cast<const TYdbErrorException*>(&ex);
+        auto ydbEx = dynamic_cast<const NStatusHelpers::TYdbErrorException*>(&ex);
         if (ydbEx) {
-            Cerr << "Ydb error: " << ydbEx->Status.GetStatus() << " " << ydbEx->Status.GetIssues().ToString() << Endl;
+            Cerr << *ydbEx << Endl;
         }
         return 1;
     }

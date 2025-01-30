@@ -1,17 +1,5 @@
 RECURSE(
-    astdiff
-    dqrun
     dq
-    mrjob
-    mrrun
-    pg_catalog_dump
-    pgrun
-    pg-make-test
-    purebench
-    sql2yql
-    sql_formatter
-    udf_dep_stub
-    udf_probe
-    udf_resolver
-    yqlrun
+    dqrun
+    solomon_emulator
 )

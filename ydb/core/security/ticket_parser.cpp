@@ -15,9 +15,11 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
         Unknown,
         Unsupported,
         AccessService,
+        NebiusAccessService,
         Builtin,
         Login,
         ApiKey, // IAM api_key
+        Certificate, // Token from SSL Certificate
     };
 
     THashMap<TString, TTokenRecord> UserTokens;
@@ -27,8 +29,8 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
     }
 };
 
-IActor* CreateTicketParser(const NKikimrProto::TAuthConfig& authConfig) {
-    return new TTicketParser(authConfig);
+IActor* CreateTicketParser(const TTicketParserSettings& settings) {
+    return new TTicketParser(settings);
 }
 
 }

@@ -1,6 +1,6 @@
 #include "helpers.h"
 
-#include <google/protobuf/compiler/cpp/cpp_helpers.h>
+#include <google/protobuf/compiler/cpp/helpers.h>
 #include <google/protobuf/any.pb.h>
 #include <google/protobuf/duration.pb.h>
 #include <google/protobuf/empty.pb.h>
@@ -18,7 +18,9 @@ static TString ProtoFileNameStripped(const google::protobuf::Descriptor* message
 }
 
 TString HeaderFileName(const google::protobuf::Descriptor* message) {
-    return ProtoFileNameStripped(message).append(".pb.h");
+    bool use_proto_h = !!getenv("PROTOC_PLUGINS_LITE_HEADERS");
+    auto name = ProtoFileNameStripped(message);
+    return use_proto_h ? name.append(".proto.h") : name.append(".pb.h");
 }
 
 TString SourceFileName(const google::protobuf::Descriptor* message) {

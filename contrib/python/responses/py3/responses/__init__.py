@@ -249,7 +249,7 @@ class CallList(Sequence[Any], Sized):
         ...
 
     @overload
-    def __getitem__(self, idx: slice) -> List[Call]:
+    def __getitem__(self, idx: "slice[int, int, Optional[int]]") -> List[Call]:
         ...
 
     def __getitem__(self, idx: Union[int, slice]) -> Union[Call, List[Call]]:
@@ -532,6 +532,7 @@ def _form_response(
     body: Union[BufferedReader, BytesIO],
     headers: Optional[Mapping[str, str]],
     status: int,
+    request_method: Optional[str],
 ) -> HTTPResponse:
     """
     Function to generate `urllib3.response.HTTPResponse` object.
@@ -566,6 +567,7 @@ def _form_response(
         headers=headers,
         original_response=orig_response,  # type: ignore[arg-type]  # See comment above
         preload_content=False,
+        request_method=request_method,
     )
 
 
@@ -632,7 +634,7 @@ class Response(BaseResponse):
             content_length = len(body.getvalue())
             headers["Content-Length"] = str(content_length)
 
-        return _form_response(body, headers, status)
+        return _form_response(body, headers, status, request.method)
 
     def __repr__(self) -> str:
         return (
@@ -695,7 +697,7 @@ class CallbackResponse(BaseResponse):
         body = _handle_body(body)
         headers.extend(r_headers)
 
-        return _form_response(body, headers, status)
+        return _form_response(body, headers, status, request.method)
 
 
 class PassthroughResponse(BaseResponse):
@@ -711,6 +713,11 @@ class RequestsMock:
     PATCH: Literal["PATCH"] = "PATCH"
     POST: Literal["POST"] = "POST"
     PUT: Literal["PUT"] = "PUT"
+
+    Response: Type[Response] = Response
+
+    # Make the `matchers` name available under a RequestsMock instance
+    from responses import matchers
 
     response_callback: Optional[Callable[[Any], Any]] = None
 
@@ -812,7 +819,11 @@ class RequestsMock:
 
         if adding_headers is not None:
             kwargs.setdefault("headers", adding_headers)
-        if "content_type" in kwargs and "headers" in kwargs:
+        if (
+            "content_type" in kwargs
+            and "headers" in kwargs
+            and kwargs["headers"] is not None
+        ):
             header_keys = [header.lower() for header in kwargs["headers"]]
             if "content-type" in header_keys:
                 raise RuntimeError(
@@ -850,6 +861,7 @@ class RequestsMock:
                 url=rsp["url"],
                 body=rsp["body"],
                 status=rsp["status"],
+                headers=rsp["headers"] if "headers" in rsp else None,
                 content_type=rsp["content_type"],
                 auto_calculate_content_length=rsp["auto_calculate_content_length"],
             )
@@ -1047,6 +1059,22 @@ class RequestsMock:
             params[key] = values
         return params
 
+    def _read_filelike_body(
+        self, body: Union[str, bytes, BufferedReader, None]
+    ) -> Union[str, bytes, None]:
+        # Requests/urllib support multiple types of body, including file-like objects.
+        # Read from the file if it's a file-like object to avoid storing a closed file
+        # in the call list and allow the user to compare against the data that was in the
+        # request.
+        # See GH #719
+        if isinstance(body, str) or isinstance(body, bytes) or body is None:
+            return body
+        # Based on
+        # https://github.com/urllib3/urllib3/blob/abbfbcb1dd274fc54b4f0a7785fd04d59b634195/src/urllib3/util/request.py#L220
+        if hasattr(body, "read") or isinstance(body, BufferedReader):
+            return body.read()
+        return body
+
     def _on_request(
         self,
         adapter: "HTTPAdapter",
@@ -1060,6 +1088,7 @@ class RequestsMock:
         request.params = self._parse_request_params(request.path_url)  # type: ignore[attr-defined]
         request.req_kwargs = kwargs  # type: ignore[attr-defined]
         request_url = str(request.url)
+        request.body = self._read_filelike_body(request.body)
 
         match, match_failed_reasons = self._find_match(request)
         resp_callback = self.response_callback
@@ -1104,7 +1133,7 @@ class RequestsMock:
             response = self._real_send(adapter, request, **kwargs)  # type: ignore
         else:
             try:
-                response = adapter.build_response(  # type: ignore[no-untyped-call]
+                response = adapter.build_response(  # type: ignore[assignment]
                     request, match.get_response(request)
                 )
             except BaseException as response:

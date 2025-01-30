@@ -57,7 +57,7 @@ public:
     void Persist(const NYT::TStreamPersistenceContext& context);
 
 private:
-    constexpr static ssize_t MaxLength = 1<<30;
+    static constexpr ssize_t MaxLength = 1<<30;
 
     std::vector<TItem> FenwickSums_;
 

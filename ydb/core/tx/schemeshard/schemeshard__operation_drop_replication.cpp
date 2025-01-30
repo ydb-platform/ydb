@@ -13,6 +13,35 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
+bool IsDropReplication(TTxState::ETxType type) {
+    switch (type) {
+    case TTxState::TxDropReplication:
+    case TTxState::TxDropReplicationCascade:
+        return true;
+    default:
+        return false;
+    }
+}
+
+struct IStrategy {
+    virtual void Check(const TPath::TChecker& checks) const = 0;
+};
+
+struct TReplicationStrategy : public IStrategy {
+    void Check(const TPath::TChecker& checks) const override {
+        checks.IsReplication();
+    };
+};
+
+struct TTransferStrategy : public IStrategy {
+    void Check(const TPath::TChecker& checks) const override {
+        checks.IsTransfer();
+    };
+};
+
+static constexpr TReplicationStrategy ReplicationStrategy;
+static constexpr TTransferStrategy TransferStrategy;
+
 class TDropParts: public TSubOperationState {
     TString DebugHint() const override {
         return TStringBuilder()
@@ -32,7 +61,7 @@ public:
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropReplication);
+        Y_ABORT_UNLESS(IsDropReplication(txState->TxType));
         const auto& pathId = txState->TargetPathId;
 
         txState->ClearShardsInProgress();
@@ -44,9 +73,10 @@ public:
             const auto tabletId = context.SS->ShardInfos.at(shard.Idx).TabletID;
 
             auto ev = MakeHolder<NReplication::TEvController::TEvDropReplication>();
-            PathIdFromPathId(pathId, ev->Record.MutablePathId());
+            pathId.ToProto(ev->Record.MutablePathId());
             ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
             ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
+            ev->Record.SetCascade(txState->TxType == TTxState::TxDropReplicationCascade);
 
             LOG_D(DebugHint() << "Send TEvDropReplication to controller"
                 << ": tabletId# " << tabletId
@@ -78,7 +108,7 @@ public:
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropReplication);
+        Y_ABORT_UNLESS(IsDropReplication(txState->TxType));
         Y_ABORT_UNLESS(txState->State == TTxState::DropParts);
 
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
@@ -137,7 +167,7 @@ public:
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropReplication);
+        Y_ABORT_UNLESS(IsDropReplication(txState->TxType));
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -151,7 +181,7 @@ public:
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropReplication);
+        Y_ABORT_UNLESS(IsDropReplication(txState->TxType));
         const auto& pathId = txState->TargetPathId;
 
         Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
@@ -171,8 +201,8 @@ public:
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(-1);
-        context.SS->ResolveDomainInfo(pathId)->DecPathsInside();
-        parentPath->DecAliveChildren();
+        context.SS->ResolveDomainInfo(pathId)->DecPathsInside(context.SS);
+        DecAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         ++parentPath->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentPath);
@@ -227,7 +257,20 @@ class TDropReplication: public TSubOperation {
     }
 
 public:
-    using TSubOperation::TSubOperation;
+    explicit TDropReplication(TOperationId id, const TTxTransaction& tx, bool cascade, const IStrategy* strategy)
+        : TSubOperation(id, tx)
+        , Cascade(cascade)
+        , Strategy(strategy)
+    {
+    }
+
+    explicit TDropReplication(TOperationId id, TTxState::ETxState state, bool cascade, const IStrategy* strategy)
+        : TSubOperation(id, state)
+        , Cascade(cascade)
+        , Strategy(strategy)
+    {
+    }
+
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
@@ -250,10 +293,10 @@ public:
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
-                .IsReplication()
                 .NotDeleted()
                 .NotUnderDeleting()
                 .NotUnderOperation();
+            Strategy->Check(checks);
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -295,8 +338,12 @@ public:
         auto replication = context.SS->Replications.at(path->PathId);
         Y_ABORT_UNLESS(!replication->AlterData);
 
+        const auto txType = Cascade
+            ? TTxState::TxDropReplicationCascade
+            : TTxState::TxDropReplication;
+
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
-        auto& txState = context.SS->CreateTx(OperationId, TTxState::TxDropReplication, path->PathId);
+        auto& txState = context.SS->CreateTx(OperationId, txType, path->PathId);
         txState.State = TTxState::DropParts;
         txState.MinStep = TStepId(1);
 
@@ -338,16 +385,28 @@ public:
         AbortUnsafeDropOperation(OperationId, forceDropTxId, context);
     }
 
+private:
+    const bool Cascade;
+    const IStrategy* Strategy;
+
 }; // TDropReplication
 
 } // anonymous
 
-ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TDropReplication>(id, tx);
+ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx, bool cascade) {
+    return MakeSubOperation<TDropReplication>(id, tx, cascade, &ReplicationStrategy);
 }
 
-ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TDropReplication>(id, state);
+ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state, bool cascade) {
+    return MakeSubOperation<TDropReplication>(id, state, cascade, &ReplicationStrategy);
+}
+
+ISubOperation::TPtr CreateDropTransfer(TOperationId id, const TTxTransaction& tx, bool cascade) {
+    return MakeSubOperation<TDropReplication>(id, tx, cascade, &TransferStrategy);
+}
+
+ISubOperation::TPtr CreateDropTransfer(TOperationId id, TTxState::ETxState state, bool cascade) {
+    return MakeSubOperation<TDropReplication>(id, state, cascade, &TransferStrategy);
 }
 
 }

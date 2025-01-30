@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/util/gen_step.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/services/services.pb.h>
@@ -44,12 +45,72 @@ public:
 
 };
 
+class TBlobsByGenStep {
+private:
+    struct TGenStepFromLogoBlobIdComparator {
+        bool operator()(const TLogoBlobID& l, const TLogoBlobID& r) const {
+            TGenStep gsl(l);
+            TGenStep gsr(r);
+            if (gsl == gsr) {
+                return l < r;
+            } else {
+                return gsl < gsr;
+            }
+        }
+    };
+    std::set<TLogoBlobID, TGenStepFromLogoBlobIdComparator> Blobs;
+public:
+    [[nodiscard]] bool Add(const TLogoBlobID& blobId) {
+        return Blobs.emplace(blobId).second;
+    }
+    [[nodiscard]] bool Remove(const TLogoBlobID& blobId) {
+        return Blobs.erase(blobId);
+    }
+    bool IsEmpty() const {
+        return Blobs.empty();
+    }
+    size_t GetSize() const {
+        return Blobs.size();
+    }
+
+    TGenStep GetMinGenStepVerified() const {
+        AFL_VERIFY(Blobs.size());
+        return TGenStep(*Blobs.begin());
+    }
+
+    template <class TActor>
+    requires std::invocable<TActor&, const TGenStep&, const TLogoBlobID&>
+    bool ExtractTo(const TGenStep& lessOrEqualThan, const ui32 countLimit, const TActor& actor) {
+        ui32 idx = 0;
+        for (auto it = Blobs.begin(); it != Blobs.end(); ++it) {
+            TGenStep gs(*it);
+            if (lessOrEqualThan < gs) {
+                Blobs.erase(Blobs.begin(), it);
+                return true;
+            }
+            if (++idx > countLimit) {
+                Blobs.erase(Blobs.begin(), it);
+                return false;
+            }
+            actor(gs, *it);
+        }
+        Blobs.clear();
+        return true;
+    }
+};
+
 class TTabletsByBlob {
 private:
     THashMap<TUnifiedBlobId, THashSet<TTabletId>> Data;
+    i32 Size = 0;
 public:
+    ui32 GetSize() const {
+        return Size;
+    }
+
     void Clear() {
         Data.clear();
+        Size = 0;
     }
 
     NKikimrColumnShardBlobOperationsProto::TTabletsByBlob SerializeToProto() const;
@@ -85,13 +146,20 @@ public:
     }
 
     template <class TFilter>
-    TTabletsByBlob ExtractBlobs(const TFilter& filter) {
+    TTabletsByBlob ExtractBlobs(const TFilter& filter, const std::optional<ui32> countLimit = {}) {
         TTabletsByBlob result;
         THashSet<TUnifiedBlobId> idsRemove;
+        ui32 count = 0;
         for (auto&& i : Data) {
             if (filter(i.first, i.second)) {
                 idsRemove.emplace(i.first);
+                Size -= i.second.size();
                 result.Data.emplace(i.first, i.second);
+                result.Size += i.second.size();
+                count += i.second.size();
+                if (countLimit && count >= *countLimit) {
+                    break;
+                }
             }
         }
         for (auto&& i : idsRemove) {
@@ -156,6 +224,7 @@ public:
         if (b.empty()) {
             Data.erase(Data.begin());
         }
+        AFL_VERIFY(--Size >= 0);
         return true;
     }
 
@@ -175,6 +244,8 @@ public:
             return false;
         }
         AFL_VERIFY(dest.Add(blobId, it->second));
+        Size -= it->second.size();
+        AFL_VERIFY(Size >= 0);
         Data.erase(it);
         return true;
     }
@@ -201,9 +272,12 @@ public:
             if (it == Data.end()) {
                 THashSet<TTabletId> tabletsLocal = {tabletId};
                 it = Data.emplace(i, tabletsLocal).first;
+                Size += 1;
             } else {
                 if (!it->second.emplace(tabletId).second) {
                     hasSkipped = true;
+                } else {
+                    Size += 1;
                 }
             }
         }
@@ -219,6 +293,8 @@ public:
         for (auto&& i : tabletIds) {
             if (!hashSet.emplace(i).second) {
                 hasSkipped = true;
+            } else {
+                Size += 1;
             }
         }
         return !hasSkipped;
@@ -234,11 +310,14 @@ public:
             return false;
         }
         it->second.erase(itTablet);
+        AFL_VERIFY(--Size >= 0);
         if (it->second.empty()) {
             Data.erase(it);
         }
         return true;
     }
+
+    TString DebugString() const;
 };
 
 class TBlobsByTablet {
@@ -314,6 +393,14 @@ public:
         std::swap(result, resultLocal);
     }
 
+    bool Contains(const TTabletId tabletId, const TUnifiedBlobId& blobId) const {
+        auto it = Data.find(tabletId);
+        if (it == Data.end()) {
+            return false;
+        }
+        return it->second.contains(blobId);
+    }
+
     const THashSet<TUnifiedBlobId>* Find(const TTabletId tabletId) const {
         auto it = Data.find(tabletId);
         if (it == Data.end()) {
@@ -362,6 +449,14 @@ public:
         }
     }
 
+    ui32 GetSize() const {
+        ui32 result = 0;
+        for (auto&& i : Data) {
+            result += i.second.size();
+        }
+        return result;
+    }
+
     bool IsEmpty() const {
         return Data.empty();
     }
@@ -397,6 +492,14 @@ private:
     YDB_ACCESSOR_DEF(TBlobsByTablet, Direct);
     YDB_READONLY_DEF(TBlobsByTablet, Borrowed);
 public:
+    bool IsEmpty() const {
+        return Sharing.IsEmpty() && Direct.IsEmpty() && Borrowed.IsEmpty();
+    }
+
+    bool HasSharingOnly() const {
+        return !Sharing.IsEmpty() && Direct.IsEmpty() && Borrowed.IsEmpty();
+    }
+
     class TIterator {
     private:
         const TBlobsCategories* Owner;
@@ -470,11 +573,11 @@ public:
     void AddSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {
         AFL_VERIFY(Sharing.Add(tabletId, id));
     }
-    void RemoveSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {
-        Y_UNUSED(Sharing.Remove(tabletId, id));
+    [[nodiscard]] bool RemoveSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {
+        return Sharing.Remove(tabletId, id);
     }
-    void RemoveBorrowed(const TTabletId tabletId, const TUnifiedBlobId& id) {
-        Y_UNUSED(Borrowed.Remove(tabletId, id));
+    [[nodiscard]] bool RemoveBorrowed(const TTabletId tabletId, const TUnifiedBlobId& id) {
+        return Borrowed.Remove(tabletId, id);
     }
     TBlobsCategories(const TTabletId selfTabletId)
         : SelfTabletId(selfTabletId)

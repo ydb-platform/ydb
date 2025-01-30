@@ -1,7 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/change_exchange.h>
 
@@ -1190,5 +1188,58 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestMoveTable(runtime, ++txId, "/MyRoot/Table", "/MyRoot/TableMove");
         env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(MoveTableWithSequence) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" DefaultFromSequence: "myseq" }
+              Columns { Name: "value" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            SequenceDescription {
+                Name: "myseq"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        i64 value = DoNextVal(runtime, "/MyRoot/Table/myseq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 1);
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/Table", "/MyRoot/TableMove");
+        env.TestWaitNotification(runtime, txId);
+
+        DoNextVal(runtime, "/MyRoot/Table/myseq", Ydb::StatusIds::SCHEME_ERROR);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/myseq"),
+                           {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        auto tableMove = DescribePath(runtime, "/MyRoot/TableMove")
+            .GetPathDescription()
+            .GetTable();
+
+        for (const auto& column: tableMove.GetColumns()) {
+            if (column.GetName() == "key") {
+                UNIT_ASSERT(column.HasDefaultFromSequence());
+                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "myseq");
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove/myseq", false, false, true, false),
+                    {
+                        NLs::SequenceName("myseq"),
+                    }
+                );
+            }
+        }
+
+        value = DoNextVal(runtime, "/MyRoot/TableMove/myseq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 2);
     }
 }

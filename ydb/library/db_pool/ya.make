@@ -7,15 +7,11 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     library/cpp/monlib/dynamic_counters
-    ydb/core/protos
     ydb/library/db_pool/protos
     ydb/library/security
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/table
 )
 
 END()
 
-RECURSE(
-    protos
-)

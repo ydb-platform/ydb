@@ -40,7 +40,7 @@ namespace orc {
    * the SearchArgument into an internal form.
    */
   class ExpressionTree {
-  public:
+   public:
     enum class Operator { OR, AND, NOT, LEAF, CONSTANT };
 
     ExpressionTree(Operator op);
@@ -73,13 +73,13 @@ namespace orc {
 
     TruthValue evaluate(const std::vector<TruthValue>& leaves) const;
 
-  private:
-    Operator mOperator;
-    std::vector<TreeNode> mChildren;
-    size_t mLeaf;
-    TruthValue mConstant;
+   private:
+    Operator operator_;
+    std::vector<TreeNode> children_;
+    size_t leaf_;
+    TruthValue constant_;
   };
 
-} // namespace orc
+}  // namespace orc
 
-#endif //ORC_EXPRESSIONTREE_HH
+#endif  // ORC_EXPRESSIONTREE_HH

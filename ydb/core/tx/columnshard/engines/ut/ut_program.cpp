@@ -1,15 +1,15 @@
-#include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/resolver.h>
 
-#include <ydb/core/tx/columnshard/columnshard__index_scan.h>
-#include <ydb/core/tx/columnshard/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/formats/arrow/converter.h>
 
-#include <ydb/library/yql/core/arrow_kernels/request/request.h>
-#include <ydb/library/yql/core/arrow_kernels/registry/registry.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
+#include <yql/essentials/core/arrow_kernels/registry/registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernel) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelStartsWithScalar) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelEndsWithScalar) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelStartsWith) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelEndsWith) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
 
@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelContains) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
 
@@ -435,7 +435,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelEquals) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
 
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     void JsonExistsImpl(bool isBinaryType) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -536,7 +536,9 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         if (isBinaryType) {
             THashMap<TString, NScheme::TTypeInfo> cc;
             cc["json_data"] = TTypeInfo(NTypeIds::JsonDocument);
-            batch = NArrow::ConvertColumns(batch, cc);
+            auto convertResult = NArrow::ConvertColumns(batch, cc);
+            UNIT_ASSERT_C(convertResult.ok(), convertResult.status().ToString());
+            batch = *convertResult;
             Cerr << batch->ToString() << Endl;
         }
         auto res = program.ApplyProgram(batch);
@@ -552,7 +554,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(Like) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -658,7 +660,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     void JsonValueImpl(bool isBinaryType, NYql::EDataSlot resultType) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -728,7 +730,9 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         if (isBinaryType) {
             THashMap<TString, NScheme::TTypeInfo> cc;
             cc["json_data"] = TTypeInfo(NTypeIds::JsonDocument);
-            batch = NArrow::ConvertColumns(batch, cc);
+            auto convertResult = NArrow::ConvertColumns(batch, cc);
+            UNIT_ASSERT_C(convertResult.ok(), convertResult.status().ToString());
+            batch = *convertResult;
             Cerr << batch->ToString() << Endl;
         }
 
@@ -809,7 +813,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(SimpleFunction) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);;
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -844,6 +848,66 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         result.AddRow().Add<uint64_t>(3);
         result.AddRow().Add<uint64_t>(1);
         result.AddRow().Add<uint64_t>(0);
+
+        auto expected = result.BuildArrow();
+        UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+    }
+
+    Y_UNIT_TEST(CountWithNulls) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        ;
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
+
+        NKikimrSSA::TProgram programProto;
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            auto* column = command->MutableAssign()->MutableColumn();
+            column->SetName("0");
+            auto* funcArg = functionProto->AddArguments();
+            funcArg->SetName("uid");
+            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_IS_NULL);
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* filter = command->MutableFilter();
+            auto* predicate = filter->MutablePredicate();
+            predicate->SetName("0");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* groupBy = command->MutableGroupBy();
+            auto* aggregate = groupBy->AddAggregates();
+            aggregate->MutableFunction()->SetId(static_cast<ui32>(NArrow::EAggregate::Count));
+            aggregate->MutableColumn()->SetName("1");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* projectionProto = command->MutableProjection();
+            auto* column = projectionProto->AddColumns();
+            column->SetName("1");
+        }
+        const auto programSerialized = SerializeProgram(programProto);
+
+        TProgramContainer program;
+        TString errors;
+        UNIT_ASSERT_C(
+            program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors),
+            errors);
+
+        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({ std::make_pair("uid", TTypeInfo(NTypeIds::Utf8)) }));
+        updates.AddRow().Add("a");
+        updates.AddRow().AddNull();
+        updates.AddRow().Add("bbb");
+        updates.AddRow().AddNull();
+        updates.AddRow().AddNull();
+
+        auto batch = updates.BuildArrow();
+        auto res = program.ApplyProgram(batch);
+        UNIT_ASSERT_C(res.ok(), res.ToString());
+
+        TTableUpdatesBuilder result(NArrow::MakeArrowSchema({ std::make_pair("1", TTypeInfo(NTypeIds::Uint64)) }));
+        result.AddRow().Add<uint64_t>(3);
 
         auto expected = result.BuildArrow();
         UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());

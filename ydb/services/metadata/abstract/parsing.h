@@ -1,7 +1,7 @@
 #pragma once
 #include "request_features.h"
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 #include <util/generic/string.h>
 #include <util/generic/typetraits.h>
@@ -14,6 +14,7 @@ namespace NObjectOptionsParsing {
 Y_HAS_MEMBER(ExistingOk); // for create
 Y_HAS_MEMBER(MissingOk); // for drop
 Y_HAS_MEMBER(ReplaceIfExists); // for create
+Y_HAS_MEMBER(ResetFeatures); // for alter
 } // namespace NObjectOptionsParsing
 
 class TObjectSettingsImpl {
@@ -21,21 +22,24 @@ public:
     using TFeaturesExtractor = NYql::TFeaturesExtractor;
 private:
     using TFeatures = THashMap<TString, TString>;
+    using TResetFeatures = std::unordered_set<TString>;
     YDB_READONLY_DEF(TString, TypeId);
     YDB_READONLY_DEF(TString, ObjectId);
     YDB_READONLY_DEF(bool, ExistingOk); // for create
     YDB_READONLY_DEF(bool, MissingOk); // for drop
     YDB_READONLY_DEF(bool, ReplaceIfExists); // for create
     TFeatures Features;
+    TResetFeatures ResetFeatures;
     std::shared_ptr<TFeaturesExtractor> FeaturesExtractor;
 public:
     TObjectSettingsImpl() = default;
 
-    TObjectSettingsImpl(const TString& typeId, const TString& objectId, const TFeatures& features)
+    TObjectSettingsImpl(const TString& typeId, const TString& objectId, const TFeatures& features, const TResetFeatures& resetFeatures = {})
         : TypeId(typeId)
         , ObjectId(objectId)
         , Features(features)
-        , FeaturesExtractor(std::make_shared<TFeaturesExtractor>(Features))
+        , ResetFeatures(resetFeatures)
+        , FeaturesExtractor(std::make_shared<TFeaturesExtractor>(Features, ResetFeatures))
         {}
 
     TFeaturesExtractor& GetFeaturesExtractor() const {
@@ -56,17 +60,28 @@ public:
         if constexpr (NObjectOptionsParsing::THasMissingOk<TKiObject>::value) {
             MissingOk = (data.MissingOk().Value() == "1");
         }
+        if constexpr (NObjectOptionsParsing::THasResetFeatures<TKiObject>::value) {
+            for (auto&& i : data.ResetFeatures()) {
+                if (auto maybeAtom = i.template Maybe<NYql::NNodes::TCoAtom>()) {
+                    ResetFeatures.emplace(maybeAtom.Cast().StringValue());
+                }
+            }
+        }
         for (auto&& i : data.Features()) {
             if (auto maybeAtom = i.template Maybe<NYql::NNodes::TCoAtom>()) {
                 Features.emplace(maybeAtom.Cast().StringValue(), "");
             } else if (auto maybeTuple = i.template Maybe<NNodes::TCoNameValueTuple>()) {
-                auto tuple = maybeTuple.Cast();
-                if (auto tupleValue = tuple.Value().template Maybe<NNodes::TCoAtom>()) {
-                    Features.emplace(tuple.Name().Value(), tupleValue.Cast().Value());
+                NNodes::TCoNameValueTuple tuple = maybeTuple.Cast();
+                if (auto maybeAtom = tuple.Value().template Maybe<NNodes::TCoAtom>()) {
+                    Features.emplace(tuple.Name().Value(), maybeAtom.Cast().Value());
+                } else if (auto maybeInt = tuple.Value().template Maybe<NNodes::TCoIntegralCtor>()) {
+                    Features.emplace(tuple.Name().Value(), maybeInt.Cast().Literal().Cast<NNodes::TCoAtom>().Value());
+                } else if (auto maybeBool = tuple.Value().template Maybe<NNodes::TCoBool>()) {
+                    Features.emplace(tuple.Name().Value(), maybeBool.Cast().Literal().Cast<NNodes::TCoAtom>().Value());
                 }
             }
         }
-        FeaturesExtractor = std::make_shared<TFeaturesExtractor>(Features);
+        FeaturesExtractor = std::make_shared<TFeaturesExtractor>(Features, ResetFeatures);
         return true;
     }
 };

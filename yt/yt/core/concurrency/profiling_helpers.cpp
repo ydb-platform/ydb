@@ -10,7 +10,7 @@ TTagSet GetThreadTags(
     const TString& threadName)
 {
     TTagSet tags;
-    tags.AddTag(std::pair<TString, TString>("thread", threadName));
+    tags.AddTag(TTag("thread", threadName));
     return tags;
 }
 
@@ -20,20 +20,22 @@ TTagSet GetBucketTags(
 {
     TTagSet tags;
 
-    tags.AddTag(std::pair<TString, TString>("thread", threadName));
-    tags.AddTag(std::pair<TString, TString>("bucket", bucketName), -1);
+    tags.AddTag(TTag("thread", threadName));
+    tags.AddTag(TTag("bucket", bucketName), -1);
 
     return tags;
 }
 
 TTagSet GetQueueTags(
     const TString& threadName,
+    const TString& bucketName,
     const TString& queueName)
 {
     TTagSet tags;
 
-    tags.AddTag(std::pair<TString, TString>("thread", threadName));
-    tags.AddTag(std::pair<TString, TString>("queue", queueName), -1);
+    tags.AddTag(TTag("thread", threadName));
+    tags.AddTag(TTag("bucket", bucketName), -1);
+    tags.AddTag(TTag("queue", queueName), -1);
 
     return tags;
 }

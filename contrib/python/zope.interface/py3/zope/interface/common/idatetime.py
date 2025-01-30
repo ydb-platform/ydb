@@ -89,10 +89,10 @@ class IDateClass(Interface):
         """Return the local date from a POSIX timestamp (like time.time())
 
         This may raise `ValueError`, if the timestamp is out of the range of
-        values supported by the platform C ``localtime()`` function. It's common
-        for this to be restricted to years from 1970 through 2038. Note that
-        on non-POSIX systems that include leap seconds in their notion of a
-        timestamp, leap seconds are ignored by `fromtimestamp`.
+        values supported by the platform C ``localtime()`` function. It's
+        common for this to be restricted to years from 1970 through 2038. Note
+        that on non-POSIX systems that include leap seconds in their notion of
+        a timestamp, leap seconds are ignored by `fromtimestamp`.
         """
 
     def fromordinal(ordinal):
@@ -122,13 +122,17 @@ class IDate(IDateClass):
     month = Attribute("Between 1 and 12 inclusive")
 
     day = Attribute(
-        "Between 1 and the number of days in the given month of the given year.")
+        "Between 1 and the number of days "
+        "in the given month of the given year."
+    )
 
     def replace(year, month, day):
         """Return a date with the same value.
 
         Except for those members given new values by whichever keyword
-        arguments are specified. For example, if ``d == date(2002, 12, 31)``, then
+        arguments are specified.
+
+        For example, if ``d == date(2002, 12, 31)``, then
         ``d.replace(day=26) == date(2000, 12, 26)``.
         """
 
@@ -238,10 +242,10 @@ class IDateTimeClass(Interface):
     def now(tz=None):
         """Return the current local date and time.
 
-        If optional argument *tz* is None or not specified, this is like `today`,
-        but, if possible, supplies more precision than can be gotten from going
-        through a `time.time` timestamp (for example, this may be possible on
-        platforms supplying the C ``gettimeofday()`` function).
+        If optional argument *tz* is None or not specified, this is like
+        `today`, but, if possible, supplies more precision than can be gotten
+        from going through a `time.time` timestamp (for example, this may be
+        possible on platforms supplying the C ``gettimeofday()`` function).
 
         Else tz must be an instance of a class tzinfo subclass, and the current
         date and time are converted to tz's time zone. In this case the result
@@ -269,7 +273,7 @@ class IDateTimeClass(Interface):
         Else tz must be an instance of a class tzinfo subclass, and the
         timestamp is converted to tz's time zone. In this case the result is
         equivalent to
-        ``tz.fromutc(datetime.utcfromtimestamp(timestamp).replace(tzinfo=tz))``.
+        ``tz.fromutc(datetime.utcfromtimestamp(timestamp).replace(tzinfo=tz))``
 
         fromtimestamp() may raise `ValueError`, if the timestamp is out of the
         range of values supported by the platform C localtime() or gmtime()
@@ -286,8 +290,8 @@ class IDateTimeClass(Interface):
         """Return the UTC datetime from the POSIX timestamp with tzinfo None.
 
         This may raise `ValueError`, if the timestamp is out of the range of
-        values supported by the platform C ``gmtime()`` function. It's common for
-        this to be restricted to years in 1970 through 2038.
+        values supported by the platform C ``gmtime()`` function. It's common
+        for this to be restricted to years in 1970 through 2038.
 
         .. seealso:: `fromtimestamp`.
         """
@@ -312,7 +316,7 @@ class IDateTimeClass(Interface):
 
 
 class IDateTime(IDate, IDateTimeClass):
-    """Object contains all the information from a date object and a time object.
+    """Contains all the information from a date object and a time object.
 
     Implemented by `datetime.datetime`.
     """
@@ -337,7 +341,7 @@ class IDateTime(IDate, IDateTimeClass):
         or None if none was passed""")
 
     def date():
-         """Return date object with same year, month and day."""
+        """Return date object with same year, month and day."""
 
     def time():
         """Return time object with same hour, minute, second, microsecond.
@@ -358,8 +362,8 @@ class IDateTime(IDate, IDateTimeClass):
         """Return a datetime with the same members, except for those members
         given new values by whichever keyword arguments are specified.
 
-        Note that ``tzinfo=None`` can be specified to create a naive datetime from
-        an aware datetime with no conversion of date and time members.
+        Note that ``tzinfo=None`` can be specified to create a naive datetime
+        from an aware datetime with no conversion of date and time members.
         """
 
     def astimezone(tz):
@@ -377,13 +381,16 @@ class IDateTime(IDate, IDateTimeClass):
 
             after astz = dt.astimezone(tz), astz - astz.utcoffset()
 
-        will usually have the same date and time members as dt - dt.utcoffset().
-        The discussion of class `datetime.tzinfo` explains the cases at Daylight Saving
-        Time transition boundaries where this cannot be achieved (an issue only
-        if tz models both standard and daylight time).
+        will usually have the same date and time members as dt -
+        dt.utcoffset().  The discussion of class `datetime.tzinfo` explains
+        the cases at Daylight Saving Time transition boundaries where this
+        cannot be achieved (an issue only if tz models both standard and
+        daylight time).
 
-        If you merely want to attach a time zone object *tz* to a datetime *dt*
-        without adjustment of date and time members, use ``dt.replace(tzinfo=tz)``.
+        If you merely want to attach a time zone object *tz* to a datetime
+        *dt* without adjustment of date and time members, use
+        ``dt.replace(tzinfo=tz)``.
+
         If you merely want to remove the time zone object from an aware
         datetime dt without conversion of date and time members, use
         ``dt.replace(tzinfo=None)``.
@@ -405,7 +412,7 @@ class IDateTime(IDate, IDateTimeClass):
         """Return the timezone name."""
 
     def timetuple():
-        """Return a 9-element tuple of the form returned by `time.localtime`."""
+        """Return a 9-tuple of the form returned by `time.localtime`."""
 
     def utctimetuple():
         """Return UTC time tuple compatilble with `time.gmtime`."""
@@ -453,17 +460,21 @@ class IDateTime(IDate, IDateTimeClass):
         """
 
     def __str__():
-        """For a datetime instance *d*, ``str(d)`` is equivalent to ``d.isoformat(' ')``.
+        """Convert to a stirng
+
+        For a datetime instance *d*, ``str(d)`` is equivalent to
+        ``d.isoformat(' ')``.
         """
 
     def ctime():
         """Return a string representing the date and time.
 
-        ``datetime(2002, 12, 4, 20, 30, 40).ctime() == 'Wed Dec 4 20:30:40 2002'``.
-        ``d.ctime()`` is equivalent to ``time.ctime(time.mktime(d.timetuple()))`` on
-        platforms where the native C ``ctime()`` function (which `time.ctime`
-        invokes, but which `datetime.ctime` does not invoke) conforms to the
-        C standard.
+        ``datetime(2002, 12, 4, 20, 30, 40).ctime()`` yields
+        ``'Wed Dec 4 20:30:40 2002'``.
+        ``d.ctime()`` is equivalent to
+        ``time.ctime(time.mktime(d.timetuple()))`` on platforms where the
+        native C ``ctime()`` function (which `time.ctime` invokes, but which
+        `datetime.ctime` does not invoke) conforms to the C standard.
         """
 
     def strftime(format):
@@ -605,7 +616,7 @@ classImplements(datetime, IDateTime)
 classImplements(time, ITime)
 classImplements(tzinfo, ITZInfo)
 
-## directlyProvides(timedelta, ITimeDeltaClass)
-## directlyProvides(date, IDateClass)
-## directlyProvides(datetime, IDateTimeClass)
-## directlyProvides(time, ITimeClass)
+# directlyProvides(timedelta, ITimeDeltaClass)
+# directlyProvides(date, IDateClass)
+# directlyProvides(datetime, IDateTimeClass)
+# directlyProvides(time, ITimeClass)

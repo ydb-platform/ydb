@@ -31,6 +31,13 @@ namespace NKikimr {
         return runtime.Register(CreateBootstrapper(info, bi.Get()), nodeIndex);
     }
 
+    TActorId StartTestTablet(TTestActorRuntime &runtime, TTabletStorageInfo *info,
+            std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex)
+    {
+        auto setup = MakeIntrusive<TTabletSetupInfo>(op, TMailboxType::Simple, ui32(0), TMailboxType::Simple, ui32(0));
+        return runtime.Register(CreateTablet({}, info, setup.Get(), 0), nodeIndex);
+    }
+
     NTabletPipe::TClientConfig GetPipeConfigWithRetries()
     {
         NTabletPipe::TClientConfig pipeConfig;

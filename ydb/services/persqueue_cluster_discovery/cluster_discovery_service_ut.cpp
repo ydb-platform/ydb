@@ -15,8 +15,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/text_format.h>
 
-#include <grpc++/client_context.h>
-#include <grpc++/create_channel.h>
+#include <grpcpp/client_context.h>
+#include <grpcpp/create_channel.h>
 
 #include <util/stream/file.h>
 #include <util/system/tempfile.h>
@@ -278,7 +278,7 @@ public:
         UNIT_ASSERT(!Server_);
 
         NetDataFile = MakeHolder<TTempFileHandle>();
-        NetDataFile->Write(netDataTsv.Data(), netDataTsv.Size());
+        NetDataFile->Write(netDataTsv.data(), netDataTsv.size());
         NetDataFile->FlushData();
 
         Settings_.NetClassifierConfig.SetNetDataFilePath(NetDataFile->Name());

@@ -66,9 +66,6 @@ struct ISubConsumerClient
         const std::vector<int>& partitionIndexes,
         bool withLastConsumeTime = false) const = 0;
 
-    //! Fetch and parse the target_queue attribute of this consumer.
-    virtual TFuture<TCrossClusterReference> FetchTargetQueue() const = 0;
-
     struct TPartitionStatistics
     {
         i64 FlushedDataWeight = 0;
@@ -94,21 +91,6 @@ struct IConsumerClient
 DEFINE_REFCOUNTED_TYPE(IConsumerClient)
 
 ////////////////////////////////////////////////////////////////////////////////
-
-// TODO(max42): get rid of the following two methods.
-// They are left as a temporary mean to keep API tests working.
-
-//! Creates a BigRT single-queue consumer client.
-ISubConsumerClientPtr CreateBigRTConsumerClient(
-    const NApi::IClientPtr& client,
-    const NYPath::TYPath& path,
-    const NTableClient::TTableSchema& schema);
-
-//! Uses the table mount cache to fetch the consumer's schema and make
-//! sure the consumer actually has BigRT consumer schema.
-ISubConsumerClientPtr CreateBigRTConsumerClient(
-    const NApi::IClientPtr& client,
-    const NYPath::TYPath& path);
 
 //! Creates a native YT multi-queue consumer client.
 IConsumerClientPtr CreateConsumerClient(

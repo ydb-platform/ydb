@@ -7,14 +7,14 @@
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/minikql/dom/yson.h>
-#include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/utils/utf8.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/minikql/dom/json.h>
+#include <yql/essentials/utils/utf8.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
@@ -75,9 +75,13 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
         case arrow::Type::DURATION:
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
-        case arrow::Type::DECIMAL:
-            // TODO
-            return false;
+        case arrow::Type::DECIMAL: {
+            auto arrowDecimal = static_cast<const arrow::DecimalType *>(&type);
+            Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
+            decimalType->set_precision(arrowDecimal->precision());
+            decimalType->set_scale(arrowDecimal->scale());
+            return true;
+        }
         case arrow::Type::NA:
         case arrow::Type::HALF_FLOAT:
         case arrow::Type::FIXED_SIZE_BINARY:
@@ -132,7 +136,7 @@ private:
 
     void OnBeforePoison(const TActorContext&) override {
         // Client is gone, but we need to "reply" anyway?
-        Request->SendResult(Ydb::StatusIds::CANCELLED, {});
+        Request->ReplyWithYdbStatus(Ydb::StatusIds::CANCELLED);
     }
 
     bool ReportCostInfoEnabled() const {
@@ -299,7 +303,7 @@ private:
 
     void OnBeforePoison(const TActorContext&) override {
         // Client is gone, but we need to "reply" anyway?
-        Request->SendResult(Ydb::StatusIds::CANCELLED, {});
+        Request->ReplyWithYdbStatus(Ydb::StatusIds::CANCELLED);
     }
 
     bool ReportCostInfoEnabled() const {
@@ -456,35 +460,13 @@ private:
             case EUploadSource::CSV:
             {
                 auto& data = GetSourceData();
-                auto& cvsSettings = GetCsvSettings();
-                ui32 skipRows = cvsSettings.skip_rows();
-                auto& delimiter = cvsSettings.delimiter();
-                auto& nullValue = cvsSettings.null_value();
-                bool withHeader = cvsSettings.header();
-
-                NFormats::TArrowCSV reader(SrcColumns, withHeader, NotNullColumns);
-                reader.SetSkipRows(skipRows);
-
-                if (!delimiter.empty()) {
-                    if (delimiter.size() != 1) {
-                        errorMessage = TStringBuilder() << "Wrong delimiter '" << delimiter << "'";
-                        return false;
-                    }
-
-                    reader.SetDelimiter(delimiter[0]);
+                auto& csvSettings = GetCsvSettings();
+                auto reader = NFormats::TArrowCSVScheme::Create(SrcColumns, csvSettings.header(), NotNullColumns);
+                if (!reader.ok()) {
+                    errorMessage = reader.status().ToString();
+                    return false;
                 }
-
-                if (!nullValue.empty()) {
-                    reader.SetNullValue(nullValue);
-                }
-
-                if (data.size() > NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
-                    ui32 blockSize = NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
-                    blockSize *= data.size() / blockSize + 1;
-                    reader.SetBlockSize(blockSize);
-                }
-
-                Batch = reader.ReadSingleBatch(data, errorMessage);
+                Batch = reader->ReadSingleBatch(data, csvSettings, errorMessage);
                 if (!Batch) {
                     return false;
                 }

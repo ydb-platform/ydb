@@ -1,11 +1,14 @@
 #include "double_indexed.h"
 #include "events.h"
+#include "events_internal.h"
+#include "events_schemeshard.h"
 #include "helpers.h"
 #include "monitorable_actor.h"
 #include "opaque_path_description.h"
 #include "replica.h"
 
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -112,7 +115,7 @@ private:
             return true;
         }
 
-        bool EnqueueVersion(const TSchemeBoardEvents::TEvNotifyBuilder* notify) {
+        bool EnqueueVersion(const NInternalEvents::TEvNotifyBuilder* notify) {
             const auto& record = notify->Record;
             return EnqueueVersion(record.GetVersion(), record.GetStrong());
         }
@@ -407,19 +410,19 @@ public:
             Notify();
         }
 
-        THolder<TSchemeBoardEvents::TEvNotifyBuilder> BuildNotify(bool forceStrong = false) const {
-            THolder<TSchemeBoardEvents::TEvNotifyBuilder> notify;
+        THolder<NInternalEvents::TEvNotifyBuilder> BuildNotify(bool forceStrong = false) const {
+            THolder<NInternalEvents::TEvNotifyBuilder> notify;
 
             const bool isDeletion = IsEmpty();
 
             if (!PathId) {
                 Y_ABORT_UNLESS(isDeletion);
-                notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(Path, isDeletion);
+                notify = MakeHolder<NInternalEvents::TEvNotifyBuilder>(Path, isDeletion);
             } else if (!Path) {
                 Y_ABORT_UNLESS(isDeletion);
-                notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(PathId, isDeletion);
+                notify = MakeHolder<NInternalEvents::TEvNotifyBuilder>(PathId, isDeletion);
             } else {
-                notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(Path, PathId, isDeletion);
+                notify = MakeHolder<NInternalEvents::TEvNotifyBuilder>(Path, PathId, isDeletion);
             }
 
             if (!isDeletion) {
@@ -712,7 +715,7 @@ private:
         return desc ? desc->GetVersion() : 0;
     }
 
-    void AckUpdate(TSchemeBoardEvents::TEvUpdate::TPtr& ev) {
+    void AckUpdate(NInternalEvents::TEvUpdate::TPtr& ev) {
         const auto& record = ev->Get()->GetRecord();
 
         const ui64 owner = record.GetOwner();
@@ -740,10 +743,10 @@ private:
         }
 
         const ui64 version = GetVersion(ackPathId);
-        Send(ev->Sender, new TSchemeBoardEvents::TEvUpdateAck(owner, generation, ackPathId, version), 0, ev->Cookie);
+        Send(ev->Sender, new NSchemeshardEvents::TEvUpdateAck(owner, generation, ackPathId, version), 0, ev->Cookie);
     }
 
-    void Handle(TSchemeBoardEvents::TEvHandshakeRequest::TPtr& ev) {
+    void Handle(NInternalEvents::TEvHandshakeRequest::TPtr& ev) {
         SBR_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
 
@@ -768,10 +771,10 @@ private:
         info.PendingGeneration = generation;
         info.PopulatorActor = ev->Sender;
 
-        Send(ev->Sender, new TSchemeBoardEvents::TEvHandshakeResponse(owner, info.Generation), 0, ev->Cookie);
+        Send(ev->Sender, new NInternalEvents::TEvHandshakeResponse(owner, info.Generation), 0, ev->Cookie);
     }
 
-    void Handle(TSchemeBoardEvents::TEvUpdate::TPtr& ev) {
+    void Handle(NInternalEvents::TEvUpdate::TPtr& ev) {
         SBR_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie
@@ -950,7 +953,7 @@ private:
             << ", curDomainId# " << curDomainId);
     }
 
-    void Handle(TSchemeBoardEvents::TEvCommitRequest::TPtr& ev) {
+    void Handle(NInternalEvents::TEvCommitRequest::TPtr& ev) {
         SBR_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
 
@@ -983,7 +986,7 @@ private:
 
         info.Generation = info.PendingGeneration;
         info.IsCommited = true;
-        Send(ev->Sender, new TSchemeBoardEvents::TEvCommitResponse(owner, info.Generation), 0, ev->Cookie);
+        Send(ev->Sender, new NInternalEvents::TEvCommitResponse(owner, info.Generation), 0, ev->Cookie);
 
         if (WaitStrongNotifications.contains(owner)) {
             Send(SelfId(), new TEvPrivate::TEvSendStrongNotifications(owner));
@@ -1049,7 +1052,7 @@ private:
         }
     }
 
-    void Handle(TSchemeBoardEvents::TEvSubscribe::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSubscribe::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui64 domainOwnerId = record.GetDomainOwnerId();
         const auto& capabilities = record.GetCapabilities();
@@ -1065,7 +1068,7 @@ private:
         }
     }
 
-    void Handle(TSchemeBoardEvents::TEvUnsubscribe::TPtr& ev) {
+    void Handle(NInternalEvents::TEvUnsubscribe::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         SBR_LOG_D("Handle " << ev->Get()->ToString()
@@ -1079,7 +1082,7 @@ private:
         }
     }
 
-    void Handle(TSchemeBoardEvents::TEvNotifyAck::TPtr& ev) {
+    void Handle(NInternalEvents::TEvNotifyAck::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         SBR_LOG_D("Handle " << ev->Get()->ToString()
@@ -1113,11 +1116,11 @@ private:
         }
 
         if (auto cookie = info.ProcessSyncRequest()) {
-            Send(ev->Sender, new TSchemeBoardEvents::TEvSyncVersionResponse(desc->GetVersion()), 0, *cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion()), 0, *cookie);
         }
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncVersionRequest::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         SBR_LOG_D("Handle " << ev->Get()->ToString()
@@ -1135,7 +1138,7 @@ private:
                 version = GetVersion(TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
             }
 
-            Send(ev->Sender, new TSchemeBoardEvents::TEvSyncVersionResponse(version), 0, ev->Cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version), 0, ev->Cookie);
             return;
         }
 
@@ -1157,7 +1160,7 @@ private:
         auto cookie = info.ProcessSyncRequest();
         Y_ABORT_UNLESS(cookie && *cookie == ev->Cookie);
 
-        Send(ev->Sender, new TSchemeBoardEvents::TEvSyncVersionResponse(desc->GetVersion()), 0, *cookie);
+        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion()), 0, *cookie);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
@@ -1267,19 +1270,22 @@ public:
 
     void Bootstrap() {
         TMonitorableActor::Bootstrap();
+        auto localNodeId = SelfId().NodeId();
+        auto whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(localNodeId);
+        Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("SchemeBoard"));
         Become(&TThis::StateWork);
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardEvents::TEvHandshakeRequest, Handle);
-            hFunc(TSchemeBoardEvents::TEvUpdate, Handle);
-            hFunc(TSchemeBoardEvents::TEvCommitRequest, Handle);
+            hFunc(NInternalEvents::TEvHandshakeRequest, Handle);
+            hFunc(NInternalEvents::TEvUpdate, Handle);
+            hFunc(NInternalEvents::TEvCommitRequest, Handle);
             hFunc(TEvPrivate::TEvSendStrongNotifications, Handle);
-            hFunc(TSchemeBoardEvents::TEvSubscribe, Handle);
-            hFunc(TSchemeBoardEvents::TEvUnsubscribe, Handle);
-            hFunc(TSchemeBoardEvents::TEvNotifyAck, Handle);
-            hFunc(TSchemeBoardEvents::TEvSyncVersionRequest, Handle);
+            hFunc(NInternalEvents::TEvSubscribe, Handle);
+            hFunc(NInternalEvents::TEvUnsubscribe, Handle);
+            hFunc(NInternalEvents::TEvNotifyAck, Handle);
+            hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeRequest, Handle);

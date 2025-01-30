@@ -3,6 +3,7 @@
 #include "rpc_scheme_base.h"
 #include "rpc_common/rpc_common.h"
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
 
 namespace NKikimr {
@@ -60,6 +61,11 @@ private:
 
 void DoRemoveDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TRemoveDirectoryRPC(p.release()));
+}
+
+template<>
+IActor* TEvRemoveDirectoryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TRemoveDirectoryRPC(msg);
 }
 
 } // namespace NGRpcService

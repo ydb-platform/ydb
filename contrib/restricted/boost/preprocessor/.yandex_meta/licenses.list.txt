@@ -1,0 +1,148 @@
+====================BSL-1.0====================
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_1_0.txt or copy at
+#  *     http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_2_0.txt or copy at
+#  *     http://www.boost.org/LICENSE_2_0.txt)
+
+
+====================BSL-1.0====================
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_3_0.txt or copy at
+#  *     http://www.boost.org/LICENSE_3_0.txt)
+
+
+====================BSL-1.0====================
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_4_0.txt or copy at
+#  *     http://www.boost.org/LICENSE_4_0.txt)
+
+
+====================BSL-1.0====================
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_5_0.txt or copy at
+#  *     http://www.boost.org/LICENSE_5_0.txt)
+
+
+====================BSL-1.0====================
+#  *     Distributed under the Boost Software License, Version 1.0. (See      *
+#  *     accompanying file LICENSE_1_0.txt or copy at                         *
+#  *     http://www.boost.org/LICENSE_1_0.txt)                                *
+
+
+====================BSL-1.0====================
+#  * Distributed under the Boost Software License, Version 1.0. (See
+#  * accompanying file LICENSE_1_0.txt or copy at
+#  * http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Edward Diener 2011.                                    *
+#  *     (C) Copyright Paul Mensonides 2011.                                  *
+#  *     Distributed under the Boost Software License, Version 1.0. (See      *
+#  *     accompanying file LICENSE_1_0.txt or copy at                         *
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Edward Diener 2013.
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Edward Diener 2014,2019.
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Edward Diener 2015.
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Edward Diener 2016.                                    *
+#  *     Distributed under the Boost Software License, Version 1.0. (See      *
+#  *     accompanying file LICENSE_1_0.txt or copy at                         *
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Edward Diener 2019.
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Edward Diener 2020.                                    *
+#  *     Distributed under the Boost Software License, Version 1.0. (See      *
+#  *     accompanying file LICENSE_1_0.txt or copy at                         *
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Paul Mensonides 2002-2011.                             *
+#  *     (C) Copyright Edward Diener 2011,2013.                               *
+#  *     Distributed under the Boost Software License, Version 1.0. (See      *
+#  *     accompanying file LICENSE_1_0.txt or copy at                         *
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Paul Mensonides 2002-2011.                             *
+#  *     (C) Copyright Edward Diener 2011-2020.                               *
+#  *     Distributed under the Boost Software License, Version 1.0. (See      *
+#  *     accompanying file LICENSE_1_0.txt or copy at                         *
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Paul Mensonides 2002-2011.                             *
+#  *     (C) Copyright Edward Diener 2011.                                    *
+#  *     Distributed under the Boost Software License, Version 1.0. (See      *
+#  *     accompanying file LICENSE_1_0.txt or copy at                         *
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Paul Mensonides 2002.
+#  *     (C) Copyright Edward Diener 2014.
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Paul Mensonides 2002.
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Paul Mensonides 2003.
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Paul Mensonides 2005.                                  *
+#  *     Distributed under the Boost Software License, Version 1.0. (See      *
+#  *     accompanying file LICENSE_1_0.txt or copy at                         *
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Paul Mensonides 2011.
+#  *     (C) Copyright Edward Diener 2011,2014.
+#  *     Distributed under the Boost Software License, Version 1.0. (See
+#  *     accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+#  *     (C) Copyright Paul Mensonides 2012.                                  *
+#  *     Distributed under the Boost Software License, Version 1.0. (See      *
+#  *     accompanying file LICENSE_1_0.txt or copy at                         *
+
+
+====================COPYRIGHT====================
+# /* Copyright (C) 2001
+#  * Housemarque Oy
+#  * http://www.housemarque.com

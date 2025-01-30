@@ -14,6 +14,7 @@
 #include <yt/yt/core/concurrency/scheduler.h>
 
 #include <library/cpp/yt/misc/strong_typedef.h>
+#include <library/cpp/yt/misc/cast.h>
 
 #include <array>
 
@@ -59,6 +60,7 @@ XX(TDuration)
 
 XX(TString)
 XX(TStringBuf)
+XX(std::string)
 XX(TGuid)
 
 #undef XX
@@ -141,8 +143,10 @@ void ToUnversionedValue(
     if constexpr (TEnumTraits<T>::IsStringSerializableEnum) {
         ToUnversionedValue(unversionedValue, NYT::FormatEnum(value), rowBuffer, id, flags);
     } else if constexpr (TEnumTraits<T>::IsBitEnum) {
+        static_assert(CanFitSubtype<ui64, std::underlying_type_t<T>>());
         ToUnversionedValue(unversionedValue, static_cast<ui64>(value), rowBuffer, id, flags);
     } else {
+        static_assert(CanFitSubtype<i64, std::underlying_type_t<T>>());
         ToUnversionedValue(unversionedValue, static_cast<i64>(value), rowBuffer, id, flags);
     }
 }
@@ -153,15 +157,50 @@ void FromUnversionedValue(
     T* value,
     TUnversionedValue unversionedValue)
 {
+    static_assert(TEnumTraits<T>::IsStringSerializableEnum ||
+        TEnumTraits<T>::IsBitEnum && CanFitSubtype<ui64, std::underlying_type_t<T>>() ||
+        !TEnumTraits<T>::IsBitEnum && CanFitSubtype<i64, std::underlying_type_t<T>>());
+
     switch (unversionedValue.Type) {
         case EValueType::Int64:
-            *value = static_cast<T>(unversionedValue.Data.Int64);
+            *value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>(unversionedValue.Data.Int64));
             break;
         case EValueType::Uint64:
-            *value = static_cast<T>(unversionedValue.Data.Uint64);
+            *value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>(unversionedValue.Data.Uint64));
             break;
         case EValueType::String:
             *value = NYT::ParseEnum<T>(unversionedValue.AsStringBuf());
+            break;
+        default:
+            THROW_ERROR_EXCEPTION("Cannot parse enum value from %Qlv",
+                unversionedValue.Type);
+    }
+}
+
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    T value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    static_assert(CanFitSubtype<i64, std::underlying_type_t<T>>());
+    ToUnversionedValue(unversionedValue, static_cast<i64>(value), rowBuffer, id, flags);
+}
+
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void FromUnversionedValue(
+    T* value,
+    TUnversionedValue unversionedValue)
+{
+    static_assert(CanFitSubtype<i64, std::underlying_type_t<T>>());
+
+    switch (unversionedValue.Type) {
+        case EValueType::Int64:
+            *value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>(unversionedValue.Data.Int64));
             break;
         default:
             THROW_ERROR_EXCEPTION("Cannot parse enum value from %Qlv",

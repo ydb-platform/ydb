@@ -51,6 +51,10 @@ ONE_FROM_MANY_LABEL = calc_label_from_name("one more from many()")
 T = TypeVar("T")
 
 
+def identity(v: T) -> T:
+    return v
+
+
 def check_sample(
     values: Union[Type[enum.Enum], Sequence[T]], strategy_name: str
 ) -> Sequence[T]:
@@ -166,8 +170,15 @@ class Sampler:
                 self.table.append((base, alternate, alternate_chance))
         self.table.sort()
 
-    def sample(self, data: "ConjectureData", forced: Optional[int] = None) -> int:
-        data.start_example(SAMPLE_IN_SAMPLER_LABEL)
+    def sample(
+        self,
+        data: "ConjectureData",
+        *,
+        forced: Optional[int] = None,
+        fake_forced: bool = False,
+    ) -> int:
+        if self.observe:
+            data.start_example(SAMPLE_IN_SAMPLER_LABEL)
         forced_choice = (  # pragma: no branch # https://github.com/nedbat/coveragepy/issues/1617
             None
             if forced is None
@@ -178,7 +189,10 @@ class Sampler:
             )
         )
         base, alternate, alternate_chance = data.choice(
-            self.table, forced=forced_choice, observe=self.observe
+            self.table,
+            forced=forced_choice,
+            fake_forced=fake_forced,
+            observe=self.observe,
         )
         forced_use_alternate = None
         if forced is not None:
@@ -189,9 +203,13 @@ class Sampler:
             assert forced == base or forced_use_alternate
 
         use_alternate = data.draw_boolean(
-            alternate_chance, forced=forced_use_alternate, observe=self.observe
+            alternate_chance,
+            forced=forced_use_alternate,
+            fake_forced=fake_forced,
+            observe=self.observe,
         )
-        data.stop_example()
+        if self.observe:
+            data.stop_example()
         if use_alternate:
             assert forced is None or alternate == forced, (forced, alternate)
             return alternate
@@ -224,6 +242,7 @@ class many:
         average_size: Union[int, float],
         *,
         forced: Optional[int] = None,
+        fake_forced: bool = False,
         observe: bool = True,
     ) -> None:
         assert 0 <= min_size <= average_size <= max_size
@@ -232,6 +251,7 @@ class many:
         self.max_size = max_size
         self.data = data
         self.forced_size = forced
+        self.fake_forced = fake_forced
         self.p_continue = _calc_p_continue(average_size - min_size, max_size - min_size)
         self.count = 0
         self.rejections = 0
@@ -240,15 +260,23 @@ class many:
         self.rejected = False
         self.observe = observe
 
+    def stop_example(self):
+        if self.observe:
+            self.data.stop_example()
+
+    def start_example(self, label):
+        if self.observe:
+            self.data.start_example(label)
+
     def more(self) -> bool:
         """Should I draw another element to add to the collection?"""
         if self.drawn:
-            self.data.stop_example()
+            self.stop_example()
 
         self.drawn = True
         self.rejected = False
 
-        self.data.start_example(ONE_FROM_MANY_LABEL)
+        self.start_example(ONE_FROM_MANY_LABEL)
         if self.min_size == self.max_size:
             # if we have to hit an exact size, draw unconditionally until that
             # point, and no further.
@@ -267,14 +295,17 @@ class many:
             elif self.forced_size is not None:
                 forced_result = self.count < self.forced_size
             should_continue = self.data.draw_boolean(
-                self.p_continue, forced=forced_result, observe=self.observe
+                self.p_continue,
+                forced=forced_result,
+                fake_forced=self.fake_forced,
+                observe=self.observe,
             )
 
         if should_continue:
             self.count += 1
             return True
         else:
-            self.data.stop_example()
+            self.stop_example()
             return False
 
     def reject(self, why: Optional[str] = None) -> None:

@@ -92,6 +92,11 @@ BM_DEFINE_double(benchmark_min_warmup_time, 0.0);
 // standard deviation of the runs will be reported.
 BM_DEFINE_int32(benchmark_repetitions, 1);
 
+// If enabled, forces each benchmark to execute exactly one iteration and one
+// repetition, bypassing any configured
+// MinTime()/MinWarmUpTime()/Iterations()/Repetitions()
+BM_DEFINE_bool(benchmark_dry_run, false);
+
 // If set, enable random interleaving of repetitions of all benchmarks.
 // See http://github.com/google/benchmark/issues/1051 for details.
 BM_DEFINE_bool(benchmark_enable_random_interleaving, false);
@@ -152,15 +157,24 @@ BENCHMARK_EXPORT std::map<std::string, std::string>*& GetGlobalContext() {
   return global_context;
 }
 
-// FIXME: wouldn't LTO mess this up?
-void UseCharPointer(char const volatile*) {}
+static void const volatile* volatile global_force_escape_pointer;
+
+// FIXME: Verify if LTO still messes this up?
+void UseCharPointer(char const volatile* const v) {
+  // We want to escape the pointer `v` so that the compiler can not eliminate
+  // computations that produced it. To do that, we escape the pointer by storing
+  // it into a volatile variable, since generally, volatile store, is not
+  // something the compiler is allowed to elide.
+  global_force_escape_pointer = reinterpret_cast<void const volatile*>(v);
+}
 
 }  // namespace internal
 
 State::State(std::string name, IterationCount max_iters,
              const std::vector<int64_t>& ranges, int thread_i, int n_threads,
              internal::ThreadTimer* timer, internal::ThreadManager* manager,
-             internal::PerfCountersMeasurement* perf_counters_measurement)
+             internal::PerfCountersMeasurement* perf_counters_measurement,
+             ProfilerManager* profiler_manager)
     : total_iterations_(0),
       batch_leftover_(0),
       max_iterations(max_iters),
@@ -174,7 +188,8 @@ State::State(std::string name, IterationCount max_iters,
       threads_(n_threads),
       timer_(timer),
       manager_(manager),
-      perf_counters_measurement_(perf_counters_measurement) {
+      perf_counters_measurement_(perf_counters_measurement),
+      profiler_manager_(profiler_manager) {
   BM_CHECK(max_iterations != 0) << "At least one iteration must be run";
   BM_CHECK_LT(thread_index_, threads_)
       << "thread_index must be less than threads";
@@ -199,7 +214,7 @@ State::State(std::string name, IterationCount max_iters,
 #if defined(__INTEL_COMPILER)
 #pragma warning push
 #pragma warning(disable : 1875)
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 #endif
@@ -217,7 +232,7 @@ State::State(std::string name, IterationCount max_iters,
       offsetof(State, skipped_) <= (cache_line_size - sizeof(skipped_)), "");
 #if defined(__INTEL_COMPILER)
 #pragma warning pop
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
 #if defined(__NVCC__)
@@ -294,6 +309,8 @@ void State::StartKeepRunning() {
   BM_CHECK(!started_ && !finished_);
   started_ = true;
   total_iterations_ = skipped() ? 0 : max_iterations;
+  if (BENCHMARK_BUILTIN_EXPECT(profiler_manager_ != nullptr, false))
+    profiler_manager_->AfterSetupStart();
   manager_->StartStopBarrier();
   if (!skipped()) ResumeTiming();
 }
@@ -307,6 +324,8 @@ void State::FinishKeepRunning() {
   total_iterations_ = 0;
   finished_ = true;
   manager_->StartStopBarrier();
+  if (BENCHMARK_BUILTIN_EXPECT(profiler_manager_ != nullptr, false))
+    profiler_manager_->BeforeTeardownStop();
 }
 
 namespace internal {
@@ -399,7 +418,8 @@ void RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks,
       benchmarks_with_threads += (benchmark.threads() > 1);
       runners.emplace_back(benchmark, &perfcounters, reports_for_family);
       int num_repeats_of_this_instance = runners.back().GetNumRepeats();
-      num_repetitions_total += num_repeats_of_this_instance;
+      num_repetitions_total +=
+          static_cast<size_t>(num_repeats_of_this_instance);
       if (reports_for_family)
         reports_for_family->num_runs_total += num_repeats_of_this_instance;
     }
@@ -577,12 +597,16 @@ size_t RunSpecifiedBenchmarks(BenchmarkReporter* display_reporter,
     Err << "A custom file reporter was provided but "
            "--benchmark_out=<file> was not specified."
         << std::endl;
+    Out.flush();
+    Err.flush();
     std::exit(1);
   }
   if (!fname.empty()) {
     output_file.open(fname);
     if (!output_file.is_open()) {
       Err << "invalid file name: '" << fname << "'" << std::endl;
+      Out.flush();
+      Err.flush();
       std::exit(1);
     }
     if (!file_reporter) {
@@ -597,10 +621,16 @@ size_t RunSpecifiedBenchmarks(BenchmarkReporter* display_reporter,
   }
 
   std::vector<internal::BenchmarkInstance> benchmarks;
-  if (!FindBenchmarksInternal(spec, &benchmarks, &Err)) return 0;
+  if (!FindBenchmarksInternal(spec, &benchmarks, &Err)) {
+    Out.flush();
+    Err.flush();
+    return 0;
+  }
 
   if (benchmarks.empty()) {
     Err << "Failed to match any benchmarks against regex: " << spec << "\n";
+    Out.flush();
+    Err.flush();
     return 0;
   }
 
@@ -611,6 +641,8 @@ size_t RunSpecifiedBenchmarks(BenchmarkReporter* display_reporter,
     internal::RunBenchmarks(benchmarks, display_reporter, file_reporter);
   }
 
+  Out.flush();
+  Err.flush();
   return benchmarks.size();
 }
 
@@ -633,6 +665,14 @@ int32_t GetBenchmarkVerbosity() { return FLAGS_v; }
 
 void RegisterMemoryManager(MemoryManager* manager) {
   internal::memory_manager = manager;
+}
+
+void RegisterProfilerManager(ProfilerManager* manager) {
+  // Don't allow overwriting an existing manager.
+  if (manager != nullptr) {
+    BM_CHECK_EQ(internal::profiler_manager, nullptr);
+  }
+  internal::profiler_manager = manager;
 }
 
 void AddCustomContext(const std::string& key, const std::string& value) {
@@ -686,6 +726,7 @@ void ParseCommandLineFlags(int* argc, char** argv) {
                         &FLAGS_benchmark_min_warmup_time) ||
         ParseInt32Flag(argv[i], "benchmark_repetitions",
                        &FLAGS_benchmark_repetitions) ||
+        ParseBoolFlag(argv[i], "benchmark_dry_run", &FLAGS_benchmark_dry_run) ||
         ParseBoolFlag(argv[i], "benchmark_enable_random_interleaving",
                       &FLAGS_benchmark_enable_random_interleaving) ||
         ParseBoolFlag(argv[i], "benchmark_report_aggregates_only",
@@ -724,6 +765,9 @@ void ParseCommandLineFlags(int* argc, char** argv) {
   if (FLAGS_benchmark_color.empty()) {
     PrintUsageAndExit();
   }
+  if (FLAGS_benchmark_dry_run) {
+    AddCustomContext("dry_run", "true");
+  }
   for (const auto& kv : FLAGS_benchmark_context) {
     AddCustomContext(kv.first, kv.second);
   }
@@ -736,6 +780,14 @@ int InitializeStreams() {
 
 }  // end namespace internal
 
+std::string GetBenchmarkVersion() {
+#ifdef BENCHMARK_VERSION
+  return {BENCHMARK_VERSION};
+#else
+  return {""};
+#endif
+}
+
 void PrintDefaultHelp() {
   fprintf(stdout,
           "benchmark"
@@ -744,6 +796,7 @@ void PrintDefaultHelp() {
           "          [--benchmark_min_time=`<integer>x` OR `<float>s` ]\n"
           "          [--benchmark_min_warmup_time=<min_warmup_time>]\n"
           "          [--benchmark_repetitions=<num_repetitions>]\n"
+          "          [--benchmark_dry_run={true|false}]\n"
           "          [--benchmark_enable_random_interleaving={true|false}]\n"
           "          [--benchmark_report_aggregates_only={true|false}]\n"
           "          [--benchmark_display_aggregates_only={true|false}]\n"

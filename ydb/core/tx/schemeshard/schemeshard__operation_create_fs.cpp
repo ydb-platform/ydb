@@ -1,9 +1,11 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/filestore/core/filestore.h>
 
 namespace {
 
@@ -19,7 +21,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TCreateFileStore::TConfigureParts"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -130,7 +132,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TCreateFileStore::TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -305,7 +307,8 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
             .NotDeleted()
             .NotUnderDeleting()
             .IsCommonSensePath()
-            .IsLikeDirectory();
+            .IsLikeDirectory()
+            .FailOnRestrictedCreateInTempZone();
 
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
@@ -425,10 +428,10 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
     context.SS->ClearDescribePathCaches(dstPath.Base());
     context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
-    dstPath.DomainInfo()->IncPathsInside();
-    dstPath.DomainInfo()->AddInternalShards(txState);
+    dstPath.DomainInfo()->IncPathsInside(context.SS);
+    dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
     dstPath.Base()->IncShardsInside(shardsToCreate);
-    parentPath.Base()->IncAliveChildren();
+    IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
     SetState(NextState());
     return result;
@@ -494,11 +497,10 @@ TTxState& TCreateFileStore::PrepareChanges(
     context.SS->ChangeTxState(db, operationId, TTxState::CreateParts);
     context.OnComplete.ActivateTx(operationId);
 
-    context.SS->PersistPath(db, fsPath->PathId);
     if (!acl.empty()) {
         fsPath->ApplyACL(acl);
-        context.SS->PersistACL(db, fsPath);
     }
+    context.SS->PersistPath(db, fsPath->PathId);
 
     context.SS->FileStoreInfos[pathId] = fs;
     context.SS->PersistFileStoreInfo(db, pathId, fs);
@@ -520,6 +522,30 @@ TTxState& TCreateFileStore::PrepareChanges(
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateFileStore().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateFileStore()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewFileStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateFileStore>(id, tx);

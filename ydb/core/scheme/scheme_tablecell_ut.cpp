@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/vector.h>
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 using namespace NActors;
 
@@ -13,6 +13,40 @@ Y_UNIT_TEST_SUITE(Scheme) {
 
     namespace NTypeIds = NScheme::NTypeIds;
     using TTypeInfo = NScheme::TTypeInfo;
+
+    Y_UNIT_TEST(NullCell) {
+        TCell nullCell;
+        UNIT_ASSERT_VALUES_EQUAL(nullCell.IsNull(), true);
+        UNIT_ASSERT_VALUES_EQUAL(nullCell.IsInline(), true);
+        UNIT_ASSERT_VALUES_EQUAL(nullCell.Data(), nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(nullCell.Size(), 0u);
+        TCell nullPtrCell(nullptr, 0);
+        UNIT_ASSERT_VALUES_EQUAL(nullPtrCell.IsNull(), true);
+        UNIT_ASSERT_VALUES_EQUAL(nullPtrCell.IsInline(), true);
+        UNIT_ASSERT_VALUES_EQUAL(nullPtrCell.Data(), nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(nullPtrCell.Size(), 0u);
+    }
+
+    Y_UNIT_TEST(EmptyCell) {
+        TCell emptyCell("", 0);
+        UNIT_ASSERT_VALUES_EQUAL(emptyCell.IsNull(), false);
+        UNIT_ASSERT_VALUES_EQUAL(emptyCell.IsInline(), true);
+        UNIT_ASSERT_VALUES_EQUAL(emptyCell.Size(), 0u);
+        UNIT_ASSERT(emptyCell.Data() != nullptr);
+    }
+
+    Y_UNIT_TEST(NotEmptyCell) {
+        TCell smallValue("abcdefghijklmn", 14);
+        UNIT_ASSERT_VALUES_EQUAL(smallValue.IsNull(), false);
+        UNIT_ASSERT_VALUES_EQUAL(smallValue.IsInline(), true);
+        UNIT_ASSERT_VALUES_EQUAL(smallValue.Size(), 14u);
+        UNIT_ASSERT_VALUES_EQUAL(smallValue.AsBuf(), "abcdefghijklmn");
+        TCell largeValue("abcdefghijklmnopq", 17);
+        UNIT_ASSERT_VALUES_EQUAL(largeValue.IsNull(), false);
+        UNIT_ASSERT_VALUES_EQUAL(largeValue.IsInline(), false);
+        UNIT_ASSERT_VALUES_EQUAL(largeValue.Size(), 17u);
+        UNIT_ASSERT_VALUES_EQUAL(largeValue.AsBuf(), "abcdefghijklmnopq");
+    }
 
     Y_UNIT_TEST(EmptyOwnedCellVec) {
         TOwnedCellVec empty;
@@ -63,6 +97,43 @@ Y_UNIT_TEST_SUITE(Scheme) {
         UNIT_ASSERT_VALUES_EQUAL(moved[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal)));
     }
 
+    Y_UNIT_TEST(OwnedCellVecFromSerialized) {
+        TOwnedCellVec empty1 = TOwnedCellVec::FromSerialized(TString());
+        UNIT_ASSERT_VALUES_EQUAL(empty1.size(), 0u);
+
+        TOwnedCellVec empty2 = TOwnedCellVec::FromSerialized(TString("\x00\x00", 2));
+        UNIT_ASSERT_VALUES_EQUAL(empty2.size(), 0u);
+
+        // Test truncated buffers don't cause buffer overflows
+        UNIT_ASSERT_EXCEPTION(TOwnedCellVec::FromSerialized(TString("\x00", 1)), std::invalid_argument);
+        UNIT_ASSERT_EXCEPTION(TOwnedCellVec::FromSerialized(TString("\x01\x00", 2)), std::invalid_argument);
+        UNIT_ASSERT_EXCEPTION(TOwnedCellVec::FromSerialized(TString("\x01\x00\x00\x00\x00", 5)), std::invalid_argument);
+        UNIT_ASSERT_EXCEPTION(TOwnedCellVec::FromSerialized(TString("\x01\x00\x04\x00\x00\x00xyz", 9)), std::invalid_argument);
+
+        TOwnedCellVec emptyCell = TOwnedCellVec::FromSerialized(TString("\x01\x00\x00\x00\x00\x00", 6));
+        UNIT_ASSERT_VALUES_EQUAL(emptyCell.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(emptyCell[0].IsNull(), false);
+        UNIT_ASSERT_VALUES_EQUAL(emptyCell[0].AsBuf(), TStringBuf());
+
+        TOwnedCellVec nullCell = TOwnedCellVec::FromSerialized(TString("\x01\x00\x00\x00\x00\x80", 6));
+        UNIT_ASSERT_VALUES_EQUAL(nullCell.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(nullCell[0].IsNull(), true);
+
+        TOwnedCellVec twoCells = TOwnedCellVec::FromSerialized(TString("\x02\x00\x03\x00\x00\x00xyz\x03\x00\x00\x00uvw", 16));
+        UNIT_ASSERT_VALUES_EQUAL(twoCells.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(twoCells[0].AsBuf(), TStringBuf("xyz"));
+        UNIT_ASSERT_VALUES_EQUAL(twoCells[1].AsBuf(), TStringBuf("uvw"));
+
+        TOwnedCellVec twoLargeCells = TOwnedCellVec::FromSerialized(TString("\x02\x00\x23\x00\x00\x00zyxwvutsrqponmlkjihgfedcba987654321\x23\x00\x00\x00ZYXWVUTSRQPONMLKJIHGFEDCBA987654321", 80));
+        UNIT_ASSERT_VALUES_EQUAL(twoLargeCells.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(twoLargeCells[0].AsBuf(), TStringBuf("zyxwvutsrqponmlkjihgfedcba987654321"));
+        UNIT_ASSERT_VALUES_EQUAL(twoLargeCells[1].AsBuf(), TStringBuf("ZYXWVUTSRQPONMLKJIHGFEDCBA987654321"));
+        // Ensure cell data is aligned (36 bytes per cell instead of 35)
+        UNIT_ASSERT_VALUES_EQUAL(twoLargeCells.DataSize(), 16 + sizeof(TCell) * 2 + 36 * 2);
+        UNIT_ASSERT_VALUES_EQUAL(uintptr_t(twoLargeCells[0].Data()) & 3, 0);
+        UNIT_ASSERT_VALUES_EQUAL(uintptr_t(twoLargeCells[1].Data()) & 3, 0);
+    }
+
     Y_UNIT_TEST(TSerializedCellVec) {
         ui64 intVal = 42;
         char smallStrVal[] = "str1";
@@ -86,11 +157,11 @@ Y_UNIT_TEST_SUITE(Scheme) {
         cells.push_back(TCell((const char*)&floatVal, sizeof(floatVal)));
         types.push_back(TTypeInfo(NTypeIds::Float));
         cells.push_back(TCell());
-        types.push_back(TTypeInfo(NTypeIds::Decimal));
+        types.push_back(TTypeInfo(NScheme::TDecimalType::Default()));
         cells.push_back(TCell((const char*)&intVal, sizeof(ui64)));
         types.push_back(TTypeInfo(NTypeIds::Uint64));
         cells.push_back(TCell());
-        types.push_back(TTypeInfo(NTypeIds::Decimal));
+        types.push_back(TTypeInfo(NScheme::TDecimalType::Default()));
         cells.push_back(TCell());
         types.push_back(TTypeInfo(NTypeIds::Uint8));
         cells.push_back(TCell(bigStrVal, sizeof(bigStrVal)));
@@ -135,12 +206,15 @@ Y_UNIT_TEST_SUITE(Scheme) {
                                  0);
 
         TSerializedCellVec vec3;
+        UNIT_ASSERT(!vec3);
         UNIT_ASSERT(vec3.GetCells().empty());
         UNIT_ASSERT(vec3.GetBuffer().empty());
 
         TString buf = vec.GetBuffer();
         UNIT_ASSERT(buf.size() > cells.size()*2);
         vec3.Parse(buf);
+        UNIT_ASSERT(vec3);
+
 
         UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec3.GetCells().data(), cells.data(),
                                                          types.data(),
@@ -309,13 +383,10 @@ Y_UNIT_TEST_SUITE(Scheme) {
     /**
      * CompareOrder test for cell1 < cell2 < cell3 given a type id
      */
-    void DoTestCompareOrder(const TCell& cell1, const TCell& cell2, const TCell& cell3, NScheme::TTypeId typeId) {
+    void DoTestCompareOrder(const TCell& cell1, const TCell& cell2, const TCell& cell3, NScheme::TTypeInfo type) {
         TCell nullCell;
 
-        NScheme::TTypeIdOrder typeIdDescending(typeId, NScheme::EOrder::Descending);
-
-        NScheme::TTypeInfo type(typeId);
-        NScheme::TTypeInfoOrder typeDescending(typeIdDescending);
+        NScheme::TTypeInfoOrder typeDescending(type, NScheme::EOrder::Descending);
 
         // NULL is always equal to itself, both ascending and descending
         UNIT_ASSERT_EQUAL(CompareTypedCells(nullCell, nullCell, type), 0);
@@ -380,7 +451,20 @@ Y_UNIT_TEST_SUITE(Scheme) {
             TCell((const char*)&decVal1, sizeof(decVal1)),
             TCell((const char*)&decVal2, sizeof(decVal2)),
             TCell((const char*)&decVal3, sizeof(decVal3)),
-            NScheme::NTypeIds::Decimal);
+            NScheme::TDecimalType::Default());
+
+        DoTestCompareOrder(
+            TCell((const char*)&decVal1, sizeof(decVal1)),
+            TCell((const char*)&decVal2, sizeof(decVal2)),
+            TCell((const char*)&decVal3, sizeof(decVal3)),
+            NScheme::TDecimalType(20, 10));
+
+        DoTestCompareOrder(
+            TCell((const char*)&decVal1, sizeof(decVal1)),
+            TCell((const char*)&decVal2, sizeof(decVal2)),
+            TCell((const char*)&decVal3, sizeof(decVal3)),
+            NScheme::TDecimalType(35, 20));
+
     }
 
     Y_UNIT_TEST(YqlTypesMustBeDefined) {
@@ -388,7 +472,9 @@ Y_UNIT_TEST_SUITE(Scheme) {
 
         TArrayRef<const NScheme::TTypeId> yqlIds(NScheme::NTypeIds::YqlIds);
         for (NScheme::TTypeId typeId : yqlIds) {
-            NScheme::TTypeInfo typeInfo(typeId);
+            NScheme::TTypeInfo typeInfo = typeId == NScheme::NTypeIds::Decimal ? 
+                NScheme::TTypeInfo(NScheme::TDecimalType::Default()) : 
+                NScheme::TTypeInfo(typeId);
             switch (typeId) {
             case NScheme::NTypeIds::Int8:
                 GetValueHash(typeInfo, TCell(charArr, sizeof(i8)));
@@ -506,5 +592,38 @@ Y_UNIT_TEST_SUITE(Scheme) {
                 UNIT_ASSERT_EQUAL(std::clamp(cmp, -1, 1), (i == j ? 0 : (i < j ? -1 : +1)));
             }
         }
+    }
+
+    Y_UNIT_TEST(UnsafeAppend) {
+        TString appended = TSerializedCellVec::Serialize({});
+
+        UNIT_ASSERT(TSerializedCellVec::UnsafeAppendCells({}, appended));
+
+        UNIT_ASSERT_EQUAL(appended.size(), 0);
+
+        ui64 intVal = 42;
+        char bigStrVal[] = "This is a large string value that shouldn't be inlined";
+
+        TVector<TCell> cells;
+        cells.emplace_back(TCell::Make(intVal));
+        cells.emplace_back(bigStrVal, sizeof(bigStrVal));
+
+        UNIT_ASSERT(TSerializedCellVec::UnsafeAppendCells(cells, appended));
+        TString serialized = TSerializedCellVec::Serialize(cells);
+
+        UNIT_ASSERT_VALUES_EQUAL(appended, serialized);
+
+        UNIT_ASSERT(TSerializedCellVec::UnsafeAppendCells(cells, appended));
+
+        cells.emplace_back(TCell::Make(intVal));
+        cells.emplace_back(bigStrVal, sizeof(bigStrVal));
+
+        serialized = TSerializedCellVec::Serialize(cells);
+
+        UNIT_ASSERT_VALUES_EQUAL(appended, serialized);
+
+        appended.resize(1);
+
+        UNIT_ASSERT(!TSerializedCellVec::UnsafeAppendCells(cells, appended));
     }
 }

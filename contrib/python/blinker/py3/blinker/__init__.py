@@ -1,19 +1,17 @@
-from blinker.base import ANY
-from blinker.base import NamedSignal
-from blinker.base import Namespace
-from blinker.base import receiver_connected
-from blinker.base import Signal
-from blinker.base import signal
-from blinker.base import WeakNamespace
+from __future__ import annotations
+
+from .base import ANY
+from .base import default_namespace
+from .base import NamedSignal
+from .base import Namespace
+from .base import Signal
+from .base import signal
 
 __all__ = [
     "ANY",
+    "default_namespace",
     "NamedSignal",
     "Namespace",
     "Signal",
-    "WeakNamespace",
-    "receiver_connected",
     "signal",
 ]
-
-__version__ = "1.7.0"

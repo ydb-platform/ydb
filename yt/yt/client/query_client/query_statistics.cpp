@@ -28,16 +28,17 @@ void ToProto(NProto::TQueryStatistics* serialized, const TQueryStatistics& origi
     serialized->set_rows_read(original.RowsRead);
     serialized->set_data_weight_read(original.DataWeightRead);
     serialized->set_rows_written(original.RowsWritten);
-    serialized->set_sync_time(ToProto<i64>(original.SyncTime));
-    serialized->set_async_time(ToProto<i64>(original.AsyncTime));
-    serialized->set_execute_time(ToProto<i64>(original.ExecuteTime));
-    serialized->set_read_time(ToProto<i64>(original.ReadTime));
-    serialized->set_write_time(ToProto<i64>(original.WriteTime));
-    serialized->set_codegen_time(ToProto<i64>(original.CodegenTime));
-    serialized->set_wait_on_ready_event_time(ToProto<i64>(original.WaitOnReadyEventTime));
+    serialized->set_sync_time(ToProto(original.SyncTime));
+    serialized->set_async_time(ToProto(original.AsyncTime));
+    serialized->set_execute_time(ToProto(original.ExecuteTime));
+    serialized->set_read_time(ToProto(original.ReadTime));
+    serialized->set_write_time(ToProto(original.WriteTime));
+    serialized->set_codegen_time(ToProto(original.CodegenTime));
+    serialized->set_wait_on_ready_event_time(ToProto(original.WaitOnReadyEventTime));
     serialized->set_incomplete_input(original.IncompleteInput);
     serialized->set_incomplete_output(original.IncompleteOutput);
     serialized->set_memory_usage(original.MemoryUsage);
+    serialized->set_total_grouped_row_count(original.TotalGroupedRowCount);
     ToProto(serialized->mutable_inner_statistics(), original.InnerStatistics);
 }
 
@@ -56,12 +57,14 @@ void FromProto(TQueryStatistics* original, const NProto::TQueryStatistics& seria
     original->IncompleteInput = serialized.incomplete_input();
     original->IncompleteOutput = serialized.incomplete_output();
     original->MemoryUsage = serialized.memory_usage();
+    original->TotalGroupedRowCount = serialized.total_grouped_row_count();
     FromProto(&original->InnerStatistics, serialized.inner_statistics());
 }
 
-TString ToString(const TQueryStatistics& stats)
+void FormatValue(TStringBuilderBase* builder, const TQueryStatistics& stats, TStringBuf /*spec*/)
 {
-    return Format(
+    Format(
+        builder,
         "{"
         "RowsRead: %v, DataWeightRead: %v, RowsWritten: %v, "
         "SyncTime: %v, AsyncTime: %v, ExecuteTime: %v, ReadTime: %v, WriteTime: %v, CodegenTime: %v, "
@@ -98,6 +101,7 @@ void Serialize(const TQueryStatistics& statistics, NYson::IYsonConsumer* consume
         .Item("incomplete_input").Value(statistics.IncompleteInput)
         .Item("incomplete_output").Value(statistics.IncompleteOutput)
         .Item("memory_usage").Value(statistics.MemoryUsage)
+        .Item("total_grouped_row_count").Value(statistics.TotalGroupedRowCount)
         .DoIf(!statistics.InnerStatistics.empty(), [&] (NYTree::TFluentMap fluent) {
             fluent
                 .Item("inner_statistics").DoListFor(statistics.InnerStatistics, [=] (

@@ -235,8 +235,7 @@ TEST(TValidateLogicalTypeTest, TestDecimalType)
 TEST(TValidateLogicalTypeTest, TestOptionalCompositeType)
 {
     const auto optionalOptionalInt = OptionalLogicalType(
-        OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))
-    );
+        OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)));
     EXPECT_GOOD_TYPE(optionalOptionalInt, " [5] ");
     EXPECT_GOOD_TYPE(optionalOptionalInt, " [#] ");
     EXPECT_GOOD_TYPE(optionalOptionalInt, " # ");
@@ -246,9 +245,7 @@ TEST(TValidateLogicalTypeTest, TestOptionalCompositeType)
 
     const auto optionalListInt = OptionalLogicalType(
         ListLogicalType(
-            SimpleLogicalType(ESimpleLogicalValueType::Int64)
-        )
-    );
+            SimpleLogicalType(ESimpleLogicalValueType::Int64)));
     EXPECT_GOOD_TYPE(optionalListInt, "[5]");
     EXPECT_GOOD_TYPE(optionalListInt, "[5; 5]");
     EXPECT_GOOD_TYPE(optionalListInt, "[]");
@@ -257,10 +254,7 @@ TEST(TValidateLogicalTypeTest, TestOptionalCompositeType)
     const auto optionalOptionalListInt = OptionalLogicalType(
         OptionalLogicalType(
             ListLogicalType(
-                SimpleLogicalType(ESimpleLogicalValueType::Int64)
-            )
-        )
-    );
+                SimpleLogicalType(ESimpleLogicalValueType::Int64))));
     EXPECT_GOOD_TYPE(optionalOptionalListInt, "[[5]]");
     EXPECT_GOOD_TYPE(optionalOptionalListInt, "[[5; 5]]");
     EXPECT_GOOD_TYPE(optionalOptionalListInt, "[[]]");
@@ -269,9 +263,7 @@ TEST(TValidateLogicalTypeTest, TestOptionalCompositeType)
 
     const auto optionalOptionalOptionalAny = OptionalLogicalType(
         OptionalLogicalType(
-            OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Any))
-        )
-    );
+            OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Any))));
     EXPECT_GOOD_TYPE(optionalOptionalOptionalAny, " [[5]] ");
     EXPECT_GOOD_TYPE(optionalOptionalOptionalAny, " [[#]] ");
     EXPECT_GOOD_TYPE(optionalOptionalOptionalAny, " [#] ");
@@ -405,8 +397,7 @@ TEST(TValidateLogicalTypeTest, TestDictType)
 {
     const auto stringToInt = DictLogicalType(
         SimpleLogicalType(ESimpleLogicalValueType::String),
-        SimpleLogicalType(ESimpleLogicalValueType::Int64)
-    );
+        SimpleLogicalType(ESimpleLogicalValueType::Int64));
 
     EXPECT_GOOD_TYPE(stringToInt, "[]");
     EXPECT_GOOD_TYPE(stringToInt, "[[\"foo\"; 0]]");
@@ -426,9 +417,7 @@ TEST(TValidateLogicalTypeTest, TestTaggedType)
         "tag",
         DictLogicalType(
             SimpleLogicalType(ESimpleLogicalValueType::String),
-            SimpleLogicalType(ESimpleLogicalValueType::Int64)
-        )
-    );
+            SimpleLogicalType(ESimpleLogicalValueType::Int64)));
 
     EXPECT_GOOD_TYPE(taggedDict, "[[\"foo\"; 0]]");
     EXPECT_BAD_TYPE(taggedDict, "[[foo; 0; 0]]");
@@ -438,8 +427,7 @@ TEST(TValidateLogicalTypeTest, TestTaggedType)
         VariantTupleLogicalType({
             SimpleLogicalType(ESimpleLogicalValueType::Boolean),
             SimpleLogicalType(ESimpleLogicalValueType::String),
-        })
-    );
+        }));
 
     EXPECT_GOOD_TYPE(taggedVariant, "[0; %true]");
     EXPECT_BAD_TYPE(taggedVariant, "[0; \"false\"]");
@@ -450,8 +438,7 @@ TEST(TValidateLogicalTypeTest, TestTaggedType)
             {"number",  SimpleLogicalType(ESimpleLogicalValueType::Int64)},
             {"english", SimpleLogicalType(ESimpleLogicalValueType::String)},
             {"russian", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
-        })
-    );
+        }));
 
     EXPECT_GOOD_TYPE(taggedStruct, " [3; three; TRI ] ");
     EXPECT_GOOD_TYPE(taggedStruct, " [1; one; # ] ");

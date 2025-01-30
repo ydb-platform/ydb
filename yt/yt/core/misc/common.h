@@ -9,6 +9,11 @@
 #include <library/cpp/yt/memory/new.h>
 #include <library/cpp/yt/memory/ref_counted.h>
 
+// NB: Must be included after IntrusivePtr<T> for
+// template instantiation correctness.
+#include <library/cpp/yt/misc/optional.h>
+#include <library/cpp/yt/misc/global.h>
+
 #include <util/datetime/base.h>
 
 #include <util/generic/hash.h>

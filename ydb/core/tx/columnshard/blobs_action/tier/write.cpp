@@ -15,15 +15,10 @@ void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlo
     ExternalStorageOperator->Execute(evPtr);
 }
 
-void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
     if (blobsWroteSuccessfully) {
         for (auto&& i : GetBlobsForWrite()) {
             dbBlobs.RemoveTierDraftBlobId(GetStorageId(), i.first);
-        }
-    } else {
-        for (auto&& i : GetBlobsForWrite()) {
-            dbBlobs.RemoveTierDraftBlobId(GetStorageId(), i.first);
-            dbBlobs.AddTierBlobToDelete(GetStorageId(), i.first, (TTabletId)self.TabletID());
         }
     }
 }
@@ -35,15 +30,13 @@ void TWriteAction::DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/
 }
 
 NKikimr::NOlap::TUnifiedBlobId TWriteAction::AllocateNextBlobId(const TString& data) {
-    static TAtomic Counter = 0;
-    auto now = TInstant::Now();
-    return TUnifiedBlobId(Max<ui32>(), TLogoBlobID(TabletId, now.GetValue() >> 32, now.GetValue() & Max<ui32>(), TLogoBlobID::MaxChannel, data.size(), AtomicIncrement(Counter) % TLogoBlobID::MaxCookie, 1));
+    return TUnifiedBlobId(Max<ui32>(), TLogoBlobID(TabletId, Generation, Step, TLogoBlobID::MaxChannel, data.size(), ++BlobIdsCounter));
 }
 
-void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
+void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool blobsWroteSuccessfully) {
     if (!blobsWroteSuccessfully) {
         for (auto&& i : GetBlobsForWrite()) {
-            GCInfo->MutableBlobsToDelete().Add((TTabletId)self.TabletID(), i.first);
+            GCInfo->MutableDraftBlobIdsToRemove().emplace_back(i.first);
         }
     }
 }

@@ -24,6 +24,7 @@ import pytest  # type: ignore
 from google.auth import _helpers
 from google.auth import crypt
 from google.auth import exceptions
+from google.auth import iam
 from google.auth import jwt
 from google.auth import transport
 from google.oauth2 import _client
@@ -194,8 +195,8 @@ def test__token_endpoint_request_internal_failure_error():
         _client._token_endpoint_request(
             request, "http://example.com", {"error_description": "internal_failure"}
         )
-    # request should be called once and then with 3 retries
-    assert request.call_count == 4
+    # request with 2 retries
+    assert request.call_count == 3
 
     request = make_request(
         {"error": "internal_failure"}, status=http_client.BAD_REQUEST
@@ -205,8 +206,8 @@ def test__token_endpoint_request_internal_failure_error():
         _client._token_endpoint_request(
             request, "http://example.com", {"error": "internal_failure"}
         )
-    # request should be called once and then with 3 retries
-    assert request.call_count == 4
+    # request with 2 retries
+    assert request.call_count == 3
 
 
 def test__token_endpoint_request_internal_failure_and_retry_failure_error():
@@ -319,7 +320,12 @@ def test_call_iam_generate_id_token_endpoint():
     request = make_request({"token": id_token})
 
     token, expiry = _client.call_iam_generate_id_token_endpoint(
-        request, "fake_email", "fake_audience", "fake_access_token"
+        request,
+        iam._IAM_IDTOKEN_ENDPOINT,
+        "fake_email",
+        "fake_audience",
+        "fake_access_token",
+        "googleapis.com",
     )
 
     assert (
@@ -352,7 +358,12 @@ def test_call_iam_generate_id_token_endpoint_no_id_token():
 
     with pytest.raises(exceptions.RefreshError) as excinfo:
         _client.call_iam_generate_id_token_endpoint(
-            request, "fake_email", "fake_audience", "fake_access_token"
+            request,
+            iam._IAM_IDTOKEN_ENDPOINT,
+            "fake_email",
+            "fake_audience",
+            "fake_access_token",
+            "googleapis.com",
         )
     assert excinfo.match("No ID token in response")
 
@@ -617,6 +628,6 @@ def test__token_endpoint_request_no_throw_with_retry(can_retry):
     )
 
     if can_retry:
-        assert mock_request.call_count == 4
+        assert mock_request.call_count == 3
     else:
         assert mock_request.call_count == 1

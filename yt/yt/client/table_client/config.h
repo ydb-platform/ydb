@@ -1,12 +1,15 @@
 #pragma once
 
 #include "public.h"
+#include "versioned_io_options.h"
 
 #include <yt/yt/client/chunk_client/config.h>
 
 #include <yt/yt/client/tablet_client/public.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
+
+#include <yt/yt/core/misc/config.h>
 
 #include <yt/yt/library/quantile_digest/public.h>
 
@@ -31,7 +34,7 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TRetentionConfig)
 
-TString ToString(const TRetentionConfigPtr& obj);
+void FormatValue(TStringBuilderBase* builder, const TRetentionConfigPtr& obj, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -152,6 +155,8 @@ public:
 
     double SampleRate;
 
+    bool EnableLargeColumnarStatistics;
+
     TChunkIndexesWriterConfigPtr ChunkIndexes;
 
     TSlimVersionedWriterConfigPtr Slim;
@@ -244,10 +249,6 @@ public:
     //! Recommended to be ~100 times less than weight of samples for that column.
     i64 ColumnDictionarySize;
 
-    //! Level of compression algorithm.
-    //! Applied to digested compression dictionary upon its construction.
-    int CompressionLevel;
-
     //! Subset of all dictionary building policies.
     //! Will build and apply dictionaries only from this subset.
     //! Upon each chunk compression will independently decide which dictionary fits best.
@@ -259,15 +260,36 @@ public:
     //! Upper limit on acceptable compression ratio. No chunk compression is performed if this limit is exceeded.
     double MaxAcceptableCompressionRatio;
 
-    //! Upper limit on content size of a batch that can be decompressed within a single iteration.
-    i64 MaxDecompressionBlobSize;
-
     REGISTER_YSON_STRUCT(TDictionaryCompressionConfig);
 
     static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TDictionaryCompressionConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TDictionaryCompressionSessionConfig
+    : public virtual NYTree::TYsonStruct
+{
+public:
+    // Compression session options.
+
+    //! Level of compression algorithm.
+    //! Applied to digested compression dictionary upon its construction.
+    int CompressionLevel;
+
+    // Decompression session options.
+
+    //! Upper limit on content size of a batch that can be decompressed within a single iteration.
+    i64 MaxDecompressionBlobSize;
+
+    REGISTER_YSON_STRUCT(TDictionaryCompressionSessionConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TDictionaryCompressionSessionConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -285,13 +307,14 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TBatchHunkReaderConfig)
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TTableReaderConfig
     : public virtual NChunkClient::TMultiChunkReaderConfig
     , public virtual TChunkReaderConfig
     , public TBatchHunkReaderConfig
     , public NChunkClient::TChunkFragmentReaderConfig
+    , public TDictionaryCompressionSessionConfig
 {
 public:
     bool SuppressAccessTracking;
@@ -401,10 +424,14 @@ public:
     bool EnableColumnarValueStatistics;
     bool EnableRowCountInColumnarStatistics;
     bool EnableSegmentMetaInBlocks;
+    bool EnableColumnMetaInChunkMeta;
+    bool ConsiderMinRowRangeDataWeight;
 
     NYTree::INodePtr CastAnyToCompositeNode;
 
     ETableSchemaModification SchemaModification;
+
+    TVersionedWriteOptions VersionedWriteOptions;
 
     EOptimizeFor OptimizeFor;
     std::optional<NChunkClient::EChunkFormat> ChunkFormat;
@@ -438,7 +465,7 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TVersionedRowDigestConfig)
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 struct TRowBatchReadOptions
 {
@@ -454,6 +481,23 @@ struct TRowBatchReadOptions
     //! If false then the reader must return a non-columnar batch.
     bool Columnar = false;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSchemalessBufferedDynamicTableWriterConfig
+    : public TTableWriterConfig
+{
+public:
+    i64 MaxBatchSize;
+    TDuration FlushPeriod;
+    TExponentialBackoffOptions RetryBackoff;
+
+    REGISTER_YSON_STRUCT(TSchemalessBufferedDynamicTableWriterConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TSchemalessBufferedDynamicTableWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

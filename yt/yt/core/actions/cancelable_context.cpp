@@ -10,7 +10,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCancelableContext::TCancelableInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<false>
 {
 public:
     TCancelableInvoker(
@@ -26,23 +26,68 @@ public:
     {
         YT_ASSERT(callback);
 
+        auto currentTokenGuard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
+
         if (Context_->Canceled_) {
+            callback.Reset();
             return;
         }
 
-        return UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE([this, this_ = MakeStrong(this), callback = std::move(callback)] {
-            if (Context_->Canceled_) {
-                return;
-            }
+        return UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
+            [
+                this,
+                this_ = MakeStrong(this),
+                callback = std::move(callback)
+            ] () mutable {
+                auto currentTokenGuard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
 
-            TCurrentInvokerGuard guard(this);
-            callback();
-        }));
+                if (Context_->Canceled_) {
+                    callback.Reset();
+                    return;
+                }
+
+                TCurrentInvokerGuard guard(this);
+                callback();
+            }));
+    }
+
+    void Invoke(TMutableRange<TClosure> callbacks) override
+    {
+        auto currentTokenGuard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
+
+        std::vector<TClosure> capturedCallbacks;
+        capturedCallbacks.reserve(callbacks.size());
+        for (auto& callback : callbacks) {
+            capturedCallbacks.push_back(std::move(callback));
+        }
+
+        if (Context_->Canceled_) {
+            capturedCallbacks.clear();
+            return;
+        }
+
+        return UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
+            [
+                this,
+                this_ = MakeStrong(this),
+                capturedCallbacks = std::move(capturedCallbacks)
+            ] () mutable {
+                auto currentTokenGuard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
+
+                if (Context_->Canceled_) {
+                    capturedCallbacks.clear();
+                    return;
+                }
+
+                TCurrentInvokerGuard guard(this);
+                for (const auto& callback : capturedCallbacks) {
+                    callback();
+                }
+            }));
     }
 
 private:
     const TCancelableContextPtr Context_;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -50,6 +95,11 @@ private:
 bool TCancelableContext::IsCanceled() const
 {
     return Canceled_;
+}
+
+const TError& TCancelableContext::GetCancelationError() const
+{
+    return CancelationError_;
 }
 
 void TCancelableContext::Cancel(const TError& error)
@@ -70,8 +120,7 @@ void TCancelableContext::Cancel(const TError& error)
     Handlers_.FireAndClear(error);
 
     for (const auto& weakContext : propagateToContexts) {
-        auto context = weakContext.Lock();
-        if (context) {
+        if (auto context = weakContext.Lock()) {
             context->Cancel(error);
         }
     }

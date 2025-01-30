@@ -5,7 +5,6 @@
 # License: http://snmplabs.com/pyasn1/license.html
 #
 import base64
-import sys
 
 stSpam, stHam, stDump = 0, 1, 2
 
@@ -38,10 +37,7 @@ def readPemBlocksFromFile(fileObj, *markers):
             else:
                 certLines.append(certLine)
         if state == stDump:
-            if sys.version_info[0] <= 2:
-                substrate = ''.join([base64.b64decode(x) for x in certLines])
-            else:
-                substrate = ''.encode().join([base64.b64decode(x.encode()) for x in certLines])
+            substrate = ''.encode().join([base64.b64decode(x.encode()) for x in certLines])
             break
     return idx, substrate
 
@@ -55,10 +51,7 @@ def readPemFromFile(fileObj,
 
 
 def readBase64fromText(text):
-    if sys.version_info[0] <= 2:
-        return base64.b64decode(text)
-    else:
-        return base64.b64decode(text.encode())
+    return base64.b64decode(text.encode())
 
 
 def readBase64FromFile(fileObj):

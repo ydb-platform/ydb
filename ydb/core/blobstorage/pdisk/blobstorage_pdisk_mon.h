@@ -9,6 +9,7 @@
 
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 
 namespace NKikimr {
@@ -26,8 +27,9 @@ public:
 
     void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters,
                     const TString& group, const TString& subgroup, const TString& name,
-                    const TVector<float> &thresholds) {
-        Tracker.Initialize(counters, group, subgroup, name, thresholds);
+                    const TVector<float> &thresholds, 
+                    NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public) {
+        Tracker.Initialize(counters, group, subgroup, name, thresholds, visibility);
     }
 
     double Increment(ui64 tokens) {
@@ -71,6 +73,7 @@ struct TPDiskMon {
             Booting,
             OK,
             Error,
+            Stopped
         };
 
         enum EDetailedState {
@@ -99,6 +102,7 @@ struct TPDiskMon {
             ErrorDeviceSerialMismatch,
             ErrorFake,
             BootingReencryptingFormat,
+            StoppedByYardControl,
         };
 
         static TString StateToStr(i64 val) {
@@ -110,6 +114,7 @@ struct TPDiskMon {
                 case Booting: return "Booting";
                 case OK: return "OK";
                 case Error: return "Error";
+                case Stopped: return "Stopped";
                 default: return "Unknown";
             }
         }
@@ -141,6 +146,7 @@ struct TPDiskMon {
                 case ErrorDeviceSerialMismatch: return "ErrorDeviceSerialMismatch";
                 case ErrorFake: return "ErrorFake";
                 case BootingReencryptingFormat: return "BootingReencryptingFormat";
+                case StoppedByYardControl: return "StoppedByYardControl";
                 default: return "Unknown";
             }
         }
@@ -155,6 +161,8 @@ struct TPDiskMon {
 
         ::NMonitoring::TDynamicCounters::TCounterPtr PDiskThreadBusyTimeNs;
 
+        ui32 PDiskId = 0;
+
     public:
         NMonitoring::TPercentileTrackerLg<5, 4, 15> UpdateCycleTime;
 
@@ -162,6 +170,10 @@ struct TPDiskMon {
         TUpdateDurationTracker()
             : BeginUpdateAt(HPNow())
         {}
+
+        void SetPDiskId(ui32 pdiskId) {
+            PDiskId = pdiskId;
+        }
 
         void SetCounter(const ::NMonitoring::TDynamicCounters::TCounterPtr& pDiskThreadBusyTimeNs) {
             PDiskThreadBusyTimeNs = pDiskThreadBusyTimeNs;
@@ -198,18 +210,19 @@ struct TPDiskMon {
             }
         }
 
-        void UpdateEnded() {
+        float UpdateEnded() {
             NHPTimer::STime updateEndedAt = HPNow();
+            float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt);
             if (IsLwProbeEnabled) {
-                float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt);
                 float inputQueueMs = HPMilliSecondsFloat(SchedulingStartAt - BeginUpdateAt);
                 float schedulingMs = HPMilliSecondsFloat(ProcessingStartAt - SchedulingStartAt);
                 float processingMs = HPMilliSecondsFloat(WaitingStartAt - ProcessingStartAt);
                 float waitingMs = HPMilliSecondsFloat(updateEndedAt - WaitingStartAt);
-                GLOBAL_LWPROBE(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails, entireUpdateMs, inputQueueMs,
+                GLOBAL_LWPROBE(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails, PDiskId, entireUpdateMs, inputQueueMs,
                         schedulingMs, processingMs, waitingMs);
             }
             BeginUpdateAt = updateEndedAt;
+            return entireUpdateMs;
         }
     };
 
@@ -300,6 +313,7 @@ struct TPDiskMon {
     THistogram DeviceReadDuration;
     THistogram DeviceWriteDuration;
     THistogram DeviceTrimDuration;
+    THistogram DeviceFlushDuration;
 
     // <BASE_BITS, EXP_BITS, FRAME_COUNT>
     using TDurationTracker = NMonitoring::TPercentileTrackerLg<5, 4, 15>;
@@ -395,11 +409,11 @@ struct TPDiskMon {
         ::NMonitoring::TDynamicCounters::TCounterPtr Bytes;
         ::NMonitoring::TDynamicCounters::TCounterPtr Results;
 
-        void Setup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString name) {
+        void Setup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString name, NMonitoring::TCountableBase::EVisibility vis) {
             TIntrusivePtr<::NMonitoring::TDynamicCounters> subgroup = group->GetSubgroup("req", name);
-            Requests = subgroup->GetCounter("Requests", true);
-            Bytes = subgroup->GetCounter("Bytes", true);
-            Results = subgroup->GetCounter("Results", true);
+            Requests = subgroup->GetCounter("Requests", true, vis);
+            Bytes = subgroup->GetCounter("Bytes", true, vis);
+            Results = subgroup->GetCounter("Results", true, vis);
         }
 
         void CountRequest(ui32 size) {
@@ -429,10 +443,10 @@ struct TPDiskMon {
         ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
         ::NMonitoring::TDynamicCounters::TCounterPtr Results;
 
-        void Setup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString name) {
+        void Setup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString name, NMonitoring::TCountableBase::EVisibility vis) {
             TIntrusivePtr<::NMonitoring::TDynamicCounters> subgroup = group->GetSubgroup("req", name);
-            Requests = subgroup->GetCounter("Requests", true);
-            Results = subgroup->GetCounter("Results", true);
+            Requests = subgroup->GetCounter("Requests", true, vis);
+            Results = subgroup->GetCounter("Results", true, vis);
         }
 
         void CountRequest() {
@@ -454,6 +468,11 @@ struct TPDiskMon {
     TReqCounters Harakiri;
     TReqCounters YardSlay;
     TReqCounters YardControl;
+
+    TReqCounters ShredPDisk;
+    TReqCounters PreShredCompactVDisk;
+    TReqCounters ShredVDiskResult;
+    TReqCounters MarkDirty;
 
     TIoCounters WriteSyncLog;
     TIoCounters WriteFresh;

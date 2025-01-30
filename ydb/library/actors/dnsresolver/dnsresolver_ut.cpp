@@ -9,6 +9,11 @@
 using namespace NActors;
 using namespace NActors::NDnsResolver;
 
+template <>
+void Out<ares_status_t>(IOutputStream& out, ares_status_t status) {
+    out << static_cast<int>(status);
+}
+
 Y_UNIT_TEST_SUITE(DnsResolver) {
 
     struct TSilentUdpServer {

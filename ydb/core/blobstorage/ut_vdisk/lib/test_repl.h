@@ -52,7 +52,6 @@ void operator ()(TConfiguration *conf); \
 
 SIMPLE_CLASS_DEF_NO_PARAMS(TTestReplProxyData)
 SIMPLE_CLASS_DEF_NO_PARAMS(TTestReplProxyKeepBits)
-SIMPLE_CLASS_DEF_NO_PARAMS(TTestHandoffMoveDel)
 SIMPLE_CLASS_DEF_NO_PARAMS(TTestCollectAllSimpleDataset)
 SIMPLE_CLASS_DEF_NO_PARAMS(TTestStub)
 

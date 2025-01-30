@@ -356,7 +356,7 @@ holds_gil(PyThreadState *tstate)
     assert(tstate != NULL);
 #ifndef NDEBUG
     if (!tstate_is_alive(tstate)) {
-        return 0;
+        return PyGILState_Check();
     }
 #endif
     _PyRuntimeState *runtime = tstate->interp->runtime;
@@ -691,7 +691,9 @@ init_interpreter(PyInterpreterState *interp,
                 _obmalloc_pools_INIT(interp->obmalloc.pools);
         memcpy(&interp->obmalloc.pools.used, temp, sizeof(temp));
     }
-    _PyObject_InitState(interp);
+
+    // We would call _PyObject_InitState() at this point
+    // if interp->feature_flags were alredy set.
 
     _PyEval_InitState(interp, pending_lock);
     _PyGC_InitState(&interp->gc);
@@ -1598,7 +1600,9 @@ tstate_delete_common(PyThreadState *tstate)
     if (tstate->_status.bound_gilstate) {
         unbind_gilstate_tstate(tstate);
     }
-    unbind_tstate(tstate);
+    if (tstate->_status.bound) {
+        unbind_tstate(tstate);
+    }
 
     // XXX Move to PyThreadState_Clear()?
     clear_datastack(tstate);
@@ -2282,12 +2286,18 @@ PyGILState_Release(PyGILState_STATE oldstate)
         /* can't have been locked when we created it */
         assert(oldstate == PyGILState_UNLOCKED);
         // XXX Unbind tstate here.
+        // gh-119585: `PyThreadState_Clear()` may call destructors that
+        // themselves use PyGILState_Ensure and PyGILState_Release, so make
+        // sure that gilstate_counter is not zero when calling it.
+        ++tstate->gilstate_counter;
         PyThreadState_Clear(tstate);
+        --tstate->gilstate_counter;
         /* Delete the thread-state.  Note this releases the GIL too!
          * It's vital that the GIL be held here, to avoid shutdown
          * races; see bugs 225673 and 1061968 (that nasty bug has a
          * habit of coming back).
          */
+        assert(tstate->gilstate_counter == 0);
         assert(current_fast_get(runtime) == tstate);
         _PyThreadState_DeleteCurrent(tstate);
     }

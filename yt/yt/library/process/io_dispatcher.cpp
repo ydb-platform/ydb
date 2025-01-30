@@ -1,9 +1,9 @@
 #include "io_dispatcher.h"
 
+#include "config.h"
+
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 #include <yt/yt/core/concurrency/poller.h>
-
-#include <yt/yt/core/misc/singleton.h>
 
 namespace NYT::NPipes {
 
@@ -20,6 +20,11 @@ TIODispatcher::~TIODispatcher() = default;
 TIODispatcher* TIODispatcher::Get()
 {
     return Singleton<TIODispatcher>();
+}
+
+void TIODispatcher::Configure(const TIODispatcherConfigPtr& config)
+{
+    Poller_->SetPollingPeriod(config->ThreadPoolPollingPeriod);
 }
 
 IInvokerPtr TIODispatcher::GetInvoker()

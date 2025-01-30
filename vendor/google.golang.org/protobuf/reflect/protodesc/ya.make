@@ -2,6 +2,8 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
+VERSION(v1.34.2)
+
 SRCS(
     desc.go
     desc_init.go
@@ -10,7 +12,5 @@ SRCS(
     editions.go
     proto.go
 )
-
-GO_EMBED_PATTERN(editions_defaults.binpb)
 
 END()

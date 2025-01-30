@@ -2,6 +2,7 @@
 #include "node_broker__scheme.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/counters_node_broker.pb.h>
 
 namespace NKikimr {
 namespace NNodeBroker {
@@ -10,15 +11,18 @@ using namespace NKikimrNodeBroker;
 
 class TNodeBroker::TTxRegisterNode : public TTransactionBase<TNodeBroker> {
 public:
-    TTxRegisterNode(TNodeBroker *self, TEvNodeBroker::TEvRegistrationRequest::TPtr &ev, const NActors::TScopeId& scopeId)
+    TTxRegisterNode(TNodeBroker *self, TEvPrivate::TEvResolvedRegistrationRequest::TPtr &resolvedEv)
         : TBase(self)
-        , Event(ev)
-        , ScopeId(scopeId)
+        , Event(resolvedEv->Get()->Request)
+        , ScopeId(resolvedEv->Get()->ScopeId)
+        , ServicedSubDomain(resolvedEv->Get()->ServicedSubDomain)
         , NodeId(0)
         , ExtendLease(false)
         , FixNodeId(false)
     {
     }
+
+    TTxType GetTxType() const override { return TXTYPE_REGISTER_NODE; }
 
     bool Error(TStatus::ECode code,
                const TString &reason,
@@ -56,7 +60,13 @@ public:
 
         if (rec.HasPath() && ScopeId == NActors::TScopeId()) {
             return Error(TStatus::ERROR,
-                         TStringBuilder() << "Cannot resolve scope id for path " << rec.GetPath(),
+                         TStringBuilder() << "Failed to resolve the database by its path. Perhaps the database " << rec.GetPath() << " does not exist",
+                         ctx);
+        }
+
+        if (Self->EnableStableNodeNames && rec.HasPath() && ServicedSubDomain == InvalidSubDomainKey) {
+            return Error(TStatus::ERROR,
+                         TStringBuilder() << "Cannot resolve subdomain key for path " << rec.GetPath(),
                          ctx);
         }
 
@@ -90,7 +100,24 @@ public:
                 Self->DbUpdateNodeLease(node, txc);
                 ExtendLease = true;
             }
-            node.AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
+            if (node.AuthorizedByCertificate != rec.GetAuthorizedByCertificate()) {
+                node.AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
+                Self->DbUpdateNodeAuthorizedByCertificate(node, txc);
+            }
+
+            if (Self->EnableStableNodeNames) {
+                if (ServicedSubDomain != node.ServicedSubDomain) {
+                    if (node.SlotIndex.has_value()) {
+                        Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
+                    }
+                    node.ServicedSubDomain = ServicedSubDomain;
+                    node.SlotIndex = Self->SlotIndexesPools[node.ServicedSubDomain].AcquireLowestFreeIndex();
+                    Self->DbAddNode(node, txc);
+                } else if (!node.SlotIndex.has_value()) {
+                    node.SlotIndex = Self->SlotIndexesPools[node.ServicedSubDomain].AcquireLowestFreeIndex();
+                    Self->DbAddNode(node, txc);
+                }
+            }
 
             Response->Record.MutableStatus()->SetCode(TStatus::OK);
             Self->FillNodeInfo(node, *Response->Record.MutableNode());
@@ -108,6 +135,11 @@ public:
         Node->AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
         Node->Lease = 1;
         Node->Expire = expire;
+
+        if (Self->EnableStableNodeNames) {
+            Node->ServicedSubDomain = ServicedSubDomain;
+            Node->SlotIndex = Self->SlotIndexesPools[Node->ServicedSubDomain].AcquireLowestFreeIndex();
+        }
 
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
 
@@ -151,6 +183,7 @@ public:
 private:
     TEvNodeBroker::TEvRegistrationRequest::TPtr Event;
     const NActors::TScopeId ScopeId;
+    const TSubDomainKey ServicedSubDomain;
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
     THolder<TNodeInfo> Node;
     ui32 NodeId;
@@ -158,9 +191,9 @@ private:
     bool FixNodeId;
 };
 
-ITransaction *TNodeBroker::CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev, const NActors::TScopeId& scopeId)
+ITransaction *TNodeBroker::CreateTxRegisterNode(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev)
 {
-    return new TTxRegisterNode(this, ev, scopeId);
+    return new TTxRegisterNode(this, ev);
 }
 
 } // NNodeBroker

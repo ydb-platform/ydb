@@ -10,6 +10,7 @@ namespace NKikimr::NFlatTxCoordinator {
 
     public:
         virtual bool PersistConfig(ui64 tabletId, const NKikimrSubDomains::TProcessingParams& config);
+        virtual void BeginPlanStep(ui64 tabletId, ui64 generation, ui64 planStep);
 
     public:
         static ICoordinatorHooks* Get();

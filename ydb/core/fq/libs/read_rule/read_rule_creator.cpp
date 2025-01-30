@@ -4,7 +4,8 @@
 #include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/library/services/services.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
@@ -79,7 +80,7 @@ public:
         , QueryId(std::move(queryId))
         , TopicConsumer(topicConsumer)
         , YdbDriver(std::move(ydbDriver))
-        , PqClient(YdbDriver, GetPqClientSettings(std::move(credentialsProvider)))
+        , TopicClient(YdbDriver, GetTopicClientSettings(std::move(credentialsProvider)))
         , Index(index)
     {
     }
@@ -105,25 +106,25 @@ public:
         Y_ABORT_UNLESS(!RequestInFlight);
         RequestInFlight = true;
         LOG_D("Make request for read rule creation for topic `" << TopicConsumer.topic_path() << "` [" << Index << "]");
-        PqClient.AddReadRule(
-            GetTopicPath(),
-            NYdb::NPersQueue::TAddReadRuleSettings()
-                .ReadRule(
-                    NYdb::NPersQueue::TReadRuleSettings()
-                        .ConsumerName(TopicConsumer.consumer_name())
-                        .ServiceType("yandex-query")
-                        .SupportedCodecs({
-                            NYdb::NPersQueue::ECodec::RAW,
-                            NYdb::NPersQueue::ECodec::GZIP,
-                            NYdb::NPersQueue::ECodec::LZOP,
-                            NYdb::NPersQueue::ECodec::ZSTD
-                        })
-                )
-        ).Subscribe(
-            [actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const NYdb::TAsyncStatus& status) {
-                actorSystem->Send(selfId, new TEvPrivate::TEvAddReadRuleStatus(status.GetValue()));
-            }
-        );
+
+        const NYdb::NTopic::TAlterTopicSettings alterTopicSettings =
+            NYdb::NTopic::TAlterTopicSettings()
+                .BeginAddConsumer(TopicConsumer.consumer_name())
+                .SetSupportedCodecs(
+                    {
+                        NYdb::NTopic::ECodec::RAW,
+                        NYdb::NTopic::ECodec::GZIP,
+                        NYdb::NTopic::ECodec::LZOP,
+                        NYdb::NTopic::ECodec::ZSTD
+                    })
+                .EndAddConsumer();
+
+        TopicClient.AlterTopic(GetTopicPath(), alterTopicSettings)
+            .Subscribe([actorSystem = TActivationContext::ActorSystem(),
+                        selfId = SelfId()](const NYdb::TAsyncStatus& status) {
+              actorSystem->Send(selfId, new TEvPrivate::TEvAddReadRuleStatus(
+                                            status.GetValue()));
+            });
     }
 
     void Handle(TEvPrivate::TEvAddReadRuleStatus::TPtr& ev) {
@@ -135,7 +136,7 @@ public:
             PassAway();
         } else {
             if (!RetryState) {
-                RetryState = NYdb::NPersQueue::IRetryPolicy::GetExponentialBackoffPolicy()->CreateRetryState();
+                RetryState = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy()->CreateRetryState();
             }
             TMaybe<TDuration> nextRetryDelay = RetryState->GetNextRetryDelay(status.GetStatus());
             if (status.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
@@ -144,7 +145,7 @@ public:
 
             LOG_D("Failed to add read rule to `" << TopicConsumer.topic_path() << "`: " << status.GetIssues().ToOneLineString() << ". Status: " << status.GetStatus() << ". Retry after: " << nextRetryDelay);
             if (!nextRetryDelay) { // Not retryable
-                Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleCreatorResult>(status.GetIssues()), 0, Index);
+                Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleCreatorResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
                 PassAway();
             } else {
                 if (!CheckFinish()) {
@@ -182,9 +183,8 @@ public:
     )
 
 private:
-    NYdb::NPersQueue::TPersQueueClientSettings GetPqClientSettings(std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProvider) {
-        return NYdb::NPersQueue::TPersQueueClientSettings()
-            .ClusterDiscoveryMode(NYdb::NPersQueue::EClusterDiscoveryMode::Off)
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProvider) {
+        return NYdb::NTopic::TTopicClientSettings()
             .Database(TopicConsumer.database())
             .DiscoveryEndpoint(TopicConsumer.cluster_endpoint())
             .CredentialsProviderFactory(std::move(credentialsProvider))
@@ -197,9 +197,9 @@ private:
     const TString QueryId;
     const Fq::Private::TopicConsumer TopicConsumer;
     NYdb::TDriver YdbDriver;
-    NYdb::NPersQueue::TPersQueueClient PqClient;
+    NYdb::NTopic::TTopicClient TopicClient;
     ui64 Index = 0;
-    NYdb::NPersQueue::IRetryPolicy::IRetryState::TPtr RetryState;
+    NYdb::NTopic::IRetryPolicy::IRetryState::TPtr RetryState;
     bool RequestInFlight = false;
     bool Finishing = false;
 };

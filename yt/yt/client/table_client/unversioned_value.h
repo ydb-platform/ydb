@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/farmhash/farm_hash.h>
 
+#include <library/cpp/yt/string/format_analyser.h>
+
 #include <util/system/defaults.h>
 
 namespace NYT::NTableClient {
@@ -22,7 +24,7 @@ union TUnversionedValueData
     //! |Boolean| value.
     bool Boolean;
     //! String value for |String| type or YSON-encoded value for |Any| type.
-    //! NB: string is not zero-terminated, so never use it as a TString.
+    //! NB: String is not zero-terminated, so never use it as a TString.
     //! Use #TUnversionedValue::AsStringBuf() or #TUnversionedValue::AsString() instead.
     const char* String;
 };
@@ -59,7 +61,7 @@ static_assert(
     sizeof(TUnversionedValue) == 16,
     "TUnversionedValue has to be exactly 16 bytes.");
 static_assert(
-    std::is_pod_v<TUnversionedValue>,
+    (std::is_standard_layout_v<TUnversionedValue> && std::is_trivial_v<TUnversionedValue>),
     "TUnversionedValue must be a POD type.");
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -98,6 +100,7 @@ struct TBitwiseUnversionedValueHash
 struct TBitwiseUnversionedValueEqual
 {
     bool operator()(const TUnversionedValue& lhs, const TUnversionedValue& rhs) const;
+    static void FormatDiff(TStringBuilderBase* builder, const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -114,4 +117,13 @@ struct THash<NYT::NTableClient::TUnversionedValue>
     {
         return NYT::NTableClient::TDefaultUnversionedValueHash()(value);
     }
+};
+
+template <class T>
+    requires std::derived_from<std::remove_cvref_t<T>, NYT::NTableClient::TUnversionedValue>
+struct NYT::TFormatArg<T>
+    : public NYT::TFormatArgBase
+{
+    static constexpr auto FlagSpecifiers
+        = TFormatArgBase::ExtendFlags</*Hot*/ true, 1, std::array{'k'}>();
 };

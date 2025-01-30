@@ -1,0 +1,28 @@
+{
+    "title": "Permissions",
+    "type": "object",
+    "required": ["subject", "permissionNames"],
+    "properties": {
+        "subject": {
+            "type": "string",
+            "description": "subject in form 'user@system' or 'allAuthenticatedUsers', possible system suffixes are 'staff' and 'tvm'"
+        },
+        "permissionNames": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "enum": [
+                    "ReadTopic",
+                    "WriteTopic",
+                    "ReadAsConsumer",
+                    "ModifyPermissions",
+                    "CreateResources",
+                    "ModifyResources",
+                    "ListResources",
+                    "CreateReadRules",
+                    "DescribeResources"
+                ]
+            }
+        }
+    }
+}

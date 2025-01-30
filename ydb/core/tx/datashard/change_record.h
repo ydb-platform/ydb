@@ -2,6 +2,7 @@
 
 #include "datashard_user_table.h"
 
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -39,6 +40,8 @@ public:
     i64 GetSeqNo() const;
     TInstant GetApproximateCreationDateTime() const;
     bool IsBroadcast() const override;
+
+    void Accept(NChangeExchange::IVisitor& visitor) const override;
 
     void Out(IOutputStream& out) const override;
 
@@ -116,6 +119,8 @@ public:
     }
 
 }; // TChangeRecordBuilder
+
+NChangeExchange::IPartitionResolverVisitor* CreateDefaultPartitionResolver(const NKikimr::TKeyDesc& keyDesc);
 
 }
 

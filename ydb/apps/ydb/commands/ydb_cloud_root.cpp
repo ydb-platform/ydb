@@ -1,9 +1,13 @@
 #include "ydb_cloud_root.h"
-#include "ydb_update.h"
 #include "ydb_version.h"
 
-#include <ydb/public/sdk/cpp/client/iam/iam.h>
+#include <ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+
+#ifndef DISABLE_UPDATE
+#include "ydb_update.h"
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
+#endif
 
 #include <filesystem>
 
@@ -26,8 +30,13 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
             return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
         }
         if (config.UseStaticCredentials) {
-            if (config.StaticCredentials.User) {
+            if (!config.StaticCredentials.User.empty()) {
                 return CreateLoginCredentialsProviderFactory(config.StaticCredentials);
+            }
+        }
+        if (config.UseOauth2TokenExchange) {
+            if (config.Oauth2KeyFile) {
+                return CreateOauth2TokenExchangeFileCredentialsProviderFactory(config.Oauth2KeyFile, config.IamEndpoint);
             }
         }
         if (config.UseIamAuth) {
@@ -50,7 +59,9 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
 TYCloudClientCommandRoot::TYCloudClientCommandRoot(const TString& name, const TClientSettings& settings)
     : TClientCommandRoot(name, settings)
 {
+#ifndef DISABLE_UPDATE
     AddCommand(std::make_unique<TCommandUpdate>());
+#endif
     AddCommand(std::make_unique<TCommandVersion>());
 }
 
@@ -73,6 +84,7 @@ void TYCloudClientCommandRoot::Config(TConfig& config) {
 }
 
 int TYCloudClientCommandRoot::Run(TConfig& config) {
+#ifndef DISABLE_UPDATE
     if (config.NeedToCheckForUpdate) {
         TYdbUpdater updater;
         if (config.ForceVersionCheck) {
@@ -89,16 +101,19 @@ int TYCloudClientCommandRoot::Run(TConfig& config) {
                 << colors.OldColor() << Endl;
         }
     }
+#endif
+
     return TClientCommandRoot::Run(config);
 }
 
 int NewYCloudClient(int argc, char** argv) {
     NYdb::NConsoleClient::TClientSettings settings;
     settings.EnableSsl = true;
-    settings.UseOAuthToken = true;
+    settings.UseAccessToken = true;
     settings.UseDefaultTokenFile = false;
     settings.UseIamAuth = true;
     settings.UseStaticCredentials = true;
+    settings.UseOauth2TokenExchange = true;
     settings.UseExportToYt = false;
     settings.MentionUserAccount = false;
     settings.YdbDir = "ydb";

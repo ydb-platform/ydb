@@ -43,6 +43,7 @@ class EmitterState {
 
   // node handling
   void SetAnchor();
+  void SetAlias();
   void SetTag();
   void SetNonContent();
   void SetLongKey();
@@ -65,6 +66,7 @@ class EmitterState {
   std::size_t LastIndent() const;
   std::size_t CurIndent() const { return m_curIndent; }
   bool HasAnchor() const { return m_hasAnchor; }
+  bool HasAlias() const { return m_hasAlias; }
   bool HasTag() const { return m_hasTag; }
   bool HasBegunNode() const {
     return m_hasAnchor || m_hasTag || m_hasNonContent;
@@ -72,6 +74,7 @@ class EmitterState {
   bool HasBegunContent() const { return m_hasAnchor || m_hasTag; }
 
   void ClearModifiedSettings();
+  void RestoreGlobalModifiedSettings();
 
   // formatters
   void SetLocalValue(EMITTER_MANIP value);
@@ -90,6 +93,9 @@ class EmitterState {
 
   bool SetBoolCaseFormat(EMITTER_MANIP value, FmtScope::value scope);
   EMITTER_MANIP GetBoolCaseFormat() const { return m_boolCaseFmt.get(); }
+
+  bool SetNullFormat(EMITTER_MANIP value, FmtScope::value scope);
+  EMITTER_MANIP GetNullFormat() const { return m_nullFmt.get(); }
 
   bool SetIntFormat(EMITTER_MANIP value, FmtScope::value scope);
   EMITTER_MANIP GetIntFormat() const { return m_intFmt.get(); }
@@ -131,6 +137,7 @@ class EmitterState {
   Setting<EMITTER_MANIP> m_boolFmt;
   Setting<EMITTER_MANIP> m_boolLengthFmt;
   Setting<EMITTER_MANIP> m_boolCaseFmt;
+  Setting<EMITTER_MANIP> m_nullFmt;
   Setting<EMITTER_MANIP> m_intFmt;
   Setting<std::size_t> m_indent;
   Setting<std::size_t> m_preCommentIndent, m_postCommentIndent;
@@ -145,7 +152,12 @@ class EmitterState {
 
   struct Group {
     explicit Group(GroupType::value type_)
-        : type(type_), indent(0), childCount(0), longKey(false) {}
+        : type(type_),
+          flowType{},
+          indent(0),
+          childCount(0),
+          longKey(false),
+          modifiedSettings{} {}
 
     GroupType::value type;
     FlowType::value flowType;
@@ -177,6 +189,7 @@ class EmitterState {
   std::vector<std::unique_ptr<Group>> m_groups;
   std::size_t m_curIndent;
   bool m_hasAnchor;
+  bool m_hasAlias;
   bool m_hasTag;
   bool m_hasNonContent;
   std::size_t m_docCount;
@@ -198,6 +211,6 @@ void EmitterState::_Set(Setting<T>& fmt, T value, FmtScope::value scope) {
       assert(false);
   }
 }
-}
+}  // namespace YAML
 
 #endif  // EMITTERSTATE_H_62B23520_7C8E_11DE_8A39_0800200C9A66

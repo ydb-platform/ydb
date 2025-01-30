@@ -25,16 +25,10 @@
 
 namespace benchmark {
 
-BM_DECLARE_string(benchmark_min_time);
-BM_DECLARE_double(benchmark_min_warmup_time);
-BM_DECLARE_int32(benchmark_repetitions);
-BM_DECLARE_bool(benchmark_report_aggregates_only);
-BM_DECLARE_bool(benchmark_display_aggregates_only);
-BM_DECLARE_string(benchmark_perf_counters);
-
 namespace internal {
 
 extern MemoryManager* memory_manager;
+extern ProfilerManager* profiler_manager;
 
 struct RunResults {
   std::vector<BenchmarkReporter::Run> non_aggregates;
@@ -112,6 +106,10 @@ class BenchmarkRunner {
     double seconds;
   };
   IterationResults DoNIterations();
+
+  MemoryManager::Result* RunMemoryManager(IterationCount memory_iterations);
+
+  void RunProfilerManager();
 
   IterationCount PredictNumItersNeeded(const IterationResults& i) const;
 

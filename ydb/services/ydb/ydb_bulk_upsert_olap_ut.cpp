@@ -1,10 +1,10 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
@@ -13,6 +13,14 @@
 using namespace NYdb;
 
 namespace {
+
+template <class T>
+std::string OptionalToString(const std::optional<T>& opt) {
+    if (opt.has_value()) {
+        return ToString(opt.value());
+    }
+    return "(NULL)";
+}
 
 std::vector<TString> ScanQuerySelectSimple(
     NYdb::NTable::TTableClient client, const TString& tablePath,
@@ -55,11 +63,11 @@ std::vector<TString> ScanQuerySelectSimple(
                             if (colName == "timestamp") {
                                 ss << parser.ColumnParser(colName).GetTimestamp() << ",";
                             } else {
-                                ss << parser.ColumnParser(colName).GetOptionalTimestamp() << ",";
+                                ss << OptionalToString(parser.ColumnParser(colName).GetOptionalTimestamp()) << ",";
                             }
                             break;
                         case NYdb::EPrimitiveType::Datetime:
-                            ss << parser.ColumnParser(colName).GetOptionalDatetime() << ",";
+                            ss << OptionalToString(parser.ColumnParser(colName).GetOptionalDatetime()) << ",";
                             break;
                         case NYdb::EPrimitiveType::String: {
                             auto& col = parser.ColumnParser(colName);
@@ -78,7 +86,7 @@ std::vector<TString> ScanQuerySelectSimple(
                             }
                             break;
                         case NYdb::EPrimitiveType::Int32:
-                            ss << parser.ColumnParser(colName).GetOptionalInt32() << ",";
+                            ss << OptionalToString(parser.ColumnParser(colName).GetOptionalInt32()) << ",";
                             break;
                         case NYdb::EPrimitiveType::JsonDocument:
                             ss << parser.ColumnParser(colName).GetOptionalJsonDocument() << ",";
@@ -116,13 +124,19 @@ std::vector<TString> ScanQuerySelect(
     return ScanQuerySelectSimple(client, tablePath, ydbSchema);
 }
 
+
+NKikimrConfig::TAppConfig GetAppConfig() {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableFeatureFlags()->SetEnableColumnStore(true);
+    return appConfig;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
     Y_UNIT_TEST(UpsertArrowBatch) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         TTestOlap::CreateTable(*server.ServerSettings);
@@ -181,7 +195,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // Less columns
             std::vector<TString> wrongColumns = columns;
             wrongColumns.resize(columns.size() - 1);
-            auto wrongBatch = NArrow::ExtractColumns(srcBatch, wrongColumns);
+            auto wrongBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(srcBatch, wrongColumns);
             strBatch = NArrow::SerializeBatchNoCompression(wrongBatch);
 
             auto res = client.BulkUpsert(tablePath,
@@ -194,7 +208,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // Reordered columns (it leads to wrong types)
             std::vector<TString> wrongColumns = columns;
             std::sort(wrongColumns.begin(), wrongColumns.end());
-            auto wrongBatch = NArrow::ExtractColumns(srcBatch, wrongColumns);
+            auto wrongBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(srcBatch, wrongColumns);
             strBatch = NArrow::SerializeBatchNoCompression(wrongBatch);
 
             auto res = client.BulkUpsert(tablePath,
@@ -206,8 +220,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
     }
 
     Y_UNIT_TEST(UpsertArrowDupField) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         ui16 grpc = server.GetPort();
@@ -274,8 +287,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
     }
 
     void ParquetImportBug(bool columnTable) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         ui16 grpc = server.GetPort();
@@ -366,7 +378,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
         { // Read all
             auto rows = ScanQuerySelect(client, tablePath, schema);
-            UNIT_ASSERT_GT(rows.size(), 0);
+            UNIT_ASSERT_EQUAL(rows.size(), 100);
         }
     }
 
@@ -379,8 +391,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
     }
 
     Y_UNIT_TEST(UpsertCsvBug) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         ui16 grpc = server.GetPort();
@@ -457,7 +468,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             auto rows = ScanQuerySelect(client, tablePath, schema);
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(rows[0],
-                "123123bs,testd,subscr,2020-01-17T22:58:50.000000Z,1973-11-27T01:52:03.000000Z,(empty maybe),http,ru,AsiaNovo,hello,{}");
+                "123123bs,testd,subscr,2020-01-17T22:58:50.000000Z,1973-11-27T01:52:03.000000Z,(NULL),http,ru,AsiaNovo,hello,{}");
 
             result = session.DropTable(tablePath).GetValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
@@ -566,8 +577,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
     }
 
     Y_UNIT_TEST(UpsertCSV) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         TTestOlap::CreateTable(*server.ServerSettings); // 2 shards
@@ -627,7 +637,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // Less columns
             std::vector<TString> wrongColumns = columns;
             wrongColumns.resize(columns.size() - 1);
-            csv = TTestOlap::ToCSV(NArrow::ExtractColumns(sampleBatch, wrongColumns));
+            csv = TTestOlap::ToCSV(NArrow::TColumnOperator().VerifyIfAbsent().Extract(sampleBatch, wrongColumns));
 
             auto res = client.BulkUpsert(tablePath,
                 NYdb::NTable::EDataFormat::CSV, csv).GetValueSync();
@@ -639,7 +649,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // Reordered columns (it leads to wrong types)
             std::vector<TString> wrongColumns = columns;
             std::sort(wrongColumns.begin(), wrongColumns.end());
-            csv = TTestOlap::ToCSV(NArrow::ExtractColumns(sampleBatch, wrongColumns));
+            csv = TTestOlap::ToCSV(NArrow::TColumnOperator().VerifyIfAbsent().Extract(sampleBatch, wrongColumns));
 
             auto res = client.BulkUpsert(tablePath,
                 NYdb::NTable::EDataFormat::CSV, csv).GetValueSync();
@@ -651,7 +661,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // Reordered columns with header
             std::vector<TString> wrongColumns = columns;
             std::sort(wrongColumns.begin(), wrongColumns.end());
-            csv = TTestOlap::ToCSV(NArrow::ExtractColumns(sampleBatch, wrongColumns), true);
+            csv = TTestOlap::ToCSV(NArrow::TColumnOperator().VerifyIfAbsent().Extract(sampleBatch, wrongColumns), true);
 
             NYdb::NTable::TBulkUpsertSettings upsertSettings;
             {
@@ -790,7 +800,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // Less columns
             std::vector<TString> wrongColumns = columns;
             wrongColumns.resize(columns.size() - 1);
-            auto wrongBatch = NArrow::ExtractColumns(srcBatch, wrongColumns);
+            auto wrongBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(srcBatch, wrongColumns);
             strBatch = NArrow::SerializeBatchNoCompression(wrongBatch);
 
             auto res = client.BulkUpsert(tablePath,
@@ -803,7 +813,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // Reordered columns (it leads to wrong types)
             std::vector<TString> wrongColumns = columns;
             std::sort(wrongColumns.begin(), wrongColumns.end());
-            auto wrongBatch = NArrow::ExtractColumns(srcBatch, wrongColumns);
+            auto wrongBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(srcBatch, wrongColumns);
             strBatch = NArrow::SerializeBatchNoCompression(wrongBatch);
 
             auto res = client.BulkUpsert(tablePath,
@@ -895,7 +905,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // Less columns
             std::vector<TString> wrongColumns = columns;
             wrongColumns.resize(columns.size() - 1);
-            csv = TTestOlap::ToCSV(NArrow::ExtractColumns(sampleBatch, wrongColumns));
+            csv = TTestOlap::ToCSV(NArrow::TColumnOperator().VerifyIfAbsent().Extract(sampleBatch, wrongColumns));
 
             auto res = client.BulkUpsert(tablePath,
                 NYdb::NTable::EDataFormat::CSV, csv).GetValueSync();
@@ -907,7 +917,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // Reordered columns (it leads to wrong types)
             std::vector<TString> wrongColumns = columns;
             std::sort(wrongColumns.begin(), wrongColumns.end());
-            csv = TTestOlap::ToCSV(NArrow::ExtractColumns(sampleBatch, wrongColumns));
+            csv = TTestOlap::ToCSV(NArrow::TColumnOperator().VerifyIfAbsent().Extract(sampleBatch, wrongColumns));
 
             auto res = client.BulkUpsert(tablePath,
                 NYdb::NTable::EDataFormat::CSV, csv).GetValueSync();
@@ -919,7 +929,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // Reordered columns with header
             std::vector<TString> wrongColumns = columns;
             std::sort(wrongColumns.begin(), wrongColumns.end());
-            csv = TTestOlap::ToCSV(NArrow::ExtractColumns(sampleBatch, wrongColumns), true);
+            csv = TTestOlap::ToCSV(NArrow::TColumnOperator().VerifyIfAbsent().Extract(sampleBatch, wrongColumns), true);
 
             NYdb::NTable::TBulkUpsertSettings upsertSettings;
             {

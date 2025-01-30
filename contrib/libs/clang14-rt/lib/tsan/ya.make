@@ -4,6 +4,8 @@ INCLUDE(${ARCADIA_ROOT}/build/platform/clang/arch.cmake)
 
 LIBRARY(clang_rt.tsan${CLANG_RT_SUFFIX})
 
+VERSION(14.0.6)
+
 LICENSE(
     Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND
@@ -12,8 +14,6 @@ LICENSE(
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
-OWNER(g:cpp-contrib)
 
 ADDINCL(
     contrib/libs/clang14-rt/lib

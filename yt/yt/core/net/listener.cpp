@@ -16,7 +16,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = NetLogger;
+static constexpr auto& Logger = NetLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,7 +39,7 @@ public:
     { }
 
     // IPollable implementation
-    const TString& GetLoggingTag() const override
+    const std::string& GetLoggingTag() const override
     {
         return Name_;
     }

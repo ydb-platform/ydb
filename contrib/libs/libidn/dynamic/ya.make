@@ -15,6 +15,8 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(1.42)
+
 DYNAMIC_LIBRARY_FROM(contrib/libs/libidn/static)
 
 LICENSE_RESTRICTION_EXCEPTIONS(contrib/libs/libidn/static)

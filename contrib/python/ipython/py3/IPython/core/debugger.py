@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Pdb debugger class.
 
@@ -15,14 +14,35 @@ Among other things, this subclass of PDB:
  - hide frames in tracebacks based on `__tracebackhide__`
  - allows to skip frames based on `__debuggerskip__`
 
+
+Global Configuration
+--------------------
+
+The IPython debugger will by read the global ``~/.pdbrc`` file.
+That is to say you can list all commands supported by ipdb in your `~/.pdbrc`
+configuration file, to globally configure pdb.
+
+Example::
+
+   # ~/.pdbrc
+   skip_predicates debuggerskip false
+   skip_hidden false
+   context 25
+
+Features
+--------
+
+The IPython debugger can hide and skip frames when printing or moving through
+the stack. This can have a performance impact, so can be configures.
+
 The skipping and hiding frames are configurable via the `skip_predicates`
 command.
 
 By default, frames from readonly files will be hidden, frames containing
-``__tracebackhide__=True`` will be hidden.
+``__tracebackhide__ = True`` will be hidden.
 
-Frames containing ``__debuggerskip__`` will be stepped over, frames who's parent
-frames value of ``__debuggerskip__`` is ``True`` will be skipped.
+Frames containing ``__debuggerskip__`` will be stepped over, frames whose parent
+frames value of ``__debuggerskip__`` is ``True`` will also be skipped.
 
     >>> def helpers_helper():
     ...     pass
@@ -101,17 +121,25 @@ All the changes since then are under the same license as IPython.
 #
 #*****************************************************************************
 
+from __future__ import annotations
+
 import inspect
 import linecache
-import sys
-import re
 import os
+import re
+import sys
+from contextlib import contextmanager
+from functools import lru_cache
 
 from IPython import get_ipython
-from contextlib import contextmanager
-from IPython.utils import PyColorize
-from IPython.utils import coloransi, py3compat
 from IPython.core.excolors import exception_colors
+from IPython.utils import PyColorize, coloransi, py3compat
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # otherwise circular import
+    from IPython.core.interactiveshell import InteractiveShell
 
 # skip module docstests
 __skip_doctest__ = True
@@ -149,14 +177,8 @@ def BdbQuit_excepthook(et, ev, tb, excepthook=None):
     parameter.
     """
     raise ValueError(
-        "`BdbQuit_excepthook` is deprecated since version 5.1",
+        "`BdbQuit_excepthook` is deprecated since version 5.1. It is still around only because it is still imported by ipdb.",
     )
-
-
-def BdbQuit_IPython_excepthook(self, et, ev, tb, tb_offset=None):
-    raise ValueError(
-        "`BdbQuit_IPython_excepthook` is deprecated since version 5.1",
-        DeprecationWarning, stacklevel=2)
 
 
 RGX_EXTRA_INDENT = re.compile(r'(?<=\n)\s+')
@@ -190,6 +212,8 @@ class Pdb(OldPdb):
     See the `skip_predicates` commands.
 
     """
+
+    shell: InteractiveShell
 
     if CHAIN_EXCEPTIONS:
         MAX_CHAINED_EXCEPTION_DEPTH = 999
@@ -261,21 +285,6 @@ class Pdb(OldPdb):
         C = coloransi.TermColors
         cst = self.color_scheme_table
 
-        cst['NoColor'].colors.prompt = C.NoColor
-        cst['NoColor'].colors.breakpoint_enabled = C.NoColor
-        cst['NoColor'].colors.breakpoint_disabled = C.NoColor
-
-        cst['Linux'].colors.prompt = C.Green
-        cst['Linux'].colors.breakpoint_enabled = C.LightRed
-        cst['Linux'].colors.breakpoint_disabled = C.Red
-
-        cst['LightBG'].colors.prompt = C.Blue
-        cst['LightBG'].colors.breakpoint_enabled = C.LightRed
-        cst['LightBG'].colors.breakpoint_disabled = C.Red
-
-        cst['Neutral'].colors.prompt = C.Blue
-        cst['Neutral'].colors.breakpoint_enabled = C.LightRed
-        cst['Neutral'].colors.breakpoint_disabled = C.Red
 
         # Add a python parser so we can syntax highlight source while
         # debugging.
@@ -471,23 +480,10 @@ class Pdb(OldPdb):
 
         return line
 
-    def new_do_frame(self, arg):
-        OldPdb.do_frame(self, arg)
-
     def new_do_quit(self, arg):
-
-        if hasattr(self, 'old_all_completions'):
-            self.shell.Completer.all_completions = self.old_all_completions
-
         return OldPdb.do_quit(self, arg)
 
     do_q = do_quit = decorate_fn_with_doc(new_do_quit, OldPdb.do_quit)
-
-    def new_do_restart(self, arg):
-        """Restart command. In the context of ipython this is exactly the same
-        thing as 'quit'."""
-        self.msg("Restart doesn't make sense here. Using 'quit' instead.")
-        return self.do_quit(arg)
 
     def print_stack_trace(self, context=None):
         Colors = self.color_scheme_table.active_colors
@@ -554,7 +550,7 @@ class Pdb(OldPdb):
         So if frame is self.current_frame we instead return self.curframe_locals
 
         """
-        if frame is self.curframe:
+        if frame is getattr(self, "curframe", None):
             return self.curframe_locals
         else:
             return frame.f_locals
@@ -941,22 +937,37 @@ class Pdb(OldPdb):
         Utility to tell us whether we are in a decorator internal and should stop.
 
         """
-
         # if we are disabled don't skip
         if not self._predicates["debuggerskip"]:
             return False
 
+        return self._cachable_skip(frame)
+
+    @lru_cache(1024)
+    def _cached_one_parent_frame_debuggerskip(self, frame):
+        """
+        Cache looking up for DEBUGGERSKIP on parent frame.
+
+        This should speedup walking through deep frame when one of the highest
+        one does have a debugger skip.
+
+        This is likely to introduce fake positive though.
+        """
+        while getattr(frame, "f_back", None):
+            frame = frame.f_back
+            if self._get_frame_locals(frame).get(DEBUGGERSKIP):
+                return True
+        return None
+
+    @lru_cache(1024)
+    def _cachable_skip(self, frame):
         # if frame is tagged, skip by default.
         if DEBUGGERSKIP in frame.f_code.co_varnames:
             return True
 
         # if one of the parent frame value set to True skip as well.
-
-        cframe = frame
-        while getattr(cframe, "f_back", None):
-            cframe = cframe.f_back
-            if self._get_frame_locals(cframe).get(DEBUGGERSKIP):
-                return True
+        if self._cached_one_parent_frame_debuggerskip(frame):
+            return True
 
         return False
 
@@ -1080,7 +1091,9 @@ class Pdb(OldPdb):
                 raise ValueError()
             self.context = new_context
         except ValueError:
-            self.error("The 'context' command requires a positive integer argument.")
+            self.error(
+                f"The 'context' command requires a positive integer argument (current value {self.context})."
+            )
 
 
 class InterruptiblePdb(Pdb):

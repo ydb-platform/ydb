@@ -1,0 +1,4 @@
+{"id"="000";"sname"="lodkovna"};
+{"id"="001";"sname"="korableva"};
+{"id"="002";"sname"="sudnovna"};
+{"id"="003";"sname"="vremeni"};

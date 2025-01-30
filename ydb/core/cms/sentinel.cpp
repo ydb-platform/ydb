@@ -43,14 +43,45 @@ namespace NSentinel {
 
 /// TPDiskStatusComputer
 
-TPDiskStatusComputer::TPDiskStatusComputer(const ui32& defaultStateLimit, const TLimitsMap& stateLimits)
+TPDiskStatusComputer::TPDiskStatusComputer(const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
     : DefaultStateLimit(defaultStateLimit)
+    , GoodStateLimit(goodStateLimit)
     , StateLimits(stateLimits)
     , StateCounter(0)
 {
 }
 
-void TPDiskStatusComputer::AddState(EPDiskState state) {
+bool IsGoodState(EPDiskState state) {
+    switch (state) {
+        case NKikimrBlobStorage::TPDiskState::Unknown:
+            return false;
+        case NKikimrBlobStorage::TPDiskState::Initial:
+        case NKikimrBlobStorage::TPDiskState::InitialFormatRead:
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogRead:
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
+        case NKikimrBlobStorage::TPDiskState::Normal:
+            return true;
+        case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
+        case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
+        case NKikimrBlobStorage::TPDiskState::OpenFileError:
+        case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
+        case NKikimrBlobStorage::TPDiskState::DeviceIoError:
+        case NKikimrBlobStorage::TPDiskState::Stopped:
+        case NKikimrBlobStorage::TPDiskState::Reserved15:
+        case NKikimrBlobStorage::TPDiskState::Reserved16:
+        case NKikimrBlobStorage::TPDiskState::Reserved17:
+        case NKikimrBlobStorage::TPDiskState::Missing:
+        case NKikimrBlobStorage::TPDiskState::Timeout:
+        case NKikimrBlobStorage::TPDiskState::NodeDisconnected:
+            return false;
+    }
+}
+
+void TPDiskStatusComputer::AddState(EPDiskState state, bool isNodeLocked) {
     if (StateCounter && state == State) {
         if (StateCounter != Max<ui64>()) {
             ++StateCounter;
@@ -58,6 +89,12 @@ void TPDiskStatusComputer::AddState(EPDiskState state) {
     } else {
         PrevState = std::exchange(State, state);
         StateCounter = 1;
+    }
+
+    if (!isNodeLocked && !IsGoodState(state)) {
+        // If node is not locked (i.e. it is not in maintenance mode),
+        // then we should remember that we had a bad state recently
+        HadBadStateRecently = true;
     }
 }
 
@@ -81,12 +118,18 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
             << " State# " << State
             << " StateCounter# " << StateCounter
             << " current# " << current;
-        switch (PrevState) {
-            case NKikimrBlobStorage::TPDiskState::Unknown:
-                return current;
-            default:
-                return EPDiskStatus::INACTIVE;
+
+        if (PrevState == NKikimrBlobStorage::TPDiskState::Unknown) {
+            return current;
         }
+
+        if (IsGoodState(PrevState) && State == NKikimrBlobStorage::TPDiskState::Normal) {
+            if (!HadBadStateRecently && (StateCounter >= GoodStateLimit)) {
+                return EPDiskStatus::ACTIVE;
+            }
+        }
+
+        return EPDiskStatus::INACTIVE;
     }
 
     reason = TStringBuilder()
@@ -99,6 +142,7 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
 
     switch (State) {
         case NKikimrBlobStorage::TPDiskState::Normal:
+            HadBadStateRecently = false;
             return EPDiskStatus::ACTIVE;
         default:
             return EPDiskStatus::FAULTY;
@@ -125,21 +169,25 @@ void TPDiskStatusComputer::SetForcedStatus(EPDiskStatus status) {
     ForcedStatus = status;
 }
 
+bool TPDiskStatusComputer::HasForcedStatus() const {
+    return ForcedStatus.Defined();
+}
+
 void TPDiskStatusComputer::ResetForcedStatus() {
     ForcedStatus.Clear();
 }
 
 /// TPDiskStatus
 
-TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits)
-    : TPDiskStatusComputer(defaultStateLimit, stateLimits)
+TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
+    : TPDiskStatusComputer(defaultStateLimit, goodStateLimit, stateLimits)
     , Current(initialStatus)
     , ChangingAllowed(true)
 {
 }
 
-void TPDiskStatus::AddState(EPDiskState state) {
-    TPDiskStatusComputer::AddState(state);
+void TPDiskStatus::AddState(EPDiskState state, bool isNodeLocked) {
+    TPDiskStatusComputer::AddState(state, isNodeLocked);
 }
 
 bool TPDiskStatus::IsChanged() const {
@@ -194,14 +242,15 @@ void TPDiskStatus::DisallowChanging() {
 
 /// TPDiskInfo
 
-TPDiskInfo::TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits)
-    : TPDiskStatus(initialStatus, defaultStateLimit, stateLimits)
+TPDiskInfo::TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
+    : TPDiskStatus(initialStatus, defaultStateLimit, goodStateLimit, stateLimits)
+    , ActualStatus(initialStatus)
 {
     Touch();
 }
 
-void TPDiskInfo::AddState(EPDiskState state) {
-    TPDiskStatus::AddState(state);
+void TPDiskInfo::AddState(EPDiskState state, bool isNodeLocked) {
+    TPDiskStatus::AddState(state, isNodeLocked);
     Touch();
 }
 
@@ -471,7 +520,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                     continue;
                 }
 
-                pdisks.emplace(id, new TPDiskInfo(pdisk.GetDriveStatus(), Config.DefaultStateLimit, Config.StateLimits));
+                pdisks.emplace(id, new TPDiskInfo(pdisk.GetDriveStatus(), Config.DefaultStateLimit, Config.GoodStateLimit, Config.StateLimits));
             }
 
             SentinelState->ConfigUpdaterState.GotBSCResponse = true;
@@ -540,6 +589,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             case NKikimrBlobStorage::TPDiskState::OpenFileError:
             case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
             case NKikimrBlobStorage::TPDiskState::DeviceIoError:
+            case NKikimrBlobStorage::TPDiskState::Stopped:
                 return state;
             default:
                 LOG_C("Unknown pdisk state: " << (ui32)state);
@@ -565,16 +615,31 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         Reply();
     }
 
+    bool IsNodeLocked(ui32 nodeId) const {
+        const auto& clusterInfo = CmsState->ClusterInfo;
+
+        if (clusterInfo && clusterInfo->HasNode(nodeId)) {
+            const auto& node = clusterInfo->Node(nodeId);
+            TErrorInfo unused;
+            if (node.IsLocked(unused, TDuration::Zero(), TInstant::Zero(), TDuration::Zero())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     void MarkNodePDisks(ui32 nodeId, EPDiskState state, bool skipTouched = false) {
+        bool isNodeLocked = IsNodeLocked(nodeId);
         auto it = SentinelState->PDisks.lower_bound(TPDiskID(nodeId, 0));
         while (it != SentinelState->PDisks.end() && it->first.NodeId == nodeId) {
             if (skipTouched && it->second->IsTouched()) {
                 ++it;
                 continue;
             }
-
+            
             Y_ABORT_UNLESS(!it->second->IsTouched());
-            it->second->AddState(state);
+            it->second->AddState(state, isNodeLocked);
             ++it;
         }
     }
@@ -608,6 +673,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                 << ": nodeId# " << nodeId);
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing);
         } else {
+            const bool isNodeLocked = IsNodeLocked(nodeId);
             for (const auto& info : record.GetPDiskStateInfo()) {
                 auto it = SentinelState->PDisks.find(TPDiskID(nodeId, info.GetPDiskId()));
                 if (it == SentinelState->PDisks.end()) {
@@ -620,7 +686,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                     << ", original# " << (ui32)info.GetState()
                     << ", safeState# " << safeState);
 
-                it->second->AddState(safeState);
+                it->second->AddState(safeState, isNodeLocked);
             }
 
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing, true);
@@ -890,15 +956,15 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                 continue;
             }
 
-            if (it->second.HasFaultyMarker()) {
-                info.SetForcedStatus(EPDiskStatus::FAULTY);
+            if (it->second.HasFaultyMarker() && Config.EvictVDisksStatus.Defined()) {
+                info.SetForcedStatus(*Config.EvictVDisksStatus);
             } else {
                 info.ResetForcedStatus();
             }
 
             all.AddPDisk(id);
             if (info.IsChanged()) {
-                if (info.IsNewStatusGood()) {
+                if (info.IsNewStatusGood() || info.HasForcedStatus()) {
                     alwaysAllowed.insert(id);
                 } else {
                     changed.AddPDisk(id);
@@ -984,6 +1050,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             command.SetPDiskId(id.DiskId);
             command.SetStatus(info->GetStatus());
         }
+        request->Record.MutableRequest()->SetIgnoreDisintegratedGroupsChecks(true);
 
         NTabletPipe::SendData(SelfId(), CmsState->BSControllerPipe, request.Release(), ++SentinelState->ChangeRequestId);
     }
@@ -1115,6 +1182,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         auto onPDiskStatusChanged = [&](const TPDiskID& id, TPDiskInfo& info) {
+            info.LastStatusChangeFailed = false;
             info.StatusChangeFailed = false;
             info.PrevStatus = info.ActualStatus;
             info.ActualStatus = info.GetStatus();
@@ -1128,21 +1196,22 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             (*Counters->PDisksChanged)++;
         };
 
-        if (!response.GetSuccess() || !response.StatusSize() || !response.GetStatus(0).GetSuccess()) {
-            Y_ABORT_UNLESS(SentinelState->ChangeRequests.size() == response.StatusSize());
+        if (!response.GetSuccess() || !response.StatusSize()) {
+            for (auto& [key, req] : SentinelState->ChangeRequests) {
+                req->LastStatusChangeFailed = false;
+                req->StatusChangeFailed = true;
+                req->StatusChangeAttempt = SentinelState->StatusChangeAttempt;
+            }
+
+            Y_ABORT_UNLESS(SentinelState->ChangeRequests.size() >= response.StatusSize());
             auto it = SentinelState->ChangeRequests.begin();
             for (const auto& status : response.GetStatus()) {
                 if (!status.GetSuccess()) {
+                    it->second->LastStatusChangeFailed = true;
                     LOG_E("Unsuccesful response from BSC"
                         << ": error# " << status.GetErrorDescription());
-
-                    it->second->StatusChangeFailed = true;
-                    it->second->StatusChangeAttempt = SentinelState->StatusChangeAttempt;
-                    ++it;
-                } else {
-                    onPDiskStatusChanged(it->first, *(it->second));
-                    it = SentinelState->ChangeRequests.erase(it);
                 }
+                ++it;
             }
 
             MaybeRetry();

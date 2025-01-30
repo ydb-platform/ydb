@@ -20,6 +20,10 @@ namespace boost { namespace locale { namespace detail {
     struct is_supported_char<char> : std::true_type {};
     template<>
     struct is_supported_char<wchar_t> : std::true_type {};
+#ifdef __cpp_char8_t
+    template<>
+    struct is_supported_char<char8_t> : std::true_type {};
+#endif
 
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     template<>

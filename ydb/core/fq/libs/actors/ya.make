@@ -43,8 +43,8 @@ PEERDIR(
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/events
-    ydb/core/fq/libs/exceptions
     ydb/core/fq/libs/grpc
+    ydb/core/fq/libs/metrics
     ydb/core/fq/libs/private_client
     ydb/core/fq/libs/rate_limiter/utils
     ydb/core/fq/libs/result_formatter
@@ -54,42 +54,42 @@ PEERDIR(
     ydb/core/util
     ydb/library/mkql_proto
     ydb/library/security
-    ydb/library/yql/ast
-    ydb/library/yql/core/facade
-    ydb/library/yql/core/services/mounts
-    ydb/library/yql/dq/integration/transform
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/comp_nodes
+    yql/essentials/ast
+    yql/essentials/core/facade
+    yql/essentials/core/services/mounts
+    yql/essentials/core/dq_integration/transform
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/comp_nodes
     ydb/library/yql/providers/common/db_id_async_resolver
-    ydb/library/yql/providers/common/metrics
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/schema/mkql
+    yql/essentials/providers/common/metrics
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/mkql
     ydb/library/yql/providers/common/token_accessor/client
-    ydb/library/yql/providers/common/udf_resolve
+    yql/essentials/providers/common/udf_resolve
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/counters
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/provider/exec
     ydb/library/yql/providers/dq/worker_manager/interface
-    ydb/library/yql/providers/generic/connector/api/common
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/pq/provider
     ydb/library/yql/providers/pq/task_meta
+    ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/provider
-    ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
-    ydb/library/yql/sql/settings
-    ydb/library/yql/utils
+    yql/essentials/public/issue
+    yql/essentials/public/issue/protos
+    yql/essentials/sql/settings
+    yql/essentials/utils
     ydb/library/yql/utils/actor_log
     ydb/public/api/protos
     ydb/public/lib/fq
-    ydb/public/sdk/cpp/client/ydb_query
-    ydb/public/sdk/cpp/client/ydb_operation
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

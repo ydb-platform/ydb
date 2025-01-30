@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet_2",
-                "PlanNodeId": 12,
+                "PlanNodeId": 13,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,23 +14,23 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 10
+                                        "ExternalPlanNodeId": 11
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 11,
+                        "PlanNodeId": 12,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 10,
+                                "PlanNodeId": 11,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "precompute_1_0",
-                                        "Node Type": "TopSort-InnerJoin (MapJoin)-ConstantExpr-Filter-TableRangeScan-ConstantExpr",
+                                        "CTE Name": "precompute_0_0",
+                                        "Node Type": "TopSort-InnerJoin (MapJoin)-Filter-TableRangeScan-ConstantExpr-Filter-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -43,26 +43,21 @@
                                                 "TopSortBy": "argument.s2.name"
                                             },
                                             {
-                                                "Condition": "name = name",
+                                                "Condition": "s3.name = s2.name",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "InternalOperatorId": 2
+                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_0_0"
-                                            },
-                                            {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "Filter",
@@ -71,10 +66,11 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 5
+                                                        "InternalOperatorId": 4
                                                     }
                                                 ],
                                                 "Name": "TableRangeScan",
+                                                "Path": "/Root/postgres_jointest/join2.test_plan/t3",
                                                 "ReadColumns": [
                                                     "n",
                                                     "name"
@@ -85,9 +81,23 @@
                                                 "Inputs": [],
                                                 "Iterator": "precompute_1_0",
                                                 "Name": "Iterator"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 6
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.name)"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
                                             }
                                         ],
-                                        "PlanNodeId": 9,
+                                        "PlanNodeId": 10,
                                         "Tables": [
                                             "postgres_jointest/join2.test_plan/t3"
                                         ]
@@ -104,7 +114,7 @@
             {
                 "Node Type": "Precompute_1",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 7,
+                "PlanNodeId": 8,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
@@ -117,7 +127,7 @@
                                 "Name": "PartitionByKey"
                             }
                         ],
-                        "PlanNodeId": 6
+                        "PlanNodeId": 7
                     }
                 ],
                 "Subplan Name": "CTE precompute_1_0"
@@ -125,38 +135,47 @@
             {
                 "Node Type": "Precompute_0",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 4,
+                "PlanNodeId": 5,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
                         "Node Type": "Collect",
-                        "PlanNodeId": 3,
+                        "PlanNodeId": 4,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 2,
+                                "PlanNodeId": 3,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TableFullScan",
-                                        "Operators": [
+                                        "Node Type": "Collect",
+                                        "PlanNodeId": 2,
+                                        "Plans": [
                                             {
-                                                "Inputs": [],
-                                                "Name": "TableFullScan",
-                                                "ReadColumns": [
-                                                    "n",
-                                                    "name"
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join2.test_plan/t2",
+                                                        "ReadColumns": [
+                                                            "n",
+                                                            "name"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "name (-\u221e, +\u221e)",
+                                                            "n (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/join2.test_plan/t2"
+                                                    }
                                                 ],
-                                                "ReadRanges": [
-                                                    "name (-\u221e, +\u221e)",
-                                                    "n (-\u221e, +\u221e)"
-                                                ],
-                                                "Table": "postgres_jointest/join2.test_plan/t2"
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "postgres_jointest/join2.test_plan/t2"
+                                                ]
                                             }
-                                        ],
-                                        "PlanNodeId": 1,
-                                        "Tables": [
-                                            "postgres_jointest/join2.test_plan/t2"
                                         ]
                                     }
                                 ]
@@ -166,7 +185,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

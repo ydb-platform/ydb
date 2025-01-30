@@ -10,11 +10,11 @@
 
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/proto/logger_config.pb.h>
 
 #include <library/cpp/digest/md5/md5.h>
 
@@ -35,6 +35,8 @@ void TDqManagerConfig::Register(TRegistrar registrar)
         .GreaterThan(0);
     registrar.Parameter("use_ipv4", &TThis::UseIPv4)
         .Default(false);
+    registrar.Parameter("address_resolver", &TThis::AddressResolver)
+        .Default();
 
     registrar.Parameter("yt_backends", &TThis::YtBackends)
         .NonEmpty();
@@ -237,6 +239,7 @@ void TDqManager::Start()
             rmOptions.UploadPrefix = rmOptions.YtBackend.GetUploadPrefix() + "/bin/" + ToString(GetProgramCommitId());
             rmOptions.Counters = MetricsRegistry_->GetSensors()->GetSubgroup("counters", "ytrm")->GetSubgroup("ytname", rmOptions.YtBackend.GetClusterName());
             rmOptions.ForceIPv4 = Config_->UseIPv4;
+            rmOptions.AddressResolverConfig = ConvertToYsonString(Config_->AddressResolver, EYsonFormat::Text);
             ActorSystem_->Register(CreateResourceManager(rmOptions, Coordinator_));
         }
         rmOptions.UploadPrefix = rmOptions.YtBackend.GetUploadPrefix();

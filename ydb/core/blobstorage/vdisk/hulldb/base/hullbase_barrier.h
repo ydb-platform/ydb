@@ -71,11 +71,6 @@ namespace NKikimr {
                 TabletId, Channel, Gen, GenCounter, Hard ? "hard" : "soft");
         }
 
-        TLogoBlobID LogoBlobID() const {
-            return TLogoBlobID();
-        }
-
-
         void Serialize(NKikimrBlobStorage::TBarrierKey &proto) const {
             proto.SetTabletId(TabletId);
             proto.SetChannel(Channel);

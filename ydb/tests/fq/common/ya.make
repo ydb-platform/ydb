@@ -15,14 +15,10 @@ PY_SRCS(
 )
 
 IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
-
-REQUIREMENTS(ram:16)
 
 END()

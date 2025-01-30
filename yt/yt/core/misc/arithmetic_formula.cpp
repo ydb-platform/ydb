@@ -1,5 +1,4 @@
 #include "arithmetic_formula.h"
-#include "phoenix.h"
 
 #include <yt/yt/core/misc/error.h>
 
@@ -42,7 +41,7 @@ bool IsSymbolAllowedInName(char c, EEvaluationContext context, bool isFirst)
     return false;
 }
 
-void ValidateFormulaVariable(const TString& variable, EEvaluationContext context)
+void ValidateFormulaVariable(const std::string& variable, EEvaluationContext context)
 {
     if (variable.empty()) {
         THROW_ERROR_EXCEPTION("Variable should not be empty");
@@ -67,12 +66,12 @@ void ValidateFormulaVariable(const TString& variable, EEvaluationContext context
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ValidateArithmeticFormulaVariable(const TString& variable)
+void ValidateArithmeticFormulaVariable(const std::string& variable)
 {
     ValidateFormulaVariable(variable, EEvaluationContext::Arithmetic);
 }
 
-void ValidateBooleanFormulaVariable(const TString& variable)
+void ValidateBooleanFormulaVariable(const std::string& variable)
 {
     ValidateFormulaVariable(variable, EEvaluationContext::Boolean);
 }
@@ -81,12 +80,12 @@ void ValidateBooleanFormulaVariable(const TString& variable)
 
 namespace {
 
-void ThrowError(const TString& formula, int position, const TString& message, EEvaluationContext evaluationContext)
+void ThrowError(const std::string& formula, int position, const std::string& message, EEvaluationContext evaluationContext)
 {
     const static int maxContextSize = 30;
 
     int contextStart = std::max(0, position - maxContextSize / 2);
-    TString context = formula.substr(contextStart, maxContextSize);
+    std::string context = formula.substr(contextStart, maxContextSize);
     int contextPosition = std::min(position, maxContextSize / 2);
 
     TStringBuilder builder;
@@ -96,7 +95,7 @@ void ThrowError(const TString& formula, int position, const TString& message, EE
         formula);
     builder.AppendChar(' ', position);
     builder.AppendFormat("^\n%v", message);
-    THROW_ERROR_EXCEPTION(builder.Flush())
+    THROW_ERROR_EXCEPTION(std::move(builder.Flush()), NYT::TError::DisableFormat)
         << TErrorAttribute("context", context)
         << TErrorAttribute("context_pos", contextPosition);
 }
@@ -137,7 +136,7 @@ DEFINE_ENUM(EFormulaTokenType,
 );
 
 static int Precedence(EFormulaTokenType type) {
-    constexpr static int precedence[] =
+    static constexpr int precedence[] =
     {
         FOR_EACH_TOKEN(EXTRACT_PRECEDENCE)
     };
@@ -154,7 +153,7 @@ struct TFormulaToken
 {
     EFormulaTokenType Type;
     int Position;
-    TString Name;
+    std::string Name;
     i64 Number = 0;
 };
 
@@ -171,11 +170,11 @@ class TGenericFormulaImpl
     : public TRefCounted
 {
 public:
-    DEFINE_BYVAL_RO_PROPERTY(TString, Formula);
+    DEFINE_BYVAL_RO_PROPERTY(std::string, Formula);
     DEFINE_BYVAL_RO_PROPERTY(size_t, Hash);
 
 public:
-    TGenericFormulaImpl(const TString& formula, size_t hash, std::vector<TFormulaToken> parsedFormula);
+    TGenericFormulaImpl(const std::string& formula, size_t hash, std::vector<TFormulaToken> parsedFormula);
 
     bool operator==(const TGenericFormulaImpl& other) const;
 
@@ -183,31 +182,31 @@ public:
 
     int Size() const;
 
-    i64 Eval(const THashMap<TString, i64>& values, EEvaluationContext context) const;
+    i64 Eval(const THashMap<std::string, i64>& values, EEvaluationContext context) const;
 
-    THashSet<TString> GetVariables() const;
+    THashSet<std::string> GetVariables() const;
 
 private:
     std::vector<TFormulaToken> ParsedFormula_;
 
-    static std::vector<TFormulaToken> Tokenize(const TString& formula, EEvaluationContext context);
+    static std::vector<TFormulaToken> Tokenize(const std::string& formula, EEvaluationContext context);
     static std::vector<TFormulaToken> Parse(
-        const TString& formula,
+        const std::string& formula,
         const std::vector<TFormulaToken>& tokens,
         EEvaluationContext context);
     static size_t CalculateHash(const std::vector<TFormulaToken>& tokens);
     static void CheckTypeConsistency(
-        const TString& formula,
+        const std::string& formula,
         const std::vector<TFormulaToken>& tokens,
         EEvaluationContext context);
 
-    friend TIntrusivePtr<TGenericFormulaImpl> MakeGenericFormulaImpl(const TString& formula, EEvaluationContext context);
+    friend TIntrusivePtr<TGenericFormulaImpl> MakeGenericFormulaImpl(const std::string& formula, EEvaluationContext context);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TGenericFormulaImpl::TGenericFormulaImpl(
-    const TString& formula,
+    const std::string& formula,
     size_t hash,
     std::vector<TFormulaToken> parsedFormula)
     : Formula_(formula)
@@ -234,9 +233,9 @@ int TGenericFormulaImpl::Size() const
     return ParsedFormula_.size();
 }
 
-i64 TGenericFormulaImpl::Eval(const THashMap<TString, i64>& values, EEvaluationContext context) const
+i64 TGenericFormulaImpl::Eval(const THashMap<std::string, i64>& values, EEvaluationContext context) const
 {
-    auto variableValue = [&] (const TString& var) -> i64 {
+    auto variableValue = [&] (const std::string& var) -> i64 {
         auto iter = values.find(var);
         if (iter == values.end()) {
             if (context == EEvaluationContext::Boolean) {
@@ -389,9 +388,9 @@ i64 TGenericFormulaImpl::Eval(const THashMap<TString, i64>& values, EEvaluationC
 #undef APPLY_BINARY_OP
 }
 
-THashSet<TString> TGenericFormulaImpl::GetVariables() const
+THashSet<std::string> TGenericFormulaImpl::GetVariables() const
 {
-    THashSet<TString> variables;
+    THashSet<std::string> variables;
     for (const auto& token : ParsedFormula_) {
         if (token.Type == EFormulaTokenType::Variable) {
             variables.insert(token.Name);
@@ -400,12 +399,12 @@ THashSet<TString> TGenericFormulaImpl::GetVariables() const
     return variables;
 }
 
-std::vector<TFormulaToken> TGenericFormulaImpl::Tokenize(const TString& formula, EEvaluationContext context)
+std::vector<TFormulaToken> TGenericFormulaImpl::Tokenize(const std::string& formula, EEvaluationContext context)
 {
     std::vector<TFormulaToken> result;
     size_t pos = 0;
 
-    auto throwError = [&] (int position, const TString& message) {
+    auto throwError = [&] (int position, const std::string& message) {
         ThrowError(formula, position, message, context);
     };
 
@@ -526,7 +525,7 @@ std::vector<TFormulaToken> TGenericFormulaImpl::Tokenize(const TString& formula,
     };
 
     auto extractVariable = [&] {
-        TString name;
+        std::string name;
         while (pos < formula.size() && IsSymbolAllowedInName(formula[pos], context, /*isFirst*/ name.empty())) {
             name += formula[pos++];
         }
@@ -595,7 +594,7 @@ std::vector<TFormulaToken> TGenericFormulaImpl::Tokenize(const TString& formula,
 }
 
 std::vector<TFormulaToken> TGenericFormulaImpl::Parse(
-    const TString& formula,
+    const std::string& formula,
     const std::vector<TFormulaToken>& tokens,
     EEvaluationContext context)
 {
@@ -607,11 +606,11 @@ std::vector<TFormulaToken> TGenericFormulaImpl::Parse(
         return result;
     }
 
-    auto throwError = [&] (int position, const TString& message) {
+    auto throwError = [&] (int position, const std::string& message) {
         ThrowError(formula, position, message, context);
     };
 
-    auto finishSubformula = [&] () {
+    auto finishSubformula = [&] {
         while (!stack.empty() && stack.back().Type != EFormulaTokenType::LeftBracket) {
             result.push_back(stack.back());
             stack.pop_back();
@@ -712,7 +711,7 @@ size_t TGenericFormulaImpl::CalculateHash(const std::vector<TFormulaToken>& toke
 }
 
 void TGenericFormulaImpl::CheckTypeConsistency(
-    const TString& formula,
+    const std::string& formula,
     const std::vector<TFormulaToken>& tokens,
     EEvaluationContext context)
 {
@@ -775,7 +774,7 @@ void TGenericFormulaImpl::CheckTypeConsistency(
     }
 }
 
-TIntrusivePtr<TGenericFormulaImpl> MakeGenericFormulaImpl(const TString& formula, EEvaluationContext context)
+TIntrusivePtr<TGenericFormulaImpl> MakeGenericFormulaImpl(const std::string& formula, EEvaluationContext context)
 {
     auto tokens = TGenericFormulaImpl::Tokenize(formula, context);
     auto parsed = TGenericFormulaImpl::Parse(formula, tokens, context);
@@ -786,7 +785,7 @@ TIntrusivePtr<TGenericFormulaImpl> MakeGenericFormulaImpl(const TString& formula
 ////////////////////////////////////////////////////////////////////////////////
 
 TArithmeticFormula::TArithmeticFormula()
-    : Impl_(MakeGenericFormulaImpl(TString(), EEvaluationContext::Arithmetic))
+    : Impl_(MakeGenericFormulaImpl(std::string(), EEvaluationContext::Arithmetic))
 { }
 
 TArithmeticFormula::TArithmeticFormula(TIntrusivePtr<TGenericFormulaImpl> impl)
@@ -819,22 +818,22 @@ size_t TArithmeticFormula::GetHash() const
     return Impl_->GetHash();
 }
 
-TString TArithmeticFormula::GetFormula() const
+std::string TArithmeticFormula::GetFormula() const
 {
     return Impl_->GetFormula();
 }
 
-i64 TArithmeticFormula::Eval(const THashMap<TString, i64>& values) const
+i64 TArithmeticFormula::Eval(const THashMap<std::string, i64>& values) const
 {
     return Impl_->Eval(values, EEvaluationContext::Arithmetic);
 }
 
-THashSet<TString> TArithmeticFormula::GetVariables() const
+THashSet<std::string> TArithmeticFormula::GetVariables() const
 {
     return Impl_->GetVariables();
 }
 
-TArithmeticFormula MakeArithmeticFormula(const TString& formula)
+TArithmeticFormula MakeArithmeticFormula(const std::string& formula)
 {
     auto impl = MakeGenericFormulaImpl(formula, EEvaluationContext::Arithmetic);
     return TArithmeticFormula(std::move(impl));
@@ -860,21 +859,21 @@ void TArithmeticFormula::Save(TStreamSaveContext& context) const
 void TArithmeticFormula::Load(TStreamLoadContext& context)
 {
     using NYT::Load;
-    auto formula = Load<TString>(context);
+    auto formula = Load<std::string>(context);
     Impl_ = MakeGenericFormulaImpl(formula, EEvaluationContext::Arithmetic);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TBooleanFormulaTags::TBooleanFormulaTags(THashSet<TString> tags)
+TBooleanFormulaTags::TBooleanFormulaTags(THashSet<std::string> tags)
     : Tags_(std::move(tags))
 {
-    for (const auto& key: Tags_) {
+    for (const auto& key : Tags_) {
         PreparedTags_[key] = 1;
     }
 }
 
-const THashSet<TString>& TBooleanFormulaTags::GetSourceTags() const
+const THashSet<std::string>& TBooleanFormulaTags::GetSourceTags() const
 {
     return Tags_;
 }
@@ -888,7 +887,7 @@ void TBooleanFormulaTags::Save(TStreamSaveContext& context) const
 void TBooleanFormulaTags::Load(TStreamLoadContext& context)
 {
     using NYT::Load;
-    *this = TBooleanFormulaTags(Load<THashSet<TString>>(context));
+    *this = TBooleanFormulaTags(Load<THashSet<std::string>>(context));
 }
 
 bool TBooleanFormulaTags::operator==(const TBooleanFormulaTags& other) const
@@ -904,15 +903,10 @@ void Serialize(const TBooleanFormulaTags& tags, NYson::IYsonConsumer* consumer)
 
 void Deserialize(TBooleanFormulaTags& tags, NYTree::INodePtr node)
 {
-    tags = TBooleanFormulaTags(ConvertTo<THashSet<TString>>(node));
+    tags = TBooleanFormulaTags(ConvertTo<THashSet<std::string>>(node));
 }
 
-TString ToString(const TBooleanFormulaTags& tags)
-{
-    return ToStringViaBuilder(tags);
-}
-
-void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*spec*/)
 {
     builder->AppendFormat("%v", tags.GetSourceTags());
 }
@@ -920,7 +914,7 @@ void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, T
 ////////////////////////////////////////////////////////////////////////////////
 
 TBooleanFormula::TBooleanFormula()
-    : Impl_(MakeGenericFormulaImpl(TString(), EEvaluationContext::Boolean))
+    : Impl_(MakeGenericFormulaImpl(std::string(), EEvaluationContext::Boolean))
 { }
 
 TBooleanFormula::TBooleanFormula(TIntrusivePtr<TGenericFormulaImpl> impl)
@@ -953,23 +947,23 @@ size_t TBooleanFormula::GetHash() const
     return Impl_->GetHash();
 }
 
-TString TBooleanFormula::GetFormula() const
+std::string TBooleanFormula::GetFormula() const
 {
     return Impl_->GetFormula();
 }
 
-bool TBooleanFormula::IsSatisfiedBy(const std::vector<TString>& value) const
+bool TBooleanFormula::IsSatisfiedBy(const std::vector<std::string>& value) const
 {
-    THashMap<TString, i64> values;
-    for (const auto& key: value) {
+    THashMap<std::string, i64> values;
+    for (const auto& key : value) {
         values[key] = 1;
     }
     return Impl_->Eval(values, EEvaluationContext::Boolean);
 }
 
-bool TBooleanFormula::IsSatisfiedBy(const THashSet<TString>& value) const
+bool TBooleanFormula::IsSatisfiedBy(const THashSet<std::string>& value) const
 {
-    return IsSatisfiedBy(std::vector<TString>(value.begin(), value.end()));
+    return IsSatisfiedBy(std::vector<std::string>(value.begin(), value.end()));
 }
 
 bool TBooleanFormula::IsSatisfiedBy(const TBooleanFormulaTags& tags) const
@@ -977,7 +971,7 @@ bool TBooleanFormula::IsSatisfiedBy(const TBooleanFormulaTags& tags) const
     return Impl_->Eval(tags.PreparedTags_, EEvaluationContext::Boolean);
 }
 
-TBooleanFormula MakeBooleanFormula(const TString& formula)
+TBooleanFormula MakeBooleanFormula(const std::string& formula)
 {
     auto impl = MakeGenericFormulaImpl(formula, EEvaluationContext::Boolean);
     return TBooleanFormula(std::move(impl));
@@ -1025,7 +1019,7 @@ void Deserialize(TBooleanFormula& booleanFormula, TYsonPullParserCursor* cursor)
 {
     MaybeSkipAttributes(cursor);
     EnsureYsonToken("TBooleanFormula", *cursor, EYsonItemType::StringValue);
-    booleanFormula = MakeBooleanFormula(ExtractTo<TString>(cursor));
+    booleanFormula = MakeBooleanFormula(ExtractTo<std::string>(cursor));
 }
 
 void TBooleanFormula::Save(TStreamSaveContext& context) const
@@ -1037,8 +1031,13 @@ void TBooleanFormula::Save(TStreamSaveContext& context) const
 void TBooleanFormula::Load(TStreamLoadContext& context)
 {
     using NYT::Load;
-    auto formula = Load<TString>(context);
+    auto formula = Load<std::string>(context);
     Impl_ = MakeGenericFormulaImpl(formula, EEvaluationContext::Boolean);
+}
+
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormula& booleanFormula, TStringBuf /*spec*/)
+{
+    builder->AppendFormat("%v", booleanFormula.GetFormula());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1070,7 +1069,7 @@ size_t TTimeFormula::GetHash() const
     return Formula_.GetHash();
 }
 
-TString TTimeFormula::GetFormula() const
+std::string TTimeFormula::GetFormula() const
 {
     return Formula_.GetFormula();
 }
@@ -1088,9 +1087,9 @@ TTimeFormula::TTimeFormula(TArithmeticFormula&& arithmeticFormula)
     : Formula_(std::move(arithmeticFormula))
 { }
 
-TTimeFormula MakeTimeFormula(const TString& formula)
+TTimeFormula MakeTimeFormula(const std::string& formula)
 {
-    const static THashSet<TString> allowedVariables{"minutes", "hours"};
+    const static THashSet<std::string> allowedVariables{"minutes", "hours"};
 
     auto arithmeticFormula = MakeArithmeticFormula(formula);
 
@@ -1119,7 +1118,7 @@ void Deserialize(TTimeFormula& timeFormula, TYsonPullParserCursor* cursor)
 {
     MaybeSkipAttributes(cursor);
     EnsureYsonToken("TTimeFormula", *cursor, EYsonItemType::StringValue);
-    timeFormula = MakeTimeFormula(ExtractTo<TString>(cursor));
+    timeFormula = MakeTimeFormula(ExtractTo<std::string>(cursor));
 }
 
 void TTimeFormula::Save(TStreamSaveContext& context) const

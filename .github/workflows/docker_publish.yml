@@ -2,7 +2,7 @@ name: Publish docker image
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 3 * * *"  # At 03:00 every day
   workflow_dispatch:
     inputs:
       git_ref:
@@ -20,12 +20,6 @@ on:
         required: true
         default: trunk
         description: "docker image tag"
-      local_ydb_ref:
-        type: string
-        required: true
-        default: main
-        description: "Git branch/tag revision to build local_ydb"
-
 jobs:
   build:
     runs-on: [self-hosted, auto-provisioned]
@@ -61,12 +55,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to the Docker Hub
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          username: ${{ vars.DOCKER_HUB_USER_NAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4
         with:
           images: |
             ghcr.io/${{ github.repository_owner }}/local-ydb
+            ${{ vars.DOCKER_HUB_REPOSITORY && vars.DOCKER_HUB_REPOSITORY || '' }}
           labels: |
             ydb.revision=${{ steps.get-sha.outputs.SHA }}
             org.opencontainers.image.revision=${{ steps.get-sha.outputs.SHA }}

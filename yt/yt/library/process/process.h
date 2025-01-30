@@ -17,6 +17,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 TErrorOr<TString> ResolveBinaryPath(const TString& binary);
+std::vector<TString> GetEnviron();
 bool TryKillProcessByPid(int pid, int signal);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -40,7 +41,9 @@ public:
     virtual NNet::IConnectionReaderPtr GetStdOutReader() = 0;
     virtual NNet::IConnectionReaderPtr GetStdErrReader() = 0;
 
+    //! Returns process completion future, which ends with EErrorCode::OK or EProcessErrorCode.
     TFuture<void> Spawn();
+
     virtual void Kill(int signal) = 0;
 
     TString GetPath() const;
@@ -70,6 +73,8 @@ protected:
     virtual void DoSpawn() = 0;
     const char* Capture(TStringBuf arg);
 
+    virtual void CleanUpParent() = 0;
+
 private:
     void SpawnChild();
     void ValidateSpawnResult();
@@ -92,6 +97,11 @@ public:
         const TString& path,
         bool copyEnv = true,
         TDuration pollPeriod = TDuration::MilliSeconds(100));
+    // We move dtor in .cpp file to avoid
+    // instantiation of ~std::unique_ptr of a forward
+    // declared class.
+    ~TSimpleProcess();
+
     void Kill(int signal) override;
     NNet::IConnectionWriterPtr GetStdInWriter() override;
     NNet::IConnectionReaderPtr GetStdOutReader() override;
@@ -104,20 +114,24 @@ private:
     std::array<NPipes::TPipe, 3> StdPipes_;
 
     NConcurrency::TPeriodicExecutorPtr AsyncWaitExecutor_;
-    struct TSpawnAction
-    {
-        std::function<bool()> Callback;
-        TString ErrorMessage;
-    };
 
-    std::vector<TSpawnAction> SpawnActions_;
+    class TProcessSpawnState;
+    std::unique_ptr<TProcessSpawnState> SpawnState_;
 
     void AddDup2FileAction(int oldFD, int newFD);
+
+    void PrepareErrorPipe();
+    void CloseErrorPipe();
+
+    void PrepareSpawnActions(sigset_t* oldSignals);
+
     void DoSpawn() override;
     void SpawnChild();
-    void ValidateSpawnResult();
     void AsyncPeriodicTryWait();
-    void Child();
+
+    void ValidateSpawnResult();
+
+    void CleanUpParent() override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

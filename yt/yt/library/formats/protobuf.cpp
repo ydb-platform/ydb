@@ -121,7 +121,7 @@ public:
     void AddError(
         int line,
         ::google::protobuf::io::ColumnNumber column,
-        const TString& message) override
+        const TProtobufString& message) override
     {
         if (std::ssize(Errors_) < ErrorCountLimit) {
             Errors_.push_back(TError("%v", message)
@@ -145,11 +145,11 @@ class TDescriptorPoolErrorCollector
 {
 public:
     void AddError(
-        const TString& fileName,
-        const TString& elementName,
+        const TProtobufString& fileName,
+        const TProtobufString& elementName,
         const Message* /*descriptor*/,
         DescriptorPool::ErrorCollector::ErrorLocation /*location*/,
-        const TString& message) override
+        const TProtobufString& message) override
     {
         if (std::ssize(Errors_) < ErrorCountLimit) {
             Errors_.push_back(TError("%v", message)
@@ -183,10 +183,12 @@ static TEnumerationDescription CreateEnumerationMap(
         const auto& valueNode = enumValue.second;
         switch (valueNode->GetType()) {
             case ENodeType::Uint64:
-                result.Add(name, valueNode->GetValue<ui64>());
+                // TODO(babenko): migrate to std::string
+                result.Add(TString(name), valueNode->GetValue<ui64>());
                 break;
             case ENodeType::Int64:
-                result.Add(name, valueNode->GetValue<i64>());
+                // TODO(babenko): migrate to std::string
+                result.Add(TString(name), valueNode->GetValue<i64>());
                 break;
             default:
                 THROW_ERROR_EXCEPTION("Invalid specification of %Qv enumeration: expected type \"int64\" or \"uint64\", actual type %Qlv",
@@ -822,7 +824,7 @@ void TProtobufFormatDescriptionBase<TType>::InitFromFileDescriptorsLegacy(
 
     std::vector<const Descriptor*> messageDescriptors;
     for (size_t i = 0; i < config->FileIndices.size(); ++i) {
-        if (config->FileIndices[i] >= static_cast<int>(fileDescriptors.size())) {
+        if (config->FileIndices[i] >= std::ssize(fileDescriptors)) {
             THROW_ERROR_EXCEPTION("File index is out of bound")
                 << TErrorAttribute("file_index", config->FileIndices[i])
                 << TErrorAttribute("file_count", fileDescriptors.size());
@@ -893,7 +895,7 @@ void TProtobufFormatDescriptionBase<TProtobufWriterType>::InitEmbeddedColumn(
 {
     auto embeddingIndex = tableType->AddEmbedding(parentEmbeddingIndex, columnConfig);
 
-    for (auto& fieldConfig: columnConfig->Type->Fields) {
+    for (auto& fieldConfig : columnConfig->Type->Fields) {
         InitColumn(fieldIndex, tableSchema, typeBuilder, tableType, fieldConfig, parent, embeddingIndex);
     }
 }
@@ -922,7 +924,7 @@ void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
             std::move(child), //KMP
             fieldIndex);
 
-    for (auto& fieldConfig: columnConfig->Type->Fields) {
+    for (auto& fieldConfig : columnConfig->Type->Fields) {
         InitColumn(fieldIndex, tableSchema, typeBuilder, tableType, fieldConfig, childPtr->Type, parentEmbeddingIndex);
     }
 }
@@ -1003,13 +1005,16 @@ void TProtobufFormatDescriptionBase<TType>::InitFromProtobufSchema(
 {
     if (config->Enumerations) {
         const auto& enumerationConfigMap = config->Enumerations;
-        for (const auto& [name, field] : enumerationConfigMap->GetChildren()) {
+        for (const auto& [name_, field] : enumerationConfigMap->GetChildren()) {
+            // TODO(babenko): migrate to std::string
+            auto name = TString(name_);
             if (field->GetType() != ENodeType::Map) {
                 THROW_ERROR_EXCEPTION(R"(Invalid enumeration specification type: expected "map", found %Qlv)",
                     field->GetType());
             }
             const auto& enumerationConfig = field->AsMap();
-            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(name, enumerationConfig));
+            // TODO(babenko): migrate to std::string
+            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(TString(TimestampColumnName), enumerationConfig));
         }
     }
 
@@ -1242,9 +1247,9 @@ void TProtobufTypeBuilder<TType>:: VisitStruct(
 
     const auto& structFields = descriptor.GetType()->GetFields();
     if (!isOneof) {
-        type->StructFieldCount = static_cast<int>(structFields.size());
+        type->StructFieldCount = std::ssize(structFields);
     }
-    for (int fieldIndex = 0; fieldIndex != static_cast<int>(structFields.size()); ++fieldIndex) {
+    for (int fieldIndex = 0; fieldIndex != std::ssize(structFields); ++fieldIndex) {
         const auto& structField = structFields[fieldIndex];
         auto configIt = nameToConfig.find(structField.Name);
         if (configIt == nameToConfig.end()) {
@@ -1317,7 +1322,7 @@ void TProtobufTypeBuilder<TType>::VisitDict(
 template <typename T>
 static T& ResizeAndGetElement(std::vector<T>& vector, int index, const T& fill = {})
 {
-    if (index >= static_cast<int>(vector.size())) {
+    if (index >= std::ssize(vector)) {
         vector.resize(index + 1, fill);
     }
     return vector[index];
@@ -1377,7 +1382,7 @@ void TProtobufWriterType::IgnoreChild(
 
 const TProtobufWriterFieldDescription* TProtobufWriterType::FindAlternative(int alternativeIndex) const
 {
-    if (alternativeIndex >= static_cast<int>(AlternativeToChildIndex_.size())) {
+    if (alternativeIndex >= std::ssize(AlternativeToChildIndex_)) {
         return nullptr;
     }
     if (AlternativeToChildIndex_[alternativeIndex] == InvalidChildIndex) {
@@ -1595,7 +1600,7 @@ static int Process(
     const std::unique_ptr<TProtobufParserFieldDescription>& child)
 {
     if (child->Type->ProtoType == EProtobufType::EmbeddedMessage) {
-        for (const auto& grandChild: child->Type->Children) {
+        for (const auto& grandChild : child->Type->Children) {
             globalChildIndex = Process(ids, globalChildIndex, nameTable, child->Type, grandChild);
         }
     } else {
@@ -1615,7 +1620,7 @@ std::vector<std::pair<ui16, TProtobufParserFieldDescription*>> TProtobufParserFo
     std::vector<std::pair<ui16, TProtobufParserFieldDescription*>> ids;
     int globalChildIndex = 0;
 
-    for (const auto& child: TableType_->Children) {
+    for (const auto& child : TableType_->Children) {
         globalChildIndex = Process(ids, globalChildIndex, nameTable, TableType_, child);
     }
 

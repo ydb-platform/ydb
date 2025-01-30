@@ -24,7 +24,28 @@ class DockerComposeRecipeException(Exception):
         super(DockerComposeRecipeException, self).__init__("[[bad]]{}[[rst]]".format(msg))
 
 
+def avoid_env_interpolation(env=None):
+    # For more info see
+    # - https://docs.docker.com/compose/compose-file/12-interpolation
+    # - https://github.com/docker/compose/issues/9704
+    # - https://st.yandex-team.ru/YA-1810
+
+    env = env or os.environ
+    replaced = []
+
+    for key, val in env.items():
+        if "$" in val:
+            replaced.append(key)
+            env[key] = re.sub(r"((^\$$)|([^\$]\$$)|(\$[^\$\{A-Za-z]))", r"\1$", val)
+
+    if replaced:
+        logger.debug("Replacing $ with $$ to avoid incorrect interpolation for %s. Fore more info see https://docs.docker.com/compose/compose-file/12-interpolation", replaced)
+    return env
+
+
 def start(argv):
+    avoid_env_interpolation(env=os.environ)
+
     args = _parse_args(argv)
 
     yml_file, cwd = get_compose_file_and_cwd(argv)
@@ -59,7 +80,7 @@ def start(argv):
 
         for net_name, net_config in six.iteritems(networks):
             while True:
-                subnet = "fc00:420:%04x::/32" % random.randrange(16**4)
+                subnet = "fc00:420:%04x::/48" % random.randrange(16**4)
                 if subnet not in subnets:
                     break
 
@@ -78,6 +99,8 @@ def start(argv):
 
 
 def stop(argv):
+    avoid_env_interpolation(env=os.environ)
+
     if yatest.common.get_param("docker-pause"):
         library.python.testing.recipe.tty()
         try:

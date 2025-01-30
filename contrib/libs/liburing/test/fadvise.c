@@ -19,30 +19,6 @@
 #define LOOPS		100
 #define MIN_LOOPS	10
 
-static unsigned long long utime_since(const struct timeval *s,
-				      const struct timeval *e)
-{
-	long long sec, usec;
-
-	sec = e->tv_sec - s->tv_sec;
-	usec = (e->tv_usec - s->tv_usec);
-	if (sec > 0 && usec < 0) {
-		sec--;
-		usec += 1000000;
-	}
-
-	sec *= 1000000;
-	return sec + usec;
-}
-
-static unsigned long long utime_since_now(struct timeval *tv)
-{
-	struct timeval end;
-
-	gettimeofday(&end, NULL);
-	return utime_since(tv, &end);
-}
-
 static int do_fadvise(struct io_uring *ring, int fd, off_t offset, off_t len,
 		      int advice)
 {
@@ -93,7 +69,7 @@ static long do_read(int fd, char *buf)
 		perror("lseek");
 		return -1;
 	}
-	
+
 	gettimeofday(&tv, NULL);
 	ret = read(fd, buf, FILE_SIZE);
 	t = utime_since_now(&tv);
@@ -116,6 +92,8 @@ static int test_fadvise(struct io_uring *ring, const char *filename)
 
 	fd = open(filename, O_RDONLY);
 	if (fd < 0) {
+		if (errno == EPERM || errno == EACCES)
+			return T_EXIT_SKIP;
 		perror("open");
 		return 1;
 	}
@@ -149,9 +127,12 @@ static int test_fadvise(struct io_uring *ring, const char *filename)
 		return 1;
 
 	if (cached_read < uncached_read &&
-	    cached_read2 < uncached_read)
+		cached_read2 < uncached_read) {
+		free(buf);
 		return 0;
+	}
 
+	free(buf);
 	return 2;
 }
 
@@ -175,6 +156,8 @@ int main(int argc, char *argv[])
 	good = bad = 0;
 	for (i = 0; i < LOOPS; i++) {
 		ret = test_fadvise(&ring, fname);
+		if (ret == T_EXIT_SKIP)
+			return T_EXIT_SKIP;
 		if (ret == 1) {
 			fprintf(stderr, "read_fadvise failed\n");
 			goto err;

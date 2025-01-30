@@ -31,7 +31,8 @@ struct IYPathServiceContext
 {
     virtual void SetRequestHeader(std::unique_ptr<NRpc::NProto::TRequestHeader> header) = 0;
 
-    virtual void SetReadRequestComplexityLimiter(const TReadRequestComplexityLimiterPtr& limiter) = 0;
+    virtual void SetReadRequestComplexityLimiter(
+        const TReadRequestComplexityLimiterPtr& limiter) = 0;
     virtual TReadRequestComplexityLimiterPtr GetReadRequestComplexityLimiter() = 0;
 };
 
@@ -126,19 +127,63 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define DECLARE_SUPPORTS_METHOD(method, base) \
+#define DECLARE_SUPPORTS_METHOD(method, ...) \
     class TSupports##method \
-        : public base \
+        __VA_OPT__(: public)  __VA_ARGS__ \
     { \
     protected: \
-        DECLARE_YPATH_SERVICE_METHOD(NProto, method); \
+        DECLARE_YPATH_SERVICE_METHOD(::NYT::NYTree::NProto, method); \
         virtual void method##Self(TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
-        virtual void method##Recursive(const TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
-        virtual void method##Attribute(const TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
+        virtual void method##Recursive(const NYPath::TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
+        virtual void method##Attribute(const NYPath::TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
     }
 
+#define IMPLEMENT_SUPPORTS_METHOD_RESOLVE(method, onPathError) \
+    DEFINE_RPC_SERVICE_METHOD(TSupports##method, method) \
+    { \
+        NYPath::TTokenizer tokenizer(GetRequestTargetYPath(context->RequestHeader())); \
+        tokenizer.Advance(); \
+        tokenizer.Skip(NYPath::ETokenType::Ampersand); \
+        if (tokenizer.GetType() == NYPath::ETokenType::EndOfStream) { \
+            method##Self(request, response, context); \
+            return; \
+        } \
+        if (tokenizer.GetType() != NYPath::ETokenType::Slash) { \
+            onPathError \
+            return; \
+        } \
+        if (tokenizer.Advance() == NYPath::ETokenType::At) { \
+            method##Attribute(NYPath::TYPath(tokenizer.GetSuffix()), request, response, context); \
+        } else { \
+            method##Recursive(NYPath::TYPath(tokenizer.GetInput()), request, response, context); \
+        } \
+    }
+
+#define IMPLEMENT_SUPPORTS_METHOD(method) \
+    IMPLEMENT_SUPPORTS_METHOD_RESOLVE( \
+        method, \
+        { \
+            tokenizer.ThrowUnexpected(); \
+        }) \
+    \
+    void TSupports##method::method##Attribute(const NYPath::TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
+    { \
+        ThrowMethodNotSupported(context->GetMethod(), TString("attribute")); \
+    } \
+    \
+    void TSupports##method::method##Self(TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
+    { \
+        ThrowMethodNotSupported(context->GetMethod(), TString("self")); \
+    } \
+    \
+    void TSupports##method::method##Recursive(const NYPath::TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
+    { \
+        ThrowMethodNotSupported(context->GetMethod(), TString("recursive")); \
+    }
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TSupportsExistsBase
-    : public virtual TRefCounted
 {
 protected:
     template <class TContextPtr>
@@ -174,8 +219,6 @@ DECLARE_SUPPORTS_METHOD(List, virtual TRefCounted);
 DECLARE_SUPPORTS_METHOD(Remove, virtual TRefCounted);
 DECLARE_SUPPORTS_METHOD(Exists, TSupportsExistsBase);
 
-#undef DECLARE_SUPPORTS_METHOD
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSupportsPermissions
@@ -189,7 +232,8 @@ protected:
     virtual void ValidatePermission(
         EPermissionCheckScope scope,
         EPermission permission,
-        const TString& user = {});
+        // TODO(babenko): replace with optional
+        const std::string& user = {});
 
     class TCachingPermissionValidator
     {
@@ -198,7 +242,7 @@ protected:
             TSupportsPermissions* owner,
             EPermissionCheckScope scope);
 
-        void Validate(EPermission permission, const TString& user = {});
+        void Validate(EPermission permission, const std::string& user = {});
 
     private:
         TSupportsPermissions* const Owner_;
@@ -278,11 +322,11 @@ private:
     public:
         explicit TCombinedAttributeDictionary(TSupportsAttributes* owner);
 
-        std::vector<TString> ListKeys() const override;
+        std::vector<TKey> ListKeys() const override;
         std::vector<TKeyValuePair> ListPairs() const override;
-        NYson::TYsonString FindYson(TStringBuf key) const override;
-        void SetYson(const TString& key, const NYson::TYsonString& value) override;
-        bool Remove(const TString& key) override;
+        TValue FindYson(TKeyView key) const override;
+        void SetYson(TKeyView key, const TValue& value) override;
+        bool Remove(TKeyView key) override;
 
     private:
         TSupportsAttributes* const Owner_;

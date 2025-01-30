@@ -4,7 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/proto_duration.h>
-#include "ydb/core/grpc_services/grpc_request_proxy.h"
+#include "ydb/core/grpc_services/base/base.h"
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -24,6 +24,26 @@ inline void SetAuthToken(TEv& ev, const IRequestCtx& ctx) {
     if (ctx.GetSerializedToken()) {
         ev->Record.SetUserToken(ctx.GetSerializedToken());
     }
+}
+
+template<typename TEv>
+inline void SetClientIdentitySettings(TEv& ev, const IRequestCtx& ctx) {
+    ev->Record.SetClientAddress(ctx.GetPeerName());
+    const auto& token = ctx.GetInternalToken();
+    if (token && !token->GetSerializedToken().empty()) {
+        ev->Record.SetUserSID(token->GetUserSID());
+    } else {
+        ev->Record.SetUserSID("<anonymous>");
+    }
+
+    const auto& userAgent = ctx.GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
+    ev->Record.SetClientUserAgent(userAgent.GetOrElse("<empty>"));
+    const auto& sdkBuildInfo = ctx.GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
+    ev->Record.SetClientSdkBuildInfo(sdkBuildInfo.GetOrElse("<empty>"));
+    const auto& appName = ctx.GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME);
+    ev->Record.SetApplicationName(appName.GetOrElse("<empty>"));
+    const auto& pid = ctx.GetPeerMetaValues(NYdb::YDB_CLIENT_PID);
+    ev->Record.SetClientPID(pid.GetOrElse("<empty>"));
 }
 
 template<typename TEv>

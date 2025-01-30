@@ -240,7 +240,7 @@ class PrefilterManager(Configurable):
 
         This implements the checker/handler part of the prefilter pipe.
         """
-        # print "prefilter_line_info: ", line_info
+        # print("prefilter_line_info: ", line_info)
         handler = self.find_handler(line_info)
         return handler.handle(line_info)
 
@@ -267,7 +267,7 @@ class PrefilterManager(Configurable):
         transformers and then the checkers/handlers.
         """
 
-        # print "prefilter_line: ", line, continue_prompt
+        # print("prefilter_line: ", line, continue_prompt)
         # All handlers *must* return a value, even if it's blank ('').
 
         # save the line away in case we crash, so the post-mortem handler can
@@ -300,7 +300,7 @@ class PrefilterManager(Configurable):
             return normal_handler.handle(line_info)
 
         prefiltered = self.prefilter_line_info(line_info)
-        # print "prefiltered line: %r" % prefiltered
+        # print("prefiltered line: %r" % prefiltered)
         return prefiltered
 
     def prefilter_lines(self, lines, continue_prompt=False):
@@ -476,8 +476,8 @@ class PythonOpsChecker(PrefilterChecker):
         any python operator, we should simply execute the line (regardless of
         whether or not there's a possible autocall expansion).  This avoids
         spurious (and very confusing) geattr() accesses."""
-        if line_info.the_rest and line_info.the_rest[0] in '!=()<>,+*/%^&|':
-            return self.prefilter_manager.get_handler_by_name('normal')
+        if line_info.the_rest and line_info.the_rest[0] in "!=()<>,+*/%^&|":
+            return self.prefilter_manager.get_handler_by_name("normal")
         else:
             return None
 
@@ -512,6 +512,10 @@ class AutocallChecker(PrefilterChecker):
             callable(oinfo.obj)
             and (not self.exclude_regexp.match(line_info.the_rest))
             and self.function_name_regexp.match(line_info.ifun)
+            and (
+                line_info.raw_the_rest.startswith(" ")
+                or not line_info.raw_the_rest.strip()
+            )
         ):
             return self.prefilter_manager.get_handler_by_name("auto")
         else:
@@ -524,11 +528,14 @@ class AutocallChecker(PrefilterChecker):
 
 
 class PrefilterHandler(Configurable):
-
-    handler_name = Unicode('normal')
-    esc_strings = List([])
-    shell = Instance('IPython.core.interactiveshell.InteractiveShellABC', allow_none=True)
-    prefilter_manager = Instance('IPython.core.prefilter.PrefilterManager', allow_none=True)
+    handler_name = Unicode("normal")
+    esc_strings: List = List([])
+    shell = Instance(
+        "IPython.core.interactiveshell.InteractiveShellABC", allow_none=True
+    )
+    prefilter_manager = Instance(
+        "IPython.core.prefilter.PrefilterManager", allow_none=True
+    )
 
     def __init__(self, shell=None, prefilter_manager=None, **kwargs):
         super(PrefilterHandler, self).__init__(
@@ -541,7 +548,7 @@ class PrefilterHandler(Configurable):
         )
 
     def handle(self, line_info):
-        # print "normal: ", line_info
+        # print("normal: ", line_info)
         """Handle normal input lines. Use as a template for handlers."""
 
         # With autoindent on, we need some way to exit the input loop, and I

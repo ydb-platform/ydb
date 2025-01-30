@@ -19,7 +19,7 @@ using namespace NYPath;
 
 using NYT::FromProto;
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TTableMountCache
     : public TTableMountCacheBase
@@ -57,6 +57,7 @@ private:
                 auto primarySchema = NYT::FromProto<NTableClient::TTableSchemaPtr>(rsp->schema());
                 tableInfo->Schemas[ETableSchemaKind::Primary] = primarySchema;
                 tableInfo->Schemas[ETableSchemaKind::Write] = primarySchema->ToWrite();
+                tableInfo->Schemas[ETableSchemaKind::WriteViaQueueProducer] = primarySchema->ToWriteViaQueueProducer();
                 tableInfo->Schemas[ETableSchemaKind::VersionedWrite] = primarySchema->ToVersionedWrite();
                 tableInfo->Schemas[ETableSchemaKind::Delete] = primarySchema->ToDelete();
                 tableInfo->Schemas[ETableSchemaKind::Query] = primarySchema->ToQuery();
@@ -65,7 +66,8 @@ private:
 
                 tableInfo->UpstreamReplicaId = FromProto<TTableReplicaId>(rsp->upstream_replica_id());
                 tableInfo->Dynamic = rsp->dynamic();
-                tableInfo->NeedKeyEvaluation = primarySchema->HasComputedColumns();
+                // Non-materialized computed columns are always non-key columns.
+                tableInfo->NeedKeyEvaluation = primarySchema->HasMaterializedComputedColumns();
 
                 if (rsp->has_physical_path()) {
                     tableInfo->PhysicalPath = rsp->physical_path();
@@ -79,9 +81,8 @@ private:
                     FromProto(tabletInfo.Get(), protoTabletInfo);
                     tabletInfo->TableId = tableId;
                     tabletInfo->UpdateTime = Now();
-                    tabletInfo->Owners.push_back(MakeWeak(tableInfo));
 
-                    tabletInfo = TabletInfoCache_.Insert(std::move(tabletInfo));
+                    TabletInfoOwnerCache_.Insert(tabletInfo->TabletId, MakeWeak(tableInfo));
                     tableInfo->Tablets.push_back(tabletInfo);
                     if (tabletInfo->State == ETabletState::Mounted) {
                         tableInfo->MountedTablets.push_back(tabletInfo);
@@ -93,15 +94,20 @@ private:
                     replicaInfo->ReplicaId = FromProto<TTableReplicaId>(protoReplicaInfo.replica_id());
                     replicaInfo->ClusterName = protoReplicaInfo.cluster_name();
                     replicaInfo->ReplicaPath = protoReplicaInfo.replica_path();
-                    replicaInfo->Mode = ETableReplicaMode(protoReplicaInfo.mode());
+                    replicaInfo->Mode = FromProto<ETableReplicaMode>(protoReplicaInfo.mode());
                     tableInfo->Replicas.push_back(replicaInfo);
                 }
 
                 tableInfo->Indices.reserve(rsp->indices_size());
                 for (const auto& protoIndexInfo : rsp->indices()) {
-                    TIndexInfo indexInfo{
+                    auto indexInfo = TIndexInfo{
                         .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
                         .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
+                        .Predicate = YT_PROTO_OPTIONAL(protoIndexInfo, predicate),
+                        .UnfoldedColumn = YT_PROTO_OPTIONAL(protoIndexInfo, unfolded_column),
+                        .Correspondence = protoIndexInfo.has_index_correspondence()
+                            ? FromProto<ETableToIndexCorrespondence>(protoIndexInfo.index_correspondence())
+                            : ETableToIndexCorrespondence::Unknown,
                     };
                     THROW_ERROR_EXCEPTION_UNLESS(TEnumTraits<ESecondaryIndexKind>::FindLiteralByValue(indexInfo.Kind).has_value(),
                         "Unsupported secondary index kind %Qlv (client not up-to-date)",
@@ -114,7 +120,11 @@ private:
                     tableInfo->UpperCapBound = MaxKey();
                 } else {
                     tableInfo->LowerCapBound = MakeUnversionedOwningRow(static_cast<int>(0));
-                    tableInfo->UpperCapBound = MakeUnversionedOwningRow(static_cast<int>(tableInfo->Tablets.size()));
+
+                    auto tabletCount = tableInfo->IsChaosReplicated()
+                        ? rsp->tablet_count()
+                        : std::ssize(tableInfo->Tablets);
+                    tableInfo->UpperCapBound = MakeUnversionedOwningRow(tabletCount);
                 }
 
                 YT_LOG_DEBUG("Table mount info received (Path: %v, TableId: %v, TabletCount: %v, Dynamic: %v)",

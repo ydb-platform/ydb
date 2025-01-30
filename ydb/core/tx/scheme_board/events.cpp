@@ -3,11 +3,10 @@
 #include "helpers.h"
 #include "opaque_path_description.h"
 #include "events.h"
+#include "events_schemeshard.h"
+#include "events_internal.h"
 
-
-namespace NKikimr {
-
-using namespace NSchemeBoard;
+namespace NKikimr::NSchemeBoard {
 
 namespace {
 
@@ -16,7 +15,7 @@ namespace {
 //
 // This code would be much simpler without backward compatibility support.
 // Consider removing compatibility support at version stable-25-1.
-TOpaquePathDescription MakeOpaquePathDescription(NKikimrSchemeBoard::TEvUpdate& update) {
+TOpaquePathDescription MakeOpaquePathDescription(::NKikimrSchemeBoard::TEvUpdate& update) {
     // PathSubdomainPathId's absence is a marker that input message was sent
     // from the older populator implementation
 
@@ -39,7 +38,7 @@ TOpaquePathDescription MakeOpaquePathDescription(NKikimrSchemeBoard::TEvUpdate& 
             .PathId = TPathId(update.GetPathOwnerId(), update.GetLocalPathId()),
             .Path = update.GetPath(),
             .PathVersion = update.GetPathDirEntryPathVersion(),
-            .SubdomainPathId = PathIdFromPathId(update.GetPathSubdomainPathId()),
+            .SubdomainPathId = TPathId::FromProto(update.GetPathSubdomainPathId()),
             .PathAbandonedTenantsSchemeShards = TSet<ui64>(
                 update.GetPathAbandonedTenantsSchemeShards().begin(),
                 update.GetPathAbandonedTenantsSchemeShards().end()
@@ -65,22 +64,22 @@ TOpaquePathDescription MakeOpaquePathDescription(NKikimrSchemeBoard::TEvUpdate& 
 
 }  // anonymous namespace
 
-// TSchemeBoardEvents::TEvUpdate
+// NInternalEvents::TEvUpdate
 //
 
-TOpaquePathDescription TSchemeBoardEvents::TEvUpdate::ExtractPathDescription() {
+TOpaquePathDescription NInternalEvents::TEvUpdate::ExtractPathDescription() {
     return MakeOpaquePathDescription(Record);
 }
 
-// TSchemeBoardEvents::TEvUpdateBuilder
+// NInternalEvents::TEvUpdateBuilder
 //
 
-TSchemeBoardEvents::TEvUpdateBuilder::TEvUpdateBuilder(const ui64 owner, const ui64 generation) {
+NInternalEvents::TEvUpdateBuilder::TEvUpdateBuilder(const ui64 owner, const ui64 generation) {
     Record.SetOwner(owner);
     Record.SetGeneration(generation);
 }
 
-TSchemeBoardEvents::TEvUpdateBuilder::TEvUpdateBuilder(const ui64 owner, const ui64 generation, const TPathId& pathId) {
+NInternalEvents::TEvUpdateBuilder::TEvUpdateBuilder(const ui64 owner, const ui64 generation, const TPathId& pathId) {
     Record.SetOwner(owner);
     Record.SetGeneration(generation);
     Record.SetPathOwnerId(pathId.OwnerId);
@@ -88,7 +87,7 @@ TSchemeBoardEvents::TEvUpdateBuilder::TEvUpdateBuilder(const ui64 owner, const u
     Record.SetIsDeletion(true);
 }
 
-TSchemeBoardEvents::TEvUpdateBuilder::TEvUpdateBuilder(
+NInternalEvents::TEvUpdateBuilder::TEvUpdateBuilder(
     const ui64 owner,
     const ui64 generation,
     const TOpaquePathDescription& pathDescription,
@@ -103,7 +102,7 @@ TSchemeBoardEvents::TEvUpdateBuilder::TEvUpdateBuilder(
     Record.SetLocalPathId(pathDescription.PathId.LocalPathId);
 
     Record.SetPathDirEntryPathVersion(pathDescription.PathVersion);
-    PathIdFromPathId(pathDescription.SubdomainPathId, Record.MutablePathSubdomainPathId());
+    pathDescription.SubdomainPathId.ToProto(Record.MutablePathSubdomainPathId());
 
     Record.MutablePathAbandonedTenantsSchemeShards()->Assign(
         pathDescription.PathAbandonedTenantsSchemeShards.begin(),
@@ -111,42 +110,72 @@ TSchemeBoardEvents::TEvUpdateBuilder::TEvUpdateBuilder(
     );
 }
 
-void TSchemeBoardEvents::TEvUpdateBuilder::SetDescribeSchemeResultSerialized(const TString& serialized) {
+void NInternalEvents::TEvUpdateBuilder::SetDescribeSchemeResultSerialized(const TString& serialized) {
     Record.AddDescribeSchemeResultSerialized(serialized);
 }
 
-void TSchemeBoardEvents::TEvUpdateBuilder::SetDescribeSchemeResultSerialized(TString&& serialized) {
+void NInternalEvents::TEvUpdateBuilder::SetDescribeSchemeResultSerialized(TString&& serialized) {
     Record.AddDescribeSchemeResultSerialized(std::move(serialized));
 }
 
-// TSchemeBoardEvents::TEvNotifyBuilder
+// NInternalEvents::TEvNotifyBuilder
 //
 
-TSchemeBoardEvents::TEvNotifyBuilder::TEvNotifyBuilder(const TString& path, const bool isDeletion /*= false*/) {
+NInternalEvents::TEvNotifyBuilder::TEvNotifyBuilder(const TString& path, const bool isDeletion /*= false*/) {
     Record.SetPath(path);
     Record.SetIsDeletion(isDeletion);
 }
 
-TSchemeBoardEvents::TEvNotifyBuilder::TEvNotifyBuilder(const TPathId& pathId, const bool isDeletion /*= false*/) {
+NInternalEvents::TEvNotifyBuilder::TEvNotifyBuilder(const TPathId& pathId, const bool isDeletion /*= false*/) {
     Record.SetPathOwnerId(pathId.OwnerId);
     Record.SetLocalPathId(pathId.LocalPathId);
     Record.SetIsDeletion(isDeletion);
 }
 
-TSchemeBoardEvents::TEvNotifyBuilder::TEvNotifyBuilder(const TString& path, const TPathId& pathId, const bool isDeletion /*= false*/) {
+NInternalEvents::TEvNotifyBuilder::TEvNotifyBuilder(const TString& path, const TPathId& pathId, const bool isDeletion /*= false*/) {
     Record.SetPath(path);
     Record.SetPathOwnerId(pathId.OwnerId);
     Record.SetLocalPathId(pathId.LocalPathId);
     Record.SetIsDeletion(isDeletion);
 }
 
-void TSchemeBoardEvents::TEvNotifyBuilder::SetPathDescription(const TOpaquePathDescription& pathDescription) {
+void NInternalEvents::TEvNotifyBuilder::SetPathDescription(const TOpaquePathDescription& pathDescription) {
     Record.SetDescribeSchemeResultSerialized(pathDescription.DescribeSchemeResultSerialized);
-    PathIdFromPathId(pathDescription.SubdomainPathId, Record.MutablePathSubdomainPathId());
+    pathDescription.SubdomainPathId.ToProto(Record.MutablePathSubdomainPathId());
     Record.MutablePathAbandonedTenantsSchemeShards()->Assign(
         pathDescription.PathAbandonedTenantsSchemeShards.begin(),
         pathDescription.PathAbandonedTenantsSchemeShards.end()
     );
 }
 
-} // NKikimr
+// NInternalEvents::TEvNotify
+//
+
+template <typename T>
+TStringBuilder& PrintPathVersion(TStringBuilder& out, const T& record) {
+    return out
+        << " Version: " << NSchemeBoard::GetPathVersion(record)
+    ;
+}
+
+template <>
+TString NInternalEvents::PrintPath(const IEventBase* ev, const NKikimrSchemeBoard::TEvNotify& record) {
+    auto out = TStringBuilder() << ev->ToStringHeader() << " {";
+    PrintPath(out, record);
+    PrintPathVersion(out, record);
+    return out << " }";
+}
+
+// NSchemeshardEvents::TEvUpdateAck
+//
+
+TString NSchemeshardEvents::TEvUpdateAck::ToString() const {
+    auto out = TStringBuilder() << ToStringHeader() << " {";
+    NInternalEvents::PrintOwnerGeneration(out, Record);
+    return out
+        << " PathId: " << GetPathId()
+        << " Version: " << Record.GetVersion()
+    << " }";
+}
+
+} // NKikimr::NSchemeBoard

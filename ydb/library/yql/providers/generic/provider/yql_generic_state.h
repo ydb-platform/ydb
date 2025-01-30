@@ -2,14 +2,14 @@
 
 #include "yql_generic_settings.h"
 
-#include <ydb/library/yql/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 namespace NKikimr::NMiniKQL {
     class IFunctionRegistry;
-}
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
     struct TGenericState: public TThrRefBase {
@@ -21,7 +21,7 @@ namespace NYql {
             const TStructExprType* ItemType = nullptr;
             TVector<TString> ColumnOrder;
             NYql::NConnector::NApi::TSchema Schema;
-            NYql::NConnector::NApi::TDataSourceInstance DataSourceInstance;
+            NYql::TGenericDataSourceInstance DataSourceInstance;
         };
 
         using TGetTableResult = std::pair<std::optional<const TTableMeta*>, std::optional<TIssue>>;
@@ -68,4 +68,4 @@ namespace NYql {
     private:
         THashMap<TTableAddress, TTableMeta> Tables_;
     };
-}
+} // namespace NYql

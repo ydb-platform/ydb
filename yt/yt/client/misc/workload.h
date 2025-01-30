@@ -58,8 +58,7 @@ IInvokerPtr GetCompressionInvoker(const TWorkloadDescriptor& workloadDescriptor)
 void FormatValue(
     TStringBuilderBase* builder,
     const TWorkloadDescriptor& descriptor,
-    TStringBuf format);
-TString ToString(const TWorkloadDescriptor& descriptor);
+    TStringBuf spec);
 
 void ToProto(NYT::NProto::TWorkloadDescriptor* protoDescriptor, const TWorkloadDescriptor& descriptor);
 void FromProto(TWorkloadDescriptor* descriptor, const NYT::NProto::TWorkloadDescriptor& protoDescriptor);

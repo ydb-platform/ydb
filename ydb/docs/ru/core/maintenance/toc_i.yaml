@@ -6,7 +6,7 @@ items:
 - name: Обслуживание кластера
   items:
   - name: Встроенный UI
-    include: { mode: link, path: embedded_monitoring/toc_p.yaml }
+    include: { mode: link, path: ../reference/embedded-ui/toc_p.yaml }
   - name: Управление дисковой подсистемой кластера
     include: { mode: link, path: manual/toc_p.yaml }
   - name: Изменение конфигурации актор-системы

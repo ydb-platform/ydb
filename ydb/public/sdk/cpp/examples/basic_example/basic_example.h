@@ -1,8 +1,11 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/query/query.h>
+#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/query/tx.h>
 
 NYdb::TParams GetTablesDataParams();
 
-bool Run(const NYdb::TDriver& driver, const TString& path);
+bool Run(const NYdb::TDriver& driver);

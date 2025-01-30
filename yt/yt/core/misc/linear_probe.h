@@ -3,7 +3,7 @@
 #include "farm_hash.h"
 #include "public.h"
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <util/system/types.h>
 
@@ -32,8 +32,8 @@ public:
     size_t GetByteSize() const;
 
 private:
-    constexpr static int HashTableExpansionParameter = 2;
-    constexpr static int ValueLog = 48;
+    static constexpr int HashTableExpansionParameter = 2;
+    static constexpr int ValueLog = 48;
 
     std::vector<std::atomic<TEntry>> HashTable_;
 

@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+import "ydb/public/api/client/yc_private/access/access.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/ydb/v1/backup.proto";
+
+// A set of methods for managing backups;.
+service BackupService {
+  // Returns the specified backup.
+  rpc Get (GetBackupRequest) returns (Backup);
+
+  // Returns list of backup paths.
+  rpc ListPaths(ListPathsRequest) returns (ListPathsResponse);
+
+  // Retrieves a list of backups.
+  rpc List (ListBackupsRequest) returns (ListBackupsResponse);
+
+  // Restarts the specified backup.
+  rpc Restart (RestartBackupRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  // Deletes the specified backup.
+  rpc Delete (DeleteBackupRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse);
+
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  rpc ListByStatus (ListBackupsByStatusRequest) returns (ListBackupsByStatusResponse);
+
+}
+
+
+message ListPathsRequest {
+  // Required. ID of the YDB backup.
+  string backup_id = 1; // [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+  // to get the next page of results in subsequent ListPaths requests.
+  // Acceptable values are 0 to 1000, inclusive. Default value: 100.
+  int64 page_size = 2; // [(value) = "0-1000"];
+
+  // Page token. Set `page_token` to the `next_page_token` returned by a previous ListPaths
+  // request to get the next page of results.
+  string page_token = 3; // [(length) = "<=100"];
+}
+
+message ListPathsResponse {
+  repeated string paths = 1;
+  string next_page_token = 2;
+}
+
+message GetBackupRequest {
+  // Required. ID of the YDB backup.
+  string backup_id = 1; // [(required) = true, (length) = "<=50"];
+}
+
+message ListBackupsRequest {
+  string folder_id = 1;
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+  // to get the next page of results in subsequent ListBackups requests.
+  // Acceptable values are 0 to 1000, inclusive. Default value: 100.
+  int64 page_size = 2; // [(value) = "0-1000"];
+
+  // Page token. Set `page_token` to the `next_page_token` returned by a previous ListBackups
+  // request to get the next page of results.
+  string page_token = 3; // [(length) = "<=100"];
+}
+
+message ListBackupsResponse {
+  repeated Backup backups = 1;
+
+  // This token allows you to get the next page of results for ListBackups requests,
+  // if the number of results is larger than `page_size` specified in the request.
+  // To get the next page, specify the value of `next_page_token` as a value for
+  // the `page_token` parameter in the next ListBackups request. Subsequent ListBackups
+  // requests will have their own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message DeleteBackupRequest {
+  string backup_id = 1;
+}
+
+message DeleteBackupMetadata {
+  string backup_id = 1;
+  string database_id = 2;
+}
+
+message RestartBackupRequest {
+  string backup_id = 1;
+}
+
+message ListBackupsByStatusRequest {
+
+  // Status of backup to select.
+  Backup.Status backup_status = 2;
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+  // to get the next page of results in subsequent ListBackupsByStatus requests.
+  // Acceptable values are 0 to 1000, inclusive. Default value: 100.
+  int64 page_size = 3; // [(value) = "0-1000"];
+
+  // Page token. Set `page_token` to the `next_page_token` returned by a previous ListBackupsByStatus
+  // request to get the next page of results.
+  string page_token = 4; // [(length) = "<=100"];
+}
+
+message ListBackupsByStatusResponse {
+  repeated Backup backups = 1;
+
+  // This token allows you to get the next page of results for ListBackupsByStatus requests,
+  // if the number of results is larger than `page_size` specified in the request.
+  // To get the next page, specify the value of `next_page_token` as a value for
+  // the `page_token` parameter in the next ListBackupsByStatus request. Subsequent ListBackupsByStatus
+  // requests will have their own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message RestartBackupMetadata {
+  string backup_id = 1;
+  string database_id = 2;
+}

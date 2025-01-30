@@ -1,0 +1,31 @@
+    items:
+    - name: Создание таблицы
+      href: create_demo_tables.md
+    - name: Добавление данных в таблицу
+      href: fill_tables_with_data.md
+    - name: Выборка данных из всех колонок
+      href: select_all_columns.md
+    - name: Выборка данных из определенных колонок
+      href: select_specific_columns.md
+    - name: Сортировка и фильтрация
+      href: basic_filter_and_sort.md
+    - name: Агрегирование данных
+      href: basic_aggregation.md
+    - name: Дополнительные условия выборки
+      href: conditional_values.md
+    - name: Объединение таблиц с помощью JOIN
+      href: join_tables.md
+    - name: Вставка и модификация данных с помощью REPLACE
+      href: replace_into.md
+    - name: Вставка и модификация данных с помощью UPSERT
+      href: upsert_into.md
+    - name: Вставка данных с помощью INSERT
+      href: insert_into.md
+    - name: Обновление данных с помощью UPDATE
+      href: update.md
+    - name: Удаление данных
+      href: delete.md
+    - name: Добавление и удаление колонок
+      href: alter_table.md
+    - name: Удаление таблицы
+      href: delete_table.md

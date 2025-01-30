@@ -21,6 +21,7 @@ SRCS(
     hullbase_logoblob.h
     hullds_arena.h
     hullds_generic_it.h
+    hullds_heap_it.h
     hullds_glue.h
     hullds_settings.h
 )

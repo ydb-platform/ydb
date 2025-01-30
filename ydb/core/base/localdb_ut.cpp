@@ -7,7 +7,7 @@ namespace NLocalDb {
     Y_UNIT_TEST_SUITE(TLocalDbTest) {
 
         Y_UNIT_TEST(BackupTaskNameChangedAtLoadTime) {
-            NKikimrSchemeOp::TCompactionPolicy policyPb;
+            NKikimrCompaction::TCompactionPolicy policyPb;
             CreateDefaultUserTablePolicy()->Serialize(policyPb);
 
             // We expect default task name to be "scan" at the moment

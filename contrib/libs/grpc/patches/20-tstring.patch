@@ -1,0 +1,11 @@
+--- contrib/libs/grpc/src/core/lib/transport/metadata_batch.h	(3aa9ce0a2551c55167cc7f1129fae1b840fbaa4c)
++++ contrib/libs/grpc/src/core/lib/transport/metadata_batch.h	(26aa0c9a05850d6e4fd9f48970eb77e7f79b8baf)
+@@ -661,7 +661,7 @@ class GetStringValueHelper {
+     for (const auto& v : *value) {
+       if (!backing_->empty()) backing_->push_back(',');
+       auto new_segment = Trait::Encode(v);
+-      backing_->append(new_segment.begin(), new_segment.end());
++      backing_->append(reinterpret_cast<const char*>(new_segment.begin()), reinterpret_cast<const char*>(new_segment.end()));
+     }
+     return *backing_;
+   }

@@ -65,6 +65,12 @@ public:
         TArrayRef<const TCell> Key;
     };
 
+    int CompareKeys(TArrayRef<const TCell> a, TArrayRef<const TCell> b) const noexcept {
+        Y_DEBUG_ABORT_UNLESS(a.size() == KeyTypes.size());
+        Y_DEBUG_ABORT_UNLESS(b.size() == KeyTypes.size());
+        return CompareTypedCellVectors(a.data(), b.data(), KeyTypes.data(), KeyTypes.size());
+    }
+
     template<class TPoint>
     bool PointLessThanLeftBorder(const TPoint& a, const TKeyRangeEntry& b) const noexcept {
         Y_DEBUG_ABORT_UNLESS(a.Key.size() == KeyTypes.size());
@@ -311,9 +317,30 @@ struct TKeyRangeCacheConfig {
     size_t MaxBytes = 128 * 1024; // maximum 128KB by default
 };
 
+class TKeyRangeCache;
+struct TKeyRangeCacheNeedGCTag;
+
+class TKeyRangeCacheNeedGCList final
+    : public TSimpleRefCount<TKeyRangeCacheNeedGCList>
+{
+public:
+    ~TKeyRangeCacheNeedGCList();
+
+    void Add(TKeyRangeCache* cache);
+
+    void RunGC();
+
+private:
+    using TListItem = TIntrusiveListItem<TKeyRangeCache, TKeyRangeCacheNeedGCTag>;
+    TIntrusiveList<TKeyRangeCache, TKeyRangeCacheNeedGCTag> List;
+};
+
 class TKeyRangeCache final
     : public TSimpleRefCount<TKeyRangeCache>
+    , public TIntrusiveListItem<TKeyRangeCache, TKeyRangeCacheNeedGCTag>
 {
+    friend class TKeyRangeCacheNeedGCList;
+
 private:
     template<class T>
     class TAccountingAllocator
@@ -387,7 +414,8 @@ public:
     };
 
 public:
-    TKeyRangeCache(const TKeyCellDefaults& keyDefaults, const TKeyRangeCacheConfig& config);
+    TKeyRangeCache(const TKeyCellDefaults& keyDefaults, const TKeyRangeCacheConfig& config,
+        const TIntrusivePtr<TKeyRangeCacheNeedGCList>& gcList = nullptr);
 
     ~TKeyRangeCache();
 
@@ -515,6 +543,13 @@ public:
     void Invalidate(const_iterator it);
 
     /**
+     * Invalidates the specified key from the entry.
+     * Entry may or may not become invalidated after this call.
+     * The key doesn't need to be previously allocated with AllocateKey.
+     */
+    void InvalidateKey(const_iterator it, TArrayRef<const TCell> key);
+
+    /**
      * Marks the specified entry as most recently used
      */
     void Touch(const_iterator it);
@@ -554,6 +589,7 @@ private:
 private:
     const TKeyCellDefaults& KeyCellDefaults;
     const TKeyRangeCacheConfig Config;
+    const TIntrusivePtr<TKeyRangeCacheNeedGCList> GCList;
     THolder<TSpecialMemoryPool> Pool;
     size_t UsedHeapMemory = 0;
     TContainer Entries;

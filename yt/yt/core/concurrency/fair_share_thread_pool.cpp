@@ -21,7 +21,7 @@ namespace NYT::NConcurrency {
 
 using namespace NProfiling;
 
-static const auto& Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -71,7 +71,10 @@ public:
         return false;
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver /*waitTimeObserver*/) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
+    { }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
     { }
 
     ~TBucket();
@@ -187,6 +190,10 @@ public:
     void Invoke(TClosure callback, TBucket* bucket)
     {
         auto guard = Guard(SpinLock_);
+        // See Shutdown.
+        if (Stopping_) {
+            return;
+        }
 
         QueueSize_.fetch_add(1, std::memory_order::relaxed);
 
@@ -228,12 +235,20 @@ public:
 
     void Shutdown()
     {
-        Drain();
-    }
-
-    void Drain()
-    {
         auto guard = Guard(SpinLock_);
+        // We want to make sure that calls to
+        // Shutdown and Invoke are "atomic" with respect
+        // to each other. We need this so that
+        // there are no tasks left in the queue after
+        // the first call to Shutdown has finished.
+        // Here we achieve that by accessing
+        // both buckets and Stopping flag under
+        // SpinLock in either method.
+        // See two_level_fair_share_thread_pool.cpp
+        // for lock-free version with a more detailed
+        // explanation why Stopping flag logic provides
+        // the desired guarantee.
+        Stopping_ = true;
         for (const auto& item : Heap_) {
             item.Bucket->Drain();
         }
@@ -339,7 +354,7 @@ private:
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-
+    bool Stopping_ = false;
     std::vector<THeapItem> Heap_;
 
     std::atomic<int> ThreadCount_ = 0;
@@ -393,7 +408,7 @@ private:
         AccountCurrentlyExecutingBuckets(tscp);
 
         #ifdef YT_ENABLE_TRACE_LOGGING
-        if (Logger.IsLevelEnabled(NLogging::ELogLevel::Trace)) {
+        if (Logger().IsLevelEnabled(NLogging::ELogLevel::Trace)) {
             auto guard = Guard(TagMappingSpinLock_);
             YT_LOG_TRACE("Buckets: [%v]",
                 MakeFormattableView(
@@ -471,8 +486,9 @@ public:
             std::move(callbackEventCount),
             threadGroupName,
             threadName,
-            threadPriority,
-            /*shutdownPriority*/ 0)
+            NThreading::TThreadOptions{
+                .ThreadPriority = threadPriority,
+            })
         , Queue_(std::move(queue))
         , Index_(index)
     { }
@@ -511,7 +527,7 @@ public:
             CallbackEventCount_,
             GetThreadTags(ThreadNamePrefix_)))
     {
-        Configure(threadCount);
+        SetThreadCount(threadCount);
         EnsureStarted();
     }
 
@@ -520,9 +536,9 @@ public:
         Shutdown();
     }
 
-    void Configure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        TThreadPoolBase::Configure(threadCount);
+        TThreadPoolBase::SetThreadCount(threadCount);
     }
 
     IInvokerPtr GetInvoker(const TFairShareThreadPoolTag& tag) override
@@ -547,28 +563,20 @@ private:
         TThreadPoolBase::DoShutdown();
     }
 
-    TClosure MakeFinalizerCallback() override
-    {
-        return BIND_NO_PROPAGATE([queue = Queue_, callback = TThreadPoolBase::MakeFinalizerCallback()] {
-            callback();
-            queue->Drain();
-        });
-    }
-
-    void DoConfigure(int threadCount) override
+    void DoSetThreadCount(int threadCount) override
     {
         Queue_->Configure(threadCount);
-        TThreadPoolBase::DoConfigure(threadCount);
+        TThreadPoolBase::DoSetThreadCount(threadCount);
     }
 
-    TSchedulerThreadBasePtr SpawnThread(int index) override
+    TSchedulerThreadPtr SpawnThread(int index) override
     {
         return New<TFairShareThread>(
             Queue_,
             CallbackEventCount_,
             ThreadNamePrefix_,
             MakeThreadName(index),
-            ThreadPriority_,
+            NThreading::EThreadPriority::Normal,
             index);
     }
 };

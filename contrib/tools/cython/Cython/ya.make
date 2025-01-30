@@ -1,12 +1,14 @@
 PY23_LIBRARY()
 
+VERSION(Service-proxy-version)
+
 LICENSE(Public-Domain)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 WITHOUT_LICENSE_TEXTS()
 
-OWNER(g:yatool)
+SUBSCRIBER(g:yatool)
 
 NO_LINT()
 

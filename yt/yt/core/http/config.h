@@ -18,6 +18,8 @@ public:
 
     int MaxRedirectCount;
 
+    bool IgnoreContinueResponses;
+
     TDuration ConnectionIdleTimeout;
 
     TDuration HeaderReadTimeout;
@@ -50,7 +52,7 @@ public:
 
     bool EnableKeepAlive;
 
-    bool CancelFiberOnConnectionClose;
+    std::optional<bool> CancelFiberOnConnectionClose;
 
     //! Disables Nagle's algorithm.
     bool NoDelay;

@@ -207,6 +207,23 @@ TEST(TIP6AddressTest, CanonicalText)
     }
 }
 
+TEST(TIP6AddressTest, Constructors)
+{
+    {
+        auto address = TIP6Address::FromString("0:0:0:0:0:0:0:3");
+        auto mask = TIP6Address::FromString("ffff:ffff:ffff:ffff:ffff:ffff:ffff:0000");
+        TIP6Network network(address, mask);
+        EXPECT_EQ(network.GetAddress(), address);
+        EXPECT_EQ(network.GetMask(), mask);
+    }
+
+    {
+        auto address = TIP6Address::FromString("0:0:0:0:0:0:0:3");
+        auto mask = TIP6Address::FromString("ffff:ffff:ffff:ffff:ffff:ffff:0000:ffff");
+        EXPECT_THROW(TIP6Network(address, mask), TErrorException);
+    }
+}
+
 TEST(TIP6AddressTest, NetworkMask)
 {
     using TTestCase = std::tuple<const char*, std::array<ui16, 8>, int>;
@@ -222,6 +239,12 @@ TEST(TIP6AddressTest, NetworkMask)
         EXPECT_EQ(AddressToWords(network.GetMask()), std::get<1>(testCase));
         EXPECT_EQ(network.GetMaskSize(), std::get<2>(testCase));
         EXPECT_EQ(ToString(network), std::get<0>(testCase));
+
+        auto networkAsString = ToString(network);
+        auto networkFromSerializedString = TIP6Network::FromString(networkAsString);
+        EXPECT_EQ(AddressToWords(networkFromSerializedString.GetMask()), std::get<1>(testCase));
+        EXPECT_EQ(networkFromSerializedString.GetMaskSize(), std::get<2>(testCase));
+        EXPECT_EQ(ToString(networkFromSerializedString), std::get<0>(testCase));
     }
 
     EXPECT_THROW(TIP6Network::FromString("::/129"), TErrorException);
@@ -249,7 +272,13 @@ TEST(TIP6AddressTest, ProjectId)
         auto testAddress = TIP6Address::FromString(std::get<1>(testCase));
         EXPECT_EQ(AddressToWords(network.GetAddress()), std::get<2>(testCase));
         EXPECT_EQ(AddressToWords(network.GetMask()), std::get<3>(testCase));
-        EXPECT_TRUE(network.Contains(testAddress) );
+        EXPECT_TRUE(network.Contains(testAddress));
+
+        auto networkAsString = ToString(network);
+        auto networkFromSerializedString = TIP6Network::FromString(networkAsString);
+        EXPECT_EQ(AddressToWords(networkFromSerializedString.GetAddress()), std::get<2>(testCase));
+        EXPECT_EQ(AddressToWords(networkFromSerializedString.GetMask()), std::get<3>(testCase));
+        EXPECT_TRUE(networkFromSerializedString.Contains(testAddress));
     }
 
     EXPECT_THROW(TIP6Network::FromString("@1::1"), TErrorException);
@@ -296,7 +325,16 @@ TEST(TIP6AddressTest, ToStringFromStringRandom)
     }
 }
 
-TEST(TMtnAddressTest, SimpleTest)
+TEST(TIP6AddressTest, IsMtn)
+{
+    EXPECT_TRUE(TIP6Address::FromString("2a02:6b8:c23:130:0:4397:571f:0").IsMtn());
+    EXPECT_TRUE(TIP6Address::FromString("2a02:6b8:fc00:c21b:0:4397:ead:0").IsMtn());
+    EXPECT_FALSE(TIP6Address::FromString("fe80::5054:ff:fe12:3456").IsMtn());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TMtnAddressTest, Simple)
 {
     TMtnAddress address(TIP6Address::FromString("1361:24ad:4326:bda1:8432:a3fe:3f6c:4b38"));
     EXPECT_EQ(address.GetPrefix(), 0x136124ad43u);
@@ -324,7 +362,7 @@ TEST(TMtnAddressTest, SimpleTest)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(InferYPCluster, ValidFqdns)
+TEST(TInferYPClusterTest, ValidFqdns)
 {
     TString gencfgHostName = "sas1-5535-9d7.sas-test.yp.gencfg-c.yandex.net";
     TString ypHostName = "noqpmfiudzbb4hvs.man.yp-c.yandex.net";
@@ -333,7 +371,7 @@ TEST(InferYPCluster, ValidFqdns)
     EXPECT_EQ(InferYPClusterFromHostName(ypHostName), "man");
 }
 
-TEST(InferYPCluster, InvalidFqdn)
+TEST(TInferYPClusterTest, InvalidFqdn)
 {
     TString hostName = "noqpmfiudzbb4hvs..yp-c.yandex.net";
 
@@ -343,9 +381,7 @@ TEST(InferYPCluster, InvalidFqdn)
     EXPECT_EQ(InferYPClusterFromHostName("yandex.net"), std::nullopt);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-TEST(InferYTCluster, ClusterUrls)
+TEST(TInferYPClusterTest, ClusterUrls)
 {
     EXPECT_EQ(InferYTClusterFromClusterUrl("hume"), "hume");
     EXPECT_EQ(InferYTClusterFromClusterUrl("http://yp-sas.yt.yandex.net"), "yp-sas");

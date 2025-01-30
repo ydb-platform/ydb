@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import sys
-from typing import Any, Callable, Mapping, TypeVar, overload
+from collections.abc import Callable, Mapping
+from typing import Any, TypeVar, final, overload
 
 from ._exceptions import TypedAttributeLookupError
-
-if sys.version_info >= (3, 8):
-    from typing import final
-else:
-    from typing_extensions import final
 
 T_Attr = TypeVar("T_Attr")
 T_Default = TypeVar("T_Default")
@@ -44,22 +39,21 @@ class TypedAttributeProvider:
     @property
     def extra_attributes(self) -> Mapping[T_Attr, Callable[[], T_Attr]]:
         """
-        A mapping of the extra attributes to callables that return the corresponding values.
+        A mapping of the extra attributes to callables that return the corresponding
+        values.
 
-        If the provider wraps another provider, the attributes from that wrapper should also be
-        included in the returned mapping (but the wrapper may override the callables from the
-        wrapped instance).
+        If the provider wraps another provider, the attributes from that wrapper should
+        also be included in the returned mapping (but the wrapper may override the
+        callables from the wrapped instance).
 
         """
         return {}
 
     @overload
-    def extra(self, attribute: T_Attr) -> T_Attr:
-        ...
+    def extra(self, attribute: T_Attr) -> T_Attr: ...
 
     @overload
-    def extra(self, attribute: T_Attr, default: T_Default) -> T_Attr | T_Default:
-        ...
+    def extra(self, attribute: T_Attr, default: T_Default) -> T_Attr | T_Default: ...
 
     @final
     def extra(self, attribute: Any, default: object = undefined) -> object:
@@ -68,16 +62,20 @@ class TypedAttributeProvider:
 
         Return the value of the given typed extra attribute.
 
-        :param attribute: the attribute (member of a :class:`~TypedAttributeSet`) to look for
-        :param default: the value that should be returned if no value is found for the attribute
-        :raises ~anyio.TypedAttributeLookupError: if the search failed and no default value was
-            given
+        :param attribute: the attribute (member of a :class:`~TypedAttributeSet`) to
+            look for
+        :param default: the value that should be returned if no value is found for the
+            attribute
+        :raises ~anyio.TypedAttributeLookupError: if the search failed and no default
+            value was given
 
         """
         try:
-            return self.extra_attributes[attribute]()
+            getter = self.extra_attributes[attribute]
         except KeyError:
             if default is undefined:
                 raise TypedAttributeLookupError("Attribute not found") from None
             else:
                 return default
+
+        return getter()

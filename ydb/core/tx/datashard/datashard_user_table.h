@@ -1,9 +1,12 @@
 #pragma once
 
 #include <ydb/core/base/storage_pools.h>
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
+
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
@@ -123,12 +126,12 @@ struct TUserTable : public TThrRefBase {
             return MainChannelByStorageEnum();
         }
 
-        ui32 ExternalChannel() const {
+        TSet<ui32> ExternalChannels() const {
             if (!*Room) {
-                return ExternalChannelByStorageEnum();
+                return {ExternalChannelByStorageEnum()};
             }
 
-            return Room->GetChannel(NKikimrStorageSettings::TChannelPurpose::External, 1);
+            return Room->GetExternalChannels(1);
         }
 
         ui32 ExternalChannelByStorageEnum() const {
@@ -251,19 +254,23 @@ struct TUserTable : public TThrRefBase {
     };
 
     struct TTableIndex {
-        using EIndexType = NKikimrSchemeOp::EIndexType;
+        using EType = NKikimrSchemeOp::EIndexType;
+        using EState = NKikimrSchemeOp::EIndexState;
 
-        TString Name;
-        EIndexType Type;
+        EType Type;
+        EState State;
         TVector<ui32> KeyColumnIds;
         TVector<ui32> DataColumnIds;
 
         TTableIndex() = default;
 
         TTableIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc, const TMap<ui32, TUserColumn>& columns)
-            : Name(indexDesc.GetName())
-            , Type(indexDesc.GetType())
+            : Type(indexDesc.GetType())
+            , State(indexDesc.GetState())
         {
+            if (Type != EType::EIndexTypeGlobalAsync) {
+                return;
+            }
             THashMap<TStringBuf, ui32> nameToId;
             for (const auto& [id, column] : columns) {
                 Y_DEBUG_ABORT_UNLESS(!nameToId.contains(column.Name));
@@ -281,6 +288,10 @@ struct TUserTable : public TThrRefBase {
 
             fillColumnIds(indexDesc.GetKeyColumnNames(),  KeyColumnIds);
             fillColumnIds(indexDesc.GetDataColumnNames(), DataColumnIds);
+        }
+
+        static void Rename(NKikimrSchemeOp::TIndexDescription& indexDesc, const TString& newName) {
+            indexDesc.SetName(newName);
         }
     };
 
@@ -315,32 +326,66 @@ struct TUserTable : public TThrRefBase {
 
     struct TReplicationConfig {
         NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode Mode;
-        NKikimrSchemeOp::TTableReplicationConfig::EConsistency Consistency;
+        NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel ConsistencyLevel;
 
         TReplicationConfig()
             : Mode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
-            , Consistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN)
+            , ConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN)
         {
         }
 
         TReplicationConfig(const NKikimrSchemeOp::TTableReplicationConfig& config)
+            : Mode(config.GetMode())
+            , ConsistencyLevel(config.GetConsistencyLevel())
+        {
+        }
+
+        bool HasRowConsistency() const {
+            return ConsistencyLevel == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW;
+        }
+
+        bool HasGlobalConsistency() const {
+            return ConsistencyLevel == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL;
+        }
+
+        void Serialize(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
+            proto.SetMode(Mode);
+            proto.SetConsistencyLevel(ConsistencyLevel);
+        }
+    };
+
+    struct TIncrementalBackupConfig {
+        NKikimrSchemeOp::TTableIncrementalBackupConfig::ERestoreMode Mode;
+        NKikimrSchemeOp::TTableIncrementalBackupConfig::EConsistency Consistency;
+
+        TIncrementalBackupConfig()
+            : Mode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_NONE)
+            , Consistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_UNKNOWN)
+        {
+        }
+
+        TIncrementalBackupConfig(const NKikimrSchemeOp::TTableIncrementalBackupConfig& config)
             : Mode(config.GetMode())
             , Consistency(config.GetConsistency())
         {
         }
 
         bool HasWeakConsistency() const {
-            return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK;
+            return Consistency == NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_WEAK;
         }
 
         bool HasStrongConsistency() const {
-            return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG;
+            return Consistency == NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_STRONG;
+        }
+
+        void Serialize(NKikimrSchemeOp::TTableIncrementalBackupConfig& proto) const {
+            proto.SetMode(Mode);
+            proto.SetConsistency(Consistency);
         }
     };
 
     struct TStats {
         NTable::TStats DataStats;
-        ui64 IndexSize = 0;
         ui64 MemRowCount = 0;
         ui64 MemDataSize = 0;
         TInstant AccessTime;
@@ -349,21 +394,15 @@ struct TUserTable : public TThrRefBase {
         THashSet<ui64> PartOwners;
         ui64 PartCount = 0;
         ui64 SearchHeight = 0;
+        bool HasSchemaChanges = false;
         TInstant StatsUpdateTime;
         ui64 DataSizeResolution = 0;
         ui64 RowCountResolution = 0;
+        ui32 HistogramBucketsCount = 0;
         ui64 BackgroundCompactionRequests = 0;
         ui64 BackgroundCompactionCount = 0;
         ui64 CompactBorrowedCount = 0;
         NTable::TKeyAccessSample AccessStats;
-
-        void Update(NTable::TStats&& dataStats, ui64 indexSize, THashSet<ui64>&& partOwners, ui64 partCount, TInstant statsUpdateTime) {
-            DataStats = dataStats;
-            IndexSize = indexSize;
-            PartOwners = partOwners;
-            PartCount = partCount;
-            StatsUpdateTime = statsUpdateTime;
-        }
     };
 
     struct TSpecialUpdate {
@@ -389,9 +428,34 @@ struct TUserTable : public TThrRefBase {
     TVector<ui32> KeyColumnIds;
     TSerializedTableRange Range;
     TReplicationConfig ReplicationConfig;
+    TIncrementalBackupConfig IncrementalBackupConfig;
     bool IsBackup = false;
 
     TMap<TPathId, TTableIndex> Indexes;
+
+    template <typename TCallback>
+    void ForAsyncIndex(const TPathId& pathId, TCallback&& callback) const {
+        if (AsyncIndexCount == 0) {
+            return;
+        }
+        auto it = Indexes.find(pathId);
+        if (it != Indexes.end() && it->second.Type == TTableIndex::EType::EIndexTypeGlobalAsync) {
+            callback(it->second);
+        }
+    }
+
+    template <typename TCallback>
+    void ForEachAsyncIndex(TCallback&& callback) const {
+        if (AsyncIndexCount == 0) {
+            return;
+        }
+        for (const auto& [pathId, index] : Indexes) {
+            if (index.Type == TTableIndex::EType::EIndexTypeGlobalAsync) {
+                callback(pathId, index);
+            }
+        }
+    }
+
     TMap<TPathId, TCdcStream> CdcStreams;
     ui32 AsyncIndexCount = 0;
     ui32 JsonCdcStreamCount = 0;
@@ -400,7 +464,7 @@ struct TUserTable : public TThrRefBase {
     mutable TStats Stats;
     mutable bool StatsUpdateInProgress = false;
     mutable bool StatsNeedUpdate = true;
-    mutable NTable::TDatabase::TChg LastTableChange{ 0, NTable::TEpoch::Zero() };
+    mutable NTable::TDatabase::TChangeCounter LastTableChange;
     mutable TMonotonic LastTableChangeTimestamp;
 
     ui32 SpecialColTablet = Max<ui32>();
@@ -442,6 +506,7 @@ struct TUserTable : public TThrRefBase {
     bool ResetTableSchemaVersion();
 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
+    void SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state);
     void DropIndex(const TPathId& indexPathId);
     bool HasAsyncIndexes() const;
 
@@ -452,6 +517,7 @@ struct TUserTable : public TThrRefBase {
     bool NeedSchemaSnapshots() const;
 
     bool IsReplicated() const;
+    bool IsIncrementalRestore() const;
 
 private:
     void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,

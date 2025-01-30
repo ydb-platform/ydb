@@ -119,7 +119,7 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
             << 'b';
 
         ui64 resultsSize = 0;
-        for (auto& result : record->GetResponse().GetResults()) {
+        for (auto& result : record->GetResponse().GetYdbResults()) {
             resultsSize += result.ByteSize();
         }
 

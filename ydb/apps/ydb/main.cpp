@@ -13,12 +13,16 @@ int main(int argc, char **argv) {
     try {
         return NYdb::NConsoleClient::NewYCloudClient(argc, argv);
     }
+    catch (const NYdb::NConsoleClient::TMisuseWithHelpException& e) {
+        // command help is already printed. Just exit(1)
+        return EXIT_FAILURE;
+    }
     catch (const NYdb::NConsoleClient::TMisuseException& e) {
         Cerr << e.what() << Endl;
         Cerr << "Try \"--help\" option for more info." << Endl;
         return EXIT_FAILURE;
     }
-    catch (const NYdb::NConsoleClient::TYdbErrorException& e) {
+    catch (const NYdb::NStatusHelpers::TYdbErrorException& e) {
         Cerr << e;
         return EXIT_FAILURE;
     }

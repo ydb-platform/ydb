@@ -26,7 +26,7 @@
 // a) Initialize dynamically when used.
 // b) Require that all singletons be initialized before main
 // is called or any entry point into the shared library is invoked.
-// This guarentees no race condition for initialization.
+// This guarantees no race condition for initialization.
 // In debug mode, we assert that no non-const functions are called
 // after main is invoked.
 //
@@ -87,7 +87,7 @@ namespace serialization {
 // 1 (Recommended): Publicly inherit your type T from singleton<T>,
 // make its ctor protected and access it via T::get_const_instance()
 // 2: Simply access singleton<T> without changing T. Note that this only
-// provides a global instance accesible by singleton<T>::get_const_instance()
+// provides a global instance accessible by singleton<T>::get_const_instance()
 // or singleton<T>::get_mutable_instance() to prevent using multiple instances
 // of T make its ctor protected
 
@@ -130,9 +130,9 @@ namespace detail {
 // for singleton<T> as a class derived from singleton<T> could be
 // instantiated multiple times.
 // It also provides a flag `is_destroyed` which returns true, when the
-// class was destructed. It is static and hence accesible even after
+// class was destructed. It is static and hence accessible even after
 // destruction. This can be used to check, if the singleton is still
-// accesible e.g. in destructors of other singletons.
+// accessible e.g. in destructors of other singletons.
 template<class T>
 class singleton_wrapper : public T
 {
@@ -175,9 +175,9 @@ private:
         // construct the instance at pre-execution time.  This would prevent
         // our usage/implementation of "locking" and introduce uncertainty into
         // the sequence of object initialization.
-        // Unfortunately, this triggers detectors of undefine behavior
-        // and reports an error.  But I've been unable to find a different
-        // of guarenteeing that the the singleton is created at pre-main time.
+        // Unfortunately, this triggers detectors of undefined behavior
+        // and reports an error.  But I've been unable to find a different way
+        // of guaranteeing that the the singleton is created at pre-main time.
         if (m_instance) use(* m_instance);
 
         return static_cast<T &>(t);

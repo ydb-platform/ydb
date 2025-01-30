@@ -106,3 +106,24 @@ message TEvListResponse {
     repeated TIndexBuild Entries = 3;
     optional string NextPageToken = 4;
 }
+
+enum EBuildStatus {
+    INVALID = 0;
+    ACCEPTED = 1; // DEPRECATED don't use it, it does nothing, we cannot remove it for now, because old nodes can send it
+    IN_PROGRESS = 2;
+    DONE = 3;
+
+    ABORTED = 4;
+    BUILD_ERROR = 5;
+    BAD_REQUEST = 6;
+}
+
+message TEvUploadSampleKResponse {
+    optional uint64 Id = 1;
+
+    optional Ydb.StatusIds.StatusCode UploadStatus = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+
+    optional uint64 UploadRows = 4;
+    optional uint64 UploadBytes = 5;
+}

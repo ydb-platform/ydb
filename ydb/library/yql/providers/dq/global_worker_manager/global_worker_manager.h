@@ -5,7 +5,7 @@
 #include <ydb/library/yql/providers/dq/actors/events.h>
 #include "coordination_helper.h"
 #include <ydb/library/yql/providers/dq/actors/yt/resource_manager.h>
-#include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
+#include <yql/essentials/providers/common/metrics/metrics_registry.h>
 
 #include <ydb/library/actors/core/events.h>
 

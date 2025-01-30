@@ -4,7 +4,7 @@
 #include <library/cpp/unified_agent_client/f_maybe.h>
 
 #include <contrib/libs/grpc/include/grpcpp/alarm.h>
-#include <contrib/libs/grpc/include/grpc++/grpc++.h>
+#include <contrib/libs/grpc/include/grpcpp/grpcpp.h>
 
 #include <thread>
 

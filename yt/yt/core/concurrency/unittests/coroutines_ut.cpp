@@ -27,7 +27,7 @@ void Coroutine0(TCoroutine<int()>& self)
 
 TEST_F(TCoroutineTest, Nullary)
 {
-    TCoroutine<int()> coro(BIND(&Coroutine0));
+    TCoroutine<int()> coro(&Coroutine0);
     EXPECT_FALSE(coro.IsCompleted());
 
     int i;
@@ -64,7 +64,7 @@ void Coroutine1(TCoroutine<int(int)>& self, int arg)
 
 TEST_F(TCoroutineTest, Unary)
 {
-    TCoroutine<int(int)> coro(BIND(&Coroutine1));
+    TCoroutine<int(int)> coro(&Coroutine1);
     EXPECT_FALSE(coro.IsCompleted());
 
     // Alternative syntax.
@@ -111,7 +111,7 @@ void Coroutine2(TCoroutine<int(int, int)>& self, int lhs, int rhs)
 
 TEST_F(TCoroutineTest, Binary)
 {
-    TCoroutine<int(int, int)> coro(BIND(&Coroutine2));
+    TCoroutine<int(int, int)> coro(&Coroutine2);
     EXPECT_FALSE(coro.IsCompleted());
 
     int i = 0;
@@ -121,8 +121,8 @@ TEST_F(TCoroutineTest, Binary)
         (actual = coro.Run(
             i < std::ssize(Coroutine2TestCases) ? Coroutine2TestCases[i].lhs : 0,
             i < std::ssize(Coroutine2TestCases) ? Coroutine2TestCases[i].rhs : 0));
-        ++i
-    ) {
+        ++i)
+    {
         EXPECT_EQ(Coroutine2TestCases[i].sum, *actual);
     }
 
@@ -142,7 +142,7 @@ void Coroutine3(TCoroutine<void()>& self)
 
 TEST_W(TCoroutineTest, WaitFor)
 {
-    TCoroutine<void()> coro(BIND(&Coroutine3));
+    TCoroutine<void()> coro(&Coroutine3);
     for (int i = 0; i < 11; ++i) {
         EXPECT_FALSE(coro.IsCompleted());
         coro.Run();

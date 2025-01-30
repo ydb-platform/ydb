@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NSequenceShard {
 
-    struct TEvSequenceShard {
+    namespace TEvSequenceShard {
         enum EEv {
             EvMarkSchemeShardPipe = EventSpaceBegin(TKikimrEvents::ES_SEQUENCESHARD),
             EvCreateSequence,
@@ -24,6 +24,8 @@ namespace NSequenceShard {
             EvRestoreSequenceResult,
             EvRedirectSequence,
             EvRedirectSequenceResult,
+            EvGetSequence,
+            EvGetSequenceResult,
             EvEnd,
         };
 
@@ -94,6 +96,11 @@ namespace NSequenceShard {
 
                 TBuilder&& SetCycle(bool cycle) && {
                     Msg->Record.SetCycle(cycle);
+                    return std::move(*this);
+                }
+
+                TBuilder&& SetFrozen(bool frozen) && {
+                    Msg->Record.SetFrozen(frozen);
                     return std::move(*this);
                 }
 
@@ -323,6 +330,11 @@ namespace NSequenceShard {
                 InitFrom(record);
             }
 
+            TEvRestoreSequence(const TPathId& pathId, const NKikimrTxSequenceShard::TEvGetSequenceResult& record) {
+                SetPathId(pathId);
+                InitFrom(record);
+            }
+
             void SetPathId(const TPathId& pathId) {
                 auto* p = Record.MutablePathId();
                 p->SetOwnerId(pathId.OwnerId);
@@ -335,6 +347,17 @@ namespace NSequenceShard {
             }
 
             void InitFrom(const NKikimrTxSequenceShard::TEvFreezeSequenceResult& record) {
+                Record.SetMinValue(record.GetMinValue());
+                Record.SetMaxValue(record.GetMaxValue());
+                Record.SetStartValue(record.GetStartValue());
+                Record.SetNextValue(record.GetNextValue());
+                Record.SetNextUsed(record.GetNextUsed());
+                Record.SetCache(record.GetCache());
+                Record.SetIncrement(record.GetIncrement());
+                Record.SetCycle(record.GetCycle());
+            }
+
+            void InitFrom(const NKikimrTxSequenceShard::TEvGetSequenceResult& record) {
                 Record.SetMinValue(record.GetMinValue());
                 Record.SetMaxValue(record.GetMaxValue());
                 Record.SetStartValue(record.GetStartValue());
@@ -389,6 +412,40 @@ namespace NSequenceShard {
             TEvRedirectSequenceResult() = default;
 
             TEvRedirectSequenceResult(EStatus status, ui64 origin) {
+                Record.SetStatus(status);
+                Record.SetOrigin(origin);
+            }
+        };
+
+        struct TEvGetSequence
+            : public TEventPB<TEvGetSequence, NKikimrTxSequenceShard::TEvGetSequence, EvGetSequence>
+        {
+            TEvGetSequence() = default;
+
+            explicit TEvGetSequence(const TPathId& pathId) {
+                SetPathId(pathId);
+            }
+
+            void SetPathId(const TPathId& pathId) {
+                auto* p = Record.MutablePathId();
+                p->SetOwnerId(pathId.OwnerId);
+                p->SetLocalId(pathId.LocalPathId);
+            }
+
+            TPathId GetPathId() const {
+                const auto& p = Record.GetPathId();
+                return TPathId(p.GetOwnerId(), p.GetLocalId());
+            }
+        };
+
+        struct TEvGetSequenceResult
+            : public TEventPB<TEvGetSequenceResult, NKikimrTxSequenceShard::TEvGetSequenceResult, EvGetSequenceResult>
+        {
+            using EStatus = NKikimrTxSequenceShard::TEvGetSequenceResult::EStatus;
+
+            TEvGetSequenceResult() = default;
+
+            TEvGetSequenceResult(EStatus status, ui64 origin) {
                 Record.SetStatus(status);
                 Record.SetOrigin(origin);
             }

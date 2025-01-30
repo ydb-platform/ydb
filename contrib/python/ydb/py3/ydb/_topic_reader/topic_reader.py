@@ -10,7 +10,7 @@ from typing import (
     Callable,
 )
 
-from ..table import RetrySettings
+from ..retries import RetrySettings
 from .._grpc.grpcwrapper.ydb_topic import StreamReadMessage, OffsetsRange
 
 

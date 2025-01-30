@@ -25,7 +25,7 @@ namespace NYT::NTesting {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IClientPtr CreateTestClient(TString proxy = "", const TCreateClientOptions& options = {});
+IClientPtr CreateTestClient(TString proxy = "", TCreateClientOptions options = {});
 
 // Create map node by unique path in Cypress and return that path.
 TYPath CreateTestDirectory(const IClientBasePtr& client);

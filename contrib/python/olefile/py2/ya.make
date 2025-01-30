@@ -2,7 +2,7 @@
 
 PY2_LIBRARY()
 
-VERSION(0.46)
+VERSION(0.47)
 
 LICENSE(BSD-3-Clause AND PIL)
 
@@ -10,6 +10,7 @@ NO_LINT()
 
 PY_SRCS(
     TOP_LEVEL
+    OleFileIO_PL.py
     olefile/__init__.py
     olefile/olefile.py
 )

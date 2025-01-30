@@ -93,7 +93,7 @@ public:
 
     static constexpr char ActorName[] = "HTTP_OUT_CACHE_ACTOR";
 
-    void Bootstrap(const NActors::TActorContext&) {
+    void Bootstrap() {
         //
         Become(&THttpOutgoingCacheActor::StateWork, RefreshTimeout, new NActors::TEvents::TEvWakeup());
     }
@@ -113,35 +113,35 @@ public:
         return { ToString(request->Host), ToString(request->URL), GetCacheHeadersKey(request, policy) };
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr event, const NActors::TActorContext& ctx) {
-        ctx.Send(event->Forward(HttpProxyId));
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& event) {
+        Send(event->Forward(HttpProxyId));
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
-        ctx.Send(event->Forward(HttpProxyId));
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event) {
+        Send(event->Forward(HttpProxyId));
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvAddListeningPort::TPtr event, const NActors::TActorContext& ctx) {
-        ctx.Send(event->Forward(HttpProxyId));
+    void Handle(NHttp::TEvHttpProxy::TEvAddListeningPort::TPtr& event) {
+        Send(event->Forward(HttpProxyId));
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvRegisterHandler::TPtr event, const NActors::TActorContext& ctx) {
-        ctx.Send(event->Forward(HttpProxyId));
+    void Handle(NHttp::TEvHttpProxy::TEvRegisterHandler::TPtr& event) {
+        Send(event->Forward(HttpProxyId));
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& event) {
         NHttp::THttpOutgoingRequestPtr request(event->Get()->Request);
         NHttp::THttpIncomingResponsePtr response(event->Get()->Response);
         auto itRequests = OutgoingRequests.find(request.Get());
         if (itRequests == OutgoingRequests.end()) {
-            LOG_ERROR_S(ctx, HttpLog, "Cache received response to unknown request " << request->Host << request->URL);
+            ALOG_ERROR(HttpLog, "Cache received response to unknown request " << request->Host << request->URL);
             return;
         }
         auto key = itRequests->second;
         OutgoingRequests.erase(itRequests);
         auto it = Cache.find(key);
         if (it == Cache.end()) {
-            LOG_ERROR_S(ctx, HttpLog, "Cache received response to unknown cache key " << request->Host << request->URL);
+            ALOG_ERROR(HttpLog, "Cache received response to unknown cache key " << request->Host << request->URL);
             return;
         }
         TCacheRecord& cacheRecord = it->second;
@@ -155,7 +155,7 @@ public:
             if (!event->Get()->Error.empty()) {
                 error2 = event->Get()->Error;
             }
-            ctx.Send(waiter->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(waiter->Get()->Request, response2, error2));
+            Send(waiter->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(waiter->Get()->Request, response2, error2));
         }
         cacheRecord.Waiters.clear();
         TString error;
@@ -167,26 +167,26 @@ public:
             error = event->Get()->Error;
         }
         if (!error.empty()) {
-            LOG_WARN_S(ctx, HttpLog, "Error from " << cacheRecord.GetName() << ": " << error);
+            ALOG_WARN(HttpLog, "Error from " << cacheRecord.GetName() << ": " << error);
         }
-        LOG_DEBUG_S(ctx, HttpLog, "OutgoingUpdate " << cacheRecord.GetName());
-        cacheRecord.UpdateResponse(response, event->Get()->Error, ctx.Now());
+        ALOG_DEBUG(HttpLog, "OutgoingUpdate " << cacheRecord.GetName());
+        cacheRecord.UpdateResponse(response, event->Get()->Error, NActors::TActivationContext::Now());
         RefreshQueue.push({it->first, it->second.RefreshTime});
-        LOG_DEBUG_S(ctx, HttpLog, "OutgoingSchedule " << cacheRecord.GetName() << " at " << cacheRecord.RefreshTime << " until " << cacheRecord.DeathTime);
+        ALOG_DEBUG(HttpLog, "OutgoingSchedule " << cacheRecord.GetName() << " at " << cacheRecord.RefreshTime << " until " << cacheRecord.DeathTime);
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event) {
         const NHttp::THttpOutgoingRequest* request = event->Get()->Request.Get();
         auto policy = GetCachePolicy(request);
         if (policy.TimeToExpire == TDuration()) {
-            ctx.Send(event->Forward(HttpProxyId));
+            Send(event->Forward(HttpProxyId));
             return;
         }
         auto key = GetCacheKey(request, policy);
         auto it = Cache.find(key);
         if (it != Cache.end()) {
             if (it->second.IsValid()) {
-                LOG_DEBUG_S(ctx, HttpLog, "OutgoingRespond "
+                ALOG_DEBUG(HttpLog, "OutgoingRespond "
                             << it->second.GetName()
                             << " ("
                             << ((it->second.Response != nullptr) ? ToString(it->second.Response->Size()) : TString("error"))
@@ -195,11 +195,11 @@ public:
                 if (response != nullptr) {
                     response = response->Duplicate(event->Get()->Request);
                 }
-                ctx.Send(event->Sender,
+                Send(event->Sender,
                          new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(event->Get()->Request,
                                                                           response,
                                                                           it->second.Error));
-                it->second.DeathTime = ctx.Now() + it->second.CachePolicy.TimeToExpire; // prolong active cache items
+                it->second.DeathTime = NActors::TActivationContext::Now() + it->second.CachePolicy.TimeToExpire; // prolong active cache items
                 return;
             }
         } else {
@@ -208,26 +208,26 @@ public:
             it->second.Timeout = event->Get()->Timeout;
             it->second.OutgoingRequest = it->second.Request->Duplicate();
             OutgoingRequests[it->second.OutgoingRequest.Get()] = key;
-            LOG_DEBUG_S(ctx, HttpLog, "OutgoingInitiate " << it->second.GetName());
-            ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(it->second.OutgoingRequest, it->second.Timeout));
+            ALOG_DEBUG(HttpLog, "OutgoingInitiate " << it->second.GetName());
+            Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(it->second.OutgoingRequest, it->second.Timeout));
         }
-        it->second.DeathTime = ctx.Now() + it->second.CachePolicy.TimeToExpire;
+        it->second.DeathTime = NActors::TActivationContext::Now() + it->second.CachePolicy.TimeToExpire;
         it->second.Waiters.emplace_back(std::move(event));
     }
 
-    void HandleRefresh(const NActors::TActorContext& ctx) {
-        while (!RefreshQueue.empty() && RefreshQueue.top().RefreshTime <= ctx.Now()) {
+    void HandleRefresh() {
+        while (!RefreshQueue.empty() && RefreshQueue.top().RefreshTime <= NActors::TActivationContext::Now()) {
             TRefreshRecord rrec = RefreshQueue.top();
             RefreshQueue.pop();
             auto it = Cache.find(rrec.Key);
             if (it != Cache.end()) {
-                if (it->second.DeathTime > ctx.Now()) {
-                    LOG_DEBUG_S(ctx, HttpLog, "OutgoingRefresh " << it->second.GetName());
+                if (it->second.DeathTime > NActors::TActivationContext::Now()) {
+                    ALOG_DEBUG(HttpLog, "OutgoingRefresh " << it->second.GetName());
                     it->second.OutgoingRequest = it->second.Request->Duplicate();
                     OutgoingRequests[it->second.OutgoingRequest.Get()] = it->first;
-                    ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(it->second.OutgoingRequest, it->second.Timeout));
+                    Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(it->second.OutgoingRequest, it->second.Timeout));
                 } else {
-                    LOG_DEBUG_S(ctx, HttpLog, "OutgoingForget " << it->second.GetName());
+                    ALOG_DEBUG(HttpLog, "OutgoingForget " << it->second.GetName());
                     if (it->second.OutgoingRequest) {
                         OutgoingRequests.erase(it->second.OutgoingRequest.Get());
                     }
@@ -235,18 +235,18 @@ public:
                 }
             }
         }
-        ctx.Schedule(RefreshTimeout, new NActors::TEvents::TEvWakeup());
+        Schedule(RefreshTimeout, new NActors::TEvents::TEvWakeup());
     }
 
-    STFUNC(StateWork) {
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
-            HFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
-            HFunc(NHttp::TEvHttpProxy::TEvAddListeningPort, Handle);
-            HFunc(NHttp::TEvHttpProxy::TEvRegisterHandler, Handle);
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
-            HFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
-            CFunc(NActors::TEvents::TSystem::Wakeup, HandleRefresh);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvAddListeningPort, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvRegisterHandler, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
+            cFunc(NActors::TEvents::TSystem::Wakeup, HandleRefresh);
         }
     }
 };
@@ -262,16 +262,15 @@ public:
     THashMap<TString, TActorId> Handlers;
 
     struct TCacheKey {
-        TString Host;
         TString URL;
         TString Headers;
 
         operator size_t() const {
-            return MultiHash(Host, URL, Headers);
+            return MultiHash(URL, Headers);
         }
 
         TString GetId() const {
-            return MD5::Calc(Host + ':' + URL + ':' + Headers);
+            return MD5::Calc(URL + ':' + Headers);
         }
     };
 
@@ -347,7 +346,7 @@ public:
 
     static constexpr char ActorName[] = "HTTP_IN_CACHE_ACTOR";
 
-    void Bootstrap(const NActors::TActorContext&) {
+    void Bootstrap() {
         //
         Become(&THttpIncomingCacheActor::StateWork, RefreshTimeout, new NActors::TEvents::TEvWakeup());
     }
@@ -364,7 +363,7 @@ public:
     }
 
     static TCacheKey GetCacheKey(const NHttp::THttpIncomingRequest* request, const TCachePolicy& policy) {
-        return { ToString(request->Host), ToString(request->URL), GetCacheHeadersKey(request, policy) };
+        return {ToString(request->URL), GetCacheHeadersKey(request, policy)};
     }
 
     TActorId GetRequestHandler(NHttp::THttpIncomingRequestPtr request) {
@@ -389,7 +388,7 @@ public:
         return {};
     }
 
-    void SendCacheRequest(const TCacheKey& cacheKey, TCacheRecord& cacheRecord, const NActors::TActorContext& ctx) {
+    void SendCacheRequest(const TCacheKey& cacheKey, TCacheRecord& cacheRecord) {
         cacheRecord.Request = cacheRecord.Request->Duplicate();
         cacheRecord.Request->AcceptEncoding.Clear(); // disable compression
         IncomingRequests[cacheRecord.Request.Get()] = cacheKey;
@@ -397,7 +396,7 @@ public:
         if (handler) {
             Send(handler, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(cacheRecord.Request));
         } else {
-            LOG_ERROR_S(ctx, HttpLog, "Can't find cache handler for " << cacheRecord.GetName());
+            ALOG_ERROR(HttpLog, "Can't find cache handler for " << cacheRecord.GetName());
         }
     }
 
@@ -413,36 +412,36 @@ public:
         Cache.erase(it);
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-        ctx.Send(event->Forward(HttpProxyId));
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& event) {
+        Send(event->Forward(HttpProxyId));
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
-        ctx.Send(event->Forward(HttpProxyId));
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
+        Send(event->Forward(HttpProxyId));
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvAddListeningPort::TPtr event, const NActors::TActorContext& ctx) {
-        ctx.Send(event->Forward(HttpProxyId));
+    void Handle(NHttp::TEvHttpProxy::TEvAddListeningPort::TPtr& event) {
+        Send(event->Forward(HttpProxyId));
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvRegisterHandler::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(NHttp::TEvHttpProxy::TEvRegisterHandler::TPtr& event) {
         Handlers[event->Get()->Path] = event->Get()->Handler;
-        ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(event->Get()->Path, ctx.SelfID));
+        Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(event->Get()->Path, SelfId()));
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& event) {
         NHttp::THttpIncomingRequestPtr request(event->Get()->Response->GetRequest());
         NHttp::THttpOutgoingResponsePtr response(event->Get()->Response);
         auto itRequests = IncomingRequests.find(request.Get());
         if (itRequests == IncomingRequests.end()) {
-            LOG_ERROR_S(ctx, HttpLog, "Cache received response to unknown request " << request->Host << request->URL);
+            ALOG_ERROR(HttpLog, "Cache received response to unknown request " << request->Host << request->URL);
             return;
         }
 
         TCacheKey key = itRequests->second;
         auto it = Cache.find(key);
         if (it == Cache.end()) {
-            LOG_ERROR_S(ctx, HttpLog, "Cache received response to unknown cache key " << request->Host << request->URL);
+            ALOG_ERROR(HttpLog, "Cache received response to unknown cache key " << request->Host << request->URL);
             return;
         }
 
@@ -462,8 +461,8 @@ public:
             if (itStatusToRetry != cacheRecord.CachePolicy.StatusesToRetry.end()) {
                 if (cacheRecord.Retries < cacheRecord.CachePolicy.RetriesCount) {
                     ++cacheRecord.Retries;
-                    LOG_WARN_S(ctx, HttpLog, "IncomingRetry " << cacheRecord.GetName() << ": " << status << " " << error);
-                    SendCacheRequest(key, cacheRecord, ctx);
+                    ALOG_WARN(HttpLog, "IncomingRetry " << cacheRecord.GetName() << ": " << status << " " << error);
+                    SendCacheRequest(key, cacheRecord);
                     return;
                 }
             }
@@ -471,38 +470,38 @@ public:
         for (auto& waiter : cacheRecord.Waiters) {
             NHttp::THttpOutgoingResponsePtr response2;
             response2 = response->Duplicate(waiter->Get()->Request);
-            ctx.Send(waiter->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response2));
+            Send(waiter->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response2));
         }
         cacheRecord.Waiters.clear();
         if (!error.empty()) {
-            LOG_WARN_S(ctx, HttpLog, "Error from " << cacheRecord.GetName() << ": " << error);
+            ALOG_WARN(HttpLog, "Error from " << cacheRecord.GetName() << ": " << error);
             if (!cacheRecord.Response) {
-                LOG_DEBUG_S(ctx, HttpLog, "IncomingDiscard " << cacheRecord.GetName());
+                ALOG_DEBUG(HttpLog, "IncomingDiscard " << cacheRecord.GetName());
                 DropCacheRecord(it);
                 return;
             }
         }
         if (cacheRecord.CachePolicy.TimeToRefresh) {
-            LOG_DEBUG_S(ctx, HttpLog, "IncomingUpdate " << cacheRecord.GetName());
-            cacheRecord.UpdateResponse(response, error, ctx.Now());
+            ALOG_DEBUG(HttpLog, "IncomingUpdate " << cacheRecord.GetName());
+            cacheRecord.UpdateResponse(response, error, NActors::TActivationContext::Now());
             if (!cacheRecord.Enqueued) {
                 RefreshQueue.push({it->first, it->second.RefreshTime});
                 cacheRecord.Enqueued = true;
             }
-            LOG_DEBUG_S(ctx, HttpLog, "IncomingSchedule " << cacheRecord.GetName() << " at " << cacheRecord.RefreshTime << " until " << cacheRecord.DeathTime);
+            ALOG_DEBUG(HttpLog, "IncomingSchedule " << cacheRecord.GetName() << " at " << cacheRecord.RefreshTime << " until " << cacheRecord.DeathTime);
         } else {
-            LOG_DEBUG_S(ctx, HttpLog, "IncomingDrop " << cacheRecord.GetName());
+            ALOG_DEBUG(HttpLog, "IncomingDrop " << cacheRecord.GetName());
             DropCacheRecord(it);
         }
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event) {
         const NHttp::THttpIncomingRequest* request = event->Get()->Request.Get();
         TCachePolicy policy = GetCachePolicy(request);
         if (policy.TimeToExpire == TDuration() && policy.RetriesCount == 0) {
             TActorId handler = GetRequestHandler(event->Get()->Request);
             if (handler) {
-                ctx.Send(event->Forward(handler));
+                Send(event->Forward(handler));
             }
             return;
         }
@@ -511,7 +510,7 @@ public:
         if (it != Cache.end() && !policy.DiscardCache) {
             it->second.UpdateExpireTime();
             if (it->second.IsValid()) {
-                LOG_DEBUG_S(ctx, HttpLog, "IncomingRespond "
+                ALOG_DEBUG(HttpLog, "IncomingRespond "
                             << it->second.GetName()
                             << " ("
                             << ((it->second.Response != nullptr) ? ToString(it->second.Response->Size()) : TString("error"))
@@ -520,7 +519,7 @@ public:
                 if (response != nullptr) {
                     response = response->Duplicate(event->Get()->Request);
                 }
-                ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+                Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
                 return;
             }
         } else {
@@ -528,42 +527,42 @@ public:
             it->second.CacheId = key.GetId(); // for debugging
             it->second.InitRequest(event->Get()->Request);
             if (policy.DiscardCache) {
-                LOG_DEBUG_S(ctx, HttpLog, "IncomingDiscardCache " << it->second.GetName());
+                ALOG_DEBUG(HttpLog, "IncomingDiscardCache " << it->second.GetName());
             }
-            LOG_DEBUG_S(ctx, HttpLog, "IncomingInitiate " << it->second.GetName());
-            SendCacheRequest(key, it->second, ctx);
+            ALOG_DEBUG(HttpLog, "IncomingInitiate " << it->second.GetName());
+            SendCacheRequest(key, it->second);
         }
         it->second.Waiters.emplace_back(std::move(event));
     }
 
-    void HandleRefresh(const NActors::TActorContext& ctx) {
-        while (!RefreshQueue.empty() && RefreshQueue.top().RefreshTime <= ctx.Now()) {
+    void HandleRefresh() {
+        while (!RefreshQueue.empty() && RefreshQueue.top().RefreshTime <= NActors::TActivationContext::Now()) {
             TRefreshRecord rrec = RefreshQueue.top();
             RefreshQueue.pop();
             auto it = Cache.find(rrec.Key);
             if (it != Cache.end()) {
                 it->second.Enqueued = false;
-                if (it->second.DeathTime > ctx.Now()) {
-                    LOG_DEBUG_S(ctx, HttpLog, "IncomingRefresh " << it->second.GetName());
-                    SendCacheRequest(it->first, it->second, ctx);
+                if (it->second.DeathTime > NActors::TActivationContext::Now()) {
+                    ALOG_DEBUG(HttpLog, "IncomingRefresh " << it->second.GetName());
+                    SendCacheRequest(it->first, it->second);
                 } else {
-                    LOG_DEBUG_S(ctx, HttpLog, "IncomingForget " << it->second.GetName());
+                    ALOG_DEBUG(HttpLog, "IncomingForget " << it->second.GetName());
                     DropCacheRecord(it);
                 }
             }
         }
-        ctx.Schedule(RefreshTimeout, new NActors::TEvents::TEvWakeup());
+        Schedule(RefreshTimeout, new NActors::TEvents::TEvWakeup());
     }
 
-    STFUNC(StateWork) {
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
-            HFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
-            HFunc(NHttp::TEvHttpProxy::TEvAddListeningPort, Handle);
-            HFunc(NHttp::TEvHttpProxy::TEvRegisterHandler, Handle);
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
-            HFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
-            CFunc(NActors::TEvents::TSystem::Wakeup, HandleRefresh);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvAddListeningPort, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvRegisterHandler, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
+            cFunc(NActors::TEvents::TSystem::Wakeup, HandleRefresh);
         }
     }
 };
@@ -573,13 +572,13 @@ TCachePolicy GetDefaultCachePolicy(const THttpRequest* request, const TCachePoli
     THeaders headers(request->Headers);
     TStringBuf cacheControl(headers["Cache-Control"]);
     while (TStringBuf cacheItem = cacheControl.NextTok(',')) {
-        Trim(cacheItem, ' ');
+        cacheItem = Trim(cacheItem, ' ');
         if (cacheItem == "no-store" || cacheItem == "no-cache") {
             policy.DiscardCache = true;
         }
         TStringBuf itemName = cacheItem.NextTok('=');
-        TrimEnd(itemName, ' ');
-        TrimBegin(cacheItem, ' ');
+        itemName = TrimEnd(itemName, ' ');
+        cacheItem = TrimBegin(cacheItem, ' ');
         if (itemName == "max-age") {
             policy.TimeToRefresh = policy.TimeToExpire = TDuration::Seconds(FromString(cacheItem));
         }

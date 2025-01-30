@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/misc/property.h>
 
+#include <library/cpp/yt/string/string_builder.h>
+
 namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -84,7 +86,7 @@ private:
     bool BooleanValue_ = false;
 };
 
-TString ToString(const TToken& token);
+void FormatValue(TStringBuilderBase* builder, const TToken& token, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

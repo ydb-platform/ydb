@@ -10,6 +10,9 @@
 #include <util/stream/input.h>
 #include <util/system/compiler.h>
 
+#include <unordered_map>
+#include <unordered_set>
+
 #ifndef __NVCC__
     // cuda is compiled in C++14 mode at the time
     #include <optional>
@@ -59,7 +62,7 @@ static inline void SavePodType(IOutputStream* rh, const T& t) {
 namespace NPrivate {
     [[noreturn]] void ThrowLoadEOFException(size_t typeSize, size_t realSize, TStringBuf structName);
     [[noreturn]] void ThrowUnexpectedVariantTagException(ui8 tagIndex);
-}
+} // namespace NPrivate
 
 template <class T>
 static inline void LoadPodType(IInputStream* rh, T& t) {
@@ -132,7 +135,7 @@ struct TSerializerTakingIntoAccountThePodType {
 
 namespace NHasSaveLoad {
     Y_HAS_MEMBER(SaveLoad);
-}
+} // namespace NHasSaveLoad
 
 template <class T, class = void>
 struct TSerializerMethodSelector;
@@ -140,7 +143,7 @@ struct TSerializerMethodSelector;
 template <class T>
 struct TSerializerMethodSelector<T, std::enable_if_t<NHasSaveLoad::THasSaveLoad<T>::value>> {
     static inline void Save(IOutputStream* out, const T& t) {
-        //assume Save clause do not change t
+        // assume Save clause do not change t
         (const_cast<T&>(t)).SaveLoad(out);
     }
 
@@ -603,6 +606,10 @@ template <class T1, class T2, class T3, class T4, class T5>
 class TSerializer<THashMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMap<T1, T2, T3, T4, T5>, false> {
 };
 
+template <class K, class T, class C, class A>
+class TSerializer<std::unordered_map<K, T, C, A>>: public TMapSerializer<std::unordered_map<K, T, C, A>, false> {
+};
+
 template <class T1, class T2, class T3, class T4, class T5>
 class TSerializer<THashMultiMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMultiMap<T1, T2, T3, T4, T5>, false> {
 };
@@ -617,6 +624,10 @@ class TSerializer<std::set<K, C, A>>: public TSetSerializer<std::set<K, C, A>, t
 
 template <class T1, class T2, class T3, class T4>
 class TSerializer<THashSet<T1, T2, T3, T4>>: public TSetSerializer<THashSet<T1, T2, T3, T4>, false> {
+};
+
+template <class K, class C, class A>
+class TSerializer<std::unordered_set<K, C, A>>: public TSetSerializer<std::unordered_set<K, C, A>, false> {
 };
 
 template <class T1, class T2>
@@ -671,7 +682,7 @@ namespace NPrivate {
         ::Load(is, loaded);
         v.template emplace<I>(std::move(loaded));
     }
-}
+} // namespace NPrivate
 
 template <typename... Args>
 struct TSerializer<std::variant<Args...>> {
@@ -698,7 +709,7 @@ struct TSerializer<std::variant<Args...>> {
 private:
     template <size_t... Is>
     static void LoadImpl(IInputStream* is, TVar& v, ui8 index, std::index_sequence<Is...>) {
-        using TLoader = void (*)(IInputStream*, TVar & v);
+        using TLoader = void (*)(IInputStream*, TVar& v);
         constexpr TLoader loaders[] = {::NPrivate::LoadVariantAlternative<TVar, Args, Is>...};
         loaders[index](is, v);
     }

@@ -79,7 +79,7 @@ private:
     }
     unsigned int m_count;
 public:
-    // make composible buy using templated constructor
+    // make composable by using templated constructor
     template<class T>
     insert_linebreaks(T  start) :
         super_t(Base(static_cast< T >(start))),

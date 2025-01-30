@@ -1,5 +1,7 @@
 #include "operation.h"
 
+#include <yt/cpp/mapreduce/interface/helpers.h>
+
 #include <util/generic/iterator_range.h>
 
 namespace NYT {
@@ -127,7 +129,7 @@ TRawJobContext::TRawJobContext(size_t outputTableCount)
     : InputFile_(Duplicate(0))
 {
     for (size_t i = 0; i != outputTableCount; ++i) {
-        OutputFileList_.emplace_back(Duplicate(3 * i + 1));
+        OutputFileList_.emplace_back(Duplicate(3 * i + GetJobFirstOutputTableFD()));
     }
 }
 

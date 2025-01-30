@@ -29,11 +29,33 @@ message TLoadControlConfig {
     string MonitoringEndpoint = 9;         // if defined, will be used as REST API instead of default GRPC
 }
 
+message TWorkloadManagerConfig {
+    message TResourcePool {
+        string Name = 1;
+        int32 ConcurrentQueryLimit = 2;
+        int32 QueueSize = 3;
+        double DatabaseLoadCpuThreshold = 4;
+        double TotalCpuLimitPercentPerNode = 5;
+    }
+
+    bool Enable = 1;
+    string ExecutionResourcePool = 2;
+    repeated TResourcePool ResourcePool = 3;
+}
+
+message TAccessConfig {
+    repeated string ExternalSourcesAccessSID = 1;
+}
+
 message TComputeDatabaseConfig {
+    string Id = 7;
     TYdbStorageConfig ControlPlaneConnection = 1;
+    TYdbStorageConfig SchemeConnection = 6;
     TYdbStorageConfig ExecutionConnection = 3;
     string Tenant = 2;
     TLoadControlConfig LoadControlConfig = 4;
+    TWorkloadManagerConfig WorkloadManagerConfig = 5;
+    TAccessConfig AccessConfig = 8;
 }
 
 message TDatabaseMapping {
@@ -43,7 +65,9 @@ message TDatabaseMapping {
 
 message TYdbComputeControlPlane {
     message TSingle {
+        string Id = 3;
         TYdbStorageConfig Connection = 1;
+        TWorkloadManagerConfig WorkloadManagerConfig = 2;
     }
 
     message TCms {

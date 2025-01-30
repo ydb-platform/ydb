@@ -113,6 +113,8 @@ public:
     //! Factors to calculate peer load as linear combination of disk queue and net queue.
     double NetQueueSizeFactor;
     double DiskQueueSizeFactor;
+    double CachedBlockCountFactor;
+    double CachedBlockSizeFactor;
 
     //! Will locate new replicas from master
     //! if node was suspicious for at least the period (unless null).
@@ -235,13 +237,18 @@ public:
     //! If |true| reader will retain a set of peers that will be banned for every session.
     bool BanPeersPermanently;
 
-    //! For testing purposes.
     //! If |true| network throttlers will be applied even in case of requests to local host.
     bool EnableLocalThrottling;
 
     //! For testing purposes.
     //! Unless null, reader will simulate failure of accessing chunk meta cache with such probability.
     std::optional<double> ChunkMetaCacheFailureProbability;
+
+    //! Use chunk prober to reduce the number of probing requests.
+    bool UseChunkProber;
+
+    //! Use request batcher to reduce the number of get blocks requests.
+    bool UseReadBlocksBatcher;
 
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
@@ -264,6 +271,9 @@ public:
 
     //! If |True| block fetcher will try to fetch block from local uncompressed block cache.
     bool UseUncompressedBlockCache;
+
+    //! If |True| block fetcher will try to fetch multiple blocks using less data node requests.
+    bool GroupOutOfOrderBlocks;
 
     REGISTER_YSON_STRUCT(TBlockFetcherConfig);
 
@@ -363,6 +373,9 @@ public:
 
     std::optional<TDuration> TestingDelay;
 
+    //! If |true| network throttlers will be applied even in case of requests to local host.
+    bool EnableLocalThrottling;
+
     int GetDirectUploadNodeCount();
 
     REGISTER_YSON_STRUCT(TReplicationWriterConfig);
@@ -425,9 +438,7 @@ class TMemoryTrackedWriterOptions
     : public NYTree::TYsonStruct
 {
 public:
-    IMemoryUsageTrackerPtr MemoryTracker;
-
-    IMemoryReferenceTrackerPtr MemoryReferenceTracker;
+    IMemoryUsageTrackerPtr MemoryUsageTracker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -486,6 +497,9 @@ public:
 
     //! Upper bound on count of simultaneously requested fragments within a reading session.
     i64 MaxInflightFragmentCount;
+
+    // If |true| will request full blocks and store them in a cache for further access.
+    bool PrefetchWholeBlocks;
 
     REGISTER_YSON_STRUCT(TChunkFragmentReaderConfig);
 

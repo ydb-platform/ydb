@@ -4,9 +4,22 @@
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/set.h>
+
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 
 namespace NKikimr::NKqp::NTopic {
+
+static void UpdateSupportivePartition(TMaybe<ui32>& lhs, const TMaybe<ui32>& rhs)
+{
+    if (lhs) {
+        if ((rhs != Nothing()) && (rhs != lhs)) {
+            lhs = Max<ui32>();
+        }
+    } else {
+        lhs = rhs;
+    }
+}
 
 //
 // TConsumerOperations
@@ -78,7 +91,8 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
     Operations_[consumer].AddOperation(consumer, range);
 }
 
-void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partition)
+void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partition,
+                                             TMaybe<ui32> supportivePartition)
 {
     Y_ABORT_UNLESS(Topic_.Empty() || Topic_ == topic);
     Y_ABORT_UNLESS(Partition_.Empty() || Partition_ == partition);
@@ -88,18 +102,20 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
         Partition_ = partition;
     }
 
+    UpdateSupportivePartition(SupportivePartition_, supportivePartition);
+
     HasWriteOperations_ = true;
 }
 
-void TTopicPartitionOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTransaction> &txs)
+void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 {
     Y_ABORT_UNLESS(TabletId_.Defined());
     Y_ABORT_UNLESS(Partition_.Defined());
 
-    auto& tx = txs[*TabletId_];
+    auto& t = txs[*TabletId_];
 
     for (auto& [consumer, operations] : Operations_) {
-        NKikimrPQ::TPartitionOperation* o = tx.MutableOperations()->Add();
+        NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
         o->SetPartitionId(*Partition_);
         auto [begin, end] = operations.GetRange();
         o->SetBegin(begin);
@@ -109,9 +125,13 @@ void TTopicPartitionOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTra
     }
 
     if (HasWriteOperations_) {
-        NKikimrPQ::TPartitionOperation* o = tx.MutableOperations()->Add();
+        NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
         o->SetPartitionId(*Partition_);
         o->SetPath(*Topic_);
+        if (SupportivePartition_.Defined()) {
+            o->SetSupportivePartition(*SupportivePartition_);
+        }
+        t.hasWrite = true;
     }
 }
 
@@ -126,6 +146,8 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
         Partition_ = rhs.Partition_;
         TabletId_ = rhs.TabletId_;
     }
+
+    UpdateSupportivePartition(SupportivePartition_, rhs.SupportivePartition_);
 
     for (auto& [key, value] : rhs.Operations_) {
         Operations_[key].Merge(value);
@@ -146,6 +168,11 @@ void TTopicPartitionOperations::SetTabletId(ui64 value)
     Y_ABORT_UNLESS(TabletId_.Empty());
 
     TabletId_ = value;
+}
+
+TMaybe<TString> TTopicPartitionOperations::GetTopicName() const
+{
+    return Topic_;
 }
 
 bool TTopicPartitionOperations::HasReadOperations() const
@@ -240,10 +267,11 @@ void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
     HasReadOperations_ = true;
 }
 
-void TTopicOperations::AddOperation(const TString& topic, ui32 partition)
+void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
+                                    TMaybe<ui32> supportivePartition)
 {
     TTopicPartition key{topic, partition};
-    Operations_[key].AddOperation(topic, partition);
+    Operations_[key].AddOperation(topic, partition, supportivePartition);
     HasWriteOperations_ = true;
 }
 
@@ -335,7 +363,7 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
     return true;
 }
 
-void TTopicOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTransaction> &txs)
+void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 {
     for (auto& [_, operations] : Operations_) {
         operations.BuildTopicTxs(txs);
@@ -356,9 +384,7 @@ TSet<ui64> TTopicOperations::GetReceivingTabletIds() const
 {
     TSet<ui64> ids;
     for (auto& [_, operations] : Operations_) {
-        if (operations.HasWriteOperations()) {
-            ids.insert(operations.GetTabletId());
-        }
+        ids.insert(operations.GetTabletId());
     }
     return ids;
 }
@@ -370,6 +396,17 @@ TSet<ui64> TTopicOperations::GetSendingTabletIds() const
         ids.insert(operations.GetTabletId());
     }
     return ids;
+}
+
+TMaybe<TString> TTopicOperations::GetTabletName(ui64 tabletId) const {
+    TMaybe<TString> topic;
+    for (auto& [_, operations] : Operations_) {
+        if (operations.GetTabletId() == tabletId) {
+            topic = operations.GetTopicName();
+            break;
+        }
+    }
+    return topic;
 }
 
 size_t TTopicOperations::GetSize() const

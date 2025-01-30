@@ -74,6 +74,27 @@ def execute_scan_query(driver, yql_text, table_path):
                 break
 
 
+def remove_optimizer_estimates(query_plan):
+    if 'Plans' in query_plan:
+        for p in query_plan['Plans']:
+            remove_optimizer_estimates(p)
+    if 'Operators' in query_plan:
+        for op in query_plan['Operators']:
+            for key in ['A-Cpu', 'A-Rows', 'E-Cost', 'E-Rows', 'E-Size']:
+                if key in op:
+                    del op[key]
+
+
+def sanitize_plan(query_plan):
+    if 'queries' not in query_plan:
+        return
+    for q in query_plan['queries']:
+        if 'SimplifiedPlan' in q:
+            del q['SimplifiedPlan']
+        if 'Plan' in q:
+            remove_optimizer_estimates(q['Plan'])
+
+
 def explain_scan_query(driver, yql_text, table_path):
     yql_text = yql_text.replace("$data", table_path)
     client = ydb.ScriptingClient(driver)
@@ -81,7 +102,10 @@ def explain_scan_query(driver, yql_text, table_path):
         yql_text,
         ydb.ExplainYqlScriptSettings().with_mode(ydb.ExplainYqlScriptSettings.MODE_EXPLAIN)
     )
-    return json.loads(result.plan)
+    res = json.loads(result.plan)
+    sanitize_plan(res)
+    print(json.dumps(res))
+    return res
 
 
 def save_canonical_data(data, fname):
@@ -106,34 +130,32 @@ def save_canonical_data(data, fname):
 @pytest.mark.parametrize("executer", ["scan", "generic"])
 def test_run_benchmark(store, executer):
     path = "clickbench/benchmark/{}/hits".format(store)
-    ret = run_cli(["workload", "clickbench", "init", "--store", store, "--path", path])
+    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime"])
     assert_that(ret.exit_code, is_(0))
 
     ret = run_cli(
         [
-            "import", "file", "csv", "--path", path,
-            "--input-file",
-            yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")
+            "workload", "clickbench", "--path", path, "import", "files",
+            "--input", yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")
         ]
     )
     assert_that(ret.exit_code, is_(0))
 
     # just validating that benchmark can be executed successfully on this data.
     out_fpath = os.path.join(yatest.common.output_path(), 'click_bench.{}.results'.format(store))
-    ret = run_cli(["workload", "clickbench", "run", "--output", out_fpath, "--table", path, "--executer", executer])
+    ret = run_cli(["workload", "clickbench", "--path", path, "run", "--output", out_fpath, "--executer", executer])
     assert_that(ret.exit_code, is_(0))
 
 
 @pytest.mark.parametrize("store", ["row", "column"])
 def test_run_determentistic(store):
     path = "clickbench/determentistic/{}/hits".format(store)
-    ret = run_cli(["workload", "clickbench", "init", "--store", store, "--path", path])
+    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime"])
     assert_that(ret.exit_code, is_(0))
     ret = run_cli(
         [
-            "import", "file", "csv", "--path", path,
-            "--input-file",
-            yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")
+            "workload", "clickbench", "--path", path, "import", "files",
+            "--input", yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")
         ]
     )
     assert_that(ret.exit_code, is_(0))
@@ -158,7 +180,7 @@ def test_run_determentistic(store):
 @pytest.mark.parametrize("store", ["row", "column"])
 def test_plans(store):
     ret = run_cli(
-        ["workload", "clickbench", "init", "--store", store, "--path", "clickbench/plans/{}/hits".format(store)]
+        ["workload", "clickbench", "--path", "clickbench/plans/{}/hits".format(store), "init", "--store", store, "--datetime"]
     )
     assert_that(ret.exit_code, is_(0))
 

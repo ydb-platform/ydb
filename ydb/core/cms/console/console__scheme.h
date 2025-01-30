@@ -5,6 +5,8 @@
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
 namespace NKikimr::NConsole {
 
 struct Schema : NIceDb::Schema {
@@ -48,13 +50,16 @@ struct Schema : NIceDb::Schema {
         struct AlterIdempotencyKey : Column<26, NScheme::NTypeIds::Utf8> {};
         struct DatabaseQuotas : Column<27, NScheme::NTypeIds::String> {};
         struct IsExternalStatisticsAggregator : Column<28, NScheme::NTypeIds::Bool> {};
+        struct IsExternalBackupController : Column<29, NScheme::NTypeIds::Bool> {};
+        struct ScaleRecommenderPolicies : Column<30, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Path>;
         using TColumns = TableColumns<Path, State, Coordinators, Mediators, PlanResolution,
             Issue, TxId, UserToken, SubdomainVersion, ConfirmedSubdomain, TimeCastBucketsPerMediator,
             Attributes, Generation, SchemeShardId, PathId, ErrorCode, IsExternalSubDomain, IsExternalHive,
             AreResourcesShared, SharedDomainSchemeShardId, SharedDomainPathId, IsExternalSysViewProcessor,
-            SchemaOperationQuotas, CreateIdempotencyKey, AlterIdempotencyKey, DatabaseQuotas, IsExternalStatisticsAggregator>;
+            SchemaOperationQuotas, CreateIdempotencyKey, AlterIdempotencyKey, DatabaseQuotas, IsExternalStatisticsAggregator,
+            IsExternalBackupController, ScaleRecommenderPolicies>;
     };
 
     struct TenantPools : Table<3> {

@@ -6,6 +6,7 @@
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/mind/local.h>
 #include <ydb/core/protos/local.pb.h>

@@ -1,11 +1,59 @@
 #include "ydb_common_ut.h"
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
+#include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
+
 using namespace NYdb;
 using namespace NYdb::NTable;
+
+namespace {
+
+void CreateTestTable(NYdb::TDriver& driver) {
+    NYdb::NTable::TTableClient client(driver);
+    auto sessionResponse = client.GetSession().ExtractValueSync();
+    UNIT_ASSERT(sessionResponse.IsSuccess());
+    auto session = sessionResponse.GetSession();
+    auto result = session.ExecuteSchemeQuery(R"___(
+        CREATE TABLE `Root/Test` (
+            Key Uint32,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+    )___").ExtractValueSync();
+    UNIT_ASSERT(result.IsSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), 1);
+}
+
+TString WarmPoolCreateSession(NYdb::NQuery::TQueryClient& client) {
+    TString sessionId;
+    auto sessionResponse = client.GetSession().ExtractValueSync();
+    UNIT_ASSERT(sessionResponse.IsSuccess());
+    auto session = sessionResponse.GetSession();
+    sessionId = session.GetId();
+    auto res = session.ExecuteQuery("SELECT * FROM `Root/Test`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+    UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+
+    TResultSetParser resultSet(res.GetResultSetParser(0));
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+
+    return sessionId;
+}
+
+void WaitForSessionsInPool(NYdb::NQuery::TQueryClient& client, i64 expected) {
+    int attempt = 10;
+    while (attempt--) {
+        if (client.GetCurrentPoolSize() == expected)
+            break;
+        Sleep(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(client.GetCurrentPoolSize(), expected);
+}
+
+}
 
 Y_UNIT_TEST_SUITE(YdbSdkSessions) {
     Y_UNIT_TEST(TestSessionPool) {
@@ -21,7 +69,7 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
         NYdb::NTable::TTableClient client(driver);
         int count = 10;
 
-        THashSet<TString> sids;
+        THashSet<std::string> sids;
         while (count--) {
             auto sessionResponse = client.GetSession().ExtractValueSync();
             UNIT_ASSERT_EQUAL(sessionResponse.IsTransportError(), false);
@@ -124,6 +172,108 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
         results.clear();
 
         UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), 0);
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(TestSdkFreeSessionAfterBadSessionQueryService) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+
+        auto driver = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+
+        CreateTestTable(driver);
+
+        NYdb::NQuery::TQueryClient client(driver);
+        TString sessionId = WarmPoolCreateSession(client);
+        WaitForSessionsInPool(client, 1);
+
+        bool allDoneOk = true;
+        NTestHelpers::CheckDelete(clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        UNIT_ASSERT(allDoneOk);
+
+        {
+            auto sessionResponse = client.GetSession().ExtractValueSync();
+            UNIT_ASSERT(sessionResponse.IsSuccess());
+            auto session = sessionResponse.GetSession();
+            UNIT_ASSERT_VALUES_EQUAL(session.GetId(), sessionId);
+
+            auto res = session.ExecuteQuery("SELECT * FROM `Root/Test`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_SESSION, res.GetIssues().ToString());
+        }
+
+        WaitForSessionsInPool(client, 0);
+
+        {
+            auto sessionResponse = client.GetSession().ExtractValueSync();
+            UNIT_ASSERT(sessionResponse.IsSuccess());
+            auto session = sessionResponse.GetSession();
+            UNIT_ASSERT_VALUES_UNEQUAL(session.GetId(), sessionId);
+            auto res = session.ExecuteQuery("SELECT * FROM `Root/Test`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+
+        WaitForSessionsInPool(client, 1);
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(TestSdkFreeSessionAfterBadSessionQueryServiceStreamCall) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+
+        auto driver = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+
+        CreateTestTable(driver);
+
+        NYdb::NQuery::TQueryClient client(driver);
+        TString sessionId = WarmPoolCreateSession(client);
+        WaitForSessionsInPool(client, 1);
+
+        bool allDoneOk = true;
+        NTestHelpers::CheckDelete(clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        UNIT_ASSERT(allDoneOk);
+
+        {
+            auto sessionResponse = client.GetSession().ExtractValueSync();
+            UNIT_ASSERT(sessionResponse.IsSuccess());
+            auto session = sessionResponse.GetSession();
+            UNIT_ASSERT_VALUES_EQUAL(session.GetId(), sessionId);
+
+            auto it = session.StreamExecuteQuery("SELECT * FROM `Root/Test`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+            auto res = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_SESSION, res.GetIssues().ToString());
+        }
+
+        WaitForSessionsInPool(client, 0);
+
+        {
+            auto sessionResponse = client.GetSession().ExtractValueSync();
+            UNIT_ASSERT(sessionResponse.IsSuccess());
+            auto session = sessionResponse.GetSession();
+            UNIT_ASSERT_VALUES_UNEQUAL(session.GetId(), sessionId);
+
+            auto res = session.ExecuteQuery("SELECT * FROM `Root/Test`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+
+        WaitForSessionsInPool(client, 1);
 
         driver.Stop(true);
     }
@@ -500,7 +650,7 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
 
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
-        TVector<TString> sessionIds;
+        std::vector<std::string> sessionIds;
         int iterations = 50;
 
         while (iterations--) {
@@ -519,7 +669,7 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
         for (const auto& sessionId : sessionIds) {
             grpc::ClientContext context;
             Ydb::Table::KeepAliveRequest request;
-            request.set_session_id(sessionId);
+            request.set_session_id(TStringType{sessionId});
             Ydb::Table::KeepAliveResponse response;
             auto status = stub->KeepAlive(&context, request, &response);
             UNIT_ASSERT(status.ok());
@@ -534,7 +684,7 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
 
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
-        TVector<TString> sessionIds;
+        std::vector<std::string> sessionIds;
         int iterations = 100;
 
         while (iterations--) {
@@ -577,7 +727,7 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
         for (const auto& sessionId : sessionIds) {
             grpc::ClientContext context;
             Ydb::Table::KeepAliveRequest request;
-            request.set_session_id(sessionId);
+            request.set_session_id(TStringType{sessionId});
             Ydb::Table::KeepAliveResponse response;
             auto status = stub->KeepAlive(&context, request, &response);
             UNIT_ASSERT(status.ok());
@@ -592,7 +742,7 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
 
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
-        TVector<TString> sessionIds;
+        std::vector<std::string> sessionIds;
         int iterations = 100;
 
         while (iterations--) {
@@ -623,7 +773,7 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
         for (const auto& sessionId : sessionIds) {
             grpc::ClientContext context;
             Ydb::Table::KeepAliveRequest request;
-            request.set_session_id(sessionId);
+            request.set_session_id(TStringType{sessionId});
             Ydb::Table::KeepAliveResponse response;
             auto status = stub->KeepAlive(&context, request, &response);
             UNIT_ASSERT(status.ok());
@@ -638,7 +788,7 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
 
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
-        TVector<TString> sessionIds;
+        std::vector<std::string> sessionIds;
         int iterations = 100;
 
         while (iterations--) {
@@ -669,7 +819,7 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
         for (const auto& sessionId : sessionIds) {
             grpc::ClientContext context;
             Ydb::Table::KeepAliveRequest request;
-            request.set_session_id(sessionId);
+            request.set_session_id(TStringType{sessionId});
             Ydb::Table::KeepAliveResponse response;
             auto status = stub->KeepAlive(&context, request, &response);
             UNIT_ASSERT(status.ok());

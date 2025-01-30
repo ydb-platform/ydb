@@ -5,18 +5,18 @@
 
 namespace NYT::NTransactionClient {
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TNoopTimestampProvider
     : public ITimestampProvider
 {
 public:
-    TFuture<TTimestamp> GenerateTimestamps(int /*count*/) override
+    TFuture<TTimestamp> GenerateTimestamps(int /*count*/, NObjectClient::TCellTag /*clockClusterTag*/) override
     {
         return MakeFuture(NullTimestamp);
     }
 
-    TTimestamp GetLatestTimestamp() override
+    TTimestamp GetLatestTimestamp(NObjectClient::TCellTag /*clockClusterTag*/) override
     {
         return NullTimestamp;
     }

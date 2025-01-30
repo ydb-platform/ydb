@@ -1,0 +1,14 @@
+--- contrib/libs/protobuf/src/google/protobuf/json/json.h	(94b865765aa38dc5e4ac99e0051d228ebc9d2a80)
++++ contrib/libs/protobuf/src/google/protobuf/json/json.h	(a305e8c438c21585e001abb5ada0122f6e1fc694)
+@@ -45,7 +45,11 @@
+ 
+ namespace google {
+ namespace protobuf {
++#ifdef USE_DEPRECATED_NAMESPACE
++namespace util {
++#else
+ namespace json {
++#endif
+ struct ParseOptions {
+   // Whether to ignore unknown JSON fields during parsing
+   bool ignore_unknown_fields = false;

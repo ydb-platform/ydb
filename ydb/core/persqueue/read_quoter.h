@@ -65,7 +65,7 @@ struct TRequestContext {
     TInstant PartitionQuotaWaitStart;
     TDuration TotalQuotaWaitTime;
     TActorId PartitionActor;
-    
+
     TRequestContext() = default;
     TRequestContext(THolder<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor)
         : Request(std::move(request))
@@ -102,6 +102,7 @@ class TConsumerReadQuota {
         std::deque<TRequestContext> ReadRequests;
 };
 
+
 class TPartitionQuoterBase : public TActorBootstrapped<TPartitionQuoterBase> {
 
 const TDuration WAKE_UP_TIMEOUT = TDuration::Seconds(1);
@@ -112,8 +113,7 @@ public:
         const NKikimrPQ::TPQTabletConfig& config,
         const TPartitionId& partition,
         TActorId tabletActor,
-        const TActorId& parent,
-        TMaybe<TQuotaTracker>&& partitionTotalQuotaTracker,
+        bool totalPartitionQuotaEnabled,
         ui64 tabletId,
         const TTabletCountersBase& counters,
         ui64 maxRequestsInflight
@@ -121,21 +121,21 @@ public:
         : InflightLimitSlidingWindow(1000, TDuration::Minutes(1))
         , RequestsInflight(0)
         , PQTabletConfig(config)
-        , PartitionTotalQuotaTracker(std::move(partitionTotalQuotaTracker))
         , TopicConverter(topicConverter)
         , TabletActor(tabletActor)
-        , Parent(parent)
         , Partition(partition)
         , TabletId(tabletId)
         , MaxInflightRequests(maxRequestsInflight)
+        , TotalPartitionQuotaEnabled(totalPartitionQuotaEnabled)
     {
         Counters.Populate(counters);
     }
 
 public:
-    
-    void Bootstrap(const TActorContext &ctx);
 
+    virtual void Bootstrap(const TActorContext &ctx);
+
+    void HandleQuotaRequestOnInit(TEvPQ::TEvRequestQuota::TPtr& ev,const TActorContext& ctx);
     void HandleQuotaRequest(TEvPQ::TEvRequestQuota::TPtr& ev,const TActorContext& ctx);
     void HandleAccountQuotaApproved(NAccountQuoterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void HandleWakeUp(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
@@ -148,7 +148,7 @@ protected:
     virtual void HandleQuotaRequestImpl(TRequestContext& context) = 0;
     virtual void HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) = 0;
 
-    virtual THolder<TAccountQuoterHolder>& GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) = 0;
+    virtual TAccountQuoterHolder* GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) = 0;
     virtual void OnAccountQuotaApproved(TRequestContext&& context) = 0;
     virtual IEventBase* MakeQuotaApprovedEvent(TRequestContext& context) = 0;
     virtual void HandleWakeUpImpl() = 0;
@@ -158,14 +158,13 @@ protected:
     virtual void UpdateCounters(const TActorContext& ctx) = 0;
     virtual ui64 GetTotalPartitionSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const = 0;
     virtual ui64 GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const = 0;
-    virtual THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const = 0;
-    
+    virtual TString Description() const = 0;
+
 protected:
     void CheckTotalPartitionQuota(TRequestContext&& context);
     void ApproveQuota(TRequestContext& context);
     TQuotaTracker CreatePartitionTotalQuotaTracker(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const;
 
-    inline const TActorId& GetParent() const {return Parent;}
     inline const TActorId& GetTabletActor() const {return TabletActor;}
     inline ui64 GetTabletId() const {return TabletId;}
     inline const TPartitionId& GetPartition() const {return Partition;}
@@ -175,10 +174,10 @@ private:
     void UpdateQuota();
     void ProcessInflightQueue();
     void ProcessPartitionTotalQuotaQueue();
-    
+
     void ScheduleWakeUp(const TActorContext& ctx);
-    
-    STFUNC(StateWork)
+
+STFUNC(StateWork)
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPQ::TEvRequestQuota, HandleQuotaRequest);
@@ -207,14 +206,13 @@ protected:
 
 private:
     TActorId TabletActor;
-    TActorId Parent;
     std::deque<TRequestContext> WaitingTotalPartitionQuotaRequests;
     THashMap<ui64, TRequestContext> PendingAccountQuotaRequests;
     const TPartitionId Partition;
     ui64 TabletId;
     ui64 MaxInflightRequests;
-
-    
+    bool TotalPartitionQuotaEnabled;
+    TVector<TEvPQ::TEvRequestQuota::TPtr> PendingQuotaRequests;
 };
 
 
@@ -234,10 +232,10 @@ public:
         const TTabletCountersBase& counters
     )
         : TPartitionQuoterBase(
-                topicConverter, config, partition, tabletActor, parent,
-                CreatePartitionTotalQuotaTracker(config, ctx),
-                tabletId, counters, AppData(ctx)->PQConfig.GetMaxInflightReadRequestsPerPartition()
+                topicConverter, config, partition, tabletActor, true, tabletId, counters,
+                AppData(ctx)->PQConfig.GetMaxInflightReadRequestsPerPartition()
         )
+        , Parent(parent)
     {
     }
 
@@ -249,21 +247,22 @@ public:
     void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) override;
     void HandleUpdateAccountQuotaCounters(NAccountQuoterEvents::TEvCounters::TPtr& ev, const TActorContext& ctx) override;
     void HandleConsumerRemoved(TEvPQ::TEvConsumerRemoved::TPtr& ev, const TActorContext& ctx);
-    
+
     void UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorContext& ctx) override;
     IEventBase* MakeQuotaApprovedEvent(TRequestContext& context) override;
 
-protected: 
+protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;
     void HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) override;
-    THolder<TAccountQuoterHolder>& GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) override;
+    TAccountQuoterHolder* GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) override;
     void OnAccountQuotaApproved(TRequestContext&& request) override;
     ui64 GetTotalPartitionSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const override;
     ui64 GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const override;
     void UpdateCounters(const TActorContext& ctx) override;
     void HandleWakeUpImpl() override;
-    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const override;
+    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const;
 
+    TString Description() const override { return "Read quoter"; }
     STFUNC(ProcessEventImpl) override
     {
         switch (ev->GetTypeRewrite()) {
@@ -283,21 +282,23 @@ private:
 
 private:
     THashMap<TString, TConsumerReadQuota> ConsumerQuotas;
+    TActorId Parent;
 };
 
 
 class TWriteQuoter : public TPartitionQuoterBase {
+    using TBase = TPartitionQuoterBase;
+
 public:
     TWriteQuoter(
         const NPersQueue::TTopicConverterPtr& topicConverter,
         const NKikimrPQ::TPQTabletConfig& config,
+        const NKikimrPQ::TPQConfig& pqConfig,
         const TPartitionId& partition,
         TActorId tabletActor,
-        const TActorId& parent,
         ui64 tabletId,
         bool isLocalDc,
-        const TTabletCountersBase& counters,
-        const TActorContext& ctx
+        const TTabletCountersBase& counters
     );
 
 public:
@@ -307,20 +308,23 @@ public:
 
     void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) override;
     void HandleUpdateAccountQuotaCounters(NAccountQuoterEvents::TEvCounters::TPtr& ev, const TActorContext& ctx) override;
-    
+
     void UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorContext& ctx) override;
     IEventBase* MakeQuotaApprovedEvent(TRequestContext& context) override;
+    void Bootstrap(const TActorContext &ctx) override;
+    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker() const;
+
 
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;
     void HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) override;
-    THolder<TAccountQuoterHolder>& GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) override;
+    TAccountQuoterHolder* GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) override;
     void OnAccountQuotaApproved(TRequestContext&& request) override;
     ui64 GetTotalPartitionSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const override;
     ui64 GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const override;
     void UpdateCounters(const TActorContext& ctx) override;
     void HandleWakeUpImpl() override;
-    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const override;
+    TString Description() const override { return "Write quoter"; }
 
     STFUNC(ProcessEventImpl) override
     {
@@ -328,9 +332,8 @@ protected:
     }
 
 private:
-    bool IsLocalDC;
     bool QuotingEnabled;
-    bool AccountQuotingEnabled; 
+    bool AccountQuotingEnabled;
     THolder<TAccountQuoterHolder> AccountQuotaTracker;
 };
 

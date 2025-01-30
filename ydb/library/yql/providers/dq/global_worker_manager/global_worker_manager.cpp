@@ -11,12 +11,12 @@
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -456,7 +456,7 @@ private:
         return std::make_pair(true, "");
     }
 
-    std::pair<bool, TString> MaybeUpload(bool isForwarded, const TVector<TFileResource>& files, bool useCache = false) {
+    std::pair<bool, TString> MaybeUploadUnsafe(bool isForwarded, const TVector<TFileResource>& files, bool useCache = false) {
         if (isForwarded) {
             return std::make_pair(false, "");
         }
@@ -556,6 +556,15 @@ private:
 
         return std::make_pair(flag, "");
     }
+
+    std::pair<bool, TString> MaybeUpload(bool isForwarded, const TVector<TFileResource>& files, bool useCache = false) {
+        try {
+            return MaybeUploadUnsafe(isForwarded, files, useCache);
+        } catch (...) {
+            return {false, CurrentExceptionMessage()};
+        }
+    }
+
 
     void StartUploadAndForward(TEvAllocateWorkersRequest::TPtr& ev, const TActorContext& ctx)
     {
@@ -674,7 +683,7 @@ private:
 
     void UpdateLeaderInfo(THashMap<TString, NYT::TNode>& attributes) {
         LeaderHost = attributes.at(NCommonAttrs::HOSTNAME_ATTR).AsString();
-        LeaderPort = std::stoi(attributes.at(NCommonAttrs::GRPCPORT_ATTR).AsString().Data());
+        LeaderPort = std::stoi(attributes.at(NCommonAttrs::GRPCPORT_ATTR).AsString().data());
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -781,7 +790,15 @@ private:
     }
 
     void TryResume() {
-        if (Workers.FreeSlots() >= ScheduleWaitCount) {
+        if (!Workers.Capacity() && ScheduleWaitCount > 0U) {
+            Scheduler->ProcessAll([&] (const auto& item) {
+                Send(item.Sender, new TEvAllocateWorkersResponse("All workers shutted down", NYql::NDqProto::StatusIds::OVERLOADED));
+                return true;
+            });
+
+            ScheduleWaitCount = 0U;
+            DeadOperations.clear();
+        } else if (Workers.FreeSlots() >= ScheduleWaitCount) {
             Scheduler->Process(Workers.Capacity(), Workers.FreeSlots(), [&] (const auto& item) {
                 auto maybeDead = DeadOperations.find(item.Request.GetResourceId());
                 if (maybeDead != DeadOperations.end()) {
@@ -808,6 +825,11 @@ private:
 
         const auto count = ev->Get()->Record.GetCount();
         Y_ASSERT(count != 0);
+
+        if (!Workers.Capacity()) {
+            Send(ev->Sender, new TEvAllocateWorkersResponse("Empty workers capacity", NYql::NDqProto::StatusIds::OVERLOADED));
+            return;
+        }
 
         if (!Scheduler->Suspend(NDq::IScheduler::TWaitInfo(ev->Get()->Record, ev->Sender))) {
             Send(ev->Sender, new TEvAllocateWorkersResponse("Too many dq operations", NYql::NDqProto::StatusIds::OVERLOADED));
@@ -1080,6 +1102,7 @@ private:
     }
 
     void OnQueryStatus(TEvQueryStatus::TPtr& ev, const TActorContext& ctx) {
+        // TODO: remove me YQL-18071. Executer actor is responsible for this function
         Y_UNUSED(ctx);
 
         auto sessionId = ev->Get()->Record.request().GetSession();

@@ -52,25 +52,25 @@ void Serialize(const TSummary& summary, NYson::IYsonConsumer* consumer);
 class TStatistics
 {
 public:
-    using TSummaryMap = std::map<NYPath::TYPath, TSummary>;
+    using TSummaryMap = std::map<NStatisticPath::TStatisticPath, TSummary>;
     using TSummaryRange = TIteratorRange<TSummaryMap::const_iterator>;
     DEFINE_BYREF_RO_PROPERTY(TSummaryMap, Data);
     DEFINE_BYVAL_RW_PROPERTY(std::optional<TInstant>, Timestamp);
 
 public:
-    void AddSample(const NYPath::TYPath& path, i64 sample);
+    void AddSample(const NStatisticPath::TStatisticPath& path, i64 sample);
 
-    void AddSample(const NYPath::TYPath& path, const NYTree::INodePtr& sample);
-
-    template <class T>
-    void AddSample(const NYPath::TYPath& path, const T& sample);
-
-    void ReplacePathWithSample(const NYPath::TYPath& path, i64 sample);
-
-    void ReplacePathWithSample(const NYPath::TYPath& path, const NYTree::INodePtr& sample);
+    void AddSample(const NStatisticPath::TStatisticPath& path, const NYTree::INodePtr& sample);
 
     template <class T>
-    void ReplacePathWithSample(const NYPath::TYPath& path, const T& sample);
+    void AddSample(const NStatisticPath::TStatisticPath& path, const T& sample);
+
+    void ReplacePathWithSample(const NStatisticPath::TStatisticPath& path, i64 sample);
+
+    void ReplacePathWithSample(const NStatisticPath::TStatisticPath& path, const NYTree::INodePtr& sample);
+
+    template <class T>
+    void ReplacePathWithSample(const NStatisticPath::TStatisticPath& path, const T& sample);
 
     //! Merge statistics by merging summaries for each common statistics path.
     void Merge(const TStatistics& statistics);
@@ -82,27 +82,36 @@ public:
      * Pre-requisites: `prefixPath` must not have terminating slash.
      * Examples: /a/b is a prefix path for /a/b/hij but not for /a/bcd/efg nor /a/b itself.
      */
-    TSummaryRange GetRangeByPrefix(const TString& prefixPath) const;
+    TSummaryRange GetRangeByPrefix(const NStatisticPath::TStatisticPath& prefixPath) const;
 
     //! Remove all the elements starting from prefixPath.
     //! The requirements for prefixPath are the same as in GetRangeByPrefix.
-    void RemoveRangeByPrefix(const TString& prefixPath);
+    void RemoveRangeByPrefix(const NStatisticPath::TStatisticPath& prefixPath);
 
     void Persist(const TStreamPersistenceContext& context);
 
 private:
     template <class TCallback>
-    void ProcessNodeWithCallback(const NYPath::TYPath& path, const NYTree::INodePtr& sample, TCallback callback);
+    void ProcessNodeWithCallback(const NStatisticPath::TStatisticPath& path, const NYTree::INodePtr& sample, TCallback callback);
 
-    TSummary& GetSummary(const NYPath::TYPath& path);
+    TSummary& GetSummary(const NStatisticPath::TStatisticPath& path);
 
     friend class TStatisticsBuildingConsumer;
 };
 
-i64 GetNumericValue(const TStatistics& statistics, const TString& path);
+i64 GetNumericValue(const TStatistics& statistics, const NStatisticPath::TStatisticPath& path);
 
-std::optional<i64> FindNumericValue(const TStatistics& statistics, const TString& path);
-std::optional<TSummary> FindSummary(const TStatistics& statistics, const TString& path);
+std::optional<i64> FindNumericValue(const TStatistics& statistics, const NStatisticPath::TStatisticPath& path);
+std::optional<TSummary> FindSummary(const TStatistics& statistics, const NStatisticPath::TStatisticPath& path);
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_ENUM(EStatisticPathConflictType,
+    (HasPrefix)
+    (IsPrefix)
+    (Exists)
+    (None)
+);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -133,12 +142,12 @@ class TTaggedStatistics
 {
 public:
     using TTaggedSummaries = THashMap<TTags, TSummary>;
-    using TSummaryMap = std::map<NYPath::TYPath, TTaggedSummaries>;
+    using TSummaryMap = std::map<NStatisticPath::TStatisticPath, TTaggedSummaries>;
 
     void AppendStatistics(const TStatistics& statistics, TTags tags);
-    void AppendTaggedSummary(const NYPath::TYPath& path, const TTaggedSummaries& taggedSummaries);
+    void AppendTaggedSummary(const NStatisticPath::TStatisticPath& path, const TTaggedSummaries& taggedSummaries);
 
-    const TTaggedSummaries* FindTaggedSummaries(const NYPath::TYPath& path) const;
+    const TTaggedSummaries* FindTaggedSummaries(const NStatisticPath::TStatisticPath& path) const;
     const TSummaryMap& GetData() const;
 
     void Persist(const TStreamPersistenceContext& context);
@@ -155,8 +164,8 @@ void Serialize(const TTaggedStatistics<TTags>& statistics, NYson::IYsonConsumer*
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TValue>
-void SerializeYsonPathsMap(
-    const std::map<NYTree::TYPath, TValue>& map,
+void SerializeStatisticPathsMap(
+    const std::map<NStatisticPath::TStatisticPath, TValue>& map,
     NYson::IYsonConsumer* consumer,
     const std::function<void(const TValue&, NYson::IYsonConsumer*)>& valueSerializer);
 

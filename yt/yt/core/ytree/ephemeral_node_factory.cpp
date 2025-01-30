@@ -4,8 +4,6 @@
 #include "ypath_client.h"
 #include "ypath_detail.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/yson/async_consumer.h>
 #include <yt/yt/core/yson/attribute_consumer.h>
 
@@ -193,14 +191,14 @@ public:
         return KeyToChild_.ysize();
     }
 
-    std::vector< std::pair<TString, INodePtr> > GetChildren() const override
+    std::vector<std::pair<std::string, INodePtr>> GetChildren() const override
     {
-        return std::vector< std::pair<TString, INodePtr> >(KeyToChild_.begin(), KeyToChild_.end());
+        return {KeyToChild_.begin(), KeyToChild_.end()};
     }
 
-    std::vector<TString> GetKeys() const override
+    std::vector<std::string> GetKeys() const override
     {
-        std::vector<TString> result;
+        std::vector<std::string> result;
         result.reserve(KeyToChild_.size());
         for (const auto& [key, child] : KeyToChild_) {
             result.push_back(key);
@@ -208,13 +206,13 @@ public:
         return result;
     }
 
-    INodePtr FindChild(const TString& key) const override
+    INodePtr FindChild(const std::string& key) const override
     {
         auto it = KeyToChild_.find(key);
         return it == KeyToChild_.end() ? nullptr : it->second;
     }
 
-    bool AddChild(const TString& key, const INodePtr& child) override
+    bool AddChild(const std::string& key, const INodePtr& child) override
     {
         YT_ASSERT(child);
         ValidateYTreeKey(key);
@@ -228,11 +226,12 @@ public:
         }
     }
 
-    bool RemoveChild(const TString& key) override
+    bool RemoveChild(const std::string& key) override
     {
         auto it = KeyToChild_.find(TString(key));
-        if (it == KeyToChild_.end())
+        if (it == KeyToChild_.end()) {
             return false;
+        }
 
         auto child = it->second;
         child->SetParent(nullptr);
@@ -251,7 +250,7 @@ public:
         auto it = ChildToKey_.find(child);
         YT_ASSERT(it != ChildToKey_.end());
 
-        // NB: don't use const auto& here, it becomes invalid!
+        // NB: Don't use const auto& here, it becomes invalid!
         auto key = it->second;
         ChildToKey_.erase(it);
         YT_VERIFY(KeyToChild_.erase(key) == 1);
@@ -268,7 +267,7 @@ public:
         auto it = ChildToKey_.find(oldChild);
         YT_ASSERT(it != ChildToKey_.end());
 
-        // NB: don't use const auto& here, it becomes invalid!
+        // NB: Don't use const auto& here, it becomes invalid!
         auto key = it->second;
 
         oldChild->SetParent(nullptr);
@@ -279,7 +278,7 @@ public:
         YT_VERIFY(ChildToKey_.emplace(newChild, key).second);
     }
 
-    std::optional<TString> FindChildKey(const IConstNodePtr& child) override
+    std::optional<std::string> FindChildKey(const IConstNodePtr& child) override
     {
         YT_ASSERT(child);
 
@@ -346,7 +345,7 @@ public:
         YT_ASSERT(child);
 
         if (beforeIndex < 0) {
-            YT_VERIFY(ChildToIndex_.emplace(child, static_cast<int>(IndexToChild_.size())).second);
+            YT_VERIFY(ChildToIndex_.emplace(child, std::ssize(IndexToChild_)).second);
             IndexToChild_.push_back(child);
         } else {
             YT_VERIFY(beforeIndex <= std::ssize(IndexToChild_));
@@ -450,7 +449,7 @@ public:
         : ShouldHideAttributes_(shouldHideAttributes)
     { }
 
-    virtual ~TEphemeralNodeFactory() override
+    ~TEphemeralNodeFactory() override
     {
         RollbackIfNeeded();
     }
@@ -506,9 +505,14 @@ std::unique_ptr<ITransactionalNodeFactory> CreateEphemeralNodeFactory(bool shoul
 
 INodeFactory* GetEphemeralNodeFactory(bool shouldHideAttributes)
 {
-    static auto hidingFactory = CreateEphemeralNodeFactory(true);
-    static auto nonhidingFactory = CreateEphemeralNodeFactory(false);
-    return shouldHideAttributes ? hidingFactory.get() : nonhidingFactory.get();
+    struct TStorage
+    {
+        const std::unique_ptr<ITransactionalNodeFactory> HidingFactory = CreateEphemeralNodeFactory(true);
+        const std::unique_ptr<ITransactionalNodeFactory> NonhidingFactory = CreateEphemeralNodeFactory(false);
+    };
+
+    const auto* storage = LeakySingleton<TStorage>();
+    return shouldHideAttributes ? storage->HidingFactory.get() : storage->NonhidingFactory.get();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

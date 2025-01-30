@@ -1,0 +1,786 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 086e913ebca204ed72c05a3607031c1d
+BELONGS ya.make
+    License text:
+        //  Copyright (C) 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+        //  Copyright (C) 2001, 2002 Peter Dimov
+        //  Copyright (C) 2002 David Abrahams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/ref.hpp [16:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a9a56c76c75046da6d531707b442246
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2007, 2008 Steven Watanabe, Joseph Gauterin, Niels Dekker
+        // Copyright (C) 2023 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/invoke_swap.hpp [1:2]
+        include/boost/core/swap.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0ac5ffd92b2d14f341279a5a1a133f45
+BELONGS ya.make
+    License text:
+        // Copyright 2003 (c) The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/enable_if.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 18b9bbddbcb28f4b2be6c0306fb4568c
+BELONGS ya.make
+    License text:
+        //  Copyright 2023 Peter Dimov
+        //  Distributed under the Boost Software License, Version 1.0.
+        //  https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/alignof.hpp [10:12]
+        include/boost/core/launder.hpp [10:12]
+        include/boost/core/max_align.hpp [10:12]
+        include/boost/core/memory_resource.hpp [10:12]
+        include/boost/core/serialization.hpp [10:12]
+        include/boost/core/yield_primitives.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1d32a7b49a04abb2fd3dbc34628bab5d
+BELONGS ya.make
+    License text:
+        //  Copyright Beman Dawes, 2009
+        //  Copyright (C) 2011-2012 Vicente J. Botet Escriba
+        //  Copyright (C) 2012 Anthony Williams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/scoped_enum.hpp [3:5]
+        include/boost/core/underlying_type.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1daddaec4a141024c460f121eb640798
+BELONGS ya.make
+    License text:
+        // (C) Copyright David Abrahams 2002.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/detail/iterator.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1f81522578ed29184544e03bd9f0c559
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Beman Dawes 1999-2003. Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/noncopyable.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ff3312854c26e9618657990979c65e1
+BELONGS ya.make
+    License text:
+        //  Copyright (C) 2014 Glen Joseph Fernandes
+        //  (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/ref.hpp [20:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2225076000632a3d391f0c4252302237
+BELONGS ya.make
+    License text:
+        //  Copyright 2007 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/detail/sp_typeinfo.hpp [14:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 264842641253ef729c3d30c20db5d154
+BELONGS ya.make
+    License text:
+        // Copyright 2020 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/bit.hpp [14:16]
+        include/boost/core/detail/splitmix64.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2a1b9056b88c2a786bdb0458965a2f2e
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2002, 2009, 2014 Peter Dimov
+        //  Copyright (2) Beman Dawes 2010, 2011
+        //  Copyright (3) Ion Gaztanaga 2013
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/lightweight_test.hpp [13:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3244b00e8ab273a03f19b20a64c26a96
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2007, 2008 Steven Watanabe, Joseph Gauterin, Niels Dekker
+        // Copyright (C) 2023 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/invoke_swap.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 33055e91cf52f04ff1b51e16884cc15f
+BELONGS ya.make
+    License text:
+        Copyright (C) 2017 Glen Joseph Fernandes (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/addressof.hpp [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3597dd90b081d5668dabc2026c83961e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2014 Glen Fernandes
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/checked_delete.hpp [2:2]
+        include/boost/detail/lightweight_test.hpp [2:2]
+        include/boost/detail/no_exceptions_support.hpp [2:2]
+        include/boost/noncopyable.hpp [2:2]
+        include/boost/ref.hpp [2:2]
+        include/boost/swap.hpp [2:2]
+        include/boost/utility/addressof.hpp [2:2]
+        include/boost/utility/enable_if.hpp [2:2]
+        include/boost/utility/explicit_operator_bool.hpp [2:2]
+        include/boost/utility/swap.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 38c7b8f60b51f597ba97b03f9715b4b9
+BELONGS ya.make
+    License text:
+        // Copyright 2014 Peter Dimov
+        // Copyright 2014 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/demangle.hpp [6:7]
+        include/boost/core/detail/is_same.hpp [6:6]
+        include/boost/core/is_same.hpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 38d3ce2209a395c064c29e47dccce34b
+BELONGS ya.make
+    License text:
+        // (C) Copyright David Abrahams 2001.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 40af3b74e6674b2ad7e7f9810d31cdf9
+BELONGS ya.make
+    License text:
+         *          Copyright Andrey Semashev 2018 - 2020.
+         * Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/uncaught_exceptions.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 44101a946d6689e8b94ede547a5e40c7
+BELONGS ya.make
+    License text:
+         *             Copyright Andrey Semashev 2024.
+         * Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/functor.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 47e3aa9b161ddf342ed17e6e3a194ad1
+BELONGS ya.make
+    License text:
+        //  Copyright 2007, 2014 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/typeinfo.hpp [12:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 488900fa132971e55b2288b6adc90297
+BELONGS ya.make
+    License text:
+        //  Copyright Beman Dawes, 2009
+        //  Copyright (C) 2011-2012 Vicente J. Botet Escriba
+        //  Copyright (C) 2012 Anthony Williams
+        //  Copyright (C) 2014 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/underlying_type.hpp [3:6]
+        include/boost/detail/scoped_enum_emulation.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4ad7fd89f16a988c974121eaf0fbfd94
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2004 Pavel Vozenilek.
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/no_exceptions_support.hpp [9:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 596d215980dce936d1d42dadce287430
+BELONGS ya.make
+    License text:
+        //  Copyright (C) 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+        //  Copyright (C) 2001, 2002 Peter Dimov
+        //  Copyright (C) 2002 David Abrahams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/ref.hpp [16:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a8c36eeb9fb77b72e7d2a0a9f5ea506
+BELONGS ya.make
+    License text:
+        // Copyright 2014, 2022 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/detail/lwt_unattended.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6cbbb864807f668d594e51006328b6ae
+BELONGS ya.make
+    License text:
+        // Copyright 2008, 2020, 2023 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/detail/sp_thread_pause.hpp [16:18]
+        include/boost/core/detail/sp_thread_sleep.hpp [17:19]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 735c6f84ee869fcdbd981c0f5fd7b030
+BELONGS ya.make
+    License text:
+        Copyright 2019-2023 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/span.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 792451df1de91afb23ff290d2f633d82
+BELONGS ya.make
+    License text:
+        Copyright (C) 2002 Brad King (brad.king@kitware.com)
+                           Douglas Gregor (gregod@cs.rpi.edu)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/addressof.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7a2395f7bb95214c9520b58ae7bbdd19
+BELONGS ya.make
+    License text:
+        Copyright 2023 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/data.hpp [2:3]
+        include/boost/core/make_span.hpp [2:3]
+        include/boost/core/size.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c8afc57941025fb6ec08dba629732b0
+BELONGS ya.make
+    License text:
+        Copyright 2021-2023 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/identity.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e6f5e41baa083be7230e409d7f43ed2
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2002, 2003 Peter Dimov
+        //  Copyright (c) 2003 Daniel Frey
+        //  Copyright (c) 2003 Howard Hinnant
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/checked_delete.hpp [15:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 981997cf6961ea0c6c6261b7881b87f7
+BELONGS ya.make
+    License text:
+        Copyright 2024 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/pointer_in_range.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c35799cf91685e1cfa7ef2db4a88cb7
+BELONGS ya.make
+    License text:
+        //  Copyright Beman Dawes, 2009
+        //  Copyright (C) 2011-2012 Vicente J. Botet Escriba
+        //  Copyright (C) 2012 Anthony Williams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/scoped_enum.hpp [3:5]
+        include/boost/core/underlying_type.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9efac63295490759e6d24cbbd00922ff
+BELONGS ya.make
+    License text:
+        Copyright 2019 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/alloc_construct.hpp [2:3]
+        include/boost/core/default_allocator.hpp [2:3]
+        include/boost/core/first_scalar.hpp [2:3]
+        include/boost/core/lightweight_test_trait.hpp [16:17]
+        include/boost/core/noinit_adaptor.hpp [2:3]
+        include/boost/core/nvp.hpp [2:3]
+        include/boost/core/use_default.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a5ea09ee095272ea2e3f101bf6849666
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2002, 2003 Peter Dimov
+        //  Copyright (c) 2003 Daniel Frey
+        //  Copyright (c) 2003 Howard Hinnant
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/checked_delete.hpp [15:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8264f6f51b14f8c407d8174d72fb197
+BELONGS ya.make
+    License text:
+        // Copyright 2014, 2021 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/lightweight_test_trait.hpp [14:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aaff8fbf592953725a89204981472fff
+BELONGS ya.make
+    License text:
+        //  Copyright Beman Dawes, 2009
+        //  Copyright (C) 2011-2012 Vicente J. Botet Escriba
+        //  Copyright (C) 2012 Anthony Williams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/scoped_enum.hpp [3:5]
+        include/boost/core/underlying_type.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b1c8015966a7ee6e2e16f052030573b6
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2014 Adam Wulkiewicz, Lodz, Poland.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/ignore_unused.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b8a308068b07a343d2dc63a195e1279e
+BELONGS ya.make
+    License text:
+        Copyright 2017-2021 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/pointer_traits.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bb55147ae1dc454d4781bbd8a6e366f9
+BELONGS ya.make
+    License text:
+        // Copyright Douglas Gregor 2001-2003. Use, modification and
+        // distribution is subject to the Boost Software License, Version
+        // 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/visit_each.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc37ce97fb02b60eb85225c35a229933
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Beman Dawes 2000. Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c02bfefa74f87417f2dbc10a0395ffac
+BELONGS ya.make
+    License text:
+        //  Copyright 2018 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/quick_exit.hpp [12:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c09f6e1583eaa14d572ddf59bb46a094
+BELONGS ya.make
+    License text:
+        // Copyright Peter Dimov and David Abrahams 2002.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/get_pointer.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c40d50ae1b61c61b9043bc01cb1ee1cd
+BELONGS ya.make
+    License text:
+        // Copyright 2008, 2020 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/detail/sp_thread_yield.hpp [17:19]
+        include/boost/core/detail/sp_win32_sleep.hpp [14:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c70cc58af261aa82af12e887b8055d12
+BELONGS ya.make
+    License text:
+         *             Copyright Andrey Semashev 2022.
+         * Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/fclose_deleter.hpp [2:4]
+        include/boost/core/snprintf.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c80445a5f7df9ecc827dd650da9cbaa8
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2002, 2003 Peter Dimov
+        //  Copyright (c) 2003 Daniel Frey
+        //  Copyright (c) 2003 Howard Hinnant
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/checked_delete.hpp [15:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9116fe6dd285652038fa8e586ac9576
+BELONGS ya.make
+    License text:
+        // Copyright 2020, 2021 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/cmath.hpp [15:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cce23f190bcbb33ec0fdc7d06d0dcba3
+BELONGS ya.make
+    License text:
+         *          Copyright Andrey Semashev 2007 - 2013.
+         * Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/explicit_operator_bool.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ccec204a78ff77e65fd8e9cfdf00f467
+BELONGS ya.make
+    License text:
+         *          Copyright Andrey Semashev 2007 - 2014.
+         * Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/null_deleter.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cf167804ae244809dad4c03e6e6a3295
+BELONGS ya.make
+    License text:
+        Copyright 2021 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/allocator_traits.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d1621c6c21ccfd4947a100ffad23e459
+BELONGS ya.make
+    License text:
+        //  Copyright (C) 2014 Agustin Berge
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/ref.hpp [23:23]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d1819f46d6f27ddacf021ceff86b106f
+BELONGS ya.make
+    License text:
+        //           (C) Copyright Gennaro Prota 2003.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/non_type.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d5560a9b5388fcb00fcee11320a6d25a
+BELONGS ya.make
+    License text:
+        Copyright 2018 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/empty_value.hpp [2:3]
+        include/boost/core/exchange.hpp [2:3]
+        include/boost/core/lightweight_test.hpp [17:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL df56a08a51f11ebc1571263ab013bc25
+BELONGS ya.make
+    License text:
+        //  Copyright 2022 Peter Dimov
+        //  Distributed under the Boost Software License, Version 1.0.
+        //  https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/verbose_terminate_handler.hpp [10:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e323857368fb1433c9c3079428ca51d3
+BELONGS ya.make
+    License text:
+        // Copyright 2017 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/detail/minstd_rand.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e97656f9dec509a30c28f6e372e5c562
+BELONGS ya.make
+    License text:
+        Copyright (C) 2002, 2008, 2013 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/addressof.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f6223a18ba26579ca79a1e3b6d297844
+BELONGS ya.make
+    License text:
+        //  Copyright (C) 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+        //  Copyright (C) 2001, 2002 Peter Dimov
+        //  Copyright (C) 2002 David Abrahams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/ref.hpp [16:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL faedff635aa9f9a8a18d7c7c02b75e2d
+BELONGS ya.make
+    License text:
+        // Copyright 2021 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/detail/string_view.hpp [12:14]
+        include/boost/core/type_name.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fcab6281e564803b0f45fa5321a2122f
+BELONGS ya.make
+    License text:
+        Copyright 2020-2022 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/allocator_access.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fd82c8c920d2d55a272cb4473c4c8e01
+BELONGS ya.make
+    License text:
+        // Copyright 2014 Peter Dimov
+        // Copyright 2014 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/demangle.hpp [6:7]

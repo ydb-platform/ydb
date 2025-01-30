@@ -4,9 +4,31 @@
 #include "hyperloglog_bias.h"
 #include "farm_hash.h"
 
+#include <yt/yt_proto/yt/core/misc/proto/hyperloglog.pb.h>
+
+#include <library/cpp/yt/memory/range.h>
+
 #include <cmath>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <int Precision>
+class THyperLogLog;
+
+template <int Precision>
+void FormatValue(TStringBuilderBase* builder, const THyperLogLog<Precision>& value, TStringBuf format);
+
+template <int Precision>
+void ToProto(
+    NProto::THyperLogLogDigest* protoHyperLogLog,
+    const THyperLogLog<Precision>& hyperloglog);
+
+template <int Precision>
+void FromProto(
+    THyperLogLog<Precision>* hyperloglog,
+    const NProto::THyperLogLogDigest& protoHyperLogLog);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -18,7 +40,10 @@ class THyperLogLog
         "Precision is out of range (expected to be within 4..18)");
 
 public:
+    static constexpr ui64 RegisterCount = (ui64)1 << Precision;
+
     THyperLogLog();
+    explicit THyperLogLog(TRange<char> data);
 
     void Add(TFingerprint fingerprint);
 
@@ -26,10 +51,23 @@ public:
 
     ui64 EstimateCardinality() const;
 
+    TRange<char> Data() const;
+
     static ui64 EstimateCardinality(const std::vector<ui64>& values);
 
+    bool operator==(const THyperLogLog<Precision>& other) const = default;
+
 private:
-    static constexpr ui64 RegisterCount = (ui64)1 << Precision;
+    friend void ToProto<Precision>(
+        NProto::THyperLogLogDigest* protoHyperLogLog,
+        const THyperLogLog<Precision>& hyperloglog);
+
+    friend void FromProto<Precision>(
+        THyperLogLog<Precision>* hyperloglog,
+        const NProto::THyperLogLogDigest& protoHyperLogLog);
+
+    friend void FormatValue<Precision>(TStringBuilderBase* builder, const THyperLogLog<Precision>& value, TStringBuf format);
+
     static constexpr ui64 PrecisionMask = RegisterCount - 1;
     static constexpr double Threshold = NDetail::Thresholds[Precision - 4];
     static constexpr int Size = NDetail::Sizes[Precision - 4];
@@ -45,6 +83,19 @@ template <int Precision>
 THyperLogLog<Precision>::THyperLogLog()
 {
     std::fill(ZeroCounts_.begin(), ZeroCounts_.end(), 0);
+}
+
+template <int Precision>
+THyperLogLog<Precision>::THyperLogLog(TRange<char> data)
+{
+    YT_VERIFY(data.size() == RegisterCount);
+    std::copy(data.begin(), data.end(), ZeroCounts_.begin());
+}
+
+template <int Precision>
+TRange<char> THyperLogLog<Precision>::Data() const
+{
+    return TRange<char>(reinterpret_cast<const char*>(ZeroCounts_.begin()), ZeroCounts_.size());
 }
 
 template <int Precision>
@@ -132,6 +183,32 @@ ui64 THyperLogLog<Precision>::EstimateCardinality(const std::vector<ui64>& value
         state.Add(v);
     }
     return state.EstimateCardinality();
+}
+
+template <int Precision>
+void ToProto(
+    NProto::THyperLogLogDigest* protoHyperLogLog,
+    const THyperLogLog<Precision>& hyperloglog)
+{
+    protoHyperLogLog->set_data(hyperloglog.Data().begin(), hyperloglog.Data().size());
+}
+
+template <int Precision>
+void FromProto(
+    THyperLogLog<Precision>* hyperloglog,
+    const NProto::THyperLogLogDigest& protoHyperLogLog)
+{
+    YT_VERIFY(protoHyperLogLog.data().size() == std::size(hyperloglog->ZeroCounts_));
+    std::copy(protoHyperLogLog.data().begin(), protoHyperLogLog.data().end(), hyperloglog->ZeroCounts_.begin());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <int Precision>
+void FormatValue(TStringBuilderBase* builder, const THyperLogLog<Precision>& value, TStringBuf /*format*/)
+{
+    builder->AppendFormat("%v", std::span<const char>(
+        reinterpret_cast<const char*>(value.ZeroCounts_.begin()), value.ZeroCounts_.size()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

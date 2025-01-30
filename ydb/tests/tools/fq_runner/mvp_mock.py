@@ -1,11 +1,15 @@
+from functools import partial
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
-import os
 import socket
 
 
 class MvpMockHttpHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+
+    def __init__(self, ydb_database, *args, **kwargs):
+        self.ydb_database = ydb_database
+        super().__init__(*args, **kwargs)
 
     def _set_headers(self, length):
         self.send_response(200, "OK")
@@ -14,7 +18,7 @@ class MvpMockHttpHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        endpoint = "{}/?database={}".format(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
+        endpoint = "{}/?database={}".format(self.ydb_database, "local")
         self.log_message("send response {}".format(endpoint))
         response = json.dumps({"endpoint" : endpoint}).encode("utf-8")
         self._set_headers(len(response))
@@ -26,9 +30,9 @@ class HTTPServerIPv6(HTTPServer):
 
 
 class MvpMockServer:
-    def __init__(self, port):
+    def __init__(self, port, ydb_endpoint):
         self.port = port
-        self.server = HTTPServerIPv6(('::', self.port), MvpMockHttpHandler)
+        self.server = HTTPServerIPv6(('::', self.port), partial(MvpMockHttpHandler, ydb_endpoint))
 
     def handle_request(self):
         self.server.handle_request()

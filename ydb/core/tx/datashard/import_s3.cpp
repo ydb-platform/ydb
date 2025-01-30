@@ -6,6 +6,7 @@
 #include "import_common.h"
 #include "import_s3.h"
 
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -14,6 +15,7 @@
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/s3_storage.h>
+#include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/io_formats/ydb_dump/csv_ydb_dump.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -45,6 +47,9 @@ namespace {
 
 namespace NKikimr {
 namespace NDataShard {
+
+using namespace NBackup;
+using namespace NBackupRestoreTraits;
 
 using namespace NResourceBroker;
 using namespace NWrappers;
@@ -345,7 +350,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
         HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
-        Become(&TThis::StateWork);
+        Become(&TThis::StateDownloadData);
     }
 
     void HeadObject(const TString& key) {
@@ -408,7 +413,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
 
-        Send(DataShard, new TEvDataShard::TEvGetS3DownloadInfo(TxId));
+        if (Checksum) {
+            HeadObject(ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None)));
+            Become(&TThis::StateDownloadChecksum);
+        } else {
+            Send(DataShard, new TEvDataShard::TEvGetS3DownloadInfo(TxId));
+        }
     }
 
     void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
@@ -439,7 +449,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         WrittenRows = info.WrittenRows;
 
         if (!ContentLength || ProcessedBytes >= ContentLength) {
-            return Finish();
+            if (CheckChecksum()) {
+                return Finish();
+            }
         }
 
         Process();
@@ -469,6 +481,36 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         Process();
     }
 
+    void HandleChecksum(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        IMPORT_LOG_D("HandleChecksum " << ev->Get()->ToString());
+
+        const auto& result = ev->Get()->Result;
+
+        if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+
+        const auto contentLength = result.GetResult().GetContentLength();
+        const auto checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, CompressionCodec));
+        GetObject(checksumKey, std::make_pair(0, contentLength - 1));
+    }
+
+    void HandleChecksum(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        IMPORT_LOG_D("HandleChecksum " << ev->Get()->ToString());
+
+        auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
+        ExpectedChecksum = msg.Body.substr(0, msg.Body.find(' '));
+
+        Send(DataShard, new TEvDataShard::TEvGetS3DownloadInfo(TxId));
+        Become(&TThis::StateDownloadData);
+    }
+
     void Process() {
         TStringBuf data;
         TString error;
@@ -489,6 +531,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         default: // ERROR
             return Finish(false, TStringBuilder() << "Cannot process data"
                 << ": " << error);
+        }
+
+        if (Checksum) {
+            Checksum->AddData(data);
         }
 
         RequestBuilder.New(TableInfo, Scheme);
@@ -652,6 +698,26 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         return true;
     }
 
+    bool CheckChecksum() {
+        if (!Checksum) {
+            return true;
+        }
+
+        TString gotChecksum = Checksum->Serialize();
+        if (gotChecksum == ExpectedChecksum) {
+            return true;
+        }
+
+        const TString error = TStringBuilder() << "Checksum mismatch:"
+            << ": expected# " << ExpectedChecksum
+            << ", got# " << gotChecksum;
+
+        IMPORT_LOG_E(error);
+        Finish(false, error);
+
+        return false;
+    }
+
     static bool ShouldRetry(const Aws::S3::S3Error& error) {
         return error.ShouldRetry();
     }
@@ -735,6 +801,7 @@ public:
         , Retries(task.GetNumberOfRetries())
         , ReadBatchSize(task.GetS3Settings().GetLimits().GetReadBatchSize())
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
+        , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
     {
     }
 
@@ -756,13 +823,23 @@ public:
         }
     }
 
-    STATEFN(StateWork) {
+    STATEFN(StateDownloadData) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
 
             hFunc(TEvDataShard::TEvS3DownloadInfo, Handle);
             hFunc(TEvDataShard::TEvS3UploadRowsResponse, Handle);
+
+            sFunc(TEvents::TEvWakeup, Restart);
+            sFunc(TEvents::TEvPoisonPill, NotifyDied);
+        }
+    }
+
+    STATEFN(StateDownloadChecksum) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChecksum);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleChecksum);
 
             sFunc(TEvents::TEvWakeup, Restart);
             sFunc(TEvents::TEvPoisonPill, NotifyDied);
@@ -802,6 +879,8 @@ private:
     THolder<TReadController> Reader;
     TUploadRowsRequestBuilder RequestBuilder;
 
+    NBackup::IChecksum::TPtr Checksum;
+    TString ExpectedChecksum;
 }; // TS3Downloader
 
 IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info) {

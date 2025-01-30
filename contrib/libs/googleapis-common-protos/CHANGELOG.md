@@ -1,5 +1,67 @@
 # Changelog
 
+## [1.66.0](https://github.com/googleapis/python-api-common-protos/compare/v1.65.0...v1.66.0) (2024-11-12)
+
+
+### Features
+
+* Add `MISSING_ORIGIN` and `OVERLOADED_CREDENTIALS` to `ErrorReason` enum ([d0478d8](https://github.com/googleapis/python-api-common-protos/commit/d0478d8beacb6c53aa29aa0ac14b949421de8112))
+* Add field `protobuf_pythonic_types_enabled` to `ExperimentalFeatures` message ([d0478d8](https://github.com/googleapis/python-api-common-protos/commit/d0478d8beacb6c53aa29aa0ac14b949421de8112))
+* Add field `selective_gapic_generation` to `CommonLanguageSettings` message ([d0478d8](https://github.com/googleapis/python-api-common-protos/commit/d0478d8beacb6c53aa29aa0ac14b949421de8112))
+* Add field `time_series_resource_hierarchy_level` to `MetricDescriptorMetadata` message ([d0478d8](https://github.com/googleapis/python-api-common-protos/commit/d0478d8beacb6c53aa29aa0ac14b949421de8112))
+* Add message `SelectiveGapicGeneration` ([d0478d8](https://github.com/googleapis/python-api-common-protos/commit/d0478d8beacb6c53aa29aa0ac14b949421de8112))
+
+## [1.65.0](https://github.com/googleapis/python-api-common-protos/compare/v1.64.0...v1.65.0) (2024-08-27)
+
+
+### Features
+
+* Add field `experimental_features` to message `PythonSettings` ([#249](https://github.com/googleapis/python-api-common-protos/issues/249)) ([139490f](https://github.com/googleapis/python-api-common-protos/commit/139490fedcebf1a6674d9cf058226e6814208619))
+
+## [1.64.0](https://github.com/googleapis/python-api-common-protos/compare/v1.63.2...v1.64.0) (2024-08-26)
+
+
+### Features
+
+* Add FieldInfo.referenced_types for generics ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+
+
+### Bug Fixes
+
+* Un-deprecate Endpoint.aliases field ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+
+
+### Documentation
+
+* Fix formatting in http.proto comments ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+* Improve MethodSettings selector examples ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+* Reformat comments in context proto ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+* Update ResourceDescriptor.plural docs with AIP-122 nested collections guidance ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+
+## [1.63.2](https://github.com/googleapis/python-api-common-protos/compare/v1.63.1...v1.63.2) (2024-06-19)
+
+
+### Bug Fixes
+
+* **deps:** Require protobuf&gt;=3.20.2 ([c77c0dc](https://github.com/googleapis/python-api-common-protos/commit/c77c0dc5d29ef780d781a3c5d757736a9ed09674))
+* Regenerate pb2 files for compatibility with protobuf 5.x ([c77c0dc](https://github.com/googleapis/python-api-common-protos/commit/c77c0dc5d29ef780d781a3c5d757736a9ed09674))
+
+## [1.63.1](https://github.com/googleapis/python-api-common-protos/compare/v1.63.0...v1.63.1) (2024-05-30)
+
+
+### Bug Fixes
+
+* Increase upper limit for protobuf 5.X versions ([#212](https://github.com/googleapis/python-api-common-protos/issues/212)) ([28fc17a](https://github.com/googleapis/python-api-common-protos/commit/28fc17a9208aa98782acc6bee6c40ec12b959706))
+
+## [1.63.0](https://github.com/googleapis/python-api-common-protos/compare/v1.62.0...v1.63.0) (2024-03-08)
+
+
+### Features
+
+* Add `api_version` field to `ServiceOptions` in `google/api/client.proto` ([6f9c4d2](https://github.com/googleapis/python-api-common-protos/commit/6f9c4d2b4b787d9ed2b447d7b99281aa3dcf97b5))
+* Add `LOCATION_POLICY_VIOLATED` enum to `ErrorReason` in `google/api/error_reason.proto` ([6f9c4d2](https://github.com/googleapis/python-api-common-protos/commit/6f9c4d2b4b787d9ed2b447d7b99281aa3dcf97b5))
+* Add `rest_reference_documentation_uri` field to `ServiceOptions` in `google/api/client.proto` ([6f9c4d2](https://github.com/googleapis/python-api-common-protos/commit/6f9c4d2b4b787d9ed2b447d7b99281aa3dcf97b5))
+
 ## [1.62.0](https://github.com/googleapis/python-api-common-protos/compare/v1.61.0...v1.62.0) (2023-12-01)
 
 

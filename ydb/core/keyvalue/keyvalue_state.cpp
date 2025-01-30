@@ -3092,6 +3092,9 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
         ui32 newRefCount = ++RefCounts[patch.PatchedBlobId];
         Y_ABORT_UNLESS(newRefCount == 1);
         intermediate->RefCountsIncr.emplace_back(patch.PatchedBlobId, true);
+
+        LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+            << " PatchedKey# " << patch.PatchedKey << " BlobId# " << patch.PatchedBlobId);
     };
 
     for (auto& write : intermediate->Writes) {
@@ -3161,7 +3164,7 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
                 ++IntermediatesInFlight;
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Enqueue storage read request, Marker# KV56");
+                    << " Enqueue storage read request " << IntermediatesInFlight << '/' << IntermediatesInFlightLimit << ", Marker# KV56");
                 PostponeIntermediate<TEvKeyValue::TEvRead>(std::move(intermediate));
             }
         }
@@ -3241,14 +3244,14 @@ void TKeyValueState::OnEvGetStorageChannelStatus(TEvKeyValue::TEvGetStorageChann
     ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize());
     ResourceMetrics->TryUpdate(ctx);
 
-    TRequestType::EType requestType = TRequestType::ReadOnlyInline;
+    TRequestType::EType requestType = TRequestType::ReadOnly;
     CountRequestIncoming(requestType);
 
     if (PrepareGetStorageChannelStatusRequest(ctx, ev, intermediate, info)) {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
             << " Create GetStorageChannelStatus request, Marker# KV75");
         RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-        ++RoInlineIntermediatesInFlight;
+        ++IntermediatesInFlight;
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
         intermediate->UpdateStat();

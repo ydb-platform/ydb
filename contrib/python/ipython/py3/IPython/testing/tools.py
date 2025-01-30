@@ -36,7 +36,7 @@ from . import skipdoctest
 doctest_deco = skipdoctest.skip_doctest if sys.platform == 'win32' else dec.null_deco
 
 @doctest_deco
-def full_path(startPath,files):
+def full_path(startPath: str, files: list[str]) -> list[str]:
     """Make full paths for all the listed files, based on startPath.
 
     Only the base part of startPath is kept, since this routine is typically
@@ -49,7 +49,7 @@ def full_path(startPath,files):
       Initial path to use as the base for the results.  This path is split
       using os.path.split() and only its first component is kept.
 
-    files : string or list
+    files : list
       One or more files.
 
     Examples
@@ -61,13 +61,8 @@ def full_path(startPath,files):
     >>> full_path('/foo',['a.txt','b.txt'])
     ['/a.txt', '/b.txt']
 
-    If a single file is given, the output is still a list::
-
-        >>> full_path('/foo','a.txt')
-        ['/a.txt']
     """
-
-    files = list_strings(files)
+    assert isinstance(files, list)
     base = os.path.split(startPath)[0]
     return [ os.path.join(base,f) for f in files ]
 
@@ -245,8 +240,8 @@ def ipexec_validate(fname, expected_out, expected_err='',
     __tracebackhide__ = True
 
     out, err = ipexec(fname, options, commands)
-    #print 'OUT', out  # dbg
-    #print 'ERR', err  # dbg
+    # print('OUT', out)  # dbg
+    # print('ERR', err)  # dbg
     # If there are any errors, we must check those before stdout, as they may be
     # more informative than simply having an empty stdout.
     if err:

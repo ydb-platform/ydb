@@ -152,17 +152,17 @@ void TTabletExecutedFlat::HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns:
     Execute(Factory->Make(ev), ctx);
 }
 
-void TTabletExecutedFlat::SignalTabletActive(const TActorIdentity &id) {
-    id.Send(Tablet(), new TEvTablet::TEvTabletActive());
+void TTabletExecutedFlat::SignalTabletActive(const TActorIdentity &id, TString &&versionInfo) {
+    id.Send(Tablet(), new TEvTablet::TEvTabletActive(std::move(versionInfo)));
 }
 
-void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx) {
-    ctx.Send(Tablet(), new TEvTablet::TEvTabletActive());
+void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx, TString &&versionInfo) {
+    ctx.Send(Tablet(), new TEvTablet::TEvTabletActive(std::move(versionInfo)));
 }
 
 void TTabletExecutedFlat::Enqueue(STFUNC_SIG) {
     Y_UNUSED(ev);
-    Y_DEBUG_ABORT_UNLESS(false, "Unhandled StateInit event 0x%08" PRIx32, ev->GetTypeRewrite());
+    Y_DEBUG_ABORT("Unhandled StateInit event 0x%08" PRIx32, ev->GetTypeRewrite());
 }
 
 void TTabletExecutedFlat::ActivateExecutor(const TActorContext &ctx) {
@@ -216,7 +216,7 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
                 DIV_CLASS("col-md-12") {str << "Tablet type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)TabletType()); }
             }
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << (Executor()->GetStats().IsFollower ? " Follower" : " Leader"); }
+                DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << (Executor()->GetStats().IsFollower() ? Sprintf(" Follower %u", Executor()->GetStats().FollowerId) : " Leader"); }
             }
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") {str << "Tablet generation: " << Executor()->Generation();}

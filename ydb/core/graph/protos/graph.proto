@@ -15,10 +15,23 @@ message TMetric {
     optional double Value = 2;
 }
 
+message TArithmeticMetric {
+    enum EOP {
+        EOP_UNKNOWN = 0;
+        EOP_DIVISION = 1;
+    }
+
+    string Name = 1;
+    EOP Op = 2;
+    double ValueA = 3;
+    double ValueB = 4;
+}
+
 message TEvSendMetrics {
     repeated TMetric Metrics = 1;
     optional uint64 Time = 2; // for testing purposes only
     repeated THistogramMetric HistogramMetrics = 3;
+    repeated TArithmeticMetric ArithmeticMetrics = 4;
 }
 
 message TEvGetMetrics {

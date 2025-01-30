@@ -1,0 +1,2 @@
+disable_dos_to_unix:
+  - tests/normalizer_issue_files/utf-8-bom.py

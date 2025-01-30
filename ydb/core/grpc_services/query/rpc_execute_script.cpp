@@ -3,11 +3,13 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/rpc_request_base.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/grpc_services/audit_dml_operations.h>
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -58,6 +60,7 @@ std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
 
     kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
     kqpRequest.MutableRequest()->SetKeepSession(false);
+    kqpRequest.MutableRequest()->SetPoolId(req.pool_id());
 
     kqpRequest.MutableRequest()->SetCancelAfterMs(GetDuration(req.operation_params().cancel_after()).MilliSeconds());
     kqpRequest.MutableRequest()->SetTimeoutMs(GetDuration(req.operation_params().operation_timeout()).MilliSeconds());
@@ -70,26 +73,29 @@ std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
     return {Ydb::StatusIds::SUCCESS, {}};
 }
 
-class TExecuteScriptRPC : public TActorBootstrapped<TExecuteScriptRPC> {
+class TExecuteScriptRPC : public TRpcRequestActor<TExecuteScriptRPC, TEvExecuteScriptRequest, false> {
 public:
+    using TRpcRequestActorBase = TRpcRequestActor<TExecuteScriptRPC, TEvExecuteScriptRequest, false>;
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TExecuteScriptRPC(TEvExecuteScriptRequest* request)
-        : Request_(request)
+    TExecuteScriptRPC(IRequestNoOpCtx* request)
+        : TRpcRequestActorBase(request)
     {}
 
     void Bootstrap() {
         NYql::TIssues issues;
-        const auto& request = *Request_->GetProtoRequest();
+        const auto& request = GetProtoRequest();
 
-        if (request.operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC) {
+        if (request->operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC) {
             issues.AddIssue("ExecuteScript must be asyncronous operation");
             return Reply(Ydb::StatusIds::BAD_REQUEST, issues);
         }
 
-        AuditContextAppend(Request_.get(), request);
+        AuditContextAppend(Request.Get(), request);
+        NDataIntegrity::LogIntegrityTrails(Request->GetTraceId(), *request, TlsActivationContext->AsActorContext());
 
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS;
         if (auto scriptRequest = MakeScriptRequest(issues, status)) {
@@ -106,10 +112,12 @@ public:
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(NKqp::TEvKqp::TEvScriptResponse, Handle)
+        HFunc(NKqp::TEvKqp::TEvScriptResponse, Handle)
     )
 
-    void Handle(NKqp::TEvKqp::TEvScriptResponse::TPtr& ev) {
+    void Handle(NKqp::TEvKqp::TEvScriptResponse::TPtr& ev, const TActorContext& ctx) {
+        NDataIntegrity::LogIntegrityTrails(Request->GetTraceId(), *GetProtoRequest(), ev, ctx);
+
         Ydb::Operations::Operation operation;
         operation.set_id(ev->Get()->OperationId);
         Ydb::Query::ExecuteScriptMetadata metadata;
@@ -121,14 +129,15 @@ private:
     }
 
     THolder<NKqp::TEvKqp::TEvScriptRequest> MakeScriptRequest(NYql::TIssues& issues, Ydb::StatusIds::StatusCode& status) const {
-        const auto* req = Request_->GetProtoRequest();
-        const auto traceId = Request_->GetTraceId();
+        const auto* req = GetProtoRequest();
+        const auto traceId = Request->GetTraceId();
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvScriptRequest>();
 
-        SetAuthToken(ev, *Request_);
-        SetDatabase(ev, *Request_);
-        SetRlPath(ev, *Request_);
+        SetAuthToken(ev, *Request);
+        SetDatabase(ev, *Request);
+        SetRlPath(ev, *Request);
+        ev->Record.MutableRequest()->SetClientAddress(Request->GetPeerName());
 
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());
@@ -161,12 +170,9 @@ private:
 
         result.set_status(status);
 
-        AuditContextAppend(Request_.get(), *Request_->GetProtoRequest(), result);
+        AuditContextAppend(Request.Get(), GetProtoRequest(), result);
 
-        TString serializedResult;
-        Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToString(&serializedResult);
-
-        Request_->SendSerializedResult(std::move(serializedResult), status);
+        TProtoResponseHelper::SendProtoResponse(result, status, Request);
 
         PassAway();
     }
@@ -176,9 +182,6 @@ private:
         result.set_ready(true);
         Reply(status, std::move(result), issues);
     }
-
-private:
-    std::unique_ptr<TEvExecuteScriptRequest> Request_;
 };
 
 } // namespace
@@ -192,6 +195,11 @@ void DoExecuteScript(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider
     f.RegisterActor(new TExecuteScriptRPC(req));
 }
 
+} // namespace NQuery
+
+template<>
+IActor* TEvExecuteScriptRequest::CreateRpcActor(IRequestNoOpCtx* msg) {
+    return new TExecuteScriptRPC(msg);
 }
 
 } // namespace NKikimr::NGRpcService

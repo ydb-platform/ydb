@@ -13,12 +13,15 @@ import traceback
 from contextlib import contextmanager
 from functools import reduce
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 import process_whole_archive_option as pwa
 
 arc_project_prefix = 'a.yandex-team.ru/'
 # FIXME: make version-independent
-std_lib_prefix = 'contrib/go/_std_1.19/src/'
+std_lib_prefix = 'contrib/go/_std_1.22/src/'
 vendor_prefix = 'vendor/'
 vet_info_ext = '.vet.out'
 vet_report_ext = '.vet.txt'
@@ -75,15 +78,24 @@ def preprocess_args(args):
     args.output_root = os.path.normpath(args.output_root)
     args.import_map = {}
     args.module_map = {}
+
+    def is_valid_cgo_peer(peer):
+        if peer.endswith('.fake.pkg') or peer.endswith('.fake'):
+            return False
+        return True
+
     if args.cgo_peers:
-        args.cgo_peers = [x for x in args.cgo_peers if not x.endswith('.fake.pkg')]
+        args.cgo_peers = list(filter(is_valid_cgo_peer, args.cgo_peers))
 
     srcs = []
     for f in args.srcs:
         if f.endswith('.gosrc'):
             with tarfile.open(f, 'r') as tar:
                 srcs.extend(os.path.join(args.output_root, src) for src in tar.getnames())
-                tar.extractall(path=args.output_root)
+                if sys.version_info >= (3, 12):
+                    tar.extractall(path=args.output_root, filter='data')
+                else:
+                    tar.extractall(path=args.output_root)
         else:
             srcs.append(f)
     args.srcs = srcs
@@ -271,6 +283,7 @@ def gen_vet_info(args):
         'Compiler': 'gc',
         'Dir': os.path.join(args.source_root, get_source_path(args)),
         'ImportPath': import_path,
+        'GoVersion': ('go%s' % args.goversion),
         'GoFiles': [x for x in args.go_srcs if x.endswith('.go')],
         'NonGoFiles': [x for x in args.go_srcs if not x.endswith('.go')],
         'ImportMap': import_map,
@@ -294,8 +307,9 @@ def create_vet_config(args, info):
 def decode_vet_report(json_report):
     report = ''
     if json_report:
+        json_report = json_report.decode('UTF-8')
         try:
-            full_diags = json.JSONDecoder().decode(json_report.decode('UTF-8'))
+            full_diags = json.JSONDecoder().decode(json_report)
         except ValueError:
             report = json_report
         else:
@@ -435,14 +449,6 @@ def do_compile_go(args):
 
 
 def do_compile_asm(args):
-    def need_compiling_runtime(import_path):
-        return (
-            import_path in ('runtime', 'reflect', 'syscall')
-            or import_path.startswith('runtime/internal/')
-            or compare_versions('1.17', args.goversion) >= 0
-            and import_path == 'internal/bytealg'
-        )
-
     assert len(args.srcs) == 1 and len(args.asm_srcs) == 1
     cmd = [args.go_asm]
     cmd += get_trimpath_args(args)
@@ -451,8 +457,6 @@ def do_compile_asm(args):
 
     # if compare_versions('1.16', args.goversion) >= 0:
     cmd += ['-p', args.import_path]
-    if need_compiling_runtime(args.import_path):
-        cmd += ['-compiling-runtime']
 
     if args.asm_flags:
         cmd += args.asm_flags
@@ -506,9 +510,14 @@ def do_link_exe(args):
     if args.buildmode:
         cmd.append('-buildmode={}'.format(args.buildmode))
     elif args.mode in ('exe', 'test'):
-        cmd.append('-buildmode=exe')
+        mode = '-buildmode=exe'
         if 'ld.lld' in str(args):
-            extldflags.append('-Wl,-no-pie')
+            if '-fPIE' in str(args) or '-fPIC' in str(args):
+                # support explicit PIE
+                mode = '-buildmode=pie'
+            else:
+                extldflags.append('-Wl,-no-pie')
+        cmd.append(mode)
     elif args.mode == 'dll':
         cmd.append('-buildmode=c-shared')
     else:
@@ -903,13 +912,7 @@ if __name__ == '__main__':
         with create_strip_symlink():
             dispatch[args.mode](args)
         exit_code = 0
-    except KeyError:
-        sys.stderr.write('Unknown build mode [{}]...\n'.format(args.mode))
     except subprocess.CalledProcessError as e:
         sys.stderr.write('{} returned non-zero exit code {}.\n{}\n'.format(' '.join(e.cmd), e.returncode, e.output))
         exit_code = e.returncode
-    except AssertionError as e:
-        traceback.print_exc(file=sys.stderr)
-    except Exception as e:
-        sys.stderr.write('Unhandled exception [{}]...\n'.format(str(e)))
     sys.exit(exit_code)

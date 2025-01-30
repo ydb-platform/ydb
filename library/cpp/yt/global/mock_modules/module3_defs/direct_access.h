@@ -1,0 +1,18 @@
+#pragma once
+
+#include <library/cpp/yt/misc/guid.h>
+
+#include <array>
+#include <cstdint>
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::array<int, 2> GetTestVariable3();
+
+void SetTestVariable3(std::array<int, 2> val);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

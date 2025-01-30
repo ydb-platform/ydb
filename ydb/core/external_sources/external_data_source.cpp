@@ -17,7 +17,7 @@ struct TExternalDataSource : public IExternalSource {
     
     virtual TString Pack(const NKikimrExternalSources::TSchema&,
                          const NKikimrExternalSources::TGeneral&) const override {
-        ythrow TExternalSourceException() << "Only external table supports pack operation";
+        ythrow TExternalSourceException() << "Internal error. Only external table supports pack operation";
     }
 
     virtual TString GetName() const override {
@@ -33,7 +33,11 @@ struct TExternalDataSource : public IExternalSource {
     }
 
     virtual TMap<TString, TVector<TString>> GetParameters(const TString&) const override {
-        ythrow TExternalSourceException() << "Only external table supports parameters";
+        ythrow TExternalSourceException() << "Internal error. Only external table supports parameters";
+    }
+
+    bool DataSourceMustHaveDataBaseName(const TProtoStringType& sourceType) const {
+        return IsIn({"Greenplum", "PostgreSQL", "MySQL", "MsSQLServer", "ClickHouse"}, sourceType);
     }
 
     virtual void ValidateExternalDataSource(const TString& externalDataSourceDescription) const override {
@@ -46,10 +50,27 @@ struct TExternalDataSource : public IExternalSource {
             if (AvailableProperties.contains(key)) {
                 continue;
             }
-            ythrow TExternalSourceException() << "Unsupported property: " << key;
+            throw TExternalSourceException() << "Unsupported property: " << key;
+        }
+
+        if (DataSourceMustHaveDataBaseName(proto.GetSourceType()) && !proto.GetProperties().GetProperties().contains("database_name")) {
+            throw TExternalSourceException() << proto.GetSourceType() << " source must provide database_name";
+        }
+
+        // oracle must have property service_name
+        if (proto.GetSourceType() == "Oracle" && !proto.GetProperties().GetProperties().contains("service_name")) {
+            throw TExternalSourceException() << proto.GetSourceType() << " source must provide service_name";
         }
 
         ValidateHostname(HostnamePatterns, proto.GetLocation());
+    }
+
+    virtual NThreading::TFuture<std::shared_ptr<TMetadata>> LoadDynamicMetadata(std::shared_ptr<TMetadata> meta) override {
+        return NThreading::MakeFuture(std::move(meta));
+    }
+
+    virtual bool CanLoadDynamicMetadata() const override {
+        return false;
     }
 
 private:

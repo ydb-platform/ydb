@@ -659,7 +659,9 @@ public:
             --NumCandidates;
 
             // some sanity checks
-            Y_ABORT_UNLESS(scrub == &*VDiskState.find(scrub->VSlotId));
+            auto it = VDiskState.find(scrub->VSlotId);
+            Y_ABORT_UNLESS(it != VDiskState.end());
+            Y_ABORT_UNLESS(scrub == &*it);
             Y_ABORT_UNLESS(scrub->ScrubState == TVDiskItem::EScrubState::ENQUEUED);
 
             // run scrubbing for this item if it is allowed

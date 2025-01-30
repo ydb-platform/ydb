@@ -53,15 +53,15 @@ namespace {
     }
 }
 
-using TCheckIt = NTest::TChecker<NTest::TWrapIter, TSubset>;
-using TCheckReverseIt = NTest::TChecker<NTest::TWrapReverseIter, TSubset>;
+using TCheckIter = NTest::TChecker<NTest::TWrapIter, TSubset>;
+using TCheckReverseIter = NTest::TChecker<NTest::TWrapReverseIter, TSubset>;
 
 Y_UNIT_TEST_SUITE(TIterator) {
     using namespace NTest;
 
     Y_UNIT_TEST(Basics)
     {
-        TCheckIt wrap(*TMake(Mass0).Mixed(0, 1, TMixerOne{ }), { });
+        TCheckIter wrap(*TMake(Mass0).Mixed(0, 1, TMixerOne{ }), { });
 
         { /*_ ESeek::Exact have to give at most one row */
             wrap.To(1).Seek(Mass0.Saved[7], ESeek::Exact).Is(Mass0.Saved[7]);
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TIterator) {
 
     Y_UNIT_TEST(External)
     {
-        TCheckIt wrap(*TMake(Mass0, Conf()).Mixed(0, 1, TMixerOne{ }), { });
+        TCheckIter wrap(*TMake(Mass0, Conf()).Mixed(0, 1, TMixerOne{ }), { });
 
         UNIT_ASSERT((*wrap).Flatten.size() == 1);
 
@@ -110,31 +110,31 @@ Y_UNIT_TEST_SUITE(TIterator) {
     {
         auto subset = TMake(Mass0, Conf()).Mixed(0, 1, TMixerOne{ });
 
-        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Cached, *subset);
+        TWreck<TCheckIter, TSubset>(Mass0, 666).Do(EWreck::Cached, *subset);
     }
 
     Y_UNIT_TEST(SingleReverse)
     {
         auto subset = TMake(Mass0, Conf()).Mixed(0, 1, TMixerOne{ });
 
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset);
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset);
     }
 
     Y_UNIT_TEST(Mixed)
     {
         auto subset = TMake(Mass0, Conf(384)).Mixed(2, 2, TMixerRnd(4));
 
-        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Cached, *subset);
-        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Evicted, *subset);
-        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Forward, *subset);
+        TWreck<TCheckIter, TSubset>(Mass0, 666).Do(EWreck::Cached, *subset);
+        TWreck<TCheckIter, TSubset>(Mass0, 666).Do(EWreck::Evicted, *subset);
+        TWreck<TCheckIter, TSubset>(Mass0, 666).Do(EWreck::Forward, *subset);
     }
 
     Y_UNIT_TEST(MixedReverse)
     {
         auto subset = TMake(Mass0, Conf(384)).Mixed(2, 2, TMixerRnd(4));
 
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset);
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Evicted, *subset);
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset);
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Evicted, *subset);
     }
 
     Y_UNIT_TEST(Serial)
@@ -145,9 +145,9 @@ Y_UNIT_TEST_SUITE(TIterator) {
 
         VerifySingleLevelNonTrivial(subset);
 
-        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Cached, *subset);
-        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Evicted, *subset);
-        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Forward, *subset);
+        TWreck<TCheckIter, TSubset>(Mass0, 666).Do(EWreck::Cached, *subset);
+        TWreck<TCheckIter, TSubset>(Mass0, 666).Do(EWreck::Evicted, *subset);
+        TWreck<TCheckIter, TSubset>(Mass0, 666).Do(EWreck::Forward, *subset);
     }
 
     Y_UNIT_TEST(SerialReverse)
@@ -158,8 +158,8 @@ Y_UNIT_TEST_SUITE(TIterator) {
 
         VerifySingleLevelNonTrivial(subset);
 
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset);
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Evicted, *subset);
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset);
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Evicted, *subset);
     }
 
     struct TFirstTimeFailEnv : public NTest::TTestEnv {
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(TIterator) {
             subset.Flatten.push_back({ part, nullptr, part->Slices });
         }
 
-        TCheckIt wrap(subset, { new TFirstTimeFailEnv });
+        TCheckIter wrap(subset, { new TFirstTimeFailEnv });
 
         // Must page fault the first couple of times
         wrap.To(0).Seek({}, ESeek::Lower).Is(EReady::Page);

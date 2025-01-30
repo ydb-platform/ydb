@@ -114,7 +114,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString User;
+    std::string User;
     NYPath::TRichYPath Path;
     NYTree::EPermission Permission;
 
@@ -173,7 +173,7 @@ private:
     TString PoolTree;
     NYTree::INodePtr ResourceDelta;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -231,9 +231,9 @@ public:
 
 private:
     NApi::EProxyType Type;
-    TString Role;
+    std::string Role;
     NApi::NRpcProxy::EAddressType AddressType;
-    TString NetworkName;
+    std::string NetworkName;
     bool IgnoreBalancers;
 
     void DoExecute(ICommandContextPtr context) override;

@@ -1,27 +1,21 @@
-UNITTEST_FOR(ydb/library/yql/providers/pq/async_io)
-
-SIZE(MEDIUM)
-
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+LIBRARY()
 
 SRCS(
-    dq_pq_read_actor_ut.cpp
-    dq_pq_write_actor_ut.cpp
+    mock_pq_gateway.cpp
     ut_helpers.cpp
 )
 
 PEERDIR(
-    ydb/core/testlib/basics/default
-    ydb/library/yql/minikql/computation/llvm14
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/providers/common/comp_nodes
+    yql/essentials/minikql/computation/llvm14
     ydb/library/yql/providers/common/ut_helpers
-    ydb/library/yql/sql
-    ydb/public/sdk/cpp/client/ydb_datastreams
-    ydb/public/sdk/cpp/client/ydb_persqueue_public
-    ydb/library/yql/minikql/comp_nodes/llvm14
+    ydb/library/yql/providers/pq/gateway/dummy
+    ydb/public/sdk/cpp/src/client/topic
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

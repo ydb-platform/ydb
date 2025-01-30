@@ -1,13 +1,14 @@
 #include "yql_generic_provider_impl.h"
 
-#include <ydb/library/yql/ast/yql_type_string.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/providers/common/mkql/parser.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/ast/yql_type_string.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/mkql/parser.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/pushdown/type_ann.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 // You may want to change AST, graph nodes, types, but finally you'll
 // return to the existing structure, inherited from ClickHouse and S3 providers.
@@ -47,36 +48,12 @@ namespace NYql {
             return TStatus::Ok;
         }
 
-        TStatus AnnotateFilterPredicate(const TExprNode::TPtr& input, size_t childIndex, const TStructExprType* itemType, TExprContext& ctx) {
-            if (childIndex >= input->ChildrenSize()) {
-                return TStatus::Error;
-            }
-
-            auto& filterLambda = input->ChildRef(childIndex);
-            if (!EnsureLambda(*filterLambda, ctx)) {
-                return TStatus::Error;
-            }
-
-            if (!UpdateLambdaAllArgumentsTypes(filterLambda, {itemType}, ctx)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (const auto* filterLambdaType = filterLambda->GetTypeAnn()) {
-                if (filterLambdaType->GetKind() != ETypeAnnotationKind::Data) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-                const TDataExprType* dataExprType = static_cast<const TDataExprType*>(filterLambdaType);
-                if (dataExprType->GetSlot() != EDataSlot::Bool) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-            } else {
-                return IGraphTransformer::TStatus::Repeat;
-            }
-            return TStatus::Ok;
-        }
-
         TStatus HandleSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-            if (!EnsureArgsCount(*input, 5, ctx)) {
+            if (!EnsureArgsCount(*input, 6, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureWorldType(*input->Child(TGenSourceSettings::idx_World), ctx)) {
                 return TStatus::Error;
             }
 
@@ -123,7 +100,7 @@ namespace NYql {
             }
 
             // Filter
-            const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TGenSourceSettings::idx_FilterPredicate, structExprType, ctx);
+            const TStatus filterAnnotationStatus = NYql::NPushdown::AnnotateFilterPredicate(input, TGenSourceSettings::idx_FilterPredicate, structExprType, ctx);
             if (filterAnnotationStatus != TStatus::Ok) {
                 return filterAnnotationStatus;
             }
@@ -204,7 +181,7 @@ namespace NYql {
             }
 
             // Filter
-            const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TGenReadTable::idx_FilterPredicate, itemType, ctx);
+            const TStatus filterAnnotationStatus = NYql::NPushdown::AnnotateFilterPredicate(input, TGenReadTable::idx_FilterPredicate, itemType, ctx);
             if (filterAnnotationStatus != TStatus::Ok) {
                 return filterAnnotationStatus;
             }
@@ -212,7 +189,7 @@ namespace NYql {
             input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
                 input->Child(TGenReadTable::idx_World)->GetTypeAnn(), ctx.MakeType<TListExprType>(itemType)}));
 
-            return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
+            return State_->Types->SetColumnOrder(*input, TColumnOrder(columnOrder), ctx);
         }
 
         TString ColumnOrderToString(const TVector<TString>& columns) {

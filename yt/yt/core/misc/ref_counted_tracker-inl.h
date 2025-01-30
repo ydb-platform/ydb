@@ -108,6 +108,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DECLARE_THREAD_LOCAL(TRefCountedTracker::TLocalSlot*, RefCountedTrackerLocalSlotsBegin);
+YT_DECLARE_THREAD_LOCAL(int, RefCountedTrackerLocalSlotsSize);
+
 Y_FORCE_INLINE TRefCountedTracker* TRefCountedTracker::Get()
 {
     return LeakySingleton<TRefCountedTracker>();
@@ -116,10 +119,10 @@ Y_FORCE_INLINE TRefCountedTracker* TRefCountedTracker::Get()
 #define INCREMENT_COUNTER(fallback, name, delta) \
     auto index = cookie.Underlying(); \
     YT_ASSERT(index >= 0); \
-    if (Y_UNLIKELY(index >= LocalSlotsSize_)) { \
+    if (Y_UNLIKELY(index >= RefCountedTrackerLocalSlotsSize())) { \
         Get()->fallback; \
     } else { \
-        LocalSlotsBegin_[index].name += delta; \
+        RefCountedTrackerLocalSlotsBegin()[index].name += delta; \
     }
 
 Y_FORCE_INLINE void TRefCountedTracker::AllocateInstance(TRefCountedTypeCookie cookie)

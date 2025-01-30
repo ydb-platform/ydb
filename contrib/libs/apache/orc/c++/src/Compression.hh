@@ -30,12 +30,11 @@ namespace orc {
    * @param input the input stream that is the underlying source
    * @param bufferSize the maximum size of the buffer
    * @param pool the memory pool
+   * @param metrics the reader metrics
    */
-  std::unique_ptr<SeekableInputStream>
-     createDecompressor(CompressionKind kind,
-                        std::unique_ptr<SeekableInputStream> input,
-                        uint64_t bufferSize,
-                        MemoryPool& pool);
+  std::unique_ptr<SeekableInputStream> createDecompressor(
+      CompressionKind kind, std::unique_ptr<SeekableInputStream> input, uint64_t bufferSize,
+      MemoryPool& pool, ReaderMetrics* metrics);
 
   /**
    * Create a compressor for the given compression kind.
@@ -43,16 +42,16 @@ namespace orc {
    * @param outStream the output stream that is the underlying target
    * @param strategy compression strategy
    * @param bufferCapacity compression stream buffer total capacity
-   * @param compressionBlockSize compression buffer block size
+   * @param compressionBlockSize compression is triggered when the original input buffer size
+   * reaches this size
+   * @param memoryBlockSize the block size for original input buffer
    * @param pool the memory pool
+   * @param metrics the writer metrics
    */
-  std::unique_ptr<BufferedOutputStream>
-     createCompressor(CompressionKind kind,
-                      OutputStream * outStream,
-                      CompressionStrategy strategy,
-                      uint64_t bufferCapacity,
-                      uint64_t compressionBlockSize,
-                      MemoryPool& pool);
-}
+  std::unique_ptr<BufferedOutputStream> createCompressor(
+      CompressionKind kind, OutputStream* outStream, CompressionStrategy strategy,
+      uint64_t bufferCapacity, uint64_t compressionBlockSize, uint64_t memoryBlockSize,
+      MemoryPool& pool, WriterMetrics* metrics);
+}  // namespace orc
 
 #endif

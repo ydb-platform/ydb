@@ -234,6 +234,27 @@ Y_UNIT_TEST_SUITE(TRope) {
         }
     }
 
+    Y_UNIT_TEST(EraseThenInsert) {
+        TRope text = CreateRope(Text, 10);
+        for (size_t begin = 0; begin < Text.size(); ++begin) {
+            for (size_t end = begin; end <= Text.size(); ++end) {
+                for (size_t offset = 0; offset < Text.size(); offset += 11) {
+                    for (size_t endOffset = offset; endOffset <= Min(offset + 20, Text.size()); ++endOffset) {
+                        TRope rope = text;
+                        const auto beginIt = rope.Position(begin);
+                        const auto endIt = rope.Position(end);
+                        const auto insertIt = rope.Erase(beginIt, endIt);
+                        rope.Insert(insertIt, {text.Position(offset), text.Position(endOffset)});
+                        TString reference = Text;
+                        reference.erase(reference.begin() + begin, reference.begin() + end);
+                        reference.insert(reference.begin() + begin, Text.begin() + offset, Text.begin() + endOffset);
+                        UNIT_ASSERT_VALUES_EQUAL(RopeToString(rope), reference);
+                    }
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(Extract) {
         for (size_t begin = 0; begin < Text.size(); ++begin) {
             for (size_t end = begin; end <= Text.size(); ++end) {

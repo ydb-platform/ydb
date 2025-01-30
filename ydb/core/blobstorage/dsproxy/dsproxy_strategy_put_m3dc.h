@@ -31,19 +31,21 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests) override {
+            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
         TBlobStorageGroupType::TPartPlacement partPlacement;
         bool degraded = false;
         bool isDone = false;
-        i32 slowDiskSubgroupIdx = MarkSlowSubgroupDisk(state, info, blackboard, true);
+        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, blackboard, true, accelerationParams);
         do {
-            if (slowDiskSubgroupIdx < 0) {
+            if (slowDiskSubgroupMask == 0) {
                 break; // ignore this case
             }
             TBlobStorageGroupInfo::TSubgroupVDisks success(&info.GetTopology());
             TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
-            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, true, success, error, degraded);
-            TBlobStorageGroupInfo::TSubgroupVDisks slow(&info.GetTopology(), slowDiskSubgroupIdx);
+            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, false, success, error, degraded);
+            TBlobStorageGroupInfo::TSubgroupVDisks slow = TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(
+                    &info.GetTopology(), slowDiskSubgroupMask);
             if ((success | error) & slow) {
                 break; // slow disk is already marked as successful or erroneous
             }
@@ -59,9 +61,7 @@ public:
 
                 // now check every realm and check if we have to issue some write requests to it
                 Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
-                        PreferredReplicasPerRealm(degraded),
-                        true, partPlacement);
-                isDone = true;
+                        PreferredReplicasPerRealm(degraded), true, false, partPlacement, isDone);
             }
         } while (false);
         if (!isDone) {
@@ -79,9 +79,10 @@ public:
             }
 
             // now check every realm and check if we have to issue some write requests to it
+            partPlacement.Records.clear();
+            bool fullPlacement;
             Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
-                    PreferredReplicasPerRealm(degraded),
-                    false, partPlacement);
+                    PreferredReplicasPerRealm(degraded), false, false, partPlacement, fullPlacement);
         }
         if (IsPutNeeded(state, partPlacement)) {
             PreparePutsForPartPlacement(logCtx, state, info, groupDiskRequests, partPlacement);

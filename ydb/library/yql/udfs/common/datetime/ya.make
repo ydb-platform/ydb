@@ -14,7 +14,6 @@ PEERDIR(
     library/cpp/timezone_conversion
     util/draft
 )
-
 END()
 
 RECURSE_FOR_TESTS(

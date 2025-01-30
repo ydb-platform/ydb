@@ -1,7 +1,5 @@
 PY23_TEST()
 
-SUBSCRIBER(g:util-subscribers)
-
 SRCDIR(util/stream)
 
 PY_SRCS(

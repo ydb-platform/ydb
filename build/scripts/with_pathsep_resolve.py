@@ -4,6 +4,7 @@ import subprocess
 import platform
 
 
+# NOTE: legacy, only for "devtools/ya/jbuild"
 def fix_args(args):
     just_replace_it = False
     for arg in args:

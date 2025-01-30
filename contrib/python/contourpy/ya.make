@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.2.0)
+VERSION(1.3.1)
 
 LICENSE(BSD-3-Clause)
 
@@ -28,6 +28,7 @@ CFLAGS(
 
 SRCS(
     src/chunk_local.cpp
+    src/contour_generator.cpp
     src/converter.cpp
     src/fill_type.cpp
     src/line_type.cpp

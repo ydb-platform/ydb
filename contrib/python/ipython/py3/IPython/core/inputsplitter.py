@@ -16,6 +16,8 @@ and stores the results.
 For more details, see the class docstrings below.
 """
 
+from __future__ import annotations
+
 from warnings import warn
 
 warn('IPython.core.inputsplitter is deprecated since IPython 7 in favor of `IPython.core.inputtransformer2`',
@@ -31,7 +33,7 @@ import sys
 import tokenize
 import warnings
 
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Union, Optional, TYPE_CHECKING
 from types import CodeType
 
 from IPython.core.inputtransformer import (leading_indent,
@@ -52,6 +54,8 @@ from IPython.core.inputtransformer import (ESC_SHELL, ESC_SH_CAP, ESC_HELP,
                                         ESC_HELP2, ESC_MAGIC, ESC_MAGIC2,
                                         ESC_QUOTE, ESC_QUOTE2, ESC_PAREN, ESC_SEQUENCES)
 
+if TYPE_CHECKING:
+    from typing_extensions import Self
 #-----------------------------------------------------------------------------
 # Utilities
 #-----------------------------------------------------------------------------
@@ -94,7 +98,7 @@ def num_ini_spaces(s):
     """
     warnings.warn(
         "`num_ini_spaces` is Pending Deprecation since IPython 8.17."
-        "It is considered fro removal in in future version. "
+        "It is considered for removal in in future version. "
         "Please open an issue if you believe it should be kept.",
         stacklevel=2,
         category=PendingDeprecationWarning,
@@ -317,7 +321,7 @@ class InputSplitter(object):
             prompt = '>>> ' + indent
             line = indent + raw_input(prompt)
             isp.push(line)
-        print 'Input source was:\n', isp.source_reset(),
+        print('Input source was:\n', isp.source_reset())
     """
     # A cache for storing the current indentation
     # The first value stores the most recently processed source input
@@ -637,9 +641,9 @@ class IPythonInputSplitter(InputSplitter):
                 # Nothing that calls reset() expects to handle transformer
                 # errors
                 pass
-    
-    def flush_transformers(self):
-        def _flush(transform, outs):
+
+    def flush_transformers(self: Self):
+        def _flush(transform, outs: List[str]):
             """yield transformed lines
 
             always strings, never None

@@ -23,7 +23,9 @@ Y_UNIT_TEST_SUITE(EscapingBasics) {
         UNIT_ASSERT_VALUES_EQUAL(EscapeString("some_secret1", '"'), "some_secret1");
         UNIT_ASSERT_VALUES_EQUAL(EscapeString("some_secret1", "}+{", "[*]"), "some_secret1");
         UNIT_ASSERT_VALUES_EQUAL(EscapeString("some\"_\"secret1", '"'), "some\\\"_\\\"secret1");
+        UNIT_ASSERT_VALUES_EQUAL(EscapeString("some\"_\\\"secret1", '"'), "some\\\"_\\\\\\\"secret1");
         UNIT_ASSERT_VALUES_EQUAL(EscapeString("some}+{_}+{secret1", "}+{", "[*]"), "some[*]_[*]secret1");
+        UNIT_ASSERT_VALUES_EQUAL(EscapeString("some}+{\\}+{secret1", "}+{", "[*]"), "some[*]\\\\[*]secret1");
     }
 
     Y_UNIT_TEST(EncloseAndEscapeStringShouldWork) {
@@ -31,7 +33,9 @@ Y_UNIT_TEST_SUITE(EscapingBasics) {
         UNIT_ASSERT_VALUES_EQUAL(EncloseAndEscapeString("some_secret1\nsome_secret2", "}+{", "[*]"), "}+{some_secret1\nsome_secret2}+{");
 
         UNIT_ASSERT_VALUES_EQUAL(EncloseAndEscapeString("some\"_\"secret1", '"'), "\"some\\\"_\\\"secret1\"");
+        UNIT_ASSERT_VALUES_EQUAL(EncloseAndEscapeString("some\"_\\\"secret1", '"'), "\"some\\\"_\\\\\\\"secret1\"");
         UNIT_ASSERT_VALUES_EQUAL(EncloseAndEscapeString("some_secret1}+{\n}+{some_secret2", "}+{", "[*]"), "}+{some_secret1[*]\n[*]some_secret2}+{");
+        UNIT_ASSERT_VALUES_EQUAL(EncloseAndEscapeString("some_secret1}+{\\}+{some_secret2", "}+{", "[*]"), "}+{some_secret1[*]\\\\[*]some_secret2}+{");
     }
 }
 

@@ -1,0 +1,19 @@
+{#- empty string #}
+val project_root = "{{ arcadia_root }}"
+
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+configurations.api {
+    isTransitive = false
+}
+
+configurations.implementation {
+    isTransitive = false
+}
+
+configurations.testImplementation {
+    isTransitive = false
+}

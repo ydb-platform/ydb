@@ -1,0 +1,127 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 05bdd09fb9fdb384a61f2eb54df462d6
+BELONGS ya.make
+    License text:
+        // Copyright 2016 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        highwayhash/benchmark.cc [1:1]
+        highwayhash/sip_hash.cc [1:1]
+        highwayhash/sip_hash.h [1:1]
+        highwayhash/vector128.h [1:1]
+        highwayhash/vector256.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 517a4cd25cf20e7769678a4f8671eef2
+BELONGS ya.make
+    License text:
+        // Copyright 2015-2017 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        highwayhash/hh_avx2.h [1:1]
+        highwayhash/hh_portable.h [1:1]
+        highwayhash/hh_sse41.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6499e2ad737f62db5558c81fbd2749a7
+BELONGS ya.make
+    License text:
+        // Copyright 2017 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        highwayhash/arch_specific.cc [1:1]
+        highwayhash/arch_specific.h [1:1]
+        highwayhash/c_bindings.cc [1:1]
+        highwayhash/c_bindings.h [1:1]
+        highwayhash/data_parallel.h [1:1]
+        highwayhash/data_parallel_benchmark.cc [1:1]
+        highwayhash/data_parallel_test.cc [1:1]
+        highwayhash/endianess.h [1:1]
+        highwayhash/hh_avx2.cc [1:1]
+        highwayhash/hh_buffer.h [1:1]
+        highwayhash/hh_portable.cc [1:1]
+        highwayhash/hh_sse41.cc [1:1]
+        highwayhash/hh_types.h [1:1]
+        highwayhash/highwayhash.h [1:1]
+        highwayhash/highwayhash_target.cc [1:1]
+        highwayhash/highwayhash_target.h [1:1]
+        highwayhash/highwayhash_test.cc [1:1]
+        highwayhash/highwayhash_test_avx2.cc [1:1]
+        highwayhash/highwayhash_test_portable.cc [1:1]
+        highwayhash/highwayhash_test_sse41.cc [1:1]
+        highwayhash/highwayhash_test_target.cc [1:1]
+        highwayhash/highwayhash_test_target.h [1:1]
+        highwayhash/iaca.h [1:1]
+        highwayhash/instruction_sets.cc [1:1]
+        highwayhash/instruction_sets.h [1:1]
+        highwayhash/load3.h [1:1]
+        highwayhash/nanobenchmark.cc [1:1]
+        highwayhash/nanobenchmark.h [1:1]
+        highwayhash/nanobenchmark_example.cc [1:1]
+        highwayhash/os_specific.cc [1:1]
+        highwayhash/os_specific.h [1:1]
+        highwayhash/profiler.h [1:1]
+        highwayhash/profiler_example.cc [1:1]
+        highwayhash/robust_statistics.h [1:1]
+        highwayhash/scalar.h [1:1]
+        highwayhash/sip_hash_test.cc [1:1]
+        highwayhash/state_helpers.h [1:1]
+        highwayhash/tsc_timer.h [1:1]
+        highwayhash/vector_test.cc [1:1]
+        highwayhash/vector_test_avx2.cc [1:1]
+        highwayhash/vector_test_portable.cc [1:1]
+        highwayhash/vector_test_sse41.cc [1:1]
+        highwayhash/vector_test_target.cc [1:1]
+        highwayhash/vector_test_target.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f4d2490c76552286e9c484abd3bea2b4
+BELONGS ya.make
+    License text:
+        // Copyright 2015 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        highwayhash/compiler_specific.h [1:1]
+        highwayhash/scalar_sip_tree_hash.cc [1:1]
+        highwayhash/scalar_sip_tree_hash.h [1:1]
+        highwayhash/sip_tree_hash.cc [1:1]
+        highwayhash/sip_tree_hash.h [1:1]

@@ -4,13 +4,14 @@
 
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/ymq/queues/common/db_queries_maker.h>
 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/utility.h>

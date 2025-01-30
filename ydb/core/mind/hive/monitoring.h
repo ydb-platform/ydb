@@ -9,13 +9,12 @@ namespace NHive {
 
 class TLoggedMonTransaction {
 private:
-    TInstant Timestamp;
+    ui64 Index;
     TString User;
 
 protected:
-    TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev);
+    TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& evi, THive* self);
 
-    bool Prepare(NIceDb::TNiceDb& db);
     void WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op);
 };
 

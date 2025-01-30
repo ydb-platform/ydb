@@ -1,0 +1,748 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 00b6a1631ceea252c07fefcfafd3253c
+BELONGS ya.make
+    License text:
+         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) Hoi-Ho Chan, <hoiho.chan@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vtls/mbedtls.c [8:9]
+        lib/vtls/mbedtls.h [10:11]
+        lib/vtls/mbedtls_threadlock.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 02c44d9c9591c1c62d6e3be7531995c2
+BELONGS ya.make
+    License text:
+         * Copyright (C) Florin Petriuc, <petriuc.florin@gmail.com>
+         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/curl_sha256.h [10:11]
+        lib/sha256.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 06e7057ea8b93e5ff1270f4a2f21ec5a
+BELONGS ya.make
+    License text:
+         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) Markus Moeller, <markus_moeller@compuserve.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/socks_gssapi.c [8:9]
+        lib/socks_sspi.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0fa5e52d736e41590d5c80eab8aae635
+BELONGS ya.make
+    License text:
+         * Copyright (C) Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vssh/libssh.c [8:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 185a41d7cb42008b19b6d3ef50ed8170
+BELONGS ya.make
+    License text:
+         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) Howard Chu, <hyc@openldap.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/openldap.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 26cfd1bda1a0a98c91e683122791bbd2
+BELONGS bin/ya.make ya.make
+    License text:
+         * Copyright (C) 1996-2022  Internet Software Consortium.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/inet_ntop.c [2:2]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 38cad413a2ebb8a3334028596a877e60
+BELONGS ya.make
+    License text:
+         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) Marc Hoersken, <info@marc-hoersken.de>
+         * Copyright (C) Mark Salisbury, <mark.salisbury@hp.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vtls/schannel.c [8:10]
+        lib/vtls/schannel.h [10:11]
+        lib/vtls/schannel_verify.c [8:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 45323df52808e24e39741bd52fa522fb
+BELONGS ya.make
+    License text:
+         * Copyright (C) Steve Holme, <steve_holme@hotmail.com>.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/curl_des.c [8:8]
+        lib/curl_des.h [10:10]
+        lib/system_win32.c [8:8]
+        lib/system_win32.h [10:10]
+        lib/vauth/digest_sspi.c [8:9]
+        lib/vauth/krb5_gssapi.c [8:9]
+        lib/vauth/krb5_sspi.c [8:8]
+        lib/vauth/vauth.c [8:8]
+        lib/vauth/vauth.h [10:10]
+        lib/version_win32.c [8:8]
+        lib/version_win32.h [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 487047a176f57677c51faf4394df4c7d
+BELONGS bin/ya.make ya.make
+    License text:
+         * Copyright (c) 1995, 1996, 1997, 1998, 1999 Kungliga Tekniska Högskolan
+         * (Royal Institute of Technology, Stockholm, Sweden).
+         * Copyright (C) Daniel Stenberg
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/krb5.c [3:6]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 65fe1442d84fc44effa563d56d07c87b
+BELONGS ya.make
+    License text:
+         * Copyright (C) Michael Forney, <mforney@mforney.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vtls/bearssl.c [8:8]
+        lib/vtls/bearssl.h [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a57d66dba6940e0ed50c447683ae874
+BELONGS ya.make
+    License text:
+         * Copyright (C) Jacob Hoffman-Andrews,
+         * <github@hoffman-andrews.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vtls/rustls.c [8:9]
+        lib/vtls/rustls.h [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6acfa3297df1dc97d507e572a0645cd9
+BELONGS ya.make
+    License text:
+        Copyright (c) 1996 - 2023, Daniel Stenberg, <daniel@haxx.se>, and many
+        contributors, see the THANKS file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 84500f86b97af8062c8463ad37fdf711
+BELONGS bin/ya.make ya.make
+    License text:
+         * Copyright (c) 2001-2004 Damien Miller <djm@openbsd.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/curl_path.c [104:104]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8c40bd65c3875627e322bf53ea9eaaa3
+BELONGS ya.make
+    License text:
+         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) Bill Nagel <wnagel@tycoint.com>, Exacq Technologies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/smb.c [8:9]
+        lib/smb.h [10:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 998d598c0b2c4665183fefe5ae17d48c
+BELONGS ya.make
+    License text:
+         * Copyright (C) Daniel Stenberg, <daniel.se>, et al.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/easygetopt.c [8:8]
+        lib/easyoptions.c [8:8]
+        lib/krb5.c [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c50cbe37ab155bc81052d66295612bf
+BELONGS ya.make
+    License text:
+        /* Copyright (c) Internet Software Consortium.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/inet_pton.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a399f03f7a309cb97b579c59e0606fd1
+BELONGS ya.make
+    License text:
+        Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/README.md [2:2]
+        include/curl/curl.h [10:10]
+        include/curl/curlver.h [10:10]
+        include/curl/easy.h [10:10]
+        include/curl/header.h [10:10]
+        include/curl/mprintf.h [10:10]
+        include/curl/multi.h [10:10]
+        include/curl/options.h [10:10]
+        include/curl/stdcheaders.h [10:10]
+        include/curl/system.h [10:10]
+        include/curl/typecheck-gcc.h [10:10]
+        include/curl/urlapi.h [10:10]
+        include/curl/websockets.h [10:10]
+        lib/altsvc.c [8:8]
+        lib/altsvc.h [10:10]
+        lib/amigaos.c [8:8]
+        lib/amigaos.h [10:10]
+        lib/arpa_telnet.h [10:10]
+        lib/asyn-ares.c [8:8]
+        lib/asyn-thread.c [8:8]
+        lib/asyn.h [10:10]
+        lib/base64.c [8:8]
+        lib/bufq.c [8:8]
+        lib/bufq.h [10:10]
+        lib/bufref.c [8:8]
+        lib/bufref.h [10:10]
+        lib/c-hyper.c [8:8]
+        lib/c-hyper.h [10:10]
+        lib/cf-h1-proxy.c [8:8]
+        lib/cf-h1-proxy.h [10:10]
+        lib/cf-h2-proxy.c [8:8]
+        lib/cf-h2-proxy.h [10:10]
+        lib/cf-haproxy.c [8:8]
+        lib/cf-haproxy.h [10:10]
+        lib/cf-https-connect.c [8:8]
+        lib/cf-https-connect.h [10:10]
+        lib/cf-socket.c [8:8]
+        lib/cf-socket.h [10:10]
+        lib/cfilters.c [8:8]
+        lib/cfilters.h [10:10]
+        lib/conncache.c [8:9]
+        lib/conncache.h [10:11]
+        lib/connect.c [8:8]
+        lib/connect.h [10:10]
+        lib/content_encoding.c [8:8]
+        lib/content_encoding.h [10:10]
+        lib/cookie.c [8:8]
+        lib/cookie.h [10:10]
+        lib/curl_addrinfo.c [8:8]
+        lib/curl_addrinfo.h [10:10]
+        lib/curl_base64.h [10:10]
+        lib/curl_ctype.h [10:10]
+        lib/curl_endian.c [8:8]
+        lib/curl_endian.h [10:10]
+        lib/curl_fnmatch.c [8:8]
+        lib/curl_fnmatch.h [10:10]
+        lib/curl_get_line.c [8:8]
+        lib/curl_get_line.h [10:10]
+        lib/curl_gethostname.c [8:8]
+        lib/curl_gethostname.h [10:10]
+        lib/curl_gssapi.c [8:8]
+        lib/curl_hmac.h [10:10]
+        lib/curl_krb5.h [10:10]
+        lib/curl_ldap.h [10:10]
+        lib/curl_md4.h [10:10]
+        lib/curl_md5.h [10:10]
+        lib/curl_memory.h [10:10]
+        lib/curl_memrchr.c [8:8]
+        lib/curl_memrchr.h [10:10]
+        lib/curl_multibyte.c [8:8]
+        lib/curl_multibyte.h [10:10]
+        lib/curl_ntlm_core.c [8:8]
+        lib/curl_ntlm_core.h [10:10]
+        lib/curl_ntlm_wb.c [8:8]
+        lib/curl_ntlm_wb.h [10:10]
+        lib/curl_path.c [8:8]
+        lib/curl_printf.h [10:10]
+        lib/curl_range.c [8:8]
+        lib/curl_range.h [10:10]
+        lib/curl_rtmp.c [8:9]
+        lib/curl_sasl.c [8:8]
+        lib/curl_sasl.h [10:10]
+        lib/curl_setup.h [10:10]
+        lib/curl_setup_once.h [10:10]
+        lib/curl_sha256.h [10:11]
+        lib/curl_sspi.c [8:8]
+        lib/curl_sspi.h [10:10]
+        lib/curl_threads.c [8:8]
+        lib/curl_threads.h [10:10]
+        lib/curl_trc.c [8:8]
+        lib/curl_trc.h [10:10]
+        lib/curlx.h [10:10]
+        lib/dict.c [8:8]
+        lib/dict.h [10:10]
+        lib/doh.c [8:8]
+        lib/doh.h [10:10]
+        lib/dynbuf.c [8:8]
+        lib/dynbuf.h [10:10]
+        lib/dynhds.c [8:8]
+        lib/dynhds.h [10:10]
+        lib/easy.c [8:8]
+        lib/easy_lock.h [10:10]
+        lib/easyif.h [10:10]
+        lib/easyoptions.h [10:10]
+        lib/escape.c [8:8]
+        lib/escape.h [10:10]
+        lib/file.c [8:8]
+        lib/file.h [10:10]
+        lib/fileinfo.c [8:8]
+        lib/fileinfo.h [10:10]
+        lib/fopen.c [8:8]
+        lib/fopen.h [10:10]
+        lib/formdata.c [8:8]
+        lib/formdata.h [10:10]
+        lib/ftp.c [8:8]
+        lib/ftp.h [10:10]
+        lib/ftplistparser.c [8:8]
+        lib/ftplistparser.h [10:10]
+        lib/functypes.h [10:10]
+        lib/getenv.c [8:8]
+        lib/getinfo.c [8:8]
+        lib/getinfo.h [10:10]
+        lib/gopher.c [8:8]
+        lib/gopher.h [10:10]
+        lib/hash.c [8:8]
+        lib/hash.h [10:10]
+        lib/headers.c [8:8]
+        lib/headers.h [10:10]
+        lib/hmac.c [8:8]
+        lib/hostasyn.c [8:8]
+        lib/hostip.c [8:8]
+        lib/hostip.h [10:10]
+        lib/hostip4.c [8:8]
+        lib/hostip6.c [8:8]
+        lib/hostsyn.c [8:8]
+        lib/hsts.c [8:8]
+        lib/hsts.h [10:10]
+        lib/http.c [8:8]
+        lib/http.h [10:10]
+        lib/http1.c [8:8]
+        lib/http1.h [10:10]
+        lib/http2.c [8:8]
+        lib/http2.h [10:10]
+        lib/http_aws_sigv4.c [8:8]
+        lib/http_aws_sigv4.h [10:10]
+        lib/http_chunks.c [8:8]
+        lib/http_chunks.h [10:10]
+        lib/http_digest.c [8:8]
+        lib/http_digest.h [10:10]
+        lib/http_negotiate.c [8:8]
+        lib/http_negotiate.h [10:10]
+        lib/http_ntlm.c [8:8]
+        lib/http_ntlm.h [10:10]
+        lib/http_proxy.c [8:8]
+        lib/http_proxy.h [10:10]
+        lib/idn.c [8:8]
+        lib/idn.h [10:10]
+        lib/if2ip.c [8:8]
+        lib/if2ip.h [10:10]
+        lib/imap.c [8:8]
+        lib/imap.h [10:10]
+        lib/inet_ntop.h [10:10]
+        lib/inet_pton.h [10:10]
+        lib/ldap.c [8:8]
+        lib/llist.c [8:8]
+        lib/llist.h [10:10]
+        lib/macos.c [8:8]
+        lib/macos.h [10:10]
+        lib/md4.c [8:8]
+        lib/md5.c [8:8]
+        lib/memdebug.c [8:8]
+        lib/memdebug.h [11:11]
+        lib/mime.c [8:8]
+        lib/mime.h [10:10]
+        lib/mprintf.c [8:8]
+        lib/mqtt.c [8:9]
+        lib/multi.c [8:8]
+        lib/multihandle.h [10:10]
+        lib/multiif.h [10:10]
+        lib/netrc.c [8:8]
+        lib/netrc.h [10:10]
+        lib/nonblock.c [8:8]
+        lib/nonblock.h [10:10]
+        lib/noproxy.c [8:8]
+        lib/noproxy.h [10:10]
+        lib/openldap.c [8:9]
+        lib/parsedate.c [8:8]
+        lib/parsedate.h [10:10]
+        lib/pingpong.c [8:8]
+        lib/pingpong.h [10:10]
+        lib/pop3.c [8:8]
+        lib/pop3.h [10:10]
+        lib/progress.c [8:8]
+        lib/progress.h [10:10]
+        lib/psl.c [8:8]
+        lib/psl.h [10:10]
+        lib/rand.c [8:8]
+        lib/rand.h [10:10]
+        lib/rename.c [8:8]
+        lib/rename.h [10:10]
+        lib/rtsp.c [8:8]
+        lib/rtsp.h [10:10]
+        lib/select.c [8:8]
+        lib/select.h [10:10]
+        lib/sendf.c [8:8]
+        lib/sendf.h [10:10]
+        lib/setopt.c [8:8]
+        lib/setopt.h [10:10]
+        lib/setup-win32.h [10:10]
+        lib/sha256.c [8:9]
+        lib/share.c [8:8]
+        lib/share.h [10:10]
+        lib/sigpipe.h [10:10]
+        lib/slist.c [8:8]
+        lib/slist.h [10:10]
+        lib/smb.c [8:9]
+        lib/smb.h [10:11]
+        lib/smtp.c [8:8]
+        lib/smtp.h [10:10]
+        lib/sockaddr.h [10:10]
+        lib/socketpair.c [8:8]
+        lib/socketpair.h [10:10]
+        lib/socks.c [8:8]
+        lib/socks.h [10:10]
+        lib/socks_gssapi.c [8:9]
+        lib/socks_sspi.c [8:9]
+        lib/speedcheck.c [8:8]
+        lib/speedcheck.h [10:10]
+        lib/splay.c [8:8]
+        lib/splay.h [10:10]
+        lib/strcase.c [8:8]
+        lib/strcase.h [10:10]
+        lib/strdup.c [8:8]
+        lib/strdup.h [10:10]
+        lib/strerror.c [8:8]
+        lib/strerror.h [10:10]
+        lib/strtok.c [8:8]
+        lib/strtok.h [10:10]
+        lib/strtoofft.c [8:8]
+        lib/strtoofft.h [10:10]
+        lib/telnet.c [8:8]
+        lib/telnet.h [10:10]
+        lib/tftp.c [8:8]
+        lib/tftp.h [10:10]
+        lib/timediff.c [8:8]
+        lib/timediff.h [10:10]
+        lib/timeval.c [8:8]
+        lib/timeval.h [10:10]
+        lib/transfer.c [8:8]
+        lib/transfer.h [10:10]
+        lib/url.c [8:8]
+        lib/url.h [10:10]
+        lib/urlapi-int.h [10:10]
+        lib/urlapi.c [8:8]
+        lib/urldata.h [10:10]
+        lib/vauth/cleartext.c [8:8]
+        lib/vauth/cram.c [8:8]
+        lib/vauth/digest.c [8:8]
+        lib/vauth/digest.h [10:10]
+        lib/vauth/digest_sspi.c [8:9]
+        lib/vauth/krb5_gssapi.c [8:9]
+        lib/vauth/ntlm.c [8:8]
+        lib/vauth/ntlm.h [10:10]
+        lib/vauth/ntlm_sspi.c [8:8]
+        lib/vauth/oauth2.c [8:8]
+        lib/vauth/spnego_gssapi.c [8:8]
+        lib/vauth/spnego_sspi.c [8:8]
+        lib/version.c [8:8]
+        lib/vquic/curl_msh3.c [8:8]
+        lib/vquic/curl_msh3.h [10:10]
+        lib/vquic/curl_ngtcp2.c [8:8]
+        lib/vquic/curl_ngtcp2.h [10:10]
+        lib/vquic/curl_quiche.c [8:8]
+        lib/vquic/curl_quiche.h [10:10]
+        lib/vquic/vquic.c [8:8]
+        lib/vquic/vquic.h [10:10]
+        lib/vquic/vquic_int.h [10:10]
+        lib/vssh/libssh2.c [8:8]
+        lib/vssh/ssh.h [10:10]
+        lib/vssh/wolfssh.c [8:8]
+        lib/vtls/gtls.c [8:8]
+        lib/vtls/gtls.h [10:10]
+        lib/vtls/hostcheck.c [8:8]
+        lib/vtls/hostcheck.h [10:10]
+        lib/vtls/keylog.c [8:8]
+        lib/vtls/keylog.h [10:10]
+        lib/vtls/mbedtls.c [8:9]
+        lib/vtls/mbedtls.h [10:11]
+        lib/vtls/mbedtls_threadlock.c [8:9]
+        lib/vtls/openssl.c [8:8]
+        lib/vtls/openssl.h [10:10]
+        lib/vtls/schannel.c [8:10]
+        lib/vtls/schannel.h [10:11]
+        lib/vtls/schannel_verify.c [8:10]
+        lib/vtls/sectransp.c [8:9]
+        lib/vtls/sectransp.h [10:11]
+        lib/vtls/vtls.c [8:8]
+        lib/vtls/vtls.h [10:10]
+        lib/vtls/vtls_int.h [10:10]
+        lib/vtls/wolfssl.c [8:8]
+        lib/vtls/wolfssl.h [10:10]
+        lib/vtls/x509asn1.c [8:8]
+        lib/vtls/x509asn1.h [11:11]
+        lib/warnless.c [8:8]
+        lib/warnless.h [10:10]
+        lib/ws.c [8:8]
+        lib/ws.h [10:10]
+        src/slist_wc.c [8:8]
+        src/slist_wc.h [10:10]
+        src/tool_binmode.c [8:8]
+        src/tool_binmode.h [10:10]
+        src/tool_bname.c [8:8]
+        src/tool_bname.h [10:10]
+        src/tool_cb_dbg.c [8:8]
+        src/tool_cb_dbg.h [10:10]
+        src/tool_cb_hdr.c [8:8]
+        src/tool_cb_hdr.h [10:10]
+        src/tool_cb_prg.c [8:8]
+        src/tool_cb_prg.h [10:10]
+        src/tool_cb_rea.c [8:8]
+        src/tool_cb_rea.h [10:10]
+        src/tool_cb_see.c [8:8]
+        src/tool_cb_see.h [10:10]
+        src/tool_cb_wrt.c [8:8]
+        src/tool_cb_wrt.h [10:10]
+        src/tool_cfgable.c [8:8]
+        src/tool_cfgable.h [10:10]
+        src/tool_dirhie.c [8:8]
+        src/tool_dirhie.h [10:10]
+        src/tool_doswin.c [8:8]
+        src/tool_doswin.h [10:10]
+        src/tool_easysrc.c [8:8]
+        src/tool_easysrc.h [10:10]
+        src/tool_filetime.c [8:8]
+        src/tool_filetime.h [10:10]
+        src/tool_findfile.c [8:8]
+        src/tool_findfile.h [10:10]
+        src/tool_formparse.c [8:8]
+        src/tool_formparse.h [10:10]
+        src/tool_getparam.c [8:8]
+        src/tool_getparam.h [10:10]
+        src/tool_getpass.c [8:8]
+        src/tool_getpass.h [10:10]
+        src/tool_help.c [8:8]
+        src/tool_help.h [10:10]
+        src/tool_helpers.c [8:8]
+        src/tool_helpers.h [10:10]
+        src/tool_hugehelp.h [10:10]
+        src/tool_ipfs.c [8:8]
+        src/tool_ipfs.h [10:10]
+        src/tool_libinfo.c [8:8]
+        src/tool_libinfo.h [10:10]
+        src/tool_listhelp.c [8:8]
+        src/tool_main.c [8:8]
+        src/tool_main.h [10:10]
+        src/tool_msgs.c [8:8]
+        src/tool_msgs.h [10:10]
+        src/tool_operate.c [8:8]
+        src/tool_operate.h [10:10]
+        src/tool_operhlp.c [8:8]
+        src/tool_operhlp.h [10:10]
+        src/tool_paramhlp.c [8:8]
+        src/tool_paramhlp.h [10:10]
+        src/tool_parsecfg.c [8:8]
+        src/tool_parsecfg.h [10:10]
+        src/tool_progress.c [8:8]
+        src/tool_progress.h [10:10]
+        src/tool_sdecls.h [10:10]
+        src/tool_setopt.c [8:8]
+        src/tool_setopt.h [10:10]
+        src/tool_setup.h [10:10]
+        src/tool_sleep.c [8:8]
+        src/tool_sleep.h [10:10]
+        src/tool_stderr.c [8:8]
+        src/tool_stderr.h [10:10]
+        src/tool_strdup.c [8:8]
+        src/tool_strdup.h [10:10]
+        src/tool_urlglob.c [8:8]
+        src/tool_urlglob.h [10:10]
+        src/tool_util.c [8:8]
+        src/tool_util.h [10:10]
+        src/tool_version.h [10:10]
+        src/tool_vms.c [8:8]
+        src/tool_vms.h [10:10]
+        src/tool_writeout.c [8:8]
+        src/tool_writeout.h [10:10]
+        src/tool_writeout_json.c [8:8]
+        src/tool_writeout_json.h [10:10]
+        src/tool_xattr.c [8:8]
+        src/tool_xattr.h [10:10]
+        src/var.c [8:8]
+        src/var.h [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b15b936c2529a025aa6d0d99083bad3a
+BELONGS ya.make
+    License text:
+         * Copyright (C) Linus Nielsen Feltzing, <linus@haxx.se>
+         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/conncache.c [8:9]
+        lib/conncache.h [10:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c17c68d0f06e908f69598f582aaf7eed
+BELONGS ya.make
+    License text:
+         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) Howard Chu, <hyc@highlandsun.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/curl_rtmp.c [8:9]
+        lib/curl_rtmp.h [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL da7062ef96ba112714cf88e2a57db302
+BELONGS ya.make
+    License text:
+         * Copyright (C) Simon Josefsson, <simon@josefsson.org>, et al.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vauth/gsasl.c [8:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ee06df2e508069fc8582790b94110a69
+BELONGS ya.make
+    License text:
+         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) Björn Stenberg, <bjorn@haxx.se>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/mqtt.c [8:9]
+        lib/mqtt.h [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f2299b14b67ba9c039302a3767d1a731
+BELONGS ya.make
+    License text:
+        \#define urlchar_needs_escaping(c) (!(ISCNTRL(c) || ISSPACE(c) || ISGRAPH(c)))
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/urlapi.c [132:132]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f38404a02e69976b94505df0c691bed0
+BELONGS bin/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/md4.c [232:237]
+        lib/md5.c [257:262]
+    Belongs difference:
+        + bin/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f66ad3516c5c308b68901e1a8c2dc0f4
+BELONGS ya.make
+    License text:
+         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) Marc Hoersken, <info@marc-hoersken.de>
+         * Copyright (C) Mark Salisbury, <mark.salisbury@hp.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vtls/schannel.c [8:10]
+        lib/vtls/schannel_verify.c [8:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f67c5520ba1720abe4d2c2a22a78616d
+BELONGS ya.make
+    License text:
+         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) Nick Zitzmann, <nickzman@gmail.com>.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vtls/sectransp.c [8:9]
+        lib/vtls/sectransp.h [10:11]

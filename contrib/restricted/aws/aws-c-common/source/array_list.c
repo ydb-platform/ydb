@@ -206,3 +206,11 @@ void aws_array_list_swap(struct aws_array_list *AWS_RESTRICT list, size_t a, siz
     aws_array_list_mem_swap(item1, item2, list->item_size);
     AWS_POSTCONDITION(aws_array_list_is_valid(list));
 }
+
+void aws_array_list_sort(struct aws_array_list *AWS_RESTRICT list, aws_array_list_comparator_fn *compare_fn) {
+    AWS_PRECONDITION(aws_array_list_is_valid(list));
+    if (list->data) {
+        qsort(list->data, aws_array_list_length(list), list->item_size, compare_fn);
+    }
+    AWS_POSTCONDITION(aws_array_list_is_valid(list));
+}

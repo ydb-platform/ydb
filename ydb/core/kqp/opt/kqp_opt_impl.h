@@ -2,9 +2,8 @@
 
 #include "kqp_opt.h"
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/providers/common/provider/yql_table_lookup.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -48,12 +47,6 @@ NYql::NNodes::TKqpTable BuildTableMeta(const NYql::TKikimrTableMetadata& tableMe
 TIntrusivePtr<NYql::TKikimrTableMetadata> GetIndexMetadata(const NYql::NNodes::TKqlReadTableIndex& index,
     const NYql::TKikimrTablesData& tables, TStringBuf cluster);
 
-bool KqpTableLookupCanCompare(NYql::NNodes::TExprBase node);
-NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpTableLookupGetValue(NYql::NNodes::TExprBase node,
-    const NYql::TTypeAnnotationNode* type, NYql::TExprContext& ctx);
-NYql::NCommon::TTableLookup::TCompareResult KqpTableLookupCompare(NYql::NNodes::TExprBase left,
-    NYql::NNodes::TExprBase right);
-
 TVector<std::pair<NYql::TExprNode::TPtr, const NYql::TIndexDescription*>> BuildSecondaryIndexVector(
     const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx,
     const THashSet<TStringBuf>* filter,
@@ -61,5 +54,8 @@ TVector<std::pair<NYql::TExprNode::TPtr, const NYql::TIndexDescription*>> BuildS
         NYql::TPositionHandle, NYql::TExprContext&)>& tableBuilder);
 
 bool IsBuiltEffect(const NYql::NNodes::TExprBase& effect);
+
+bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
+    const TMaybe<THashSet<TStringBuf>>& passthroughFields = {});
 
 } // namespace NKikimr::NKqp::NOpt

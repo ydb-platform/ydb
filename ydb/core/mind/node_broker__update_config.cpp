@@ -1,6 +1,8 @@
 #include "node_broker_impl.h"
 #include "node_broker__scheme.h"
 
+#include <ydb/core/protos/counters_node_broker.pb.h>
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -23,6 +25,8 @@ public:
         , Modify(false)
     {
     }
+
+    TTxType GetTxType() const override { return TXTYPE_UPDATE_CONFIG; }
 
     bool ProcessNotification(const TActorContext &ctx)
     {

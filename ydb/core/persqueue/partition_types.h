@@ -20,6 +20,7 @@ struct TWriteMsg {
     TMaybe<ui64> Offset;
     TEvPQ::TEvWrite::TMsg Msg;
     std::optional<ui64> InitialSeqNo;
+    bool Internal = false;
 };
 
 struct TOwnershipMsg {
@@ -60,6 +61,7 @@ struct TSplitMessageGroupMsg {
     }
 };
 
+
 struct TMessage {
     std::variant<
         TWriteMsg,
@@ -68,15 +70,18 @@ struct TMessage {
         TDeregisterMessageGroupMsg,
         TSplitMessageGroupMsg
     > Body;
-
     TDuration QueueTime;    // baseline for request and duration for response
     TInstant WriteTimeBaseline;
+    NWilson::TSpan Span;
+    NWilson::TSpan WaitPreviousWriteSpan;
+    NWilson::TSpan WaitQuotaSpan;
 
     template <typename T>
-    explicit TMessage(T&& body, TDuration queueTime, TInstant writeTimeBaseline = TInstant::Zero())
+    explicit TMessage(T&& body, NWilson::TSpan&& span, TDuration queueTime, TInstant writeTimeBaseline = TInstant::Zero())
         : Body(std::forward<T>(body))
         , QueueTime(queueTime)
         , WriteTimeBaseline(writeTimeBaseline)
+        , Span(std::move(span))
     {
     }
 
@@ -117,8 +122,16 @@ struct TMessage {
     DEFINE_CHECKER_GETTER(SplitMessageGroup, 4)
 
     #undef DEFINE_CHECKER_GETTER
+
+    size_t GetWriteSize() const {
+        if (IsWrite()) {
+            auto& w = GetWrite();
+            return w.Msg.SourceId.size() + w.Msg.Data.size();
+        } else {
+            return 0;
+        }
+    }
 };
 
 
 } // namespace NKikimr::NPQ
-

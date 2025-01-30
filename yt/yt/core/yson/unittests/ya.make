@@ -2,10 +2,6 @@ GTEST(unittester-core-yson)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-IF (NOT OS_WINDOWS AND NOT ARCH_AARCH64)
-    ALLOCATOR(YT)
-ENDIF()
-
 PROTO_NAMESPACE(yt)
 
 SRCS(
@@ -18,6 +14,7 @@ SRCS(
     protobuf_yson_ut.cpp
     ypath_designated_yson_consumer_ut.cpp
     ypath_filtering_yson_consumer_ut.cpp
+    yson_builder_ut.cpp
     yson_parser_ut.cpp
     yson_pull_parser_ut.cpp
     yson_token_writer_ut.cpp

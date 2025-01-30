@@ -1,0 +1,12 @@
+--- contrib/python/moto/py3/moto/s3/responses.py	(index)
++++ contrib/python/moto/py3/moto/s3/responses.py	(working tree)
+@@ -2000,7 +2000,8 @@ class S3Response(BaseResponse):
+             tagging = self._tagging_from_headers(request.headers)
+             storage_type = request.headers.get("x-amz-storage-class", "STANDARD")
+             acl = self._acl_from_headers(request.headers)
+-
++            if acl is None:
++                acl = self.backend.get_bucket(bucket_name).acl
+             multipart_id = self.backend.create_multipart_upload(
+                 bucket_name,
+                 key_name,

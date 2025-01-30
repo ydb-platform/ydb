@@ -15,7 +15,7 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/misc/hash.h>
 
@@ -35,11 +35,11 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = NodeTrackerClientLogger;
+static constexpr auto& Logger = NodeTrackerClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& NullNodeAddress()
+const std::string& NullNodeAddress()
 {
     static const TString Result("<null>");
     return Result;
@@ -58,9 +58,9 @@ namespace {
 constexpr int TypicalTagCount = 16;
 
 // Cf. YT-10645
-TCompactVector<TStringBuf, TypicalTagCount> GetSortedTags(const std::vector<TString>& tags)
+TCompactVector<std::string, TypicalTagCount> GetSortedTags(const std::vector<std::string>& tags)
 {
-    TCompactVector<TStringBuf, TypicalTagCount> result;
+    TCompactVector<std::string, TypicalTagCount> result;
     result.reserve(tags.size());
     for (const auto& tag : tags) {
         result.push_back(tag);
@@ -77,12 +77,12 @@ TNodeDescriptor::TNodeDescriptor()
     : DefaultAddress_(NullNodeAddress())
 { }
 
-TNodeDescriptor::TNodeDescriptor(const TString& defaultAddress)
+TNodeDescriptor::TNodeDescriptor(const std::string& defaultAddress)
     : Addresses_{std::pair(DefaultNetworkName, defaultAddress)}
     , DefaultAddress_(defaultAddress)
 { }
 
-TNodeDescriptor::TNodeDescriptor(const std::optional<TString>& defaultAddress)
+TNodeDescriptor::TNodeDescriptor(const std::optional<std::string>& defaultAddress)
 {
     if (defaultAddress) {
         *this = TNodeDescriptor(*defaultAddress);
@@ -91,10 +91,10 @@ TNodeDescriptor::TNodeDescriptor(const std::optional<TString>& defaultAddress)
 
 TNodeDescriptor::TNodeDescriptor(
     TAddressMap addresses,
-    std::optional<TString> host,
-    std::optional<TString> rack,
-    std::optional<TString> dc,
-    const std::vector<TString>& tags,
+    const std::optional<std::string>& host,
+    const std::optional<std::string>& rack,
+    const std::optional<std::string>& dc,
+    const std::vector<std::string>& tags,
     std::optional<TInstant> lastSeenTime)
     : Addresses_(std::move(addresses))
     , DefaultAddress_(NNodeTrackerClient::GetDefaultAddress(Addresses_))
@@ -115,37 +115,37 @@ const TAddressMap& TNodeDescriptor::Addresses() const
     return Addresses_;
 }
 
-const TString& TNodeDescriptor::GetDefaultAddress() const
+const std::string& TNodeDescriptor::GetDefaultAddress() const
 {
     return DefaultAddress_;
 }
 
-const TString& TNodeDescriptor::GetAddressOrThrow(const TNetworkPreferenceList& networks) const
+const std::string& TNodeDescriptor::GetAddressOrThrow(const TNetworkPreferenceList& networks) const
 {
     return NNodeTrackerClient::GetAddressOrThrow(Addresses(), networks);
 }
 
-std::optional<TString> TNodeDescriptor::FindAddress(const TNetworkPreferenceList& networks) const
+std::optional<std::string> TNodeDescriptor::FindAddress(const TNetworkPreferenceList& networks) const
 {
     return NNodeTrackerClient::FindAddress(Addresses(), networks);
 }
 
-const std::optional<TString>& TNodeDescriptor::GetHost() const
+const std::optional<std::string>& TNodeDescriptor::GetHost() const
 {
     return Host_;
 }
 
-const std::optional<TString>& TNodeDescriptor::GetRack() const
+const std::optional<std::string>& TNodeDescriptor::GetRack() const
 {
     return Rack_;
 }
 
-const std::optional<TString>& TNodeDescriptor::GetDataCenter() const
+const std::optional<std::string>& TNodeDescriptor::GetDataCenter() const
 {
     return DataCenter_;
 }
 
-const std::vector<TString>& TNodeDescriptor::GetTags() const
+const std::vector<std::string>& TNodeDescriptor::GetTags() const
 {
     return Tags_;
 }
@@ -181,6 +181,37 @@ void TNodeDescriptor::Persist(const TStreamPersistenceContext& context)
     }
 }
 
+void SerializeFragment(const TNodeDescriptor& descriptor, NYson::IYsonConsumer* consumer)
+{
+    BuildYsonMapFragmentFluently(consumer)
+        .Item("addresses").Value(descriptor.Addresses_)
+        .Item("default_address").Value(descriptor.DefaultAddress_)
+        .OptionalItem("host", descriptor.Host_)
+        .OptionalItem("rack", descriptor.Rack_)
+        .OptionalItem("data_center", descriptor.DataCenter_)
+        .Item("tags").Value(descriptor.Tags_);
+}
+
+void DeserializeFragment(TNodeDescriptor& descriptor, NYTree::INodePtr node)
+{
+    descriptor = {};
+
+    auto mapNode = node->AsMap();
+
+    Deserialize(descriptor.Addresses_, mapNode->GetChildOrThrow("addresses"));
+    Deserialize(descriptor.DefaultAddress_, mapNode->GetChildOrThrow("default_address"));
+    if (auto child = mapNode->FindChild("host")) {
+        Deserialize(descriptor.Host_, child);
+    }
+    if (auto child = mapNode->FindChild("rack")) {
+        Deserialize(descriptor.Rack_, child);
+    }
+    if (auto child = mapNode->FindChild("data_center")) {
+        Deserialize(descriptor.DataCenter_, child);
+    }
+    Deserialize(descriptor.Tags_, mapNode->GetChildOrThrow("tags"));
+}
+
 void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor, TStringBuf /*spec*/)
 {
     if (descriptor.IsNull()) {
@@ -203,12 +234,7 @@ void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor,
     }
 }
 
-TString ToString(const TNodeDescriptor& descriptor)
-{
-    return ToStringViaBuilder(descriptor);
-}
-
-std::optional<TString> FindDefaultAddress(const TAddressMap& addresses)
+std::optional<std::string> FindDefaultAddress(const TAddressMap& addresses)
 {
     if (addresses.empty()) {
         return NullNodeAddress();
@@ -220,7 +246,7 @@ std::optional<TString> FindDefaultAddress(const TAddressMap& addresses)
     return std::nullopt;
 }
 
-const TString& GetDefaultAddress(const TAddressMap& addresses)
+const std::string& GetDefaultAddress(const TAddressMap& addresses)
 {
     if (addresses.empty()) {
         return NullNodeAddress();
@@ -228,7 +254,7 @@ const TString& GetDefaultAddress(const TAddressMap& addresses)
     return GetOrCrash(addresses, DefaultNetworkName);
 }
 
-const TString& GetDefaultAddress(const NProto::TAddressMap& addresses)
+const std::string& GetDefaultAddress(const NProto::TAddressMap& addresses)
 {
     if (addresses.entries_size() == 0) {
         return NullNodeAddress();
@@ -277,8 +303,8 @@ void ToProto(NNodeTrackerClient::NProto::TAddressMap* protoAddresses, const NNod
 {
     for (const auto& [networkName, networkAddress] : addresses) {
         auto* entry = protoAddresses->add_entries();
-        entry->set_network(networkName);
-        entry->set_address(networkAddress);
+        entry->set_network(NYT::ToProto(networkName));
+        entry->set_address(NYT::ToProto(networkAddress));
     }
 }
 
@@ -295,7 +321,7 @@ void ToProto(NNodeTrackerClient::NProto::TNodeAddressMap* proto, const NNodeTrac
 {
     for (const auto& [addressType, addresses] : nodeAddresses) {
         auto* entry = proto->add_entries();
-        entry->set_address_type(static_cast<int>(addressType));
+        entry->set_address_type(ToProto(addressType));
         ToProto(entry->mutable_addresses(), addresses);
     }
 }
@@ -319,19 +345,19 @@ void ToProto(NNodeTrackerClient::NProto::TNodeDescriptor* protoDescriptor, const
     ToProto(protoDescriptor->mutable_addresses(), descriptor.Addresses());
 
     if (auto host = descriptor.GetHost()) {
-        protoDescriptor->set_host(*host);
+        protoDescriptor->set_host(ToProto(*host));
     } else {
         protoDescriptor->clear_host();
     }
 
     if (auto rack = descriptor.GetRack()) {
-        protoDescriptor->set_rack(*rack);
+        protoDescriptor->set_rack(ToProto(*rack));
     } else {
         protoDescriptor->clear_rack();
     }
 
     if (auto dataCenter = descriptor.GetDataCenter()) {
-        protoDescriptor->set_data_center(*dataCenter);
+        protoDescriptor->set_data_center(ToProto(*dataCenter));
     } else {
         protoDescriptor->clear_data_center();
     }
@@ -339,7 +365,7 @@ void ToProto(NNodeTrackerClient::NProto::TNodeDescriptor* protoDescriptor, const
     ToProto(protoDescriptor->mutable_tags(), descriptor.GetTags());
 
     if (auto lastHeartbeatTime = descriptor.GetLastSeenTime()) {
-        protoDescriptor->set_last_seen_time(ToProto<i64>(*lastHeartbeatTime));
+        protoDescriptor->set_last_seen_time(ToProto(*lastHeartbeatTime));
     } else {
         protoDescriptor->clear_last_seen_time();
     }
@@ -354,7 +380,7 @@ void FromProto(NNodeTrackerClient::TNodeDescriptor* descriptor, const NNodeTrack
         protoDescriptor.has_host() ? std::make_optional(protoDescriptor.host()) : std::nullopt,
         protoDescriptor.has_rack() ? std::make_optional(protoDescriptor.rack()) : std::nullopt,
         protoDescriptor.has_data_center() ? std::make_optional(protoDescriptor.data_center()) : std::nullopt,
-        FromProto<std::vector<TString>>(protoDescriptor.tags()),
+        FromProto<std::vector<std::string>>(protoDescriptor.tags()),
         protoDescriptor.has_last_seen_time() ? std::make_optional(FromProto<TInstant>(protoDescriptor.last_seen_time())) : std::nullopt);
 }
 
@@ -408,7 +434,7 @@ bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs
     }
 
     const auto& lhsTags = lhs.GetTags();
-    auto rhsTags = FromProto<std::vector<TString>>(rhs.tags());
+    auto rhsTags = FromProto<std::vector<std::string>>(rhs.tags());
     if (GetSortedTags(lhsTags) != GetSortedTags(rhsTags)) {
         return false;
     }
@@ -471,7 +497,7 @@ void TNodeDirectory::DumpTo(NProto::TNodeDirectory* destination)
     auto guard = ReaderGuard(SpinLock_);
     for (auto [id, descriptor] : IdToDescriptor_) {
         auto* item = destination->add_items();
-        item->set_node_id(ToProto<ui32>(id));
+        item->set_node_id(ToProto(id));
         ToProto(item->mutable_node_descriptor(), *descriptor);
     }
 }
@@ -630,14 +656,14 @@ std::vector<std::pair<TNodeId, TNodeDescriptor>> TNodeDirectory::GetAllDescripto
     return result;
 }
 
-const TNodeDescriptor* TNodeDirectory::FindDescriptor(const TString& address)
+const TNodeDescriptor* TNodeDirectory::FindDescriptor(const std::string& address)
 {
     auto guard = ReaderGuard(SpinLock_);
     auto it = AddressToDescriptor_.find(address);
     return it == AddressToDescriptor_.end() ? nullptr : it->second;
 }
 
-const TNodeDescriptor& TNodeDirectory::GetDescriptor(const TString& address)
+const TNodeDescriptor& TNodeDirectory::GetDescriptor(const std::string& address)
 {
     const auto* result = FindDescriptor(address);
     YT_VERIFY(result);
@@ -685,13 +711,13 @@ TAddressMap::const_iterator SelectAddress(const TAddressMap& addresses, const TN
 
 } // namespace
 
-std::optional<TString> FindAddress(const TAddressMap& addresses, const TNetworkPreferenceList& networks)
+std::optional<std::string> FindAddress(const TAddressMap& addresses, const TNetworkPreferenceList& networks)
 {
     const auto it = SelectAddress(addresses, networks);
     return it == addresses.cend() ? std::nullopt : std::make_optional(it->second);
 }
 
-const TString& GetAddressOrThrow(const TAddressMap& addresses, const TNetworkPreferenceList& networks)
+const std::string& GetAddressOrThrow(const TAddressMap& addresses, const TNetworkPreferenceList& networks)
 {
     const auto it = SelectAddress(addresses, networks);
     if (it != addresses.cend()) {

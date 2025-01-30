@@ -2,6 +2,8 @@ PY23_LIBRARY()
 
 LICENSE(Service-Py23-Proxy)
 
+VERSION(Service-proxy-version)
+
 ADDINCL(
     GLOBAL contrib/python/numpy/include/numpy/core/include
     GLOBAL contrib/python/numpy/include/numpy/core/include/numpy

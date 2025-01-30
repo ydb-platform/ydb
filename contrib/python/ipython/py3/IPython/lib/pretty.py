@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Python advanced pretty printer.  This pretty printer is intended to
 replace the old `pprint` python module which does not allow developers
@@ -107,6 +106,8 @@ from warnings import warn
 
 from IPython.utils.decorators import undoc
 from IPython.utils.py3compat import PYPY
+
+from typing import Dict
 
 __all__ = ['pretty', 'pprint', 'PrettyPrinter', 'RepresentationPrinter',
     'for_type', 'for_type_by_name', 'RawText', 'RawStringLiteral', 'CallExpression']
@@ -405,8 +406,16 @@ class RepresentationPrinter(PrettyPrinter):
                             meth = cls._repr_pretty_
                             if callable(meth):
                                 return meth(obj, self, cycle)
-                        if cls is not object \
-                                and callable(cls.__dict__.get('__repr__')):
+                        if (
+                            cls is not object
+                            # check if cls defines __repr__
+                            and "__repr__" in cls.__dict__
+                            # check if __repr__ is callable.
+                            # Note: we need to test getattr(cls, '__repr__')
+                            #   instead of cls.__dict__['__repr__']
+                            #   in order to work with descriptors like partialmethod,
+                            and callable(_safe_getattr(cls, "__repr__", None))
+                        ):
                             return _repr_pprint(obj, self, cycle)
 
             return _default_pprint(obj, self, cycle)
@@ -532,7 +541,7 @@ class RawText:
 class CallExpression:
     """ Object which emits a line-wrapped call expression in the form `__name(*args, **kwargs)` """
     def __init__(__self, __name, *args, **kwargs):
-        # dunders are to avoid clashes with kwargs, as python's name manging
+        # dunders are to avoid clashes with kwargs, as python's name managing
         # will kick in.
         self = __self
         self.name = __name
@@ -546,7 +555,7 @@ class CallExpression:
         return inner
 
     def _repr_pretty_(self, p, cycle):
-        # dunders are to avoid clashes with kwargs, as python's name manging
+        # dunders are to avoid clashes with kwargs, as python's name managing
         # will kick in.
 
         started = False
@@ -715,8 +724,15 @@ class _ReFlags:
 
     def _repr_pretty_(self, p, cycle):
         done_one = False
-        for flag in ('TEMPLATE', 'IGNORECASE', 'LOCALE', 'MULTILINE', 'DOTALL',
-            'UNICODE', 'VERBOSE', 'DEBUG'):
+        for flag in (
+            "IGNORECASE",
+            "LOCALE",
+            "MULTILINE",
+            "DOTALL",
+            "UNICODE",
+            "VERBOSE",
+            "DEBUG",
+        ):
             if self.value & getattr(re, flag):
                 if done_one:
                     p.text('|')
@@ -807,6 +823,7 @@ def _exception_pprint(obj, p, cycle):
 
 
 #: the exception base
+_exception_base: type
 try:
     _exception_base = BaseException
 except NameError:
@@ -848,8 +865,8 @@ _type_pprinters[range] = _repr_pprint
 _type_pprinters[bytes] = _repr_pprint
 
 #: printers for types specified by name
-_deferred_type_pprinters = {
-}
+_deferred_type_pprinters: Dict = {}
+
 
 def for_type(typ, func):
     """

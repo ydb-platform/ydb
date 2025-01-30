@@ -23,7 +23,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -66,7 +65,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -116,7 +114,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -168,7 +165,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -250,7 +246,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -303,7 +298,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -395,7 +389,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -466,7 +459,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -585,7 +577,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 

@@ -1,5 +1,8 @@
 Y_BENCHMARK()
 
+TAG(ya:fat)
+SIZE(LARGE)
+
 ALLOCATOR(LF)
 
 PEERDIR(

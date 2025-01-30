@@ -131,21 +131,24 @@ namespace NKikimr {
     class TEvHullFreeHugeSlots : public TEventLocal<TEvHullFreeHugeSlots, TEvBlobStorage::EvHullFreeHugeSlots> {
     public:
         const TDiskPartVec HugeBlobs;
+        const TDiskPartVec AllocatedBlobs;
         const ui64 DeletionLsn;
         const TLogSignature Signature; // identifies database we send update for
+        const ui64 WId;
 
-        TEvHullFreeHugeSlots(TDiskPartVec &&hugeBlobs, ui64 deletionLsn,
-                             TLogSignature signature)
+        TEvHullFreeHugeSlots(TDiskPartVec&& hugeBlobs, TDiskPartVec&& allocatedBlobs, ui64 deletionLsn,
+                TLogSignature signature, ui64 wId)
             : HugeBlobs(std::move(hugeBlobs))
+            , AllocatedBlobs(std::move(allocatedBlobs))
             , DeletionLsn(deletionLsn)
             , Signature(signature)
+            , WId(wId)
         {}
 
         TString ToString() const {
             TStringStream str;
-            str << "{" << Signature.ToString()
-                << " DelLsn# " << DeletionLsn << " Slots# "
-                << HugeBlobs.ToString() << "}";
+            str << "{" << Signature.ToString() << " DelLsn# " << DeletionLsn << " Slots# " << HugeBlobs.ToString()
+                << " Allocated# " << AllocatedBlobs.ToString() << " WId# " << WId << "}";
             return str.Str();
         }
     };
@@ -207,6 +210,37 @@ namespace NKikimr {
     class TEvHugeStatResult : public TEventLocal<TEvHugeStatResult, TEvBlobStorage::EvHugeStatResult> {
     public:
         NHuge::THeapStat Stat;
+    };
+
+    struct TEvHugePreCompact : TEventLocal<TEvHugePreCompact, TEvBlobStorage::EvHugePreCompact> {};
+
+    struct TEvHugePreCompactResult : TEventLocal<TEvHugePreCompactResult, TEvBlobStorage::EvHugePreCompactResult> {
+        const ui64 WId; // this is going to be provided in free slots operation
+        TEvHugePreCompactResult(ui64 wId) : WId(wId) {}
+    };
+
+    struct TEvHugeAllocateSlots : TEventLocal<TEvHugeAllocateSlots, TEvBlobStorage::EvHugeAllocateSlots> {
+        std::vector<ui32> BlobSizes;
+
+        TEvHugeAllocateSlots(std::vector<ui32> blobSizes)
+            : BlobSizes(std::move(blobSizes))
+        {}
+    };
+
+    struct TEvHugeAllocateSlotsResult : TEventLocal<TEvHugeAllocateSlotsResult, TEvBlobStorage::EvHugeAllocateSlotsResult> {
+        std::vector<TDiskPart> Locations;
+
+        TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations)
+            : Locations(std::move(locations))
+        {}
+    };
+
+    struct TEvHugeDropAllocatedSlots : TEventLocal<TEvHugeDropAllocatedSlots, TEvBlobStorage::EvHugeDropAllocatedSlots> {
+        std::vector<TDiskPart> Locations;
+
+        TEvHugeDropAllocatedSlots(std::vector<TDiskPart> locations)
+            : Locations(std::move(locations))
+        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////

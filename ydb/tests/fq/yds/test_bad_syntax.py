@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import os
 import pytest
 import time
 
@@ -15,18 +16,13 @@ class TestBadSyntax(TestYdsBase):
     @pytest.mark.parametrize(
         "query_type",
         [fq.QueryContent.QueryType.ANALYTICS, fq.QueryContent.QueryType.STREAMING],
-        ids=["analytics", "streaming"]
+        ids=["analytics", "streaming"],
     )
+    @pytest.mark.parametrize("after_modify", [True, False], ids=["modify", "create"])
     @pytest.mark.parametrize(
-        "after_modify",
-        [True, False],
-        ids=["modify", "create"]
+        "with_read_rules", [True, False], ids=["with_created_read_rules", "without_created_read_rules"]
     )
-    @pytest.mark.parametrize(
-        "with_read_rules",
-        [True, False],
-        ids=["with_created_read_rules", "without_created_read_rules"]
-    )
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_bad_syntax(self, kikimr, client, query_type, after_modify, with_read_rules):
         if with_read_rules and not after_modify:
             return
@@ -36,10 +32,9 @@ class TestBadSyntax(TestYdsBase):
         if with_read_rules:
             self.init_topics("bad_syntax_{}".format(query_type))
             connection_name = "yds_{}".format(query_type)
-            sql_with_rr = "INSERT INTO {connection_name}.`{output_topic}` SELECT * FROM {connection_name}.`{input_topic}` LIMIT 1;" \
-                .format(connection_name=connection_name,
-                        output_topic=self.output_topic,
-                        input_topic=self.input_topic)
+            sql_with_rr = "INSERT INTO {connection_name}.`{output_topic}` SELECT * FROM {connection_name}.`{input_topic}` LIMIT 1;".format(
+                connection_name=connection_name, output_topic=self.output_topic, input_topic=self.input_topic
+            )
 
         if after_modify:
             if with_read_rules:

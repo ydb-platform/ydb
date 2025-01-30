@@ -1,10 +1,12 @@
 #include "query_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 #include <library/cpp/histogram/hdr/histogram.h>
 #include <util/system/thread.h>
 #include <util/system/mutex.h>
 #include <util/thread/pool.h>
+#include <mutex>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -76,11 +78,11 @@ TCommandQueryWorkload::TCommandQueryWorkload()
 }
 
 TCommandQueryWorkloadRun::TCommandQueryWorkloadRun()
-    : TYdbOperationCommand("run", {}, "Run YDB query workload")
+    : TYdbSimpleCommand("run", {}, "Run YDB query workload")
 {}
 
 void TCommandQueryWorkloadRun::Config(TConfig& config) {
-    TYdbOperationCommand::Config(config);
+    TYdbSimpleCommand::Config(config);
     config.Opts->AddLongOption('q', "query", "Query to execute") .RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('t', "threads", "Number of parallel threads; 1 if not specified").DefaultValue(1).StoreResult(&Threads);
     config.Opts->AddLongOption('d', "delay", "Interval delay in seconds; 1 if not specified").DefaultValue(1).StoreResult(&IntervalSeconds);
@@ -101,35 +103,32 @@ int TCommandQueryWorkloadRun::Run(TConfig& config) {
         pool.SafeAddFunc([&] {
             try {
                 TDriver driver = CreateDriver(config);
-                NScripting::TScriptingClient client(driver);
+                NQuery::TQueryClient client(driver);
 
-                NScripting::TExecuteYqlRequestSettings settings;
-                settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Basic);
+                NQuery::TExecuteQuerySettings settings;
+                settings.StatsMode(NQuery::EStatsMode::Basic);
 
                 while (!IsInterrupted() && !ThreadTerminated.load()) {
-                    auto asyncResult = client.StreamExecuteYqlScript(
+                    auto asyncResult = client.StreamExecuteQuery(
                         Query,
+                        NQuery::TTxControl::NoTx(),
                         FillSettings(settings)
                     );
 
                     auto result = asyncResult.GetValueSync();
-                    ThrowOnError(result);
+                    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
                     TDuration local_duration;
 
                     while (!IsInterrupted())
                     {
                         auto streamPart = result.ReadNext().GetValueSync();
-                        if (!streamPart.IsSuccess()) {
-                            if (streamPart.EOS()) {
-                                break;
-                            }
-
-                            ThrowOnError(streamPart);
+                        if (ThrowOnErrorAndCheckEOS(streamPart)) {
+                            break;
                         }
 
-                        if (streamPart.HasQueryStats()) {
-                            const auto& queryStats = streamPart.GetQueryStats();
+                        if (streamPart.GetStats()) {
+                            const auto& queryStats = streamPart.GetStats().value();
                             local_duration += queryStats.GetTotalDuration();
                         }
                     }

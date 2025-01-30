@@ -16,9 +16,10 @@ PEERDIR(
     ydb/core/grpc_services/cancelation/protos
     ydb/core/kqp/common/simple
     ydb/core/protos
+    ydb/library/wilson_ids
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
-    ydb/public/sdk/cpp/client/ydb_params
+    ydb/public/sdk/cpp/src/client/params
 )
 
 END()

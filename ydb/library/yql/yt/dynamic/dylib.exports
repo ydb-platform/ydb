@@ -17,3 +17,6 @@ UdfFreeWithSize
 UdfRegisterObject
 UdfTerminate
 UdfUnregisterObject
+UdfArrowAllocate
+UdfArrowReallocate
+UdfArrowFree

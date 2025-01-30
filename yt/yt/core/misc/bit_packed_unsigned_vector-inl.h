@@ -25,7 +25,7 @@ inline size_t CompressedUnsignedVectorSizeInWords(ui64 maxValue, size_t count)
 
 inline size_t CompressedUnsignedVectorSizeInBytes(ui64 maxValue, size_t count)
 {
-    static size_t wordSize = sizeof(ui64);
+    static constexpr size_t wordSize = sizeof(ui64);
     return CompressedUnsignedVectorSizeInWords(maxValue, count) * wordSize;
 }
 
@@ -154,7 +154,7 @@ inline size_t TBitPackedUnsignedVectorReader<T, Scan>::GetByteSize() const
 template <class T, bool Scan>
 TRange<T> TBitPackedUnsignedVectorReader<T, Scan>::GetData() const
 {
-    return MakeRange(Values_, Values_ + Size_);
+    return TRange(Values_, Values_ + Size_);
 }
 
 template <class T, bool Scan>

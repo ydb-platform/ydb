@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <cstdint>
+#include <cstring>
 #include <memory>
 
 #include "y_absl/base/config.h"
 #include "y_absl/crc/crc32c.h"
 #include "y_absl/crc/internal/crc_memcpy.h"
+#include "y_absl/strings/string_view.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN

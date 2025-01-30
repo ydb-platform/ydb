@@ -1,5 +1,5 @@
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/providers/dq/global_worker_manager/service_node_resolver.h>
 #include <ydb/library/yql/providers/dq/global_worker_manager/coordination_helper.h>
 #include <ydb/library/yql/providers/dq/actors/yt/yt_wrapper.h>
@@ -9,7 +9,7 @@
 #include <ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.h>
 #include <ydb/library/yql/providers/dq/actors/dynamic_nameserver.h>
 #include <ydb/library/yql/providers/dq/actors/execution_helpers.h>
-#include <ydb/library/yql/utils/bind_in_range.h>
+#include <yql/essentials/utils/network/bind_in_range.h>
 #include <library/cpp/digest/md5/md5.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -20,29 +20,29 @@
 #include <ydb/library/yql/providers/dq/runtime/task_command_executor.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_pipe.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
-#include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_factory.h>
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
-#include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_stats_registry.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
-#include <ydb/library/yql/utils/log/tls_backend.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_stats_registry.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/proto/logger_config.pb.h>
+#include <yql/essentials/utils/log/tls_backend.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 
@@ -107,13 +107,26 @@ public:
 
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    RegisterDqPqReadActorFactory(*factory, driver, nullptr);
-    RegisterYdbReadActorFactory(*factory, driver, nullptr);
-    RegisterS3ReadActorFactory(*factory, nullptr, httpGateway);
-    RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
 
-    RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
-    RegisterS3WriteActorFactory(*factory, nullptr, httpGateway);
+    TPqGatewayServices pqServices(
+        driver,
+        nullptr,
+        nullptr,
+        std::make_shared<TPqGatewayConfig>(),
+        nullptr
+    );
+    auto pqGateway = CreatePqNativeGateway(std::move(pqServices));
+    RegisterDqPqReadActorFactory(*factory, driver, nullptr, pqGateway);
+
+    RegisterYdbReadActorFactory(*factory, driver, nullptr);
+    RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
+    RegisterDqPqWriteActorFactory(*factory, driver, nullptr, pqGateway);
+
+    auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+    auto retryPolicy = GetHTTPDefaultRetryPolicy();
+    s3ActorsFactory->RegisterS3WriteActorFactory(*factory, nullptr, httpGateway, retryPolicy);
+    s3ActorsFactory->RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, retryPolicy);
+
     return factory;
 }
 
@@ -121,7 +134,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, I
 
 int main(int argc, char** argv) {
 
-    const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
+    const auto driverConfig = NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(driverConfig);
 
     Y_DEFER {
@@ -400,7 +413,7 @@ int main(int argc, char** argv) {
             : TTaskRunnerInvokerFactory::TPtr(new TConcurrentInvokerFactory(2*capacity));
         YQL_ENSURE(functionRegistry);
         lwmOptions.TaskRunnerActorFactory = disablePipe
-            ? NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory([=](NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
+            ? NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory([=](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
                 {
                     return lwmOptions.Factory->Get(alloc, task, statsMode);
                 })

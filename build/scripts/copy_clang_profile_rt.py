@@ -1,12 +1,15 @@
 import optparse
-import os
+import sys, os
 import shutil
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 
 # List is a temporary thing to ensure that nothing breaks before and after switching to newer clang
 # Remove after DTCC-1902
-CLANG_RT_VERSIONS = [14, 16]
+CLANG_RT_VERSIONS = [14, 16, 18]
 
 
 def copy_clang_rt_profile(cmd, build_root, arch):

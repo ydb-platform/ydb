@@ -259,7 +259,7 @@ private:
     const int Scale_;
 
     static_assert(ConverterType == EConverterType::ToClient || ConverterType == EConverterType::ToServer);
-    constexpr static auto Size_ = (ConverterType == EConverterType::ToClient)
+    static constexpr auto Size_ = (ConverterType == EConverterType::ToClient)
         ? TDecimal::MaxTextSize
         : TDecimal::MaxBinarySize;
     std::array<char, Size_> Buffer_;
@@ -695,7 +695,7 @@ public:
             consumer->OnListItem();
             valueRecoder(cursor, consumer);
             consumer->OnEndList();
-        } if constexpr (mode == EDictMode::Named) {
+        } else if constexpr (mode == EDictMode::Named) {
             valueRecoder(cursor, consumer);
         } else {
             // Not compilable.
@@ -707,7 +707,7 @@ public:
     {
         if constexpr (mode == EDictMode::Positional) {
             consumer->OnEndList();
-        } if constexpr (mode == EDictMode::Named) {
+        } else if constexpr (mode == EDictMode::Named) {
             consumer->OnEndMap();
         } else {
             // Not compilable.

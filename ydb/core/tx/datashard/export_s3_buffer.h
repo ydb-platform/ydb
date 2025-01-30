@@ -9,10 +9,10 @@ namespace NKikimr {
 namespace NDataShard {
 
 NExportScan::IBuffer* CreateS3ExportBufferRaw(
-    const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes);
+    const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, bool enableChecksums);
 
 NExportScan::IBuffer* CreateS3ExportBufferZstd(int compressionLevel,
-    const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, ui64 minBytes);
+    const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, ui64 minBytes, bool enableChecksums);
 
 } // NDataShard
 } // NKikimr

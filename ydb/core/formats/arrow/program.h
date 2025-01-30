@@ -21,6 +21,7 @@ enum class EAggregate {
     Max = 4,
     Sum = 5,
     //Avg = 6,
+    NumRows = 7,
 };
 
 }
@@ -37,14 +38,47 @@ const char * GetHouseFunctionName(EAggregate op);
 inline const char * GetHouseGroupByName() { return "ch.group_by"; }
 EOperation ValidateOperation(EOperation op, ui32 argsSize);
 
-struct TDatumBatch {
-    std::shared_ptr<arrow::Schema> Schema;
-    std::vector<arrow::Datum> Datums;
+class TDatumBatch {
+private:
+    std::shared_ptr<arrow::Schema> SchemaBase;
+    THashMap<std::string, ui32> NewColumnIds;
+    std::vector<std::shared_ptr<arrow::Field>> NewColumnsPtr;
     int64_t Rows = 0;
+
+public:
+    std::vector<arrow::Datum> Datums;
+
+    ui64 GetRecordsCount() const {
+        return Rows;
+    }
+
+    void SetRecordsCount(const ui64 value) {
+        Rows = value;
+    }
+
+    TDatumBatch(const std::shared_ptr<arrow::Schema>& schema, std::vector<arrow::Datum>&& datums, const i64 rows);
+
+    const std::shared_ptr<arrow::Schema>& GetSchema() {
+        if (NewColumnIds.size()) {
+            std::vector<std::shared_ptr<arrow::Field>> fields = SchemaBase->fields();
+            fields.insert(fields.end(), NewColumnsPtr.begin(), NewColumnsPtr.end());
+            SchemaBase = std::make_shared<arrow::Schema>(fields);
+            NewColumnIds.clear();
+            NewColumnsPtr.clear();
+        }
+        return SchemaBase;
+    }
 
     arrow::Status AddColumn(const std::string& name, arrow::Datum&& column);
     arrow::Result<arrow::Datum> GetColumnByName(const std::string& name) const;
-    std::shared_ptr<arrow::RecordBatch> ToRecordBatch() const;
+    bool HasColumn(const std::string& name) const {
+        if (NewColumnIds.contains(name)) {
+            return true;
+        }
+        return SchemaBase->GetFieldIndex(name) > -1;
+    }
+    std::shared_ptr<arrow::Table> ToTable();
+    std::shared_ptr<arrow::RecordBatch> ToRecordBatch();
     static std::shared_ptr<TDatumBatch> FromRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
     static std::shared_ptr<TDatumBatch> FromTable(const std::shared_ptr<arrow::Table>& batch);
 };
@@ -290,6 +324,7 @@ public:
     const arrow::compute::ScalarAggregateOptions* GetOptions() const { return &ScalarOpts; }
 
     IStepFunction<TAggregateAssign>::TPtr GetFunction(arrow::compute::ExecContext* ctx) const;
+    TString DebugString() const;
 
 private:
     TColumnInfo Column;
@@ -339,10 +374,18 @@ public:
             sb << "];";
         }
         if (GroupBy.size()) {
-            sb << "group_by_count=" << GroupBy.size() << "; ";
+            sb << "group_by_assignes=[";
+            for (auto&& i : GroupBy) {
+                sb << i.DebugString() << ";";
+            }
+            sb << "];";
         }
         if (GroupByKeys.size()) {
-            sb << "group_by_keys_count=" << GroupByKeys.size() << ";";
+            sb << "group_by_keys=[";
+            for (auto&& i : GroupByKeys) {
+                sb << i.DebugString() << ";";
+            }
+            sb << "];";
         }
 
         sb << "projections=[";
@@ -355,7 +398,7 @@ public:
         return sb;
     }
 
-    std::set<std::string> GetColumnsInUsage() const;
+    std::set<std::string> GetColumnsInUsage(const bool originalOnly = false) const;
 
     const std::set<ui32>& GetFilterOriginalColumnIds() const;
 
@@ -392,7 +435,7 @@ public:
 
     arrow::Status Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const;
 
-    arrow::Status ApplyAssignes(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const;
+    [[nodiscard]] arrow::Status ApplyAssignes(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const;
     arrow::Status ApplyAggregates(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const;
     arrow::Status ApplyFilters(TDatumBatch& batch) const;
     arrow::Status ApplyProjection(std::shared_ptr<arrow::RecordBatch>& batch) const;
@@ -404,7 +447,7 @@ public:
         return Filters.size() && (!GroupBy.size() && !GroupByKeys.size());
     }
 
-    std::shared_ptr<NArrow::TColumnFilter> BuildFilter(const std::shared_ptr<arrow::Table>& t) const;
+    [[nodiscard]] arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& t) const;
 };
 
 struct TProgram {
@@ -417,6 +460,18 @@ public:
     TProgram(std::vector<std::shared_ptr<TProgramStep>>&& steps)
         : Steps(std::move(steps))
     {}
+
+    arrow::Status ApplyTo(std::shared_ptr<arrow::Table>& table, arrow::compute::ExecContext* ctx) const {
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::SliceToRecordBatches(table);
+        for (auto&& i : batches) {
+            auto status = ApplyTo(i, ctx);
+            if (!status.ok()) {
+                return status;
+            }
+        }
+        table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
+        return arrow::Status::OK();
+    }
 
     arrow::Status ApplyTo(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const {
         try {
@@ -434,7 +489,6 @@ public:
 
     std::set<std::string> GetEarlyFilterColumns() const;
     std::set<std::string> GetProcessingColumns() const;
-    std::shared_ptr<NArrow::TColumnFilter> ApplyEarlyFilter(std::shared_ptr<arrow::Table>& batch, const bool useFilter) const;
     TString DebugString() const {
         TStringBuilder sb;
         sb << "[";
@@ -447,10 +501,16 @@ public:
 };
 
 inline arrow::Status ApplyProgram(
+    std::shared_ptr<arrow::Table>& batch,
+    const TProgram& program,
+    arrow::compute::ExecContext* ctx = nullptr) {
+    return program.ApplyTo(batch, ctx);
+}
+
+inline arrow::Status ApplyProgram(
     std::shared_ptr<arrow::RecordBatch>& batch,
     const TProgram& program,
-    arrow::compute::ExecContext* ctx = nullptr)
-{
+    arrow::compute::ExecContext* ctx = nullptr) {
     return program.ApplyTo(batch, ctx);
 }
 

@@ -23,7 +23,7 @@ public:
     static TKey FromRow(TUnversionedRow row, std::optional<int> length = {});
 
     //! Same as above, but does not check that row does not contain sentinels.
-    //! NB: in debug mode value type check is still performed, but results in YT_ABORT().
+    //! NB: In debug mode value type check is still performed, but results in YT_ABORT().
     static TKey FromRowUnchecked(TUnversionedRow row, std::optional<int> length = {});
 
     //! Performs a deep copy of underlying values into owning row.
@@ -50,8 +50,7 @@ private:
 
 bool operator==(const TKey& lhs, const TKey& rhs);
 
-void FormatValue(TStringBuilderBase* builder, const TKey& key, TStringBuf format);
-TString ToString(const TKey& key);
+void FormatValue(TStringBuilderBase* builder, const TKey& key, TStringBuf spec);
 
 void Serialize(const TKey& key, NYson::IYsonConsumer* consumer);
 
@@ -65,7 +64,7 @@ void Serialize(const TKey& key, NYson::IYsonConsumer* consumer);
 //! replacing all sentinels to <null> and by padding row with nulls or shortening it so that
 //! row length is exactly keyLength.
 //!
-//! NB: this method is inefficient (as it deals with owning rows), do not use it on hot path.
+//! NB: This method is inefficient (as it deals with owning rows), do not use it on hot path.
 TUnversionedOwningRow LegacyKeyToKeyFriendlyOwningRow(TUnversionedRow row, int keyLength);
 
 ////////////////////////////////////////////////////////////////////////////////

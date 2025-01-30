@@ -2,10 +2,10 @@
 
 #include <ydb/library/mkql_proto/ut/helpers/helpers.h>
 
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 #include <google/protobuf/text_format.h>
@@ -511,7 +511,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         TVector<TCell> cells;
         TVector<TString> memoryOwner;
         TString errStr;
-        bool res = CellsFromTuple(&params.GetType(), params.GetValue(), types, true, cells, errStr, memoryOwner);
+        bool res = CellsFromTuple(&params.GetType(), params.GetValue(), types, {}, true, cells, errStr, memoryOwner);
         UNIT_ASSERT_VALUES_EQUAL_C(res, errStr.empty(), paramsProto);
 
         return errStr;

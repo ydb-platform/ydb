@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: zstandard
-Version: 0.22.0
+Version: 0.23.0
 Summary: Zstandard bindings for Python
 Home-page: https://github.com/indygreg/python-zstandard
 Author: Gregory Szorc
@@ -16,6 +16,7 @@ Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Requires-Python: >=3.8
 License-File: LICENSE
 Requires-Dist: cffi >=1.11 ; platform_python_implementation == "PyPy"

@@ -12,6 +12,7 @@ struct TTaskCounters : public TCounters {
 
     void AddAsyncStats(const NDqProto::TDqAsyncBufferStats stats, const std::map<TString, TString>& l, const TString& p) {
         if (auto v = stats.GetBytes();  v) SetCounter(GetCounterName("TaskRunner", l, p + "Bytes"), v);
+        if (auto v = stats.GetDecompressedBytes(); v) SetCounter(GetCounterName("TaskRunner", l, p + "DecompressedBytes"), v);
         if (auto v = stats.GetRows();   v) SetCounter(GetCounterName("TaskRunner", l, p + "Rows"), v);
         if (auto v = stats.GetChunks(); v) SetCounter(GetCounterName("TaskRunner", l, p + "Chunks"), v);
         if (auto v = stats.GetSplits(); v) SetCounter(GetCounterName("TaskRunner", l, p + "Splits"), v);

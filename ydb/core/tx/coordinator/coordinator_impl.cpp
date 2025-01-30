@@ -62,6 +62,7 @@ TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
     , MinLeaderLeaseDurationUs(250000, 1000, 5000000)
     , VolatilePlanLeaseMs(250, 0, 10000)
     , PlanAheadTimeShiftMs(50, 0, 86400000)
+    , MinPlanResolutionMs(0, 0, 1000)
 #ifdef COORDINATOR_LOG_TO_FILE
     , DebugName(Sprintf("/tmp/coordinator_db_log_%" PRIu64 ".%" PRIi32 ".%" PRIu64 ".gz", TabletID(), getpid(), tablet.LocalId()))
     , DebugLogFile(DebugName)
@@ -141,18 +142,22 @@ void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext
     }
 
     // Volatile transactions are not persistent and planned as soon as possible
-    bool volatileTx = proposal.HasVolatileFlag();
-
-    // Rapid transactions are buffered and may be planned without alignment
-    bool rapidTx = (proposal.MinStep <= VolatileState.LastPlanned) && !volatileTx;
+    ui64 volatileLeaseMs = VolatilePlanLeaseMs;
+    bool volatilePlan = volatileLeaseMs > 0 && proposal.HasVolatileFlag();
 
     // The minimum step we can plan is the next step
-    ui64 planStep = VolatileState.LastPlanned + 1;
+    const ui64 minPlanStep = VolatileState.LastPlanned + 1;
 
-    // Prefer planning non-rapid transactions to a resolution aligned step
-    if (!rapidTx && !volatileTx) {
-        planStep = Max(planStep, Min(proposal.MaxStep - 1,
-                (proposal.MinStep + Config.Resolution - 1) / Config.Resolution * Config.Resolution));
+    // We would prefer planning to the next aligned plan step
+    ui64 planStep = AlignPlanStep(minPlanStep, volatilePlan);
+
+    if (planStep < proposal.MinStep) {
+        // We need a step that is further into the future
+        planStep = AlignPlanStep(proposal.MinStep, volatilePlan);
+    }
+    if (planStep >= proposal.MaxStep) {
+        // The preferred step is too late, try using an earlier time
+        planStep = Max(minPlanStep, proposal.MaxStep - 1);
     }
 
     if (planStep >= proposal.MaxStep) {
@@ -161,28 +166,12 @@ void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext
             TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated, proposal.TxId, 0, ctx, TabletID());
     }
 
-    if ((planStep % Config.Resolution) == 0) {
-        // Step is already aligned
-        rapidTx = false;
-    }
-
     MonCounters.PlanTxAccepted->Inc();
     SendTransactionStatus(proposal.Proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted,
         proposal.TxId, planStep, ctx, TabletID());
 
-    if (rapidTx) {
-        TQueueType::TSlot &rapidSlot = VolatileState.Queue.RapidSlot;
-        rapidSlot.push_back(std::move(proposal));
-
-        if (rapidSlot.size() < Config.RapidSlotFlushSize) {
-            // Wait for the next aligned step until enough rapid transactions
-            SchedulePlanTickAligned(planStep);
-            return;
-        }
-    } else {
-        TQueueType::TSlot &planSlot = VolatileState.Queue.LowSlot(planStep);
-        planSlot.push_back(std::move(proposal));
-    }
+    TQueueType::TSlot &planSlot = VolatileState.Queue.LowSlot(planStep);
+    planSlot.push_back(std::move(proposal));
 
     // Wait for the specified step even when not aligned
     SchedulePlanTickExact(planStep);
@@ -225,7 +214,8 @@ bool TTxCoordinator::AllowReducedPlanResolution() const {
 }
 
 void TTxCoordinator::SchedulePlanTick() {
-    const ui64 resolution = Config.Resolution;
+    const ui64 minResolution = MinPlanResolutionMs;
+    const ui64 resolution = Max(minResolution, Config.Resolution);
     const ui64 timeShiftMs = PlanAheadTimeShiftMs;
     const TInstant now = TAppData::TimeProvider->Now() + TDuration::MilliSeconds(timeShiftMs);
     const TMonotonic monotonic = AppData()->MonotonicTimeProvider->Now();
@@ -238,7 +228,8 @@ void TTxCoordinator::SchedulePlanTick() {
 
     if (AllowReducedPlanResolution()) {
         // We want to tick with reduced resolution when all siblings are confirmed
-        ui64 reduced = (VolatileState.LastPlanned + 1 + Config.ReducedResolution - 1) / Config.ReducedResolution * Config.ReducedResolution;
+        ui64 reducedResolution = Max(minResolution, Config.ReducedResolution);
+        ui64 reduced = (VolatileState.LastPlanned + 1 + reducedResolution - 1) / reducedResolution * reducedResolution;
         // Include transactions waiting in the queue, so we don't sleep for seconds when the next tx is in 10ms
         ui64 minWaiting = (VolatileState.Queue.MinLowSlot() + resolution - 1) / resolution * resolution;
         if (minWaiting && minWaiting < reduced) {
@@ -320,13 +311,19 @@ void TTxCoordinator::SchedulePlanTickAligned(ui64 next) {
     SchedulePlanTickExact(AlignPlanStep(next));
 }
 
-ui64 TTxCoordinator::AlignPlanStep(ui64 step) {
-    const ui64 resolution = Config.Resolution;
+ui64 TTxCoordinator::AlignPlanStep(ui64 step, bool volatilePlan) {
+    const ui64 minResolution = MinPlanResolutionMs;
+    const ui64 resolution = Max(minResolution, volatilePlan ? ui64(1) : Config.Resolution);
     return ((step + resolution - 1) / resolution * resolution);
 }
 
 void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorContext &ctx) {
     //LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " HANDLE EvPlanTick LastPlanned " << VolatileState.LastPlanned);
+
+    if (VolatileState.Preserved) {
+        // Avoid planning any new transactions, wait until we are stopped
+        return;
+    }
 
     ui64 next = ev->Get()->Step;
     while (!PendingPlanTicks.empty() && PendingPlanTicks.front() <= next) {
@@ -342,7 +339,8 @@ void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorConte
         VolatileState.Queue.Unsorted.reset();
     }
 
-    const ui64 resolution = Config.Resolution;
+    const ui64 minResolution = MinPlanResolutionMs;
+    const ui64 resolution = Max(minResolution, Config.Resolution);
     const ui64 timeShiftMs = PlanAheadTimeShiftMs;
     const TInstant now = TAppData::TimeProvider->Now() + TDuration::MilliSeconds(timeShiftMs);
 
@@ -503,6 +501,7 @@ void TTxCoordinator::IcbRegister() {
         AppData()->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "CoordinatorControls.MinLeaderLeaseDurationUs");
         AppData()->Icb->RegisterSharedControl(VolatilePlanLeaseMs, "CoordinatorControls.VolatilePlanLeaseMs");
         AppData()->Icb->RegisterSharedControl(PlanAheadTimeShiftMs, "CoordinatorControls.PlanAheadTimeShiftMs");
+        AppData()->Icb->RegisterSharedControl(MinPlanResolutionMs, "CoordinatorControls.MinPlanResolutionMs");
         IcbRegistered = true;
     }
 }
@@ -556,8 +555,14 @@ void TTxCoordinator::TryInitMonCounters(const TActorContext &ctx) {
 }
 
 void TTxCoordinator::SendMediatorStep(TMediator &mediator, const TActorContext &ctx) {
+    if (VolatileState.Preserved) {
+        // We don't want to send new steps when state has been preserved and
+        // potentially sent to newer generations.
+        return;
+    }
+
     if (!mediator.Active) {
-        // We don't want to update LastSentStep when mediators are not empty
+        // We don't want to update LastSentStep when mediators are not connected
         return;
     }
 

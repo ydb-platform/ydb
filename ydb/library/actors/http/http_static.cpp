@@ -29,22 +29,22 @@ public:
     static constexpr char ActorName[] = "HTTP_STATIC_ACTOR";
 
     static TInstant GetCompileTime() {
-        tm compileTime;
+        tm compileTime = {};
         strptime(__DATE__ " " __TIME__, "%B %d %Y %H:%M:%S", &compileTime);
         return TInstant::Seconds(mktime(&compileTime));
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event) {
         THttpOutgoingResponsePtr response;
         if (event->Get()->Request->Method != "GET") {
             response = event->Get()->Request->CreateResponseBadRequest("Wrong request");
-            ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+            Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
             return;
         }
         TFsPath url(event->Get()->Request->URL.Before('?'));
         if (!url.IsAbsolute()) {
             response = event->Get()->Request->CreateResponseBadRequest("Completely wrong URL");
-            ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+            Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
             return;
         }
         if (url.GetPath().EndsWith('/') && Index.IsDefined()) {
@@ -64,7 +64,7 @@ public:
                 TFsPath filename(FilePath / url);
                 if (!filename.IsSubpathOf(FilePath) && filename != FilePath) {
                     response = event->Get()->Request->CreateResponseBadRequest("Wrong URL");
-                    ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+                    Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
                     return;
                 }
                 if (filename.Stat(filestat) && filestat.IsFile()) {
@@ -80,12 +80,12 @@ public:
         catch (const yexception&) {
             response = event->Get()->Request->CreateResponseServiceUnavailable("Not available");
         }
-        ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+        Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
-    STFUNC(StateWork) {
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
         }
     }
 };

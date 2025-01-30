@@ -14,6 +14,9 @@ void THttpIOConfig::Register(TRegistrar registrar)
     registrar.Parameter("max_redirect_count", &TThis::MaxRedirectCount)
         .Default(0);
 
+    registrar.Parameter("ignore_continue_responses", &TThis::IgnoreContinueResponses)
+        .Default(false);
+
     registrar.Parameter("connection_idle_timeout", &TThis::ConnectionIdleTimeout)
         .Default(TDuration::Minutes(5));
 
@@ -35,10 +38,10 @@ void TServerConfig::Register(TRegistrar registrar)
         .Default(80);
 
     registrar.Parameter("max_simultaneous_connections", &TThis::MaxSimultaneousConnections)
-        .Default(50000);
+        .Default(50'000);
 
     registrar.Parameter("max_backlog_size", &TThis::MaxBacklogSize)
-        .Default(8192);
+        .Default(8'192);
 
     registrar.Parameter("bind_retry_count", &TThis::BindRetryCount)
         .Default(5);
@@ -50,7 +53,7 @@ void TServerConfig::Register(TRegistrar registrar)
         .Default(true);
 
     registrar.Parameter("cancel_fiber_on_connection_close", &TThis::CancelFiberOnConnectionClose)
-        .Default(false);
+        .Default();
 
     registrar.Parameter("nodelay", &TThis::NoDelay)
         .Default(true);

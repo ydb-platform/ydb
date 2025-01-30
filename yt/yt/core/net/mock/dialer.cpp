@@ -7,7 +7,7 @@ namespace NYT::NNet {
 TDialerMock::TDialerMock(IDialerPtr underlying)
     : Underlying_(std::move(underlying))
 {
-    ON_CALL(*this, Dial).WillByDefault([this] (const TNetworkAddress& address, TRemoteContextPtr /*context*/) {
+    ON_CALL(*this, Dial).WillByDefault([this] (const TNetworkAddress& address, TDialerContextPtr /*context*/) {
         return Underlying_->Dial(address);
     });
 }

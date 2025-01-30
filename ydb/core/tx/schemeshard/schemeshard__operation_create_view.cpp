@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
@@ -48,7 +49,7 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateView);
 
         context.SS->TabletCounters->Simple()[COUNTER_VIEW_COUNT].Add(1);
-        
+
         const auto pathId = txState->TargetPathId;
         auto path = TPath::Init(pathId, context.SS);
 
@@ -68,6 +69,7 @@ TViewInfo::TPtr CreateView(const NKikimrSchemeOp::TViewDescription& desc) {
     TViewInfo::TPtr viewInfo = new TViewInfo;
     viewInfo->AlterVersion = 1;
     viewInfo->QueryText = desc.GetQueryText();
+    viewInfo->CapturedContext = desc.GetCapturedContext();
     return viewInfo;
 }
 
@@ -109,7 +111,7 @@ public:
         const auto& viewDescription = Transaction.GetCreateView();
 
         const TString& name = viewDescription.GetName();
-        
+
         LOG_N("TCreateView Propose"
                             << ", path: " << parentPathStr << "/" << name
                             << ", opId: " << OperationId
@@ -133,7 +135,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -194,8 +197,9 @@ public:
         context.DbChanges.PersistTxState(OperationId);
 
         dstPath.MaterializeLeaf(owner, viewPathId);
-        dstPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+
         result->SetPathId(viewPathId.LocalPathId);
 
         TPathElement::TPtr viewPath = dstPath.Base();
@@ -246,6 +250,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateView>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateView().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateView()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewView(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateView>(id, tx);

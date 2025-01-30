@@ -45,11 +45,6 @@ void FormatValue(TStringBuilderBase* builder, const TProxyDiscoveryRequest& requ
         request.IgnoreBalancers);
 }
 
-TString ToString(const TProxyDiscoveryRequest& request)
-{
-    return ToStringViaBuilder(request);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TProxyDiscoveryCache
@@ -62,7 +57,7 @@ public:
         IClientPtr client)
         : TAsyncExpiringCache(
             std::move(config),
-            DriverLogger.WithTag("Cache: ProxyDiscovery"))
+            DriverLogger().WithTag("Cache: ProxyDiscovery"))
         , Client_(std::move(client))
     { }
 
@@ -74,6 +69,8 @@ public:
 
 private:
     const IClientPtr Client_;
+
+    const NLogging::TLogger Logger = DriverLogger();
 
     TFuture<TProxyDiscoveryResponse> DoGet(
         const TProxyDiscoveryRequest& request,
@@ -98,7 +95,13 @@ private:
         options.ReadFrom = EMasterChannelKind::LocalCache;
         options.Attributes = {BalancersAttributeName};
 
-        auto path = GetProxyRegistryPath(request.Type) + "/@";
+        TYPath path;
+        try {
+            path = GetProxyRegistryPath(request.Type) + "/@";
+        } catch (const std::exception& ex) {
+            YT_LOG_ERROR(ex, "Failed to get proxy registry path");
+            return MakeFuture<std::optional<TProxyDiscoveryResponse>>(ex);
+        }
         return Client_->GetNode(path, options).Apply(
             BIND([=] (const TYsonString& yson) -> std::optional<TProxyDiscoveryResponse> {
                 auto attributes = ConvertTo<IMapNodePtr>(yson);
@@ -125,7 +128,13 @@ private:
         options.SuppressTransactionCoordinatorSync = true;
         options.Attributes = {BannedAttributeName, RoleAttributeName, AddressesAttributeName};
 
-        auto path = GetProxyRegistryPath(request.Type);
+        TYPath path;
+        try {
+            path = GetProxyRegistryPath(request.Type);
+        } catch (const std::exception& ex) {
+            YT_LOG_ERROR(ex, "Failed to get proxy registry path");
+            return MakeFuture<TProxyDiscoveryResponse>(ex);
+        }
         return Client_->GetNode(path, options).Apply(BIND([=] (const TYsonString& yson) {
             TProxyDiscoveryResponse response;
 
@@ -138,7 +147,7 @@ private:
                     continue;
                 }
 
-                if (proxyNode->Attributes().Get<TString>(RoleAttributeName, DefaultRpcProxyRole) != request.Role) {
+                if (proxyNode->Attributes().Get<std::string>(RoleAttributeName, DefaultRpcProxyRole) != request.Role) {
                     continue;
                 }
 

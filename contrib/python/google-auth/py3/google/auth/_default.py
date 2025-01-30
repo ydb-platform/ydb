@@ -237,6 +237,7 @@ def _get_gcloud_sdk_credentials(quota_project_id=None):
     credentials, project_id = load_credentials_from_file(
         credentials_filename, quota_project_id=quota_project_id
     )
+    credentials._cred_file_path = credentials_filename
 
     if not project_id:
         project_id = _cloud_sdk.get_project_id()
@@ -270,6 +271,7 @@ def _get_explicit_environ_credentials(quota_project_id=None):
         credentials, project_id = load_credentials_from_file(
             os.environ[environment_vars.CREDENTIALS], quota_project_id=quota_project_id
         )
+        credentials._cred_file_path = f"{explicit_file} file via the GOOGLE_APPLICATION_CREDENTIALS environment variable"
 
         return credentials, project_id
 
@@ -468,6 +470,10 @@ def _get_impersonated_service_account_credentials(filename, info, scopes):
             )
         elif source_credentials_type == _SERVICE_ACCOUNT_TYPE:
             source_credentials, _ = _get_service_account_credentials(
+                filename, source_credentials_info
+            )
+        elif source_credentials_type == _EXTERNAL_ACCOUNT_AUTHORIZED_USER_TYPE:
+            source_credentials, _ = _get_external_account_authorized_user_credentials(
                 filename, source_credentials_info
             )
         else:

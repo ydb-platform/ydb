@@ -7,9 +7,7 @@ IF (OS_WINDOWS)
 ELSE()
     SRCS(
         common.cpp
-        list_objects.cpp
         object_exists.cpp
-        delete_objects.cpp
         get_object.cpp
         s3_out.cpp
         abstract.cpp
@@ -17,10 +15,10 @@ ELSE()
     PEERDIR(
         contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
         contrib/libs/curl
-        ydb/library/actors/core
         ydb/core/base
         ydb/core/protos
         ydb/core/wrappers/ut_helpers
+        ydb/library/actors/core
     )
 ENDIF()
 

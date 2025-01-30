@@ -68,14 +68,14 @@ public:
         TSerializedCellVec fromKeyCells(Ev->Get()->Record.GetFromKey());
         keyFrom.clear();
         for (ui32 i = 0; i < fromKeyCells.GetCells().size(); ++i) {
-            keyFrom.push_back(TRawTypeValue(fromKeyCells.GetCells()[i].AsRef(), keyColumnTypes[i]));
+            keyFrom.push_back(TRawTypeValue(fromKeyCells.GetCells()[i].AsRef(), keyColumnTypes[i].GetTypeId()));
         }
         keyFrom.resize(tableInfo->KeyColumns.size());
 
         TSerializedCellVec toKeyCells(Ev->Get()->Record.GetToKey());
         keyTo.clear();
         for (ui32 i = 0; i < toKeyCells.GetCells().size(); ++i) {
-            keyTo.push_back(TRawTypeValue(toKeyCells.GetCells()[i].AsRef(), keyColumnTypes[i]));
+            keyTo.push_back(TRawTypeValue(toKeyCells.GetCells()[i].AsRef(), keyColumnTypes[i].GetTypeId()));
         }
 
         TVector<NTable::TTag> valueColumns;

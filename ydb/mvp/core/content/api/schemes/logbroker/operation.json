@@ -1,0 +1,28 @@
+{
+    "title" : "Operation",
+    "type": "object",
+    "required" : ["id", "ready", "code", "status", "details"],
+    "properties": {
+        "id" : {
+            "type": "string"
+        },
+        "ready": {
+            "type": "bool"
+        },
+        "code" : {
+            "type": "integer",
+            "description" : "HTTP status code closest to real operation status code"
+        },
+        "status" : {
+            "type": "integer",
+            "description" : "HTTP status string representation closest to real operation status code"
+        },
+        "details" : {
+            "type": "array",
+            "description": "Additional details",
+            "items": {
+                "type": "object"
+            }
+        }
+    }
+}

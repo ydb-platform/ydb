@@ -1,5 +1,7 @@
 #include "distconf.h"
 
+#include <google/protobuf/util/json_util.h>
+
 namespace NKikimr::NStorage {
 
     namespace {
@@ -153,6 +155,36 @@ namespace NKikimr::NStorage {
 
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
+                        out << "Main operational parameters";
+                    }
+                    DIV_CLASS("panel-body") {
+                        out << "Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "<br/>";
+                    }
+                }
+
+                auto outputConfig = [&](const char *name, auto *config) {
+                    DIV_CLASS("panel panel-info") {
+                        DIV_CLASS("panel-heading") {
+                            out << name;
+                        }
+                        DIV_CLASS("panel-body") {
+                            if (config) {
+                                TString s;
+                                NProtoBuf::TextFormat::PrintToString(*config, &s);
+                                out << "<pre>" << s << "</pre>";
+                            } else {
+                                out << "not defined";
+                            }
+                        }
+                    }
+                };
+                outputConfig("StorageConfig", StorageConfig ? &StorageConfig.value() : nullptr);
+                outputConfig("BaseConfig", &BaseConfig);
+                outputConfig("InitialConfig", &InitialConfig);
+                outputConfig("ProposedStorageConfig", ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr);
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
                         out << "Outgoing binding";
                     }
                     DIV_CLASS("panel-body") {
@@ -173,7 +205,19 @@ namespace NKikimr::NStorage {
                            out << "ErrorReason: " << ErrorReason << "<br/>";
                         }
                         out << "Quorum: " << (HasQuorum() ? "yes" : "no") << "<br/>";
-                        out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null");
+                        out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null") << "<br/>";
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Static <-> dynamic node interaction";
+                    }
+                    DIV_CLASS("panel-body") {
+                        out << "IsSelfStatic: " << (IsSelfStatic ? "true" : "false") << "<br/>";
+                        out << "ConnectedToStaticNode: " << ConnectedToStaticNode << "<br/>";
+                        out << "StaticNodeSessionId: " << StaticNodeSessionId << "<br/>";
+                        out << "ConnectedDynamicNodes: " << FormatList(ConnectedDynamicNodes) << "<br/>";
                     }
                 }
 

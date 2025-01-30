@@ -9,15 +9,30 @@
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 #include <library/cpp/yt/memory/weak_ptr.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
 #include <library/cpp/yt/misc/enum.h>
 
+#include <library/cpp/yt/string/format.h>
+
 #include <vector>
 
 namespace NYT::NProfiling {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTesting;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+template <bool>
+class TProfiler;
+
+} // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -33,10 +48,11 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    ICounterImplPtr Counter_;
+    ICounterPtr Counter_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -49,10 +65,11 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    ITimeCounterImplPtr Counter_;
+    ITimeCounterPtr Counter_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -65,10 +82,11 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    IGaugeImplPtr Gauge_;
+    IGaugePtr Gauge_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,10 +99,11 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    ITimeGaugeImplPtr Gauge_;
+    ITimeGaugePtr Gauge_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -97,9 +116,10 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
 
-    ISummaryImplPtr Summary_;
+    ISummaryPtr Summary_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -112,9 +132,10 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
 
-    ITimerImplPtr Timer_;
+    ITimerPtr Timer_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -150,9 +171,10 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
 
-    IHistogramImplPtr Histogram_;
+    IHistogramPtr Histogram_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -165,10 +187,11 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
-    IHistogramImplPtr Histogram_;
+    IHistogramPtr Histogram_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -219,13 +242,47 @@ struct TSensorOptions
     bool IsCompatibleWith(const TSensorOptions& other) const;
 };
 
-TString ToString(const TSensorOptions& options);
+void FormatValue(TStringBuilderBase* builder, const TSensorOptions& options, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! TProfiler stores common settings of profiling counters.
-class TProfiler
+namespace NDetail {
+
+template <bool UseWeakPtr>
+class TRegistryHolderBase
 {
+public:
+    explicit TRegistryHolderBase(const IRegistryPtr& impl = nullptr);
+
+    const IRegistryPtr& GetRegistry() const;
+
+private:
+    IRegistryPtr Impl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+class TRegistryHolderBase<true>
+{
+public:
+    explicit TRegistryHolderBase(const IRegistryPtr& impl = nullptr);
+
+    IRegistryPtr GetRegistry() const;
+
+private:
+    TWeakPtr<IRegistry> Impl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <bool UseWeakPtr>
+class TProfiler
+    : private TRegistryHolderBase<UseWeakPtr>
+{
+private:
+    using TBase = TRegistryHolderBase<UseWeakPtr>;
+
 public:
     //! Default constructor creates null registry. Every method of null registry is no-op.
     /*!
@@ -244,18 +301,18 @@ public:
     static constexpr auto DefaultNamespace = "yt";
 
     TProfiler(
-        const IRegistryImplPtr& impl,
-        const TString& prefix,
-        const TString& _namespace = DefaultNamespace);
+        const IRegistryPtr& impl,
+        const std::string& prefix,
+        const std::string& _namespace = DefaultNamespace);
 
     explicit TProfiler(
-        const TString& prefix,
-        const TString& _namespace = DefaultNamespace,
+        const std::string& prefix,
+        const std::string& _namespace = DefaultNamespace,
         const TTagSet& tags = {},
-        const IRegistryImplPtr& impl = nullptr,
+        const IRegistryPtr& impl = nullptr,
         TSensorOptions options = {});
 
-    TProfiler WithPrefix(const TString& prefix) const;
+    TProfiler WithPrefix(const std::string& prefix) const;
 
     //! Tag settings control local aggregates.
     /*!
@@ -263,18 +320,18 @@ public:
      *  #parent is negative number representing parent tag index.
      *  #alternativeTo is negative number representing alternative tag index.
      */
-    TProfiler WithTag(const TString& name, const TString& value, int parent = NoParent) const;
-    TProfiler WithRequiredTag(const TString& name, const TString& value, int parent = NoParent) const;
-    TProfiler WithExcludedTag(const TString& name, const TString& value, int parent = NoParent) const;
-    TProfiler WithAlternativeTag(const TString& name, const TString& value, int alternativeTo, int parent = NoParent) const;
-    TProfiler WithExtensionTag(const TString& name, const TString& value, int parent = NoParent) const;
+    TProfiler WithTag(const std::string& name, const std::string& value, int parent = NoParent) const;
+    TProfiler WithRequiredTag(const std::string& name, const std::string& value, int parent = NoParent) const;
+    TProfiler WithExcludedTag(const std::string& name, const std::string& value, int parent = NoParent) const;
+    TProfiler WithAlternativeTag(const std::string& name, const std::string& value, int alternativeTo, int parent = NoParent) const;
+    TProfiler WithExtensionTag(const std::string& name, const std::string& value, int parent = NoParent) const;
     TProfiler WithTags(const TTagSet& tags) const;
 
     //! Rename tag in all previously registered sensors.
     /*!
      *  NOTE: this is O(n) operation.
      */
-    void RenameDynamicTag(const TDynamicTagPtr& tag, const TString& name, const TString& value) const;
+    void RenameDynamicTag(const TDynamicTagPtr& tag, const std::string& name, const std::string& value) const;
 
     //! WithSparse sets sparse flags on all sensors created using returned registry.
     /*!
@@ -326,38 +383,38 @@ public:
     TProfiler WithHot(bool value = true) const;
 
     //! Counter is used to measure rate of events.
-    TCounter Counter(const TString& name) const;
+    TCounter Counter(const std::string& name) const;
 
     //! Counter is used to measure CPU time consumption.
-    TTimeCounter TimeCounter(const TString& name) const;
+    TTimeCounter TimeCounter(const std::string& name) const;
 
     //! Gauge is used to measure instant value.
-    TGauge Gauge(const TString& name) const;
+    TGauge Gauge(const std::string& name) const;
 
     //! TimeGauge is used to measure instant duration.
-    TTimeGauge TimeGauge(const TString& name) const;
+    TTimeGauge TimeGauge(const std::string& name) const;
 
     //! Summary is used to measure distribution of values.
-    TSummary Summary(const TString& name, ESummaryPolicy summaryPolicy = ESummaryPolicy::Default) const;
+    TSummary Summary(const std::string& name, ESummaryPolicy summaryPolicy = ESummaryPolicy::Default) const;
 
     //! GaugeSummary is used to aggregate multiple values locally.
     /*!
      *  Each TGauge tracks single value. Values are aggregated using Summary rules.
      */
-    TGauge GaugeSummary(const TString& name, ESummaryPolicy summaryPolicy = ESummaryPolicy::Default) const;
+    TGauge GaugeSummary(const std::string& name, ESummaryPolicy summaryPolicy = ESummaryPolicy::Default) const;
 
     //! TimeGaugeSummary is used to aggregate multiple values locally.
     /*!
      *  Each TGauge tracks single value. Values are aggregated using Summary rules.
      */
-    TTimeGauge TimeGaugeSummary(const TString& name, ESummaryPolicy summaryPolicy = ESummaryPolicy::Default) const;
+    TTimeGauge TimeGaugeSummary(const std::string& name, ESummaryPolicy summaryPolicy = ESummaryPolicy::Default) const;
 
     //! Timer is used to measure distribution of event durations.
     /*!
      *  Currently, max value during 5 second interval is exported to solomon.
      *  Use it, when you need a cheap way to monitor lag spikes.
      */
-    TEventTimer Timer(const TString& name) const;
+    TEventTimer Timer(const std::string& name) const;
 
     //! TimeHistogram is used to measure distribution of event durations.
     /*!
@@ -371,49 +428,60 @@ public:
      *  In terms of time this can be read as:
      *  1us, 2us, 4us, 8us, ..., 500us, 1ms, 2ms, ..., 500ms, 1s, ...
      */
-    TEventTimer TimeHistogram(const TString& name, TDuration min, TDuration max) const;
+    TEventTimer TimeHistogram(const std::string& name, TDuration min, TDuration max) const;
 
     //! TimeHistogram is used to measure distribution of event durations.
     /*!
      *  Allows to use custom bounds, bounds should be sorted (maximum 51 elements are allowed).
      */
-    TEventTimer TimeHistogram(const TString& name, std::vector<TDuration> bounds) const;
+    TEventTimer TimeHistogram(const std::string& name, std::vector<TDuration> bounds) const;
 
     //! GaugeHistogram is used to measure distribution of set of samples.
-    TGaugeHistogram GaugeHistogram(const TString& name, std::vector<double> buckets) const;
+    TGaugeHistogram GaugeHistogram(const std::string& name, std::vector<double> buckets) const;
 
     //! RateHistogram is used to measure distribution of set of samples.
     /*!
      *  Bucket values at the next point will be calculated as a derivative.
      */
-    TRateHistogram RateHistogram(const TString& name, std::vector<double> buckets) const;
+    TRateHistogram RateHistogram(const std::string& name, std::vector<double> buckets) const;
 
     void AddFuncCounter(
-        const TString& name,
+        const std::string& name,
         const TRefCountedPtr& owner,
         std::function<i64()> reader) const;
 
     void AddFuncGauge(
-        const TString& name,
+        const std::string& name,
         const TRefCountedPtr& owner,
         std::function<double()> reader) const;
 
+    //! AddProducer is used to batch sensor reports.
+    /*!
+     *  If many producers of the same profiler report a metric (whether it's a counter or a gauge) with the same set of tags,
+     *  the resulting value registered in the profiler will be a sum of the values reported by each producer.
+     */
     void AddProducer(
-        const TString& prefix,
+        const std::string& prefix,
         const ISensorProducerPtr& producer) const;
 
-    const IRegistryImplPtr& GetRegistry() const;
+    using TBase::GetRegistry;
 
 private:
-    friend struct TTesting;
+    friend struct ::NYT::NProfiling::TTesting;
 
     bool Enabled_ = false;
-    TString Prefix_;
-    TString Namespace_;
+    std::string Prefix_;
+    std::string Namespace_;
     TTagSet Tags_;
     TSensorOptions Options_;
-    IRegistryImplPtr Impl_;
 };
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TProfiler = NDetail::TProfiler</*UseWeakPtr*/false>;
+using TWeakProfiler = NDetail::TProfiler</*UseWeakPtr*/true>;
 
 using TRegistry = TProfiler;
 

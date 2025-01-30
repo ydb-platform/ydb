@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.resourcemanager.v1;
+
+import "ydb/public/api/client/yc_private/resourcemanager/cloud.proto";
+
+service CloudService {
+
+  rpc Get (GetCloudRequest) returns (Cloud);
+
+}
+
+message GetCloudRequest {
+  string cloud_id = 1; // [(required) = true, (length) = "<=50"];
+}
+

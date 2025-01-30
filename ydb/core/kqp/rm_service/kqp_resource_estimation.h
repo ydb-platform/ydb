@@ -30,9 +30,5 @@ struct TTaskResourceEstimation {
 
 TTaskResourceEstimation BuildInitialTaskResources(const NYql::NDqProto::TDqTask& task);
 
-TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task,
-    const NKikimrConfig::TTableServiceConfig::TResourceManager& config, const ui32 tasksCount);
-
-void EstimateTaskResources(const NKikimrConfig::TTableServiceConfig::TResourceManager& config, TTaskResourceEstimation& result, const ui32 tasksCount);
 
 } // namespace NKikimr::NKqp

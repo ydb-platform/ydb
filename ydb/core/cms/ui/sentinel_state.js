@@ -15,6 +15,7 @@ var TPDiskState = [
     "OpenFileError",
     "ChunkQuotaError",
     "DeviceIoError",
+    "Stopped",
 ];
 
 TPDiskState[252] = "Missing";
@@ -22,14 +23,14 @@ TPDiskState[253] = "Timeout";
 TPDiskState[254] = "NodeDisconnected";
 TPDiskState[255] = "Unknown";
 
-const EPDiskStatus = [
-    "UNKNOWN",
-    "ACTIVE",
-    "INACTIVE",
-    "BROKEN",
-    "FAULTY",
-    "TO_BE_REMOVED",
-];
+const EPDiskStatus = {
+    0: "UNKNOWN",
+    1: "ACTIVE",
+    2: "INACTIVE",
+    3: "BROKEN",
+    5: "FAULTY",
+    6: "TO_BE_REMOVED",
+};
 
 const PDiskHeaders = [
     "PDiskId",

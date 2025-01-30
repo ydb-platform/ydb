@@ -1,0 +1,582 @@
+****************************************************************************
+As of ANTLR 4.2.1, March 25 2014, we are no longer updating this file. Instead,
+we are using the github release mechanism. For example, here is
+4.2.1 release notes:
+
+https://github.com/antlr/antlr4/releases/tag/4.2.1
+****************************************************************************
+
+ANTLR v4 Honey Badger
+
+January 15, 2014
+
+* Unit tests for lexer actions from yesterday.
+* Refactored TreeView so we can refresh tree externally w/o creating new one.
+  Needed for intellij plugin.
+
+January 14, 2014
+
+* Updated serialized ATN representation of lexer actions, allowing the lexer
+  interpreter to execute the majority of lexer commands (#408)
+
+January 12, 2014
+
+* Support executing precedence predicates during the SLL phase of
+  adaptivePredict (#401). The result is a massive performance boost for grammars
+  containing direct left-recursion (improvements of 5% to 1000+% have been
+  observed, depending on the grammar and input).
+
+December 29, 2013
+
+* Internal change: Tool.loadGrammar() -> parseGrammar(). Tool.load()->parse()
+
+* Added Tool.loadGrammar(fileName) that completely parses, extracts implicit lexer,
+  and processes into Grammar object. Does not geneate code.  Use
+  Grammar.getImplicitLexer() to get the lexer created during processing of
+  combined grammar.
+
+* Added Grammar.load(fileName) that creates Tool object for you. loadGrammar()
+  lets you create your own Tool for setting error handlers etc...
+
+	final Grammar g = Grammar.load("/tmp/MyGrammar.g4");
+
+December 19, 2013
+
+* Sam:
+	Improved documentation for tree patterns classes
+    Refactored parts of the tree patterns API to simplify classes and improve encapsulation
+    Move ATN serializer to runtime
+    Use ATNDeserializer methods instead of ATNSimulator methods which are now deprecated
+
+* parrt: fix null pointer bug with rule "a : a;"
+
+November 24, 2013
+
+* Ter adds tree pattern matching.  Preferred interface:
+
+	ParseTree t = parser.expr();
+	ParseTreePattern p = parser.compileParseTreePattern("<ID>+0", MyParser.RULE_expr);
+	ParseTreeMatch m = p.match(t);
+	String id = m.get("ID");
+
+  or
+
+	String xpath = "//blockStatement/*";
+	String treePattern = "int <Identifier> = <expression>;";
+	ParseTreePattern p =
+		parser.compileParseTreePattern(treePattern,
+									   JavaParser.RULE_localVariableDeclarationStatement);
+	List<ParseTreeMatch> matches = p.findAll(tree, xpath);
+
+November 20, 2013
+
+* Sam added method stuff like expr() that calls expr(0). Makes it possible
+  to call expr rule from TestRig (grun).
+
+November 14, 2013
+
+* Added Sam's ParserInterpreter implementation that uses ATN after
+  deserialization.
+
+	LexerGrammar lg = new LexerGrammar(
+		"lexer grammar L;\n" +
+  		"A : 'a' ;\n" +
+  		"B : 'b' ;\n" +
+  		"C : 'c' ;\n");
+  	Grammar g = new Grammar(
+  		"parser grammar T;\n" +
+  		"s : (A{;}|B)* C ;\n",
+  		lg);
+
+	LexerInterpreter lexEngine = lg.createLexerInterpreter(new ANTLRInputStream(input));
+	CommonTokenStream tokens = new CommonTokenStream(lexEngine);
+	ParserInterpreter parser = g.createParserInterpreter(tokens);
+	ParseTree t = parser.parse(g.rules.get(startRule).index);
+
+November 13, 2013
+
+* move getChildren() from Tree into Trees (to avoid breaking change)
+* Notation:
+	/prog/func,         -> all funcs under prog at root
+	/prog/*,            -> all children of prog at root
+	/*/func,            -> all func kids of any root node
+	prog,               -> prog must be root node
+	/prog,              -> prog must be root node
+	/*,                 -> any root
+	*,                  -> any root
+	//ID,               -> any ID in tree
+	//expr/primary/ID,  -> any ID child of a primary under any expr
+	//body//ID,         -> any ID under a body
+	//'return',         -> any 'return' literal in tree
+	//primary/*,        -> all kids of any primary
+	//func/*/stat,      -> all stat nodes grandkids of any func node
+	/prog/func/'def',   -> all def literal kids of func kid of prog
+	//stat/';',         -> all ';' under any stat node
+	//expr/primary/!ID, -> anything but ID under primary under any expr node
+	//expr/!primary,    -> anything but primary under any expr node
+	//!*,               -> nothing anywhere
+	/!*,                -> nothing at root
+
+September 16, 2013
+
+* Updated build.xml to support v4 grammars in v4 itself; compiles XPathLexer.g4
+* Add to XPath:
+	Collection<ParseTree> findAll(String xpath);
+
+September 11, 2013
+
+* Add ! operator to XPath
+* Use ANTLR v4 XPathLexer.g4 not regex
+* Copy lots of find node stuff from v3 GrammarAST to Trees class in runtime.
+
+September 10, 2013
+
+* Adding in XPath stuff.
+
+August 31, 2013
+
+* Lots of little fixes thanks to Coverity Scan
+
+August 7, 2013
+
+* [BREAKING CHANGE] Altered left-recursion elimination to be simpler. Now,
+  we use the following patterns:
+
+  * Binary expressions are expressions which contain a recursive invocation of
+    the rule as the first and last element of the alternative.
+
+  * Suffix expressions contain a recursive invocation of the rule as the first
+    element of the alternative, but not as the last element.
+
+  * Prefix expressions contain a recursive invocation of the rule as the last
+    element of the alternative, but not as the first element.
+
+There is no such thing as a "ternary" expression--they are just binary
+expressions in disguise.
+
+The right associativity specifiers no longer on the individual tokens because
+it's done on alternative basis anyway. The option is now on the individual
+alternative; e.g.,
+
+  e : e '*' e
+    | e '+' e
+    |<assoc=right> e '?' e ':' e
+    |<assoc=right> e '=' e
+    | INT
+    ;
+
+If your language uses a right-associative ternary operator, you will need
+to update your grammar to include <assoc=right> on the alternative operator.
+
+This also fixes #245 and fixes #268:
+
+https://github.com/antlr/antlr4/issues/245
+https://github.com/antlr/antlr4/issues/268
+
+To smooth the transition, <assoc=right> is still allowed on token references
+but it is ignored.
+
+June 30, 2013 -- 4.1 release
+
+June 24, 2013
+
+* Resize ANTLRInputStream.data after reading a file with fewer characters than
+  bytes
+* Fix ATN created for non-greedy optional block with multiple alternatives
+* Support Unicode escape sequences with indirection in JavaUnicodeInputStream
+  (fixes #287)
+* Remove the ParserRuleContext.altNum field (fixes #288)
+* PredictionContext no longer implements Iterable<SingletonPredictionContext>
+* PredictionContext no longer implements Comparable<PredictionContext>
+* Add the EPSILON_CLOSURE error and EPSILON_OPTIONAL warning
+* Optimized usage of closureBusy set (fixes #282)
+
+June 9, 2013
+
+* Add regression test for #239 (already passes)
+
+June 8, 2013
+
+* Support list labels on a set of tokens (fixes #270)
+* Fix associativity of XOR in Java LR grammar (fixes #280)
+
+June 1, 2013
+
+* DiagnosticErrorListener includes rule names for each decision in its reports
+* Document ANTLRErrorListener and DiagnosticErrorListener (fixes #265)
+* Support '\uFFFF' (fixes #267)
+* Optimize serialized ATN
+
+May 26, 2013
+
+* Report errors that occur while lexing a grammar (fixes #262)
+* Improved error message for unterminated string literals (fixes #243)
+
+May 24, 2013
+
+* Significantly improve performance of JavaUnicodeInputStream.LA(1)
+
+May 20, 2013
+
+* Generate Javadoc for generated visitor and listener interfaces and classes
+* Fix unit tests
+
+May 18, 2013
+
+* Group terminals in Java grammars so ATN can collapse sets
+* Improved Java 7 support in Java grammars (numeric literals)
+* Updated error listener interfaces
+* Support detailed statistics in TestPerformance
+
+May 17, 2013
+
+* Add JavaUnicodeInputStream to handle Unicode escapes in Java code
+* Proper Unicode identifier handling in Java grammars
+* Report file names with lexer errors in TestPerformance
+
+May 14, 2013
+
+* Use a called rule stack to prevent stack overflow in LL1Analyzer
+* Use 0-based indexing for several arrays in the tool
+* Code simplification, assertions, documentation
+
+May 13, 2013
+
+* Unit test updates to ensure exceptions are not hidden
+
+May 12, 2013
+
+* Updates to TestPerformance
+
+May 5, 2013
+
+* Updated several classes to use MurmurHash 3 hashing
+
+May 1, 2013
+
+* Added parse tree JTree to TreeViewer (Bart Kiers)
+
+April 30, 2013
+
+* Updated TestPerformance to support parallelization across passes
+
+April 24, 2013
+
+* Remove unused stub class ParserATNPathFinder
+* Remove ParserInterpreter.predictATN
+* Remove DFA.getATNStatesAlongPath
+* Encapsulate implementation methods in LexerATNSimulator and ParserATNSimulator
+* Updated documentation
+* Simplify creation of new DFA edges
+* Fix handling of previously cached error edges
+* Fix DFA created during forced-SLL parsing (PredictionMode.SLL)
+* Extract methods ParserATNSimulator.getExistingTargetState and
+  ParserATNSimulator.computeTargetState.
+
+April 22, 2013
+
+* Lazy initialization of ParserATNSimulator.mergeCache
+* Improved hash code for DFAState
+* Improved hash code with caching for ATNConfigSet
+* Add new configuration parameters to TestPerformance
+* Update Java LR and Java Std to support Java 7 syntax
+
+April 21, 2013
+
+* Add new configuration parameters to TestPerformance
+
+April 18, 2013
+
+* Must check rule transition follow states before eliminating states in
+  the ATN (fixes #224)
+* Simplify ParserATNSimulator and improve performance by combining execDFA and
+  execATN and using DFA edges even after edge computation is required
+
+April 15, 2013
+
+* Fix code in TestPerformance that clears the DFA
+
+April 12, 2013
+
+* Improved initialization and concurrency control in DFA updates
+* Fix EOF handling in edge case (fixes #218)
+
+April 4, 2013
+
+* Improved testing of error reporting
+* Fix NPE revealed by updated testing method
+* Strict handling of redefined rules - prevents code generation (fixes #210)
+* Updated documentation in Tool
+
+March 27, 2013
+
+* Avoid creating empty action methods in lexer (fixes #202)
+* Split serialized ATN when it exceeds Java's 65535 byte limit (fixes #76)
+* Fix incorrect reports of label type conflicts across separated labeled outer
+  alternatives (fixes #195)
+* Update Maven plugin site documentation
+
+March 26, 2013
+
+* Fix bugs with the closureBusy set in ParserATNSimulator.closure
+* Fix handling of empty options{} block (fixes #194)
+* Add error 149 INVALID_LEXER_COMMAND (fixes #190)
+* Add error 150 MISSING_LEXER_COMMAND_ARGUMENT
+* Add error 151 UNWANTED_LEXER_COMMAND_ARGUMENT
+* Updated documentation in the Parser and RecognitionException classes
+* Refactored and extensively documented the ANTLRErrorStrategy interface and
+  DefaultErrorStrategy default implementation
+* Track the number of syntax errors in Parser.notifyErrorListeners instead of in
+  the error strategy
+* Move primary implementation of getExpectedTokens to ATN, fixes #191
+* Updated ATN documentation
+* Use UUID instead of incremented integer for serialized ATN versioning
+
+March 7, 2013
+
+* Added export to PNG feature to the parse tree viewer
+
+March 6, 2013
+
+* Allow direct calls to left-recursive rules (fixes #161)
+* Change error type 146 (EPSILON_TOKEN) to a warning (fixes #180)
+* Specify locale for all format operations (fixes #158)
+* Fix generation of invalid Unicode escape sequences in Java code (fixes #164)
+* Do not require escape for $ in action when not followed by an ID start char
+  (fixes #176)
+
+February 23, 2013
+
+* Refactoring Target-related classes to improve support for additional language
+  targets
+
+February 22, 2013
+
+* Do not allow raw newline characters in literals
+* Pair and Triple are immutable; Triple is not a Pair
+
+February 5, 2013
+
+* Fix IntervalSet.add when multiple merges are required (fixes #153)
+
+January 29, 2013
+
+* don't call process() if args aren't specified (Dave Parfitt)
+
+January 21, 2013 -- Release 4.0
+
+* Updated PredictionContext Javadocs
+* Updated Maven site documentation
+* Minor tweaks in Java.stg
+
+January 15, 2013
+
+* Tweak error messages
+* (Tool) Make TokenVocabParser fields `protected final`
+* Fix generated escape sequences for literals containing backslashes
+
+January 14, 2013
+
+* Relax parser in favor of errors during semantic analysis
+* Add error 145: lexer mode must contain at least one non-fragment rule
+* Add error 146: non-fragment lexer rule can match the empty string
+
+January 11, 2013
+
+* Updated error 72, 76; added 73-74 and 136-143: detailed errors about name
+  conflicts
+* Report exact location for parameter/retval/local name conflicts
+* Add error 144: multi-character literals are not allowed in lexer sets
+* Error 134 now only applies to rule references in lexer sets
+* Updated error messages (cleanup)
+* Reduce size of _serializedATN by adding 2 to each element: new representation
+  avoids embedded values 0 and 0xFFFF which are common and have multi-byte
+  representations in Java's modified UTF-8
+
+January 10, 2013
+
+* Add error 135: cannot assign a value to list label: $label
+  (fixes antlr/antlr4#128)
+
+January 2, 2013
+
+* Fix EOF handling (antlr/antlr4#110)
+* Remove TREE_PARSER reference
+* Additional validation checks in ATN deserialization
+* Fix potential NPE in parser predicate evaluation
+* Fix termination condition detection in full-context parsing
+
+January 1, 2013
+
+* Updated documentation
+* Minor code cleanup
+* Added the `-XdbgSTWait` command line option for the Tool
+* Removed method override since bug was fixed in V3 runtime
+
+December 31, 2012
+
+* I altered Target.getTargetStringLiteralFromANTLRStringLiteral() so that
+  it converts \uXXXX in an ANTLR string to \\uXXXX, thus, avoiding Java's
+  conversion to a single character before compilation.
+
+December 16, 2012
+
+* Encapsulate some fields in ANTLRMessage
+* Remove ErrorType.INVALID
+* Update error/warning messages, show all v3 compatibility messages
+
+December 12, 2012
+
+* Use arrays instead of HashSet to save memory in SemanticContext.AND/OR
+* Use arrays instead of HashSet to save memory in cached DFA
+* Reduce single-operand SemanticContext.and/or operations
+
+December 11, 2012
+
+* Add -long-messages option; only show exceptions with errors when set
+* "warning treated as error" is a one-off error
+* Listen for issues reported by StringTemplate, report them as warnings
+* Fix template issues
+* GrammarASTWithOptions.getOptions never returns null
+* Use EnumSet instead of HashSet
+* Use new STGroup.GROUP_FILE_EXTENSION value
+
+December 2, 2012
+
+* Remove -Xverbose-dfa option
+* Create the ParseTreeVisitor interface for all visitors, rename previous base
+  visitor class to AbstractParseTreeVisitor
+
+December 1, 2012
+
+* escape [\n\r\t] in lexical error messages; e.g,:
+  line 2:3 token recognition error at: '\t'
+  line 2:4 token recognition error at: '\n'
+
+* added error for bad sets in lexer; e.g.:
+  lexer set element A is invalid (either rule ref or literal with > 1 char)
+  some tests in TestSets appeared to allow ~('a'|B) but it was randomly working.
+  ('a'|B) works, though doesn't collapse to a set.
+
+* label+='foo' wasn't generating good code. It was generating token type as
+  variable name. Now, I gen "s<ttype>" for implicit labels on string literals.
+
+* tokens now have token and char source to draw from.
+
+* remove -Xsave-lexer option; log file as implicit lexer AST.
+
+November 30, 2012
+
+* Maven updates (cleanup, unification, and specify Java 6 bootstrap classpath)
+
+November 28, 2012
+
+* Maven updates (uber-jar, manifest details)
+
+November 27, 2012
+
+* Maven updates (prepare for deploying to Sonatype OSS)
+* Use efficient bitset tests instead of long chains of operator ==
+
+November 26, 2012
+
+* Maven updates (include sources and javadocs, fix warnings)
+* Don't generate action methods for lexer rules not containing an action
+* Generated action and sempred methods are private
+* Remove unused / problematic methods:
+** (unused) TerminalNodeImpl.isErrorNode
+** (unused) RuleContext.conflictsWith, RuleContext.suffix.
+** (problematic) RuleContext.hashCode, RuleContext.equals.
+
+November 23, 2012
+
+* Updated Maven build (added master POM, cleaned up module POMs)
+
+November 22, 2012
+
+* make sure left-recur rule translation uses token stream from correct imported file.
+* actions like @after in imported rules caused inf loop.
+* This misidentified scope lexer/parser: @lexer::members { } @parser::members { }
+
+November 18, 2012
+
+* fixed: undefined rule refs caused exception
+* cleanup, rm dead etypes, add check for ids that cause code gen issues
+* added notion of one-off error
+* added check for v3 backward incompatibilities:
+** tree grammars
+** labels in lexer rules
+** tokens {A;B;} syntax
+** tokens {A='C';} syntax
+** {...}?=> gate semantic predicates
+** (...)=> syntactic predicates
+* Detect EOF in lexer rule
+
+November 17, 2012
+
+* .tokens files goes in output dir like parser file.
+* added check: action in lexer rules must be last element of outermost alt
+* properly check for grammar/filename difference
+* if labels, don't allow set collapse for
+  a : A # X | B ;
+* wasn't checking soon enough for rule redef; now it sets a dead flag in
+  AST so no more walking dup.
+  error(51): T.g:7:0: rule s redefinition (ignoring); previous at line 3
+
+November 11, 2012
+
+* Change version to 4.0b4 (btw, forgot to push 4.0b3 in build.properties when
+  I made git tag 4.0b3...ooops).
+
+November 4, 2012
+
+* Kill box in tree dialog box makes dialog dispose of itself
+
+October 29, 2012
+
+* Sam fixes nongreedy more.
+* -Werror added.
+* Sam made speed improvement re preds in lexer.
+
+October 20, 2012
+
+* Merged Sam's fix for nongreedy lexer/parser. lots of unit tests. A fix in
+  prediction ctx merge. https://github.com/parrt/antlr4/pull/99
+
+October 14, 2012
+
+* Rebuild how ANTLR detects SLL conflict and failover to full LL.  LL is
+  a bit slower but correct now.  Added ability to ask for exact ambiguity
+  detection.
+
+October 8, 2012
+
+* Fixed a bug where labeling the alternatives of the start rule caused
+  a null pointer exception.
+
+October 1, 2012 -- 4.0b2 release
+
+September 30, 2012
+
+* Fixed the unbuffered streams, which actually buffered everything
+  up by mistake. tweaked a few comments.
+
+* Added a getter to IntStream for the token factory
+
+* Added -depend cmd-line option.
+
+September 29, 2012
+
+* no nongreedy or wildcard in parser.
+
+September 28, 2012
+
+* empty "tokens {}" is ok now.
+
+September 22, 2012
+
+* Rule exception handlers weren't passed to the generated code
+* $ruleattribute.foo weren't handled properly
+* Added -package option
+
+September 18, 2012 -- 4.0b1 release

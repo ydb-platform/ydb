@@ -15,7 +15,22 @@ namespace {
 using namespace NKikimr;
 using namespace NFq;
 
-TString NoPermissionStr = "You have no permission to resolve database id into database endpoint. ";
+TString MakeErrorPrefix(
+    const TString& host, 
+    const TString& url,
+    const TString& databaseId,
+    const NYql::EDatabaseType& databaseType) {
+    TStringBuilder ss;
+    
+    return TStringBuilder() 
+        << "Error while trying to resolve managed " << ToString(databaseType)
+        << " database with id " << databaseId << " via HTTP request to"
+        << ": endpoint '" << host << "'"
+        << ", url '" << url << "'"
+        << ": ";
+}
+
+TString NoPermissionStr = "you have no permission to resolve database id into database endpoint.";
 
 struct TTestBootstrap : public TTestActorRuntime {
     NConfig::TCheckpointCoordinatorConfig Settings;
@@ -51,7 +66,7 @@ struct TTestBootstrap : public TTestActorRuntime {
     void CheckEqual(
         const NHttp::TEvHttpProxy::TEvHttpOutgoingRequest& lhs,
         const NHttp::TEvHttpProxy::TEvHttpOutgoingRequest& rhs) {
-        UNIT_ASSERT_EQUAL(lhs.Request->URL, rhs.Request->URL);
+        UNIT_ASSERT_EQUAL_C(lhs.Request->URL, rhs.Request->URL, "Compare: " << lhs.Request->URL << " " << rhs.Request->URL);
     }
 
     void CheckEqual(
@@ -109,12 +124,14 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
     void Test(
         NYql::EDatabaseType databaseType,
-        NYql::NConnector::NApi::EProtocol protocol,
+        NYql::EGenericProtocol protocol,
         const TString& getUrl,
         const TString& status,
         const TString& responseBody,
         const NYql::TDatabaseResolverResponse::TDatabaseDescription& description,
-        const NYql::TIssues& issues)
+        const NYql::TIssues& issues,
+        const TString& error = ""
+        )
     {
         TTestBootstrap bootstrap;
 
@@ -132,7 +149,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 NYql::IDatabaseAsyncResolver::TDatabaseAuthMap(
                     {std::make_pair(requestIdAndDatabaseType, databaseAuth)}),
                 TString("https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod"),
-                TString("mdbGateway"),
+                TString("https://mdb.api.cloud.yandex.net:443"),
                 TString("traceId"),
                 NFq::MakeMdbEndpointGeneratorGeneric(true))));
 
@@ -145,14 +162,17 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
         bootstrap.WaitForBootstrap();
 
-        auto response = std::make_unique<NHttp::THttpIncomingResponse>(nullptr);
-        response->Status = status;
-        response->Body = responseBody;
+        std::unique_ptr<NHttp::THttpIncomingResponse> httpIncomingResponse;
+        if (!error) {
+            httpIncomingResponse = std::make_unique<NHttp::THttpIncomingResponse>(nullptr);
+            httpIncomingResponse->Status = status;
+            httpIncomingResponse->Body = responseBody;
+        }
 
         bootstrap.Send(new IEventHandle(
             processorActorId,
             bootstrap.HttpProxy,
-            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(httpOutgoingRequest->Request, response.release(), "")));
+            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(httpOutgoingRequest->Request, httpIncomingResponse.release(), error)));
 
         NYql::TDatabaseResolverResponse::TDatabaseDescriptionMap result;
         if (status == "200") {
@@ -166,7 +186,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(Ydb_Serverless) {
         Test(
             NYql::EDatabaseType::Ydb,
-            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
             "200",
             R"(
@@ -184,10 +204,62 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             );
     }
 
+    Y_UNIT_TEST(Ydb_Serverless_Timeout) {
+        NYql::TIssues issues{
+            NYql::TIssue(
+                TStringBuilder{} << MakeErrorPrefix(
+                    "ydbc.ydb.cloud.yandex.net:8789",
+                    "/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+                    "etn021us5r9rhld1vgbh",
+                    NYql::EDatabaseType::Ydb
+                ) << "Connection timeout"
+            )
+        };
+
+        Test(
+            NYql::EDatabaseType::Ydb,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
+            "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+            "",
+            "",           
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{
+                TString{"ydb.serverless.yandexcloud.net:2135"},
+                TString{"ydb.serverless.yandexcloud.net"},
+                2135,
+                TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
+                true
+                },
+                issues,
+                "Connection timeout"
+            );
+    }
+
+    Y_UNIT_TEST(Ydb_Dedicated) {
+        Test(
+            NYql::EDatabaseType::Ydb,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
+            "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+            "200",
+            R"(
+                {
+                    "endpoint":"grpcs://lb.etnbrtlini51k7cinbdr.ydb.mdb.yandexcloud.net:2135/?database=/ru-central1/b1gtl2kg13him37quoo6/etn021us5r9rhld1vgbh", 
+                    "storageConfig":{"storageSizeLimit":107374182400}
+                })",
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{
+                TString{"u-lb.etnbrtlini51k7cinbdr.ydb.mdb.yandexcloud.net:2135"},
+                TString{"u-lb.etnbrtlini51k7cinbdr.ydb.mdb.yandexcloud.net"},
+                2135,
+                TString("/ru-central1/b1gtl2kg13him37quoo6/etn021us5r9rhld1vgbh"),
+                true
+                },
+                {}
+            );
+    }
+
     Y_UNIT_TEST(DataStreams_Serverless) {
         Test(
             NYql::EDatabaseType::DataStreams,
-            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
             "200",
             R"(
@@ -208,7 +280,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(DataStreams_Dedicated) {
         Test(
             NYql::EDatabaseType::DataStreams,
-            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
             "200",
             R"(
@@ -230,7 +302,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(ClickHouseNative) {
         Test(
             NYql::EDatabaseType::ClickHouse,
-            NYql::NConnector::NApi::EProtocol::NATIVE,
+            NYql::EGenericProtocol::NATIVE,
             "https://mdb.api.cloud.yandex.net:443/managed-clickhouse/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "200",
             R"({
@@ -264,7 +336,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(ClickHouseHttp) {
         Test(
             NYql::EDatabaseType::ClickHouse,
-            NYql::NConnector::NApi::EProtocol::HTTP,
+            NYql::EGenericProtocol::HTTP,
             "https://mdb.api.cloud.yandex.net:443/managed-clickhouse/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "200",
             R"({
@@ -298,13 +370,18 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(ClickHouse_PermissionDenied) {
         NYql::TIssues issues{
             NYql::TIssue(
-                TStringBuilder{} << NoPermissionStr << "Please check that your service account has role `managed-clickhouse.viewer`."
+                TStringBuilder{} << MakeErrorPrefix(
+                    "mdb.api.cloud.yandex.net:443",
+                    "/managed-clickhouse/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+                    "etn021us5r9rhld1vgbh",
+                    NYql::EDatabaseType::ClickHouse
+                ) << NoPermissionStr << " Please check that your service account has role `managed-clickhouse.viewer`."
             )
         };
 
         Test(
             NYql::EDatabaseType::ClickHouse,
-            NYql::NConnector::NApi::EProtocol::HTTP,
+            NYql::EGenericProtocol::HTTP,
             "https://mdb.api.cloud.yandex.net:443/managed-clickhouse/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "403",
             R"(
@@ -328,7 +405,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(PostgreSQL) {
         Test(
             NYql::EDatabaseType::PostgreSQL,
-            NYql::NConnector::NApi::EProtocol::NATIVE,
+            NYql::EGenericProtocol::NATIVE,
             "https://mdb.api.cloud.yandex.net:443/managed-postgresql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "200",
             R"({
@@ -366,13 +443,18 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(PostgreSQL_PermissionDenied) {
         NYql::TIssues issues{
             NYql::TIssue(
-                TStringBuilder{} << NoPermissionStr << "Please check that your service account has role `managed-postgresql.viewer`."
+                TStringBuilder{} << MakeErrorPrefix(
+                    "mdb.api.cloud.yandex.net:443",
+                    "/managed-postgresql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+                    "etn021us5r9rhld1vgbh",
+                    NYql::EDatabaseType::PostgreSQL
+                ) << NoPermissionStr << " Please check that your service account has role `managed-postgresql.viewer`."
             )
         };
 
         Test(
             NYql::EDatabaseType::PostgreSQL,
-            NYql::NConnector::NApi::EProtocol::NATIVE,
+            NYql::EGenericProtocol::NATIVE,
             "https://mdb.api.cloud.yandex.net:443/managed-postgresql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "403",
             R"(
@@ -393,15 +475,156 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             );
     }
 
+    Y_UNIT_TEST(Greenplum_MasterNode) {
+        Test(
+            NYql::EDatabaseType::Greenplum,
+            NYql::EGenericProtocol::NATIVE,
+            "https://mdb.api.cloud.yandex.net:443/managed-greenplum/v1/clusters/etn021us5r9rhld1vgbh/master-hosts",
+            "200",
+            R"({
+                "hosts": [
+                {
+                 "resources": {
+                 "resourcePresetId": "s3-c8-m32",
+                 "diskSize": "395136991232",
+                "diskTypeId": "local-ssd"
+                },
+                "assignPublicIp": false,
+                "name": "rc1d-51jc89m9q72vcdkn.mdb.yandexcloud.net",
+                "clusterId": "c9qfrvbs21vo0a56s5hm",
+                "zoneId": "ru-central1-d",
+                "type": "MASTER",
+                "health": "ALIVE",
+                "subnetId": "fl8vtt2td9qbtlqdj5ji"
+                }
+                ]
+            })",
+        NYql::TDatabaseResolverResponse::TDatabaseDescription{
+            TString{""},
+                    TString{"rc1d-51jc89m9q72vcdkn.db.yandex.net"},
+                    6432,
+                    TString(""),
+                    true},
+                {});
+    }
+
+    Y_UNIT_TEST(Greenplum_PermissionDenied) {
+            NYql::TIssues issues{
+                NYql::TIssue(
+                    TStringBuilder{} << MakeErrorPrefix(
+                                            "mdb.api.cloud.yandex.net:443",
+                                            "/managed-greenplum/v1/clusters/etn021us5r9rhld1vgbh/master-hosts",
+                                            "etn021us5r9rhld1vgbh",
+                                            NYql::EDatabaseType::Greenplum)
+                                     << NoPermissionStr)};
+
+            Test(
+                NYql::EDatabaseType::Greenplum,
+                NYql::EGenericProtocol::NATIVE,
+                "https://mdb.api.cloud.yandex.net:443/managed-greenplum/v1/clusters/etn021us5r9rhld1vgbh/master-hosts",
+                "403",
+                R"(
+                {
+                    "code": 7,
+                    "message": "Permission denied",
+                    "details": [
+                        {
+                            "@type": "type.googleapis.com/google.rpc.RequestInfo",
+                            "requestId": "a943c092-d596-4e0e-ae7b-1f67f9d8164e"
+                        }
+                    ]
+                }
+            )",
+                NYql::TDatabaseResolverResponse::TDatabaseDescription{},
+                issues);
+    }
+
+    Y_UNIT_TEST(MySQL) {
+        Test(
+            NYql::EDatabaseType::MySQL,
+            NYql::EGenericProtocol::NATIVE,
+            "https://mdb.api.cloud.yandex.net:443/managed-mysql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+            "200",
+            R"({
+                "hosts": [
+                {
+                "services": [
+                    {
+                    "type": "POOLER",
+                    "health": "ALIVE"
+                    },
+                    {
+                    "type": "MYSQL",
+                    "health": "ALIVE"
+                    }
+                ],
+                "name": "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net",
+                "clusterId": "c9qb2bjghs8onbncpamk",
+                "zoneId": "ru-central1-b",
+                "role": "MASTER",
+                "health": "ALIVE"
+                }
+                ]
+                })",
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{
+                TString{""},
+                TString{"rc1b-eyt6dtobu96rwydq.db.yandex.net"},
+                3306,
+                TString(""),
+                true
+                },
+                {});
+    }
+
+    Y_UNIT_TEST(MySQL_PermissionDenied) {
+        NYql::TIssues issues{
+            NYql::TIssue(
+                TStringBuilder{} << MakeErrorPrefix(
+                    "mdb.api.cloud.yandex.net:443",
+                    "/managed-mysql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+                    "etn021us5r9rhld1vgbh",
+                    NYql::EDatabaseType::MySQL
+                ) << NoPermissionStr
+            )
+        };
+
+        Test(
+            NYql::EDatabaseType::MySQL,
+            NYql::EGenericProtocol::NATIVE,
+            "https://mdb.api.cloud.yandex.net:443/managed-mysql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+            "403",
+            R"(
+                {
+                    "code": 7,
+                    "message": "Permission denied",
+                    "details": [
+                        {
+                            "@type": "type.googleapis.com/google.rpc.RequestInfo",
+                            "requestId": "a943c092-d596-4e0e-ae7b-1f67f9d8164e"
+                        }
+                    ]
+                }
+            )",
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{},
+                issues
+            );
+    }
+    
+
     Y_UNIT_TEST(DataStreams_PermissionDenied) {
         NYql::TIssues issues{
             NYql::TIssue(
-                NoPermissionStr
+                TStringBuilder{} << MakeErrorPrefix(
+                    "ydbc.ydb.cloud.yandex.net:8789",
+                    "/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+                    "etn021us5r9rhld1vgbh",
+                    NYql::EDatabaseType::DataStreams
+                ) << NoPermissionStr 
             )
         };
         Test(
             NYql::EDatabaseType::DataStreams,
-            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
             "403",
             R"(
@@ -419,7 +642,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
         NYql::TDatabaseAuth databaseAuth;
         databaseAuth.UseTls = true;
-        databaseAuth.Protocol = NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED;
+        databaseAuth.Protocol = NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED;
 
         TString databaseId1{"etn021us5r9rhld1vgb1"};
         TString databaseId2{"etn021us5r9rhld1vgb2"};
@@ -434,7 +657,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                     std::make_pair(requestIdAndDatabaseType1, databaseAuth),
                     std::make_pair(requestIdAndDatabaseType2, databaseAuth)}),
                 TString("https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod"),
-                TString("mdbGateway"),
+                TString("https://mdb.api.cloud.yandex.net:443"),
                 TString("traceId"),
                 NFq::MakeMdbEndpointGeneratorGeneric(true))));
 
@@ -481,7 +704,11 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
         NYql::TIssues issues{
             NYql::TIssue(
-                TStringBuilder{} << "Cannot resolve database id (status = 404). Response body from /ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgb1: {\"message\":\"Database not found\"}"
+                TStringBuilder() << MakeErrorPrefix(
+                    "ydbc.ydb.cloud.yandex.net:8789", 
+                    "/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgb1", 
+                    "etn021us5r9rhld1vgb1", 
+                    NYql::EDatabaseType::DataStreams)<< "\nStatus: 404\nResponse body: {\"message\":\"Database not found\"}"
             )
         };
 

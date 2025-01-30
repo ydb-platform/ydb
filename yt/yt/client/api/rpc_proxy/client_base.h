@@ -183,6 +183,15 @@ public:
     TFuture<NApi::ITableWriterPtr> CreateTableWriter(
         const NYPath::TRichYPath& path,
         const NApi::TTableWriterOptions& options) override;
+
+    // Distributed table client
+    TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options) override;
+
+    TFuture<void> FinishDistributedWriteSession(
+        const TDistributedWriteSessionWithResults& sessionWithResults,
+        const TDistributedWriteSessionFinishOptions& options) override;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClientBase)

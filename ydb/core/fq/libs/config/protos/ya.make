@@ -22,6 +22,7 @@ SRCS(
     rate_limiter.proto
     read_actors_factory.proto
     resource_manager.proto
+    row_dispatcher.proto
     storage.proto
     test_connection.proto
     token_accessor.proto
@@ -30,7 +31,7 @@ SRCS(
 PEERDIR(
     ydb/library/folder_service/proto
     ydb/library/yql/dq/actors/protos
-    ydb/library/yql/providers/common/proto
+    yql/essentials/providers/common/proto
     ydb/library/yql/providers/s3/proto
 )
 

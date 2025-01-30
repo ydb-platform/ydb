@@ -1,0 +1,44 @@
+Metadata-Version: 2.1
+Name: moto
+Version: 1.3.7
+Summary: A library that allows your python tests to easily mock out the boto library
+Home-page: https://github.com/spulec/moto
+Author: Steve Pulec
+Author-email: spulec@gmail.com
+License: Apache
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Topic :: Software Development :: Testing
+Provides-Extra: server
+Requires-Dist: Jinja2 (>=2.7.3)
+Requires-Dist: boto (>=2.36.0)
+Requires-Dist: boto3 (>=1.6.16)
+Requires-Dist: botocore (>=1.12.13)
+Requires-Dist: cryptography (>=2.3.0)
+Requires-Dist: requests (>=2.5)
+Requires-Dist: xmltodict
+Requires-Dist: six (>1.9)
+Requires-Dist: werkzeug
+Requires-Dist: pyaml
+Requires-Dist: pytz
+Requires-Dist: python-dateutil (<3.0.0,>=2.1)
+Requires-Dist: python-jose (<3.0.0)
+Requires-Dist: mock
+Requires-Dist: docker (>=2.5.1)
+Requires-Dist: jsondiff (==1.1.1)
+Requires-Dist: aws-xray-sdk (<0.96,>=0.93)
+Requires-Dist: responses (>=0.9.0)
+Requires-Dist: backports.tempfile; python_version<'3.3'
+Provides-Extra: server
+Requires-Dist: flask; extra == 'server'
+
+UNKNOWN
+
+

@@ -1,0 +1,11 @@
+--- contrib/tools/python3/Objects/codeobject.c	(index)
++++ contrib/tools/python3/Objects/codeobject.c	(working tree)
+@@ -768,7 +768,7 @@ PyCode_Addr2Line(PyCodeObject *co, int addrq)
+     if (addrq < 0) {
+         return co->co_firstlineno;
+     }
+-    assert(addrq >= 0 && addrq < _PyCode_NBYTES(co));
++    assert(addrq >= 0 && addrq <= _PyCode_NBYTES(co));
+     PyCodeAddressRange bounds;
+     _PyCode_InitAddressRange(co, &bounds);
+     return _PyCode_CheckLineNumber(addrq, &bounds);

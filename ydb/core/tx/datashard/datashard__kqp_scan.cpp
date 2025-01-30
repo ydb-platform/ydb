@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_row_celled.h>
 
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
@@ -71,8 +72,8 @@ public:
                     schema.emplace_back(column.Name, column.Type);
                 }
                 BatchBuilder->Reserve(INIT_BATCH_ROWS);
-                bool started = BatchBuilder->Start(schema);
-                YQL_ENSURE(started, "Failed to start BatchBuilder");
+                auto started = BatchBuilder->Start(schema);
+                YQL_ENSURE(started.ok(), "Failed to start BatchBuilder: " + started.ToString());
             }
         }
 
@@ -436,7 +437,7 @@ private:
 
             if (DataFormat == NKikimrDataEvents::FORMAT_ARROW) {
                 FlushBatchToResult();
-                sendBytes = NArrow::GetBatchDataSize(Result->ArrowBatch);
+                sendBytes = NArrow::GetTableDataSize(Result->ArrowBatch);
                 // Batch is stored inside BatchBuilder until we flush it into Result. So we verify number of rows here.
                 YQL_ENSURE(Rows == 0 && Result->ArrowBatch == nullptr || Result->ArrowBatch->num_rows() == (i64) Rows);
             } else {
@@ -489,7 +490,7 @@ private:
         // send a batch and try to send an empty batch again without adding rows, then a copy of the batch will be send
         // instead. So we check Rows here.
         if (Rows != 0) {
-            Result->ArrowBatch = Tags.empty() ? NArrow::CreateNoColumnsBatch(Rows) : BatchBuilder->FlushBatch(true);
+            Result->ArrowBatch = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({Tags.empty() ? NArrow::CreateNoColumnsBatch(Rows) : BatchBuilder->FlushBatch(true)}));
         }
     }
 
@@ -617,8 +618,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
             return;
         }
 
-        // TODO: support pg types
-        if (column->Type.GetTypeId() != request.GetColumnTypes(i)) {
+        const auto& typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(request.GetColumnTypes(i), &request.GetColumnTypeInfos(i));
+        if (column->Type != typeInfoMod.TypeInfo || column->TypeMod != typeInfoMod.TypeMod) {
             reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
                 << " Table '" << request.GetTablePath() << "'"
                 << " column " << request.GetColumnTags(i)  << " type mismatch at " << TabletID());

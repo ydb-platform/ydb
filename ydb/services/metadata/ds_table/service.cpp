@@ -18,7 +18,7 @@ IActor* CreateService(const TConfig& config) {
 
 void TService::PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender) {
     TBehavioursId id(managers);
-    if (RegistrationData->GetInitializationSnapshot()) {
+    if (RegistrationData->GetSnapshotOwner()->HasInitializationSnapshot()) {
         auto bInitializer = NInitializer::TDBObjectBehaviour::GetInstance();
         switch (RegistrationData->GetStage()) {
             case TRegistrationData::EStage::Created:

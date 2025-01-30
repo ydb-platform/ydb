@@ -1,16 +1,15 @@
 RECURSE(
-    log_backend
     core
     cppcoro
     dnsresolver
     examples
-    interconnect
-    memory_log
     helpers
+    http
+    interconnect
+    log_backend
+    memory_log
     prof
-    protos
+    testlib
     util
     wilson
-    testlib
-    http
 )

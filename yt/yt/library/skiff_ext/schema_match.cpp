@@ -20,7 +20,7 @@ const TString SparseColumnsName = "$sparse_columns";
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void ThrowInvalidSkiffTypeError(const TString& columnName, std::shared_ptr<TSkiffSchema> expectedType, std::shared_ptr<TSkiffSchema> actualType)
+static void ThrowInvalidSkiffTypeError(const std::string& columnName, std::shared_ptr<TSkiffSchema> expectedType, std::shared_ptr<TSkiffSchema> actualType)
 {
     THROW_ERROR_EXCEPTION("Column %Qv has unexpected Skiff type: expected %Qv, found type %Qv",
         columnName,
@@ -56,13 +56,13 @@ static ERowRangeIndexMode GetRowRangeIndexMode(const std::shared_ptr<TSkiffSchem
 
 static bool IsSkiffSpecialColumn(
     TStringBuf columnName,
-    const TString& rangeIndexColumnName,
-    const TString& rowIndexColumnName)
+    const std::string& rangeIndexColumnName,
+    const std::string& rowIndexColumnName)
 {
-    static const THashSet<TString> specialColumns = {
+    static const THashSet<std::string, THash<TStringBuf>, TEqualTo<>> specialColumns{
         KeySwitchColumnName,
         OtherColumnsName,
-        SparseColumnsName
+        SparseColumnsName,
     };
     return specialColumns.contains(columnName) || columnName == rangeIndexColumnName || columnName == rowIndexColumnName;
 }
@@ -85,8 +85,8 @@ static std::pair<std::shared_ptr<TSkiffSchema>, bool> DeoptionalizeSchema(std::s
 
 static TSkiffTableDescription CreateTableDescription(
     const std::shared_ptr<TSkiffSchema>& skiffSchema,
-    const TString& rangeIndexColumnName,
-    const TString& rowIndexColumnName)
+    const std::string& rangeIndexColumnName,
+    const std::string& rowIndexColumnName)
 {
     TSkiffTableDescription result;
     THashSet<TString> topLevelNames;
@@ -186,8 +186,8 @@ static TSkiffTableDescription CreateTableDescription(
 
 std::vector<TSkiffTableDescription> CreateTableDescriptionList(
     const std::vector<std::shared_ptr<TSkiffSchema>>& skiffSchemas,
-    const TString& rangeIndexColumnName,
-    const TString& rowIndexColumnName)
+    const std::string& rangeIndexColumnName,
+    const std::string& rowIndexColumnName)
 {
     std::vector<TSkiffTableDescription> result;
     for (ui16 index = 0; index < skiffSchemas.size(); ++index) {
@@ -303,8 +303,7 @@ std::shared_ptr<TSkiffSchema> ParseSchema(
             "Invalid type for Skiff schema description; expected %Qlv or %Qlv, found %Qlv",
             ENodeType::Map,
             ENodeType::String,
-            schemaNodeType
-        );
+            schemaNodeType);
     }
 }
 

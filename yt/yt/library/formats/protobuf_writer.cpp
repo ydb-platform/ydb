@@ -255,12 +255,12 @@ class TEnumVisitor
 public:
     Y_FORCE_INLINE void OnInt64(i64 value)
     {
-        InRange = TryIntegralCast<i32>(value, &EnumValue);
+        OnInt(value);
     }
 
     Y_FORCE_INLINE void OnUint64(ui64 value)
     {
-        InRange = TryIntegralCast<i32>(value, &EnumValue);
+        OnInt(value);
     }
 
     Y_FORCE_INLINE void OnString(TStringBuf value, const TProtobufWriterTypePtr& type)
@@ -268,21 +268,31 @@ public:
         if (Y_UNLIKELY(!type->EnumerationDescription)) {
             THROW_ERROR_EXCEPTION("Enumeration description not found");
         }
-        if (SuppressUnknownValueError) {
+        if (SuppressUnknownValueError_) {
             if (auto enumValue = type->EnumerationDescription->TryGetValue(value)) {
-                EnumValue = *enumValue;
+                EnumValue_ = *enumValue;
             } else {
-                InRange = false;
+                InRange_ = false;
             }
         } else {
-            EnumValue = type->EnumerationDescription->GetValue(value);
+            EnumValue_ = type->EnumerationDescription->GetValue(value);
         }
     }
 
 public:
-    bool SuppressUnknownValueError = false;
-    bool InRange = true;
-    i32 EnumValue;
+    bool SuppressUnknownValueError_ = false;
+    bool InRange_ = true;
+    i32 EnumValue_;
+
+    template <class T>
+    Y_FORCE_INLINE void OnInt(T value)
+    {
+        if (auto enumValue = TryCheckedIntegralCast<i32>(value)) {
+            EnumValue_ = *enumValue;
+        } else {
+            InRange_ = false;
+        }
+    }
 };
 
 template <typename TValueExtractor>
@@ -297,19 +307,19 @@ Y_FORCE_INLINE void WriteProtobufEnum(
 
     if ((fieldDescription.Repeated || type->Optional) &&
         fieldDescription.EnumWritingMode == EProtobufEnumWritingMode::SkipUnknownValues) {
-        visitor.SuppressUnknownValueError = true;
+        visitor.SuppressUnknownValueError_ = true;
     }
 
     extractor.ExtractEnum(&visitor, type);
 
-    auto getEnumerationName = [&] () {
+    auto getEnumerationName = [&] {
         return type->EnumerationDescription
             ? type->EnumerationDescription->GetEnumerationName()
             : "<unknown>";
     };
 
-    if (Y_UNLIKELY(!visitor.InRange)) {
-        if (visitor.SuppressUnknownValueError) {
+    if (Y_UNLIKELY(!visitor.InRange_)) {
+        if (visitor.SuppressUnknownValueError_) {
             return;
         } else {
             THROW_ERROR_EXCEPTION("Value out of range for protobuf enumeration %Qv",
@@ -319,7 +329,7 @@ Y_FORCE_INLINE void WriteProtobufEnum(
     if (!fieldDescription.Packed) {
         WriteVarUint32(writer, fieldDescription.WireTag);
     }
-    WriteVarUint64(writer, static_cast<ui64>(visitor.EnumValue)); // No zigzag int32.
+    WriteVarUint64(writer, static_cast<ui64>(visitor.EnumValue_)); // No zigzag int32.
 }
 
 template <typename TValueExtractor>
@@ -678,7 +688,7 @@ public:
 
         int parentEmbeddingIndex = 0;
 
-        std::function<int(int)> EmitMessage = [&](int parentEmbeddingIndex) {
+        std::function<int(int)> EmitMessage = [&] (int parentEmbeddingIndex) {
             auto& embeddingDescription = embeddings[parentEmbeddingIndex];
             auto& blob = EmbeddedBuffers[parentEmbeddingIndex];
 
@@ -919,7 +929,7 @@ public:
 private:
     void DoWrite(TRange<TUnversionedRow> rows) override
     {
-        int rowCount = static_cast<int>(rows.Size());
+        int rowCount = std::ssize(rows);
         for (int index = 0; index < rowCount; ++index) {
             auto row = rows[index];
 
@@ -1069,7 +1079,7 @@ ISchemalessFormatWriterPtr CreateWriterForProtobuf(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for protobuf format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for protobuf format") << ex;
     }
 }
 

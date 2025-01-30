@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/protos/blobs.pb.h>
 
 #include <util/generic/refcount.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap {
 
@@ -48,9 +49,20 @@ NKikimr::TConclusionStatus TTabletsByBlob::DeserializeFromProto(const NKikimrCol
         auto it = Data.emplace(*parse, THashSet<TTabletId>()).first;
         for (auto&& t : i.GetTabletIds()) {
             AFL_VERIFY(it->second.emplace((TTabletId)t).second);
+            ++Size;
         }
     }
     return TConclusionStatus::Success();
+}
+
+TString TTabletsByBlob::DebugString() const {
+    TStringBuilder sb;
+    for (auto&& i : Data) {
+        sb << "[";
+        sb << i.first.ToStringNew() << ":" << JoinSeq(",", i.second);
+        sb << "];";
+    }
+    return sb;
 }
 
 }

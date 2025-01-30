@@ -1,0 +1,125 @@
+--- contrib/python/ydb/py2/ydb/_apis.py	(index)
++++ contrib/python/ydb/py2/ydb/_apis.py	(working tree)
+@@ -1,21 +1,41 @@
+ # -*- coding: utf-8 -*-
+-from contrib.ydb.public.api.grpc import (
+-    ydb_cms_v1_pb2_grpc,
+-    ydb_discovery_v1_pb2_grpc,
+-    ydb_scheme_v1_pb2_grpc,
+-    ydb_table_v1_pb2_grpc,
+-    ydb_operation_v1_pb2_grpc,
+-)
++try:
++    from ydb.public.api.grpc import (
++        ydb_cms_v1_pb2_grpc,
++        ydb_discovery_v1_pb2_grpc,
++        ydb_scheme_v1_pb2_grpc,
++        ydb_table_v1_pb2_grpc,
++        ydb_operation_v1_pb2_grpc,
++    )
++
++    from ydb.public.api.protos import (
++        ydb_status_codes_pb2,
++        ydb_discovery_pb2,
++        ydb_scheme_pb2,
++        ydb_table_pb2,
++        ydb_value_pb2,
++        ydb_operation_pb2,
++        ydb_common_pb2,
++    )
++except ImportError:
++    from contrib.ydb.public.api.grpc import (
++        ydb_cms_v1_pb2_grpc,
++        ydb_discovery_v1_pb2_grpc,
++        ydb_scheme_v1_pb2_grpc,
++        ydb_table_v1_pb2_grpc,
++        ydb_operation_v1_pb2_grpc,
++    )
++
++    from contrib.ydb.public.api.protos import (
++        ydb_status_codes_pb2,
++        ydb_discovery_pb2,
++        ydb_scheme_pb2,
++        ydb_table_pb2,
++        ydb_value_pb2,
++        ydb_operation_pb2,
++        ydb_common_pb2,
++    )
+
+-from contrib.ydb.public.api.protos import (
+-    ydb_status_codes_pb2,
+-    ydb_discovery_pb2,
+-    ydb_scheme_pb2,
+-    ydb_table_pb2,
+-    ydb_value_pb2,
+-    ydb_operation_pb2,
+-    ydb_common_pb2,
+-)
+
+ StatusIds = ydb_status_codes_pb2.StatusIds
+ FeatureFlag = ydb_common_pb2.FeatureFlag
+--- contrib/python/ydb/py2/ydb/credentials.py	(index)
++++ contrib/python/ydb/py2/ydb/credentials.py	(working tree)
+@@ -8,8 +8,12 @@ from concurrent import futures
+ import logging
+ import time
+
+-from contrib.ydb.public.api.protos import ydb_auth_pb2
+-from contrib.ydb.public.api.grpc import ydb_auth_v1_pb2_grpc
++try:
++    from ydb.public.api.protos import ydb_auth_pb2
++    from ydb.public.api.grpc import ydb_auth_v1_pb2_grpc
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_auth_pb2
++    from contrib.ydb.public.api.grpc import ydb_auth_v1_pb2_grpc
+
+
+ YDB_AUTH_TICKET_HEADER = "x-ydb-auth-ticket"
+--- contrib/python/ydb/py2/ydb/export.py	(index)
++++ contrib/python/ydb/py2/ydb/export.py	(working tree)
+@@ -4,8 +4,12 @@ from . import _apis
+
+ from . import settings_impl as s_impl
+
+-from contrib.ydb.public.api.protos import ydb_export_pb2
+-from contrib.ydb.public.api.grpc import ydb_export_v1_pb2_grpc
++try:
++    from ydb.public.api.protos import ydb_export_pb2
++    from ydb.public.api.grpc import ydb_export_v1_pb2_grpc
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_export_pb2
++    from contrib.ydb.public.api.grpc import ydb_export_v1_pb2_grpc
+
+ from . import operation
+
+--- contrib/python/ydb/py2/ydb/import_client.py	(index)
++++ contrib/python/ydb/py2/ydb/import_client.py	(working tree)
+@@ -4,8 +4,12 @@ from . import _apis
+
+ from . import settings_impl as s_impl
+
+-from contrib.ydb.public.api.protos import ydb_import_pb2
+-from contrib.ydb.public.api.grpc import ydb_import_v1_pb2_grpc
++try:
++    from ydb.public.api.protos import ydb_import_pb2
++    from ydb.public.api.grpc import ydb_import_v1_pb2_grpc
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_import_pb2
++    from contrib.ydb.public.api.grpc import ydb_import_v1_pb2_grpc
+
+
+ from . import operation
+--- contrib/python/ydb/py2/ydb/scripting.py	(index)
++++ contrib/python/ydb/py2/ydb/scripting.py	(working tree)
+@@ -1,5 +1,9 @@
+-from contrib.ydb.public.api.protos import ydb_scripting_pb2
+-from contrib.ydb.public.api.grpc import ydb_scripting_v1_pb2_grpc
++try:
++    from ydb.public.api.protos import ydb_scripting_pb2
++    from ydb.public.api.grpc import ydb_scripting_v1_pb2_grpc
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_scripting_pb2
++    from contrib.ydb.public.api.grpc import ydb_scripting_v1_pb2_grpc
+
+
+ from . import issues, convert, settings

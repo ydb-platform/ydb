@@ -39,17 +39,17 @@ protected:
         return NNet::CreateDialer(
             New<TDialerConfig>(),
             Poller_,
-            NetLogger);
+            NetLogger());
     }
 };
 
 TEST_F(TNetTest, ReconfigurePoller)
 {
     for (int i = 1; i <= 10; ++i) {
-        Poller_->Reconfigure(i);
+        Poller_->SetThreadCount(i);
     }
     for (int i = 9; i >= 10; --i) {
-        Poller_->Reconfigure(i);
+        Poller_->SetThreadCount(i);
     }
 }
 
@@ -219,8 +219,7 @@ INSTANTIATE_TEST_SUITE_P(
     TContinueReadInCaseOfWriteErrorsTest,
     testing::Values(
         false,
-        true
-    )
+        true)
 );
 
 TEST_F(TNetTest, StressConcurrentClose)

@@ -1,15 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import ydb.core.protos.msgbus_pb2 as msgbus
-from ydb.tests.library.common.types import DeltaTypes, PType
+import json
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.public.api.protos.draft.ydb_tablet_pb2 import ChangeTabletSchemaRequest
+from ydb.tests.library.common.types import PType
 
 
 def column_to_dict(delta):
     return {
-        "ColumnId": delta.ColumnId,
-        "ColumnName": delta.ColumnName,
+        "ColumnId": delta['column_id'],
+        "ColumnName": delta['column_name'],
         "ColumnType": str(
-            PType.from_int(delta.ColumnType)
+            PType.from_int(delta['column_type'])
         )
     }
 
@@ -35,8 +37,8 @@ class TableScheme(object):
         return self
 
     def add_column_to_family(self, delta):
-        cid = delta.ColumnId
-        fid = delta.FamilyId
+        cid = delta['column_id']
+        fid = delta['family_id']
 
         if fid not in self.data['ColumnFamilies']:
             raise RuntimeError("Unknown family")
@@ -45,8 +47,8 @@ class TableScheme(object):
         return self
 
     def add_family(self, delta):
-        fid = delta.FamilyId
-        rid = delta.RoomId
+        fid = delta['family_id']
+        rid = delta['room_id']
 
         if rid not in self.data['Rooms']:
             raise RuntimeError("Unknown room")
@@ -67,25 +69,25 @@ class TableScheme(object):
         return self
 
     def set_family(self, delta):
-        fid = delta.FamilyId
+        fid = delta['family_id']
 
         if fid not in self.data['ColumnFamilies']:
             raise RuntimeError("Unknown family")
 
-        if hasattr(delta, 'Codec') and delta.Codec is not None:
-            self.data['ColumnFamilies'][fid]['Codec'] = delta.Codec
+        if 'codec' in delta and delta['codec'] is not None:
+            self.data['ColumnFamilies'][fid]['Codec'] = delta['codec']
 
-        if hasattr(delta, 'InMemory') and delta.InMemory is not None:
-            self.data['ColumnFamilies'][fid]['InMemory'] = delta.InMemory
+        if 'in_memory' in delta and delta['in_memory'] is not None:
+            self.data['ColumnFamilies'][fid]['InMemory'] = delta['in_memory']
 
-        if hasattr(delta, 'Cache') and delta.Cache is not None:
-            self.data['ColumnFamilies'][fid]['Cache'] = delta.Cache
+        if 'cache' in delta and delta['cache'] is not None:
+            self.data['ColumnFamilies'][fid]['Cache'] = delta['cache']
 
-        if hasattr(delta, 'Small') and delta.Small is not None:
-            self.data['ColumnFamilies'][fid]['Small'] = delta.Small
+        if 'small' in delta and delta['small'] is not None:
+            self.data['ColumnFamilies'][fid]['Small'] = delta['small']
 
-        if hasattr(delta, 'Large') and delta.Large is not None:
-            self.data['ColumnFamilies'][fid]['Large'] = delta.Large
+        if 'large' in delta and delta['large'] is not None:
+            self.data['ColumnFamilies'][fid]['Large'] = delta['large']
 
         return self
 
@@ -102,7 +104,7 @@ class TableScheme(object):
         return self.data['Rooms']
 
     def add_column_to_key(self, delta):
-        cid = delta.ColumnId
+        cid = delta['column_id']
         self.data['TableKey'].append(cid)
         return self
 
@@ -110,7 +112,7 @@ class TableScheme(object):
         raise RuntimeError("Unknown delta type")
 
     def set_room(self, delta):
-        self.data['Rooms'][delta.RoomId] = {"Main": delta.Main, "Outer": delta.Outer, "Blobs": delta.Blobs}
+        self.data['Rooms'][delta['room_id']] = {"Main": delta['main'], "Outer": delta['outer'], "Blobs": delta['blobs'], "ExternalBlobs": delta['external_blobs']}
         return self
 
     def set_compaction_policy(self, delta):
@@ -123,23 +125,27 @@ class TableScheme(object):
 
     def add_delta(self, delta):
         mapping = {
-            DeltaTypes.AddColumn: self.add_column,
-            DeltaTypes.DropColumn: self.drop_column,
-            DeltaTypes.AddColumnToKey: self.add_column_to_key,
-            DeltaTypes.AddColumnToFamily: self.add_column_to_family,
-            DeltaTypes.AddFamily: self.add_family,
-            DeltaTypes.SetRoom: self.set_room,
-            DeltaTypes.SetCompactionPolicy: self.set_compaction_policy,
-            DeltaTypes.SetFamily: self.set_family,
-            DeltaTypes.SetTable: self.set_table,
+            'AddColumn': self.add_column,
+            'DropColumn': self.drop_column,
+            'AddColumnToKey': self.add_column_to_key,
+            'AddColumnToFamily': self.add_column_to_family,
+            'AddFamily': self.add_family,
+            'SetRoom': self.set_room,
+            'SetCompactionPolicy': self.set_compaction_policy,
+            'SetFamily': self.set_family,
+            'SetTable': self.set_table,
         }
-        op = mapping.get(delta.DeltaType, self.unknown_delta)
+        op = mapping.get(delta['delta_type'], self.unknown_delta)
         return op(delta)
 
 
 def get_deltas(client, tablet_id):
-    resp = client.send_request(msgbus.TLocalSchemeTx(TabletID=tablet_id, Timeout=60 * 1000), method='LocalSchemeTx')
-    return resp.LocalDbScheme.Delta
+    resp = client.tablet_service.ChangeTabletSchema(ChangeTabletSchemaRequest(tablet_id=tablet_id))
+    assert resp.status == StatusIds.SUCCESS
+    if resp.status != StatusIds.SUCCESS:
+        raise RuntimeError('ERROR: {status} {issues}'.format(status=resp.status, issues=resp.issues))
+    schema = json.loads(resp.schema)
+    return schema['delta']
 
 
 def get_scheme(client, tablet_id):
@@ -148,15 +154,15 @@ def get_scheme(client, tablet_id):
     pos = {}
 
     for delta in deltas:
-        if not delta.HasField('TableId'):
+        if 'table_id' not in delta:
             continue
 
-        if delta.DeltaType == DeltaTypes.AddTable:
-            table = TableScheme(delta.TableId, delta.TableName)
-            pos[delta.TableId] = len(scheme)
+        if delta['delta_type'] == 'AddTable':
+            table = TableScheme(delta['table_id'], delta['table_name'])
+            pos[delta['table_id']] = len(scheme)
             scheme.append(table)
             continue
 
-        scheme[pos[delta.TableId]] = scheme[pos[delta.TableId]].add_delta(delta)
+        scheme[pos[delta['table_id']]] = scheme[pos[delta['table_id']]].add_delta(delta)
 
     return [element for element in scheme]

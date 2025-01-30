@@ -40,6 +40,10 @@ void TKqpShutdownController::Stop() {
         ++iteration;
         spent = (TInstant::Now() - startedAt).SecondsFloat();
     }
+    if (!ShutdownState_->ShutdownComplete()) {
+        Cerr << "Failed to gracefully shutdown KQP after " << timeout.Seconds() << " seconds: spent " << spent << " seconds, ";
+        Cerr << ShutdownState_->GetPendingSessions() << " sessions to shutdown left" << Endl;
+    }
 }
 
 } // namespace NKikimr::NKqp

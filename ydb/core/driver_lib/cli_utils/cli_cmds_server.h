@@ -30,6 +30,8 @@ protected:
     std::unique_ptr<NConfig::IEnv> Env;
     std::unique_ptr<NConfig::IInitLogger> Logger;
 
+    std::unique_ptr<NConfig::IInitialConfiguratorDepsRecorder> DepsRecorder;
+
     NConfig::TInitialConfigurator InitCfg;
 };
 

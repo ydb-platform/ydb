@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -1966,8 +1966,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             {"Value3", "Pg('pgint2','',21,0,0)"}
         };
 
-        const THashMap<std::string_view, bool> columnNullability = {
-            {"Key1", true},
+        const THashMap<std::string_view, bool> columnNonNullability = {
+            {"Key1", false},
             {"Key2", false},
             {"Value1", false},
             {"Value2", false},
@@ -1977,7 +1977,12 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         const auto& columns = describeTableResult.GetTableDescription().GetTableColumns();
         for (const auto& column : columns) {
             UNIT_ASSERT_VALUES_EQUAL_C(column.Type.ToString(), columnTypes.at(column.Name), column.Name);
-            UNIT_ASSERT_VALUES_EQUAL_C(column.NotNull.value(), columnNullability.at(column.Name), column.Name);
+            bool isNotNull = columnNonNullability.at(column.Name);
+            if (isNotNull) {
+                UNIT_ASSERT_VALUES_EQUAL_C(column.NotNull.value(), true, column.Name);
+            } else {
+                UNIT_ASSERT_C(!column.NotNull.has_value() || !column.NotNull.value(), column.Name);
+            }
         }
     }
 
@@ -1997,16 +2002,21 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
         auto describeTableResult = session.DescribeTable("/Root/NotNullCheck").GetValueSync();
         UNIT_ASSERT_C(describeTableResult.IsSuccess(), describeTableResult.GetIssues().ToString());
-        const THashMap<std::string_view, bool> columnNullability = {
+        const THashMap<std::string_view, bool> columnNonNullability = {
             {"1", false},
-            {"2", true},
+            {"2", false},
             {"3", false},
             {"4", true},
         };
 
         const auto& columns = describeTableResult.GetTableDescription().GetTableColumns();
         for (const auto& column : columns) {
-            UNIT_ASSERT_VALUES_EQUAL_C(column.NotNull.value(), columnNullability.at(column.Name), column.Name);
+            bool isNotNull = columnNonNullability.at(column.Name);
+            if (isNotNull) {
+                UNIT_ASSERT_VALUES_EQUAL_C(column.NotNull.value(), true, column.Name);
+            } else {
+                UNIT_ASSERT_C(!column.NotNull.has_value() || !column.NotNull.value(), column.Name);
+            }
         }
 
         {
@@ -2014,7 +2024,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             proto.mutable_columns()->begin()->set_not_null(true);
             auto result = session.CreateTable("/Root/NotNullCheck2", TTableDescription(std::move(proto), {})).GetValueSync();
             UNIT_ASSERT_C(!result.GetIssues().Empty(), "ok with faulty protobuf");
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Error: Not consistent column type and not_null option for column: 1"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Error: Not consistent column type and not_null option for column: 1"));
         }
     }
 

@@ -10,7 +10,7 @@ public:
 private:
     TString PresetName = "default";
     TString WorkingDir;
-    TString StoreName;
+    YDB_READONLY_DEF(TString, StoreName);
 public:
     virtual ~ITableStoreOperation() {};
 
@@ -20,6 +20,7 @@ public:
 private:
     virtual TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) = 0;
     virtual void DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& scheme) const = 0;
+    virtual void DoSerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme, const bool isStandalone) const;
 };
 
 }

@@ -28,7 +28,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = BusLogger;
+static constexpr auto& Logger = BusLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -47,85 +47,85 @@ public:
 
     ~TTcpClientBusProxy()
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         Connection_->Terminate(TError(NBus::EErrorCode::TransportError, "Bus terminated"));
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointDescription();
     }
 
     const IAttributeDictionary& GetEndpointAttributes() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointAttributes();
     }
 
-    const TString& GetEndpointAddress() const override
+    const std::string& GetEndpointAddress() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointAddress();
     }
 
     const NNet::TNetworkAddress& GetEndpointNetworkAddress() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointNetworkAddress();
     }
 
     bool IsEndpointLocal() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->IsEndpointLocal();
     }
 
     bool IsEncrypted() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->IsEncrypted();
     }
 
     TBusNetworkStatistics GetNetworkStatistics() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetNetworkStatistics();
     }
 
     TFuture<void> GetReadyFuture() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->GetReadyFuture();
     }
 
     TFuture<void> Send(TSharedRefArray message, const TSendOptions& options) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->Send(std::move(message), options);
     }
 
     void SetTosLevel(TTosLevel tosLevel) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         return Connection_->SetTosLevel(tosLevel);
     }
 
     void Terminate(const TError& error) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         Connection_->Terminate(error);
     }
 
     void SubscribeTerminated(const TCallback<void(const TError&)>& callback) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         Connection_->SubscribeTerminated(callback);
     }
 
     void UnsubscribeTerminated(const TCallback<void(const TError&)>& callback) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         Connection_->UnsubscribeTerminated(callback);
     }
 
@@ -141,25 +141,16 @@ class TTcpBusClient
 public:
     TTcpBusClient(
         TBusClientConfigPtr config,
-        IPacketTranscoderFactory* packetTranscoderFactory)
+        IPacketTranscoderFactory* packetTranscoderFactory,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(std::move(config))
         , PacketTranscoderFactory_(packetTranscoderFactory)
-    {
-        if (Config_->Address) {
-            EndpointDescription_ = *Config_->Address;
-        } else if (Config_->UnixDomainSocketPath) {
-            EndpointDescription_ = Format("unix://%v", *Config_->UnixDomainSocketPath);
-        }
+        , MemoryUsageTracker_(std::move(memoryUsageTracker))
+        , EndpointDescription_(MakeEndpointDescription(Config_))
+        , EndpointAttributes_(MakeEndpointAttributes(Config_, EndpointDescription_))
+    { }
 
-        EndpointAttributes_ = ConvertToAttributes(BuildYsonStringFluently()
-            .BeginMap()
-                .Item("address").Value(EndpointDescription_)
-                .Item("encryption_mode").Value(Config_->EncryptionMode)
-                .Item("verification_mode").Value(Config_->VerificationMode)
-            .EndMap());
-    }
-
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointDescription_;
     }
@@ -171,7 +162,7 @@ public:
 
     IBusPtr CreateBus(IMessageHandlerPtr handler, const TCreateBusOptions& options) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto id = TConnectionId::Create();
 
@@ -204,7 +195,8 @@ public:
             Config_->UnixDomainSocketPath,
             std::move(handler),
             std::move(poller),
-            PacketTranscoderFactory_);
+            PacketTranscoderFactory_,
+            MemoryUsageTracker_);
         connection->Start();
 
         return New<TTcpClientBusProxy>(std::move(connection));
@@ -212,20 +204,45 @@ public:
 
 private:
     const TBusClientConfigPtr Config_;
-
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+    const std::string EndpointDescription_;
+    const IAttributeDictionaryPtr EndpointAttributes_;
 
-    TString EndpointDescription_;
-    IAttributeDictionaryPtr EndpointAttributes_;
+    static std::string MakeEndpointDescription(const TBusClientConfigPtr& config)
+    {
+        if (config->Address) {
+            return *config->Address;
+        } else if (config->UnixDomainSocketPath) {
+            return Format("unix://%v", *config->UnixDomainSocketPath);
+        }
+        YT_ABORT();
+    }
+
+    static IAttributeDictionaryPtr MakeEndpointAttributes(
+        const TBusClientConfigPtr& config,
+        const std::string& endpointDescription)
+    {
+        return ConvertToAttributes(BuildYsonStringFluently()
+            .BeginMap()
+                .Item("address").Value(endpointDescription)
+                .Item("encryption_mode").Value(config->EncryptionMode)
+                .Item("verification_mode").Value(config->VerificationMode)
+            .EndMap());
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 IBusClientPtr CreateBusClient(
     TBusClientConfigPtr config,
-    IPacketTranscoderFactory* packetTranscoderFactory)
+    IPacketTranscoderFactory* packetTranscoderFactory,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
-    return New<TTcpBusClient>(std::move(config), packetTranscoderFactory);
+    return New<TTcpBusClient>(
+        std::move(config),
+        packetTranscoderFactory,
+        std::move(memoryUsageTracker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

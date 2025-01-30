@@ -11,9 +11,9 @@
 
 #include <util/thread/pool.h>
 
-#include <grpc++/alarm.h>
+#include <grpcpp/alarm.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 using NYdbGrpc::IQueueClientContext;
 using NYdbGrpc::IQueueClientEvent;

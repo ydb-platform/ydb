@@ -87,7 +87,7 @@ TFuture<typename TNonblockingBatcher<T, TBatchLimiter>::TBatch> TNonblockingBatc
 template <class T, CBatchLimiter<T> TBatchLimiter>
 void TNonblockingBatcher<T, TBatchLimiter>::Drop()
 {
-    std::queue<TBatch> batches;
+    std::deque<TBatch> batches;
     std::deque<TPromise<TBatch>> promises;
     {
         auto guard = Guard(SpinLock_);
@@ -178,7 +178,7 @@ void TNonblockingBatcher<T, TBatchLimiter>::CheckFlush(TGuard<NThreading::TSpinL
         return;
     }
     ResetTimer(guard);
-    Batches_.push(std::move(CurrentBatch_));
+    Batches_.push_back(std::move(CurrentBatch_));
     CurrentBatch_.clear();
     CurrentBatchLimiter_ = BatchLimiter_;
     CheckReturn(guard);
@@ -191,7 +191,7 @@ void TNonblockingBatcher<T, TBatchLimiter>::CheckReturn(TGuard<NThreading::TSpin
         return;
     }
     auto batch = std::move(Batches_.front());
-    Batches_.pop();
+    Batches_.pop_front();
     auto promise = std::move(Promises_.front());
     Promises_.pop_front();
     if (AllowEmptyBatches_ && !Promises_.empty()) {
@@ -211,6 +211,39 @@ void TNonblockingBatcher<T, TBatchLimiter>::OnBatchTimeout(ui64 generation)
     }
     TimerState_ = ETimerState::Finished;
     CheckFlush(guard);
+}
+
+template <class T, CBatchLimiter<T> TBatchLimiter>
+std::vector<typename TNonblockingBatcher<T, TBatchLimiter>::TBatch> TNonblockingBatcher<T, TBatchLimiter>::Drain()
+{
+    std::deque<TPromise<TBatch>> promises;
+    std::vector<TBatch> result;
+
+    {
+        auto guard = Guard(SpinLock_);
+
+        result.reserve(Batches_.size() + (CurrentBatch_.empty() ? 0 : 1));
+
+        for (auto& batch : Batches_) {
+            result.push_back(std::move(batch));
+        }
+        Batches_.clear();
+
+        if (!CurrentBatch_.empty()) {
+            result.push_back(std::move(CurrentBatch_));
+            CurrentBatch_.clear();
+        }
+
+        std::swap(promises, Promises_);
+        CurrentBatchLimiter_ = BatchLimiter_;
+        ResetTimer(guard);
+    }
+
+    for (auto& promise : promises) {
+        promise.Set(TError("Batcher is drained"));
+    }
+
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

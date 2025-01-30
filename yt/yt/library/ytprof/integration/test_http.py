@@ -1,3 +1,4 @@
+from collections import Counter
 import pytest
 import requests
 import time
@@ -63,7 +64,7 @@ async def launch(running_example, name):
     resps = await asyncio.gather(*map(get_async, urls))
     data = [resp.status_code for resp in resps]
 
-    assert data == [200, 429, 429]
+    assert Counter(data) == Counter([200, 429, 429])
 
 
 def test_async(running_example):
@@ -89,16 +90,16 @@ def test_spinlock_profile(running_example):
     if yatest.common.context.build_type != "profile":
         pytest.skip()
 
-    fetch_data(running_example, "lock?d=1")
-    fetch_data(running_example, "lock?d=1&frac=1")
+    fetch_data(running_example, "spinlock/lock?d=1")
+    fetch_data(running_example, "spinlock/lock?d=1&frac=1")
 
 
 def test_block_profile(running_example):
     if yatest.common.context.build_type != "profile":
         pytest.skip()
 
-    fetch_data(running_example, "block?d=1")
-    fetch_data(running_example, "block?d=1&frac=1")
+    fetch_data(running_example, "spinlock/block?d=1")
+    fetch_data(running_example, "spinlock/block?d=1&frac=1")
 
 
 def test_binary_handler(running_example):

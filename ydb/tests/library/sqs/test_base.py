@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os
 import itertools
 import logging
 import time
@@ -11,9 +10,9 @@ import re
 import socket
 from hamcrest import assert_that, equal_to, not_none, none, greater_than, less_than_or_equal_to, any_of, not_
 
-import ydb.tests.library.common.yatest_common as yatest_common
+import yatest
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 
@@ -46,8 +45,8 @@ TABLES_FORMAT_PARAMS = {
 
 POLLING_PARAMS = {
     'argnames': 'polling_wait_timeout',
-    'argvalues': [0, 1],
-    'ids': ['short_polling', 'long_polling'],
+    'argvalues': [1],
+    'ids': ['long_polling'],
 }
 
 STOP_NODE_PARAMS = {
@@ -67,12 +66,6 @@ HAS_QUEUES_PARAMS = {
     'argvalues': [True, False],
     'ids': ['with_queues', 'without_queues']
 }
-
-
-def get_sqs_client_path():
-    if os.getenv("SQS_CLIENT_BINARY"):
-        return yatest_common.binary_path(os.getenv("SQS_CLIENT_BINARY"))
-    raise RuntimeError("SQS_CLIENT_BINARY enviroment variable is not specified")
 
 
 def to_bytes(v):
@@ -179,7 +172,7 @@ class KikimrSqsTestBase(object):
 
     def setup_method(self, method=None):
         logging.debug('Test started: {}'.format(str(method.__name__)))
-        logging.debug("Kikimr logs dir: {}".format(self.cluster.slots[1].cwd if self.slot_count else self.cluster.nodes[1].cwd))
+        logging.debug("Kikimr working dir: {}".format(self.cluster.config.working_dir))
 
         # Start all nodes in case of previous test with killed nodes
         for node_index in range(len(self.cluster.nodes)):
@@ -191,8 +184,7 @@ class KikimrSqsTestBase(object):
         for slot_index in range(len(self.cluster.slots)):
             self._enable_tablets_on_node(slot_index)
 
-        grpc_port = self.cluster.slots[1].grpc_port if self.slot_count else self.cluster.nodes[1].grpc_port
-        self._sqs_server_opts = ['-s', 'localhost', '-p', str(grpc_port)]
+        self._http_port = self.cluster.nodes[1].sqs_port
         test_name = str(method.__name__)[5:]
 
         def create_unique_name(user=False):
@@ -288,7 +280,7 @@ class KikimrSqsTestBase(object):
         config_generator = KikimrConfigGenerator(
             erasure=cls.erasure,
             use_in_memory_pdisks=cls.use_in_memory_pdisks,
-            additional_log_configs={'SQS': LogLevels.DEBUG},
+            additional_log_configs={'SQS': LogLevels.TRACE},
             enable_sqs=True,
         )
         config_generator.yaml_config['sqs_config']['root'] = cls.sqs_root
@@ -315,41 +307,44 @@ class KikimrSqsTestBase(object):
             with ydb.SessionPool(driver, size=1) as pool:
                 with pool.checkout() as session:
                     create_all_sqs_tables(cls.sqs_root, driver, session)
-        cls.create_metauser(cluster, config_generator)
+        http_port = cluster.nodes[1].sqs_port
+        cls.create_metauser(http_port, config_generator)
 
     @classmethod
-    def create_metauser(cls, cluster, config_generator):
-        grpc_port = cluster.slots[1].grpc_port if cls.slot_count else cluster.nodes[1].grpc_port
+    def create_metauser(cls, http_port, config_generator):
         cmd = [
-            get_sqs_client_path(),
-            'user',
-            '-u', 'metauser',
-            '-n', 'metauser',
-            '-s', 'localhost',
-            '-p', str(grpc_port)
+            'curl',
+            '-v',
+            'localhost:'+str(http_port)+'?Action=CreateUser&UserName=metauser',
+            '-H',
+            'authorization: aaa credential=abacaba/20220830/ec2/aws4_request'
         ]
-        yatest_common.execute(cmd)
+        yatest.common.execute(cmd)
 
     @classmethod
     def _setup_cluster(cls):
         config_generator = cls._setup_config_generator()
-        cluster = kikimr_cluster_factory(config_generator)
+        cluster = KiKiMR(config_generator)
         cluster.start()
         cls._init_cluster(cluster, config_generator)
         return cluster, config_generator
 
     def _setup_user(self, _username, retries_count=20):
+
         cmd = [
-            get_sqs_client_path(),
-            'user',
-            '-u', 'metauser',
-            '-n', _username,
-        ] + self._sqs_server_opts
+            'curl',
+            '-v',
+            'localhost:'+str(self._http_port)+'?Action=CreateUser&UserName='+_username+'',
+            '-H',
+            'authorization: aaa credential=abacaba/20220830/ec2/aws4_request'
+
+        ]
+
         while retries_count:
             logging.debug("Running {}".format(' '.join(cmd)))
             try:
-                yatest_common.execute(cmd)
-            except yatest_common.ExecutionError as ex:
+                yatest.common.execute(cmd)
+            except yatest.common.ExecutionError as ex:
                 logging.debug("Create user failed: {}. Retrying".format(ex))
                 retries_count -= 1
                 time.sleep(3)
@@ -413,31 +408,21 @@ class KikimrSqsTestBase(object):
         ]
         return any_of(*urls_matchers)
 
-    def _create_queue_and_assert(self, queue_name, is_fifo=False, use_http=False, attributes=None, shards=None, retries=3):
+    def _create_queue_and_assert(self, queue_name, is_fifo=False, use_http=False, attributes=None, shards=None, retries=3, tags=None):
         self.queue_url = None
         if attributes is None:
-            attributes = dict()
-        logging.debug('Create queue. Attributes: {}. Use http: {}. Is fifo: {}'.format(attributes, use_http, is_fifo))
+            attributes = {}
+        if tags is None:
+            tags = {}
+        logging.debug('Create queue. Name: {}. Attributes: {}. Use http: {}. Is fifo: {}'.format(queue_name, attributes, use_http, is_fifo))
         assert (len(attributes.keys()) == 0 or use_http), 'Attributes are supported only for http queue creation'
+        assert (len(tags.keys()) == 0 or use_http), 'Tags are supported only for http queue creation'
         assert (shards is None or not use_http), 'Custom shards number is only supported in non-http mode'
         while retries:
             retries -= 1
             try:
-                if use_http:
-                    self.queue_url = self._sqs_api.create_queue(queue_name, is_fifo=is_fifo, attributes=attributes)
-                else:
-                    cmd = [
-                        get_sqs_client_path(),
-                        'create',  # create queue command
-                        '-u', self._username,
-                        '--shards', str(shards) if shards is not None else '2',
-                        '--partitions', '1',
-                        '--queue-name', queue_name,
-                    ] + self._sqs_server_opts
-                    execute = yatest_common.execute(cmd)
-                    self.queue_url = execute.std_out
-                    self.queue_url = self.queue_url.strip()
-            except (RuntimeError, yatest_common.ExecutionError) as ex:
+                self.queue_url = self._sqs_api.create_queue(queue_name, is_fifo=is_fifo, attributes=attributes, tags=tags)
+            except (RuntimeError, yatest.common.ExecutionError) as ex:
                 logging.debug("Got error: {}. Retrying creation request".format(ex))
                 if retries:
                     time.sleep(1)  # Sleep before next retry
@@ -495,6 +480,8 @@ class KikimrSqsTestBase(object):
                     break
             else:
                 empty_reads_count = 0
+
+            logging.debug('Read result {}'.format(read_result))
 
             if read_result:
                 request_end = time.time()

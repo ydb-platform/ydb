@@ -1,3 +1,5 @@
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
+
 #include "schemeshard_impl.h"
 #include "schemeshard_path_describer.h"
 
@@ -75,10 +77,10 @@ struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
 }; // TTxPublishToSchemeBoard
 
 struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TSchemeShard> {
-    TSchemeBoardEvents::TEvUpdateAck::TPtr Ev;
+    NSchemeBoard::NSchemeshardEvents::TEvUpdateAck::TPtr Ev;
     TSideEffects SideEffects;
 
-    TTxAckPublishToSchemeBoard(TSelf *self, TSchemeBoardEvents::TEvUpdateAck::TPtr& ev)
+    TTxAckPublishToSchemeBoard(TSelf *self, NSchemeBoard::NSchemeshardEvents::TEvUpdateAck::TPtr& ev)
         : TBase(self)
         , Ev(ev)
     {
@@ -227,7 +229,7 @@ void TSchemeShard::PublishToSchemeBoard(TTxId txId, TDeque<TPathId>&& paths, con
     PublishToSchemeBoard({{txId, std::move(paths)}}, ctx);
 }
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxAckPublishToSchemeBoard(TSchemeBoardEvents::TEvUpdateAck::TPtr& ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxAckPublishToSchemeBoard(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck::TPtr& ev) {
     return new TTxAckPublishToSchemeBoard(this, ev);
 }
 

@@ -13,15 +13,22 @@
 #include <yt/yt/core/misc/ref_counted_tracker_profiler.h>
 
 #include <yt/yt/library/profiling/sensor.h>
+
+#include <yt/yt/library/profiling/solomon/config.h>
 #include <yt/yt/library/profiling/solomon/exporter.h>
 #include <yt/yt/library/profiling/solomon/registry.h>
+
 #include <yt/yt/library/profiling/tcmalloc/profiler.h>
-#include <yt/yt/library/profiling/perf/counters.h>
+
+#include <yt/yt/library/profiling/perf/event_counter_profiler.h>
 
 #include <util/stream/output.h>
 #include <util/system/compiler.h>
+
 #include <util/generic/yexception.h>
+
 #include <util/string/cast.h>
+
 #include <util/system/madvise.h>
 
 using namespace NYT;
@@ -32,7 +39,7 @@ using namespace NYT::NProfiling;
 int main(int argc, char* argv[])
 {
     EnableTCMallocProfiler();
-    EnablePerfCounters();
+    EnablePerfEventCounterProfiling();
 
     try {
         if (argc != 2 && argc != 3) {
@@ -40,7 +47,7 @@ int main(int argc, char* argv[])
         }
 
         auto port = FromString<int>(argv[1]);
-        auto fast = TString{"--fast"} == TString{argv[2]};
+        auto fast = std::string{"--fast"} == std::string{argv[2]};
         auto poller = CreateThreadPoolPoller(1, "Example");
         auto server = CreateServer(port, poller);
         auto actionQueue = New<TActionQueue>("Control");

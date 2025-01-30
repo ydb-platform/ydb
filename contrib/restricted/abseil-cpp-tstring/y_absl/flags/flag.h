@@ -29,12 +29,14 @@
 #ifndef Y_ABSL_FLAGS_FLAG_H_
 #define Y_ABSL_FLAGS_FLAG_H_
 
+#include <cstdint>
 #include <util/generic/string.h>
 #include <type_traits>
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
 #include "y_absl/base/optimization.h"
+#include "y_absl/flags/commandlineflag.h"
 #include "y_absl/flags/config.h"
 #include "y_absl/flags/internal/flag.h"
 #include "y_absl/flags/internal/registry.h"

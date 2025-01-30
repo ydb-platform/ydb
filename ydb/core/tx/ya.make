@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     defs.h
-    message_seqno.h
+    message_seqno.cpp
     tx.h
     tx.cpp
     tx_processing.h
@@ -27,6 +27,7 @@ RECURSE(
     columnshard
     coordinator
     datashard
+    locks
     long_tx_service
     mediator
     replication
@@ -35,11 +36,11 @@ RECURSE(
     schemeshard
     sequenceproxy
     sequenceshard
+    sharding
+    tiering
     time_cast
+    tracing
     tx_allocator
     tx_allocator_client
     tx_proxy
-    tiering
-    sharding
-    tracing
 )

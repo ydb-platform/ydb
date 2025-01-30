@@ -1,0 +1,49 @@
+package NKikimrSchemeShardTxBackgroundProto;
+
+import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_operation.proto";
+
+message TTxModification {
+    optional NKikimrSchemeOp.TModifyScheme Transaction = 1;
+}
+
+message TTxChainCommonData {
+    optional string TablePath = 1;
+    repeated TTxModification Modification = 2;
+}
+
+message TTxChainTask {
+    optional TTxChainCommonData CommonData = 1;
+}
+
+message TTxChainSessionLogic {
+    optional TTxChainCommonData CommonData = 1;
+}
+
+message TTxChainSessionProgress {
+    optional uint32 StepForExecute = 1;
+}
+
+message TTxChainSessionState {
+}
+
+message TStatusChannel {
+    optional uint64 SSTabletId = 1;
+    optional string TaskClassName = 2;
+    optional string TaskIdentifier = 3;
+}
+
+message TEvListRequest {
+    optional string DatabaseName = 1;
+    optional uint64 PageSize = 2;
+    optional string PageToken = 3;
+}
+
+message TEvListResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    repeated Ydb.Operations.Operation Entries = 3;
+    optional string NextPageToken = 4;
+}

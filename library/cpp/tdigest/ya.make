@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/protobuf
+    library/cpp/protobuf/runtime
 )
 
 END()

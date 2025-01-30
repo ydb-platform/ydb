@@ -1,5 +1,7 @@
 #include "proto_helpers.h"
 
+#include <yt/yt/core/misc/protobuf_helpers.h>
+
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/interface/fluent.h>
 
@@ -7,7 +9,6 @@
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/messagext.h>
 #include <google/protobuf/io/coded_stream.h>
 
 #include <util/stream/str.h>
@@ -21,7 +22,6 @@ using ::google::protobuf::Descriptor;
 using ::google::protobuf::DescriptorPool;
 
 using ::google::protobuf::io::CodedInputStream;
-using ::google::protobuf::io::TCopyingInputStreamAdaptor;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -87,7 +87,7 @@ void ValidateProtoDescriptor(
 void ParseFromArcadiaStream(IInputStream* stream, Message& row, ui32 length)
 {
     TLengthLimitedInput input(stream, length);
-    TCopyingInputStreamAdaptor adaptor(&input);
+    TProtobufInputStreamAdaptor adaptor(&input);
     CodedInputStream codedStream(&adaptor);
     codedStream.SetTotalBytesLimit(length + 1);
     bool parsedOk = row.ParseFromCodedStream(&codedStream);

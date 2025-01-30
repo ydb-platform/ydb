@@ -132,7 +132,7 @@
     #endif
 #endif
 
-//to cheat compiler about strict aliasing or similar problems
+// to cheat compiler about strict aliasing or similar problems
 #if defined(__GNUC__)
     #define Y_FAKE_READ(X)                  \
         do {                                \
@@ -227,7 +227,7 @@ constexpr Y_FORCE_INLINE int Y_UNUSED(Types&&...) {
  * }
  *
  * // we know that xs and ys are non-negative from domain knowledge,
- * // but we can't change the types of xs and ys because of API constrains
+ * // but we can't change the types of xs and ys because of API constraints
  * int Foo(const TVector<int>& xs, const TVector<int>& ys) {
  *     TVector<int> avgs;
  *     avgs.resize(xs.size());
@@ -297,6 +297,9 @@ _YandexAbort();
     #if __has_feature(address_sanitizer)
         #define _asan_enabled_
     #endif
+    #if __has_feature(leak_sanitizer)
+        #define _lsan_enabled_
+    #endif
 
 #else
 
@@ -309,10 +312,13 @@ _YandexAbort();
     #if defined(address_sanitizer_enabled) || defined(__SANITIZE_ADDRESS__)
         #define _asan_enabled_
     #endif
+    #if defined(leak_sanitizer_enabled) || defined(__SANITIZE_LEAK__)
+        #define _lsan_enabled_
+    #endif
 
 #endif
 
-#if defined(_asan_enabled_) || defined(_msan_enabled_) || defined(_tsan_enabled_) || defined(_ubsan_enabled_)
+#if defined(_asan_enabled_) || defined(_msan_enabled_) || defined(_tsan_enabled_) || defined(_ubsan_enabled_) || defined(_lsan_enabled_)
     #define _san_enabled_
 #endif
 
@@ -660,7 +666,7 @@ Y_FORCE_INLINE void DoNotOptimizeAway(const T&) = delete;
  * an object or reference refers to another object with a shorter lifetime.
  */
 #if defined(__clang__) && defined(__cplusplus) && defined(__has_cpp_attribute)
-    #if defined(__CUDACC__) && !Y_CUDA_AT_LEAST(11, 0)
+    #if defined(__CUDACC__) && (!Y_CUDA_AT_LEAST(11, 0) || (__clang_major__ < 13))
         #define Y_LIFETIME_BOUND
     #elif __has_cpp_attribute(clang::lifetimebound)
         #define Y_LIFETIME_BOUND [[clang::lifetimebound]]

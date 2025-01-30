@@ -4,11 +4,13 @@ package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
 message AdditionalMessage {
+    reserved "AnotherReservedField";
 }
 
 message AnotherMessage {
     optional string Content = 1;
     optional AdditionalMessage Field1 = 2;
+    reserved "IncludedReservedField";
 }
 
 message ActualConfigMessage {
@@ -16,4 +18,5 @@ message ActualConfigMessage {
     optional AdditionalMessage Field1 = 1;
     optional AdditionalMessage Field21 = 21;
     optional string Field201 = 201;
+    reserved "RootReservedField";
 }

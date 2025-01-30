@@ -24,7 +24,9 @@ constexpr int MaxReplicasPerReplicationCard = 128;
 DECLARE_REFCOUNTED_STRUCT(TReplicationCard)
 
 DECLARE_REFCOUNTED_STRUCT(IReplicationCardCache)
+DECLARE_REFCOUNTED_CLASS(TChaosCacheChannelConfig)
 DECLARE_REFCOUNTED_CLASS(TReplicationCardCacheConfig)
+DECLARE_REFCOUNTED_CLASS(TReplicationCardCacheDynamicConfig)
 
 struct TReplicationProgress;
 struct TReplicaHistoryItem;
@@ -32,9 +34,11 @@ struct TReplicaInfo;
 struct TReplicationCardFecthOptions;
 
 YT_DEFINE_ERROR_ENUM(
-    ((ReplicationCardNotKnown)         (3200))
-    ((ReplicationCardMigrated)         (3201))
-    ((ChaosCellSuspended)              (3202))
+    ((ReplicationCardNotKnown)           (3200))
+    ((ReplicationCardMigrated)           (3201))
+    ((ChaosCellSuspended)                (3202))
+    ((ReplicationCollocationNotKnown)    (3203))
+    ((ReplicationCollocationIsMigrating) (3204))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

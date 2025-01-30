@@ -39,7 +39,7 @@ namespace {
 
         inline void BroadCast() noexcept {
             with_lock (Lock_) {
-                //TODO
+                // TODO
                 while (!Events_.Empty()) {
                     Events_.PopFront()->Signal();
                 }
@@ -70,7 +70,7 @@ namespace {
         TWaitEvents Events_;
         TLock Lock_;
     };
-}
+} // namespace
 
 #if defined(_win_)
 class TCondVar::TImpl: public TCondVarImpl {

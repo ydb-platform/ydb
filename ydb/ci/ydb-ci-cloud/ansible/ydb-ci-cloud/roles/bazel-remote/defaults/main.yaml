@@ -1,0 +1,9 @@
+bazel_remote_version: 2.4.3
+bazel_remote_config_default:
+  disable_http_ac_validation: true
+  allow_unauthenticated_reads: true
+  htpasswd_file: /home/bazel-remote/htpasswd
+  grpc_address: none
+  
+bazel_remote_instances: []
+bazel_remote_htpasswd_lockbox_secret_id: ~

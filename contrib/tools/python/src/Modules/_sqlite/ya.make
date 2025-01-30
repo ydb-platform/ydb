@@ -1,5 +1,7 @@
 LIBRARY()
 
+VERSION(2.7.18)
+
 LICENSE(Python-2.0)
 
 PEERDIR(

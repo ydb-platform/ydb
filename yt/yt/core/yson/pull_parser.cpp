@@ -498,7 +498,6 @@ void TYsonPullParser::TransferComplexValue(IYsonConsumer* consumer, const TYsonI
         /*stopAfterAttributes*/ false);
 }
 
-
 void TYsonPullParser::SkipAttributes(const TYsonItem& previousItem)
 {
     EnsureYsonToken("attributes", *this, previousItem, EYsonItemType::BeginAttributes);

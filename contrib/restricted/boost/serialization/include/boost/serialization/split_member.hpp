@@ -72,7 +72,7 @@ inline void split_member(
 } // namespace serialization
 } // namespace boost
 
-// split member function serialize funcition into save/load
+// split member function serialize function into save/load
 #define BOOST_SERIALIZATION_SPLIT_MEMBER()                       \
 template<class Archive>                                          \
 void serialize(                                                  \

@@ -1,3 +1,4 @@
+from __future__ import print_function
 import argparse
 import os
 import sys
@@ -72,12 +73,12 @@ def print_stat(da, fnda, teamcity_stat_output):
     func_total = len(fnda.values())
     func_coverage = 100.0 * func_hit / func_total if func_total else 0
 
-    print >> sys.stderr, '[[imp]]Lines[[rst]]     {: >16} {: >16} {: >16.1f}%'.format(
+    print('[[imp]]Lines[[rst]]     {: >16} {: >16} {: >16.1f}%'.format(
         lines_hit, lines_total, lines_coverage
-    )
-    print >> sys.stderr, '[[imp]]Functions[[rst]] {: >16} {: >16} {: >16.1f}%'.format(
+    ), file=sys.stderr)
+    print('[[imp]]Functions[[rst]] {: >16} {: >16} {: >16.1f}%'.format(
         func_hit, func_total, func_coverage
-    )
+    ), file=sys.stderr)
 
     if teamcity_stat_output:
         with open(teamcity_stat_output, 'w') as tc_file:
@@ -119,7 +120,7 @@ def combine_info_files(lcov, files, out_file):
         for trace in chunk:
             assert os.path.exists(trace), "Trace file does not exist: {} (cwd={})".format(trace, os.getcwd())
             combine_cmd += ["-a", os.path.abspath(trace)]
-        print >> sys.stderr, '## lcov', ' '.join(combine_cmd[1:])
+        print('## lcov', ' '.join(combine_cmd[1:]), file=sys.stderr)
         out_file_tmp = "combined.tmp"
         with open(out_file_tmp, "w") as stdout:
             subprocess.check_call(combine_cmd, stdout=stdout)
@@ -157,7 +158,7 @@ def update_stat_global(src_file, line, fnda, da):
 
 
 def gen_info_global(cmd, cov_info, probe_path, update_stat, lcov_args):
-    print >> sys.stderr, '## geninfo', ' '.join(cmd)
+    print('## geninfo', ' '.join(cmd), file=sys.stderr)
     subprocess.check_call(cmd)
     if recast(cov_info + '.tmp', cov_info, probe_path, update_stat):
         lcov_args.append(cov_info)
@@ -297,7 +298,7 @@ def main(
             output_dir,
             output_trace,
         ]
-        print >> sys.stderr, '## genhtml', ' '.join(cmd)
+        print('## genhtml', ' '.join(cmd), file=sys.stderr)
         subprocess.check_call(cmd)
         if lcov_cobertura:
             gen_cobertura(lcov_cobertura, gcov_report, output_trace)

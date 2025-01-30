@@ -51,9 +51,19 @@ public:
         return ConnectTimeout_;
     }
 
+    TSelf& MaxRedirectCount(int count) {
+        MaxRedirectCount_ = count;
+        return *this;
+    }
+
+    ui16 MaxRedirectCount() const noexcept {
+        return MaxRedirectCount_;
+    }
+
 private:
     TString Host_;
     ui16 Port_;
     TDuration SocketTimeout_ = TDuration::Seconds(5);
     TDuration ConnectTimeout_ = TDuration::Seconds(30);
+    int MaxRedirectCount_ = INT_MAX;
 };

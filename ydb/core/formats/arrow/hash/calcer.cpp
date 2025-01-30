@@ -1,15 +1,17 @@
 #include "calcer.h"
-#include "xx_hash.h"
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <ydb/library/actors/core/log.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow::NHash {
 
-void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer) {
+namespace {
+template <class TStreamCalcer>
+void AppendFieldImpl(const std::shared_ptr<arrow::Scalar>& scalar, TStreamCalcer& hashCalcer) {
     AFL_VERIFY(scalar);
     NArrow::SwitchType(scalar->type->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
@@ -28,7 +30,8 @@ void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TSt
     });
 }
 
-void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) {
+template <class TStreamCalcer>
+void AppendFieldImpl(const std::shared_ptr<arrow::Array>& array, const int row, TStreamCalcer& hashCalcer) {
     NArrow::SwitchType(array->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using T = typename TWrap::T;
@@ -47,6 +50,24 @@ void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int ro
         }
         return true;
     });
+}
+
+}   // namespace
+
+void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer) {
+    AppendFieldImpl(scalar, hashCalcer);
+}
+
+void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer_H3& hashCalcer) {
+    AppendFieldImpl(scalar, hashCalcer);
+}
+
+void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) {
+    AppendFieldImpl(array, row, hashCalcer);
+}
+
+void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer_H3& hashCalcer) {
+    AppendFieldImpl(array, row, hashCalcer);
 }
 
 std::optional<std::vector<ui64>> TXX64::Execute(const std::shared_ptr<arrow::RecordBatch>& batch) const {
@@ -81,53 +102,6 @@ TXX64::TXX64(const std::vector<std::string>& columnNames, const ENoColumnPolicy 
     , ColumnNames(columnNames.begin(), columnNames.end())
     , NoColumnPolicy(noColumnPolicy) {
     Y_ABORT_UNLESS(ColumnNames.size() >= 1);
-}
-
-std::shared_ptr<arrow::Array> TXX64::ExecuteToArray(const std::shared_ptr<arrow::RecordBatch>& batch, const std::string& hashFieldName) const {
-    std::vector<std::shared_ptr<arrow::Array>> columns = GetColumns(batch);
-    if (columns.empty()) {
-        return nullptr;
-    }
-
-    auto builder = NArrow::MakeBuilder(std::make_shared<arrow::Field>(hashFieldName, arrow::TypeTraits<arrow::UInt64Type>::type_singleton()));
-    auto& intBuilder = static_cast<arrow::UInt64Builder&>(*builder);
-    TStatusValidator::Validate(intBuilder.Reserve(batch->num_rows()));
-    {
-        NXX64::TStreamStringHashCalcer hashCalcer(Seed);
-        for (int row = 0; row < batch->num_rows(); ++row) {
-            hashCalcer.Start();
-            for (auto& column : columns) {
-                AppendField(column, row, hashCalcer);
-            }
-            intBuilder.UnsafeAppend(hashCalcer.Finish());
-        }
-    }
-    return NArrow::TStatusValidator::GetValid(builder->Finish());
-}
-
-std::vector<std::shared_ptr<arrow::Array>> TXX64::GetColumns(const std::shared_ptr<arrow::RecordBatch>& batch) const {
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(ColumnNames.size());
-    for (auto& colName : ColumnNames) {
-        auto array = batch->GetColumnByName(colName);
-        if (!array) {
-            switch (NoColumnPolicy) {
-                case ENoColumnPolicy::Ignore:
-                    break;
-                case ENoColumnPolicy::Verify:
-                    AFL_VERIFY(false)("reason", "no_column")("column_name", colName);
-                case ENoColumnPolicy::ReturnEmpty:
-                    return {};
-            }
-        } else {
-            columns.emplace_back(array);
-        }
-    }
-    if (columns.empty()) {
-        AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_read_all_columns")("reason", "fields_not_found")
-            ("field_names", JoinSeq(",", ColumnNames))("batch_fields", JoinSeq(",", batch->schema()->field_names()));
-    }
-    return columns;
 }
 
 ui64 TXX64::CalcHash(const std::shared_ptr<arrow::Scalar>& scalar) {

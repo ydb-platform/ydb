@@ -314,4 +314,35 @@ void TPausePipelineCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGetPipelineStateCommand::Register(TRegistrar /*registrar*/)
+{ }
+
+void TGetPipelineStateCommand::DoExecute(ICommandContextPtr context)
+{
+    auto client = context->GetClient();
+    auto result = WaitFor(client->GetPipelineState(PipelinePath, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(TYsonString(ToString(result.State)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TGetFlowViewCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("view_path", &TThis::ViewPath)
+        .Default();
+}
+
+void TGetFlowViewCommand::DoExecute(ICommandContextPtr context)
+{
+    auto client = context->GetClient();
+    auto result = WaitFor(client->GetFlowView(PipelinePath, ViewPath, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(result.FlowViewPart);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

@@ -4,6 +4,7 @@
 #include "flat_page_gstat.h"
 
 #include <library/cpp/time_provider/time_provider.h>
+#include <ydb/core/tablet_flat/util_fmt_line.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -26,6 +27,7 @@ namespace NCompGen {
             ICompactionBackend* backend,
             IResourceBroker* broker,
             ITimeProvider* time,
+            NUtil::ILogger* logger,
             TString taskNameSuffix);
 
         ~TGenCompactionStrategy();
@@ -36,7 +38,6 @@ namespace NCompGen {
         void ReflectSchema() override;
         void ReflectRemovedRowVersions() override;
         void UpdateCompactions() override;
-        float GetOverloadFactor() override;
         ui64 GetBackingSize() override;
         ui64 GetBackingSize(ui64 ownerTabletId) override;
         ui64 BeginMemCompaction(TTaskId taskId, TSnapEdge edge, ui64 forcedCompactionId) override;
@@ -254,6 +255,7 @@ namespace NCompGen {
         ICompactionBackend* const Backend;
         IResourceBroker* const Broker;
         ITimeProvider* const Time;
+        NUtil::ILogger* const Logger;
         const TString TaskNameSuffix;
 
         TIntrusiveConstPtr<TCompactionPolicy> Policy;
@@ -265,7 +267,6 @@ namespace NCompGen {
         EForcedState ForcedState = EForcedState::None;
         ui64 ForcedMemCompactionId = 0;
         ui32 ForcedGeneration = 0;
-        float MaxOverloadFactor = 0.0;
 
         ui64 CurrentForcedGenCompactionId = 0;
         ui64 NextForcedGenCompactionId = 0;

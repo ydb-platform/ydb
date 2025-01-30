@@ -5,6 +5,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/core/util/gen_step.h>
 
 namespace NKikimr::NTable {
 class TDatabase;
@@ -13,12 +14,14 @@ class TDatabase;
 namespace NKikimr::NOlap {
 
 // Garbage Collection generation and step
-using TGenStep = std::tuple<ui32, ui32>;
+using TGenStep = ::NKikimr::TGenStep;
 
 class IBlobManagerDb {
 public:
     virtual ~IBlobManagerDb() = default;
 
+    [[nodiscard]] virtual bool LoadGCBarrierPreparation(TGenStep& genStep) = 0;
+    virtual void SaveGCBarrierPreparation(const TGenStep& genStep) = 0;
     [[nodiscard]] virtual bool LoadLastGcBarrier(TGenStep& lastCollectedGenStep) = 0;
     virtual void SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) = 0;
 
@@ -53,6 +56,10 @@ public:
 
     [[nodiscard]] bool LoadLastGcBarrier(TGenStep& lastCollectedGenStep) override;
     void SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) override;
+
+    [[nodiscard]] bool LoadGCBarrierPreparation(TGenStep& genStep) override;
+    void SaveGCBarrierPreparation(const TGenStep& genStep) override;
+    static void SaveGCBarrierPreparation(NTable::TDatabase& database, const TGenStep& step);
 
     [[nodiscard]] bool LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTabletsByBlob& blobsToDelete,
         const IBlobGroupSelector* dsGroupSelector, const TTabletId selfTabletId) override;

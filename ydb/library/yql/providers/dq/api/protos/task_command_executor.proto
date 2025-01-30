@@ -42,6 +42,8 @@ message TCommandHeader {
         SINK_STATS = 26; // Header -> TGetSinkStatsResponse
 
         GET_METERING_STATS = 27;
+
+        CONFIGURE_FAILURE_INJECTOR = 28;
     };
 
     int32 Version = 1;
@@ -150,3 +152,8 @@ message TSourcePushRequest {
     int64 Space = 2;
 }
 
+message TConfigureFailureInjectorRequest {
+    string Name = 1;
+    uint64 Skip = 2;
+    uint64 Fail = 3;
+}

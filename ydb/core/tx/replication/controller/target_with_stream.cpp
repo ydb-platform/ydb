@@ -9,21 +9,23 @@ namespace NKikimr::NReplication::NController {
 
 const TString ReplicationConsumerName = "replicationConsumer";
 
-void TTargetWithStream::Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) {
+void TTargetWithStream::Progress(const TActorContext& ctx) {
+    auto replication = GetReplication();
+
     switch (GetStreamState()) {
     case EStreamState::Creating:
         if (GetStreamName().empty() && !NameAssignmentInProcess) {
-            ctx.Send(ctx.SelfID, new TEvPrivate::TEvAssignStreamName(GetReplicationId(), GetTargetId()));
+            ctx.Send(ctx.SelfID, new TEvPrivate::TEvAssignStreamName(replication->GetId(), GetId()));
             NameAssignmentInProcess = true;
         } else if (!StreamCreator) {
-            StreamCreator = ctx.Register(CreateStreamCreator(ctx.SelfID, proxy,
-                GetReplicationId(), GetTargetId(), GetTargetKind(), GetSrcPath(), GetStreamName()));
+            StreamCreator = ctx.Register(CreateStreamCreator(replication, GetId(), ctx));
         }
         return;
     case EStreamState::Removing:
-        if (!StreamRemover) {
-            StreamRemover = ctx.Register(CreateStreamRemover(ctx.SelfID, proxy,
-                GetReplicationId(), GetTargetId(), GetTargetKind(), GetSrcPath(), GetStreamName()));
+        if (GetWorkers()) {
+            RemoveWorkers(ctx);
+        } else if (!StreamRemover) {
+            StreamRemover = ctx.Register(CreateStreamRemover(replication, GetId(), ctx));
         }
         return;
     case EStreamState::Ready:
@@ -32,7 +34,7 @@ void TTargetWithStream::Progress(ui64 schemeShardId, const TActorId& proxy, cons
         break;
     }
 
-    TTargetBase::Progress(schemeShardId, proxy, ctx);
+    TTargetBase::Progress(ctx);
 }
 
 void TTargetWithStream::Shutdown(const TActorContext& ctx) {

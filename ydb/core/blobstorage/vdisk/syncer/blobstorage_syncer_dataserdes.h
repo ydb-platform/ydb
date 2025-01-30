@@ -53,12 +53,12 @@ namespace NKikimr {
                 ythrow yexception() << "not eof";
         }
 
-        ui32 GetGroupId() const { return GroupId; }
+        TGroupId GetGroupId() const { return GroupId; }
         ui32 GetGroupGeneration() const { return GroupGeneration; }
 
     private:
         IInputStream &Str;
-        ui32 GroupId = 0;
+        TGroupId GroupId = TGroupId::Zero();
         ui32 GroupGeneration = 0;
     };
 
@@ -76,7 +76,7 @@ namespace NKikimr {
             , GroupGeneration(info->GroupGeneration)
         {}
 
-        TSer(IOutputStream &str, ui32 groupId, ui32 groupGen)
+        TSer(IOutputStream &str, TGroupId groupId, ui32 groupGen)
             : LocalProto()
             , Proto(&LocalProto)
             , Str(&str)
@@ -108,7 +108,7 @@ namespace NKikimr {
         NKikimrVDiskData::TSyncerEntryPoint LocalProto;
         NKikimrVDiskData::TSyncerEntryPoint *Proto = nullptr;
         IOutputStream *Str = nullptr;
-        ui32 GroupId = 0;
+        TGroupId GroupId = TGroupId::Zero();
         ui32 GroupGeneration = 0;
     };
 

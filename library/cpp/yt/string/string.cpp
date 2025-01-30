@@ -3,6 +3,8 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
+#include <library/cpp/yt/exception/exception.h>
+
 #include <util/generic/hash.h>
 
 #include <util/string/ascii.h>
@@ -353,6 +355,22 @@ bool ParseBool(TStringBuf value)
 TStringBuf FormatBool(bool value)
 {
     return value ? TStringBuf("true") : TStringBuf("false");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TruncateStringInplace(TString* string, int lengthLimit, TStringBuf truncatedSuffix)
+{
+    if (std::ssize(*string) > lengthLimit) {
+        string->resize(lengthLimit);
+        string->append(truncatedSuffix);
+    }
+}
+
+TString TruncateString(TString string, int lengthLimit, TStringBuf truncatedSuffix)
+{
+    TruncateStringInplace(&string, lengthLimit, truncatedSuffix);
+    return string;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

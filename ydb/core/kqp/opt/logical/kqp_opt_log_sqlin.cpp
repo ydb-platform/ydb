@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/common_opt/yql_co_sqlin.h>
+#include <yql/essentials/core/common_opt/yql_co_sqlin.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -48,10 +48,6 @@ bool CanRewriteSqlInToEquiJoin(const TTypeAnnotationNode* lookupType, const TTyp
 TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrConfiguration::TPtr& config)
 {
-    if (kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
-        return node;
-    }
-
     if (config->HasOptDisableSqlInToJoin()) {
         return node;
     }
@@ -87,10 +83,6 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
     ui64 fixedPrefixLen;
     auto pointSelection = RewriteReadToPrefixLookup(readMatch->Read, ctx, kqpCtx, kqpCtx.Config->IdxLookupJoinsPrefixPointLimit);
     if (!pointSelection) {
-        return node;
-    }
-
-    if ((!kqpCtx.Config->PredicateExtract20 || kqpCtx.Config->OldLookupJoinBehaviour) && pointSelection->Filter.IsValid()) {
         return node;
     }
 

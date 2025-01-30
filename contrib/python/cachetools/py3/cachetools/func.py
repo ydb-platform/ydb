@@ -82,6 +82,10 @@ def mru_cache(maxsize=128, typed=False):
     up to `maxsize` results based on a Most Recently Used (MRU)
     algorithm.
     """
+    from warnings import warn
+
+    warn("@mru_cache is deprecated", DeprecationWarning, stacklevel=2)
+
     if maxsize is None:
         return _cache({}, None, typed)
     elif callable(maxsize):

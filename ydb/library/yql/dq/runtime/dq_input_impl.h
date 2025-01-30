@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 namespace NYql::NDq {
 
@@ -59,23 +59,38 @@ public:
 
     TInputChannelFormat GetFormat() {
         if (Width) {
-            if (InputType->IsStruct()) {
-                auto structType = static_cast<NKikimr::NMiniKQL::TStructType*>(InputType);
-                for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
-                    if (structType->GetMemberType(i)->IsBlock()) {
-                        return BLOCK_WIDE;
+            switch (InputType->GetKind()) {
+                case NKikimr::NMiniKQL::TTypeBase::EKind::Struct: {
+                    auto structType = static_cast<NKikimr::NMiniKQL::TStructType*>(InputType);
+                    for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
+                        if (structType->GetMemberType(i)->IsBlock()) {
+                            return BLOCK_WIDE;
+                        }
                     }
+                    break;
                 }
-            } else if (InputType->IsTuple()) {
-                auto tupleType= static_cast<NKikimr::NMiniKQL::TTupleType*>(InputType);
-                for (ui32 i = 0; i < tupleType->GetElementsCount(); i++) {
-                    if (tupleType->GetElementType(i)->IsBlock()) {
-                        return BLOCK_WIDE;
+                case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple: {
+                    auto tupleType = static_cast<NKikimr::NMiniKQL::TTupleType*>(InputType);
+                    for (ui32 i = 0; i < tupleType->GetElementsCount(); i++) {
+                        if (tupleType->GetElementType(i)->IsBlock()) {
+                            return BLOCK_WIDE;
+                        }
                     }
+                    break;
                 }
-            } else {
-                return SIMPLE_WIDE;
+                case NKikimr::NMiniKQL::TTypeBase::EKind::Multi: {
+                    auto multiType = static_cast<NKikimr::NMiniKQL::TMultiType*>(InputType);
+                    for (ui32 i = 0; i < multiType->GetElementsCount(); i++) {
+                        if (multiType->GetElementType(i)->IsBlock()) {
+                            return BLOCK_WIDE;
+                        }
+                    }
+                    break;
+                }
+                default:
+                    break;
             }
+            return SIMPLE_WIDE;
         }
 
         if (InputType->IsStruct()) {
@@ -110,7 +125,8 @@ public:
             case BLOCK_WIDE: {
                 ui64 result = 0;
                 batch.ForEachRowWide([&](NUdf::TUnboxedValue* values, ui32 width) {
-                    result += NKikimr::NMiniKQL::TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+                    const auto& blockLength = values[width - 1];
+                    result += NKikimr::NMiniKQL::TArrowBlock::From(blockLength).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
                 });
                 return result;
             }
@@ -120,7 +136,8 @@ public:
             case LEGACY_SIMPLE_BLOCK: {
                 ui64 result = 0;
                 batch.ForEachRow([&](NUdf::TUnboxedValue& value) {
-                    result += NKikimr::NMiniKQL::TArrowBlock::From(value.GetElement(LegacyBlockLengthIndex)).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+                    const auto& blockLength = value.GetElement(LegacyBlockLengthIndex);
+                    result += NKikimr::NMiniKQL::TArrowBlock::From(blockLength).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
                 });
                 return result;
             }
@@ -128,7 +145,8 @@ public:
                 ui64 result = 0;
                 batch.ForEachRow([&](NUdf::TUnboxedValue& value) {
                     auto value0 = value.GetElement(0);
-                    result += NKikimr::NMiniKQL::TArrowBlock::From(value0.GetElement(LegacyBlockLengthIndex)).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+                    const auto& blockLength = value0.GetElement(LegacyBlockLengthIndex);
+                    result += NKikimr::NMiniKQL::TArrowBlock::From(blockLength).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
                 });
                 return result;
             }
@@ -144,14 +162,15 @@ public:
 
         StoredBytes += space;
         StoredRows += batch.RowCount();
+        auto& pushStats = static_cast<TDerived*>(this)->PushStats;
 
-        if (static_cast<TDerived*>(this)->PushStats.CollectBasic()) {
-            static_cast<TDerived*>(this)->PushStats.Bytes += space;
-            static_cast<TDerived*>(this)->PushStats.Rows += GetRowsCount(batch);
-            static_cast<TDerived*>(this)->PushStats.Chunks++;
-            static_cast<TDerived*>(this)->PushStats.Resume();
-            if (static_cast<TDerived*>(this)->PushStats.CollectFull()) {
-                static_cast<TDerived*>(this)->PushStats.MaxMemoryUsage = std::max(static_cast<TDerived*>(this)->PushStats.MaxMemoryUsage, StoredBytes);
+        if (pushStats.CollectBasic()) {
+            pushStats.Bytes += space;
+            pushStats.Rows += GetRowsCount(batch);
+            pushStats.Chunks++;
+            pushStats.Resume();
+            if (pushStats.CollectFull()) {
+                pushStats.MaxMemoryUsage = std::max(pushStats.MaxMemoryUsage, StoredBytes);
             }
         }
 
@@ -172,7 +191,9 @@ public:
 
         batch.clear();
 
-        static_cast<TDerived*>(this)->PopStats.Resume(); //save timing before processing
+        auto& popStats = static_cast<TDerived*>(this)->PopStats;
+
+        popStats.Resume(); //save timing before processing
         ui64 popBytes = 0;
 
         if (IsPaused()) {
@@ -228,10 +249,10 @@ public:
             Batches.clear();
         }
 
-        if (static_cast<TDerived*>(this)->PopStats.CollectBasic()) {
-            static_cast<TDerived*>(this)->PopStats.Bytes += popBytes;
-            static_cast<TDerived*>(this)->PopStats.Rows += GetRowsCount(batch);
-            static_cast<TDerived*>(this)->PopStats.Chunks++;
+        if (popStats.CollectBasic()) {
+            popStats.Bytes += popBytes;
+            popStats.Rows += GetRowsCount(batch);
+            popStats.Chunks++;
         }
 
         Y_ABORT_UNLESS(!batch.empty());
@@ -252,11 +273,9 @@ public:
 
     void Pause() override {
         Y_ABORT_UNLESS(!IsPaused());
-        if (!Finished) {
-            BatchesBeforePause = Batches.size() | PauseMask;
-            StoredRowsBeforePause = StoredRows;
-            StoredBytesBeforePause = StoredBytes;
-        }
+        BatchesBeforePause = Batches.size() | PauseMask;
+        StoredRowsBeforePause = StoredRows;
+        StoredBytesBeforePause = StoredBytes;
     }
 
     void Resume() override {

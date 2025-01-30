@@ -5,7 +5,7 @@ with ast-transformers it is not easy to directly manipulate ast.
 
 
 IPython has pre-code and post-code hooks, but are ran from within the IPython
-machinery so may be inappropriate, for example for performance mesurement.
+machinery so may be inappropriate, for example for performance measurement.
 
 This module give you tools to simplify this, and expose 2 classes:
 
@@ -178,11 +178,21 @@ transforming:
 __skip_doctest__ = True
 
 
-from ast import NodeTransformer, Store, Load, Name, Expr, Assign, Module
+from ast import (
+    NodeTransformer,
+    Store,
+    Load,
+    Name,
+    Expr,
+    Assign,
+    Module,
+    Import,
+    ImportFrom,
+)
 import ast
 import copy
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 
 mangle_all = lambda name: False if name in ("__ret__", "__code__") else True
@@ -231,13 +241,13 @@ class Mangler(NodeTransformer):
                 self.log("Not mangling function arg", arg.arg)
         return self.generic_visit(node)
 
-    def visit_ImportFrom(self, node):
+    def visit_ImportFrom(self, node: ImportFrom):
         return self._visit_Import_and_ImportFrom(node)
 
-    def visit_Import(self, node):
+    def visit_Import(self, node: Import):
         return self._visit_Import_and_ImportFrom(node)
 
-    def _visit_Import_and_ImportFrom(self, node):
+    def _visit_Import_and_ImportFrom(self, node: Union[Import, ImportFrom]):
         for alias in node.names:
             asname = alias.name if alias.asname is None else alias.asname
             if self.predicate(asname):

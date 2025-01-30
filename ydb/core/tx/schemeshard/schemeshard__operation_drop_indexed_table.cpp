@@ -5,6 +5,8 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -35,10 +37,10 @@ void DropPath(NIceDb::TNiceDb& db, TOperationContext& context,
     context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
     auto domainInfo = context.SS->ResolveDomainInfo(path->PathId);
-    domainInfo->DecPathsInside();
+    domainInfo->DecPathsInside(context.SS);
 
     auto parentDir = path.Parent();
-    parentDir->DecAliveChildren();
+    DecAliveChildrenDirect(operationId, parentDir.Base(), context); // for correct discard of ChildrenExist prop
     ++parentDir->DirAlterVersion;
     context.SS->PersistPathDirAlterVersion(db, parentDir.Base());
 
@@ -137,7 +139,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompletePublication"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
@@ -158,7 +160,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
         if (path.IsActive()) {
@@ -206,7 +208,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -231,7 +233,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         context.OnComplete.Barrier(OperationId, "RenamePathBarrier");
 
@@ -395,11 +397,10 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
     auto dropOperation = tx.GetDrop();
 
     const TString parentPathStr = tx.GetWorkingDir();
-    const TString name = dropOperation.GetName();
 
     TPath table = dropOperation.HasId()
         ? TPath::Init(TPathId(context.SS->TabletID(), dropOperation.GetId()), context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        : TPath::Resolve(parentPathStr, context.SS).Dive(dropOperation.GetName());
 
     {
         TPath::TChecker checks = table.Check();
@@ -424,8 +425,10 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
                 checks
                     .IsTable()
                     .NotUnderDeleting()
-                    .NotUnderOperation()
-                    .IsCommonSensePath();
+                    .NotUnderOperation();
+                if (!table.Parent()->IsTableIndex() || !NTableIndex::IsBuildImplTable(table.LeafName())) {
+                    checks.IsCommonSensePath();
+                }
             }
         }
 
@@ -443,102 +446,8 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
 
     TVector<ISubOperation::TPtr> result;
     result.push_back(CreateDropTable(NextPartId(nextId, result), tx));
-
-    for (const auto& [childName, childPathId] : table.Base()->GetChildren()) {
-        TPath child = table.Child(childName);
-        {
-            TPath::TChecker checks = child.Check();
-            checks
-                .NotEmpty()
-                .IsResolved();
-
-            if (checks) {
-                if (child.IsDeleted()) {
-                    continue;
-                }
-            }
-
-            if (child.IsTableIndex()) {
-                checks.IsTableIndex();
-            } else if (child.IsCdcStream()) {
-                checks.IsCdcStream();
-            } else if (child.IsSequence()) {
-                checks.IsSequence();
-            }
-
-            checks.NotDeleted()
-                .NotUnderDeleting()
-                .NotUnderOperation();
-
-            if (!checks) {
-                return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
-            }
-        }
-        Y_ABORT_UNLESS(child.Base()->PathId == childPathId);
-
-        if (child.IsSequence()) {
-            auto dropSequence = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
-            dropSequence.MutableDrop()->SetName(ToString(child->Name));
-
-            result.push_back(CreateDropSequence(NextPartId(nextId, result), dropSequence));
-            continue;
-        } else if (child.IsTableIndex()) {
-            auto dropIndex = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
-            dropIndex.MutableDrop()->SetName(ToString(child.Base()->Name));
-
-            result.push_back(CreateDropTableIndex(NextPartId(nextId, result), dropIndex));
-        } else if (child.IsCdcStream()) {
-            auto dropStream = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl);
-            dropStream.MutableDrop()->SetName(ToString(child.Base()->Name));
-
-            result.push_back(CreateDropCdcStreamImpl(NextPartId(nextId, result), dropStream));
-        }
-
-        Y_ABORT_UNLESS(child.Base()->GetChildren().size() == 1);
-        for (auto& [implName, implPathId] : child.Base()->GetChildren()) {
-            Y_ABORT_UNLESS(implName == "indexImplTable" || implName == "streamImpl",
-                "unexpected name %s", implName.c_str());
-
-            TPath implPath = child.Child(implName);
-            {
-                TPath::TChecker checks = implPath.Check();
-                checks
-                    .NotEmpty()
-                    .IsResolved()
-                    .NotDeleted()
-                    .NotUnderDeleting()
-                    .NotUnderOperation();
-
-                if (checks) {
-                    if (implPath.Base()->IsTable()) {
-                        checks
-                            .IsTable()
-                            .IsInsideTableIndexPath();
-                    } else if (implPath.Base()->IsPQGroup()) {
-                        checks
-                            .IsPQGroup()
-                            .IsInsideCdcStreamPath();
-                    }
-                }
-
-                if (!checks) {
-                    return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
-                }
-            }
-            Y_ABORT_UNLESS(implPath.Base()->PathId == implPathId);
-
-            if (implPath.Base()->IsTable()) {
-                auto dropIndexTable = TransactionTemplate(child.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
-                dropIndexTable.MutableDrop()->SetName(ToString(implPath.Base()->Name));
-
-                result.push_back(CreateDropTable(NextPartId(nextId, result), dropIndexTable));
-            } else if (implPath.Base()->IsPQGroup()) {
-                auto dropPQGroup = TransactionTemplate(child.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
-                dropPQGroup.MutableDrop()->SetName(ToString(implPath.Base()->Name));
-
-                result.push_back(CreateDropPQ(NextPartId(nextId, result), dropPQGroup));
-            }
-        }
+    if (auto reject = CascadeDropTableChildren(result, nextId, table)) {
+        return {reject};
     }
 
     return result;

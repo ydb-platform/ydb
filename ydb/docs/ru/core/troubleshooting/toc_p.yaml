@@ -1,4 +1,6 @@
 items:
-- name: Обзор
-  href: index.md
-- include: { mode: link, path: toc_i.yaml }
+- name: Проблемы с производительностью
+  href: performance/index.md
+  include:
+    mode: link
+    path: performance/toc_p.yaml

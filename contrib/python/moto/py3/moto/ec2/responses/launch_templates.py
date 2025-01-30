@@ -1,6 +1,5 @@
-import uuid
-from moto.ec2.models import OWNER_ID
 from moto.ec2.exceptions import FilterNotImplementedError
+from moto.moto_api._internal import mock_random
 from ._base_response import EC2BaseResponse
 
 from xml.etree import ElementTree
@@ -11,7 +10,7 @@ def xml_root(name):
     root = ElementTree.Element(
         name, {"xmlns": "http://ec2.amazonaws.com/doc/2016-11-15/"}
     )
-    request_id = str(uuid.uuid4()) + "example"
+    request_id = str(mock_random.uuid4()) + "example"
     ElementTree.SubElement(root, "requestId").text = request_id
 
     return root
@@ -118,7 +117,7 @@ class LaunchTemplates(EC2BaseResponse):
                 parsed_template_data["TagSpecifications"].extend(converted_tag_spec)
 
             template = self.ec2_backend.create_launch_template(
-                name, version_description, parsed_template_data
+                name, version_description, parsed_template_data, tag_spec
             )
             version = template.default_version()
 
@@ -128,13 +127,12 @@ class LaunchTemplates(EC2BaseResponse):
                 "launchTemplate",
                 {
                     "createTime": version.create_time,
-                    "createdBy": "arn:aws:iam::{OWNER_ID}:root".format(
-                        OWNER_ID=OWNER_ID
-                    ),
+                    "createdBy": f"arn:aws:iam::{self.current_account}:root",
                     "defaultVersionNumber": template.default_version_number,
                     "latestVersionNumber": version.number,
                     "launchTemplateId": template.id,
                     "launchTemplateName": template.name,
+                    "tags": template.tags,
                 },
             )
 
@@ -162,9 +160,7 @@ class LaunchTemplates(EC2BaseResponse):
                 "launchTemplateVersion",
                 {
                     "createTime": version.create_time,
-                    "createdBy": "arn:aws:iam::{OWNER_ID}:root".format(
-                        OWNER_ID=OWNER_ID
-                    ),
+                    "createdBy": f"arn:aws:iam::{self.current_account}:root",
                     "defaultVersion": template.is_default(version),
                     "launchTemplateData": version.data,
                     "launchTemplateId": template.id,
@@ -253,9 +249,7 @@ class LaunchTemplates(EC2BaseResponse):
                     "item",
                     {
                         "createTime": version.create_time,
-                        "createdBy": "arn:aws:iam::{OWNER_ID}:root".format(
-                            OWNER_ID=OWNER_ID
-                        ),
+                        "createdBy": f"arn:aws:iam::{self.current_account}:root",
                         "defaultVersion": True,
                         "launchTemplateData": version.data,
                         "launchTemplateId": template.id,
@@ -291,13 +285,12 @@ class LaunchTemplates(EC2BaseResponse):
                     "item",
                     {
                         "createTime": template.create_time,
-                        "createdBy": "arn:aws:iam::{OWNER_ID}:root".format(
-                            OWNER_ID=OWNER_ID
-                        ),
+                        "createdBy": f"arn:aws:iam::{self.current_account}:root",
                         "defaultVersionNumber": template.default_version_number,
                         "latestVersionNumber": template.latest_version_number,
                         "launchTemplateId": template.id,
                         "launchTemplateName": template.name,
+                        "tags": template.tags,
                     },
                 )
 

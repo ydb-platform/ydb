@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <util/generic/hash.h>
 
 namespace NYql {
@@ -12,4 +12,4 @@ namespace NYql {
 
     // Validates cluster config. Throws exception in case of error.
     void ValidateGenericClusterConfig(const NYql::TGenericClusterConfig& clusterConfig, const TString& context);
-}
+} // namespace NYql

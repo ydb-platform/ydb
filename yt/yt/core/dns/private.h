@@ -10,8 +10,8 @@ namespace NYT::NDns {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const NLogging::TLogger DnsLogger("Dns");
-inline const NProfiling::TProfiler DnsProfiler("/dns");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, DnsLogger, "Dns");
+YT_DEFINE_GLOBAL(const NProfiling::TProfiler, DnsProfiler, "/dns");
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -16,7 +16,7 @@ ydbd -s <endpoint> admin console configs load --out-dir <config-folder> --tenant
 
 First, you need to pull the desired config as indicated above and then prepare a protobuf file with an update request.
 
-```
+```proto
 Actions {
   AddConfigItem {
     ConfigItem {

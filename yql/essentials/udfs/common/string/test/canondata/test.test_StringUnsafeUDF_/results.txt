@@ -1,0 +1,158 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "b32dec";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "b32sdec";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "b64dec";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "b64sdec";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "xdec";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "   !qwe rty   uiop [ ]$"
+                        ];
+                        [
+                            "   !qwe rty   uiop [ ]$"
+                        ];
+                        [
+                            [
+                                "EAQCAILRO5SSA4TUPEQCAIDVNFXXAIC3EBOS"
+                            ]
+                        ];
+                        #;
+                        #
+                    ];
+                    [
+                        [
+                            [
+                                "QIAEXLvMggAcAECCAFgAQUALyg=="
+                            ]
+                        ];
+                        #;
+                        [
+                            "   !qwe rty   uiop [ ]$"
+                        ];
+                        [
+                            "   !qwe rty   uiop [ ]$"
+                        ];
+                        #
+                    ];
+                    [
+                        [
+                            [
+                                "0DQNA0D4P/93QP6/z4NA0DQP98Dxfg0DodA6PQ=="
+                            ]
+                        ];
+                        #;
+                        #;
+                        #;
+                        [
+                            "   !qwe rty   uiop [ ]$"
+                        ]
+                    ];
+                    [
+                        [
+                            "@as       dfgh jkl\\n;'%  "
+                        ];
+                        [
+                            "@as       dfgh jkl\\n;'%  "
+                        ];
+                        [
+                            [
+                                "IBQXGIBAEAQCAIBAMRTGO2BANJVWYXDOHMTSKIBA"
+                            ]
+                        ];
+                        [
+                            [
+                                "IBQXGIBAEAQCAIBAMRTGO2BANJVWYXDOHMTSKIBA"
+                            ]
+                        ];
+                        #
+                    ];
+                    [
+                        [
+                            [
+                                "gYoECABAgAQaIM6AAAAAubn0goBAAA=="
+                            ]
+                        ];
+                        #;
+                        [
+                            "@as       dfgh jkl\\n;'%  "
+                        ];
+                        [
+                            "@as       dfgh jkl\\n;'%  "
+                        ];
+                        #
+                    ];
+                    [
+                        [
+                            [
+                                "4DwP70DQNA0DQNA0D3Pe9/wNA8DwfC6LxNh1/XdA0A=="
+                            ]
+                        ];
+                        #;
+                        #;
+                        #;
+                        [
+                            "@as       dfgh jkl\\n;'%  "
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

@@ -151,7 +151,8 @@ void TJsonCallbacksBuildingNodesImpl::OnItemFinished()
 void TJsonCallbacksBuildingNodesImpl::ConsumeNode(INodePtr node, int nestingLevel)
 {
     if (NestingLevelLimit_ > 0 && nestingLevel > NestingLevelLimit_) {
-        THROW_ERROR_EXCEPTION("JSON nesting level limit exceeded") << TErrorAttribute("nesting_level_limit", NestingLevelLimit_);
+        THROW_ERROR_EXCEPTION("JSON nesting level limit exceeded")
+            << TErrorAttribute("nesting_level_limit", NestingLevelLimit_);
     }
     switch (node->GetType()) {
         case ENodeType::Int64:

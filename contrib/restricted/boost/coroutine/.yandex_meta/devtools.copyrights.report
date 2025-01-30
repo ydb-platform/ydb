@@ -1,0 +1,98 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 102aeb9de0dd2b131e13f2e7b47e1c05
+BELONGS ya.make
+    License text:
+        //          Copyright Oliver Kowalke 2015.
+        // Distributed under the Boost Software License, Version 1.0.
+        //    (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/coroutine/detail/preallocated.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 768f987faaed0adc6222ab24c7bd02e6
+BELONGS ya.make
+    License text:
+        //          Copyright Oliver Kowalke 2009.
+        // Distributed under the Boost Software License, Version 1.0.
+        //    (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/coroutine/all.hpp [2:4]
+        include/boost/coroutine/asymmetric_coroutine.hpp [2:4]
+        include/boost/coroutine/attributes.hpp [2:4]
+        include/boost/coroutine/coroutine.hpp [2:4]
+        include/boost/coroutine/detail/config.hpp [2:4]
+        include/boost/coroutine/detail/coroutine_context.hpp [2:4]
+        include/boost/coroutine/detail/data.hpp [2:4]
+        include/boost/coroutine/detail/flags.hpp [2:4]
+        include/boost/coroutine/detail/parameters.hpp [2:4]
+        include/boost/coroutine/detail/pull_coroutine_impl.hpp [2:4]
+        include/boost/coroutine/detail/pull_coroutine_object.hpp [2:4]
+        include/boost/coroutine/detail/pull_coroutine_synthesized.hpp [2:4]
+        include/boost/coroutine/detail/push_coroutine_impl.hpp [2:4]
+        include/boost/coroutine/detail/push_coroutine_object.hpp [2:4]
+        include/boost/coroutine/detail/push_coroutine_synthesized.hpp [2:4]
+        include/boost/coroutine/detail/setup.hpp [2:4]
+        include/boost/coroutine/detail/symmetric_coroutine_call.hpp [2:4]
+        include/boost/coroutine/detail/symmetric_coroutine_impl.hpp [2:4]
+        include/boost/coroutine/detail/symmetric_coroutine_object.hpp [2:4]
+        include/boost/coroutine/detail/symmetric_coroutine_yield.hpp [2:4]
+        include/boost/coroutine/detail/trampoline.hpp [2:4]
+        include/boost/coroutine/detail/trampoline_pull.hpp [2:4]
+        include/boost/coroutine/detail/trampoline_push.hpp [2:4]
+        include/boost/coroutine/exceptions.hpp [2:4]
+        include/boost/coroutine/flags.hpp [2:4]
+        include/boost/coroutine/posix/protected_stack_allocator.hpp [2:4]
+        include/boost/coroutine/posix/segmented_stack_allocator.hpp [2:4]
+        include/boost/coroutine/protected_stack_allocator.hpp [2:4]
+        include/boost/coroutine/segmented_stack_allocator.hpp [2:4]
+        include/boost/coroutine/stack_allocator.hpp [2:4]
+        include/boost/coroutine/stack_context.hpp [2:4]
+        include/boost/coroutine/stack_traits.hpp [2:4]
+        include/boost/coroutine/standard_stack_allocator.hpp [2:4]
+        include/boost/coroutine/symmetric_coroutine.hpp [2:4]
+        include/boost/coroutine/windows/protected_stack_allocator.hpp [2:4]
+        src/detail/coroutine_context.cpp [2:4]
+        src/exceptions.cpp [2:4]
+        src/posix/stack_traits.cpp [2:4]
+        src/windows/stack_traits.cpp [2:4]

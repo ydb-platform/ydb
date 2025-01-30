@@ -8,8 +8,6 @@
 
 #include <util/system/env.h>
 
-#include <random>
-
 using namespace NYT;
 using namespace NYT::NTracing;
 
@@ -99,7 +97,6 @@ NAuth::TTvmServiceConfigPtr GetTvmConfig()
 int main(int argc, char* argv[])
 {
     try {
-
         bool test = false;
         auto usage = Format("usage: %v [--test] COLLECTOR_ENDPOINTS", argv[0]);
 
@@ -113,7 +110,7 @@ int main(int argc, char* argv[])
             throw yexception() << usage;
         }
 
-        static auto config = New<NTracing::TJaegerTracerConfig>();
+        auto config = New<NTracing::TJaegerTracerConfig>();
         config->CollectorChannelConfig = New<NRpc::NGrpc::TChannelConfig>();
         config->CollectorChannelConfig->Address = argv[1];
 

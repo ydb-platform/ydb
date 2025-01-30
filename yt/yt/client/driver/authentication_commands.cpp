@@ -43,6 +43,12 @@ void TIssueTokenCommand::Register(TRegistrar registrar)
     registrar.Parameter("user", &TThis::User_);
     registrar.Parameter("password_sha256", &TThis::PasswordSha256_)
         .Default();
+    registrar.ParameterWithUniversalAccessor<TString>(
+        "description",
+        [] (TThis* command) -> TString& {
+            return command->Options.Description;
+        })
+        .Optional();
 }
 
 void TIssueTokenCommand::DoExecute(ICommandContextPtr context)
@@ -85,6 +91,12 @@ void TListUserTokensCommand::Register(TRegistrar registrar)
     registrar.Parameter("user", &TThis::User_);
     registrar.Parameter("password_sha256", &TThis::PasswordSha256_)
         .Default();
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "with_metadata",
+        [] (TThis* command) -> bool& {
+            return command->Options.WithMetadata;
+        })
+        .Default(false);
 }
 
 void TListUserTokensCommand::DoExecute(ICommandContextPtr context)
@@ -95,7 +107,11 @@ void TListUserTokensCommand::DoExecute(ICommandContextPtr context)
         Options))
         .ValueOrThrow();
 
-    context->ProduceOutputValue(ConvertToYsonString(result.Tokens));
+    if (Options.WithMetadata) {
+        context->ProduceOutputValue(ConvertToYsonString(result.Metadata));
+    } else {
+        context->ProduceOutputValue(ConvertToYsonString(result.Tokens));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

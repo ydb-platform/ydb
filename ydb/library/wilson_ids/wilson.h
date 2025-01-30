@@ -8,26 +8,34 @@ namespace NKikimr {
 #error "Macro collision: DEFINE_TRACING_LEVELS"
 #endif
 
-#define DEFINE_TRACING_LEVELS(COMPONENT, MINIMAL, BASIC, DETAILED, FULL, DIAGNOSTIC, TRACE) \
+#define DEFINE_TRACING_LEVELS(COMPONENT, MINIMAL, BASIC, DETAILED, DIAGNOSTIC, TRACE) \
         struct COMPONENT { \
             enum : ui8 { \
                 TopLevel = MINIMAL, \
                 Basic = BASIC, \
                 Detailed = DETAILED, \
-                Full = FULL, \
                 Diagnostic = DIAGNOSTIC, \
                 Trace = TRACE, \
             }; \
         };
 
 
-        DEFINE_TRACING_LEVELS(TGrpcProxy, 0, 5, 9, 13, 14, 15)
-        DEFINE_TRACING_LEVELS(TQueryProcessor, 1, 5, 9, 13, 14, 15)
-        DEFINE_TRACING_LEVELS(TDistributedTransactions, 2, 6, 10, 13, 14, 15)
-        DEFINE_TRACING_LEVELS(TTablet, 3, 7, 11, 13, 14, 15)
-        DEFINE_TRACING_LEVELS(TDistributedStorage, 4, 8, 12, 13, 14, 15)
+        DEFINE_TRACING_LEVELS(THttp, 0, 5, 10, 14, 15)
+        DEFINE_TRACING_LEVELS(TGrpcProxy, 0, 5, 10, 14, 15)
+        DEFINE_TRACING_LEVELS(TQueryProcessor, 1, 6, 10, 14, 15)
+        DEFINE_TRACING_LEVELS(TDistributedTransactions, 2, 7, 11, 14, 15)
+        DEFINE_TRACING_LEVELS(TTablet, 3, 8, 12, 14, 15)
+        DEFINE_TRACING_LEVELS(TDistributedStorage, 4, 9, 13, 14, 15)
+        DEFINE_TRACING_LEVELS(TTopic, 4, 9, 13, 14, 15)
 
 #undef DEFINE_TRACING_LEVELS
+
+        enum : ui8 {
+            // The most verbose detalisation level used in production
+            ProductionVerbose = 13,
+            // The most verbose detalisation level
+            MostVerbose = 15,
+        };
     };
 
 
@@ -39,7 +47,7 @@ namespace NKikimr {
             VDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
             PDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
             PDiskBasic = TComponentTracingLevels::TDistributedStorage::Detailed,
-            PDiskDetailed = TComponentTracingLevels::TDistributedStorage::Full,
+            PDiskDetailed = TComponentTracingLevels::TDistributedStorage::Detailed,
         };
     };
 
@@ -73,7 +81,16 @@ namespace NKikimr {
 
                 LookupActor = TComponentTracingLevels::TQueryProcessor::Basic,
                     LookupActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
-                
+
+                TableWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                    TableWriteActorTableNavigate = TComponentTracingLevels::TQueryProcessor::Detailed,
+
+                DirectWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                ForwardWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
+
+                BufferWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                    BufferWriteActorState = TComponentTracingLevels::TQueryProcessor::Basic,
+
             BulkUpsertActor = TComponentTracingLevels::TQueryProcessor::TopLevel,
         };
     };
@@ -83,7 +100,6 @@ namespace NKikimr {
             TabletTopLevel = TComponentTracingLevels::TTablet::TopLevel,
             TabletBasic = TComponentTracingLevels::TTablet::Basic,
             TabletDetailed = TComponentTracingLevels::TTablet::Detailed,
-            TabletFull = TComponentTracingLevels::TTablet::Full,
         };
     };
 
@@ -91,6 +107,16 @@ namespace NKikimr {
         enum {
             RequestProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
             RequestActor = TComponentTracingLevels::TGrpcProxy::TopLevel,
+            RequestCheckActor = TComponentTracingLevels::TGrpcProxy::Basic,
+        };
+    };
+
+    struct TWilsonTopic {
+        enum {
+            TopicTopLevel = TComponentTracingLevels::TTopic::TopLevel,
+            TopicBasic = TComponentTracingLevels::TTopic::Basic,
+            TopicDetailed = TComponentTracingLevels::TTopic::Detailed,
+            TopicTrace = TComponentTracingLevels::TTopic::Trace,
         };
     };
 

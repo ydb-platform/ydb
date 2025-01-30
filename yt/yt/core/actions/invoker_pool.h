@@ -61,6 +61,7 @@ public:
     {
         i64 EnqueuedActionCount = 0;
         i64 DequeuedActionCount = 0;
+        i64 ExecutedActionCount = 0;
         i64 WaitingActionCount = 0;
         TDuration TotalTimeEstimate;
     };

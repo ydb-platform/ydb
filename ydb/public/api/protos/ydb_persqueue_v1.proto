@@ -3,7 +3,10 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
+
+import "google/protobuf/duration.proto";
 
 package Ydb.PersQueue.V1;
 
@@ -38,7 +41,7 @@ message OffsetsRange {
 
 // In-session reauthentication and reauthorization, lets user increase session lifetime. You should wait for 'update_token_response' before sending next 'update_token_request'.
 message UpdateTokenRequest {
-    string token = 1;
+    string token = 1 [(Ydb.sensitive) = true];
 }
 
 message UpdateTokenResponse {
@@ -788,7 +791,7 @@ message MigrationStreamingReadClientMessage {
     }
 
     // User credentials if update is needed or empty string.
-    bytes token = 20;
+    bytes token = 20 [(Ydb.sensitive) = true];
 }
 
 /**
@@ -1073,10 +1076,24 @@ message Credentials {
         string service_account_key = 2;
     }
     oneof credentials {
-        string oauth_token = 1;
-        string jwt_params = 2;
+        string oauth_token = 1 [(Ydb.sensitive) = true];
+        string jwt_params = 2 [(Ydb.sensitive) = true];
         Iam iam = 3;
     }
+}
+
+enum AutoPartitioningStrategy {
+    // The auto partitioning algorithm is not specified. The default value will be used.
+    AUTO_PARTITIONING_STRATEGY_UNSPECIFIED = 0;
+    // The auto partitioning is disabled.
+    AUTO_PARTITIONING_STRATEGY_DISABLED = 1;
+    // The auto partitioning algorithm will increase partitions count depending on the load characteristics.
+    // The auto partitioning algorithm will never decrease the number of partitions.
+    AUTO_PARTITIONING_STRATEGY_SCALE_UP = 2;
+    // The auto partitioning algorithm will both increase and decrease partitions count depending on the load characteristics.
+    AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN = 3;
+    // The auto partitioning is paused.
+    AUTO_PARTITIONING_STRATEGY_PAUSED = 4;
 }
 
 /**
@@ -1088,8 +1105,13 @@ message TopicSettings {
         FORMAT_BASE = 1;
     }
 
+
     // How many partitions in topic. Must less than database limit. Default limit - 10.
     int32 partitions_count = 1 [(value) = "> 0"];
+    // Settings for the partitions count auto partitioning.
+    AutoPartitioningSettings auto_partitioning_settings = 15;
+
+
     oneof retention {
         // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
         // Default limit - 36 hours.
@@ -1162,6 +1184,40 @@ message TopicSettings {
     }
     // remote mirror rule for this topic.
     RemoteMirrorRule remote_mirror_rule = 11;
+}
+
+message AutoPartitioningSettings {
+    // Strategy of auto partitioning.
+    AutoPartitioningStrategy strategy = 1;
+
+    // Auto merge would stop working when the partitions count reaches min_active_partitions.
+    // Zero value means default - 1.
+    int64 min_active_partitions = 2 [(Ydb.value) = ">= 0"];
+    // Auto split would stop working when the partitions count reaches max_active_partitions.
+    // Zero value means default - 1.
+    int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
+    // Limit for total partition count, including active (open for write) and read-only partitions.
+    // Zero value means default - 100.
+    int64 partition_count_limit = 4 [(Ydb.value) = ">= 0", deprecated = true];
+
+    // Partition write speed auto partitioning options.
+    AutoPartitioningWriteSpeedStrategy partition_write_speed = 5;
+}
+
+message AutoPartitioningWriteSpeedStrategy {
+    //Partition will be auto partitioning up (divided into 2 partitions)
+    //after write speed to the partition exceeds up_utilization_percent (in percentage of maximum write speed to the partition) for the period of time stabilization_window
+
+    //Partition will become a candidate to the auto partitioning down
+    //after write speed doesn’t reach down_utilization_percent (in percentage of maximum write speed to the partition) for the period of time stabilization_window
+    //This candidate partition will be auto partitioned down when other neighbour partition will become a candidate to the auto partitioning down and not earlier than a retention period.
+
+    // Zero value means default - 300.
+    google.protobuf.Duration stabilization_window = 1;
+    // Zero value means default - 90.
+    int32 up_utilization_percent  = 2 [(Ydb.value) = ">= 0"];
+    // Zero value means default - 30.
+    int32 down_utilization_percent  = 3 [(Ydb.value) = ">= 0"];
 }
 
 /**

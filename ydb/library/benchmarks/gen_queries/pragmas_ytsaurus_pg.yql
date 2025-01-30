@@ -2,7 +2,4 @@
 set TablePathPrefix='{{table_path_prefix}}';
 set DqEngine="disable";
 set yt.HybridDqExecution="0";
-set AnsiOptionalAs;
-set AnsiInForEmptyOrNullableItemsCollections;
-set CompactGroupBy;
 set yt.QueryCacheMode = "disable";

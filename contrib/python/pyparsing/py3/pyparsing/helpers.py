@@ -1,5 +1,6 @@
 # helpers.py
 import html.entities
+import operator
 import re
 import sys
 import typing
@@ -10,6 +11,7 @@ from .util import (
     _bslash,
     _flatten,
     _escape_regex_range_chars,
+    make_compressed_re,
     replaced_by_pep8,
 )
 
@@ -74,7 +76,7 @@ def counted_array(
         intExpr = intExpr.copy()
     intExpr.set_name("arrayLen")
     intExpr.add_parse_action(count_field_parse_action, call_during_try=True)
-    return (intExpr + array_expr).set_name("(len) " + str(expr) + "...")
+    return (intExpr + array_expr).set_name(f"(len) {expr}...")
 
 
 def match_previous_literal(expr: ParserElement) -> ParserElement:
@@ -95,15 +97,17 @@ def match_previous_literal(expr: ParserElement) -> ParserElement:
     rep = Forward()
 
     def copy_token_to_repeater(s, l, t):
-        if t:
-            if len(t) == 1:
-                rep << t[0]
-            else:
-                # flatten t tokens
-                tflat = _flatten(t.as_list())
-                rep << And(Literal(tt) for tt in tflat)
-        else:
+        if not t:
             rep << Empty()
+            return
+
+        if len(t) == 1:
+            rep << t[0]
+            return
+
+        # flatten t tokens
+        tflat = _flatten(t.as_list())
+        rep << And(Literal(tt) for tt in tflat)
 
     expr.add_parse_action(copy_token_to_repeater, callDuringTry=True)
     rep.set_name("(prev) " + str(expr))
@@ -195,21 +199,22 @@ def one_of(
         and __diag__.warn_on_multiple_string_args_to_oneof
     ):
         warnings.warn(
-            "More than one string argument passed to one_of, pass"
+            "warn_on_multiple_string_args_to_oneof:"
+            " More than one string argument passed to one_of, pass"
             " choices as a list or space-delimited string",
             stacklevel=2,
         )
 
     if caseless:
-        isequal = lambda a, b: a.upper() == b.upper()
+        is_equal = lambda a, b: a.upper() == b.upper()
         masks = lambda a, b: b.upper().startswith(a.upper())
-        parseElementClass = CaselessKeyword if asKeyword else CaselessLiteral
+        parse_element_class = CaselessKeyword if asKeyword else CaselessLiteral
     else:
-        isequal = lambda a, b: a == b
+        is_equal = operator.eq
         masks = lambda a, b: b.startswith(a)
-        parseElementClass = Keyword if asKeyword else Literal
+        parse_element_class = Keyword if asKeyword else Literal
 
-    symbols: List[str] = []
+    symbols: list[str]
     if isinstance(strs, str_type):
         strs = typing.cast(str, strs)
         symbols = strs.split()
@@ -222,20 +227,19 @@ def one_of(
 
     # reorder given symbols to take care to avoid masking longer choices with shorter ones
     # (but only if the given symbols are not just single characters)
-    if any(len(sym) > 1 for sym in symbols):
-        i = 0
-        while i < len(symbols) - 1:
-            cur = symbols[i]
-            for j, other in enumerate(symbols[i + 1 :]):
-                if isequal(other, cur):
-                    del symbols[i + j + 1]
-                    break
-                elif masks(cur, other):
-                    del symbols[i + j + 1]
-                    symbols.insert(i, other)
-                    break
-            else:
-                i += 1
+    i = 0
+    while i < len(symbols) - 1:
+        cur = symbols[i]
+        for j, other in enumerate(symbols[i + 1 :]):
+            if is_equal(other, cur):
+                del symbols[i + j + 1]
+                break
+            if len(other) > len(cur) and masks(cur, other):
+                del symbols[i + j + 1]
+                symbols.insert(i, other)
+                break
+        else:
+            i += 1
 
     if useRegex:
         re_flags: int = re.IGNORECASE if caseless else 0
@@ -267,7 +271,7 @@ def one_of(
             )
 
     # last resort, just use MatchFirst
-    return MatchFirst(parseElementClass(sym) for sym in symbols).set_name(
+    return MatchFirst(parse_element_class(sym) for sym in symbols).set_name(
         " | ".join(symbols)
     )
 
@@ -534,7 +538,9 @@ def nested_expr(
         )
     else:
         ret <<= Group(Suppress(opener) + ZeroOrMore(ret | content) + Suppress(closer))
-    ret.set_name("nested %s%s expression" % (opener, closer))
+    ret.set_name(f"nested {opener}{closer} expression")
+    # don't override error message from content expressions
+    ret.errmsg = None
     return ret
 
 
@@ -580,7 +586,7 @@ def _makeTags(tagStr, xml, suppress_LT=Suppress("<"), suppress_GT=Suppress(">"))
         )
     closeTag = Combine(Literal("</") + tagStr + ">", adjacent=False)
 
-    openTag.set_name("<%s>" % resname)
+    openTag.set_name(f"<{resname}>")
     # add start<tagname> results name in parse action now that ungrouped names are not reported at two levels
     openTag.add_parse_action(
         lambda t: t.__setitem__(
@@ -589,7 +595,7 @@ def _makeTags(tagStr, xml, suppress_LT=Suppress("<"), suppress_GT=Suppress(">"))
     )
     closeTag = closeTag(
         "end" + "".join(resname.replace(":", " ").title().split())
-    ).set_name("</%s>" % resname)
+    ).set_name(f"</{resname}>")
     openTag.tag = resname
     closeTag.tag = resname
     openTag.tag_body = SkipTo(closeTag())
@@ -598,7 +604,7 @@ def _makeTags(tagStr, xml, suppress_LT=Suppress("<"), suppress_GT=Suppress(">"))
 
 def make_html_tags(
     tag_str: Union[str, ParserElement]
-) -> Tuple[ParserElement, ParserElement]:
+) -> tuple[ParserElement, ParserElement]:
     """Helper to construct opening and closing tag expressions for HTML,
     given a tag name. Matches tags in either upper or lower case,
     attributes with namespaces and with quoted or unquoted values.
@@ -625,7 +631,7 @@ def make_html_tags(
 
 def make_xml_tags(
     tag_str: Union[str, ParserElement]
-) -> Tuple[ParserElement, ParserElement]:
+) -> tuple[ParserElement, ParserElement]:
     """Helper to construct opening and closing tag expressions for XML,
     given a tag name. Matches tags only in the given upper/lower case.
 
@@ -641,9 +647,12 @@ any_open_tag, any_close_tag = make_html_tags(
 )
 
 _htmlEntityMap = {k.rstrip(";"): v for k, v in html.entities.html5.items()}
-common_html_entity = Regex("&(?P<entity>" + "|".join(_htmlEntityMap) + ");").set_name(
-    "common HTML entity"
+_most_common_entities = "nbsp lt gt amp quot apos cent pound euro copy".replace(
+    " ", "|"
 )
+common_html_entity = Regex(
+    lambda: f"&(?P<entity>{_most_common_entities}|{make_compressed_re(_htmlEntityMap)});"
+).set_name("common HTML entity")
 
 
 def replace_html_entity(s, l, t):
@@ -660,16 +669,16 @@ class OpAssoc(Enum):
 
 
 InfixNotationOperatorArgType = Union[
-    ParserElement, str, Tuple[Union[ParserElement, str], Union[ParserElement, str]]
+    ParserElement, str, tuple[Union[ParserElement, str], Union[ParserElement, str]]
 ]
 InfixNotationOperatorSpec = Union[
-    Tuple[
+    tuple[
         InfixNotationOperatorArgType,
         int,
         OpAssoc,
         typing.Optional[ParseAction],
     ],
-    Tuple[
+    tuple[
         InfixNotationOperatorArgType,
         int,
         OpAssoc,
@@ -679,7 +688,7 @@ InfixNotationOperatorSpec = Union[
 
 def infix_notation(
     base_expr: ParserElement,
-    op_list: List[InfixNotationOperatorSpec],
+    op_list: list[InfixNotationOperatorSpec],
     lpar: Union[str, ParserElement] = Suppress("("),
     rpar: Union[str, ParserElement] = Suppress(")"),
 ) -> ParserElement:
@@ -771,23 +780,28 @@ def infix_notation(
     _FB.__name__ = "FollowedBy>"
 
     ret = Forward()
+    ret.set_name(f"{base_expr.name}_expression")
     if isinstance(lpar, str):
         lpar = Suppress(lpar)
     if isinstance(rpar, str):
         rpar = Suppress(rpar)
 
+    nested_expr = (lpar + ret + rpar).set_name(f"nested_{base_expr.name}")
+
     # if lpar and rpar are not suppressed, wrap in group
-    if not (isinstance(rpar, Suppress) and isinstance(rpar, Suppress)):
-        lastExpr = base_expr | Group(lpar + ret + rpar)
+    if not (isinstance(lpar, Suppress) and isinstance(rpar, Suppress)):
+        lastExpr = base_expr | Group(nested_expr)
     else:
-        lastExpr = base_expr | (lpar + ret + rpar)
+        lastExpr = base_expr | nested_expr
 
     arity: int
     rightLeftAssoc: opAssoc
     pa: typing.Optional[ParseAction]
     opExpr1: ParserElement
     opExpr2: ParserElement
-    for i, operDef in enumerate(op_list):
+    matchExpr: ParserElement
+    match_lookahead: ParserElement
+    for operDef in op_list:
         opExpr, arity, rightLeftAssoc, pa = (operDef + (None,))[:4]  # type: ignore[assignment]
         if isinstance(opExpr, str_type):
             opExpr = ParserElement._literalStringClass(opExpr)
@@ -798,9 +812,9 @@ def infix_notation(
                     "if numterms=3, opExpr must be a tuple or list of two expressions"
                 )
             opExpr1, opExpr2 = opExpr
-            term_name = f"{opExpr1}{opExpr2} term"
+            term_name = f"{opExpr1}{opExpr2} operations"
         else:
-            term_name = f"{opExpr} term"
+            term_name = f"{opExpr} operations"
 
         if not 1 <= arity <= 3:
             raise ValueError("operator must be unary (1), binary (2), or ternary (3)")
@@ -810,46 +824,61 @@ def infix_notation(
 
         thisExpr: ParserElement = Forward().set_name(term_name)
         thisExpr = typing.cast(Forward, thisExpr)
+        match_lookahead = And([])
         if rightLeftAssoc is OpAssoc.LEFT:
             if arity == 1:
-                matchExpr = _FB(lastExpr + opExpr) + Group(lastExpr + opExpr[1, ...])
+                match_lookahead = _FB(lastExpr + opExpr)
+                matchExpr = Group(lastExpr + opExpr[1, ...])
             elif arity == 2:
                 if opExpr is not None:
-                    matchExpr = _FB(lastExpr + opExpr + lastExpr) + Group(
-                        lastExpr + (opExpr + lastExpr)[1, ...]
-                    )
+                    match_lookahead = _FB(lastExpr + opExpr + lastExpr)
+                    matchExpr = Group(lastExpr + (opExpr + lastExpr)[1, ...])
                 else:
-                    matchExpr = _FB(lastExpr + lastExpr) + Group(lastExpr[2, ...])
+                    match_lookahead = _FB(lastExpr + lastExpr)
+                    matchExpr = Group(lastExpr[2, ...])
             elif arity == 3:
-                matchExpr = _FB(
+                match_lookahead = _FB(
                     lastExpr + opExpr1 + lastExpr + opExpr2 + lastExpr
-                ) + Group(lastExpr + OneOrMore(opExpr1 + lastExpr + opExpr2 + lastExpr))
+                )
+                matchExpr = Group(
+                    lastExpr + (opExpr1 + lastExpr + opExpr2 + lastExpr)[1, ...]
+                )
         elif rightLeftAssoc is OpAssoc.RIGHT:
             if arity == 1:
                 # try to avoid LR with this extra test
                 if not isinstance(opExpr, Opt):
                     opExpr = Opt(opExpr)
-                matchExpr = _FB(opExpr.expr + thisExpr) + Group(opExpr + thisExpr)
+                match_lookahead = _FB(opExpr.expr + thisExpr)
+                matchExpr = Group(opExpr + thisExpr)
             elif arity == 2:
                 if opExpr is not None:
-                    matchExpr = _FB(lastExpr + opExpr + thisExpr) + Group(
-                        lastExpr + (opExpr + thisExpr)[1, ...]
-                    )
+                    match_lookahead = _FB(lastExpr + opExpr + thisExpr)
+                    matchExpr = Group(lastExpr + (opExpr + thisExpr)[1, ...])
                 else:
-                    matchExpr = _FB(lastExpr + thisExpr) + Group(
-                        lastExpr + thisExpr[1, ...]
-                    )
+                    match_lookahead = _FB(lastExpr + thisExpr)
+                    matchExpr = Group(lastExpr + thisExpr[1, ...])
             elif arity == 3:
-                matchExpr = _FB(
+                match_lookahead = _FB(
                     lastExpr + opExpr1 + thisExpr + opExpr2 + thisExpr
-                ) + Group(lastExpr + opExpr1 + thisExpr + opExpr2 + thisExpr)
+                )
+                matchExpr = Group(lastExpr + opExpr1 + thisExpr + opExpr2 + thisExpr)
+
+        # suppress lookahead expr from railroad diagrams
+        match_lookahead.show_in_diagram = False
+
+        # TODO - determine why this statement can't be included in the following
+        #  if pa block
+        matchExpr = match_lookahead + matchExpr
+
         if pa:
             if isinstance(pa, (tuple, list)):
                 matchExpr.set_parse_action(*pa)
             else:
                 matchExpr.set_parse_action(pa)
+
         thisExpr <<= (matchExpr | lastExpr).setName(term_name)
         lastExpr = thisExpr
+
     ret <<= lastExpr
     return ret
 
@@ -997,10 +1026,9 @@ def indentedBlock(blockStatementExpr, indentStack, indent=True, backup_stacks=[]
     return smExpr.set_name("indented block")
 
 
-# it's easy to get these comment structures wrong - they're very common, so may as well make them available
-c_style_comment = Combine(Regex(r"/\*(?:[^*]|\*(?!/))*") + "*/").set_name(
-    "C style comment"
-)
+# it's easy to get these comment structures wrong - they're very common,
+# so may as well make them available
+c_style_comment = Regex(r"/\*(?:[^*]|\*(?!/))*\*\/").set_name("C style comment")
 "Comment of the form ``/* ... */``"
 
 html_comment = Regex(r"<!--[\s\S]*?-->").set_name("HTML comment")
@@ -1010,8 +1038,8 @@ rest_of_line = Regex(r".*").leave_whitespace().set_name("rest of line")
 dbl_slash_comment = Regex(r"//(?:\\\n|[^\n])*").set_name("// comment")
 "Comment of the form ``// ... (to end of line)``"
 
-cpp_style_comment = Combine(
-    Regex(r"/\*(?:[^*]|\*(?!/))*") + "*/" | dbl_slash_comment
+cpp_style_comment = Regex(
+    r"(?:/\*(?:[^*]|\*(?!/))*\*\/)|(?://(?:\\\n|[^\n])*)"
 ).set_name("C++ style comment")
 "Comment of either form :class:`c_style_comment` or :class:`dbl_slash_comment`"
 
@@ -1024,7 +1052,7 @@ python_style_comment = Regex(r"#.*").set_name("Python style comment")
 
 # build list of built-in expressions, for future reference if a global default value
 # gets updated
-_builtin_exprs: List[ParserElement] = [
+_builtin_exprs: list[ParserElement] = [
     v for v in vars().values() if isinstance(v, ParserElement)
 ]
 
@@ -1045,7 +1073,7 @@ def delimited_list(
     )
 
 
-# pre-PEP8 compatible names
+# Compatibility synonyms
 # fmt: off
 opAssoc = OpAssoc
 anyOpenTag = any_open_tag
@@ -1058,43 +1086,17 @@ dblSlashComment = dbl_slash_comment
 cppStyleComment = cpp_style_comment
 javaStyleComment = java_style_comment
 pythonStyleComment = python_style_comment
-
-@replaced_by_pep8(DelimitedList)
-def delimitedList(): ...
-
-@replaced_by_pep8(DelimitedList)
-def delimited_list(): ...
-
-@replaced_by_pep8(counted_array)
-def countedArray(): ...
-
-@replaced_by_pep8(match_previous_literal)
-def matchPreviousLiteral(): ...
-
-@replaced_by_pep8(match_previous_expr)
-def matchPreviousExpr(): ...
-
-@replaced_by_pep8(one_of)
-def oneOf(): ...
-
-@replaced_by_pep8(dict_of)
-def dictOf(): ...
-
-@replaced_by_pep8(original_text_for)
-def originalTextFor(): ...
-
-@replaced_by_pep8(nested_expr)
-def nestedExpr(): ...
-
-@replaced_by_pep8(make_html_tags)
-def makeHTMLTags(): ...
-
-@replaced_by_pep8(make_xml_tags)
-def makeXMLTags(): ...
-
-@replaced_by_pep8(replace_html_entity)
-def replaceHTMLEntity(): ...
-
-@replaced_by_pep8(infix_notation)
-def infixNotation(): ...
+delimitedList = replaced_by_pep8("delimitedList", DelimitedList)
+delimited_list = replaced_by_pep8("delimited_list", DelimitedList)
+countedArray = replaced_by_pep8("countedArray", counted_array)
+matchPreviousLiteral = replaced_by_pep8("matchPreviousLiteral", match_previous_literal)
+matchPreviousExpr = replaced_by_pep8("matchPreviousExpr", match_previous_expr)
+oneOf = replaced_by_pep8("oneOf", one_of)
+dictOf = replaced_by_pep8("dictOf", dict_of)
+originalTextFor = replaced_by_pep8("originalTextFor", original_text_for)
+nestedExpr = replaced_by_pep8("nestedExpr", nested_expr)
+makeHTMLTags = replaced_by_pep8("makeHTMLTags", make_html_tags)
+makeXMLTags = replaced_by_pep8("makeXMLTags", make_xml_tags)
+replaceHTMLEntity = replaced_by_pep8("replaceHTMLEntity", replace_html_entity)
+infixNotation = replaced_by_pep8("infixNotation", infix_notation)
 # fmt: on

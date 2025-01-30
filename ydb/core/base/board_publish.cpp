@@ -138,6 +138,9 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
                 Send(xpair.second.PublishActor, new TEvents::TEvPoisonPill());
         }
 
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(), SelfId(),
+            nullptr, 0));
+
         TActor::PassAway();
     }
 
@@ -150,15 +153,27 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
         auto *msg = ev->Get();
 
         if (msg->Replicas.empty()) {
+            Y_ABORT_UNLESS(ReplicaPublishActors.empty());
             BLOG_ERROR("publish on unconfigured statestorage board service");
         } else {
             auto now = TlsActivationContext->Monotonic();
+
             for (auto &replicaId : msg->Replicas) {
                 auto& publishActorState = ReplicaPublishActors[replicaId];
                 if (publishActorState.RetryState.LastRetryAt == TMonotonic::Zero()) {
                     publishActorState.PublishActor =
                         RegisterWithSameMailbox(new TBoardReplicaPublishActor(Path, Payload, replicaId, SelfId()));
                     publishActorState.RetryState.LastRetryAt = now;
+                }
+            }
+            THashSet<TActorId> usedReplicas(msg->Replicas.begin(), msg->Replicas.end());
+            for (auto it = ReplicaPublishActors.begin(); it != ReplicaPublishActors.end(); ) {
+                if (usedReplicas.contains(it->first)) {
+                    ++it;
+                } else {
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, it->second.PublishActor,
+                        SelfId(), nullptr, 0));
+                    ReplicaPublishActors.erase(it++);
                 }
             }
         }
@@ -252,7 +267,7 @@ public:
 
     void Bootstrap() {
         const TActorId proxyId = MakeStateStorageProxyID();
-        Send(proxyId, new TEvStateStorage::TEvResolveBoard(Path), IEventHandle::FlagTrackDelivery);
+        Send(proxyId, new TEvStateStorage::TEvResolveBoard(Path, true), IEventHandle::FlagTrackDelivery);
 
         Become(&TThis::StateResolve);
     }
@@ -267,6 +282,7 @@ public:
 
     STATEFN(StateCalm) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TEvStateStorage::TEvPublishActorGone, CalmGone);
             hFunc(TEvPrivate::TEvRetryPublishActor, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);

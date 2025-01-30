@@ -5,7 +5,7 @@
 * Перекладывание одного сообщения из `topic1` в базе данных `quickstart` в `topic2` в базе данных `db2`, с ожиданием его появления в топике-источнике
 
   ```bash
-  {{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w | {{ ydb-cli }} -p db2 topic write topic2 
+  {{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w | {{ ydb-cli }} -p db2 topic write topic2
   ```
 
 * Фоновая передача всех появляющихся однострочных сообщений в топике `topic1` в базе данных `quickstart`, в топик `topic2` в базе данных `db2`. Данный сценарий можно использовать в случае, если гарантируется отсутствие байтов `0x0A` (перевод строки) в исходных сообщениях.
@@ -37,7 +37,7 @@
   {{ ydb-cli }} -p quickstart topic write topic1 --format newline-delimited
   ```
 
-### Исполнение YQL-запроса с передачей сообщений из топика в качестве параметров {#example-read-to-yql-param}
+## Исполнение YQL-запроса с передачей сообщений из топика в качестве параметров {#example-read-to-yql-param}
 
 * Исполнение YQL-запроса с передачей параметром каждого сообщения, считанного из топика `topic1`
 

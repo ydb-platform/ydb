@@ -3,11 +3,8 @@
 Overview: Easy, clean, reliable Python 2/3 compatibility
 ========================================================
 
-.. image:: https://travis-ci.org/PythonCharmers/python-future.svg?branch=master
-    :target: https://travis-ci.org/PythonCharmers/python-future
-
-.. image:: https://readthedocs.org/projects/python-future/badge/?version=latest
-    :target: https://python-future.readthedocs.io/en/latest/?badge=latest
+.. image:: https://github.com/PythonCharmers/python-future/actions/workflows/ci.yml/badge.svg?branch=master
+    :target: https://github.com/PythonCharmers/python-future/actions/workflows/ci.yml?query=branch%3Amaster
 
 ``python-future`` is the missing compatibility layer between Python 2 and
 Python 3. It allows you to use a single, clean Python 3.x-compatible
@@ -19,9 +16,21 @@ ports of features from Python 3 and 2. It also comes with ``futurize`` and
 either Py2 or Py3 code easily to support both Python 2 and 3 in a single
 clean Py3-style codebase, module by module.
 
-Notable projects that use ``python-future`` for Python 2/3 compatibility
-are `Mezzanine <http://mezzanine.jupo.org/>`_ and `ObsPy
-<http://obspy.org>`_.
+The ``python-future`` project has been downloaded over 1.7 billion times.
+
+.. _status
+
+Status
+------
+
+The ``python-future`` project was created in 2013 to attempt to save Python from
+the schism of version incompatibility that was threatening to tear apart the
+language (as Perl 6 contributed to the death of Perl).
+
+That time is now past. Thanks to a huge porting effort across the Python
+community, Python 3 eventually thrived. Python 2 reached its end of life in
+2020 and the ``python-future`` package should no longer be necessary. Use it to
+help with porting legacy code to Python 3 but don't depend on it for new code.
 
 .. _features:
 
@@ -223,11 +232,14 @@ into this code which runs on both Py2 and Py3:
     name = input()
     greet(name)
 
+The first four lines have no effect under Python 3 and can be removed from
+the codebase when Python 2 compatibility is no longer required.
+
 See :ref:`forwards-conversion` and :ref:`backwards-conversion` for more details.
 
 
 Automatic translation
----------------------
+~~~~~~~~~~~~~~~~~~~~~
 
 The ``past`` package can automatically translate some simple Python 2
 modules to Python 3 upon import. The goal is to support the "long tail" of
@@ -264,10 +276,9 @@ properly to a Python 2/3 compatible codebase using a tool like
 Note: the auto-translation feature is still in alpha; it needs more testing and
 development, and will likely never be perfect.
 
-For more info, see :ref:`translation`.
 
 Pre-commit hooks
-----------------
+~~~~~~~~~~~~~~~~
 
 `Pre-commit <https://pre-commit.com/>`_ is a framework for managing and maintaining
 multi-language pre-commit hooks.
@@ -304,23 +315,25 @@ Licensing
 
 :Author:  Ed Schofield, Jordan M. Adler, et al
 
-:Copyright: 2013-2019 Python Charmers Pty Ltd, Australia.
+:Copyright: 2013-2024 Python Charmers, Australia.
 
-:Sponsors: Python Charmers Pty Ltd, Australia, and Python Charmers Pte
-           Ltd, Singapore. http://pythoncharmers.com
+:Sponsors: Python Charmers: https://pythoncharmers.com
 
-           Pinterest https://opensource.pinterest.com/
+           Pinterest https://opensource.pinterest.com
 
-:Licence: MIT. See ``LICENSE.txt`` or `here <http://python-future.org/credits.html>`_.
+:Licence: MIT. See ``LICENSE.txt`` or `here <https://python-future.org/credits.html>`_.
 
-:Other credits:  See `here <http://python-future.org/credits.html>`_.
+:Other credits:  See `here <https://python-future.org/credits.html>`_.
 
+Docs
+----
+See the docs `here <https://python-future.org>`_.
 
 Next steps
 ----------
 
 If you are new to Python-Future, check out the `Quickstart Guide
-<http://python-future.org/quickstart.html>`_.
+<https://python-future.org/quickstart.html>`_.
 
 For an update on changes in the latest version, see the `What's New
-<http://python-future.org/whatsnew.html>`_ page.
+<https://python-future.org/whatsnew.html>`_ page.

@@ -1,7 +1,5 @@
-# Diagnostics
+# Troubleshooting
 
-This section contains articles about YDB database diagnostics tools.
+This section of the {{ ydb-short-name }} documentation provides guidance on troubleshooting issues related to {{ ydb-short-name }} databases and the applications that interact with them.
 
-- [System views](system_views_db.md)
-- [Metrics](monitoring.md)
-- [Grafana dashboards](../administration/grafana-dashboards.md)
+- [{#T}](performance/index.md)

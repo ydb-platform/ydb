@@ -6,7 +6,7 @@
 
 select
     n_name,
-    sum(l_extendedprice * (1::numeric - l_discount)) as revenue
+    sum(l_extendedprice * (1 - l_discount)) as revenue
 from
     {{customer}},
     {{orders}},
@@ -21,9 +21,9 @@ where
     and c_nationkey = s_nationkey
     and s_nationkey = n_nationkey
     and n_regionkey = r_regionkey
-    and r_name = 'AFRICA'
-    and o_orderdate >= date '1995-01-01'
-    and o_orderdate < date '1995-01-01' + interval '1' year
+    and r_name = 'ASIA'
+    and o_orderdate >= date '1994-01-01'
+    and o_orderdate < date '1994-01-01' + interval '1' year
 group by
     n_name
 order by

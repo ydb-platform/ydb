@@ -1,24 +1,27 @@
 LIBRARY()
 
 SRCS(
+    control.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
+    kqp_lwtrace_probes.cpp
+    kqp_lwtrace_probes.h
     kqp_resolve.cpp
     kqp_resolve.h
     kqp_ru_calc.cpp
-    kqp_yql.cpp
-    kqp_yql.h
     kqp_script_executions.cpp
-    kqp_timeouts.h
     kqp_timeouts.cpp
-    kqp_lwtrace_probes.h
-    kqp_lwtrace_probes.cpp
-    kqp_types.h
+    kqp_timeouts.h
+    kqp_tx_manager.cpp
+    kqp_tx.cpp
     kqp_types.cpp
-    kqp.cpp
-    kqp.h
+    kqp_types.h
     kqp_user_request_context.cpp
     kqp_user_request_context.h
+    kqp_yql.cpp
+    kqp_yql.h
+    kqp.cpp
+    kqp.h
 )
 
 PEERDIR(
@@ -34,12 +37,14 @@ PEERDIR(
     ydb/core/tx/sharding
     ydb/library/yql/dq/expr_nodes
     ydb/library/aclib
-    ydb/library/yql/core/issue
+    yql/essentials/core/issue
+    yql/essentials/core/services
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/common
-    ydb/library/yql/parser/pg_wrapper/interface
-    ydb/public/lib/operation_id
-    ydb/public/lib/operation_id/protos
+    yql/essentials/core/dq_integration
+    yql/essentials/parser/pg_wrapper/interface
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id/protos
     ydb/core/grpc_services/cancelation
     library/cpp/lwtrace
     #library/cpp/lwtrace/protos
@@ -54,6 +59,6 @@ END()
 
 RECURSE(
     compilation
-    simple
     events
+    simple
 )

@@ -3,8 +3,7 @@
 Contains MSVCCompiler, an implementation of the abstract CCompiler class
 for Microsoft Visual Studio 2015.
 
-The module is compatible with VS 2015 and later. You can find legacy support
-for older versions in distutils.msvc9compiler and distutils.msvccompiler.
+This module requires VS 2015 or later.
 """
 
 # Written by Perry Stoll
@@ -13,27 +12,27 @@ for older versions in distutils.msvc9compiler and distutils.msvccompiler.
 # ported to VS 2005 and VS 2008 by Christian Heimes
 # ported to VS 2015 by Steve Dower
 
+import contextlib
 import os
 import subprocess
-import contextlib
-import warnings
 import unittest.mock as mock
+import warnings
 
 with contextlib.suppress(ImportError):
     import winreg
 
+from itertools import count
+
+from ._log import log
+from .ccompiler import CCompiler, gen_lib_options
 from .errors import (
+    CompileError,
     DistutilsExecError,
     DistutilsPlatformError,
-    CompileError,
     LibError,
     LinkError,
 )
-from .ccompiler import CCompiler, gen_lib_options
-from ._log import log
-from .util import get_platform
-
-from itertools import count
+from .util import get_host_platform, get_platform
 
 
 def _find_vc2015():
@@ -79,32 +78,40 @@ def _find_vc2017():
     if not root:
         return None, None
 
-    try:
-        path = subprocess.check_output(
-            [
-                os.path.join(
-                    root, "Microsoft Visual Studio", "Installer", "vswhere.exe"
-                ),
-                "-latest",
-                "-prerelease",
-                "-requires",
-                "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-                "-property",
-                "installationPath",
-                "-products",
-                "*",
-            ],
-            encoding="mbcs",
-            errors="strict",
-        ).strip()
-    except (subprocess.CalledProcessError, OSError, UnicodeDecodeError):
-        return None, None
+    variant = 'arm64' if get_platform() == 'win-arm64' else 'x86.x64'
+    suitable_components = (
+        f"Microsoft.VisualStudio.Component.VC.Tools.{variant}",
+        "Microsoft.VisualStudio.Workload.WDExpress",
+    )
 
-    path = os.path.join(path, "VC", "Auxiliary", "Build")
-    if os.path.isdir(path):
-        return 15, path
+    for component in suitable_components:
+        # Workaround for `-requiresAny` (only available on VS 2017 > 15.6)
+        with contextlib.suppress(
+            subprocess.CalledProcessError, OSError, UnicodeDecodeError
+        ):
+            path = (
+                subprocess.check_output([
+                    os.path.join(
+                        root, "Microsoft Visual Studio", "Installer", "vswhere.exe"
+                    ),
+                    "-latest",
+                    "-prerelease",
+                    "-requires",
+                    component,
+                    "-property",
+                    "installationPath",
+                    "-products",
+                    "*",
+                ])
+                .decode(encoding="mbcs", errors="strict")
+                .strip()
+            )
 
-    return None, None
+            path = os.path.join(path, "VC", "Auxiliary", "Build")
+            if os.path.isdir(path):
+                return 15, path
+
+    return None, None  # no suitable component found
 
 
 PLAT_SPEC_TO_RUNTIME = {
@@ -140,7 +147,11 @@ def _get_vc_env(plat_spec):
 
     vcvarsall, _ = _find_vcvarsall(plat_spec)
     if not vcvarsall:
-        raise DistutilsPlatformError("Unable to find vcvarsall.bat")
+        raise DistutilsPlatformError(
+            'Microsoft Visual C++ 14.0 or greater is required. '
+            'Get it with "Microsoft C++ Build Tools": '
+            'https://visualstudio.microsoft.com/visual-cpp-build-tools/'
+        )
 
     try:
         out = subprocess.check_output(
@@ -178,15 +189,41 @@ def _find_exe(exe, paths=None):
     return exe
 
 
-# A map keyed by get_platform() return values to values accepted by
-# 'vcvarsall.bat'. Always cross-compile from x86 to work with the
-# lighter-weight MSVC installs that do not include native 64-bit tools.
-PLAT_TO_VCVARS = {
+_vcvars_names = {
     'win32': 'x86',
-    'win-amd64': 'x86_amd64',
-    'win-arm32': 'x86_arm',
-    'win-arm64': 'x86_arm64',
+    'win-amd64': 'amd64',
+    'win-arm32': 'arm',
+    'win-arm64': 'arm64',
 }
+
+
+def _get_vcvars_spec(host_platform, platform):
+    """
+    Given a host platform and platform, determine the spec for vcvarsall.
+
+    Uses the native MSVC host if the host platform would need expensive
+    emulation for x86.
+
+    >>> _get_vcvars_spec('win-arm64', 'win32')
+    'arm64_x86'
+    >>> _get_vcvars_spec('win-arm64', 'win-amd64')
+    'arm64_amd64'
+
+    Otherwise, always cross-compile from x86 to work with the
+    lighter-weight MSVC installs that do not include native 64-bit tools.
+
+    >>> _get_vcvars_spec('win32', 'win32')
+    'x86'
+    >>> _get_vcvars_spec('win-arm32', 'win-arm32')
+    'x86_arm'
+    >>> _get_vcvars_spec('win-amd64', 'win-arm64')
+    'x86_arm64'
+    """
+    if host_platform != 'win-arm64':
+        host_platform = 'win32'
+    vc_hp = _vcvars_names[host_platform]
+    vc_plat = _vcvars_names[platform]
+    return vc_hp if vc_hp == vc_plat else f'{vc_hp}_{vc_plat}'
 
 
 class MSVCCompiler(CCompiler):
@@ -218,7 +255,7 @@ class MSVCCompiler(CCompiler):
     static_lib_format = shared_lib_format = '%s%s'
     exe_extension = '.exe'
 
-    def __init__(self, verbose=0, dry_run=0, force=0):
+    def __init__(self, verbose=False, dry_run=False, force=False):
         super().__init__(verbose, dry_run, force)
         # target platform (.plat_name is consistent with 'bdist')
         self.plat_name = None
@@ -242,18 +279,17 @@ class MSVCCompiler(CCompiler):
         if plat_name is None:
             plat_name = get_platform()
         # sanity check for platforms to prevent obscure errors later.
-        if plat_name not in PLAT_TO_VCVARS:
+        if plat_name not in _vcvars_names:
             raise DistutilsPlatformError(
-                f"--plat-name must be one of {tuple(PLAT_TO_VCVARS)}"
+                f"--plat-name must be one of {tuple(_vcvars_names)}"
             )
 
-        # Get the vcvarsall.bat spec for the requested platform.
-        plat_spec = PLAT_TO_VCVARS[plat_name]
+        plat_spec = _get_vcvars_spec(get_host_platform(), plat_name)
 
         vc_env = _get_vc_env(plat_spec)
         if not vc_env:
             raise DistutilsPlatformError(
-                "Unable to find a compatible " "Visual Studio installation."
+                "Unable to find a compatible Visual Studio installation."
             )
         self._configure(vc_env)
 
@@ -334,7 +370,7 @@ class MSVCCompiler(CCompiler):
         output_dir=None,
         macros=None,
         include_dirs=None,
-        debug=0,
+        debug=False,
         extra_preargs=None,
         extra_postargs=None,
         depends=None,
@@ -423,7 +459,7 @@ class MSVCCompiler(CCompiler):
         return objects
 
     def create_static_lib(
-        self, objects, output_libname, output_dir=None, debug=0, target_lang=None
+        self, objects, output_libname, output_dir=None, debug=False, target_lang=None
     ):
         if not self.initialized:
             self.initialize()
@@ -452,7 +488,7 @@ class MSVCCompiler(CCompiler):
         library_dirs=None,
         runtime_library_dirs=None,
         export_symbols=None,
-        debug=0,
+        debug=False,
         extra_preargs=None,
         extra_postargs=None,
         build_temp=None,
@@ -551,7 +587,7 @@ class MSVCCompiler(CCompiler):
     def library_option(self, lib):
         return self.library_filename(lib)
 
-    def find_library_file(self, dirs, lib, debug=0):
+    def find_library_file(self, dirs, lib, debug=False):
         # Prefer a debugging library if found (and requested), but deal
         # with it if we don't have one.
         if debug:

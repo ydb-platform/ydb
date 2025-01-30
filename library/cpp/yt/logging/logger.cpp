@@ -34,15 +34,45 @@ TSharedRef TMessageStringBuilder::Flush()
     return Buffer_.Slice(0, GetLength());
 }
 
-void TMessageStringBuilder::DisablePerThreadCache()
-{
-    Cache_ = nullptr;
-    CacheDestroyed_ = true;
-}
-
 void TMessageStringBuilder::DoReset()
 {
     Buffer_.Reset();
+}
+
+struct TPerThreadCache;
+
+YT_DEFINE_THREAD_LOCAL(TPerThreadCache*, Cache);
+YT_DEFINE_THREAD_LOCAL(bool, CacheDestroyed);
+
+struct TPerThreadCache
+{
+    TSharedMutableRef Chunk;
+    size_t ChunkOffset = 0;
+
+    ~TPerThreadCache()
+    {
+        TMessageStringBuilder::DisablePerThreadCache();
+    }
+
+    static YT_PREVENT_TLS_CACHING TPerThreadCache* GetCache()
+    {
+        auto& cache = Cache();
+        if (Y_LIKELY(cache)) {
+            return cache;
+        }
+        if (CacheDestroyed()) {
+            return nullptr;
+        }
+        static thread_local TPerThreadCache CacheData;
+        cache = &CacheData;
+        return cache;
+    }
+};
+
+void TMessageStringBuilder::DisablePerThreadCache()
+{
+    Cache() = nullptr;
+    CacheDestroyed() = true;
 }
 
 void TMessageStringBuilder::DoReserve(size_t newCapacity)
@@ -53,7 +83,7 @@ void TMessageStringBuilder::DoReserve(size_t newCapacity)
     auto newChunkSize = std::max(ChunkSize, newCapacity);
     // Hold the old buffer until the data is copied.
     auto oldBuffer = std::move(Buffer_);
-    auto* cache = GetCache();
+    auto* cache = TPerThreadCache::GetCache();
     if (Y_LIKELY(cache)) {
         auto oldCapacity = End_ - Begin_;
         auto deltaCapacity = newCapacity - oldCapacity;
@@ -85,27 +115,6 @@ void TMessageStringBuilder::DoReserve(size_t newCapacity)
     End_ = Begin_ + newCapacity;
 }
 
-TMessageStringBuilder::TPerThreadCache* TMessageStringBuilder::GetCache()
-{
-    if (Y_LIKELY(Cache_)) {
-        return Cache_;
-    }
-    if (CacheDestroyed_) {
-        return nullptr;
-    }
-    static YT_THREAD_LOCAL(TPerThreadCache) Cache;
-    Cache_ = &GetTlsRef(Cache);
-    return Cache_;
-}
-
-TMessageStringBuilder::TPerThreadCache::~TPerThreadCache()
-{
-    TMessageStringBuilder::DisablePerThreadCache();
-}
-
-YT_THREAD_LOCAL(TMessageStringBuilder::TPerThreadCache*) TMessageStringBuilder::Cache_;
-YT_THREAD_LOCAL(bool) TMessageStringBuilder::CacheDestroyed_;
-
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -126,16 +135,16 @@ Y_WEAK ILogManager* GetDefaultLogManager()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_THREAD_LOCAL(ELogLevel) ThreadMinLogLevel = ELogLevel::Minimum;
+YT_DEFINE_THREAD_LOCAL(ELogLevel, ThreadMinLogLevel, ELogLevel::Minimum);
 
 void SetThreadMinLogLevel(ELogLevel minLogLevel)
 {
-    ThreadMinLogLevel = minLogLevel;
+    ThreadMinLogLevel() = minLogLevel;
 }
 
 ELogLevel GetThreadMinLogLevel()
 {
-    return ThreadMinLogLevel;
+    return ThreadMinLogLevel();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,7 +182,7 @@ bool TLogger::IsLevelEnabledHeavy(ELogLevel level) const
 
     return
         level >= Category_->MinPlainTextLevel &&
-        level >= ThreadMinLogLevel;
+        level >= ThreadMinLogLevel();
 }
 
 bool TLogger::GetAbortOnAlert() const
@@ -186,14 +195,21 @@ bool TLogger::IsEssential() const
     return Essential_;
 }
 
-void TLogger::UpdateAnchor(TLoggingAnchor* anchor) const
+void TLogger::UpdateStaticAnchor(
+    TLoggingAnchor* anchor,
+    std::atomic<bool>* anchorRegistered,
+    ::TSourceLocation sourceLocation,
+    TStringBuf message) const
 {
+    if (!anchorRegistered->exchange(true)) {
+        LogManager_->RegisterStaticAnchor(anchor, sourceLocation, message);
+    }
     LogManager_->UpdateAnchor(anchor);
 }
 
-void TLogger::RegisterStaticAnchor(TLoggingAnchor* anchor, ::TSourceLocation sourceLocation, TStringBuf message) const
+void TLogger::UpdateDynamicAnchor(TLoggingAnchor* anchor) const
 {
-    LogManager_->RegisterStaticAnchor(anchor, sourceLocation, message);
+    LogManager_->UpdateAnchor(anchor);
 }
 
 void TLogger::Write(TLogEvent&& event) const
@@ -201,15 +217,16 @@ void TLogger::Write(TLogEvent&& event) const
     LogManager_->Enqueue(std::move(event));
 }
 
-void TLogger::AddRawTag(const TString& tag)
+void TLogger::AddRawTag(const std::string& tag)
 {
-    if (!Tag_.empty()) {
-        Tag_ += ", ";
+    auto* state = GetMutableCoWState();
+    if (!state->Tag.empty()) {
+        state->Tag += ", ";
     }
-    Tag_ += tag;
+    state->Tag += tag;
 }
 
-TLogger TLogger::WithRawTag(const TString& tag) const
+TLogger TLogger::WithRawTag(const std::string& tag) const
 {
     auto result = *this;
     result.AddRawTag(tag);
@@ -223,10 +240,16 @@ TLogger TLogger::WithEssential(bool essential) const
     return result;
 }
 
+void TLogger::AddStructuredValidator(TStructuredValidator validator)
+{
+    auto* state = GetMutableCoWState();
+    state->StructuredValidators.push_back(std::move(validator));
+}
+
 TLogger TLogger::WithStructuredValidator(TStructuredValidator validator) const
 {
     auto result = *this;
-    result.StructuredValidators_.push_back(std::move(validator));
+    result.AddStructuredValidator(std::move(validator));
     return result;
 }
 
@@ -239,19 +262,39 @@ TLogger TLogger::WithMinLevel(ELogLevel minLevel) const
     return result;
 }
 
-const TString& TLogger::GetTag() const
+const std::string& TLogger::GetTag() const
 {
-    return Tag_;
+    static const std::string emptyResult;
+    return CoWState_ ? CoWState_->Tag : emptyResult;
 }
 
 const TLogger::TStructuredTags& TLogger::GetStructuredTags() const
 {
-    return StructuredTags_;
+    static const TStructuredTags emptyResult;
+    return CoWState_ ? CoWState_->StructuredTags : emptyResult;
 }
 
 const TLogger::TStructuredValidators& TLogger::GetStructuredValidators() const
 {
-    return StructuredValidators_;
+    static const TStructuredValidators emptyResult;
+    return CoWState_ ? CoWState_->StructuredValidators : emptyResult;
+}
+
+TLogger::TCoWState* TLogger::GetMutableCoWState()
+{
+    if (!CoWState_ || GetRefCounter(CoWState_.get())->GetRefCount() > 1) {
+        auto uniquelyOwnedState = New<TCoWState>();
+        if (CoWState_) {
+            *uniquelyOwnedState = *CoWState_;
+        }
+        CoWState_ = StaticPointerCast<const TCoWState>(std::move(uniquelyOwnedState));
+    }
+    return const_cast<TCoWState*>(CoWState_.get());
+}
+
+void TLogger::ResetCoWState()
+{
+    CoWState_.Reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

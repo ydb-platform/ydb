@@ -1,4 +1,10 @@
+import sys
 from collections.abc import ItemsView, Iterable, KeysView, Set, ValuesView
+
+if sys.version_info >= (3, 11):
+    from typing import assert_never
+else:
+    from typing_extensions import assert_never
 
 
 def _abc_itemsview_register(view_cls):
@@ -46,6 +52,8 @@ def _viewbaseset_richcmp(view, other, op):
             if elem not in view:
                 return False
         return True
+    else:  # pragma: no cover
+        assert_never(op)
 
 
 def _viewbaseset_and(view, other):

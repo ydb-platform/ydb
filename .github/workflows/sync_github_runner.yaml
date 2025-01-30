@@ -1,0 +1,29 @@
+name: Upload the latest GitHub Actions Runner
+on:
+  schedule:
+    - cron: "15 */12 * * *"  # Two times a day
+  workflow_dispatch:
+jobs:
+  sync:
+    name: Upload the latest GitHub Actions Runner
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            ydb/ci/
+      - name: Set up S3cmd cli tool
+        uses: s3-actions/s3cmd@v1.6.1
+      - name: Prepare s3cmd
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+      - name: sync
+        run: bash ./ydb/ci/sync_github_runner.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUCKET_PATH: ${{ vars.RUNNER_MIRROR_S3_BUCKET_PATH }}

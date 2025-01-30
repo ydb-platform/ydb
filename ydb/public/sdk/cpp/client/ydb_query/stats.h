@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
@@ -12,16 +14,18 @@ namespace Ydb::TableStats {
     class QueryStats;
 }
 
-namespace NYdb {
+namespace NYdb::inline V2 {
     class TProtoAccessor;
 }
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 class TExecStats {
-    friend class NYdb::TProtoAccessor;
+    friend class NYdb::V2::TProtoAccessor;
 
 public:
+    TExecStats() = default;
+
     explicit TExecStats(Ydb::TableStats::QueryStats&& proto);
     explicit TExecStats(const Ydb::TableStats::QueryStats& proto);
 

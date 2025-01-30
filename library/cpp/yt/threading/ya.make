@@ -23,6 +23,7 @@ SRCS(
 PEERDIR(
     library/cpp/yt/assert
     library/cpp/yt/cpu_clock
+    library/cpp/yt/exception
     library/cpp/yt/system
     library/cpp/yt/memory
 )

@@ -1,0 +1,327 @@
+====================BSL-1.0====================
+(http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Adam D. Walling 2012. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Daniel Walker 2006. Use, modification and distribution
+//  are subject to the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Eric Niebler 2014. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Neil Groves 2007. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Neil Groves 2009. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Neil Groves 2009. Use, modification and distribution
+//  are subject to the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Neil Groves 2010. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Neil Groves 2014. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Pavol Droba 2002-2003. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Thorsten Ottosen 2003-2004. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Thorsten Ottosen 2003-2006. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Thorsten Ottosen 2006. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Thorsten Ottosen, Neil Groves 2006 - 2008. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Thorsten Ottosen, Neil Groves 2006. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  Use, modification and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Use, modification and distribution is subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+//  See http://www.boost.org for updates, documentation, and revision history.
+
+
+====================BSL-1.0====================
+// (C) Copyright Jeremy Siek 2001. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// (C) Copyright Thorsten Ottosen 2002-2003. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. 
+// (See accompanying file LICENSE_1_0.txt or copy at 
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Use, modification and distribution are subject to the Boost Software License,
+// Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt).
+
+
+====================BSL-1.0====================
+Distributed under the Boost Software License, Version 1.0.
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2010 Ilya Murav'jov
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2010 Neil Groves
+//  Distributed under the Boost Software License, Version 1.0.
+//  See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright 2014 Neil Groves
+
+
+====================COPYRIGHT====================
+//  Copyright Adam D. Walling 2012. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Arno Schoedl & Neil Groves 2009.
+//  Use, modification and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Bryce Lelbach 2010
+//  Copyright Neil Groves 2009. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Daniel Walker 2006. Use, modification and distribution
+//  are subject to the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Eric Niebler 2014. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Neil Groves & Thorsten Ottosen & Pavol Droba 2003-2004.
+//  Use, modification and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Neil Groves 2003-2004.
+//  Use, modification and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Neil Groves 2007.
+//  Copyright Thorsten Ottosen 2006.
+//  Use, modification and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Neil Groves 2009. Use, modification and distribution
+//  are subject to the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Neil Groves 2010. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Neil Groves 2014
+//  Use, modification and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Pavol Droba 2002-2003. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Robin Eckert 2015.
+//  Copyright Thorsten Ottosen, Neil Groves 2006 - 2008. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Thorsten Ottosen 2003-2004. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Thorsten Ottosen 2003-2006. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Thorsten Ottosen, Neil Groves 2006 - 2008. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Thorsten Ottosen, Neil Groves 2006. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// (C) Copyright Jeremy Siek 2001. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// (C) Copyright Thorsten Ottosen 2002-2003. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright 2004 Eric Niebler.
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright 2006 Thorsten Ottosen.
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright 2009 Neil Groves.
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright 2009-2014 Neil Groves.
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright 2019 Glen Joseph Fernandes (glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+// Copyright Shunsuke Sogame 2005-2006.
+// Distributed under the Boost Software License, Version 1.0. 
+// (See accompanying file LICENSE_1_0.txt or copy at 

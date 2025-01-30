@@ -1,17 +1,17 @@
 #include "yql_dq_common.h"
 
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 
-#include <ydb/library/yql/sql/sql.h>
-#include <ydb/library/yql/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 
 #include <util/string/split.h>
 
@@ -20,16 +20,15 @@ namespace NCommon {
 
 using namespace NKikimr::NMiniKQL;
 
-TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
+TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn) {
     Y_ABORT_UNLESS(typeAnn);
-    Y_ABORT_UNLESS(functionRegistry);
 
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment typeEnv(alloc);
 
-    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(typeEnv, *functionRegistry);
+    NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
     TStringStream errorStream;
-    auto type = NCommon::BuildType(*typeAnn, pgmBuilder, errorStream);
+    auto type = NCommon::BuildType(*typeAnn, typeBuilder, errorStream);
     Y_ENSURE(type, "Failed to compile type: " << errorStream.Str());
     return SerializeNode(type, typeEnv);
 }

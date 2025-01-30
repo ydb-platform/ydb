@@ -5,7 +5,6 @@ TEST_SRCS(
     test_encryption.py
 )
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 DEPENDS(
@@ -18,6 +17,8 @@ PEERDIR(
     ydb/public/sdk/python
 )
 
-REQUIREMENTS(ram:32)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:4)
+ENDIF()
 
 END()

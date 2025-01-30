@@ -1,4 +1,5 @@
 RECURSE(
-    yc_public
+    nc_private
     yc_private
+    yc_public
 )

@@ -1,0 +1,63 @@
+items:
+- name: Overview
+  href: index.md
+- name: Initialize the driver
+  href: init.md
+- name: Authentication
+  items:
+  - name: Overview
+    href: auth.md
+  - name: Using a token
+    href: auth-access-token.md
+  - name: Anonymous
+    href: auth-anonymous.md
+  - name: Service account file
+    href: auth-service-account.md
+  - name: Metadata service
+    href: auth-metadata.md
+  - name: Using environment variables
+    href: auth-env.md
+  - name: Username and password based
+    href: auth-static.md
+- name: Balancing
+  items:
+  - name: Overview
+    href: balancing.md
+  - name: Random choice
+    href: balancing-random-choice.md
+  - name: Prefer the nearest data center
+    href: balancing-prefer-local.md
+  - name: Prefer the specific availability zone
+    href: balancing-prefer-location.md
+- name: Running repeat queries
+  href: retry.md
+- name: Setting the session pool size
+  href: session-pool-limit.md
+- name: Upserting data
+  href: upsert.md
+- name: Bulk-upserting data
+  href: bulk-upsert.md
+- name: Setting up the transaction execution mode
+  href: tx-control.md
+- name: Configuring time to live (TTL)
+  href: ttl.md
+- name: Coordination
+  items:
+  - name: Distributed lock
+    href: distributed-lock.md
+  - name: Leader election
+    href: leader-election.md
+  - name: Service discovery
+    href: service-discovery.md
+  - name: Configuration publication
+    href: config-publication.md
+- name: Troubleshooting
+  items:
+  - name: Overview
+    href: debug.md
+  - name: Enable logging
+    href: debug-logs.md
+  - name: Enable metrics in Prometheus
+    href: debug-prometheus.md
+  - name: Enable tracing in Jaeger
+    href: debug-jaeger.md

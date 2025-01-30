@@ -4,12 +4,19 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
+# https://github.com/ydb-platform/ydb/issues/12513
+IF (SANITIZER_TYPE == "address")
+    TAG(ya:not_autocheck)
+ENDIF()
+
+IF (SANITIZER_TYPE OR NOT OPENSOURCE)
+    REQUIREMENTS(ram:10)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -18,9 +25,9 @@ SRCS(
  )
 
 PEERDIR(
-    ydb/library/yql/public/udf
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/public/udf
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()
@@ -31,6 +38,5 @@ IF (MKQL_RUNTIME_VERSION)
     )
 ENDIF()
 
-REQUIREMENTS(ram:10)
 
 END()

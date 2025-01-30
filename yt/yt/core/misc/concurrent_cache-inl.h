@@ -17,12 +17,14 @@ struct TConcurrentCache<T>::TLookupTable final
     static constexpr bool EnableHazard = true;
 
     const size_t Capacity;
+    const TMemoryUsageTrackerGuard MemoryUsageGuard;
     std::atomic<size_t> Size = 0;
     TAtomicPtr<TLookupTable> Next;
 
-    explicit TLookupTable(size_t capacity)
+    TLookupTable(size_t capacity, IMemoryUsageTrackerPtr memoryUsageTracker)
         : THashTable(capacity)
         , Capacity(capacity)
+        , MemoryUsageGuard(TMemoryUsageTrackerGuard::Acquire(std::move(memoryUsageTracker), THashTable::GetByteSize()))
     { }
 
     typename THashTable::TItemRef Insert(TValuePtr item)
@@ -46,11 +48,11 @@ TConcurrentCache<T>::RenewTable(const TIntrusivePtr<TLookupTable>& head, size_t 
     }
 
     // Rotate lookup table.
-    auto newHead = New<TLookupTable>(capacity);
+    auto newHead = New<TLookupTable>(capacity, MemoryUsageTracker_);
     newHead->Next = head;
 
     if (Head_.SwapIfCompare(head, newHead)) {
-        static const auto& Logger = LockFreePtrLogger;
+        constexpr auto& Logger = LockFreeLogger;
         YT_LOG_DEBUG("Concurrent cache lookup table rotated (LoadFactor: %v)",
             head->Size.load());
 
@@ -63,9 +65,10 @@ TConcurrentCache<T>::RenewTable(const TIntrusivePtr<TLookupTable>& head, size_t 
 }
 
 template <class T>
-TConcurrentCache<T>::TConcurrentCache(size_t capacity)
-    : Capacity_(capacity)
-    , Head_(New<TLookupTable>(capacity))
+TConcurrentCache<T>::TConcurrentCache(size_t capacity, IMemoryUsageTrackerPtr tracker)
+    : MemoryUsageTracker_(std::move(tracker))
+    , Capacity_(capacity)
+    , Head_(New<TLookupTable>(capacity, tracker))
 {
     YT_VERIFY(capacity > 0);
 }
@@ -75,7 +78,7 @@ TConcurrentCache<T>::~TConcurrentCache()
 {
     auto head = Head_.Acquire();
 
-    static const auto& Logger = LockFreePtrLogger;
+    constexpr auto& Logger = LockFreeLogger;
     YT_LOG_DEBUG("Concurrent cache head statistics (ElementCount: %v)",
         head->Size.load());
 }
@@ -214,6 +217,6 @@ bool TConcurrentCache<T>::IsHead(const TIntrusivePtr<TLookupTable>& head) const
     return Head_ == head.Get();
 }
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

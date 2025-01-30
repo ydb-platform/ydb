@@ -12,22 +12,22 @@ public:
     TMockChannelStorage(ui64 capacity)
         : Capacity(capacity) {}
 
-    bool IsEmpty() const override {
+    bool IsEmpty() override {
         return Blobs.empty();
     }
 
-    bool IsFull() const override {
+    bool IsFull() override {
         return Capacity <= UsedSpace;
     }
 
-    void Put(ui64 blobId, TRope&& blob, ui64 /* cookie = 0 */) override {
-        if (UsedSpace + blob.size() > Capacity) {
+    void Put(ui64 blobId, TChunkedBuffer&& blob, ui64 /* cookie = 0 */) override {
+        if (UsedSpace + blob.Size() > Capacity) {
             ythrow yexception() << "Space limit exceeded";
         }
 
         auto result = Blobs.emplace(blobId, std::move(blob));
         Y_ABORT_UNLESS(result.second);
-        UsedSpace += result.first->second.size();
+        UsedSpace += result.first->second.Size();
     }
 
     bool Get(ui64 blobId, TBuffer& data, ui64 /* cookie = 0 */) override {
@@ -42,12 +42,16 @@ public:
 
         auto& blob = Blobs[blobId];
         data.Clear();
-        data.Reserve(blob.size());
-        for (auto it = blob.Begin(); it.Valid(); ++it) {
-            data.Append(it.ContiguousData(), it.ContiguousSize());
+        const size_t toCopy = blob.Size();
+        data.Reserve(toCopy);
+
+        while (!blob.Empty()) {
+            auto& buf = blob.Front().Buf;
+            data.Append(buf.data(), buf.size());
+            blob.Erase(buf.size());
         }
 
-        Y_ABORT_UNLESS(data.size() == blob.size());
+        Y_ABORT_UNLESS(data.size() == toCopy);
 
         Blobs.erase(blobId);
         UsedSpace -= data.size();
@@ -62,7 +66,7 @@ public:
 
 private:
     const ui64 Capacity;
-    THashMap<ui64, TRope> Blobs;
+    THashMap<ui64, TChunkedBuffer> Blobs;
     ui64 UsedSpace = 0;
     ui32 GetBlankRequests = 0;
 };

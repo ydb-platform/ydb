@@ -4,8 +4,9 @@
 
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/core/persqueue/utils.h>
+#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -222,31 +223,32 @@ void TAddReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void TAddReadRuleActor::ModifyPersqueueConfig(
-    const TActorContext& ctx,
+    TAppData* appData,
     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
     const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
     const NKikimrSchemeOp::TDirEntry& selfInfo
 ) {
     Y_UNUSED(pqGroupDescription);
 
-    auto* pqConfig = groupConfig.MutablePQTabletConfig();
+    auto* tabletConfig = groupConfig.MutablePQTabletConfig();
+    const auto& pqConfig = appData->PQConfig;
     auto rule = GetProtoRequest()->read_rule();
 
     if (rule.version() == 0) {
         rule.set_version(selfInfo.GetVersion().GetPQVersion());
     }
-    auto serviceTypes = GetSupportedClientServiceTypes(ctx);
+    auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
 
     TString error;
-    auto messageAndCode = AddReadRuleToConfig(pqConfig, rule, serviceTypes, ctx);
+    auto messageAndCode = AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig);
     auto status = messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK ?
-                                CheckConfig(*pqConfig, serviceTypes, messageAndCode.Message, ctx, Ydb::StatusIds::ALREADY_EXISTS)
+                                CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, Ydb::StatusIds::ALREADY_EXISTS)
                                 : Ydb::StatusIds::BAD_REQUEST;
     if (status != Ydb::StatusIds::SUCCESS) {
         return ReplyWithError(status,
                               status == Ydb::StatusIds::ALREADY_EXISTS ? Ydb::PersQueue::ErrorCode::OK
                                                                        : Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                              messageAndCode.Message, ctx);
+                              messageAndCode.Message);
     }
 }
 
@@ -263,7 +265,7 @@ void TRemoveReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void TRemoveReadRuleActor::ModifyPersqueueConfig(
-    const TActorContext& ctx,
+    TAppData* appData,
     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
     const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
     const NKikimrSchemeOp::TDirEntry& selfInfo
@@ -274,10 +276,10 @@ void TRemoveReadRuleActor::ModifyPersqueueConfig(
         groupConfig.MutablePQTabletConfig(),
         pqGroupDescription.GetPQTabletConfig(),
         GetProtoRequest()->consumer_name(),
-        ctx
+        appData->PQConfig
     );
-    if (!error.Empty()) {
-        return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
+    if (!error.empty()) {
+        return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error);
     }
 }
 
@@ -373,7 +375,7 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
     {
         TString error;
 
-        auto status = FillProposeRequestImpl(name, *GetProtoRequest(), modifyScheme, ctx, error,
+        auto status = FillProposeRequestImpl(name, *GetProtoRequest(), modifyScheme, AppData(ctx), error,
                                              workingDir, proposal.Record.GetDatabaseName(), LocalCluster).YdbCode;
 
         if (!error.empty()) {
@@ -426,7 +428,7 @@ void TAlterTopicActor::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void TAlterTopicActor::ModifyPersqueueConfig(
-    const TActorContext& ctx,
+    TAppData* appData,
     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
     const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
     const NKikimrSchemeOp::TDirEntry& selfInfo
@@ -436,7 +438,7 @@ void TAlterTopicActor::ModifyPersqueueConfig(
     TString error;
     Y_UNUSED(selfInfo);
 
-    auto status = FillProposeRequestImpl(*GetProtoRequest(), groupConfig, ctx, error, GetCdcStreamName().Defined());
+    auto status = FillProposeRequestImpl(*GetProtoRequest(), groupConfig, appData, error, GetCdcStreamName().Defined());
     if (!error.empty()) {
         Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
         return RespondWithCode(status);
@@ -1021,37 +1023,6 @@ bool TDescribeConsumerActor::ApplyResponse(
 }
 
 
-bool FillConsumerProto(Ydb::Topic::Consumer *rr, const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
-                        const NActors::TActorContext& ctx, Ydb::StatusIds::StatusCode& status, TString& error)
-{
-    const auto& pqConfig = AppData(ctx)->PQConfig;
-
-    auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx);
-    rr->set_name(consumerName);
-    rr->mutable_read_from()->set_seconds(consumer.GetReadFromTimestampsMs() / 1000);
-    auto version = consumer.GetVersion();
-    if (version != 0)
-        (*rr->mutable_attributes())["_version"] = TStringBuilder() << version;
-    for (const auto &codec : consumer.GetCodec().GetIds()) {
-        rr->mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec) (codec + 1));
-    }
-
-    rr->set_important(consumer.GetImportant());
-    TString serviceType = "";
-    if (consumer.HasServiceType()) {
-        serviceType = consumer.GetServiceType();
-    } else {
-        if (pqConfig.GetDisallowDefaultClientServiceType()) {
-            error = "service type must be set for all read rules";
-            status = Ydb::StatusIds::INTERNAL_ERROR;
-            return false;
-        }
-        serviceType = pqConfig.GetDefaultClientServiceType().GetName();
-    }
-    (*rr->mutable_attributes())["_service_type"] = serviceType;
-    return true;
-}
-
 void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     Y_ABORT_UNLESS(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
@@ -1062,94 +1033,21 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
     const TString path = JoinSeq("/", response.Path);
 
-    Ydb::Scheme::Entry *selfEntry = Result.mutable_self();
-    ConvertDirectoryEntry(response.Self->Info, selfEntry, true);
-    if (const auto& name = GetCdcStreamName()) {
-        selfEntry->set_name(*name);
-    }
-
     if (response.PQGroupInfo) {
         const auto& pqDescr = response.PQGroupInfo->Description;
-        Result.mutable_partitioning_settings()->set_min_active_partitions(pqDescr.GetTotalGroupCount());
-        for(ui32 i = 0; i < pqDescr.GetTotalGroupCount(); ++i) {
-            auto part = Result.add_partitions();
-            part->set_partition_id(i);
-            part->set_active(true);
+        Ydb::StatusIds::StatusCode status;
+        TString error;
+        if (!FillTopicDescription(Result, pqDescr, response.Self->Info, GetCdcStreamName(), status, error)) {
+            return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
         }
 
         const auto &config = pqDescr.GetPQTabletConfig();
-        if (!config.GetRequireAuthWrite()) {
-            (*Result.mutable_attributes())["_allow_unauthenticated_write"] = "true";
-        }
-
-        if (!config.GetRequireAuthRead()) {
-            (*Result.mutable_attributes())["_allow_unauthenticated_read"] = "true";
-        }
-
-        if (pqDescr.GetPartitionPerTablet() != 2) {
-            (*Result.mutable_attributes())["_partitions_per_tablet"] =
-                TStringBuilder() << pqDescr.GetPartitionPerTablet();
-        }
-        if (config.HasAbcId()) {
-            (*Result.mutable_attributes())["_abc_id"] = TStringBuilder() << config.GetAbcId();
-        }
-        if (config.HasAbcSlug()) {
-            (*Result.mutable_attributes())["_abc_slug"] = config.GetAbcSlug();
-        }
-        if (config.HasFederationAccount()) {
-            (*Result.mutable_attributes())["_federation_account"] = config.GetFederationAccount();
-        }
-        bool local = config.GetLocalDC();
-        const auto &partConfig = config.GetPartitionConfig();
-        i64 msip = partConfig.GetMaxSizeInPartition();
-        if (partConfig.HasMaxSizeInPartition() && msip != Max<i64>()) {
-            (*Result.mutable_attributes())["_max_partition_storage_size"] = TStringBuilder() << msip;
-        }
-        Result.mutable_retention_period()->set_seconds(partConfig.GetLifetimeSeconds());
-        Result.set_retention_storage_mb(partConfig.GetStorageLimitBytes() / 1024 / 1024);
-        (*Result.mutable_attributes())["_message_group_seqno_retention_period_ms"] = TStringBuilder() << (partConfig.GetSourceIdLifetimeSeconds() * 1000);
-        (*Result.mutable_attributes())["__max_partition_message_groups_seqno_stored"] = TStringBuilder() << partConfig.GetSourceIdMaxCounts();
-
-        const auto& pqConfig = AppData(ActorContext())->PQConfig;
-
-        if (local || pqConfig.GetTopicsAreFirstClassCitizen()) {
-            Result.set_partition_write_speed_bytes_per_second(partConfig.GetWriteSpeedInBytesPerSecond());
-            Result.set_partition_write_burst_bytes(partConfig.GetBurstSize());
-        }
-
-        if (pqConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) {
-            auto readSpeedPerConsumer = partConfig.GetWriteSpeedInBytesPerSecond() * 2;
-            Result.set_partition_total_read_speed_bytes_per_second(readSpeedPerConsumer * pqConfig.GetQuotingConfig().GetMaxParallelConsumersPerPartition());
-            Result.set_partition_consumer_read_speed_bytes_per_second(readSpeedPerConsumer);
-        }
-
-        for (const auto &codec : config.GetCodecs().GetIds()) {
-            Result.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec)(codec + 1));
-        }
-
-        if (pqConfig.GetBillingMeteringConfig().GetEnabled()) {
-            switch (config.GetMeteringMode()) {
-                case NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY:
-                    Result.set_metering_mode(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY);
-                    break;
-                case NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS:
-                    Result.set_metering_mode(Ydb::Topic::METERING_MODE_REQUEST_UNITS);
-                    break;
-                default:
-                    break;
-            }
-        }
         auto consumerName = NPersQueue::ConvertNewConsumerName(Settings.Consumer, ActorContext());
         bool found = false;
         for (const auto& consumer : config.GetConsumers()) {
             if (consumerName == consumer.GetName()) {
-                 found = true;
-            }
-            auto rr = Result.add_consumers();
-            Ydb::StatusIds::StatusCode status;
-            TString error;
-            if (!FillConsumerProto(rr, consumer, ActorContext(), status, error)) {
-                return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
+                found = true;
+                break;
             }
         }
 
@@ -1164,6 +1062,12 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
             ProcessTablets(pqDescr, ActorContext());
             return;
+        }
+    } else {
+        Ydb::Scheme::Entry *selfEntry = Result.mutable_self();
+        ConvertDirectoryEntry(response.Self->Info, selfEntry, true);
+        if (const auto& name = GetCdcStreamName()) {
+            selfEntry->set_name(*name);
         }
     }
     return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ActorContext());
@@ -1207,7 +1111,7 @@ void TDescribeConsumerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::
             auto rr = Result.mutable_consumer();
             Ydb::StatusIds::StatusCode status;
             TString error;
-            if (!FillConsumerProto(rr, consumer, ActorContext(), status, error)) {
+            if (!FillConsumer(*rr, consumer, status, error)) {
                 return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
             }
             break;
@@ -1309,8 +1213,9 @@ TDescribePartitionActor::TDescribePartitionActor(NKikimr::NGRpcService::IRequest
 {
 }
 
-void TDescribePartitionActor::Bootstrap(const NActors::TActorContext& ctx)
-{
+void TDescribePartitionActor::Bootstrap(const NActors::TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "TDescribePartitionActor" << ctx.SelfID.ToString() << ": Bootstrap");
+    CheckAccessWithWriteTopicPermission = true;
     TBase::Bootstrap(ctx);
     SendDescribeProposeRequest(ctx);
     Become(&TDescribePartitionActor::StateWork);
@@ -1318,6 +1223,14 @@ void TDescribePartitionActor::Bootstrap(const NActors::TActorContext& ctx)
 
 void TDescribePartitionActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
+        case TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType:
+            if (NeedToRequestWithDescribeSchema(ev)) {
+                // We do not have the UpdateRow permission. Check if we're allowed to DescribeSchema.
+                CheckAccessWithWriteTopicPermission = false;
+                SendDescribeProposeRequest(ActorContext());
+                break;
+            }
+            [[fallthrough]];
         default:
             if (!TDescribeTopicActorImpl::StateWork(ev, ActorContext())) {
                 TBase::StateWork(ev);
@@ -1325,14 +1238,35 @@ void TDescribePartitionActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     }
 }
 
-void TDescribePartitionActor::HandleCacheNavigateResponse(
-    TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev
-) {
-    Y_ABORT_UNLESS(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
+// Return true if we need to send a second request to SchemeCache with DescribeSchema permission,
+// because the first request checking the UpdateRow permission resulted in an AccessDenied error.
+bool TDescribePartitionActor::NeedToRequestWithDescribeSchema(TAutoPtr<IEventHandle>& ev) {
+    if (!CheckAccessWithWriteTopicPermission) {
+        // We've already sent a request with DescribeSchema, ev is a response to it.
+        return false;
+    }
+
+    auto evNav = *reinterpret_cast<typename TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+    auto const& entries = evNav->Get()->Request.Get()->ResultSet;
+    Y_ABORT_UNLESS(entries.size() == 1);
+
+    if (entries.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied) {
+        // We do have access to the requested entity or there was an error.
+        // Transfer ownership to the ev pointer, and let the base classes' StateWork methods handle the response.
+        ev = *reinterpret_cast<TAutoPtr<IEventHandle>*>(&evNav);
+        return false;
+    }
+
+    return true;
+}
+
+void TDescribePartitionActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    auto const& entries = ev->Get()->Request.Get()->ResultSet;
+    Y_ABORT_UNLESS(entries.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
         return;
     }
-    PQGroupInfo = ev->Get()->Request->ResultSet[0].PQGroupInfo;
+    PQGroupInfo = entries[0].PQGroupInfo;
     auto* partRes = Result.mutable_partition();
     partRes->set_partition_id(Settings.Partitions[0]);
     partRes->set_active(true);
@@ -1350,7 +1284,6 @@ void TDescribePartitionActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TE
     for (auto partData : record.GetPartResult()) {
         if ((ui32)partData.GetPartition() != Settings.Partitions[0])
             continue;
-
         Y_ABORT_UNLESS((ui32)(partData.GetPartition()) == Settings.Partitions[0]);
         partResult->set_partition_id(partData.GetPartition());
         partResult->set_active(true);
@@ -1408,13 +1341,10 @@ void TPartitionsLocationActor::Bootstrap(const NActors::TActorContext&)
 {
     SendDescribeProposeRequest();
     UnsafeBecome(&TPartitionsLocationActor::StateWork);
-    SendNodesRequest();
-
 }
 
 void TPartitionsLocationActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvICNodesInfoCache::TEvGetAllNodesInfoResponse, Handle);
         default:
             if (!TDescribeTopicActorImpl::StateWork(ev, ActorContext())) {
                 TBase::StateWork(ev);
@@ -1449,25 +1379,8 @@ bool TPartitionsLocationActor::ApplyResponse(
         partLocation.NodeId = nodeId;
         Response->Partitions.emplace_back(std::move(partLocation));
     }
-    if (GotNodesInfo)
-        Finalize();
-    else
-        GotPartitions = true;
+    Finalize();
     return true;
-}
-
-void TPartitionsLocationActor::SendNodesRequest() const {
-    auto* icEv = new TEvICNodesInfoCache::TEvGetAllNodesInfoRequest();
-    ActorContext().Send(CreateICNodesInfoCacheServiceId(), icEv);
-
-}
-
-void TPartitionsLocationActor::Handle(TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev) {
-    NodesInfoEv = ev;
-    if (GotPartitions)
-        Finalize();
-    else
-        GotNodesInfo = true;
 }
 
 void TPartitionsLocationActor::Finalize() {
@@ -1476,23 +1389,79 @@ void TPartitionsLocationActor::Finalize() {
     } else {
         Y_ABORT_UNLESS(Response->Partitions.size() == PQGroupInfo->Description.PartitionsSize());
     }
-    for (auto& pInResponse : Response->Partitions) {
-        auto iter = NodesInfoEv->Get()->NodeIdsMapping->find(pInResponse.NodeId);
-        if (iter.IsEnd()) {
-            return RaiseError(
-                    TStringBuilder() << "Hostname not found for nodeId " << pInResponse.NodeId,
-                    Ydb::PersQueue::ErrorCode::ERROR,
-                    Ydb::StatusIds::INTERNAL_ERROR, ActorContext()
-            );
-        }
-        pInResponse.Hostname = (*NodesInfoEv->Get()->Nodes)[iter->second].Host;
-    }
     TBase::RespondWithCode(Ydb::StatusIds::SUCCESS);
 }
 
 void TPartitionsLocationActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) {
     this->AddIssue(FillIssue(error, errorCode));
     this->RespondWithCode(status);
+}
+
+TAlterTopicActorInternal::TAlterTopicActorInternal(
+        TAlterTopicActorInternal::TRequest&& request,
+        NThreading::TPromise<TAlterTopicResponse>&& promise,
+        bool missingOk
+)
+    : TActorBase(std::move(request), TActorId{})
+    , Promise(std::move(promise))
+    , MissingOk(missingOk)
+{}
+
+void TAlterTopicActorInternal::Bootstrap(const NActors::TActorContext&) {
+    SendDescribeProposeRequest();
+    Become(&TAlterTopicActorInternal::StateWork);
+}
+
+void TAlterTopicActorInternal::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    if (!TActorBase::HandleCacheNavigateResponseBase(ev)) {
+        this->Die(ActorContext());
+        return;
+    }
+    TUpdateSchemeBase::HandleCacheNavigateResponse(ev);
+    auto& schemeTx = Response->Response.ModifyScheme;
+    std::pair <TString, TString> pathPair;
+    try {
+        pathPair = NKikimr::NGRpcService::SplitPath(GetTopicPath());
+    } catch (const std::exception &ex) {
+        Response->Response.Issues.AddIssue(NYql::ExceptionToIssue(ex));
+        RespondWithCode(Ydb::StatusIds::BAD_REQUEST);
+        return;
+    }
+
+    const auto& workingDir = pathPair.first;
+    const auto& name = pathPair.second;
+    FillModifyScheme(schemeTx, ActorContext(), workingDir, name);
+}
+
+void TAlterTopicActorInternal::ModifyPersqueueConfig(
+    TAppData* appData,
+    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+    const NKikimrSchemeOp::TDirEntry& selfInfo
+) {
+    Y_UNUSED(pqGroupDescription);
+    Y_UNUSED(selfInfo);
+    TString error;
+    Y_UNUSED(selfInfo);
+
+    auto status = FillProposeRequestImpl(GetRequest().Request, groupConfig, appData, error, GetCdcStreamName().Defined());
+    if (!error.empty()) {
+        Response->Response.Issues.AddIssue(error);
+    }
+    RespondWithCode(status);
+}
+
+bool TAlterTopicActorInternal::RespondOverride(Ydb::StatusIds::StatusCode status, bool notFound) {
+    if (MissingOk && notFound) {
+        Response->Response.Status = Ydb::StatusIds::SUCCESS;
+        Response->Response.ModifyScheme.Clear();
+
+    } else {
+        Response->Response.Status = status;
+        Response->Response.Issues.AddIssues(std::move(Response->Issues));
+    }
+    Promise.SetValue(std::move(Response->Response));
+    return true;
 }
 
 } // namespace NKikimr::NGRpcProxy::V1

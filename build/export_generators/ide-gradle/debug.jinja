@@ -1,0 +1,19 @@
+{% if dump_sems is defined %}
+// vvvvvv SEMANTICS
+{#- replace(' ', ' ') is workaround, else `split` function in C++ receive invalid input -#}
+{%-    set lines = split(dump_sems|replace(' ', ' '), '\n') -%}
+{%-    for line in lines %}
+// {{ line }}
+{%-    endfor %}
+// ^^^^^^ SEMANTICS
+{%- endif %}
+
+{% if dump_attrs is defined %}
+// vvvvvv ATTRIBUTES
+{#- replace(' ', ' ') is workaround, else `split` function in C++ receive invalid input -#}
+{%-    set lines = split(dump_attrs|replace(' ', ' '), '\n') -%}
+{%-    for line in lines %}
+// {{ line }}
+{%-    endfor %}
+// ^^^^^^ ATTRIBUTES
+{%- endif %}

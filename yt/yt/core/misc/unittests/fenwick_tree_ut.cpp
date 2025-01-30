@@ -140,7 +140,7 @@ TEST(TFenwickTreeTest, TCustomStructureTest)
         int X = 0;
         int Y = 0;
 
-        TItem() {}
+        TItem() = default;
 
         TItem(int x, int y)
             : X(x)
@@ -165,20 +165,20 @@ TEST(TFenwickTreeTest, TCustomStructureTest)
 
     EXPECT_EQ(tree.GetCumulativeSum(2), TItem(3, 3));
 
-    auto cmp = [](TItem lhs, TItem rhs) {
+    auto cmp = [] (TItem lhs, TItem rhs) {
         return std::tie(lhs.X, lhs.Y) < std::tie(rhs.X, rhs.Y);
     };
 
     EXPECT_EQ(tree.LowerBound(TItem(1, 1), cmp), 1);
     EXPECT_EQ(tree.UpperBound(TItem(1, 1), cmp), 2);
 
-    auto cmpLower = [](TItem lhs, int rhs) {
+    auto cmpLower = [] (TItem lhs, int rhs) {
         return lhs.X < rhs;
     };
 
     EXPECT_EQ(tree.LowerBound(1, cmpLower), 1);
 
-    auto cmpUpper = [](int rhs, TItem lhs) {
+    auto cmpUpper = [] (int rhs, TItem lhs) {
         return rhs < lhs.X;
     };
 

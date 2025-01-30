@@ -1,12 +1,14 @@
 LIBRARY()
 
 SRCS(
+    cleanup_portions.cpp
+    cleanup_tables.cpp
     compaction.cpp
-    ttl.cpp
-    indexation.cpp
-    cleanup.cpp
-    with_appended.cpp
     general_compaction.cpp
+    indexation.cpp
+    merge_subset.cpp
+    ttl.cpp
+    with_appended.cpp
 )
 
 PEERDIR(
@@ -16,6 +18,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/changes/abstract
     ydb/core/tx/columnshard/engines/changes/compaction
     ydb/core/tx/columnshard/engines/changes/counters
+    ydb/core/tx/columnshard/engines/changes/actualization
     ydb/core/tx/columnshard/splitter
     ydb/core/tablet_flat
     ydb/core/tx/tiering

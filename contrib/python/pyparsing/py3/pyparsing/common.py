@@ -206,15 +206,22 @@ class pyparsing_common:
     scientific notation and returns a float"""
 
     # streamlining this expression makes the docs nicer-looking
-    number = (sci_real | real | signed_integer).setName("number").streamline()
+    number = (sci_real | real | signed_integer).set_name("number").streamline()
     """any numeric expression, returns the corresponding Python type"""
 
     fnumber = (
-        Regex(r"[+-]?\d+\.?\d*([eE][+-]?\d+)?")
+        Regex(r"[+-]?\d+\.?\d*(?:[eE][+-]?\d+)?")
         .set_name("fnumber")
         .set_parse_action(convert_to_float)
     )
     """any int or real number, returned as float"""
+
+    ieee_float = (
+        Regex(r"(?i:[+-]?(?:(?:\d+\.?\d*(?:e[+-]?\d+)?)|nan|inf(?:inity)?))")
+        .set_name("ieee_float")
+        .set_parse_action(convert_to_float)
+    )
+    """any floating-point literal (int, real number, infinity, or NaN), returned as float"""
 
     identifier = Word(identchars, identbodychars).set_name("identifier")
     """typical code identifier (leading alpha or '_', followed by 0 or more alphas, nums, or '_')"""
@@ -411,20 +418,15 @@ class pyparsing_common:
     # fmt: on
 
     # pre-PEP8 compatibility names
-    convertToInteger = convert_to_integer
-    """Deprecated - use :class:`convert_to_integer`"""
-    convertToFloat = convert_to_float
-    """Deprecated - use :class:`convert_to_float`"""
-    convertToDate = convert_to_date
-    """Deprecated - use :class:`convert_to_date`"""
-    convertToDatetime = convert_to_datetime
-    """Deprecated - use :class:`convert_to_datetime`"""
-    stripHTMLTags = strip_html_tags
-    """Deprecated - use :class:`strip_html_tags`"""
-    upcaseTokens = upcase_tokens
-    """Deprecated - use :class:`upcase_tokens`"""
-    downcaseTokens = downcase_tokens
-    """Deprecated - use :class:`downcase_tokens`"""
+    # fmt: off
+    convertToInteger = staticmethod(replaced_by_pep8("convertToInteger", convert_to_integer))
+    convertToFloat = staticmethod(replaced_by_pep8("convertToFloat", convert_to_float))
+    convertToDate = staticmethod(replaced_by_pep8("convertToDate", convert_to_date))
+    convertToDatetime = staticmethod(replaced_by_pep8("convertToDatetime", convert_to_datetime))
+    stripHTMLTags = staticmethod(replaced_by_pep8("stripHTMLTags", strip_html_tags))
+    upcaseTokens = staticmethod(replaced_by_pep8("upcaseTokens", upcase_tokens))
+    downcaseTokens = staticmethod(replaced_by_pep8("downcaseTokens", downcase_tokens))
+    # fmt: on
 
 
 _builtin_exprs = [

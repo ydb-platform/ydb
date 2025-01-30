@@ -7,9 +7,9 @@ using namespace NYTree;
 ////////////////////////////////////////////////////////////////////////////////
 
 TError TCheckPermissionResult::ToError(
-    const TString& user,
+    const std::string& user,
     EPermission permission,
-    const std::optional<TString>& column) const
+    const std::optional<std::string>& column) const
 {
     switch (Action) {
         case NSecurityClient::ESecurityAction::Allow:
@@ -32,16 +32,16 @@ TError TCheckPermissionResult::ToError(
                     user,
                     permission);
             }
-            error.MutableAttributes()->Set("user", user);
-            error.MutableAttributes()->Set("permission", permission);
+            error <<= TErrorAttribute("user", user);
+            error <<= TErrorAttribute("permission", permission);
             if (ObjectId) {
-                error.MutableAttributes()->Set("denied_by", ObjectId);
+                error <<= TErrorAttribute("denied_by", ObjectId);
             }
             if (SubjectId) {
-                error.MutableAttributes()->Set("denied_for", SubjectId);
+                error <<= TErrorAttribute("denied_for", SubjectId);
             }
             if (column) {
-                error.MutableAttributes()->Set("column", *column);
+                error <<= TErrorAttribute("column", *column);
             }
             return error;
         }
@@ -51,7 +51,7 @@ TError TCheckPermissionResult::ToError(
     }
 }
 
-TError TCheckPermissionByAclResult::ToError(const TString &user, EPermission permission) const
+TError TCheckPermissionByAclResult::ToError(const std::string& user, EPermission permission) const
 {
     switch (Action) {
         case NSecurityClient::ESecurityAction::Allow:
@@ -73,10 +73,10 @@ TError TCheckPermissionByAclResult::ToError(const TString &user, EPermission per
                     user,
                     permission);
             }
-            error.MutableAttributes()->Set("user", user);
-            error.MutableAttributes()->Set("permission", permission);
+            error <<= TErrorAttribute("user", user);
+            error <<= TErrorAttribute("permission", permission);
             if (SubjectId) {
-                error.MutableAttributes()->Set("denied_for", SubjectId);
+                error <<= TErrorAttribute("denied_for", SubjectId);
             }
             return error;
         }

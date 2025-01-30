@@ -235,6 +235,8 @@ namespace NKikimr::NAutoConfigInitializer {
         Y_ABORT_UNLESS(cpuCount);
         config->SetCpuCount(cpuCount);
 
+        bool useSharedThreads = config->GetUseSharedThreads();
+
         if (!config->HasScheduler()) {
             auto *scheduler = config->MutableScheduler();
             scheduler->SetResolution(64);
@@ -306,6 +308,9 @@ namespace NKikimr::NAutoConfigInitializer {
             i16 threadsCount = cfg.ThreadCount;
             if (poolCount == 2) {
                 threadsCount = cpuCount;
+            }
+            if (useSharedThreads) {
+                executor->SetHasSharedThread(true);
             }
             executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
             executor->SetThreads(threadsCount);

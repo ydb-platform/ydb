@@ -218,11 +218,10 @@ def py2_strencode(s):
     """
     if PY3:
         return s
+    if isinstance(s, str):
+        return s
     else:
-        if isinstance(s, str):
-            return s
-        else:
-            return s.encode(ENCODING, ENCODING_ERRS)
+        return s.encode(ENCODING, ENCODING_ERRS)
 
 
 @memoize
@@ -238,8 +237,7 @@ def getpagesize():
 def virtual_memory():
     """System virtual memory as a namedtuple."""
     mem = cext.virtual_mem()
-    totphys, availphys, totsys, availsys = mem
-    #
+    totphys, availphys, _totsys, _availsys = mem
     total = totphys
     avail = availphys
     free = availphys
@@ -338,7 +336,7 @@ def cpu_count_cores():
 
 def cpu_stats():
     """Return CPU statistics."""
-    ctx_switches, interrupts, dpcs, syscalls = cext.cpu_stats()
+    ctx_switches, interrupts, _dpcs, syscalls = cext.cpu_stats()
     soft_interrupts = 0
     return _common.scpustats(
         ctx_switches, interrupts, soft_interrupts, syscalls
@@ -515,7 +513,7 @@ def win_service_get(name):
     return service
 
 
-class WindowsService:
+class WindowsService:  # noqa: PLW1641
     """Represents an installed Windows service."""
 
     def __init__(self, name, display_name):
@@ -576,10 +574,10 @@ class WindowsService:
                     % self._name
                 )
                 raise AccessDenied(pid=None, name=self._name, msg=msg)
-            elif err.winerror in (
+            elif err.winerror in {
                 cext.ERROR_INVALID_NAME,
                 cext.ERROR_SERVICE_DOES_NOT_EXIST,
-            ):
+            }:
                 msg = "service %r does not exist" % self._name
                 raise NoSuchProcess(pid=None, name=self._name, msg=msg)
             else:
@@ -698,17 +696,15 @@ ppid_map = cext.ppid_map  # used internally by Process.children()
 def is_permission_err(exc):
     """Return True if this is a permission error."""
     assert isinstance(exc, OSError), exc
-    if exc.errno in (errno.EPERM, errno.EACCES):
+    if exc.errno in {errno.EPERM, errno.EACCES}:
         return True
     # On Python 2 OSError doesn't always have 'winerror'. Sometimes
     # it does, in which case the original exception was WindowsError
     # (which is a subclass of OSError).
-    if getattr(exc, "winerror", -1) in (
+    return getattr(exc, "winerror", -1) in {
         cext.ERROR_ACCESS_DENIED,
         cext.ERROR_PRIVILEGE_NOT_HELD,
-    ):
-        return True
-    return False
+    }
 
 
 def convert_oserror(exc, pid=None, name=None):
@@ -765,7 +761,7 @@ def retry_error_partial_copy(fun):
 class Process:
     """Wrapper class around underlying C implementation."""
 
-    __slots__ = ["pid", "_name", "_ppid", "_cache"]
+    __slots__ = ["_cache", "_name", "_ppid", "pid"]
 
     def __init__(self, pid):
         self.pid = pid
@@ -865,6 +861,7 @@ class Process:
             if is_permission_err(err):
                 # TODO: the C ext can probably be refactored in order
                 # to get this from cext.proc_info()
+                debug("attempting memory_info() fallback (slower)")
                 info = self._proc_info()
                 return (
                     info[pinfo_map['num_page_faults']],
@@ -921,10 +918,10 @@ class Process:
         if sig == signal.SIGTERM:
             cext.proc_kill(self.pid)
         # py >= 2.7
-        elif sig in (
+        elif sig in {
             getattr(signal, "CTRL_C_EVENT", object()),
             getattr(signal, "CTRL_BREAK_EVENT", object()),
-        ):
+        }:
             os.kill(self.pid, sig)
         else:
             msg = (
@@ -978,20 +975,23 @@ class Process:
 
     @wrap_exceptions
     def username(self):
-        if self.pid in (0, 4):
+        if self.pid in {0, 4}:
             return 'NT AUTHORITY\\SYSTEM'
         domain, user = cext.proc_username(self.pid)
         return py2_strencode(domain) + '\\' + py2_strencode(user)
 
     @wrap_exceptions
-    def create_time(self):
+    def create_time(self, fast_only=False):
         # Note: proc_times() not put under oneshot() 'cause create_time()
         # is already cached by the main Process class.
         try:
-            user, system, created = cext.proc_times(self.pid)
+            _user, _system, created = cext.proc_times(self.pid)
             return created
         except OSError as err:
             if is_permission_err(err):
+                if fast_only:
+                    raise
+                debug("attempting create_time() fallback (slower)")
                 return self._proc_info()[pinfo_map['create_time']]
             raise
 
@@ -1011,10 +1011,11 @@ class Process:
     @wrap_exceptions
     def cpu_times(self):
         try:
-            user, system, created = cext.proc_times(self.pid)
+            user, system, _created = cext.proc_times(self.pid)
         except OSError as err:
             if not is_permission_err(err):
                 raise
+            debug("attempting cpu_times() fallback (slower)")
             info = self._proc_info()
             user = info[pinfo_map['user_time']]
             system = info[pinfo_map['kernel_time']]
@@ -1032,7 +1033,7 @@ class Process:
     @wrap_exceptions
     @retry_error_partial_copy
     def cwd(self):
-        if self.pid in (0, 4):
+        if self.pid in {0, 4}:
             raise AccessDenied(self.pid, self._name)
         # return a normalized pathname since the native C function appends
         # "\\" at the and of the path
@@ -1041,7 +1042,7 @@ class Process:
 
     @wrap_exceptions
     def open_files(self):
-        if self.pid in (0, 4):
+        if self.pid in {0, 4}:
             return []
         ret = set()
         # Filenames come in in native format like:
@@ -1059,7 +1060,7 @@ class Process:
         return list(ret)
 
     @wrap_exceptions
-    def connections(self, kind='inet'):
+    def net_connections(self, kind='inet'):
         return net_connections(kind, _pid=self.pid)
 
     @wrap_exceptions
@@ -1085,12 +1086,12 @@ class Process:
         if value:
             msg = "value argument not accepted on Windows"
             raise TypeError(msg)
-        if ioclass not in (
+        if ioclass not in {
             IOPRIO_VERYLOW,
             IOPRIO_LOW,
             IOPRIO_NORMAL,
             IOPRIO_HIGH,
-        ):
+        }:
             raise ValueError("%s is not a valid priority" % ioclass)
         cext.proc_io_priority_set(self.pid, ioclass)
 
@@ -1101,6 +1102,7 @@ class Process:
         except OSError as err:
             if not is_permission_err(err):
                 raise
+            debug("attempting io_counters() fallback (slower)")
             info = self._proc_info()
             ret = (
                 info[pinfo_map['io_rcount']],
@@ -1160,6 +1162,7 @@ class Process:
             return cext.proc_num_handles(self.pid)
         except OSError as err:
             if is_permission_err(err):
+                debug("attempting num_handles() fallback (slower)")
                 return self._proc_info()[pinfo_map['num_handles']]
             raise
 

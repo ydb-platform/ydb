@@ -58,7 +58,7 @@ public:
         ui64 size = 0;
         while ((it != Self->IndexBuilds.end()) && size < pageSize) {
             if (it->second->DomainPathId == domainPathId) {
-                Fill(*respRecord.MutableEntries()->Add(), it->second);
+                Fill(*respRecord.MutableEntries()->Add(), *it->second);
                 ++size;
             }
             ++it;

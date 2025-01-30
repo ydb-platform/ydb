@@ -19,6 +19,7 @@ that they implement the appropriate interface.
 """
 
 from zope.interface import classImplements
+from zope.interface._compat import PY313_OR_OLDER
 from zope.interface.common import collections
 from zope.interface.common import io
 from zope.interface.common import numbers
@@ -34,6 +35,7 @@ __all__ = [
     'IDict',
     'IFile',
 ]
+
 
 # pylint:disable=no-self-argument
 class IList(collections.IMutableSequence):
@@ -66,17 +68,18 @@ class ITextString(collections.ISequence):
     extra_classes = (str,)
 
 
-class IByteString(collections.IByteString):
-    """
-    Interface for immutable byte strings.
+if PY313_OR_OLDER:
+    class IByteString(collections.IByteString):
+        """
+        Interface for immutable byte strings.
 
-    On all Python versions this is :class:`bytes`.
+        On all Python versions this is :class:`bytes`.
 
-    Unlike :class:`zope.interface.common.collections.IByteString`
-    (the parent of this interface) this does *not* include
-    :class:`bytearray`.
-    """
-    extra_classes = (bytes,)
+        Unlike :class:`zope.interface.common.collections.IByteString`
+        (the parent of this interface) this does *not* include
+        :class:`bytearray`.
+        """
+        extra_classes = (bytes,)
 
 
 class INativeString(ITextString):
@@ -86,6 +89,8 @@ class INativeString(ITextString):
     On all Python versions, this is :class:`str`. Tt extends
     :class:`ITextString`.
     """
+
+
 # We're not extending ABCInterface so extra_classes won't work
 classImplements(str, INativeString)
 
@@ -108,8 +113,8 @@ class IFile(io.IIOBase):
     """
     Interface for :class:`file`.
 
-    It is recommended to use the interfaces from :mod:`zope.interface.common.io`
-    instead of this interface.
+    It is recommended to use the interfaces from
+    :mod:`zope.interface.common.io` instead of this interface.
 
     On Python 3, there is no single implementation of this interface;
     depending on the arguments, the :func:`open` builtin can return

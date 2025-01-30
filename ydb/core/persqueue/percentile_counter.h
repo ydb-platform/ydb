@@ -30,6 +30,8 @@ private:
 };
 
 class TPercentileCounter {
+friend class TPartitionHistogramWrapper;
+
 public:
     TPercentileCounter() = default;
     TPercentileCounter(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
@@ -53,6 +55,78 @@ private:
 NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TVector<NPersQueue::TPQLabelsInfo> aggr,
         const TString name, ui32 border, TVector<ui32> durations);
+
+
+class TPartitionCounterWrapper {
+private:
+    bool DoSave = false;
+    bool DoReport = false;
+    TMaybe<NKikimr::NPQ::TMultiCounter> Counter;
+    ui64 CounterValue = 0;
+    bool Inited = false;
+
+public:
+    TPartitionCounterWrapper() = default;
+    explicit TPartitionCounterWrapper(NKikimr::NPQ::TMultiCounter&& counter, bool isSupportivePartition, bool doReport = true);
+    void Setup(bool isSupportivePartition, bool doReport, NKikimr::NPQ::TMultiCounter&& counter);
+    void Inc(ui64 value);
+    ui64 Value() const;
+    void SetSavedValue(ui64 value);
+    operator bool() const;
+};
+
+class TPartitionHistogramWrapper {
+private:
+    bool IsSupportivePartition;
+    std::unique_ptr<NKikimr::NPQ::TPercentileCounter> Histogram;
+    TMap<ui32, ui64> Values;
+    bool Inited = false;
+
+public:
+    TPartitionHistogramWrapper() = default;
+    void Setup(bool isSupportivePartition, std::unique_ptr<NKikimr::NPQ::TPercentileCounter>&& histogram);
+    void IncFor(ui64 key, ui64 value = 1);
+    TVector<ui64> GetValues() const;
+    template<class TIterable>
+    void SetValues(const TIterable& inputVector) {
+        auto iter = Values.begin();
+        for (auto inputVal: inputVector) {
+            if (iter == Values.end())
+                break;
+            iter->second = inputVal;
+            iter++;
+        }
+    }
+    const TVector<ui64>& GetRanges() const;
+    operator bool() const;
+};
+
+
+class TMultiBucketCounter {
+private:
+    struct TBucket {
+        ui64 Range;
+        double AvgValue = 0;
+        ui64 ValuesCount = 0;
+        TBucket() = default;
+        explicit TBucket(ui64 range)
+            : Range(range)
+            , AvgValue(0)
+            , ValuesCount(0)
+        {}
+    };
+    TVector<TBucket> Buckets;
+    ui64 TimeReference;
+
+    ui64 InsertWithHint(double value, ui64 count, ui64 hint) noexcept;
+
+public:
+    TMultiBucketCounter(const TVector<ui64>& buckets, ui64 multiplier, ui64 timeRef);
+    void UpdateTimestamp(ui64 newTimeReference);
+    void Insert(i64 value, ui64 count) noexcept;
+    TVector<std::pair<double, ui64>> GetValues(bool allowZeroes = false) const noexcept;
+
+};
 
 }// NPQ
 }// NKikimr

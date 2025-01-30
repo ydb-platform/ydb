@@ -17,6 +17,8 @@ void TDialerConfig::Register(TRegistrar registrar)
     registrar.Parameter("rto_scale", &TThis::RtoScale)
         .GreaterThan(0.0)
         .Default(2.0);
+    registrar.Parameter("connect_timeout", &TThis::ConnectTimeout)
+        .Default(TDuration::Seconds(15));
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->MaxRto < config->MinRto) {
@@ -38,8 +40,6 @@ void TAddressResolverConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("resolve_hostname_into_fqdn", &TThis::ResolveHostNameIntoFqdn)
         .Default(true);
-    registrar.Parameter("expected_localhost_name", &TThis::ExpectedLocalHostName)
-        .Default();
 
     registrar.Preprocessor([] (TThis* config) {
         config->RefreshTime = TDuration::Seconds(60);

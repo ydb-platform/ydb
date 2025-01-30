@@ -118,6 +118,8 @@ message ComputeStatus {
     StatusFlag.Status overall = 1;
     repeated ComputeNodeStatus nodes = 2;
     repeated ComputeTabletStatus tablets = 3;
+    float paths_quota_usage = 4;
+    float shards_quota_usage = 5;
 }
 
 message LocationNode {
@@ -202,4 +204,5 @@ message SelfCheckResult {
     SelfCheck.Result self_check_result = 1;
     repeated IssueLog issue_log = 2;
     repeated DatabaseStatus database_status = 3;
+    LocationNode location = 4;
 }

@@ -1,0 +1,689 @@
+Registering pre-existing tables
+	onek
+	tenk1
+	int8_tbl
+<sql-statement>
+--
+-- LIMIT
+-- Check the LIMIT/OFFSET feature of SELECT
+--
+SELECT ''::text AS two, unique1, unique2, stringu1
+		FROM onek WHERE unique1 > 50
+		ORDER BY unique1 LIMIT 2;
+</sql-statement>
+<sql-statement>
+SELECT ''::text AS five, unique1, unique2, stringu1
+		FROM onek WHERE unique1 > 60
+		ORDER BY unique1 LIMIT 5;
+</sql-statement>
+<sql-statement>
+SELECT ''::text AS two, unique1, unique2, stringu1
+		FROM onek WHERE unique1 > 60 AND unique1 < 63
+		ORDER BY unique1 LIMIT 5;
+</sql-statement>
+<sql-statement>
+SELECT ''::text AS three, unique1, unique2, stringu1
+		FROM onek WHERE unique1 > 100
+		ORDER BY unique1 LIMIT 3 OFFSET 20;
+</sql-statement>
+<sql-statement>
+SELECT ''::text AS zero, unique1, unique2, stringu1
+		FROM onek WHERE unique1 < 50
+		ORDER BY unique1 DESC LIMIT 8 OFFSET 99;
+</sql-statement>
+<sql-statement>
+SELECT ''::text AS eleven, unique1, unique2, stringu1
+		FROM onek WHERE unique1 < 50
+		ORDER BY unique1 DESC LIMIT 20 OFFSET 39;
+</sql-statement>
+<sql-statement>
+SELECT ''::text AS ten, unique1, unique2, stringu1
+		FROM onek
+		ORDER BY unique1 OFFSET 990;
+</sql-statement>
+<sql-statement>
+SELECT ''::text AS five, unique1, unique2, stringu1
+		FROM onek
+		ORDER BY unique1 OFFSET 990 LIMIT 5;
+</sql-statement>
+<sql-statement>
+SELECT ''::text AS five, unique1, unique2, stringu1
+		FROM onek
+		ORDER BY unique1 LIMIT 5 OFFSET 900;
+</sql-statement>
+<sql-statement>
+-- Test null limit and offset.  The planner would discard a simple null
+-- constant, so to ensure executor is exercised, do this:
+select * from int8_tbl limit (case when random() < 0.5 then null::bigint end);
+</sql-statement>
+<sql-statement>
+select * from int8_tbl offset (case when random() < 0.5 then null::bigint end);
+</sql-statement>
+<sql-statement>
+-- Test assorted cases involving backwards fetch from a LIMIT plan node
+begin;
+</sql-statement>
+<sql-statement>
+declare c1 cursor for select * from int8_tbl limit 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 304
+    	declare c1 cursor for select * from int8_tbl limit 10;
+	^
+<sql-statement>
+fetch all in c1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch all in c1;
+	^
+<sql-statement>
+fetch 1 in c1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch 1 in c1;
+	^
+<sql-statement>
+fetch backward 1 in c1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward 1 in c1;
+	^
+<sql-statement>
+fetch backward all in c1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward all in c1;
+	^
+<sql-statement>
+fetch backward 1 in c1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward 1 in c1;
+	^
+<sql-statement>
+fetch all in c1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch all in c1;
+	^
+<sql-statement>
+declare c2 cursor for select * from int8_tbl limit 3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 304
+    	declare c2 cursor for select * from int8_tbl limit 3;
+	^
+<sql-statement>
+fetch all in c2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch all in c2;
+	^
+<sql-statement>
+fetch 1 in c2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch 1 in c2;
+	^
+<sql-statement>
+fetch backward 1 in c2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward 1 in c2;
+	^
+<sql-statement>
+fetch backward all in c2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward all in c2;
+	^
+<sql-statement>
+fetch backward 1 in c2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward 1 in c2;
+	^
+<sql-statement>
+fetch all in c2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch all in c2;
+	^
+<sql-statement>
+declare c3 cursor for select * from int8_tbl offset 3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 304
+    	declare c3 cursor for select * from int8_tbl offset 3;
+	^
+<sql-statement>
+fetch all in c3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch all in c3;
+	^
+<sql-statement>
+fetch 1 in c3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch 1 in c3;
+	^
+<sql-statement>
+fetch backward 1 in c3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward 1 in c3;
+	^
+<sql-statement>
+fetch backward all in c3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward all in c3;
+	^
+<sql-statement>
+fetch backward 1 in c3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward 1 in c3;
+	^
+<sql-statement>
+fetch all in c3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch all in c3;
+	^
+<sql-statement>
+declare c4 cursor for select * from int8_tbl offset 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 304
+    	declare c4 cursor for select * from int8_tbl offset 10;
+	^
+<sql-statement>
+fetch all in c4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch all in c4;
+	^
+<sql-statement>
+fetch 1 in c4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch 1 in c4;
+	^
+<sql-statement>
+fetch backward 1 in c4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward 1 in c4;
+	^
+<sql-statement>
+fetch backward all in c4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward all in c4;
+	^
+<sql-statement>
+fetch backward 1 in c4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward 1 in c4;
+	^
+<sql-statement>
+fetch all in c4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch all in c4;
+	^
+<sql-statement>
+declare c5 cursor for select * from int8_tbl order by q1 fetch first 2 rows with ties;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 304
+    	declare c5 cursor for select * from int8_tbl order by q1 fetch first 2 rows with ties;
+	^
+<sql-statement>
+fetch all in c5;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch all in c5;
+	^
+<sql-statement>
+fetch 1 in c5;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch 1 in c5;
+	^
+<sql-statement>
+fetch backward 1 in c5;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward 1 in c5;
+	^
+<sql-statement>
+fetch backward 1 in c5;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward 1 in c5;
+	^
+<sql-statement>
+fetch all in c5;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch all in c5;
+	^
+<sql-statement>
+fetch backward all in c5;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward all in c5;
+	^
+<sql-statement>
+fetch all in c5;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch all in c5;
+	^
+<sql-statement>
+fetch backward all in c5;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward all in c5;
+	^
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+-- Stress test for variable LIMIT in conjunction with bounded-heap sorting
+SELECT
+  (SELECT n
+     FROM (VALUES (1)) AS x,
+          (SELECT n FROM generate_series(1,10) AS n
+             ORDER BY n LIMIT 1 OFFSET s-1) AS y) AS z
+  FROM generate_series(1,10) AS s;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:6:40: Error: Columns are not allowed in: OFFSET
+    	             ORDER BY n LIMIT 1 OFFSET s-1) AS y) AS z
+	                                       ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- Stress test for variable LIMIT in conjunction with bounded-heap sorting
+	^
+        -stdin-:<main>:3:3: Error: At function: PgSubLink, At function: PgSelect
+        	  (SELECT n
+	  ^
+            -stdin-:<main>:3:3: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+            	  (SELECT n
+	  ^
+<sql-statement>
+--
+-- Test behavior of volatile and set-returning functions in conjunction
+-- with ORDER BY and LIMIT.
+--
+create temp sequence testseq;
+</sql-statement>
+-stdin-:<main>: Error: Pre type annotation
+
+    -stdin-:<main>:1:1: Error: Unexpected tag: pgObject
+    	--
+	^
+<sql-statement>
+explain (verbose, costs off)
+select unique1, unique2, nextval('testseq')
+  from tenk1 order by unique2 limit 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select unique1, unique2, nextval('testseq')
+  from tenk1 order by unique2 limit 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	select unique1, unique2, nextval('testseq')
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "testseq" does not exist
+
+        	select unique1, unique2, nextval('testseq')
+	^
+<sql-statement>
+select currval('testseq');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select currval('testseq');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "testseq" does not exist
+
+        	select currval('testseq');
+	^
+<sql-statement>
+explain (verbose, costs off)
+select unique1, unique2, nextval('testseq')
+  from tenk1 order by tenthous limit 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select unique1, unique2, nextval('testseq')
+  from tenk1 order by tenthous limit 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	select unique1, unique2, nextval('testseq')
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "testseq" does not exist
+
+        	select unique1, unique2, nextval('testseq')
+	^
+<sql-statement>
+select currval('testseq');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select currval('testseq');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "testseq" does not exist
+
+        	select currval('testseq');
+	^
+<sql-statement>
+explain (verbose, costs off)
+select unique1, unique2, generate_series(1,10)
+  from tenk1 order by unique2 limit 7;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select unique1, unique2, generate_series(1,10)
+  from tenk1 order by unique2 limit 7;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:26: Error: Generator functions are not allowed in: SELECT
+    	select unique1, unique2, generate_series(1,10)
+	                         ^
+<sql-statement>
+explain (verbose, costs off)
+select unique1, unique2, generate_series(1,10)
+  from tenk1 order by tenthous limit 7;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select unique1, unique2, generate_series(1,10)
+  from tenk1 order by tenthous limit 7;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:26: Error: Generator functions are not allowed in: SELECT
+    	select unique1, unique2, generate_series(1,10)
+	                         ^
+<sql-statement>
+-- use of random() is to keep planner from folding the expressions together
+explain (verbose, costs off)
+select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- use of random() is to keep planner from folding the expressions together
+	^
+<sql-statement>
+select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2;
+	       ^
+<sql-statement>
+explain (verbose, costs off)
+select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2
+order by s2 desc;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2
+order by s2 desc;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2
+	       ^
+<sql-statement>
+-- test for failure to set all aggregates' aggtranstype
+explain (verbose, costs off)
+select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
+  from tenk1 group by thousand order by thousand limit 3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- test for failure to set all aggregates' aggtranstype
+	^
+<sql-statement>
+select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
+  from tenk1 group by thousand order by thousand limit 3;
+</sql-statement>
+<sql-statement>
+--
+-- FETCH FIRST
+-- Check the WITH TIES clause
+--
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST 2 ROW WITH TIES;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: LimitOption unsupported value: 1
+    	--
+	^
+<sql-statement>
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST ROWS WITH TIES;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: LimitOption unsupported value: 1
+    	SELECT  thousand
+	^
+<sql-statement>
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST 1 ROW WITH TIES;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: LimitOption unsupported value: 1
+    	SELECT  thousand
+	^
+<sql-statement>
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST 2 ROW ONLY;
+</sql-statement>
+<sql-statement>
+-- SKIP LOCKED and WITH TIES are incompatible
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST 1 ROW WITH TIES FOR UPDATE SKIP LOCKED;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: ERROR:  SKIP LOCKED and WITH TIES options cannot be used together
+
+    	-- SKIP LOCKED and WITH TIES are incompatible
+	^
+<sql-statement>
+-- should fail
+SELECT ''::text AS two, unique1, unique2, stringu1
+		FROM onek WHERE unique1 > 50
+		FETCH FIRST 2 ROW WITH TIES;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: ERROR:  WITH TIES cannot be specified without ORDER BY clause
+
+    	-- should fail
+	^
+<sql-statement>
+-- test ruleutils
+CREATE VIEW limit_thousand_v_1 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST 5 ROWS WITH TIES OFFSET 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	-- test ruleutils
+	^
+<sql-statement>
+\d+ limit_thousand_v_1
+</sql-statement>
+Metacommand \d+ limit_thousand_v_1 is not supported
+<sql-statement>
+CREATE VIEW limit_thousand_v_2 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand OFFSET 10 FETCH FIRST 5 ROWS ONLY;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE VIEW limit_thousand_v_2 AS SELECT thousand FROM onek WHERE thousand < 995
+	^
+<sql-statement>
+\d+ limit_thousand_v_2
+</sql-statement>
+Metacommand \d+ limit_thousand_v_2 is not supported
+<sql-statement>
+CREATE VIEW limit_thousand_v_3 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST NULL ROWS WITH TIES;		-- fails
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE VIEW limit_thousand_v_3 AS SELECT thousand FROM onek WHERE thousand < 995
+	^
+<sql-statement>
+CREATE VIEW limit_thousand_v_3 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST (NULL+1) ROWS WITH TIES;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE VIEW limit_thousand_v_3 AS SELECT thousand FROM onek WHERE thousand < 995
+	^
+<sql-statement>
+\d+ limit_thousand_v_3
+</sql-statement>
+Metacommand \d+ limit_thousand_v_3 is not supported
+<sql-statement>
+CREATE VIEW limit_thousand_v_4 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST NULL ROWS ONLY;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE VIEW limit_thousand_v_4 AS SELECT thousand FROM onek WHERE thousand < 995
+	^
+<sql-statement>
+\d+ limit_thousand_v_4
+</sql-statement>
+Metacommand \d+ limit_thousand_v_4 is not supported
+<sql-statement>
+-- leave these views
+</sql-statement>

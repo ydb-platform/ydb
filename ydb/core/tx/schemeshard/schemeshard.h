@@ -51,7 +51,7 @@ public:
     }
 };
 
-struct TEvSchemeShard {
+namespace TEvSchemeShard {
     enum EEv {
         EvModifySchemeTransaction = EventSpaceBegin(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD),  // 271122432
         EvModifySchemeTransactionResult = EvModifySchemeTransaction + 1 * 512,
@@ -94,6 +94,9 @@ struct TEvSchemeShard {
         EvProcessingResponse,
 
         EvOwnerActorAck,
+
+        EvListUsers,
+        EvListUsersResult,
 
         EvEnd
     };
@@ -336,6 +339,20 @@ struct TEvSchemeShard {
             Record.SetPath(path);
             Record.SetPathId(pathId.LocalPathId);
             Record.SetPathOwnerId(pathId.OwnerId);
+        }
+
+        // TEventPreSerializedPB::ToString() calls TEventPreSerializedPB::GetRecord()
+        // which reconstructs full message by deserializing PreSerializedData.
+        // That could be expensive for NKikimrScheme::TEvDescribeSchemeResult (e.g.
+        // table with huge number of partitions).
+        // Override ToString() to avoid unintentional message reconstruction.
+        TString ToString() const override {
+            TStringStream str;
+            str << ToStringHeader()
+                << " PreSerializedData size# " << PreSerializedData.size()
+                << " Record# " << Record.ShortDebugString()
+            ;
+            return str.Str();
         }
     };
 
@@ -646,6 +663,14 @@ struct TEvSchemeShard {
 
     struct TEvOwnerActorAck : TEventPB<TEvOwnerActorAck, NKikimrScheme::TEvOwnerActorAck, EvOwnerActorAck> {
         TEvOwnerActorAck() = default;
+    };
+
+    struct TEvListUsers : TEventPB<TEvListUsers, NKikimrScheme::TEvListUsers, EvListUsers> {
+        TEvListUsers() = default;
+    };
+
+    struct TEvListUsersResult : TEventPB<TEvListUsersResult, NKikimrScheme::TEvListUsersResult, EvListUsersResult> {
+        TEvListUsersResult() = default;
     };
 };
 

@@ -19,12 +19,13 @@
 
 namespace __cxxabiv1 {
 
-#ifdef __USING_EMSCRIPTEN_EXCEPTIONS__
+#ifdef __EMSCRIPTEN_EXCEPTIONS__
 
 struct _LIBCXXABI_HIDDEN __cxa_exception {
   size_t referenceCount;
   std::type_info *exceptionType;
-  void (*exceptionDestructor)(void *);
+  // In wasm, destructors return 'this' as in ARM
+  void* (*exceptionDestructor)(void *);
   uint8_t caught;
   uint8_t rethrown;
   void *adjustedPtr;
@@ -53,7 +54,7 @@ struct _LIBCXXABI_HIDDEN __cxa_exception {
     // in the beginning of the struct, rather than before unwindHeader.
     void *reserve;
 
-    // This is a new field to support C++ 0x exception_ptr.
+    // This is a new field to support C++11 exception_ptr.
     // For binary compatibility it is at the start of this
     // struct which is prepended to the object thrown in
     // __cxa_allocate_exception.
@@ -62,11 +63,11 @@ struct _LIBCXXABI_HIDDEN __cxa_exception {
 
     //  Manage the exception object itself.
     std::type_info *exceptionType;
-#ifdef __USING_WASM_EXCEPTIONS__
-    // In wasm, destructors return their argument
-    void *(*exceptionDestructor)(void *);
+#ifdef __wasm__
+    // In Wasm, a destructor returns its argument
+    void *(_LIBCXXABI_DTOR_FUNC *exceptionDestructor)(void *);
 #else
-    void (*exceptionDestructor)(void *);
+    void (_LIBCXXABI_DTOR_FUNC *exceptionDestructor)(void *);
 #endif
     std::unexpected_handler unexpectedHandler;
     std::terminate_handler  terminateHandler;
@@ -87,9 +88,9 @@ struct _LIBCXXABI_HIDDEN __cxa_exception {
 #endif
 
 #if !defined(__LP64__) && !defined(_WIN64) && !defined(_LIBCXXABI_ARM_EHABI)
-    // This is a new field to support C++ 0x exception_ptr.
+    // This is a new field to support C++11 exception_ptr.
     // For binary compatibility it is placed where the compiler
-    // previously adding padded to 64-bit align unwindHeader.
+    // previously added padding to 64-bit align unwindHeader.
     size_t referenceCount;
 #endif
     _Unwind_Exception unwindHeader;
@@ -105,7 +106,7 @@ struct _LIBCXXABI_HIDDEN __cxa_dependent_exception {
 #endif
 
     std::type_info *exceptionType;
-    void (*exceptionDestructor)(void *);
+    void (_LIBCXXABI_DTOR_FUNC *exceptionDestructor)(void *);
     std::unexpected_handler unexpectedHandler;
     std::terminate_handler terminateHandler;
 
@@ -183,7 +184,7 @@ extern "C" _LIBCXXABI_FUNC_VIS __cxa_eh_globals * __cxa_get_globals_fast ();
 extern "C" _LIBCXXABI_FUNC_VIS void * __cxa_allocate_dependent_exception ();
 extern "C" _LIBCXXABI_FUNC_VIS void __cxa_free_dependent_exception (void * dependent_exception);
 
-#endif // !__USING_EMSCRIPTEN_EXCEPTIONS__
+#endif // !__EMSCRIPTEN_EXCEPTIONS__
 
 }  // namespace __cxxabiv1
 

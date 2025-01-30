@@ -1,0 +1,185 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  14395d49cccf7dd9c262788c7c3eb609
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.rst [3:20]
+
+KEEP     Python-2.0           2d546e12da84a09821b5adec69c70a0f
+BELONGS ya.make
+    License text:
+        For this reason the documentation is distributed under the Python Software
+        Foundation license available in `doc/python-license.txt
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        README.rst [514:515]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 3fcdee168a85f1461aa583cd7f18043b
+BELONGS ya.make
+    License text:
+        For this reason the documentation is distributed under the Python Software
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README.rst [514:514]
+
+KEEP     MIT                  476937dc5fddc3ee6decbe8339415f26
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/fmt/format.h [6:23]
+
+SKIP     LicenseRef-scancode-free-unknown 5d196c949d549ec6ab6c8b6e91d13198
+BELONGS ya.make
+    License text:
+        * `0 A.D. <https://play0ad.com/>`_: a free, open-source, cross-platform
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        README.rst [303:303]
+
+KEEP     Apache-2.0 WITH LLVM-exception 8414486073d317cf7cd4d1f09dfce508
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 25.87
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.rst [22:27]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 25.87
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        LICENSE.rst [22:27]
+
+KEEP     Public-Domain        8625d6667c7cc7a4ddcc3e7fd4308e40
+BELONGS ya.make
+    License text:
+        // A public domain branchless UTF-8 decoder by Christopher Wellons:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        include/fmt/format.h [474:474]
+
+KEEP     MIT                  b98929dca7b73a810e832f9c054d3879
+BELONGS ya.make
+    License text:
+          permissive MIT `license
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.rst [71:71]
+
+KEEP     MIT                  c5802f9446103e27fc922556ae4d3933
+BELONGS ya.make
+    License text:
+        * Switched to the `MIT license
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        ChangeLog.rst [2343:2343]
+
+KEEP     MIT                  e647d0c897654c0ee685caf63729e497
+BELONGS ya.make
+    License text:
+        {fmt} is distributed under the MIT `license
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.rst [505:505]
+
+SKIP     LicenseRef-scancode-unknown-license-reference e6ae53b14c92abc61997c8f784da0ebd
+BELONGS ya.make
+    License text:
+        agree that your contributions are licensed under the {fmt} license, and agree
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [6:6]
+
+KEEP     Apache-2.0 WITH LLVM-exception fa9fb64ff4e431b42132f9429061d02d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 25.87
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/fmt/format.h [25:30]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 25.87
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        include/fmt/format.h [25:30]

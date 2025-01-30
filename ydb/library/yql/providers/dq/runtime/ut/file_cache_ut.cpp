@@ -110,5 +110,44 @@ Y_UNIT_TEST(AcquireSingleFile2Times) {
     UNIT_ASSERT_EQUAL(fc.UsedDiskSize(), 22);
 }
 
+Y_UNIT_TEST(ContainsReleased) {
+    NFs::RemoveRecursive("contains_released");
+    TFileCache fc("contains_released", 20);
+    fc.AddFile(GetFile(20), "1");
+    fc.AcquireFile("1");
+    fc.AddFile(GetFile(15), "2");
+    fc.AddFile(GetFile(15), "3");
+    THashSet<TString> objects;
+    fc.Walk([&](const TString& objectId) {
+        objects.insert(objectId);
+    });
+    UNIT_ASSERT(!objects.contains("1"));
+    UNIT_ASSERT(!fc.Contains("1"));
+    UNIT_ASSERT(objects.size() == 2);
+    UNIT_ASSERT_EQUAL(fc.UsedDiskSize(), 20 + 15 + 15);
+    fc.ReleaseFile("1");
+    UNIT_ASSERT_EQUAL(fc.UsedDiskSize(), 15 + 15);
+}
+
+Y_UNIT_TEST(AddAfterRemoveAcquired) {
+    NFs::RemoveRecursive("add_after_remote_acquired");
+    TFileCache fc("add_after_remote_acquired", 20);
+    fc.AddFile(GetFile(20), "1");
+    fc.AcquireFile("1");
+    fc.AddFile(GetFile(15), "2");
+    fc.AddFile(GetFile(15), "3");
+    UNIT_ASSERT(!fc.Contains("1"));
+    UNIT_ASSERT_EQUAL(fc.UsedDiskSize(), 20 + 15 + 15);
+    fc.AddFile(GetFile(20), "1");
+    UNIT_ASSERT_EQUAL(fc.UsedDiskSize(), 20 + 15);
+    UNIT_ASSERT(fc.Contains("1"));
+    UNIT_ASSERT(fc.Contains("3"));
+    UNIT_ASSERT(!fc.Contains("2"));
+    fc.ReleaseFile("1");
+    UNIT_ASSERT(fc.Contains("1"));
+    UNIT_ASSERT(fc.Contains("3"));
+    UNIT_ASSERT(!fc.Contains("2"));
+}
+
 } // Y_UNIT_TEST_SUITE(TestFileCache) {
 

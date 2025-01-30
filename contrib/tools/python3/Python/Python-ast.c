@@ -863,14 +863,15 @@ ast_type_init(PyObject *self, PyObject *args, PyObject *kw)
     Py_ssize_t i, numfields = 0;
     int res = -1;
     PyObject *key, *value, *fields;
-    if (_PyObject_LookupAttr((PyObject*)Py_TYPE(self), state->_fields, &fields) < 0) {
+
+    fields = PyObject_GetAttr((PyObject*)Py_TYPE(self), state->_fields);
+    if (fields == NULL) {
         goto cleanup;
     }
-    if (fields) {
-        numfields = PySequence_Size(fields);
-        if (numfields == -1) {
-            goto cleanup;
-        }
+
+    numfields = PySequence_Size(fields);
+    if (numfields == -1) {
+        goto cleanup;
     }
 
     res = 0; /* if no error occurs, this stays 0 to the end */
@@ -13152,15 +13153,14 @@ PyObject* PyAST_mod2obj(mod_ty t)
 
     int starting_recursion_depth;
     /* Be careful here to prevent overflow. */
-    int COMPILER_STACK_FRAME_SCALE = 2;
     PyThreadState *tstate = _PyThreadState_GET();
     if (!tstate) {
         return NULL;
     }
     struct validator vstate;
-    vstate.recursion_limit = C_RECURSION_LIMIT * COMPILER_STACK_FRAME_SCALE;
+    vstate.recursion_limit = C_RECURSION_LIMIT;
     int recursion_depth = C_RECURSION_LIMIT - tstate->c_recursion_remaining;
-    starting_recursion_depth = recursion_depth * COMPILER_STACK_FRAME_SCALE;
+    starting_recursion_depth = recursion_depth;
     vstate.recursion_depth = starting_recursion_depth;
 
     PyObject *result = ast2obj_mod(state, &vstate, t);

@@ -12,25 +12,23 @@ SRCS(
     cli_cmds_cms.cpp
     cli_cmds_config.cpp
     cli_cmds_console.cpp
+    cli_cmds_validate_config.cpp
     cli_cmds_debug.cpp
     cli_cmds_disk.cpp
     cli_cmds_genconfig.cpp
-    cli_cmds_get.cpp
-    cli_cmds_group.cpp
     cli_cmds_node.cpp
     cli_cmds_root.cpp
     cli_cmds_server.cpp
     cli_cmds_tablet.cpp
     cli_cmds_tenant.cpp
     cli_fakeinitshard.cpp
-    cli_keyvalue.cpp
     cli_persqueue.cpp
     cli_persqueue_cluster_discovery.cpp
     cli_persqueue_stress.cpp
-    cli_load.cpp
-    cli_minikql_compile_and_exec.cpp
     cli_scheme_cache_append.cpp
     cli_scheme_initroot.cpp
+    melancholic_gopher.cpp
+    melancholic_gopher.h
 )
 
 PEERDIR(
@@ -43,6 +41,7 @@ PEERDIR(
     ydb/core/client/minikql_compile
     ydb/core/client/scheme_cache_lib
     ydb/core/config/init
+    ydb/core/config/validation
     ydb/core/driver_lib/cli_base
     ydb/core/engine
     ydb/core/erasure
@@ -51,14 +50,13 @@ PEERDIR(
     ydb/core/scheme
     ydb/library/aclib
     ydb/library/folder_service/proto
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/yaml_config
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/lib/deprecated/client
-    ydb/public/lib/ydb_cli/common
-    ydb/public/sdk/cpp/client/ydb_discovery
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/lib/ydb_cli/commands/ydb_discovery
 )
 
 YQL_LAST_ABI_VERSION()

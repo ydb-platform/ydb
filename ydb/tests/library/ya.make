@@ -18,20 +18,15 @@ PY_SRCS(
     common/path_types.py
     common/types.py
     common/wait_for.py
+    common/workload_manager.py
     kv/__init__.py
     kv/helpers.py
-    serializability/__init__.py
-    serializability/checker.py
     harness/__init__.py
-    harness/blockstore.py
     harness/daemon.py
-    harness/kikimr_client.py
     harness/kikimr_node_interface.py
-    harness/kikimr_monitoring.py
     harness/kikimr_cluster_interface.py
     harness/kikimr_cluster.py
     harness/kikimr_config.py
-    harness/kikimr_http_client.py
     harness/kikimr_port_allocator.py
     harness/kikimr_runner.py
     harness/param_constants.py
@@ -50,14 +45,6 @@ PY_SRCS(
     predicates/tx.py
     predicates/hive.py
     predicates/executor.py
-    wardens/__init__.py
-    wardens/base.py
-    wardens/datashard.py
-    wardens/disk.py
-    wardens/factories.py
-    wardens/hive.py
-    wardens/logs.py
-    wardens/schemeshard.py
     nemesis/__init__.py
     nemesis/nemesis_core.py
     nemesis/nemesis_network.py
@@ -83,10 +70,20 @@ IF (NOT PYTHON3)
     )
 ENDIF()
 
+IF (PYTHON3)
+    PEERDIR(
+        ydb/tools/ydbd_slice
+    )
+    PY_SRCS(
+        harness/ydbd_slice.py
+    )
+ENDIF()
+
 PEERDIR(
     contrib/python/PyHamcrest
     contrib/python/PyYAML
     contrib/python/cryptography
+    contrib/python/importlib-resources
     contrib/python/protobuf
     contrib/python/pytest
     contrib/python/setuptools
@@ -95,14 +92,24 @@ PEERDIR(
     library/python/svn_version
     library/python/testing/yatest_common
     ydb/core/protos
-    ydb/library/yql/providers/common/proto
+    yql/essentials/providers/common/proto
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos
+    ydb/public/sdk/python/enable_v3_new_behavior
+    ydb/tests/library/wardens
+    ydb/tests/library/clients
     ydb/tests/oss/canonical
     ydb/tests/oss/ydb_sdk_import
 )
 
 END()
 
+RECURSE(
+    compatibility
+    clients
+    serializability
+    wardens
+    sqs
+)
 RECURSE_FOR_TESTS(ut)

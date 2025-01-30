@@ -18,7 +18,7 @@
 
 #include <boost/config.hpp>
 
-// the following help macro is to guarentee that certain coded
+// the following help macro is to guarantee that certain coded
 // is not removed by over-eager linker optimiser.  In certain cases
 // we create static objects must be created but are actually never
 // referenced - creation has a side-effect such as global registration

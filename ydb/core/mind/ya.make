@@ -14,6 +14,7 @@ SRCS(
     lease_holder.h
     local.cpp
     local.h
+    node_broker__graceful_shutdown.cpp
     node_broker.cpp
     node_broker.h
     node_broker_impl.h
@@ -25,6 +26,8 @@ SRCS(
     node_broker__update_config.cpp
     node_broker__update_config_subscription.cpp
     node_broker__update_epoch.cpp
+    slot_indexes_pool.cpp
+    slot_indexes_pool.h
     table_adapter.h
     tenant_node_enumeration.cpp
     tenant_node_enumeration.h

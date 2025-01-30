@@ -1,4 +1,3 @@
-#include "events.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/scheme/scheme_pathid.h>

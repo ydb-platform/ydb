@@ -103,6 +103,8 @@ public:
             MKQL_ENSURE(Ready.empty(), "Inconsistent state to save, not all elements are fetched");
             TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
 
+            Cerr << "Save StatesMap size " << StatesMap.size() << Endl;
+
             out.Write<ui32>(StatesMap.size());
             for (const auto& [key, state] : StatesMap) {
                 out.WriteUnboxedValue(Self->KeyPacker.RefMutableObject(Ctx, false, Self->KeyType), key);
@@ -142,6 +144,9 @@ public:
             }
 
             const auto statesMapSize = in.Read<ui32>();
+
+            Cerr << "Load StatesMap size " << statesMapSize << Endl;
+
             ClearState();
             StatesMap.reserve(statesMapSize);
             for (auto i = 0U; i < statesMapSize; ++i) {

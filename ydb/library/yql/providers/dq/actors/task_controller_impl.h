@@ -299,12 +299,12 @@ private:
                         publicCounterName = "query.input_filtered_bytes";
                         isDeriv = true;
                     } else if (name == "IngressFilteredRows" && taskLevelCounter) {
-                        publicCounterName = "query.input_filtered_records";
+                        publicCounterName = "query.source_input_filtered_records";
                         isDeriv = true;
                     } else if (name == "IngressQueuedBytes" && taskLevelCounter) {
                         publicCounterName = "query.input_queued_bytes";
                     } else if (name == "IngressQueuedRows" && taskLevelCounter) {
-                        publicCounterName = "query.input_queued_records";
+                        publicCounterName = "query.source_input_queued_records";
                     } else if (name == "Tasks") {
                         publicCounterName = "query.running_tasks";
                         isDeriv = false;

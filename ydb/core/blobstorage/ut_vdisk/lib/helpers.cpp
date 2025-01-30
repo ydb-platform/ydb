@@ -1819,7 +1819,7 @@ class TSyncRunActor : public TActor<TSyncRunActor> {
     std::shared_ptr<TSyncRunner::TReturnValue> ReturnValue;
 
     void Handle(TEvRunActor::TPtr &ev, const TActorContext &ctx) {
-        ctx.ExecutorThread.RegisterActor(ev->Get()->Actor.Release());
+        ctx.Register(ev->Get()->Actor.Release());
     }
 
     void HandleDone(TEvents::TEvCompleted::TPtr &ev, const TActorContext &ctx) {

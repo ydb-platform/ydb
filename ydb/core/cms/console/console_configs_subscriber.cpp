@@ -395,7 +395,7 @@ private:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, console, pipeConfig);
-        Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        Pipe = ctx.Register(pipe);
     }
 
 private:

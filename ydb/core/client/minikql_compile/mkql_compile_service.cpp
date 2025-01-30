@@ -83,7 +83,7 @@ public:
 
     NYql::IDbSchemeResolver* MakeDbSchemeResolver(const TActorContext& ctx) {
         auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), Counters);
-        SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
+        SchemeCache = ctx.Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
         return NSchCache::CreateDbSchemeResolver(ctx.ExecutorThread.ActorSystem, SchemeCache);
     }
 
@@ -131,7 +131,7 @@ private:
             c->Retried = true;
 
             auto *compileActor = NYql::CreateCompileActor(c->Program, &c->TypeEnv, DbSchemeResolver.Get(), ctx.SelfID, std::move(msg->CompileResolveCookies), false);
-            const TActorId actId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap, appData->UserPoolId);
+            const TActorId actId = ctx.Register(compileActor, TMailboxType::HTSwap, appData->UserPoolId);
             Compiling.insert(TCompilingMap::value_type(actId, c));
         }
     }
@@ -149,7 +149,7 @@ private:
             std::move(next->CompileResolveCookies),
             next->ForceRefresh);
         auto *appData = AppData(ctx);
-        auto actId = ctx.ExecutorThread.RegisterActor(act, TMailboxType::HTSwap, appData->UserPoolId);
+        auto actId = ctx.Register(act, TMailboxType::HTSwap, appData->UserPoolId);
         Compiling.insert(TCompilingMap::value_type(actId, next));
         CompileQueue.pop();
     }

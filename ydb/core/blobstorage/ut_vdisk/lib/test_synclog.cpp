@@ -190,7 +190,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
         TestCtx->LsnMngr = Db->LsnMngr;
 
         // RecoveryLogWriter
-        TestCtx->LoggerId = ctx.ExecutorThread.RegisterActor(CreateRecoveryLogWriter(
+        TestCtx->LoggerId = ctx.Register(CreateRecoveryLogWriter(
                     VDiskConfig->BaseInfo.PDiskActorID,
                     ctx.SelfID,
                     TestCtx->PDiskCtx->Dsk->Owner,
@@ -200,7 +200,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
 
         // RecoveryLogCutter
         TLogCutterCtx logCutterCtx = {VCtx, TestCtx->PDiskCtx, TestCtx->LsnMngr, VDiskConfig, TestCtx->LoggerId};
-        LogCutterId = ctx.ExecutorThread.RegisterActor(CreateRecoveryLogCutter(std::move(logCutterCtx)));
+        LogCutterId = ctx.Register(CreateRecoveryLogCutter(std::move(logCutterCtx)));
 
         // Repaired SyncLog State
         NSyncLog::TSyncLogParams params = {

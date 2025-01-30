@@ -21,7 +21,7 @@ public:
         Y_ABORT_UNLESS(!Pipes[entityId].contains(dst));
         using namespace NTabletPipe;
 
-        const auto clientId = ctx.ExecutorThread.RegisterActor(CreateClient(ctx.SelfID, ui64(dst), TClientRetryPolicy {
+        const auto clientId = ctx.Register(CreateClient(ctx.SelfID, ui64(dst), TClientRetryPolicy {
             .MinRetryTime = TDuration::MilliSeconds(100),
             .MaxRetryTime = TDuration::Seconds(30),
         }));

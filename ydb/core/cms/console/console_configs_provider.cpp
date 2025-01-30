@@ -61,7 +61,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, Subscription->Subscriber.TabletId, pipeConfig);
-        Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        Pipe = ctx.Register(pipe);
     }
 
     void SendNotifyRequest(const TActorContext &ctx)

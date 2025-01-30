@@ -170,7 +170,7 @@ public:
             .MaxRetryTime = TDuration::Seconds(1),
         };
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, TenantSlotBroker.TabletId, pipeConfig);
-        TenantSlotBroker.Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        TenantSlotBroker.Pipe = ctx.Register(pipe);
 
         auto request = MakeHolder<TEvTenantSlotBroker::TEvRegisterPool>();
         ActorIdToProto(TenantSlotBroker.Pipe, request->Record.MutableClientId());
@@ -837,7 +837,7 @@ public:
         }
 
         auto *local = CreateLocal(Config->LocalConfig.Get());
-        LocalID = ctx.ExecutorThread.RegisterActor(local, TMailboxType::ReadAsFilled, 0);
+        LocalID = ctx.Register(local, TMailboxType::ReadAsFilled, 0);
         ctx.ExecutorThread.ActorSystem->RegisterLocalService(MakeLocalID(SelfId().NodeId()), LocalID);
 
         THashMap<TString, TTenantPoolConfig::TPtr> domainConfigs;

@@ -92,7 +92,7 @@ namespace NTabletPipe {
                 clientId = PipeFactory->CreateClient(ctx, tabletId, PipeClientConfig);
             } else {
                 IActor* client = CreateClient(ctx.SelfID, tabletId, PipeClientConfig);
-                clientId = ctx.ExecutorThread.RegisterActor(client);
+                clientId = ctx.Register(client);
             }
             Container->Insert(tabletId, TClientCacheEntry(clientId, 0), currentClient);
             return clientId;

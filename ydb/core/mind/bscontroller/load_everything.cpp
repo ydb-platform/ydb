@@ -93,6 +93,9 @@ public:
                 Self->TryToRelocateBrokenDisksLocallyFirst = state.GetValue<T::TryToRelocateBrokenDisksLocallyFirst>();
                 Self->YamlConfig = state.GetValue<T::YamlConfig>();
                 Self->ConfigVersion = state.GetValue<T::ConfigVersion>();
+                if (state.HaveValue<T::ShredState>()) {
+                    Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
+                }
             }
         }
 
@@ -324,7 +327,8 @@ public:
                     disks.GetValueOrDefault<T::NextVSlotId>(), disks.GetValue<T::PDiskConfig>(), boxId,
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
-                    disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage);
+                    disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage,
+                    disks.GetValueOrDefault<T::ShredComplete>());
 
                 if (!disks.Next())
                     return false;

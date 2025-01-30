@@ -153,6 +153,15 @@ namespace NKikimr::NStorage {
                     }
                 }
 
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Main operational parameters";
+                    }
+                    DIV_CLASS("panel-body") {
+                        out << "Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "<br/>";
+                    }
+                }
+
                 auto outputConfig = [&](const char *name, auto *config) {
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {

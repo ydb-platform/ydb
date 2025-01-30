@@ -8,13 +8,6 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NHttpClient {
-    class IHttpResponse;
-    using IHttpResponsePtr = std::unique_ptr<IHttpResponse>;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 class IRawClient
     : public virtual TThrRefBase
 {
@@ -334,6 +327,10 @@ public:
         const TGetTablePartitionsOptions& options = {}) = 0;
 
     virtual ui64 GenerateTimestamp() = 0;
+
+    // Batch
+
+    virtual IRawBatchRequestPtr CreateRawBatchRequest() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

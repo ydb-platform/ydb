@@ -1,6 +1,7 @@
 #pragma once
 #include "json_pipe_req.h"
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 
 namespace NKikimr::NViewer {
@@ -156,12 +157,12 @@ public:
                 }
                 NYql::TIssues issues;
                 NYql::IssuesFromMessage(response.operation().issues(), issues);
-                result->Status = NYdb::TStatus(NYdb::EStatus(response.operation().status()), std::move(issues));
+                result->Status = NYdb::TStatus(NYdb::EStatus(response.operation().status()), NYdb::NAdapters::ToSdkIssues(std::move(issues)));
             } else {
                 result->Message = response;
                 NYql::TIssues issues;
                 NYql::IssuesFromMessage(response.issues(), issues);
-                result->Status = NYdb::TStatus(NYdb::EStatus(response.status()), std::move(issues));
+                result->Status = NYdb::TStatus(NYdb::EStatus(response.status()), NYdb::NAdapters::ToSdkIssues(std::move(issues)));
             }
 
             actorSystem->Send(actorId, result.Release());

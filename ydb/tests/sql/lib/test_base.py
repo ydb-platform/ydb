@@ -3,27 +3,43 @@ import os
 import yatest.common
 import random
 import logging
+import hashlib
+
 
 from datetime import date
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
-from typing import Callable, Any, List
-from .test_lib import TestLib
+from .test_query import Query
+from ydb.tests.library.harness.util import LogLevels
 
 
 logger = logging.getLogger(__name__)
 
 
-class TestBase(TestLib):
+class TestBase(Query):
 
     @classmethod
     def setup_class(cls):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY", "ydb/apps/ydbd/ydbd"))
-        logger.error(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("ascii"))
+        logger.error(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+
+        cls.ydb_cli_path = yatest.common.build_path("ydb/apps/ydb/ydb")
 
         cls.database = "/Root"
-        cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration()))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration(),
+                                                   extra_feature_flags=["enable_resource_pools",
+                                                                        "enable_external_data_sources",
+                                                                        "enable_tiering_in_column_shard"],
+                                                   column_shard_config={
+                                                       'disabled_on_scheme_shard': False,
+                                                       'lag_for_compaction_before_tierings_ms': 0,
+                                                       'compaction_actualization_lag_ms': 0,
+                                                       'optimizer_freshness_check_duration_ms': 0,
+                                                       'small_portion_detect_size_limit': 0,
+                                                       },
+                                                   additional_log_configs={
+                                                       'TX_TIERING': LogLevels.DEBUG}))
         cls.cluster.start()
         cls.driver = ydb.Driver(
             ydb.DriverConfig(
@@ -33,6 +49,10 @@ class TestBase(TestLib):
         )
         cls.driver.wait()
         cls.pool = ydb.QuerySessionPool(cls.driver)
+
+    @classmethod
+    def create_connection(self, user=None, password=None) -> Query:
+        return Query.create(self.get_database(), self.get_endpoint(), user, password)
 
     @classmethod
     def get_cluster_configuration(self):
@@ -57,22 +77,8 @@ class TestBase(TestLib):
     def setup_method(self):
         current_test_full_name = os.environ.get("PYTEST_CURRENT_TEST")
         self.table_path = "insert_table_" + current_test_full_name.replace("::", ".").removesuffix(" (setup)")
-
-    def query(self, text, tx: ydb.QueryTxContext | None = None) -> List[Any]:
-        results = []
-        if tx is None:
-            result_sets = self.pool.execute_with_retries(text)
-            for result_set in result_sets:
-                results.extend(result_set.rows)
-        else:
-            with tx.execute(text) as result_sets:
-                for result_set in result_sets:
-                    results.extend(result_set.rows)
-
-        return results
-
-    def transactional(self, fn: Callable[[ydb.QuerySession], List[Any]]):
-        return self.pool.retry_operation_sync(lambda session: fn(session))
+        self.hash = hashlib.md5(self.table_path.encode()).hexdigest()
+        self.hash_short = self.hash[:8]
 
 
 class TpchTestBaseH1(TestBase):
@@ -83,7 +89,6 @@ class TpchTestBaseH1(TestBase):
 
     @classmethod
     def run_cli(cls, argv: list[str]) -> yatest.common.process._Execution:
-        workload_path = yatest.common.build_path("ydb/apps/ydb/ydb")
 
         args = [
             '-e', 'grpc://'+cls.get_endpoint(),
@@ -91,7 +96,10 @@ class TpchTestBaseH1(TestBase):
         ]
 
         args.extend(argv)
-        return yatest.common.execute([workload_path] + args)
+
+        return yatest.common.execute([cls.ydb_cli_path] + args,
+                                     wait=True,
+                                     ).stdout.decode("utf-8")
 
     def setup_method(cls):
         super().setup_method()
@@ -159,7 +167,7 @@ class TpchTestBaseH1(TestBase):
 
     def tpch_empty_lineitem(self):
         return {
-            # do not generated 'l_orderkey', 'l_linenumber' because they are primary keys
+            # do not generate 'l_orderkey', 'l_linenumber' because they are primary keys
             # and must be explicitly specified
             'l_partkey': random.randint(1, 1000),
             'l_suppkey': random.randint(1, 1000),
@@ -186,3 +194,11 @@ class TpchTestBaseH1(TestBase):
 
     def tpch_est_records_count(self):
         return 600_000_000
+
+    # Function to perform bulk upserts
+    def bulk_upsert_operation(self, table_name, data_slice):
+        self.driver.table_client.bulk_upsert(
+            f"{self.database}/{table_name}",
+            data_slice,
+            self.tpch_bulk_upsert_col_types()
+        )

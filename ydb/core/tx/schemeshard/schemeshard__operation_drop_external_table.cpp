@@ -53,8 +53,8 @@ public:
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
-        parentDir->DecAliveChildren();
+        domainInfo->DecPathsInside(context.SS);
+        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
 
         TExternalDataSourceInfo::TPtr externalDataSourceInfo = context.SS->ExternalDataSources.Value(dataSourcePathId, nullptr);
         Y_ABORT_UNLESS(externalDataSourceInfo);

@@ -23,19 +23,18 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <google/protobuf/any.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
-#include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
@@ -868,7 +867,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
             auto families = desc.GetColumnFamilies();
             UNIT_ASSERT_VALUES_EQUAL(families.size(), 1u);
             auto family = families.at(0);
-            UNIT_ASSERT_VALUES_EQUAL(family.GetKeepInMemory(), true);
+            UNIT_ASSERT_VALUES_EQUAL(*family.GetKeepInMemory(), true);
         }
 
         {
@@ -888,7 +887,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
             auto family = families.at(0);
             // Note: server cannot currently distinguish between implicitly
             // unset and explicitly disabled, so it returns the former.
-            UNIT_ASSERT_VALUES_EQUAL(family.GetKeepInMemory(), Nothing());
+            UNIT_ASSERT(!family.GetKeepInMemory());
         }
 
         {
@@ -906,7 +905,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
             auto families = desc.GetColumnFamilies();
             UNIT_ASSERT_VALUES_EQUAL(families.size(), 1u);
             auto family = families.at(0);
-            UNIT_ASSERT_VALUES_EQUAL(family.GetKeepInMemory(), true);
+            UNIT_ASSERT_VALUES_EQUAL(*family.GetKeepInMemory(), true);
         }
     }
 }
@@ -928,7 +927,7 @@ static TString CreateSession(std::shared_ptr<grpc::Channel> channel) {
     return result.session_id();
 }
 
-void IncorrectConnectionStringPending(const TString& incorrectLocation) {
+void IncorrectConnectionStringPending(const std::string& incorrectLocation) {
     auto connection = NYdb::TDriver(incorrectLocation);
     auto client = NYdb::NTable::TTableClient(connection);
     auto session = client.CreateSession().ExtractValueSync().GetSession();
@@ -942,7 +941,7 @@ Y_UNIT_TEST_SUITE(GrpcConnectionStringParserTest) {
         bool done = false;
 
         {
-            TString location = TStringBuilder() << "localhost:" << grpc;
+            std::string location = TStringBuilder() << "localhost:" << grpc;
 
             // by default, location won't have database path
             auto connection = NYdb::TDriver(location);
@@ -1307,9 +1306,9 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             UNIT_ASSERT(status.ok());
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST);
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(deferred.issues(), issues);
-            UNIT_ASSERT(issues.ToString().Contains("invalid or unset index type"));
+            NYdb::NIssue::TIssues issues;
+            NYdb::NIssue::IssuesFromMessage(deferred.issues(), issues);
+            UNIT_ASSERT(issues.ToString().contains("invalid or unset index type"));
         }
     }
 
@@ -4537,7 +4536,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
                 auto parser = TValueParser(val);
                 parser.OpenTuple();
                 UNIT_ASSERT(parser.TryNextElement());
-                return parser.GetOptionalUint64().GetRef();
+                return parser.GetOptionalUint64().value();
             };
 
             int n = 0;

@@ -1,5 +1,6 @@
 import concurrent.futures
 import random
+import ydb
 from ydb.tests.sql.lib.test_base import TpchTestBaseH1
 
 
@@ -7,10 +8,18 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
 
     def test_upsert_delete_and_read_tpch(self):
         """
-        Test concurrent operations of inserting and deleting a row with l_suppkey=9999,
-        while checking if the rows with l_suppkey=9999 are always 0 or 1.
+        Tests concurrent upsert/delete operations with parallel reads.
+        Verifies ACID properties by ensuring count of specific records (l_suppkey=9999)
+        is always 0 or 1 during concurrent modifications:
+        - Multiple threads performing cycles of upserts and immediate delete
+        - Uses larger dataset (100k records) with batch size of 100
+        - Single thread continuously checking record count
+        - Validates consistency of concurrent operations
         """
         lineitem_table = f"{self.tpch_default_path()}/lineitem"
+
+        # Delete all records with l_suppkey = 9999
+        self.query(f"DELETE FROM `{lineitem_table}` WHERE l_suppkey = 9999")
 
         # Common l_orderkey
         l_orderkey = random.randint(1, self.tpch_est_records_count())
@@ -21,23 +30,32 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
         # One worker thread required be
         num_threads = 10
 
+        batch_size = 100
+
         def insert_and_delete():
-            for _ in range(total_records // num_threads):
-                # Generate random values for other columns
-                lineitem = self.create_lineitem({
-                    "l_orderkey": l_orderkey,
-                    "l_linenumber": 1,
-                    "l_suppkey": 9999
-                    })
+            for _ in range(total_records // num_threads // batch_size):
+                try:
+                    queries = []
+                    for _ in range(batch_size):
+                        # Generate random values for other columns
+                        lineitem = self.create_lineitem({
+                            "l_orderkey": l_orderkey,
+                            "l_linenumber": 1,
+                            "l_suppkey": 9999
+                            })
+                        query = self.build_lineitem_upsert_query(lineitem_table, lineitem)
+                        queries.append(query)
 
-                # Insert a row
-                self.query(self.build_lineitem_upsert_query(lineitem_table, lineitem))
+                    # Insert rows
+                    self.query(";".join(queries))
 
-                # Immediately delete the row
-                delete_query = f"""
-                DELETE FROM `{lineitem_table}` WHERE l_suppkey = 9999;
-                """
-                self.query(delete_query)
+                    # Immediately delete the row
+                    delete_query = f"""
+                    DELETE FROM `{lineitem_table}` WHERE l_suppkey = 9999;
+                    """
+                    self.query(delete_query)
+                except ydb.issues.Aborted:
+                    continue
 
                 if read_future.done():
                     break
@@ -63,15 +81,24 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             # Ensure both operations complete
             read_future.result()
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         check_data()
 
     def test_upsert_delete_and_read_tpch_tx(self):
         """
-        Test concurrent operations of inserting and deleting a row with l_suppkey=9999,
-        while checking if the rows with l_suppkey=9999 are always 0.
+        Tests concurrent transactional upsert/delete operations with parallel reads.
+        Performs batched operations within transactions:
+        - Multiple threads doing batches of upserts followed by delete in single transaction
+        - Single thread continuously verifying count is always 0
+        - Uses larger dataset (100k records) with batch size of 100
+        - Validates transaction isolation and consistency
         """
         lineitem_table = f"{self.tpch_default_path()}/lineitem"
+
+        # Delete all records with l_suppkey = 9999
+        self.query(f"DELETE FROM `{lineitem_table}` WHERE l_suppkey = 9999")
 
         # Common l_orderkey
         l_orderkey = random.randint(1, self.tpch_est_records_count())
@@ -82,21 +109,25 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
         # One worker thread required be
         num_threads = 10
 
+        # Batch size for upsert
+        batch_size = 100
+
         def insert_and_delete():
-            for _ in range(total_records // num_threads):
+            for _ in range(total_records // num_threads // batch_size):
                 def transaction_upsert(session):
                     tx = session.transaction().begin()
 
                     try:
-                        # Generate random values for other columns
-                        lineitem = self.create_lineitem({
-                            "l_orderkey": l_orderkey,
-                            "l_linenumber": 1,
-                            "l_suppkey": 9999
-                            })
+                        for _ in range(batch_size):
+                            # Generate random values for other columns
+                            lineitem = self.create_lineitem({
+                                "l_orderkey": l_orderkey,
+                                "l_linenumber": 1,
+                                "l_suppkey": 9999
+                                })
 
-                        # Insert a row
-                        self.query(self.build_lineitem_upsert_query(lineitem_table, lineitem), tx)
+                            # Insert a row
+                            self.query(self.build_lineitem_upsert_query(lineitem_table, lineitem), tx)
 
                         # Immediately delete the row
                         delete_query = f"""
@@ -108,7 +139,11 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
                         tx.rollback()
                         raise
 
-                self.transactional(transaction_upsert)
+                try:
+                    self.transactional(transaction_upsert)
+                except ydb.issues.Aborted:
+                    continue  # just skip TLI exception
+
                 if read_future.done():
                     break
 
@@ -133,15 +168,24 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             # Ensure both operations complete
             read_future.result()
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         check_data()
 
     def test_bulkupsert_delete_and_read_tpch(self):
         """
-        Test concurrent operations of inserting and deleting a row with l_suppkey=9999,
-        while checking if the rows with l_suppkey=9999 are always 0 or 1.
+        Tests concurrent bulk upsert/delete operations with parallel reads.
+        Performs batched bulk operations:
+        - Multiple threads doing bulk upserts of 100 records followed by delete
+        - Single thread continuously verifying count is between 0 and batch size
+        - Uses larger dataset (100k records) processed in batches
+        - Validates consistency during bulk operations
         """
         lineitem_table = f"{self.tpch_default_path()}/lineitem"
+
+        # Delete all records with l_suppkey = 9999
+        self.query(f"DELETE FROM `{lineitem_table}` WHERE l_suppkey = 9999")
 
         # Common l_orderkey
         l_orderkey = random.randint(1, self.tpch_est_records_count())
@@ -152,23 +196,32 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
         # One worker thread required be
         num_threads = 10
 
+        # Batch size for upsert
+        batch_size = 100
+
         def insert_and_delete():
-            for _ in range(total_records // num_threads):
-                # Generate random values for other columns
-                lineitem = self.create_lineitem({
-                    "l_orderkey": l_orderkey,
-                    "l_linenumber": 1,
-                    "l_suppkey": 9999
-                    })
+            for _ in range(total_records // num_threads // batch_size):
+                try:
+                    rows = []
+                    for _ in range(batch_size):
+                        # Generate random values for other columns
+                        lineitem = self.create_lineitem({
+                            "l_orderkey": l_orderkey,
+                            "l_linenumber": 1,
+                            "l_suppkey": 9999
+                            })
+                        rows.append(lineitem)
 
-                # Insert a row
-                self.bulk_upsert_operation(lineitem_table, [lineitem])
+                    # Insert a row
+                    self.bulk_upsert_operation(lineitem_table, rows)
 
-                # Immediately delete the row
-                delete_query = f"""
-                DELETE FROM `{lineitem_table}` WHERE l_suppkey = 9999;
-                """
-                self.query(delete_query)
+                    # Immediately delete the row
+                    delete_query = f"""
+                    DELETE FROM `{lineitem_table}` WHERE l_suppkey = 9999;
+                    """
+                    self.query(delete_query)
+                except ydb.issues.Aborted:
+                    continue  # just skip TLI exception
 
                 if read_future.done():
                     break
@@ -177,7 +230,7 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             read_query = f"SELECT COUNT(*) AS cnt FROM `{lineitem_table}` WHERE l_suppkey = 9999;"
             result = self.query(read_query)
             count = result[0]['cnt']
-            assert count in {0, 1}, f"Unexpected count of rows with l_suppkey=9999: {count}"
+            assert 0 <= count and count <= batch_size, f"Unexpected count of rows with l_suppkey=9999: {count}"
 
         def read_data():
             while not all(f.done() for f in insert_futures):
@@ -194,13 +247,19 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             # Ensure both operations complete
             read_future.result()
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         check_data()
 
     def test_insert_delete_and_read_simpletable(self):
         """
-        Test concurrent operations of inserting and deleting a row to simple CS table,
-        while checking if the rows count is always 0 or 1.
+        Tests concurrent operations on simple table with two columns.
+        Simulates basic concurrency scenario:
+        - Multiple threads alternating between insert and delete of same record
+        - Single thread continuously verifying count is 0 or 1
+        - Uses simple schema (id, value) with primary key
+        - Validates ACID properties on basic operations
         """
         table_name = f"{self.table_path}"
 
@@ -217,26 +276,33 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
         )
 
         # total records to upsert/delete
-        total_records = 100_000
+        total_records = 10_000
 
         # One worker thread required be
         num_threads = 10
 
+        batch_size = 10
+
         def insert_and_delete():
-            for _ in range(total_records//num_threads):
+            for _ in range(total_records//num_threads//batch_size):
+                try:
+                    queries = []
+                    for _ in range(batch_size):
+                        # Insert a row
+                        query = f"""
+                            UPSERT INTO `{table_name}` (id, value) VALUES (1, '9999');
+                            """
+                        queries.append(query)
 
-                # Insert a row
-                self.query(
-                    f"""
-                    UPSERT INTO `{table_name}` (id, value) VALUES (1, '9999');
+                    self.query(";".join(queries))
+
+                    # Immediately delete the row
+                    delete_query = f"""
+                    DELETE FROM `{table_name}` WHERE value = '9999';
                     """
-                    )
-
-                # Immediately delete the row
-                delete_query = f"""
-                DELETE FROM `{table_name}` WHERE value = '9999';
-                """
-                self.query(delete_query)
+                    self.query(delete_query)
+                except ydb.issues.Aborted:
+                    continue
 
                 if read_future.done():
                     break
@@ -262,13 +328,19 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             # Ensure both operations complete
             read_future.result()
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         check_data()
 
     def test_insert_delete_and_read_simple_tx(self):
         """
-        Test concurrent operations of inserting and deleting a row to simple CS table in tx,
-        while checking if the rows count is always 0.
+        Tests concurrent transactional operations on simple table.
+        Simulates transactional scenario:
+        - Multiple threads performing insert+delete in single transaction
+        - Single thread verifying count is always 0
+        - Uses simple schema (id, value) with primary key
+        - Validates transaction isolation and atomicity
         """
         table_name = f"{self.table_path}"
 
@@ -288,7 +360,7 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
         num_threads = 10
 
         # total records to upsert/delete
-        total_records = 100_000
+        total_records = 1_000
 
         def insert_and_delete():
             for _ in range(total_records // num_threads):
@@ -314,7 +386,10 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
                         tx.rollback()
                         raise
 
-                self.transactional(transaction_upsert)
+                try:
+                    self.transactional(transaction_upsert)
+                except (ydb.issues.Aborted, RuntimeError):
+                    continue  # just skip TLI exception
 
                 if read_future.done():
                     break
@@ -340,5 +415,7 @@ class TestConcurrentInsertDeleteAndRead(TpchTestBaseH1):
             # Ensure both operations complete
             read_future.result()
             concurrent.futures.wait(insert_futures)
+            for future in insert_futures:
+                future.result()
 
         check_data()

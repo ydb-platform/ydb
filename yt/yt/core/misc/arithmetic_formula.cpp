@@ -868,7 +868,7 @@ void TArithmeticFormula::Load(TStreamLoadContext& context)
 TBooleanFormulaTags::TBooleanFormulaTags(THashSet<std::string> tags)
     : Tags_(std::move(tags))
 {
-    for (const auto& key: Tags_) {
+    for (const auto& key : Tags_) {
         PreparedTags_[key] = 1;
     }
 }
@@ -955,7 +955,7 @@ std::string TBooleanFormula::GetFormula() const
 bool TBooleanFormula::IsSatisfiedBy(const std::vector<std::string>& value) const
 {
     THashMap<std::string, i64> values;
-    for (const auto& key: value) {
+    for (const auto& key : value) {
         values[key] = 1;
     }
     return Impl_->Eval(values, EEvaluationContext::Boolean);

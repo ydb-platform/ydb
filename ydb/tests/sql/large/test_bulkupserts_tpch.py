@@ -2,7 +2,8 @@
 import random
 import ydb
 
-from ydb.tests.sql.lib.test_base import TpchTestBaseH1, TestBase
+from ydb.tests.sql.lib.test_base import TpchTestBaseH1
+from ydb.tests.sql.lib.helpers import split_data_into_fixed_size_chunks
 
 
 class TestTpchBulkUpsertsOperations(TpchTestBaseH1):
@@ -153,7 +154,7 @@ class TestTpchBulkUpsertsOperations(TpchTestBaseH1):
                 self.tpch_bulk_upsert_col_types()
             )
 
-        for chunk in TestBase.split_data_into_fixed_size_chunks(upsert_data, 10000):
+        for chunk in split_data_into_fixed_size_chunks(upsert_data, 10000):
             bulk_upsert_operation(chunk)
 
         # Verify data integrity by fetching all records with the special l_suppkey

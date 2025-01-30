@@ -681,6 +681,11 @@ namespace NYql::NConnector::NTest {
                 return TListSplitsResultBuilder<TBuilder>(ResponseResult_, this);
             }
 
+            auto& Status(const NYdbGrpc::TGrpcStatus& status) {
+                ResponseStatus_ = status;
+                return *this;
+            }
+
             void FillWithDefaults() {
                 Result();
             }
@@ -688,12 +693,13 @@ namespace NYql::NConnector::NTest {
         private:
             void SetExpectation() {
                 EXPECT_CALL(*Mock_, ListSplitsImpl(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{NYdbGrpc::TGrpcStatus(), ResponseResult_}));
+                    .WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{ResponseStatus_, ResponseResult_}));
             }
 
         private:
             TConnectorClientMock* Mock_ = nullptr;
             TListSplitsStreamIteratorMock::TPtr ResponseResult_ = std::make_shared<TListSplitsStreamIteratorMock>();
+            NYdbGrpc::TGrpcStatus ResponseStatus_ {};
         };
 
         template <class TParent = void /* no parent by default */>
@@ -751,6 +757,11 @@ namespace NYql::NConnector::NTest {
                 return TReadSplitsResultBuilder<TBuilder>(ResponseResult_, this);
             }
 
+            auto& Status(const NYdbGrpc::TGrpcStatus& status) {
+                ResponseStatus_ = status;
+                return *this;
+            }
+
             void FillWithDefaults() {
                 Format(NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
             }
@@ -758,12 +769,13 @@ namespace NYql::NConnector::NTest {
         private:
             void SetExpectation() {
                 EXPECT_CALL(*Mock_, ReadSplitsImpl(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{NYdbGrpc::TGrpcStatus(), ResponseResult_}));
+                    .WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{ResponseStatus_, ResponseResult_}));
             }
 
         private:
             TConnectorClientMock* Mock_ = nullptr;
             TReadSplitsStreamIteratorMock::TPtr ResponseResult_ = std::make_shared<TReadSplitsStreamIteratorMock>();
+            NYdbGrpc::TGrpcStatus ResponseStatus_ {};
         };
 
         TDescribeTableExpectationBuilder ExpectDescribeTable() {
@@ -778,7 +790,7 @@ namespace NYql::NConnector::NTest {
             return TReadSplitsExpectationBuilder(this);
         }
 
-        TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request) override {
+        TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request, TDuration = {}) override {
             Cerr << "Call DescribeTable.\n"
                  << request.Utf8DebugString() << Endl;
             auto result = DescribeTableImpl(request);
@@ -792,7 +804,7 @@ namespace NYql::NConnector::NTest {
             return NThreading::MakeFuture(std::move(result));
         }
 
-        TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request) override {
+        TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request, TDuration = {}) override {
             Cerr << "Call ListSplits.\n"
                  << request.Utf8DebugString() << Endl;
             auto result = ListSplitsImpl(request);
@@ -801,7 +813,7 @@ namespace NYql::NConnector::NTest {
             return NThreading::MakeFuture(std::move(result));
         }
 
-        TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request) override {
+        TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request, TDuration = {}) override {
             Cerr << "Call ReadSplits.\n"
                  << request.Utf8DebugString() << Endl;
             auto result = ReadSplitsImpl(request);
@@ -814,10 +826,10 @@ namespace NYql::NConnector::NTest {
         static TString StatusToDebugString(const NYdbGrpc::TGrpcStatus& status) {
             TStringBuilder s;
             s << "GRpcStatusCode: " << status.GRpcStatusCode << '\n';
-            if (status.Msg) {
+            if (!status.Msg.empty()) {
                 s << status.Msg;
             }
-            if (status.Details) {
+            if (!status.Details.empty()) {
                 s << " (" << status.Details << ')';
             }
             if (status.InternalError) {

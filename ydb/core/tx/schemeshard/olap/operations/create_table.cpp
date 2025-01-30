@@ -571,7 +571,6 @@ public:
         auto defaultFamily = mutableSchema->AddColumnFamilies();
         defaultFamily->SetName("default");
         defaultFamily->SetId(0);
-        defaultFamily->SetColumnCodec(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
 
         for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
             if (!schema.GetColumns(i).HasColumnFamilyName() || !schema.GetColumns(i).HasColumnFamilyId()) {
@@ -861,12 +860,12 @@ public:
         context.SS->ClearDescribePathCaches(dstPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
         if (!storeInfo) {
-            dstPath.DomainInfo()->AddInternalShards(txState);
+            dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
             dstPath.Base()->IncShardsInside(tableInfo->GetOwnedColumnShardsVerified().size());
         }
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState(!!storeInfo));
         return result;

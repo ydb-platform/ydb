@@ -259,6 +259,9 @@ message TDomainsConfig {
         repeated TGroup DefaultGroups = 16;
         repeated string DefaultAccess = 17;
         optional string AllUsersGroup = 18;
+        optional bool DisableBuiltinSecurity = 19;
+        optional bool DisableBuiltinGroups = 20;
+        optional bool DisableBuiltinAccess = 21;
     }
 
     repeated TDomain Domain = 1;
@@ -1265,6 +1268,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 86400000,
             DefaultValue: 50 }];
+        optional uint64 MinPlanResolutionMs = 5 [(ControlOptions) = {
+            Description: "Minimum plan resolution override in milliseconds, which includes volatile planning (0 when not overridden)",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 0 }];
     }
 
     message TSchemeShardControls {
@@ -1373,6 +1381,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 260 }];
+        optional uint64 MaxChunksToDefragInflight = 21 [(ControlOptions) = {
+            Description: "Max inflight defragmentation chunks per one chunk size per vdisk",
+            MinValue: 1,
+            MaxValue: 50,
+            DefaultValue: 10 }];
 
         optional uint64 ThrottlingDeviceSpeed = 14 [(ControlOptions) = {
             Description: "Maximum allowed speed when throttling is active",
@@ -1409,6 +1422,16 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 950 }];
+        optional uint64 ThrottlingMinLogChunkCount = 22 [(ControlOptions) = {
+            Description: "Minimum pdisk log chunk count - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 100 }];
+        optional uint64 ThrottlingMaxLogChunkCount = 23 [(ControlOptions) = {
+            Description: "Maximum pdisk log chunk count - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 130 }];
     }
 
     message TTabletControls {
@@ -1792,6 +1815,10 @@ message TColumnShardConfig {
     optional uint64 WritingBufferVolumeMb = 33 [default = 32];
     optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000];
     optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 128000000];
+    optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
+    optional int32 DefaultCompressionLevel = 37;
+    optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
+    optional bool AlterObjectEnabled = 39 [default = false];
 }
 
 message TSchemeShardConfig {

@@ -428,6 +428,10 @@ public:
     NMonitoring::THistogramPtr WriteActorWritesOperationsHistogram;
     NMonitoring::THistogramPtr WriteActorWritesLatencyHistogram;
 
+    NMonitoring::THistogramPtr BufferActorPrepareLatencyHistogram;
+    NMonitoring::THistogramPtr BufferActorCommitLatencyHistogram;
+    NMonitoring::THistogramPtr BufferActorFlushLatencyHistogram;
+
     NMonitoring::THistogramPtr ForwardActorWritesSizeHistogram;
     NMonitoring::THistogramPtr ForwardActorWritesLatencyHistogram;
 
@@ -452,6 +456,10 @@ public:
     NMonitoring::THistogramPtr ScanTxTotalTimeHistogram;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsDuplicationsFound;
+
+    // Locality metrics for request
+    NMonitoring::TDynamicCounters::TCounterPtr TotalSingleNodeReqCount;
+    NMonitoring::TDynamicCounters::TCounterPtr NonLocalSingleNodeReqCount;
 
     TAlignedPagePoolCounters AllocCounters;
 

@@ -281,23 +281,20 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
 
     Y_UNIT_TEST(TestHarmonize) {
         ui64 currentTs = 1000000;
-        auto harmonizer = MakeHarmonizer(currentTs);
-        auto mockPool = new TMockExecutorPool();
-        harmonizer->AddPool(mockPool);
+        std::unique_ptr<IHarmonizer> harmonizer(MakeHarmonizer(currentTs));
+        std::unique_ptr<TMockExecutorPool> mockPool(new TMockExecutorPool);
+        harmonizer->AddPool(mockPool.get());
 
         harmonizer->Harmonize(currentTs + 1000000);  // 1 second later
 
         auto stats = harmonizer->GetPoolStats(0);
         Y_UNUSED(stats);
         UNIT_ASSERT_VALUES_EQUAL(mockPool->ThreadCount, 4);  // Should start with default
-
-        delete harmonizer;
-        delete mockPool;
     }
 
     Y_UNIT_TEST(TestToNeedyNextToHoggish) {
         ui64 currentTs = 1000000;
-        auto harmonizer = MakeHarmonizer(currentTs);
+        std::unique_ptr<IHarmonizer> harmonizer(MakeHarmonizer(currentTs));
         TMockExecutorPoolParams params;
         std::vector<std::unique_ptr<TMockExecutorPool>> mockPools;
         mockPools.emplace_back(new TMockExecutorPool(params));
@@ -338,7 +335,7 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
 
     Y_UNIT_TEST(TestToNeedyNextToStarved) {
         ui64 currentTs = 1000000;
-        auto harmonizer = MakeHarmonizer(currentTs);
+        std::unique_ptr<IHarmonizer> harmonizer(MakeHarmonizer(currentTs));
         TMockExecutorPoolParams params;
         std::vector<std::unique_ptr<TMockExecutorPool>> mockPools;
         mockPools.emplace_back(new TMockExecutorPool(params));
@@ -380,7 +377,7 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
 
     Y_UNIT_TEST(TestExchangeThreads) {
         ui64 currentTs = 1000000;
-        auto harmonizer = MakeHarmonizer(currentTs);
+        std::unique_ptr<IHarmonizer> harmonizer(MakeHarmonizer(currentTs));
         TMockExecutorPoolParams params {
             .DefaultFullThreadCount = 1,
             .MinFullThreadCount = 1,
@@ -475,7 +472,7 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
                 .PoolId = 2,
             },
         };
-        auto harmonizer = MakeHarmonizer(currentTs);
+        std::unique_ptr<IHarmonizer> harmonizer(MakeHarmonizer(currentTs));
         std::vector<std::unique_ptr<TMockExecutorPool>> mockPools;
         i16 budget = 0;
         for (auto& param : params) {

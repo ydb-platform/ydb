@@ -3,13 +3,14 @@
 #include "http.h"
 #include "util.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/util/pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_NOTICE
 #error log macro definition clash
@@ -1927,15 +1928,8 @@ bool TTenantsManager::CheckAccess(const TString &token,
                                   TString &error,
                                   const TActorContext &ctx)
 {
-    auto *appData = AppData(ctx);
-    if (appData->AdministrationAllowedSIDs.empty())
+    if (IsAdministrator(AppData(ctx), token)) {
         return true;
-
-    if (token) {
-        NACLib::TUserToken userToken(token);
-        for (auto &sid : appData->AdministrationAllowedSIDs)
-            if (userToken.IsExist(sid))
-                return true;
     }
 
     code = Ydb::StatusIds::UNAUTHORIZED;

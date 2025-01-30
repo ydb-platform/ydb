@@ -19,22 +19,6 @@
 
 namespace NKikimr::NConsole {
 
-bool TConfigsManager::CheckRights(const TString &userToken) {
-    if (AppData()->AdministrationAllowedSIDs.empty()) {
-        return true;
-    }
-
-    NACLib::TUserToken token(userToken);
-
-    for (auto &sid : AppData()->AdministrationAllowedSIDs) {
-        if (token.IsExist(sid)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 void TConfigsManager::ClearState()
 {
     ConfigIndex.Clear();

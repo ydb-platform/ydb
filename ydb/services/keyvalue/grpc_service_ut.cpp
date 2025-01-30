@@ -9,9 +9,9 @@
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/logger/backend.h>

@@ -808,8 +808,9 @@ TProtobufElement TProtobufField::GetElement(bool insideRepeated) const
         });
     } else {
         return std::make_unique<TProtobufScalarElement>(TProtobufScalarElement{
-            static_cast<TProtobufScalarElement::TType>(GetType()),
-            GetEnumYsonStorageType()
+            static_cast<TProtobufElementType>(GetType()),
+            GetEnumYsonStorageType(),
+            EnumType_
         });
     }
 }
@@ -3050,6 +3051,11 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
         }
 
         tokenizer.Advance();
+        if (options.AllowAsterisks && tokenizer.GetType() == NYPath::ETokenType::Asterisk) {
+            tokenizer.Advance();
+            tokenizer.Expect(NYPath::ETokenType::Slash);
+            tokenizer.Advance();
+        }
         tokenizer.Expect(NYPath::ETokenType::Literal);
 
         const auto& fieldName = tokenizer.GetLiteralValue();
@@ -3114,7 +3120,9 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
 
             tokenizer.Expect(NYPath::ETokenType::Slash);
             tokenizer.Advance();
-            tokenizer.ExpectListIndex();
+            if (!options.AllowAsterisks || tokenizer.GetType() != NYPath::ETokenType::Asterisk) {
+                tokenizer.ExpectListIndex();
+            }
 
             if (!field->IsMessage()) {
                 return GetProtobufElementFromField(

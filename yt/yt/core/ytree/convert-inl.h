@@ -8,7 +8,6 @@
 #include "default_building_consumer.h"
 #include "serialize.h"
 #include "tree_builder.h"
-#include "helpers.h"
 
 #include <yt/yt/core/ypath/token.h>
 
@@ -158,7 +157,10 @@ INodePtr ConvertToNode(
 template <class T>
 IAttributeDictionaryPtr ConvertToAttributes(const T& value)
 {
-    auto attributes = CreateEphemeralAttributes();
+    // Forward declaration.
+    IAttributeDictionaryPtr CreateEphemeralAttributes(std::optional<int> ysonNestingLevelLimit);
+
+    auto attributes = CreateEphemeralAttributes(std::nullopt);
     TAttributeConsumer consumer(attributes.Get());
     Serialize(value, &consumer);
     return attributes;

@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/operations/common/context.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
@@ -8,7 +9,7 @@
 
 namespace NKikimr::NOlap::NWritingPortions {
 
-class TWriteUnit {
+class TWriteUnit: public NColumnShard::TMonitoringObjectsCounter<TWriteUnit> {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteData>, Data);
     YDB_READONLY_DEF(NArrow::TContainerWithIndexes<arrow::RecordBatch>, Batch);
@@ -17,6 +18,7 @@ public:
     TWriteUnit(const std::shared_ptr<NEvWrite::TWriteData>& data, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& batch)
         : Data(data)
         , Batch(batch) {
+        Data->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::WaitFlush);
         AFL_VERIFY(Data->GetWritePortions());
         AFL_VERIFY(Batch.HasContainer());
     }
@@ -47,6 +49,9 @@ public:
         , WriteUnits(std::move(writeUnits))
         , Context(context) {
         AFL_VERIFY(WriteUnits.size());
+        for (auto&& i : WriteUnits) {
+            i.GetData()->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildSlicesPack);
+        }
     }
 };
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NWritingPortions

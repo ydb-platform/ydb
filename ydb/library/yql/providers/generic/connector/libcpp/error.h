@@ -5,7 +5,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 namespace NYql::NConnector {
     NApi::TError NewSuccess();

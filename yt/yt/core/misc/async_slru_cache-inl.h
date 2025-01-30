@@ -203,10 +203,28 @@ const TKey& TAsyncCacheValueBase<TKey, TValue, THash>::GetKey() const
 }
 
 template <class TKey, class TValue, class THash>
+TIntrusivePtr<typename TAsyncCacheValueBase<TKey, TValue, THash>::TCache> TAsyncCacheValueBase<TKey, TValue, THash>::TryGetCache() const
+{
+    return Cache_.Load().Lock();
+}
+
+template <class TKey, class TValue, class THash>
+void TAsyncCacheValueBase<TKey, TValue, THash>::SetCache(TWeakPtr<TCache> cache)
+{
+    Cache_.Store(cache);
+}
+
+template <class TKey, class TValue, class THash>
+void TAsyncCacheValueBase<TKey, TValue, THash>::ResetCache()
+{
+    Cache_.Store(nullptr);
+}
+
+template <class TKey, class TValue, class THash>
 void TAsyncCacheValueBase<TKey, TValue, THash>::UpdateWeight() const
 {
-    if (auto cache = Cache_.Lock()) {
-        cache->UpdateWeight(GetKey());
+    if (auto cache = TryGetCache()) {
+        cache->UpdateWeight(Key_);
     }
 }
 
@@ -218,7 +236,7 @@ TAsyncCacheValueBase<TKey, TValue, THash>::TAsyncCacheValueBase(const TKey& key)
 template <class TKey, class TValue, class THash>
 NYT::TAsyncCacheValueBase<TKey, TValue, THash>::~TAsyncCacheValueBase()
 {
-    if (auto cache = Cache_.Lock()) {
+    if (auto cache = TryGetCache()) {
         cache->Unregister(Key_);
     }
 }
@@ -448,7 +466,7 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::Touch(const TValuePtr& value)
 
     auto readerGuard = ReaderGuard(shard->SpinLock);
 
-    if (value->Cache_.Lock() != this || !value->Item_) {
+    if (value->TryGetCache() != this || !value->Item_) {
         return;
     }
 
@@ -755,7 +773,7 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::EndInsert(const TInsertCookie& in
 
     shard->DrainTouchBuffer();
 
-    value->Cache_ = MakeWeak(this);
+    value->SetCache(MakeWeak(this));
 
     auto* item = GetOrCrash(shard->ItemMap, key);
     item->Value = value;
@@ -841,11 +859,12 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::Unregister(const TKey& key)
     auto* shard = GetShardByKey(key);
 
     auto guard = WriterGuard(shard->SpinLock);
-
-    shard->DrainTouchBuffer();
-
-    YT_VERIFY(shard->ItemMap.find(key) == shard->ItemMap.end());
-    YT_VERIFY(shard->ValueMap.erase(key) == 1);
+    if (auto it = shard->ValueMap.find(key);
+        it != shard->ValueMap.end())
+    {
+        shard->DrainTouchBuffer();
+        shard->ValueMap.erase(it);
+    }
 }
 
 template <class TKey, class TValue, class THash>
@@ -890,7 +909,7 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::DoTryRemove(
     }
 
     if (forbidResurrection || !IsResurrectionSupported()) {
-        valueIt->second->Cache_.Reset();
+        valueIt->second->ResetCache();
         valueMap.erase(valueIt);
     }
 
@@ -915,9 +934,11 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::DoTryRemove(
 
     delete item;
 
-    guard.Release();
-
     OnRemoved(actualValue);
+
+    // It is necessary to remove the guard before the actual value is destroyed.
+    // Otherwise, it will lead to a deadlock in unregister.
+    guard.Release();
 }
 
 template <class TKey, class TValue, class THash>
@@ -1323,11 +1344,11 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TShard::Trim(const TIntrusiveListWithA
     for (const auto& item : evictedItems) {
         auto value = item.Value;
 
-        YT_VERIFY(ItemMap.erase(value->GetKey()) == 1);
+        EraseOrCrash(ItemMap, value->GetKey());
 
         if (!Parent->IsResurrectionSupported()) {
-            YT_VERIFY(ValueMap.erase(value->GetKey()) == 1);
-            value->Cache_.Reset();
+            EraseOrCrash(ValueMap, value->GetKey());
+            value->ResetCache();
         }
 
         YT_VERIFY(value->Item_ == &item);

@@ -21,7 +21,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <util/generic/maybe.h>
 
-namespace NYdb {
+namespace NYdb::inline V3 {
     class ICredentialsProviderFactory;
 }
 

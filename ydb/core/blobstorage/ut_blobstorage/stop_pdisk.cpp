@@ -23,9 +23,9 @@ Y_UNIT_TEST_SUITE(BSCStopPDisk) {
         NKikimrBlobStorage::TConfigRequest request;
 
         NKikimrBlobStorage::TStopPDisk* cmd = request.AddCommand()->MutableStopPDisk();
-        auto* hostKey = cmd->MutableHostKey();
-        hostKey->SetNodeId(targetNodeId);
-        cmd->SetPDiskId(targetPDiskId);
+        auto* pdiskId = cmd->MutableTargetPDiskId();
+        pdiskId->SetNodeId(targetNodeId);
+        pdiskId->SetPDiskId(targetPDiskId);
 
         auto response = env.Invoke(request);
 

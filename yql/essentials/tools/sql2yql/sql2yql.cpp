@@ -272,6 +272,7 @@ int BuildAST(int argc, char* argv[]) {
             settings.V0ForceDisable = false;
             settings.AssumeYdbOnClusterWithSlash = res.Has("assume-ydb-on-slash");
             settings.TestAntlr4 = res.Has("test-antlr4");
+            settings.EmitReadsForExists = true;
 
             if (res.Has("lexer")) {
                 NYql::TIssues issues;
@@ -317,7 +318,7 @@ int BuildAST(int argc, char* argv[]) {
                         auto lexer = SqlLexer(query, parseRes.Issues, settings);
                         if (lexer && CollectSqlHints(*lexer, query, queryFile, settings.File, hints, parseRes.Issues,
                             settings.MaxErrors, settings.Antlr4Parser)) {
-                            parseRes = NSQLTranslation::SqlASTToYql(*ast, hints, settings);
+                            parseRes = NSQLTranslation::SqlASTToYql(query, *ast, hints, settings);
                         }
                    }
                 } else {

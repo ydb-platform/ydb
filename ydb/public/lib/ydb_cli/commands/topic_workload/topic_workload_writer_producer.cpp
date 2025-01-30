@@ -63,7 +63,7 @@ TString TTopicWorkloadWriterProducer::GetGeneratedMessage() const {
 bool TTopicWorkloadWriterProducer::WaitForInitSeqNo() {
     Y_ASSERT(WriteSession_);
 
-    NThreading::TFuture<ui64> InitSeqNo = WriteSession_->GetInitSeqNo();
+    NThreading::TFuture<uint64_t> InitSeqNo = WriteSession_->GetInitSeqNo();
     while (!*Params_.ErrorFlag) {
         if (!InitSeqNo.HasValue() && !InitSeqNo.Wait(TDuration::Seconds(1))) {
             WRITE_LOG(Params_.Log, ELogPriority::TLOG_WARNING,
@@ -116,7 +116,7 @@ void TTopicWorkloadWriterProducer::WaitForContinuationToken(const TDuration& tim
             << ": foundEvent - " << foundEvent);
 
     if (foundEvent) {
-        auto variant = WriteSession_->GetEvent(true).GetRef();
+        auto variant = WriteSession_->GetEvent(true).value();
         if (std::holds_alternative<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(variant)) {
             auto event = std::get<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(variant);
             ContinuationToken_ = std::move(event.ContinuationToken);

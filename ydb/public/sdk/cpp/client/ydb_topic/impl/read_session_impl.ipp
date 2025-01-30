@@ -24,7 +24,7 @@
 #include <utility>
 #include <variant>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 static const bool RangesMode = !GetEnv("PQ_OFFSET_RANGES_MODE").empty();
 

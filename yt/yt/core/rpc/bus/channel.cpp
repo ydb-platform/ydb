@@ -284,8 +284,7 @@ private:
 
         void HandleMessage(TSharedRefArray message, IBusPtr replyBus) noexcept override
         {
-            auto session_ = Session_.Lock();
-            if (session_) {
+            if (auto session_ = Session_.Lock()) {
                 session_->HandleMessage(std::move(message), std::move(replyBus));
             }
         }

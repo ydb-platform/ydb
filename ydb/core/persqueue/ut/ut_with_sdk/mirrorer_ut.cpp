@@ -1,8 +1,9 @@
 #include "actor_persqueue_client_iface.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/test_server.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/data_plane_helpers.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
 
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -161,17 +162,17 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         TVector<ui32> messagesPerPartition(partitionsCount, 0);
         for (ui32 partition = 0; partition < partitionsCount; ++partition) {
             TString sourceId = "some_sourceid_" + ToString(partition);
-            THashMap<TString, TString> sessionMeta = {
+            std::unordered_map<std::string, std::string> sessionMeta = {
                 {"some_extra_field", "some_value"},
-                {"some_extra_field2", "another_value" + ToString(partition)},
-                {"file", "/home/user/log" + ToString(partition)}
+                {"some_extra_field2", "another_value" + std::to_string(partition)},
+                {"file", "/home/user/log" + std::to_string(partition)}
             };
             auto writer = CreateSimpleWriter(*driver, srcTopic, sourceId, partition + 1, std::nullopt, std::nullopt, sessionMeta);
 
             ui64 seqNo = writer->GetInitSeqNo();
 
             for (ui32 i = 1; i <= 11; ++i) {
-                auto res = writer->Write(TString(i, 'a'), ++seqNo);
+                auto res = writer->Write(std::string(i, 'a'), ++seqNo);
                 UNIT_ASSERT(res);
                 ++messagesPerPartition[partition];
             }

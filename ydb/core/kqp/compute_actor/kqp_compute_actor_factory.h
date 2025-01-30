@@ -130,6 +130,7 @@ public:
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<IKqpNodeState> State = nullptr;
         TComputeActorSchedulingOptions SchedulingOptions = {};
+        TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     };
 
     typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;

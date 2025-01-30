@@ -9,6 +9,11 @@
             "uri": "file://test.test_From_/results.txt"
         }
     ],
+    "test.test[Get]": [
+        {
+            "uri": "file://test.test_Get_/results.txt"
+        }
+    ],
     "test.test[SplitMake]": [
         {
             "uri": "file://test.test_SplitMake_/results.txt"

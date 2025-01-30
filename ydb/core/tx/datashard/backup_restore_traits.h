@@ -31,6 +31,8 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur);
 TString DataFileExtension(EDataFormat format, ECompressionCodec codec);
 
 TString PermissionsKeySuffix();
+TString TopicKeySuffix();
+TString ChangefeedKeySuffix();
 TString SchemeKeySuffix();
 TString MetadataKeySuffix();
 TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec);

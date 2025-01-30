@@ -17,6 +17,14 @@ public:
         return nullptr;
     }
 
+    virtual bool IsMonEvent() const {
+        return false;
+    }
+
+    virtual bool IsHttpEvent() const {
+        return false;
+    }
+
     virtual YAML::Node GetRequestSwagger() = 0;
 };
 
@@ -36,6 +44,10 @@ public:
     YAML::Node GetRequestSwagger() override {
         return Swagger;
     }
+
+    bool IsMonEvent() const override {
+        return true;
+    }
 };
 
 template <typename ActorRequestType>
@@ -53,6 +65,10 @@ public:
 
     YAML::Node GetRequestSwagger() override {
         return Swagger;
+    }
+
+    bool IsHttpEvent() const override {
+        return true;
     }
 };
 

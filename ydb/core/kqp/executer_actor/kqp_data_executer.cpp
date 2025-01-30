@@ -145,6 +145,7 @@ public:
         , AllowOlapDataQuery(tableServiceConfig.GetAllowOlapDataQuery())
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(tableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
+        , VerboseMemoryLimitException(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException())
     {
         if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
@@ -307,7 +308,7 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -315,7 +316,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
             MakeResponseAndPassAway();
             return;
         } else if (Request.UseImmediateEffects) {
@@ -324,7 +325,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
-            Send(BufferActorId, event.release());
+            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
             return;
         } else {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -334,12 +335,33 @@ public:
     }
 
     STATEFN(FinalizeState) {
-        switch(ev->GetTypeRewrite()) {
-            hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-            hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
-            default:
-                LOG_W("Unexpected event: " << ev->GetTypeName() << ", at state: FinalizeState");
+        try {
+            switch(ev->GetTypeRewrite()) {
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
+                hFunc(TEvents::TEvUndelivered, HandleFinalize);
+
+                IgnoreFunc(TEvColumnShard::TEvProposeTransactionResult);
+                IgnoreFunc(TEvDataShard::TEvProposeTransactionResult);
+                IgnoreFunc(TEvDataShard::TEvProposeTransactionRestart);
+                IgnoreFunc(TEvDataShard::TEvProposeTransactionAttachResult);
+                IgnoreFunc(TEvPersQueue::TEvProposeTransactionResult);
+                IgnoreFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult);
+                IgnoreFunc(TEvPrivate::TEvReattachToShard);
+                IgnoreFunc(TEvDqCompute::TEvState);
+                IgnoreFunc(TEvDqCompute::TEvChannelData);
+                IgnoreFunc(TEvKqpExecuter::TEvStreamDataAck);
+                IgnoreFunc(TEvPipeCache::TEvDeliveryProblem);
+                IgnoreFunc(TEvInterconnect::TEvNodeDisconnected);
+                IgnoreFunc(TEvKqpNode::TEvStartKqpTasksResponse);
+                IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+                default:
+                    UnexpectedEvent("FinalizeState", ev->GetTypeRewrite());
+            }
+        } catch (const yexception& e) {
+            InternalError(e.what());
         }
+        ReportEventElapsedTime();
     }
 
     void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
@@ -349,6 +371,11 @@ public:
             }
         }
         MakeResponseAndPassAway();
+    }
+
+    void HandleFinalize(TEvents::TEvUndelivered::TPtr&) {
+        auto issue = YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN, "Buffer actor isn't available. Operation state unknown.");
+        ReplyErrorAndDie(Ydb::StatusIds::UNDETERMINED, issue);
     }
 
     void MakeResponseAndPassAway() {
@@ -1311,6 +1338,8 @@ private:
         const ui64 shardId = res->GetOrigin();
         LastShard = shardId;
 
+        ParticipantNodes.emplace(ev->Sender.NodeId());
+
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState);
 
@@ -1599,11 +1628,11 @@ private:
 
         for (auto& op : stage.GetTableOps()) {
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
-            auto columns = BuildKqpColumns(op, tableInfo);
             switch (op.GetTypeCase()) {
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
+                    auto columns = BuildKqpColumns(op, tableInfo);
                     bool isFullScan = false;
                     auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
                     auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
@@ -2104,7 +2133,8 @@ private:
         if (i64 msc = (i64) Request.MaxShardCount; msc > 0) {
             shardsLimit = std::min(shardsLimit, (ui32) msc);
         }
-        size_t shards = datashardTasks.size() + sourceScanPartitionsCount;
+        const size_t shards = datashardTasks.size() + sourceScanPartitionsCount;
+
         if (shardsLimit > 0 && shards > shardsLimit) {
             LOG_W("Too many affected shards: datashardTasks=" << shards << ", limit: " << shardsLimit);
             Counters->TxProxyMon->TxResultError->Inc();
@@ -2186,6 +2216,14 @@ private:
 
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
+
+        if (TxManager) {
+            for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+                if (stageInfo.Meta.ShardKey) {
+                    TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+                }
+            }
+        }
 
         if (StreamResult || EnableReadsMerge || AllowOlapDataQuery) {
             TSet<ui64> shardIds;
@@ -2721,6 +2759,7 @@ private:
             .CaFactory_ = Request.CaFactory_,
             .BlockTrackingMode = BlockTrackingMode,
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
+            .VerboseMemoryLimitException = VerboseMemoryLimitException,
         });
 
         auto err = Planner->PlanExecution();
@@ -3045,6 +3084,7 @@ private:
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TDuration WaitCAStatsTimeout;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
+    const bool VerboseMemoryLimitException;
 };
 
 } // namespace

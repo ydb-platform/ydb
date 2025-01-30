@@ -11,8 +11,6 @@
 
 #include <yt/yt/library/decimal/decimal.h>
 
-#include <yt/yt/core/misc/range.h>
-
 #include <yt/yt/core/yson/consumer.h>
 
 #include <yt/yt/core/ytree/attributes.h>
@@ -21,6 +19,7 @@
 
 #include <library/cpp/yt/misc/hash.h>
 
+#include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/tls_scratch.h>
 
 #include <library/cpp/yt/farmhash/farm_hash.h>
@@ -1729,6 +1728,31 @@ void Deserialize(TLegacyOwningKey& key, INodePtr node)
                             valueType);
                     }
                     builder.AddValue(MakeUnversionedSentinelValue(valueType, id));
+                    break;
+                }
+
+                case ENodeType::List: {
+                    auto valueType = item->Attributes().Get<EValueType>("type", EValueType::Any);
+                    if (valueType != EValueType::Any && valueType != EValueType::Composite) {
+                        THROW_ERROR_EXCEPTION(
+                            "Unexpected type %Qlv of composite key", valueType);
+                    }
+
+                    TStringStream str;
+                    {
+                        // We want to skip top level attributes of the key,
+                        // so we traverse value manualy.
+                        TBufferedBinaryYsonWriter writer(&str);
+                        writer.OnBeginList();
+                        for (const auto& child : item->AsList()->GetChildren()) {
+                            writer.OnListItem();
+                            Serialize(child, &writer);
+                        }
+                        writer.OnEndList();
+                        writer.Flush();
+                    }
+
+                    builder.AddValue(MakeUnversionedStringLikeValue(valueType, str.Str(), id));
                     break;
                 }
 

@@ -69,7 +69,6 @@ public:
 class TSchemeObjectWatcher: public TActorBootstrapped<TSchemeObjectWatcher> {
 private:
     TActorId Owner;
-    THashSet<TPathId> WatchedPathIds;
 
 private:
     THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(
@@ -103,11 +102,7 @@ private:
     }
 
     void WatchPathId(const TPathId& pathId) {
-        if (WatchedPathIds.emplace(pathId).second) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(pathId), IEventHandle::FlagTrackDelivery);
-        } else {
-            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_watch_path_id")("reason", "already_subscribed")("path", pathId.ToString());
-        }
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(pathId), IEventHandle::FlagTrackDelivery);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -152,7 +147,6 @@ private:
         const TString name = TString(ExtractBase(record->Path));
         const TString storageDir = TString(ExtractParent(record->Path));
         AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "object_deleted")("path", record->Path);
-        AFL_VERIFY(WatchedPathIds.erase(record->PathId));
         Send(Owner, new NTiers::TEvNotifySchemeObjectDeleted(record->Path));
     }
 

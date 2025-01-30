@@ -411,6 +411,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, ResumeOperation, (const NScheduler::TOperationIdOrAlias&, const TResumeOperationOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, CompleteOperation, (const NScheduler::TOperationIdOrAlias&, const TCompleteOperationOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, UpdateOperationParameters, (const NScheduler::TOperationIdOrAlias&, const NYson::TYsonString&, const TUpdateOperationParametersOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, PatchOperationSpec, (const NScheduler::TOperationIdOrAlias&, const NScheduler::TSpecPatchList&, const TPatchOperationSpecOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TOperation>, GetOperation, (const NScheduler::TOperationIdOrAlias&, const TGetOperationOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, DumpJobContext, (NJobTrackerClient::TJobId, const NYPath::TYPath&, const TDumpJobContextOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, GetJobInput, (NJobTrackerClient::TJobId, const TGetJobInputOptions&));
@@ -456,6 +457,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (const std::string&, bool, const std::vector<TGuid>&, const TDestroyChunkLocationsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (const std::string&, const std::vector<TGuid>&, const TResurrectChunkLocationsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (const std::string&, const TRequestRestartOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TCollectCoverageResult>, CollectCoverage, (const std::string&, const TCollectCoverageOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, SetUserPassword, (const std::string&, const TString&, const TString&, const TSetUserPasswordOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const TString&, const TIssueTokenOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, RevokeToken, (const std::string&, const TString&, const TString&, const TRevokeTokenOptions&));

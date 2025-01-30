@@ -671,8 +671,10 @@ namespace NActors {
                 }
                 Total = UtilizedPart + WaitingCpuPart + IdlePart;
                 if (Total) {
-                    Utilized = (Utilized + WaitingCpuPart) / Total;
+                    Utilized = (UtilizedPart + WaitingCpuPart) / Total;
                     Starving = WaitingCpuPart / Total;
+                } else {
+                    Utilized = Starving = 0;
                 }
                 if (newState) {
                     State = *newState;

@@ -48,6 +48,8 @@ protected:
         Valid_ = NextValue();
     }
 
+    virtual TString DebugInfo() const override;
+
     void Finish() {
         MkqlReader_.Finish();
     }

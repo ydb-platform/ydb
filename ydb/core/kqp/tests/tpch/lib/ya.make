@@ -13,8 +13,8 @@ SRCS(
 PEERDIR(
     library/cpp/resource
     ydb/core/protos
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
 )
 
 RESOURCE(

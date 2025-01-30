@@ -2,6 +2,14 @@
 
 namespace NKikimr::NSchemeShard {
 
+void TSchemeShard::Handle(TEvSchemeShard::TEvDataClenupRequest::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
+    for (const auto& [shardIdx, shardInfo] : ShardInfos) {
+        if (shardInfo.TabletType == ETabletType::DataShard) {
+            EnqueueTenantDataErasure(shardIdx); // forward generation
+        }
+    }
+}
+
 NOperationQueue::EStartStatus TSchemeShard::StartTenantDataErasure(const TShardIdx& shardIdx) {
     UpdateTenantDataErasureQueueMetrics();
 

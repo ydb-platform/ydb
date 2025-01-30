@@ -7530,6 +7530,28 @@ void TSchemeShard::StartStopCompactionQueues() {
     BorrowedCompactionQueue->Start();
 }
 
+void TSchemeShard::StartDataErasure() {
+    if (IsDomainSchemeShard) {
+        DataErasureQueue->Start();
+        FillDataErasureQueue();
+    } else {
+        TenantDataErasureQueue->Start();
+    }
+}
+
+void TSchemeShard::FillDataErasureQueue() {
+    for (auto& [pathId, subdomain] : SubDomains) {
+        auto path = TPath::Init(pathId, this);
+        if (path->IsRoot()) {
+            continue;
+        }
+        if (subdomain->GetTenantSchemeShardID() == InvalidTabletId) { // no tenant schemeshard
+            continue;
+        }
+        DataErasureQueue->Enqueue(pathId);
+    }
+}
+
 void TSchemeShard::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr &, const TActorContext &ctx) {
      LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                   "Subscription to Console has been set up"

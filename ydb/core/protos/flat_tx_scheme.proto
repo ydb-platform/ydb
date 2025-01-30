@@ -170,7 +170,7 @@ message TEvListUsersResult {
         optional uint64 LastSuccessfulAttemptAt = 5;
         optional uint64 LastFailedAttemptAt = 6;
         optional uint32 FailedAttemptCount = 7;
-        optional string PasswordHash = 8; // JSON with type, salt and password hash 
+        optional string PasswordHash = 8; // JSON with type, salt and password hash
     }
 
     repeated TUser Users = 1;
@@ -440,4 +440,13 @@ message TEvFindTabletSubDomainPathIdResult {
 }
 
 message TEvOwnerActorAck {
+}
+
+message TEvDataCleanupRequest {
+    optional uint64 Generation = 1;
+}
+
+message TEvDataCleanupResult {
+    optional uint64 CurrentGeneration = 1; // current clean up iteration
+    optional bool Completed = 2; // is it completed?
 }

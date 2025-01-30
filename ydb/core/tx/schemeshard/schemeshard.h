@@ -98,6 +98,9 @@ namespace TEvSchemeShard {
         EvListUsers,
         EvListUsersResult,
 
+        EvDataCleanupRequest,
+        EvDataCleanupResult,
+
         EvEnd
     };
 
@@ -671,6 +674,23 @@ namespace TEvSchemeShard {
 
     struct TEvListUsersResult : TEventPB<TEvListUsersResult, NKikimrScheme::TEvListUsersResult, EvListUsersResult> {
         TEvListUsersResult() = default;
+    };
+
+    struct TEvDataClenupRequest : TEventPB<TEvDataClenupRequest, NKikimrScheme::TEvDataCleanupRequest, EvDataCleanupRequest> {
+        TEvDataClenupRequest() = default;
+
+        TEvDataClenupRequest(ui64 generation) {
+            Record.SetGeneration(generation);
+        }
+    };
+
+    struct TEvDataCleanupResult : TEventPB<TEvDataCleanupResult, NKikimrScheme::TEvDataCleanupResult, EvDataCleanupResult> {
+        TEvDataCleanupResult() = default;
+
+        TEvDataCleanupResult(ui64 generation, bool isCompleted) {
+            Record.SetCurrentGeneration(generation);
+            Record.SetCompleted(isCompleted);
+        }
     };
 };
 

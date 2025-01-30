@@ -172,8 +172,8 @@ private:
     };
 
     using TDataErasureQueue = NOperationQueue::TOperationQueueWithTimer<
-        TString,
-        TFifoQueue<TString>,
+        TPathId,
+        TFifoQueue<TPathId>,
         TEvPrivate::EvRunDataErasure,
         NKikimrServices::FLAT_TX_SCHEMESHARD,
         NKikimrServices::TActivity::DATA_ERASURE>;
@@ -184,12 +184,12 @@ private:
             : Self(self)
         { }
 
-        NOperationQueue::EStartStatus StartOperation(const TString& tenant) override {
-            return Self->StartDataErasure(tenant);
+        NOperationQueue::EStartStatus StartOperation(const TPathId& pathId) override {
+            return Self->StartDataErasure(pathId);
         }
 
-        void OnTimeout(const TString& tenant) override {
-            Self->OnDataErasureTimeout(tenant);
+        void OnTimeout(const TPathId& pathId) override {
+            Self->OnDataErasureTimeout(pathId);
         }
 
     private:
@@ -574,6 +574,9 @@ public:
         const TActorContext &ctx);
 
     void StartStopCompactionQueues();
+
+    void StartDataErasure();
+    void FillDataErasureQueue();
 
     void WaitForTableProfiles(ui64 importId, ui32 itemIdx);
     void LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* config, const TActorContext& ctx);
@@ -1028,9 +1031,9 @@ public:
 
     // void EnqueueDataErasure(const TShardIdx& shardIdx);
     // void RemoveDataErasure(const TShardIdx& shardIdx);
-    NOperationQueue::EStartStatus StartDataErasure(const TString& tenant);
-    void OnDataErasureTimeout(const TString& tenant);
-    // void UpdateDataErasureQueueMetrics();
+    NOperationQueue::EStartStatus StartDataErasure(const TPathId& pathId);
+    void OnDataErasureTimeout(const TPathId& pathId);
+    void UpdateDataErasureQueueMetrics();
     // void DataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId);
 
     void EnqueueTenantDataErasure(const TShardIdx& shardIdx);
@@ -1221,6 +1224,8 @@ public:
     void Handle(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const TActorContext& ctx);
 
 
     void Handle(TEvSchemeShard::TEvProcessingRequest::TPtr& ev, const TActorContext& ctx);

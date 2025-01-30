@@ -11,9 +11,9 @@ Y_UNIT_TEST_SUITE(YqlCompleteTests) {
         };
 
         TYqlCompletionEngine engine;
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"se"}), expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"sE"}), expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"Se"}), expected);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SE"}), expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"se"}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"sE"}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"Se"}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SE"}).Candidates, expected);
     }
 } // Y_UNIT_TEST_SUITE(YqlCompleteTests)

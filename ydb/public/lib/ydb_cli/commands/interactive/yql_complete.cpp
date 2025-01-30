@@ -47,7 +47,7 @@ namespace NYdb {
             };
         }
 
-        void EnrichWithKeywords(TVector<TCandidate>& candidates, TVector<TString> keywords) {
+        void EnrichWithKeywords(TVector<TCandidate>& candidates, TVector<std::string> keywords) {
             for (auto keyword : keywords) {
                 candidates.push_back({
                     .Kind = ECandidateKind::Keyword,

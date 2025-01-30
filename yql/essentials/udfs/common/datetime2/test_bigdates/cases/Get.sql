@@ -4,11 +4,14 @@ $check = ($arg) -> {
         ryear:              DateTime::GetYear($arg),
         rdayofyear:         DateTime::GetDayOfYear($arg),
         rmonth:             DateTime::GetMonth($arg),
+        rmonthname:         DateTime::GetMonthName($arg),
         rweekofyear:        DateTime::GetWeekOfYear($arg),
         rweekofyeariso8601: DateTime::GetWeekOfYearIso8601($arg),
         rdayofmonth:        DateTime::GetDayOfMonth($arg),
         rdayofweek:         DateTime::GetDayOfWeek($arg),
+        rdayofweekname:     DateTime::GetDayOfWeekName($arg),
         rtz:                DateTime::GetTimezoneId($arg),
+        rtzname:            DateTime::GetTimezoneName($arg),
     |>
 };
 

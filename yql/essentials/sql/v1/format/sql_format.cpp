@@ -574,7 +574,7 @@ private:
             ForceExpandedLine = token.GetLine();
         }
 
-        const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor());
+        const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor() || descr == TRule_type_name_composite::GetDescriptor());
         if (expr) {
             ++InsideExpr;
         }

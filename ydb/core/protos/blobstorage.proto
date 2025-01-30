@@ -1396,17 +1396,18 @@ message TEvControllerProposeConfigResponse {
         UnexpectedConfig = 1;
         CommitIsNeeded = 2;
         CommitIsNotNeeded = 3;
+        ReverseCommit = 4;
     }
     optional EStatus Status = 1;
     optional uint64 ProposedConfigHash = 2;
     optional uint64 ConsoleConfigHash = 3;
-    optional uint32 ProposedConfigVersion = 4;
-    optional uint32 ConsoleConfigVersion = 5;
+    optional uint64 ProposedConfigVersion = 4;
+    optional uint64 ConsoleConfigVersion = 5;
+    optional string YAML = 6;
 }
 
 message TEvControllerConsoleCommitRequest {
     optional string YAML = 1;
-    optional uint32 ConfigVersion = 2;
 }
 
 message TEvControllerConsoleCommitResponse {
@@ -1420,11 +1421,13 @@ message TEvControllerConsoleCommitResponse {
 }
 
 message TEvControllerReplaceConfigRequest {
-    optional string YAML = 1;
-    optional uint32 ConfigVersion = 2;
-    optional bool OverwriteFlag = 3;
+    optional string ClusterYaml = 1;
+    optional string StorageYaml = 2;
+    optional bool OverwriteFlag = 3; // this configuration is a priority: drop any pending transactions and start a new one
     optional bool SkipBSCValidation = 4;
     optional bool SkipConsoleValidation = 5;
+    optional bool SwitchDedicatedStorageSection = 6;
+    optional bool DedicatedConfigMode = 7;
 }
 
 message TEvControllerReplaceConfigResponse {
@@ -1435,14 +1438,15 @@ message TEvControllerReplaceConfigResponse {
         BSCInvalidConfig = 3;
         SessionClosed = 4;
         Success = 5;
+        InvalidRequest = 6;
+        Aborted = 7;
     }
     optional EStatus Status = 1;
+    optional string ErrorReason = 2;
 }
 
 message TEvControllerValidateConfigRequest {
     optional string YAML = 1;
-    optional bool SkipBSCValidation = 2;
-    optional uint32 ConfigVersion = 3;
 }
 
 message TEvControllerValidateConfigResponse {
@@ -1452,10 +1456,8 @@ message TEvControllerValidateConfigResponse {
         ConfigIsValid = 2;
     }
     optional EStatus Status = 1;
-    optional bool SkipBSCValidation = 2;
-    optional string YAML = 3;
-    optional uint32 ConfigVersion = 4;
-    optional string ErrorReason = 5;
+    optional string YAML = 2;
+    optional string ErrorReason = 3;
 }
 
 message TEvControllerShredRequest {
@@ -1472,4 +1474,14 @@ message TShredState {
     optional uint64 Generation = 1;
     optional bool Completed = 2;
     optional uint32 Progress10k = 3;
+}
+
+message TEvControllerFetchConfigRequest {
+    optional bool DedicatedStorageSection = 1;
+    optional bool DedicatedClusterSection = 2;
+}
+
+message TEvControllerFetchConfigResponse {
+    optional string ClusterYaml = 1;
+    optional string StorageYaml = 2;
 }

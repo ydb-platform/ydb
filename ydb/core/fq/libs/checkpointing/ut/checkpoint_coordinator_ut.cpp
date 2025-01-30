@@ -75,7 +75,7 @@ struct TTestBootstrap : public TTestActorRuntime {
 
     ::NMonitoring::TDynamicCounterPtr Counters = new ::NMonitoring::TDynamicCounters();
 
-    explicit TTestBootstrap(ui64 graphFlag, ui64 snaphotRotationPeriod, const TString& sourceType)
+    explicit TTestBootstrap(ui64 graphFlags, ui64 snaphotRotationPeriod, const TString& sourceType)
         : TTestActorRuntime(true)
         , GraphState(BuildTestGraph(graphFlags, sourceType))
         , CoordinatorId("my-graph-id", 42)

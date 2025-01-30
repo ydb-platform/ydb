@@ -100,6 +100,34 @@ Y_UNIT_TEST_SUITE(SchemeRanges) {
             UNIT_ASSERT_EQUAL(CompareRanges(first, second, types), 0);
             UNIT_ASSERT_EQUAL(CompareRanges(second, first, types), 0);
         }
+
+        {
+            TTableRange first(secondLeft, true, secondLeft, true);
+            TTableRange second(secondLeft, true, sedondRight, false);
+            UNIT_ASSERT_EQUAL(CompareRanges(first, second, types), 0);
+            UNIT_ASSERT_EQUAL(CompareRanges(second, first, types), 0);
+        }
+
+        {
+            TTableRange first(secondLeft, true, secondLeft, true);
+            TTableRange second(secondLeft, false, sedondRight, true);
+            UNIT_ASSERT_EQUAL(CompareRanges(first, second, types), -1);
+            UNIT_ASSERT_EQUAL(CompareRanges(second, first, types), 1);
+        }
+
+        {
+            TTableRange first(sedondRight, true, sedondRight, true);
+            TTableRange second(secondLeft, false, sedondRight, true);
+            UNIT_ASSERT_EQUAL(CompareRanges(first, second, types), 0);
+            UNIT_ASSERT_EQUAL(CompareRanges(second, first, types), 0);
+        }
+
+        {
+            TTableRange first(sedondRight, true, sedondRight, true);
+            TTableRange second(secondLeft, true, sedondRight, false);
+            UNIT_ASSERT_EQUAL(CompareRanges(first, second, types), 1);
+            UNIT_ASSERT_EQUAL(CompareRanges(second, first, types), -1);
+        }
     }
 
     Y_UNIT_TEST(CmpBorders) {

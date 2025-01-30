@@ -1,5 +1,7 @@
 #include "impl.h"
 
+#include <ydb/library/yaml_config/yaml_config.h>
+
 namespace NKikimr {
 namespace NBsController {
 
@@ -91,8 +93,12 @@ public:
                 Self->SysViewChangedSettings = true;
                 Self->UseSelfHealLocalPolicy = state.GetValue<T::UseSelfHealLocalPolicy>();
                 Self->TryToRelocateBrokenDisksLocallyFirst = state.GetValue<T::TryToRelocateBrokenDisksLocallyFirst>();
-                Self->YamlConfig = state.GetValue<T::YamlConfig>();
-                Self->ConfigVersion = state.GetValue<T::ConfigVersion>();
+                if (state.HaveValue<T::YamlConfig>()) {
+                    Self->YamlConfig = DecompressYamlConfig(state.GetValue<T::YamlConfig>());
+                }
+                if (state.HaveValue<T::StorageYamlConfig>()) {
+                    Self->StorageYamlConfig = DecompressStorageYamlConfig(state.GetValue<T::StorageYamlConfig>());
+                }
                 if (state.HaveValue<T::ShredState>()) {
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }

@@ -26,17 +26,9 @@ ADDINCL(
 CXXFLAGS(-D_LIBCPP_BUILDING_LIBRARY)
 
 IF (OS_ANDROID)
-    DEFAULT(CXX_RT "default")
-    LDFLAGS(-lc++abi)
-    CFLAGS(
-        -DLIBCXX_BUILDING_LIBCXXABI
-    )
+    SET(CXX_RT "libcxxabi_dynamic")
 ELSEIF (OS_IOS)
-    # Take cxxabi implementation from system.
-    LDFLAGS(-lc++abi)
-    CFLAGS(
-        -DLIBCXX_BUILDING_LIBCXXABI
-    )
+    SET(CXX_RT "libcxxabi_dynamic")
     # Yet take builtins library from Arcadia
     PEERDIR(
         contrib/libs/cxxsupp/builtins
@@ -44,15 +36,16 @@ ELSEIF (OS_IOS)
 ELSEIF (OS_LINUX OR OS_DARWIN)
     IF (ARCH_ARM7)
         # XXX: libcxxrt support for ARM is currently broken
-        DEFAULT(CXX_RT "glibcxx_static")
+        SET(CXX_RT "glibcxx_static")
         # ARM7 OS_SDK has old libstdc++ without aligned allocation support
         CFLAGS(
             GLOBAL -fno-aligned-new
         )
     ELSE()
-        DEFAULT(CXX_RT "libcxxrt")
+        SET(CXX_RT "libcxxrt")
     ENDIF()
 ELSEIF (OS_WINDOWS)
+    SET(CXX_RT "msvcrt")
     SRCS(
         src/support/win32/locale_win32.cpp
         src/support/win32/support.cpp
@@ -66,11 +59,8 @@ ELSEIF (OS_WINDOWS)
         )
     ENDIF()
 ELSEIF (OS_EMSCRIPTEN)
-    DEFAULT(CXX_RT "libcxxabi")
+    SET(CXX_RT "libcxxabi")
     LDFLAGS(-Wl,-Bdynamic)
-    CXXFLAGS(-nostdinc++)
-ELSE()
-    DEFAULT(CXX_RT "glibcxx_static")
     CXXFLAGS(-nostdinc++)
 ENDIF()
 
@@ -79,14 +69,11 @@ IF (CLANG)
 ENDIF()
 
 # The CXX_RT variable controls which C++ runtime is used.
-# * libcxxrt        - https://github.com/libcxxrt/libcxxrt library stored in Arcadia
-# * glibcxx_static  - GNU C++ Library runtime with static linkage
-# * glibcxx_dynamic - GNU C++ Library runtime with dynamic linkage
-# * default         - default C++ runtime provided by the compiler driver
-#
-# All glibcxx* runtimes are taken from system/compiler SDK
-
-DEFAULT(CXX_RT "default")
+# * libcxxabi         - https://github.com/llvm/llvm-project/tree/main/libcxxabi from Arcadia
+# * libcxxabi_dynamic - https://github.com/llvm/llvm-project/tree/main/libcxxabi from SDK, dynamically linked
+# * libcxxrt          - https://github.com/libcxxrt/libcxxrt from Arcadia (with some parts hijacked from libcxxabi)
+# * glibcxx_static    - https://github.com/gcc-mirror/gcc/tree/master/libstdc++-v3/libsupc++ from SDK, statically linked 
+# * msvcrt            - Visual C++ runtime library from SDK, dynamically linked
 
 DISABLE(NEED_GLIBCXX_CXX17_SHIMS)
 
@@ -118,14 +105,6 @@ ELSEIF (CXX_RT == "glibcxx_static")
     CXXFLAGS(-D__GLIBCXX__=1)
     ENABLE(NEED_GLIBCXX_CXX17_SHIMS)
     ENABLE(NEED_CXX_RT_ADDINCL)
-ELSEIF (CXX_RT == "glibcxx_dynamic")
-    LDFLAGS(
-        -lgcc_s
-        -lstdc++
-    )
-    CXXFLAGS(-D__GLIBCXX__=1)
-    ENABLE(NEED_GLIBCXX_CXX17_SHIMS)
-    ENABLE(NEED_CXX_RT_ADDINCL)
 ELSEIF (CXX_RT == "libcxxabi")
     PEERDIR(
         contrib/libs/cxxsupp/builtins
@@ -137,8 +116,13 @@ ELSEIF (CXX_RT == "libcxxabi")
     CFLAGS(
         -DLIBCXX_BUILDING_LIBCXXABI
     )
-ELSEIF (CXX_RT == "default")
-    # Do nothing
+ELSEIF (CXX_RT == "libcxxabi_dynamic")
+    LDFLAGS(-lc++abi)
+    CFLAGS(
+        -DLIBCXX_BUILDING_LIBCXXABI
+    )
+ELSEIF (CXX_RT == "msvcrt")
+    # Do nothing, proper runtime will be linked by the means /MT* flags in build/ymake.core.conf
 ELSE()
     MESSAGE(FATAL_ERROR "Unexpected CXX_RT value: ${CXX_RT}")
 ENDIF()

@@ -6228,14 +6228,14 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         }
     };
 
-    Y_UNIT_TEST(EnableLocalDBBtreeIndex_Default) { // uses flat index
+    Y_UNIT_TEST(EnableLocalDBBtreeIndex_Default) { // uses b-tree index
         TMyEnvBase env;
         TRowsModel rows;
 
         auto &appData = env->GetAppData();
         UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.HasEnableLocalDBBtreeIndex(), false);
         UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.HasEnableLocalDBFlatIndex(), false);
-        UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.GetEnableLocalDBBtreeIndex(), false);
+        UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.GetEnableLocalDBBtreeIndex(), true);
         UNIT_ASSERT_VALUES_EQUAL(appData.FeatureFlags.GetEnableLocalDBFlatIndex(), true);
         auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
         int readRows = 0, failedAttempts = 0;
@@ -6252,8 +6252,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
         env.WaitFor<NFake::TEvCompacted>();
 
-        // all pages are always kept in shared cache
-        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 290);
+        // all pages are always kept in shared cache (except flat index)
+        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 334);
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
@@ -6266,7 +6266,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         // after restart we have no pages in private cache
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 330);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True) { // uses b-tree index

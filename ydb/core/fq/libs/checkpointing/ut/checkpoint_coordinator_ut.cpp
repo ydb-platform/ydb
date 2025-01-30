@@ -378,7 +378,6 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
 
             ExpectEvent(IngressActor, 
                 NYql::NDq::TEvDqCompute::TEvInjectCheckpoint(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, type));
-            ExpectRun();
         }
 
         void AllSavedAndCommited(
@@ -447,6 +446,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 0);
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
+        test.ExpectRun();
         test.AllSavedAndCommited(test.CheckpointId1);
         test.MockRunGraph();
     }
@@ -455,6 +455,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         CheckpointsTestHelper test(ETestGraphFlags::InputWithSource | ETestGraphFlags::SourceWithChannelInOneTask, 0);
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
+        test.ExpectRun();
         test.AllSavedAndCommited(test.CheckpointId1);
         test.MockRunGraph();
     }
@@ -463,6 +464,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 0);
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
+        test.ExpectRun();
         test.AllSavedAndCommited(test.CheckpointId1);
         test.MockRunGraph();
 
@@ -475,6 +477,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 2);
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
+        test.ExpectRun();
         test.AllSavedAndCommited(test.CheckpointId1);
         test.MockRunGraph();
 
@@ -495,6 +498,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 0);
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
+        test.ExpectRun();
         test.SaveFailed(test.CheckpointId1);
 
         test.ScheduleCheckpointing();

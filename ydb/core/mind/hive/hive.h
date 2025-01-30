@@ -148,7 +148,7 @@ struct TCompleteNotifications {
     void Send(const TActorContext& ctx) {
         for (auto& [notification, duration] : Notifications) {
             if (duration) {
-                ctx.ExecutorThread.Schedule(duration, notification.Release());
+                ctx.Schedule(duration, notification.Release());
             } else {
                 ctx.Send(notification.Release());
             }

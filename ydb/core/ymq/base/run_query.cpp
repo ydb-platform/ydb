@@ -42,7 +42,7 @@ namespace NKikimr::NSQS {
         if (sendAfter == TDuration::Zero()) {
             ctx.Send(kqpActor, ev.Release());
         } else {
-            ctx.ExecutorThread.Schedule(sendAfter, new IEventHandle(kqpActor, ctx.SelfID, ev.Release()));
+            ctx.Schedule(sendAfter, new IEventHandle(kqpActor, ctx.SelfID, ev.Release()));
         }
     }
 

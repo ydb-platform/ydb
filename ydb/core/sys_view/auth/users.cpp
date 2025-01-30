@@ -89,6 +89,9 @@ protected:
             if (!user.HasName() || !CanAccessUser(user.GetName())) {
                 continue;
             }
+            if (!OneCellStringKeyIsInTableRange(user.GetName())) {
+                continue;
+            }
             users.push_back(&user);
         }
         SortBatch(users, [](const auto* left, const auto* right) {
@@ -98,19 +101,6 @@ protected:
         TVector<TCell> cells(::Reserve(Columns.size()));
         
         for (const auto* user : users) {
-            bool isInRange = true;
-            if (auto pathFrom = GetCellFrom(0); pathFrom) {
-                int cmp = pathFrom->AsBuf().compare(user->GetName());
-                isInRange &= cmp < 0 || cmp == 0 && TableRange.FromInclusive;
-            }
-            if (auto pathTo = GetCellTo(0); pathTo) {
-                int cmp = pathTo->AsBuf().compare(user->GetName());
-                isInRange &= cmp > 0 || cmp == 0 && TableRange.ToInclusive;
-            }
-            if (!isInRange) {
-                continue;
-            }
-
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthUsers::Sid::ColumnId:

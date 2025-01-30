@@ -34,17 +34,7 @@ protected:
 
         auto entryPath = CanonizePath(entry.Path);
 
-        bool isInRange = true;
-        if (auto pathFrom = GetCellFrom(0); pathFrom) {
-            int cmp = pathFrom->AsBuf().compare(entryPath);
-            isInRange &= cmp < 0 || cmp == 0 && TableRange.FromInclusive;
-        }
-        if (auto pathTo = GetCellTo(0); pathTo) {
-            int cmp = pathTo->AsBuf().compare(entryPath);
-            isInRange &= cmp > 0 || cmp == 0 && TableRange.ToInclusive;
-        }
-
-        if (isInRange) {
+        if (OneCellStringKeyIsInTableRange(entryPath)) {
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthOwners::Path::ColumnId:

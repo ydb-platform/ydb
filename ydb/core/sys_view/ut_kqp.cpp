@@ -2690,6 +2690,36 @@ Y_UNIT_TEST_SUITE(SystemView) {
         NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
     }
 
+    Y_UNIT_TEST(AuthGroups_TableRange) {
+        TTestEnv env;
+        SetupAuthEnvironment(env);
+        TTableClient client(env.GetDriver());
+
+        for (auto group : {
+            "group1",
+            "group2",
+            "group3",
+            "group4",
+        }) {
+            env.GetClient().CreateGroup("/Root", group);
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT Sid
+                FROM `Root/.sys/auth_groups`
+                WHERE Sid > "group1" AND Sid <= "group3"
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["group2"]];
+                [["group3"]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+    }
+
     Y_UNIT_TEST(AuthGroupMembers) {
         TTestEnv env;
         SetupAuthEnvironment(env);

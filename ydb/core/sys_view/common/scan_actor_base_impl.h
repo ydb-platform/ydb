@@ -170,6 +170,20 @@ protected:
         return GetCell(TableRange.To.GetCells(), index);
     }
 
+    bool OneCellStringKeyIsInTableRange(const TString value) const {
+        if (auto pathFrom = GetCellFrom(0); pathFrom) {
+            if (int cmp = pathFrom->AsBuf().compare(value); cmp > 0 || cmp == 0 && !TableRange.FromInclusive) {
+                return false;
+            }
+        }
+        if (auto pathTo = GetCellTo(0); pathTo) {
+            if (int cmp = pathTo->AsBuf().compare(value); cmp < 0 || cmp == 0 && !TableRange.ToInclusive) {
+                return false;
+            }
+        }
+        return true;
+    }
+
 private:
     virtual void ProceedToScan() = 0;
 

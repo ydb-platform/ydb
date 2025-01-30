@@ -3010,10 +3010,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CREATE TABLE `/Root/ColumnShard` (
                 a Uint64,
                 b Int64,
-                PRIMARY KEY (a)
+                PRIMARY KEY (a, b)
             )
             PARTITION BY HASH(a)
-            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
         )";
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -3023,21 +3023,70 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/ColumnShard` (a, b) VALUES
-                    (NULL, 5),
-                    (2u, 5)
+                    (NULL, 3),
+                    (2u, 5),
+                    (3u, NULL)
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(prepareResult.IsSuccess());;
         }
 
         {
+            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
+            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
+
+            Cerr << "Starting select\n";
             auto it = client.StreamExecuteQuery(R"(
                 SELECT
                     COUNT(*)
                 FROM `/Root/ColumnShard`
-                WHERE a is NULL;
+                WHERE a IS NULL;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << output << Endl;
+            CompareYson(output, R"([[1u;]])");
+
+            Cerr << "Starting select\n";
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    COUNT(*)
+                FROM `/Root/ColumnShard`
+                WHERE a IS NULL AND b = 3;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            output = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << output << Endl;
+            CompareYson(output, R"([[1u;]])");
+
+            Cerr << "Starting select\n";
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    COUNT(*)
+                FROM `/Root/ColumnShard`
+                WHERE a IS NOT NULL;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            output = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << output << Endl;
+            CompareYson(output, R"([[2u;]])");
+
+            Cerr << "Starting select\n";
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    COUNT(*)
+                FROM `/Root/ColumnShard`
+                WHERE a IS NOT NULL AND b = 5;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            output = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
             Cout << output << Endl;
             CompareYson(output, R"([[1u;]])");
         }

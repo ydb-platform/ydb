@@ -8387,8 +8387,15 @@ TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
 
-    if (node->Head().IsCallable("TableSource")) {
+    if (node->ChildrenSize() == 1 && node->Head().IsCallable("TableSource")) {
         if (auto wide = MakeWideTableSource(node->Head(), ctx)) {
+            return wide;
+        }
+    }
+
+    if (node->ChildrenSize() == 1 && node->Head().IsCallable("Iterator")
+        && node->Head().ChildrenSize() == 1 && node->Head().Head().IsCallable("TableSource")) {
+        if (auto wide = MakeWideTableSource(node->Head().Head(), ctx)) {
             return wide;
         }
     }

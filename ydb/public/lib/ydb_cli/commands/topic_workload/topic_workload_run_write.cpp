@@ -66,10 +66,6 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
         .StoreMappedResultT<TString>(&Scenario.Codec, &TCommandWorkloadTopicParams::StrToCodec);
-    config.Opts->AddLongOption("direct", "Direct write to a partition node.")
-        .Hidden()
-        .StoreTrue(&Scenario.Direct);
-
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 
     config.Opts->AddLongOption("use-tx", "Use transactions.")
@@ -91,7 +87,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .DefaultValue(1'000'000)
         .Hidden()
         .StoreResult(&Scenario.CommitMessages);
-    config.Opts->AddLongOption("tx-commit-messages", "Number of messages to commit transaction. " 
+    config.Opts->AddLongOption("tx-commit-messages", "Number of messages to commit transaction. "
                                                             " Both tx-commit-messages and tx-commit-interval can trigger transaction commit.")
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);
@@ -99,7 +95,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
     config.IsNetworkIntensive = true;
 }
 
-void TCommandWorkloadTopicRunWrite::Parse(TConfig& config) 
+void TCommandWorkloadTopicRunWrite::Parse(TConfig& config)
 {
     TClientCommand::Parse(config);
 

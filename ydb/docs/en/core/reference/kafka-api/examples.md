@@ -7,8 +7,8 @@ You don't need to create a consumer for this reading mode.
 Before proceeding with the examples:
 
 1. [Create a topic](../ydb-cli/topic-create.md).
-2. [Add a consumer](../ydb-cli/topic-consumer-add.md).
-3. If authentication is enabled, [create a user](../../security/authorization.md#user).
+1. [Add a consumer](../ydb-cli/topic-consumer-add.md).
+1. If authentication is enabled, [create a user](../../security/authorization.md#user).
 
 ## How to try the Kafka API {#how-to-try-kafka-api}
 
@@ -23,10 +23,10 @@ You can try working with YDB topics via the Kafka API for free ([in small volume
 To do this in your [Yandex Cloud console](https://console.yandex.cloud):
 
 1. Create a [YDB database](https://yandex.cloud/en/docs/ydb/quickstart) if you don't have one yet.
-2. Create a [Yandex Data Streams queue](https://yandex.cloud/en/docs/data-streams/quickstart).
-3. Create a [service account](https://yandex.cloud/en/docs/iam/operations/sa/create) if you don't have one yet,
+1. Create a [Yandex Data Streams queue](https://yandex.cloud/en/docs/data-streams/quickstart).
+1. Create a [service account](https://yandex.cloud/en/docs/iam/operations/sa/create) if you don't have one yet,
    and assign this service account the roles of ydb.viewer (to read data from the stream), ydb.editor (to write data to the stream), and ydb.kafkaApi.client (to access the data stream via the Kafka API).
-4. Create an [API key](https://yandex.cloud/en/docs/iam/operations/sa/create-access-key) for this service account.
+1. Create an [API key](https://yandex.cloud/en/docs/iam/operations/sa/create-access-key) for this service account.
    For the key, select `yc.ydb.topics.manage` in the **Scope** field. You can also set a description and an expiration date.
 
 
@@ -59,87 +59,21 @@ For examples of how to set up authentication, see the section [Authentication Ex
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-  ```bash
-  kafka-console-consumer --bootstrap-server localhost:9092 \
-    --topic my-topic  \
-    --group my-group \
-    --from-beginning \
-    --consumer-property check.crcs=false \
-    --consumer-property partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor
-  ```
+  {% include [index.md](../../../_includes/bash/kafka-api-console-read-no-auth.md) %}
 
 - kcat
 
-  ```bash
-  kcat -C \
-      -b <ydb-endpoint> \
-      -X check.crcs=false \
-      -X partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor \
-      -G <consumer-name> <topic-name>
-  ```
+  {% include [index.md](../../../_includes/bash/kafka-api-kcat-read-no-auth.md) %}
 
 - Java
 
-  ```java
-  String HOST = "<ydb-endpoint>";
-  String TOPIC = "<topic-name>";
-  String CONSUMER = "<consumer-name>";
-
-  Properties props = new Properties();
-
-  props.put("bootstrap.servers", HOST);
-
-  props.put("key.deserializer", StringDeserializer.class.getName());
-  props.put("value.deserializer", StringDeserializer.class.getName());
-
-  props.put("check.crcs", false);
-  props.put("partition.assignment.strategy", RoundRobinAssignor.class.getName());
-
-  props.put("group.id", CONSUMER);
-  Consumer<String, String> consumer = new KafkaConsumer<>(props);
-  consumer.subscribe(Arrays.asList(new String[] {TOPIC}));
-
-  while (true) {
-      ConsumerRecords<String, String> records = consumer.poll(10000); // timeout 10 sec
-      for (ConsumerRecord<String, String> record : records) {
-          System.out.println(record.key() + ":" + record.value());
-      }
-  }
-  ```
+  {% include [index.md](../../../_includes/java/kafka-api-java-read-no-auth.md) %}
 
 - Spark
 
   {% include [index.md](_includes/spark-constraints.md) %}
 
-  ```java
-  public class ExampleReadApp {
-      public static void main(String[] args) {
-        var conf = new SparkConf().setAppName("my-app").setMaster("local");
-        var context = new SparkContext(conf);
-
-        context.setCheckpointDir("checkpoints");
-        SparkSession spark = SparkSession.builder()
-                .sparkContext(context)
-                .config(conf)
-                .appName("Simple Application")
-                .getOrCreate();
-
-        Dataset<Row> df = spark
-                .read()
-                .format("kafka")
-                .option("kafka.bootstrap.servers", "localhost:9092")
-                .option("subscribe", "flink-demo-input-topic")
-                .option("kafka.group.id", "spark-example-app")
-                .option("startingOffsets", "earliest")
-                .option("kafka." + ConsumerConfig.CHECK_CRCS_CONFIG, "false")
-                .load();
-
-        df.foreach((ForeachFunction<Row>) row -> {
-            System.out.println(row);
-        });
-      }
-  }
-  ```
+  {% include [index.md](../../../_includes/java/kafka-api-spark-read-no-auth.md) %}
 
   {% include [index.md](_includes/spark-version-notice.md) %}
 
@@ -147,34 +81,7 @@ For examples of how to set up authentication, see the section [Authentication Ex
 
   {% include [index.md](_includes/flink-constraints.md) %}
 
-  ```java
-    public class YdbKafkaApiReadExample {
-   
-        public static void main(String[] args) throws Exception {
-            final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment()
-                    .enableCheckpointing(5000, CheckpointingMode.AT_LEAST_ONCE);
-   
-            Configuration config = new Configuration();
-            config.set(CheckpointingOptions.CHECKPOINT_STORAGE, "filesystem");
-            config.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, "file:///path/to/your/checkpoints");
-            env.configure(config);
-   
-            KafkaSource<String> kafkaSource = KafkaSource.<String>builder()
-                    .setBootstrapServers("localhost:9092")
-                    .setProperty(ConsumerConfig.CHECK_CRCS_CONFIG, "false")
-                    .setGroupId("flink-demo-consumer")
-                    .setTopics("my-topic")
-                    .setStartingOffsets(OffsetsInitializer.earliest())
-                    .setBounded(OffsetsInitializer.latest())
-                    .setValueOnlyDeserializer(new SimpleStringSchema())
-                            .build();
-   
-            env.fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "kafka-source").print();
-   
-            env.execute("YDB Kafka API example read app");
-        }
-    }
-  ```
+  {% include [index.md](../../../_includes/java/kafka-api-flink-read-no-auth.md) %}
 
   {% include [index.md](_includes/flink-version-notice.md) %}
 
@@ -212,70 +119,21 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-    ```bash
-  kafka-console-producer --broker-list localhost:9092 --topic my-topic
-  ```
+  {% include [index.md](../../../_includes/bash/kafka-api-console-write-no-auth.md) %}
 
 - kcat
 
-  ```bash
-  echo "test message" | kcat -P \
-    -b <ydb-endpoint> \
-    -t <topic-name> \
-    -k key
-  ```
+  {% include [index.md](../../../_includes/bash/kafka-api-kcat-write-no-auth.md) %}
 
 - Java
 
-  ```java
-  String HOST = "<ydb-endpoint>";
-  String TOPIC = "<topic-name>";
-
-  Properties props = new Properties();
-  props.put("bootstrap.servers", HOST);
-  props.put("acks", "all");
-
-  props.put("key.serializer", StringSerializer.class.getName());
-  props.put("key.deserializer", StringDeserializer.class.getName());
-  props.put("value.serializer", StringSerializer.class.getName());
-  props.put("value.deserializer", StringDeserializer.class.getName());
-
-  props.put("compression.type", "none");
-
-  Producer<String, String> producer = new KafkaProducer<>(props);
-  producer.send(new ProducerRecord<String, String>(TOPIC, "msg-key", "msg-body"));
-  producer.flush();
-  producer.close();
-  ```
+  {% include [index.md](../../../_includes/java/kafka-api-java-write-no-auth.md) %}
 
 - Spark
 
   {% include [index.md](_includes/spark-constraints.md) %}
 
-  ```java
-  public class ExampleWriteApp {
-    public static void main(String[] args) {
-        var conf = new SparkConf().setAppName("my-app").setMaster("local");
-        var context = new SparkContext(conf);
-        context.setCheckpointDir("path/to/dir/with/checkpoints");
-        SparkSession spark = SparkSession.builder()
-            .sparkContext(context)
-              .config(conf)
-              .appName("Simple Application")
-              .getOrCreate();
- 
-        spark
-              .createDataset(List.of("spark-1", "spark-2", "spark-3", "spark-4"), Encoders.STRING())
-              .write()
-              .format("kafka")
-              .option("kafka.bootstrap.servers", "localhost:9092")
-              .option("topic", "flink-demo-output-topic")
-              .option("kafka.group.id", "spark-example-app")
-              .option("startingOffsets", "earliest")
-              .save();
-      }
-  }
-  ```
+  {% include [index.md](../../../_includes/java/kafka-api-spark-write-no-auth.md) %}
 
   {% include [index.md](_includes/spark-version-notice.md) %}
 
@@ -283,63 +141,17 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
 
   {% include [index.md](_includes/flink-constraints.md) %}
 
-  ```java
-  public class YdbKafkaApiProduceExample {
-      private static final String TOPIC = "my-topic";
- 
-      public static void main(String[] args) throws Exception {
-          final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
- 
-          Sink<String> kafkaSink = KafkaSink.<String>builder()
-                  .setBootstrapServers("localhost:9092") // assuming ydb is running locally with kafka proxy on 9092 port
-                  .setRecordSerializer(KafkaRecordSerializationSchema.builder()
-                          .setTopic(TOPIC)
-                          .setValueSerializationSchema(new SimpleStringSchema())
-                          .setKeySerializationSchema(new SimpleStringSchema())
-                          .build())
-                  .setRecordSerializer((el, ctx, ts) -> new ProducerRecord<>(TOPIC, el.getBytes()))
-                  .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
-                          .build();
- 
-          env.setParallelism(1)
-                  .fromSequence(0, 10)
-                  .map(i -> i + "")
-                  .sinkTo(kafkaSink);
- 
-          // Execute program, beginning computation.
-          env.execute("ydb_kafka_api_write_example");
-      }
-  }
-  ```
+  {% include [index.md](../../../_includes/java/kafka-api-flink-write-no-auth.md) %}
 
   {% include [index.md](_includes/flink-version-notice.md) %}
 
 - Logstash
 
-  ```ruby
-  output {
-    kafka {
-      codec => json
-      topic_id => "<topic-name>"
-      bootstrap_servers => "<ydb-endpoint>"
-      compression_type => none
-    }
-  }
-  ```
+  {% include [index.md](../../../_includes/logs-to-kafka/kafka-api-logstash.md) %}
 
 - Fluent Bit
 
-  ```ini
-  [OUTPUT]
-    name                          kafka
-    match                         *
-    Brokers                       <ydb-endpoint>
-    Topics                        <topic-name>
-    rdkafka.client.id             Fluent-bit
-    rdkafka.request.required.acks 1
-    rdkafka.log_level             7
-    rdkafka.sasl.mechanism        PLAIN
-  ```
+  {% include [index.md](../../../_includes/logs-to-kafka/kafka-api-fluent-bit.md) %}
 
 {% endlist %}
 
@@ -387,63 +199,15 @@ The username is not specified in <path_to_database>. Only `@` is added, followed
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-  ```bash
-  kafka-console-consumer --bootstrap-server <kafka_api_endpoint> \
-    --topic <topic-name>  \
-    --group <consumer-name> \
-    --from-beginning \
-    --consumer-property check.crcs=false \
-    --consumer-property partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor \
-    --consumer-property security.protocol=SASL_SSL \
-    --consumer-property sasl.mechanism=PLAIN \
-    --consumer-property "sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"@<path_to_database>\" password=\"<api_key>\";"
-  ```
+  {% include [index.md](../../../_includes/bash/kafka-api-console-read-with-sasl-creds-cloud.md) %}
 
 - kcat
 
-  ```bash
-  kcat -C \
-      -b <kafka_api_endpoint> \
-      -X security.protocol=SASL_SSL \
-      -X sasl.mechanism=PLAIN \
-      -X sasl.username="@<path_to_database>" \
-      -X sasl.password="<api_key>" \
-      -X check.crcs=false \
-      -X partition.assignment.strategy=roundrobin \
-      -G <consumer-name> <topic-name>
-  ```
+  {% include [index.md](../../../_includes/bash/kafka-api-kcat-read-with-sasl-creds-cloud.md) %}
 
 - Java
 
-  ```java
-  String TOPIC = "<topic-name>";
-  String CONSUMER = "<consumer-name>";
-
-  Properties props = new Properties();
-
-  props.put("bootstrap.servers", <kafka_api_endpoint>);
-
-  props.put("key.deserializer", StringDeserializer.class.getName());
-  props.put("value.deserializer", StringDeserializer.class.getName());
-
-  props.put("check.crcs", false);
-  props.put("partition.assignment.strategy", RoundRobinAssignor.class.getName());
- 
-  props.put("security.protocol", "SASL_SSL");
-  props.put("sasl.mechanism", "PLAIN");
-  props.put("sasl.jaas.config", "sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"@<path_to_database>\" password=\"<api_key>\";");
-
-  props.put("group.id", CONSUMER);
-  Consumer<String, String> consumer = new KafkaConsumer<>(props);
-  consumer.subscribe(Arrays.asList(new String[] {TOPIC}));
-
-  while (true) {
-      ConsumerRecords<String, String> records = consumer.poll(10000); // timeout 10 sec
-      for (ConsumerRecord<String, String> record : records) {
-          System.out.println(record.key() + ":" + record.value());
-      }
-  }
-  ```
+  {% include [index.md](../../../_includes/java/kafka-api-java-read-with-sasl-creds-cloud.md) %}
 
 {% endlist %}
 
@@ -469,62 +233,14 @@ Examples are shown for reading, but the same configuration parameters work for w
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-  ```bash
-  kafka-console-consumer --bootstrap-server localhost:9092 \
-    --topic <topic-name>  \
-    --group <consumer-name> \
-    --from-beginning \
-    --consumer-property check.crcs=false \
-    --consumer-property partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor \
-    --consumer-property security.protocol=SASL_PLAINTEXT \
-    --consumer-property sasl.mechanism=PLAIN \
-    --consumer-property "sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"<username>\" password=\"<password>\";"
-  ```
+  {% include [index.md](../../../_includes/bash/kafka-api-console-read-with-sasl-creds-on-prem.md) %}
 
 - kcat
 
-  ```bash
-  kcat -C \
-      -b localhost:9092 \
-      -X security.protocol=SASL_PLAINTEXT \
-      -X sasl.mechanism=PLAIN \
-      -X sasl.username="<username>" \
-      -X sasl.password="<password>" \
-      -X check.crcs=false \
-      -X partition.assignment.strategy=roundrobin \
-      -G <consumer-name> <topic-name>
-  ```
+  {% include [index.md](../../../_includes/bash/kafka-api-kcat-read-with-sasl-creds-on-prem.md) %}
 
 - Java
 
-  ```java
-  String TOPIC = "<topic-name>";
-  String CONSUMER = "<consumer-name>";
-
-  Properties props = new Properties();
-
-  props.put("bootstrap.servers", "localhost:9092");
-
-  props.put("key.deserializer", StringDeserializer.class.getName());
-  props.put("value.deserializer", StringDeserializer.class.getName());
-
-  props.put("check.crcs", false);
-  props.put("partition.assignment.strategy", RoundRobinAssignor.class.getName());
- 
-  props.put("security.protocol", "SASL_PLAINTEXT");
-  props.put("sasl.mechanism", "PLAIN");
-  props.put("sasl.jaas.config", "sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"<username>\" password=\"<password>\";");
-
-  props.put("group.id", CONSUMER);
-  Consumer<String, String> consumer = new KafkaConsumer<>(props);
-  consumer.subscribe(Arrays.asList(new String[] {TOPIC}));
-
-  while (true) {
-      ConsumerRecords<String, String> records = consumer.poll(10000); // timeout 10 sec
-      for (ConsumerRecord<String, String> record : records) {
-          System.out.println(record.key() + ":" + record.value());
-      }
-  }
-  ```
+  {% include [index.md](../../../_includes/java/kafka-api-java-read-with-sasl-creds-on-prem.md) %}
 
 {% endlist %}

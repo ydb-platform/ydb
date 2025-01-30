@@ -10,6 +10,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {ECandidateKind::Keyword, "ALTER"},
             {ECandidateKind::Keyword, "ANALYZE"},
             {ECandidateKind::Keyword, "BACKUP"},
+            {ECandidateKind::Keyword, "BATCH"},
             {ECandidateKind::Keyword, "COMMIT"},
             {ECandidateKind::Keyword, "CREATE"},
             {ECandidateKind::Keyword, "DECLARE"},
@@ -63,6 +64,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {ECandidateKind::Keyword, "TABLE"},
             {ECandidateKind::Keyword, "TABLESTORE"},
             {ECandidateKind::Keyword, "TOPIC"},
+            {ECandidateKind::Keyword, "TRANSFER"},
             {ECandidateKind::Keyword, "USER"},
         };
 
@@ -84,6 +86,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {ECandidateKind::Keyword, "TEMP"},
             {ECandidateKind::Keyword, "TEMPORARY"},
             {ECandidateKind::Keyword, "TOPIC"},
+            {ECandidateKind::Keyword, "TRANSFER"},
             {ECandidateKind::Keyword, "USER"},
             {ECandidateKind::Keyword, "VIEW"},
         };
@@ -112,6 +115,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {ECandidateKind::Keyword, "TABLE"},
             {ECandidateKind::Keyword, "TABLESTORE"},
             {ECandidateKind::Keyword, "TOPIC"},
+            {ECandidateKind::Keyword, "TRANSFER"},
             {ECandidateKind::Keyword, "USER"},
             {ECandidateKind::Keyword, "VIEW"},
         };
@@ -125,6 +129,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {ECandidateKind::Keyword, "ALTER"},
             {ECandidateKind::Keyword, "ANALYZE"},
             {ECandidateKind::Keyword, "BACKUP"},
+            {ECandidateKind::Keyword, "BATCH"},
             {ECandidateKind::Keyword, "COMMIT"},
             {ECandidateKind::Keyword, "CREATE"},
             {ECandidateKind::Keyword, "DECLARE"},
@@ -275,7 +280,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         TSqlCompletionEngine engine;
         UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT ("}).Candidates.size(), 28);
         UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT (1)"}).Candidates.size(), 30);
-        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT 1;"}).Candidates.size(), 33);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SELECT 1;"}).Candidates.size(), 34);
     }
 
     Y_UNIT_TEST(Typing) {
@@ -293,5 +298,17 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             auto completion = engine.Complete({TString::FromUtf16(prefixUtf16)});
             Y_DO_NOT_OPTIMIZE_AWAY(completion);
         }
+    }
+
+    Y_UNIT_TEST(CaseInsensitivity) {
+        TVector<TCandidate> expected = {
+            {ECandidateKind::Keyword, "SELECT"},
+        };
+
+        TSqlCompletionEngine engine;
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"se"}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"sE"}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"Se"}).Candidates, expected);
+        UNIT_ASSERT_VALUES_EQUAL(engine.Complete({"SE"}).Candidates, expected);
     }
 } // Y_UNIT_TEST_SUITE(SqlCompleteTests)

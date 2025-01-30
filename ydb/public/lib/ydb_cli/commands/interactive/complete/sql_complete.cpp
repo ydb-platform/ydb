@@ -212,8 +212,9 @@ namespace NSQLComplete {
     }
 
     void FilterByContent(TVector<TCandidate>& candidates, TStringBuf prefix) {
+        const auto lowerPrefix = ToLowerUTF8(prefix);
         auto removed = std::ranges::remove_if(candidates, [&](const auto& candidate) {
-            return !ToLowerUTF8(candidate.Content).StartsWith(prefix);
+            return !ToLowerUTF8(candidate.Content).StartsWith(lowerPrefix);
         });
         candidates.erase(std::begin(removed), std::end(removed));
     }

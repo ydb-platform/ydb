@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(TFqYdbTest) {
     {
         auto promise = NThreading::NewPromise<NYdb::TStatus>();
         auto future = promise.GetFuture();
-        promise.SetValue(TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{}));
+        promise.SetValue(TStatus(EStatus::BAD_REQUEST, NYql::TIssues{}));
         NThreading::TFuture<NYql::TIssues> future2 = NFq::StatusToIssues(future);
 
         NYql::TIssues issues = future2.GetValueSync();

@@ -55,9 +55,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
             if (auto gInit = result.StartInitialization()) {
                 gInit->InitializationFinished(
                     BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions));
-            } else {
-                AFL_VERIFY(!result.NeedInitialization());
             }
+            AFL_VERIFY(!result.NeedInitialization());
         }
         return result.GetScriptVerified();
     }

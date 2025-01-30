@@ -189,6 +189,14 @@ public:
         return Script;
     }
 
+    TString DebugString() const {
+        if (Script) {
+            return TStringBuilder() << Script->DebugString() << Endl;
+        } else {
+            return TStringBuilder() << "NO_SCRIPT" << Endl;
+        }
+    }
+
     bool HasScript() const {
         return !!Script;
     }

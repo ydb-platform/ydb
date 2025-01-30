@@ -53,7 +53,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         if (result.NeedInitialization()) {
             TGuard<TMutex> g(Mutex);
             if (auto gInit = result.StartInitialization()) {
-                gInit.InitializationFinished(
+                gInit->InitializationFinished(
                     BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions));
             } else {
                 AFL_VERIFY(!result.NeedInitialization());
@@ -141,9 +141,9 @@ TString TSpecialReadContext::ProfileDebugString() const {
     };
 
     for (ui32 i = 0; i < (1 << 5); ++i) {
-        auto script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)];
-        if (script && *script) {
-            sb << (*script)->DebugString() << ";";
+        auto& script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)];
+        if (script.HasScript()) {
+            sb << script.DebugString() << ";";
         }
     }
     return sb;

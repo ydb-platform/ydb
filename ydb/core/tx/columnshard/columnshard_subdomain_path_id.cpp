@@ -27,7 +27,7 @@ public:
     }
 
 private:
-    const bool OutOfSpace = false;
+    const bool OutOfSpace;
 };
 
 class TTxPersistSubDomainPathId : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {

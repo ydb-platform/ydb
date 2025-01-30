@@ -55,9 +55,9 @@ public:
                 AFL_VERIFY(Self->CurrentSchemeShardId == record.GetSchemeShardId());
             }
             if (txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA) {
-                ui64 subDomainPathId = record.GetSubDomainPathId();
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "propose")("subdomain_id", subDomainPathId);
-                if (subDomainPathId) {
+                if (record.HasSubDomainPathId()) {
+                    ui64 subDomainPathId = record.GetSubDomainPathId();
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "propose")("subdomain_id", subDomainPathId);
                     Self->PersistSubDomainPathId(record.GetSchemeShardId(), subDomainPathId, txc);
                     Self->StartWatchingSubDomainPathId();
                 }

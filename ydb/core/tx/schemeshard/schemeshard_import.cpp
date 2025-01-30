@@ -191,14 +191,20 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     );
     const ui64 count = item.Changefeeds.size();
     TVector<TString> jsonChangefeeds;
+    TVector<TString> jsonTopics;
     jsonChangefeeds.reserve(count);
+    jsonTopics.reserve(count);
 
-    for (const auto& changefeed : item.Changefeeds) {
+    for (const auto& [changefeed, topic] : item.Changefeeds) {
         jsonChangefeeds.push_back(changefeed.SerializeAsString());
+        jsonTopics.push_back(topic.SerializeAsString());
     }
 
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::Changefeeds>(jsonChangefeeds)
+    );
+    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+        NIceDb::TUpdate<Schema::ImportItems::Topics>(jsonTopics)
     );
 }
 

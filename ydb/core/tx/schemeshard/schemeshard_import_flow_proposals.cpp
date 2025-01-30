@@ -20,7 +20,7 @@ bool CreateChangefeedsPropose(THolder<TEvSchemeShard::TEvModifySchemeTransaction
         if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
             return false;
         }
-        cdcStreamDescription.
+        cdcStream.SetRetentionPeriodSeconds(topic.Getretention_period().seconds());
     }
     return true;
 }

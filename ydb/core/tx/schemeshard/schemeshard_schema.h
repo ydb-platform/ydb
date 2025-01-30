@@ -1563,6 +1563,7 @@ struct Schema : NIceDb::Schema {
         struct Permissions : Column<11, NScheme::NTypeIds::String> {};
         struct Metadata : Column<12, NScheme::NTypeIds::String> {};
         struct Changefeeds : Column<13, NScheme::NTypeIds::Json> {};
+        struct Topics : Column<14, NScheme::NTypeIds::Json> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };

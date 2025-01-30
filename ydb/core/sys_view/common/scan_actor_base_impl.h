@@ -162,6 +162,14 @@ protected:
         SendBatch(std::move(batch));
     }
 
+    std::optional<TCell> GetCellFrom(size_t index) const {
+        return GetCell(TableRange.From.GetCells(), index);
+    }
+
+    std::optional<TCell> GetCellTo(size_t index) const {
+        return GetCell(TableRange.To.GetCells(), index);
+    }
+
 private:
     virtual void ProceedToScan() = 0;
 
@@ -307,6 +315,13 @@ private:
                 LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
                     "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
+    }
+
+    std::optional<TCell> GetCell(TConstArrayRef<TCell> cells, size_t index) const {
+        if (index < cells.size() && !cells[index].IsNull()) {
+            return cells[index];
+        }
+        return {};
     }
 
 protected:

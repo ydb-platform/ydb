@@ -54,16 +54,6 @@ protected:
     }
 
     void StartScan() {
-        // TODO: support TableRange filter
-        if (auto cellsFrom = TBase::TableRange.From.GetCells(); cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "TableRange.From filter is not supported");
-            return;
-        }
-        if (auto cellsTo = TBase::TableRange.To.GetCells(); cellsTo.size() > 0 && !cellsTo[0].IsNull()) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "TableRange.To filter is not supported");
-            return;
-        }
-
         auto request = MakeHolder<TEvSchemeShard::TEvListUsers>();
 
         LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
@@ -108,12 +98,23 @@ protected:
         TVector<TCell> cells(::Reserve(Columns.size()));
         
         for (const auto* user : users) {
+            bool isInRange = true;
+            if (auto pathFrom = GetCellFrom(0); pathFrom) {
+                int cmp = pathFrom->AsBuf().compare(user->GetName());
+                isInRange &= cmp < 0 || cmp == 0 && TableRange.FromInclusive;
+            }
+            if (auto pathTo = GetCellTo(0); pathTo) {
+                int cmp = pathTo->AsBuf().compare(user->GetName());
+                isInRange &= cmp > 0 || cmp == 0 && TableRange.ToInclusive;
+            }
+            if (!isInRange) {
+                continue;
+            }
+
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthUsers::Sid::ColumnId:
-                    cells.push_back(user->HasName()
-                        ? TCell(user->GetName().data(), user->GetName().size())
-                        : TCell());
+                    cells.push_back(TCell(user->GetName().data(), user->GetName().size()));
                     break;
                 case Schema::AuthUsers::IsEnabled::ColumnId:
                     cells.push_back(user->HasIsEnabled()

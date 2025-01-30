@@ -34,26 +34,38 @@ protected:
 
         auto entryPath = CanonizePath(entry.Path);
 
-        for (auto& column : Columns) {
-            switch (column.Tag) {
-            case Schema::AuthOwners::Path::ColumnId:
-                cells.push_back(TCell(entryPath.data(), entryPath.size()));
-                break;
-            case Schema::AuthOwners::Sid::ColumnId:
-                if (entry.SecurityObject && entry.SecurityObject->HasOwnerSID()) {
-                    cells.push_back(TCell(entry.SecurityObject->GetOwnerSID().data(), entry.SecurityObject->GetOwnerSID().size()));
-                } else {
-                    cells.emplace_back();
-                }
-                break;
-            default:
-                cells.emplace_back();
-            }
+        bool isInRange = true;
+        if (auto pathFrom = GetCellFrom(0); pathFrom) {
+            int cmp = pathFrom->AsBuf().compare(entryPath);
+            isInRange &= cmp < 0 || cmp == 0 && TableRange.FromInclusive;
+        }
+        if (auto pathTo = GetCellTo(0); pathTo) {
+            int cmp = pathTo->AsBuf().compare(entryPath);
+            isInRange &= cmp > 0 || cmp == 0 && TableRange.ToInclusive;
         }
 
-        TArrayRef<const TCell> ref(cells);
-        batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
-        cells.clear();
+        if (isInRange) {
+            for (auto& column : Columns) {
+                switch (column.Tag) {
+                case Schema::AuthOwners::Path::ColumnId:
+                    cells.push_back(TCell(entryPath.data(), entryPath.size()));
+                    break;
+                case Schema::AuthOwners::Sid::ColumnId:
+                    if (entry.SecurityObject && entry.SecurityObject->HasOwnerSID()) {
+                        cells.push_back(TCell(entry.SecurityObject->GetOwnerSID().data(), entry.SecurityObject->GetOwnerSID().size()));
+                    } else {
+                        cells.emplace_back();
+                    }
+                    break;
+                default:
+                    cells.emplace_back();
+                }
+            }
+
+            TArrayRef<const TCell> ref(cells);
+            batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
+            cells.clear();
+        }
 
         batch.Finished = false;
     }

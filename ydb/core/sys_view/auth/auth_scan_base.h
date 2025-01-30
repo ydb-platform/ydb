@@ -57,11 +57,11 @@ public:
         , RequireUserAdministratorAccess(requireUserAdministratorAccess)
     {
         if (applyPathTableRange) {
-            if (auto cellsFrom = TBase::TableRange.From.GetCells(); cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
-                PathFrom = cellsFrom[0].AsBuf();
+            if (auto cell = TBase::GetCellFrom(0)) {
+                PathFrom = cell->AsBuf();
             }
-            if (auto cellsTo = TBase::TableRange.To.GetCells(); cellsTo.size() > 0 && !cellsTo[0].IsNull()) {
-                PathTo = cellsTo[0].AsBuf();
+            if (auto cell = TBase::GetCellTo(0)) {
+                PathTo = cell->AsBuf();
             }
         }
     }
@@ -106,7 +106,7 @@ protected:
             auto& last = DeepFirstSearchStack.back();
 
             if (last.Index == Max<size_t>()) { // tenant root
-                if ((PathFrom || PathTo) && ShouldSkipPath(TBase::TenantName)) {
+                if ((PathFrom || PathTo) && ShouldSkipSubTree(TBase::TenantName)) {
                     DeepFirstSearchStack.pop_back();
                     continue;
                 }
@@ -124,7 +124,7 @@ protected:
                 }
                                 
                 last.Entry.Path.push_back(child.Name);
-                if ((PathFrom || PathTo) && ShouldSkipPath(CanonizePath(last.Entry.Path))) {
+                if ((PathFrom || PathTo) && ShouldSkipSubTree(CanonizePath(last.Entry.Path))) {
                     last.Entry.Path.pop_back();
                     continue;
                 }
@@ -201,7 +201,7 @@ protected:
     // ignores from/to inclusive flags for simplicity
     // ignores some boundary cases for simplicity
     // precise check will be performed later on batch rows filtering
-    bool ShouldSkipPath(const TString& path) {
+    bool ShouldSkipSubTree(const TString& path) {
         Y_DEBUG_ABORT_UNLESS(PathFrom || PathTo);
 
         if (PathFrom) {

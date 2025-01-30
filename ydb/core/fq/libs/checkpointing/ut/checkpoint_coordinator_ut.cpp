@@ -75,7 +75,7 @@ struct TTestBootstrap : public TTestActorRuntime {
 
     ::NMonitoring::TDynamicCounterPtr Counters = new ::NMonitoring::TDynamicCounters();
 
-    explicit TTestBootstrap(ui64 graphFlags = 0, const TString& sourceType, ui64 snaphotRotationPeriod = 0)
+    explicit TTestBootstrap(ui64 graphFlag, ui64 snaphotRotationPeriod, const TString& sourceType)
         : TTestActorRuntime(true)
         , GraphState(BuildTestGraph(graphFlags, sourceType))
         , CoordinatorId("my-graph-id", 42)
@@ -319,8 +319,8 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     class CheckpointsTestHelper : public TTestBootstrap
     {
     public:
-        CheckpointsTestHelper(ui64 graphFlags, const TString& sourceType, ui64 snaphotRotationPeriod = 0)
-            : TTestBootstrap(graphFlags, sourceType, snaphotRotationPeriod) {
+        CheckpointsTestHelper(ui64 graphFlags, ui64 snaphotRotationPeriod = 0, const TString& sourceType = "PqSource")
+            : TTestBootstrap(graphFlags, snaphotRotationPeriod, sourceType) {
         }
         
         void RegisterCoordinator() {
@@ -444,7 +444,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     };
 
     Y_UNIT_TEST(ShouldTriggerCheckpointWithSource) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, "PqSource", 0);
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 0);
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
         test.AllSavedAndCommited(test.CheckpointId1);
@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     }
 
     Y_UNIT_TEST(ShouldTriggerCheckpointWithSourcesAndWithChannel) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource | ETestGraphFlags::SourceWithChannelInOneTask, "PqSource", 0);
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource | ETestGraphFlags::SourceWithChannelInOneTask, 0);
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
         test.AllSavedAndCommited(test.CheckpointId1);
@@ -460,7 +460,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     }
 
     Y_UNIT_TEST(ShouldAllSnapshots) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, "PqSource", 0);
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 0);
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
         test.AllSavedAndCommited(test.CheckpointId1);
@@ -472,7 +472,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     }
 
     Y_UNIT_TEST(Should2Increments1Snapshot) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, "PqSource", 2);
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 2);
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
         test.AllSavedAndCommited(test.CheckpointId1);
@@ -492,7 +492,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     }
 
     Y_UNIT_TEST(ShouldAbortPreviousCheckpointsIfNodeStateCantBeSaved) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, "PqSource", 0);
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 0);
         test.RegisterCoordinator();
         test.InjectCheckpoint(test.CheckpointId1);
         test.SaveFailed(test.CheckpointId1);

@@ -42,16 +42,4 @@ IChunkedArray::TLocalChunkedArrayAddress TCompositeChunkedArray::DoGetLocalChunk
     return *result;
 }
 
-std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::DoGetChunkedArray() const {
-    std::vector<std::shared_ptr<arrow::Array>> chunks;
-    for (auto&& i : Chunks) {
-        auto arr = i->GetChunkedArray();
-        AFL_VERIFY(arr->num_chunks());
-        for (auto&& chunk : arr->chunks()) {
-            chunks.emplace_back(chunk);
-        }
-    }
-    return std::make_shared<arrow::ChunkedArray>(chunks);
-}
-
 }   // namespace NKikimr::NArrow::NAccessor

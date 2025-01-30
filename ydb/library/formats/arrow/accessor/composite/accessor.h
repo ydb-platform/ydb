@@ -33,7 +33,6 @@ protected:
         return nullptr;
     }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
-    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override;
 
     TCompositeChunkedArray(std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& chunks, const ui32 recordsCount,
         const std::shared_ptr<arrow::DataType>& type)

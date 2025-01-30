@@ -230,7 +230,7 @@ private:
     virtual std::optional<ui64> DoGetRawSize() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const = 0;
 
-    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
         AFL_VERIFY(false);
         return TLocalChunkedArrayAddress(nullptr, 0, 0);
     }

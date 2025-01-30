@@ -7,7 +7,7 @@ namespace NKikimr {
 
         bool IsExtendedVDiskCounters() {
             return NActors::TlsActivationContext
-                && NActors::TlsActivationContext->ExecutorThread.ActorSystem
+                && NActors::TlsActivationContext->ActorSystem()
                 && AppData()->FeatureFlags.GetExtendedVDiskCounters();
         }
 

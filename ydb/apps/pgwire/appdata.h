@@ -11,7 +11,7 @@ struct TAppData {
 };
 
 inline TAppData* AppData() {
-    return NActors::TlsActivationContext->ExecutorThread.ActorSystem->template AppData<TAppData>();
+    return NActors::TlsActivationContext->ActorSystem()->template AppData<TAppData>();
 }
 
 }

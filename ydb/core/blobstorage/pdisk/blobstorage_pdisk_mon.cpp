@@ -20,7 +20,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     using EVisibility = NMonitoring::TCountableBase::EVisibility;
 
     bool extendedPDiskSensors = NActors::TlsActivationContext
-        && NActors::TlsActivationContext->ExecutorThread.ActorSystem
+        && NActors::TlsActivationContext->ActorSystem()
         && AppData()->FeatureFlags.GetExtendedPDiskSensors();
 
     EVisibility visibilityForExtended = extendedPDiskSensors

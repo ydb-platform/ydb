@@ -31,6 +31,7 @@ target_link_libraries(dq_vanilla_job PUBLIC
   yql-dq-transform
   providers-common-comp_nodes
   yt-codec-codegen
+  minikql-comp_nodes-llvm14
   yt-comp_nodes-llvm14
   essentials-utils-backtrace
   comp_nodes-dq-llvm14

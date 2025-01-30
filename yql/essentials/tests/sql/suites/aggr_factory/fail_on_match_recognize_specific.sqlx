@@ -1,0 +1,14 @@
+$input = SELECT * FROM AS_TABLE([
+    <|time: 0,   value: 1u, name: "A"|>,
+    <|time: 100, value: 2u, name: "A"|>,
+    <|time: 200, value: 3u, name: "B"|>,
+    <|time: 300, value: 3u, name: "B"|>,
+    <|time: 400, value: 4u, name: "A"|>,
+    <|time: 500, value: 5u, name: "A"|>,
+]);
+
+SELECT
+    AGGREGATE_BY(value, AggregationFactory("first")) as first,
+    AGGREGATE_BY(value, AggregationFactory("last")) as last
+FROM $input
+GROUP BY name;

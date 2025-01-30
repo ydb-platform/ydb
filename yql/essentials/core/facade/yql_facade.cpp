@@ -644,7 +644,7 @@ void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& fl
 }
 
 void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
-    const NSQLTranslation::TTranslationSettings*& currentSettings)
+    NSQLTranslation::TTranslationSettings*& currentSettings)
 {
     if (QContext_.CanWrite()) {
         auto clusterMappingsNode = NYT::TNode::CreateMap();
@@ -719,13 +719,15 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     NYql::TWarningRules warningRules;
     auto sourceCode = SourceCode_;
     HandleSourceCode(sourceCode);
-    const NSQLTranslation::TTranslationSettings* currentSettings = &settings;
+    NSQLTranslation::TTranslationSettings outerSettings = settings;
+    NSQLTranslation::TTranslationSettings* currentSettings = &outerSettings;
     NSQLTranslation::TTranslationSettings loadedSettings;
     loadedSettings.PgParser = settings.PgParser;
     if (QContext_) {
         HandleTranslationSettings(loadedSettings, currentSettings);
     }
 
+    currentSettings->EmitReadsForExists = true;
     return FillParseResult(SqlToYql(sourceCode, *currentSettings, &warningRules), &warningRules);
 }
 

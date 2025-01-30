@@ -3149,10 +3149,6 @@ struct TBuiltinFuncData {
             // Hopping intervals time functions
             {"hopstart", BuildSimpleBuiltinFactoryCallback<THoppingTime<true>>()},
             {"hopend", BuildSimpleBuiltinFactoryCallback<THoppingTime<false>>()},
-
-            //MatchRecognize navigation functions
-            {"first", BuildNamedBuiltinFactoryCallback<TMatchRecognizeNavigate>("FIRST")},
-            {"last", BuildNamedBuiltinFactoryCallback<TMatchRecognizeNavigate>("LAST")},
         };
         return builtinFuncs;
     }
@@ -3269,6 +3265,10 @@ struct TBuiltinFuncData {
             {"firstvalueignorenulls", BuildAggrFuncFactoryCallback("FirstValueIgnoreNulls", "first_value_ignore_nulls_traits_factory", {OverWindow})},
             {"lastvalueignorenulls", BuildAggrFuncFactoryCallback("LastValueIgnoreNulls", "last_value_ignore_nulls_traits_factory", {OverWindow})},
             {"nthvalueignorenulls", BuildAggrFuncFactoryCallback("NthValueIgnoreNulls", "nth_value_ignore_nulls_traits_factory", {OverWindow}, NTH_VALUE)},
+
+            // MatchRecognize navigation functions
+            {"first", BuildAggrFuncFactoryCallback("First", "first_traits_factory")},
+            {"last", BuildAggrFuncFactoryCallback("Last", "last_traits_factory")},
         };
         return aggrFuncs;
     }
@@ -3633,7 +3633,17 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"));
             }
 
-            return (*aggrCallback).second(pos, args, aggMode, true).Release();
+            switch (ctx.GetColumnReferenceState()) {
+            case EColumnRefState::MatchRecognizeMeasures:
+                [[fallthrough]];
+            case EColumnRefState::MatchRecognizeDefine:
+                return new TInvalidBuiltin(pos, "Cannot use aggregation factory inside the MATCH_RECOGNIZE context");
+            default:
+                if ("first" == aggNormalizedName || "last" == aggNormalizedName) {
+                    return new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context");
+                }
+                return (*aggrCallback).second(pos, args, aggMode, true);
+            }
         }
 
         if (normalizedName == "aggregateby" || normalizedName == "multiaggregateby") {
@@ -3651,7 +3661,19 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
         auto aggrCallback = aggrFuncs.find(normalizedName);
         if (aggrCallback != aggrFuncs.end()) {
-            return (*aggrCallback).second(pos, args, aggMode, false).Release();
+            switch (ctx.GetColumnReferenceState()) {
+            case EColumnRefState::MatchRecognizeMeasures: {
+                auto result = (*aggrCallback).second(pos, args, aggMode, false);
+                return BuildMatchRecognizeVarAccess(pos, std::move(result));
+            }
+            case EColumnRefState::MatchRecognizeDefine:
+                return BuildMatchRecognizeDefineAggregate(ctx.Pos(), normalizedName, args);
+            default:
+                if ("first" == normalizedName || "last" == normalizedName) {
+                    return new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context");
+                }
+                return (*aggrCallback).second(pos, args, aggMode, false);
+            }
         }
         if (aggMode == EAggregateMode::Distinct || aggMode == EAggregateMode::OverWindowDistinct) {
             return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");

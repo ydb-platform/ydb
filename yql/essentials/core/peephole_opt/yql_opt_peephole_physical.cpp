@@ -6664,7 +6664,7 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal()
                 .Build();
-        } else if (input.IsCallable({"WideTakeBlocks", "WideSkipBlocks", "BlockExpandChunked"})) {
+        } else if (input.IsCallable({"WideTakeBlocks", "WideSkipBlocks"})) {
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
             return ctx.Builder(node->Pos())
                 .Callable(node->Content())

@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 import argparse
 
 # Explicitly enable local imports
@@ -154,9 +155,14 @@ def main():
         with_kotlin=True if args.kotlin else False,
         with_coverage=True if args.coverage else False)
 
+    jsrcs_dir = None
     for src in src_sorter.sort_args(remaining_args):
         if src.endswith(".gentar"):
             unpack_dir(src, os.path.dirname(src))
+            continue
+        if src.endswith(".jsrc"):
+            jsrcs_dir = os.path.join(args.bindir, 'jsrcs')
+            unpack_dir(src, jsrcs_dir)
             continue
 
         src_consumer.consume(src, src_sorter)
@@ -172,6 +178,25 @@ def main():
 
     for rargs in resolve_args:
         resolve.cli_main(rargs, force_skip_source_jars=not args.with_sources_jar)
+
+    if jsrcs_dir is not None:
+        resolve.resolve_sources_and_fill_filelists(
+            directory=jsrcs_dir,
+            sources_file=args.java,
+            resources_file=os.path.join(args.bindir, 'default.res.txt'),
+            kotlin_sources_file=args.kotlin if args.kotlin else None,
+            include_patterns=['**/*'],
+            exclude_patterns=[],
+            resolve_kotlin=True if args.kotlin else False,
+            append=True,
+            all_resources=False,
+        )
+        if args.with_sources_jar:
+            # TODO ugly hack here. Once jar directory preparation will be handled in a single script
+            # sources copying should use common API here as well. Current "common API" is to populate
+            # file with files to be copied by another script. It can't be uses here since there is no
+            # way to send filelist to that external script from current point in code
+            shutil.copytree(jsrcs_dir, os.path.join(args.bindir, 'src'), dirs_exist_ok=True)
 
     return 0
 

@@ -358,7 +358,7 @@ public:
                 TSession::TImpl::MakeImplAsync(processor, args);
             } else {
                 TStatus st(std::move(status));
-                args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession()));
+                args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession(args->Client)));
             }
         },
         &Ydb::Query::V1::QueryService::Stub::AsyncAttachSession,
@@ -381,13 +381,13 @@ public:
                     NYql::TIssues opIssues;
                     NYql::IssuesFromMessage(resp->issues(), opIssues);
                     TStatus st(static_cast<EStatus>(resp->status()), std::move(opIssues));
-                    promise.SetValue(TCreateSessionResult(std::move(st), TSession()));
+                    promise.SetValue(TCreateSessionResult(std::move(st), TSession(self)));
                 } else {
                     self->DoAttachSession(resp, promise, status.Endpoint, self);
                 }
             } else {
                 TStatus st(std::move(status));
-                promise.SetValue(TCreateSessionResult(std::move(st), TSession()));
+                promise.SetValue(TCreateSessionResult(std::move(st), TSession(self)));
             }
         };
 
@@ -626,6 +626,14 @@ TSession TCreateSessionResult::GetSession() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 TSession::TSession()
+{}
+
+TSession::TSession(std::shared_ptr<TQueryClient::TImpl> client)
+    : Client_(client)
+    , SessionImpl_(
+        new TSession::TImpl(nullptr, "", "", client),
+        TKqpSessionCommon::GetSmartDeleter(client)
+    )
 {}
 
 TSession::TSession(std::shared_ptr<TQueryClient::TImpl> client, TSession::TImpl* session)

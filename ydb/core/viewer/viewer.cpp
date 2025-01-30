@@ -70,7 +70,7 @@ public:
             }
             mon->RegisterActorPage({
                 .RelPath = "viewer",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
@@ -78,66 +78,66 @@ public:
             mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
             });
             mon->RegisterActorPage({
                 .Title = "Monitoring",
                 .RelPath = "monitoring",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "healthcheck",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "pdisk",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "operation",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "query",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "scheme",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "storage",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,

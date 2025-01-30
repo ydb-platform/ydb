@@ -5756,17 +5756,6 @@ TRuntimeNode TProgramBuilder::BlockFunc(const std::string_view& funcName, TType*
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockBitCast(TRuntimeNode value, TType* targetType) {
-    MKQL_ENSURE(value.GetStaticType()->IsBlock(), "Expected Block type");
-
-    auto returnType = TBlockType::Create(targetType, AS_TYPE(TBlockType, value.GetStaticType())->GetShape(), Env);
-    TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(value);
-    builder.Add(TRuntimeNode(targetType, true));
-
-    return TRuntimeNode(builder.Build(), false);
-}
-
 TRuntimeNode TProgramBuilder::BuildBlockCombineAll(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
         const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     const auto inputType = input.GetStaticType();

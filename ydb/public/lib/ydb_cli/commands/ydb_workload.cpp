@@ -243,7 +243,8 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
                 TotalErrors++;
                 WindowErrors++;
                 if (Verbose && status.GetStatus() != EStatus::ABORTED) {
-                    Cerr << "Task ID: " << taskId << " Status: " << status.GetStatus() << " " << status.GetIssues().ToString() << Endl;
+                    Cerr << "Task ID: " << taskId << " Status: " << status.GetStatus() << " " << status.GetIssues().ToString() << Endl
+                    << " Query text: " << queryInfo.Query << Endl;
                 }
                 break;
             }

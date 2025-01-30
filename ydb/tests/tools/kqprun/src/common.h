@@ -36,12 +36,13 @@ struct TYdbSetupSettings {
     std::unordered_set<TString> SharedTenants;
     std::unordered_set<TString> ServerlessTenants;
     TDuration InitializationTimeout = TDuration::Seconds(10);
+    ui8 HealthCheckLevel = 1;
     bool SameSession = false;
 
     bool DisableDiskMock = false;
     bool FormatStorage = false;
     std::optional<TString> PDisksPath;
-    ui64 DiskSize = 32_GB;
+    std::optional<ui64> DiskSize;
 
     bool MonitoringEnabled = false;
     ui16 MonitoringPortOffset = 0;

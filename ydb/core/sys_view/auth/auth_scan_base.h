@@ -1,5 +1,7 @@
 #pragma once
 
+#include "sort_helpers.h"
+
 #include <ydb/core/base/auth.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -21,7 +23,22 @@ template <typename TDerived>
 class TAuthScanBase : public TScanActorBase<TDerived> {
     struct TTraversingChildren {
         TNavigate::TEntry Entry;
+        TVector<const TNavigate::TListNodeEntry::TChild*> SortedChildren;
         size_t Index = 0;
+
+        TTraversingChildren() = default;
+
+        TTraversingChildren(TNavigate::TEntry&& entry)
+            : Entry(std::move(entry))
+            , SortedChildren(::Reserve(Entry.ListNodeEntry->Children.size()))
+        {
+            for (const auto& child : Entry.ListNodeEntry->Children) {
+                SortedChildren.push_back(&child);
+            }
+            SortBatch(SortedChildren, [](const auto* left, const auto* right) {
+                return left->Name < right->Name;
+            });
+        }
     };
 
 public:
@@ -96,9 +113,9 @@ protected:
                 return;
             }
 
-            auto& children = last.Entry.ListNodeEntry->Children;
+            auto& children = last.SortedChildren;
             if (last.Index < children.size()) {
-                auto& child = children.at(last.Index++);
+                const auto& child = *children.at(last.Index++);
 
                 if (child.Kind == TSchemeCacheNavigate::KindExtSubdomain || child.Kind == TSchemeCacheNavigate::KindSubdomain) {
                     continue;

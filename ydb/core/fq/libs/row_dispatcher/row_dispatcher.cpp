@@ -488,7 +488,7 @@ void TRowDispatcher::Bootstrap() {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(FQ_ROW_DISPATCHER_PROVIDER));
         ::NMonitoring::TIndexMonPage* actorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
         Monitoring->RegisterActorPage(actorsMonPage, "row_dispatcher", "Row Dispatcher", false,
-            TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+            TlsActivationContext->ActorSystem(), SelfId());
     }
     NodesTracker.Init(SelfId());
 }

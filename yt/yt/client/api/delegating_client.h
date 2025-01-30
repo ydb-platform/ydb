@@ -484,6 +484,12 @@ public:
         const TUpdateOperationParametersOptions& options),
         (operationIdOrAlias, parameters, options))
 
+    DELEGATE_METHOD(TFuture<void>, PatchOperationSpec, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const TPatchOperationSpecOptions& options),
+        (operationIdOrAlias, patches, options))
+
     DELEGATE_METHOD(TFuture<TOperation>, GetOperation, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const TGetOperationOptions& options),
@@ -895,4 +901,3 @@ protected:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

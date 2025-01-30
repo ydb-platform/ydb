@@ -31,27 +31,36 @@ protected:
         Y_ABORT_UNLESS(entry.Status == TNavigate::EStatus::Ok);
         Y_ABORT_UNLESS(CanonizePath(entry.Path) == TBase::TenantName);
         
-        TVector<TCell> cells(::Reserve(Columns.size()));
-
+        TVector<std::pair<const TDomainInfo::TGroup*, const TString*>> memberships;
         for (const auto& group : entry.DomainInfo->Groups) {
             for (const auto& member : group.Members) {
-                for (auto& column : Columns) {
-                    switch (column.Tag) {
-                    case Schema::AuthGroupMembers::GroupSid::ColumnId:
-                        cells.push_back(TCell(group.Sid.data(), group.Sid.size()));
-                        break;
-                    case Schema::AuthGroupMembers::MemberSid::ColumnId:
-                        cells.push_back(TCell(member.data(), member.size()));
-                        break;
-                    default:
-                        cells.emplace_back();
-                    }
-                }
-
-                TArrayRef<const TCell> ref(cells);
-                batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
-                cells.clear();
+                memberships.emplace_back(&group, &member);
             }
+        }
+        SortBatch(memberships, [](const auto& left, const auto& right) {
+            return left.first->Sid < right.first->Sid ||
+                left.first->Sid == right.first->Sid && *left.second < *right.second;
+        });
+
+        TVector<TCell> cells(::Reserve(Columns.size()));
+
+        for (const auto& [group, member] : memberships) {
+            for (auto& column : Columns) {
+                switch (column.Tag) {
+                case Schema::AuthGroupMembers::GroupSid::ColumnId:
+                    cells.push_back(TCell(group->Sid.data(), group->Sid.size()));
+                    break;
+                case Schema::AuthGroupMembers::MemberSid::ColumnId:
+                    cells.push_back(TCell(member->data(), member->size()));
+                    break;
+                default:
+                    cells.emplace_back();
+                }
+            }
+
+            TArrayRef<const TCell> ref(cells);
+            batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
+            cells.clear();
         }
 
         batch.Finished = true;

@@ -57,11 +57,11 @@ public:
         , RequireUserAdministratorAccess(requireUserAdministratorAccess)
     {
         if (applyPathTableRange) {
-            if (auto cell = TBase::GetCellFrom(0)) {
-                PathFrom = cell->AsBuf();
+            if (auto cellsFrom = TBase::TableRange.From.GetCells(); cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
+                PathFrom = cellsFrom[0].AsBuf();
             }
-            if (auto cell = TBase::GetCellTo(0)) {
-                PathTo = cell->AsBuf();
+            if (auto cellsTo = TBase::TableRange.To.GetCells(); cellsTo.size() > 0 && !cellsTo[0].IsNull()) {
+                PathTo = cellsTo[0].AsBuf();
             }
         }
     }

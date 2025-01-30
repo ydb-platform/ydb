@@ -34,7 +34,7 @@ protected:
 
         auto entryPath = CanonizePath(entry.Path);
 
-        if (OneCellStringKeyIsInTableRange(entryPath)) {
+        if (StringKeyIsInTableRange({entryPath})) {
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthOwners::Path::ColumnId:

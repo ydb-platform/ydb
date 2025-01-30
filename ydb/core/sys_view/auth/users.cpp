@@ -89,7 +89,7 @@ protected:
             if (!user.HasName() || !CanAccessUser(user.GetName())) {
                 continue;
             }
-            if (!OneCellStringKeyIsInTableRange(user.GetName())) {
+            if (!StringKeyIsInTableRange({user.GetName()})) {
                 continue;
             }
             users.push_back(&user);

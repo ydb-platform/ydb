@@ -162,25 +162,52 @@ protected:
         SendBatch(std::move(batch));
     }
 
-    std::optional<TCell> GetCellFrom(size_t index) const {
-        return GetCell(TableRange.From.GetCells(), index);
-    }
-
-    std::optional<TCell> GetCellTo(size_t index) const {
-        return GetCell(TableRange.To.GetCells(), index);
-    }
-
-    bool OneCellStringKeyIsInTableRange(const TString value) const {
-        if (auto pathFrom = GetCellFrom(0); pathFrom) {
-            if (int cmp = pathFrom->AsBuf().compare(value); cmp > 0 || cmp == 0 && !TableRange.FromInclusive) {
+    bool StringKeyIsInTableRange(const TVector<TString>& key) const {
+        {
+            bool equalPrefixes = true;
+            for (size_t index : xrange(Min(TableRange.From.GetCells().size(), key.size()))) {
+                if (auto cellFrom = TableRange.From.GetCells()[index]; !cellFrom.IsNull()) {
+                    int cmp = cellFrom.AsBuf().compare(key[index]);
+                    if (cmp < 0) {
+                        equalPrefixes = false;
+                        break;
+                    }
+                    if (cmp > 0) {
+                        return false;
+                    }
+                    // cmp == 0, prefixes are equal, go further
+                } else {
+                    equalPrefixes = false;
+                    break;
+                }
+            }
+            if (equalPrefixes && !TableRange.FromInclusive) {
                 return false;
             }
         }
-        if (auto pathTo = GetCellTo(0); pathTo) {
-            if (int cmp = pathTo->AsBuf().compare(value); cmp < 0 || cmp == 0 && !TableRange.ToInclusive) {
+
+        if (TableRange.To.GetCells().size()) {
+            bool equalPrefixes = true;
+            for (size_t index : xrange(Min(TableRange.To.GetCells().size(), key.size()))) {
+                if (auto cellTo = TableRange.To.GetCells()[index]; !cellTo.IsNull()) {
+                    int cmp = cellTo.AsBuf().compare(key[index]);
+                    if (cmp > 0) {
+                        equalPrefixes = false;
+                        break;
+                    }
+                    if (cmp < 0) {
+                        return false;
+                    }
+                    // cmp == 0, prefixes are equal, go further
+                } else {
+                    break;
+                }
+            }
+            if (equalPrefixes && !TableRange.ToInclusive) {
                 return false;
             }
         }
+
         return true;
     }
 
@@ -329,13 +356,6 @@ private:
                 LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
                     "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
-    }
-
-    std::optional<TCell> GetCell(TConstArrayRef<TCell> cells, size_t index) const {
-        if (index < cells.size() && !cells[index].IsNull()) {
-            return cells[index];
-        }
-        return {};
     }
 
 protected:

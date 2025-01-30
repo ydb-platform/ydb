@@ -33,10 +33,9 @@ protected:
 
         TVector<const TDomainInfo::TGroup*> groups(::Reserve(entry.DomainInfo->Groups.size()));
         for (const auto& group : entry.DomainInfo->Groups) {
-            if (!OneCellStringKeyIsInTableRange(group.Sid)) {
-                continue;
+            if (StringKeyIsInTableRange({group.Sid})) {
+                groups.push_back(&group);
             }
-            groups.push_back(&group);
         }
         SortBatch(groups, [](const auto* left, const auto* right) {
             return left->Sid < right->Sid;

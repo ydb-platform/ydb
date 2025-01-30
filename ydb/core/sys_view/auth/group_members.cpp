@@ -34,7 +34,9 @@ protected:
         TVector<std::pair<const TDomainInfo::TGroup*, const TString*>> memberships;
         for (const auto& group : entry.DomainInfo->Groups) {
             for (const auto& member : group.Members) {
-                memberships.emplace_back(&group, &member);
+                if (StringKeyIsInTableRange({group.Sid, member})) {
+                    memberships.emplace_back(&group, &member);
+                }
             }
         }
         SortBatch(memberships, [](const auto& left, const auto& right) {

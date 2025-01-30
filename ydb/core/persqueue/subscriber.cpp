@@ -5,6 +5,20 @@
 namespace NKikimr {
 namespace NPQ {
 
+TBlobRefCounters::~TBlobRefCounters()
+{
+    for (auto& p : Ptrs) {
+        Y_ABORT_UNLESS(*p > 0);
+        --*p;
+    }
+}
+
+void TBlobRefCounters::Append(std::shared_ptr<size_t> p)
+{
+    ++*p;
+    Ptrs.push_back(std::move(p));
+}
+
 TSubscriberLogic::TSubscriberLogic()
 {}
 
@@ -15,7 +29,7 @@ TMaybe<TReadInfo> TSubscriberLogic::ForgetSubscription(const ui64 cookie)
         return TMaybe<TReadInfo>();
     TReadInfo res(std::move(it->second));
     ReadInfo.erase(it);
-    return res;
+    return std::move(res);
 }
 
 void TSubscriberLogic::AddSubscription(TReadInfo&& info, const ui64 cookie)
@@ -23,7 +37,7 @@ void TSubscriberLogic::AddSubscription(TReadInfo&& info, const ui64 cookie)
     Y_ABORT_UNLESS(WaitingReads.empty() || WaitingReads.back().Offset == info.Offset);
     info.IsSubscription = true;
     WaitingReads.push_back({info.Offset, cookie});
-    bool res = ReadInfo.insert({cookie, std::move(info)}).second;
+    bool res = ReadInfo.emplace(cookie, std::move(info)).second;
     Y_ABORT_UNLESS(res);
 }
 

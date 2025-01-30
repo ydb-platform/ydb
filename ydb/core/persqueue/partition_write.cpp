@@ -388,7 +388,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         PQ_LOG_D("clear head keys");
         for (auto& k : HeadKeys) {
             // The keys are queued. They will be deleted later when the `RefCount' value is reset.
-            PQ_LOG_D("delete head key " << k.Key.ToString());
+            PQ_LOG_D("schedule delete head key " << k.Key.ToString());
             DeletedHeadKeys.push_back(std::move(k));
         }
         HeadKeys.clear();
@@ -401,7 +401,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
                 (HeadKeys.back().Key.GetOffset() == NewHeadKey.Key.GetOffset() && HeadKeys.back().Key.GetPartNo() >= NewHeadKey.Key.GetPartNo()))) {
             auto k = std::move(HeadKeys.back());
             HeadKeys.pop_back();
-            PQ_LOG_D("delete head key " << k.Key.ToString());
+            PQ_LOG_D("schedule delete head key " << k.Key.ToString());
             // The key is placed in the queue. It will be deleted later when the `RefCount` value is reset.
             DeletedHeadKeys.push_back(std::move(k));
         }

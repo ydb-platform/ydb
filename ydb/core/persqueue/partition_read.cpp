@@ -591,8 +591,18 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
 
 
 TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
-        const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset
+        const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
+        TBlobRefCounters* blobRefCounters
 ) {
+    PQ_LOG_D("GetReadRequestFromBody: " <<
+             "startOffset=" << startOffset <<
+             ", partNo=" << partNo <<
+             ", maxCount=" << maxCount <<
+             ", maxSize=" << maxSize <<
+             ", rcount=" << *rcount <<
+             ", rsize=" << *rsize <<
+             ", lastOffset=" << lastOffset);
+
     Y_ABORT_UNLESS(rcount && rsize);
     ui32& count = *rcount;
     ui32& size = *rsize;
@@ -629,6 +639,8 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
             TRequestedBlob reqBlob(it->Key.GetOffset(), it->Key.GetPartNo(), it->Key.GetCount(),
                                    it->Key.GetInternalPartsCount(), it->Size, TString(), it->Key);
             blobs.push_back(reqBlob);
+
+            blobRefCounters->Append(it->RefCount);
 
             ++it;
             if (it == DataKeysBody.end())
@@ -998,9 +1010,11 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     }
 
     TVector<TRequestedBlob> blobs = GetReadRequestFromBody(
-            info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset
+            info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
+            &info.BlobRefCounters
     );
     info.Blobs = blobs;
+    PQ_LOG_D("info.Blobs.size=" << info.Blobs.size());
     ui64 lastOffset = info.Offset + Min(count, info.Count);
 
     PQ_LOG_D("read cookie " << cookie << " added " << info.Blobs.size()
@@ -1015,6 +1029,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         PQ_LOG_D("info.Cached.size=" << info.Cached.size());
         info.CachedOffset = insideHeadOffset;
     }
+    Y_ABORT_UNLESS(info.BlobRefCounters.Size() == info.Blobs.size());
     if (info.Destination != 0) {
         ++userInfo.ActiveReads;
         userInfo.UpdateReadingTimeAndState(EndOffset, ctx.Now());
@@ -1045,7 +1060,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     }
 
     const TString user = info.User;
-    bool res = ReadInfo.insert({cookie, std::move(info)}).second;
+    bool res = ReadInfo.emplace(cookie, std::move(info)).second;
     PQ_LOG_D("Reading cookie " << cookie << ". Send blob request.");
     Y_ABORT_UNLESS(res);
 

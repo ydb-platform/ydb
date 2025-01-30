@@ -453,7 +453,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         }
 
         auto& firstKey = DataKeysBody.front();
-        PQ_LOG_D("firstKey=" << firstKey.Key.ToString());
+        PQ_LOG_D("firstKey=" << firstKey.Key.ToString() << ", BodySize=" << BodySize << ", keySize=" << firstKey.Size);
         if (hasStorageLimit) {
             const auto bodySize = BodySize - firstKey.Size;
             if (bodySize < partConfig.GetStorageLimitBytes()) {
@@ -472,7 +472,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
                        firstKey.Key.ToString().data(), *firstKey.RefCount);
         --*firstKey.RefCount;
 
-        PQ_LOG_D("delete body key " << firstKey.Key.ToString());
+        PQ_LOG_D("schedule delete body key " << firstKey.Key.ToString());
         DeletedHeadKeys.push_back(std::move(DataKeysBody.front()));
         DataKeysBody.pop_front();
 
@@ -505,7 +505,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
                            firstKey.Key.ToString().data(), *firstKey.RefCount);
             --*firstKey.RefCount;
 
-            PQ_LOG_D("delete body key " << firstKey.Key.ToString());
+            PQ_LOG_D("schedule delete body key " << firstKey.Key.ToString());
             DeletedHeadKeys.push_back(std::move(firstKey));
             DataKeysBody.pop_front();
         }
@@ -2102,8 +2102,11 @@ void TPartition::TryAddDeleteHeadKeysToPersistRequest()
         auto& k = DeletedHeadKeys.back();
         if (k.RefCount && *k.RefCount > 0) {
             // the blob has already been repackaged and is still being read
+            PQ_LOG_D("wait for key " << k.Key.ToString());
             break;
         }
+
+        PQ_LOG_D("delete key " << k.Key.ToString());
 
         auto* cmd = PersistRequest->Record.AddCmdDeleteRange();
         auto* range = cmd->MutableRange();

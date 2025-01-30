@@ -595,6 +595,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
         TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
         if (!actualKeys.contains(pair.GetKey())) {
+            PQ_LOG_D("schedule delete key " << k.ToString());
             Partition()->DeletedHeadKeys.emplace_back(k, 0, TInstant(), 0, nullptr);
             continue;
         }

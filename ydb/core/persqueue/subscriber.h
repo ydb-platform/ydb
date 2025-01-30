@@ -18,6 +18,21 @@ struct TReadAnswer {
     THolder<IEventBase> Event;
 };
 
+struct TBlobRefCounters {
+    TBlobRefCounters() = default;
+    TBlobRefCounters(const TBlobRefCounters& rhs);
+    TBlobRefCounters(TBlobRefCounters&& rhs) = default;
+    ~TBlobRefCounters();
+
+    TBlobRefCounters& operator=(const TBlobRefCounters& rhs);
+    TBlobRefCounters& operator=(TBlobRefCounters&& rhs) noexcept;
+
+    void Append(std::shared_ptr<size_t> p);
+    size_t Size() const { return Ptrs.size(); }
+
+    TVector<std::shared_ptr<size_t>> Ptrs;
+};
+
 struct TReadInfo {
     TString User;
     TString ClientDC;
@@ -42,6 +57,8 @@ struct TReadInfo {
     ui64 RealReadOffset = 0;
     ui64 LastOffset = 0;
     bool Error = false;
+
+    TBlobRefCounters BlobRefCounters;
 
     TReadInfo() = delete;
     TReadInfo(

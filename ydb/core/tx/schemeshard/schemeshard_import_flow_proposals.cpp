@@ -12,7 +12,7 @@ bool CreateChangefeedsPropose(THolder<TEvSchemeShard::TEvModifySchemeTransaction
     auto& record = propose->Record;
     const auto& changefeeds = item.Changefeeds;
     
-    for (const auto& changefeed : changefeeds) {
+    for (const auto& [changefeed, topic]: changefeeds) {
         auto& modifyScheme = *record.AddTransaction();
         auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
         Ydb::StatusIds::StatusCode status;
@@ -20,6 +20,7 @@ bool CreateChangefeedsPropose(THolder<TEvSchemeShard::TEvModifySchemeTransaction
         if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
             return false;
         }
+        cdcStreamDescription.
     }
     return true;
 }

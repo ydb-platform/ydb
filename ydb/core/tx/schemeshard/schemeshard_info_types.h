@@ -2837,6 +2837,11 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         S3 = 0,
     };
 
+    struct TChangefeedImportDescriptions {
+        Ydb::Table::ChangefeedDescription ChangefeedDescription;
+        Ydb::Topic::DescribeTopicResult Topic;
+    };
+
     struct TItem {
         enum class ESubState: ui8 {
             AllocateTxId = 0,
@@ -2850,9 +2855,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
-        TVector<Ydb::Table::ChangefeedDescription> Changefeeds;
         NBackup::TMetadata Metadata;
-        TVector<Ydb::Table::ChangefeedDescription> Changefeeds;
+        TVector<TChangefeedImportDescriptions> Changefeeds;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;

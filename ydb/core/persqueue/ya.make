@@ -84,6 +84,7 @@ RECURSE(
     config
     events
     partition_key_range
+    purecalc
     writer
 )
 

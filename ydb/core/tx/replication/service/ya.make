@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/json
 
     ydb/core/fq/libs/row_dispatcher/events
+    ydb/core/persqueue/purecalc
 )
 
 SRCS(

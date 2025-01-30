@@ -20,8 +20,12 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
+#include <yql/essentials/public/udf/udf_string.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
+
+#include <ydb/core/persqueue/purecalc/purecalc.h>
 
 
 #include <library/cpp/json/json_writer.h>
@@ -35,24 +39,173 @@ namespace NKikimr::NReplication::NService {
 
 namespace {
 
-constexpr const char* OFFSET_FIELD_NAME = "_offset";
 constexpr const char* RESULT_COLUMN_NAME = "__ydb_r";
 
+using namespace NYql::NPureCalc;
+using namespace NKikimr::NMiniKQL;
 
-TString GetPartKey(ui64 firstOffset, const TString& writerName) {
-    return Sprintf("part.%ld.%s.jsonl", firstOffset, writerName.c_str());
-}
 
-struct TInputType {
-
+struct TOutputType {
+    // TODO
 };
 
+class TMessageOutputSpec : public NYql::NPureCalc::TOutputSpecBase {
+public:
+    explicit TMessageOutputSpec(const NYT::TNode& schema)
+        : Schema(schema)
+    {}
+
+public:
+    const NYT::TNode& GetSchema() const override {
+        return Schema;
+    }
+
+private:
+    const NYT::TNode Schema;
+};
+
+class TOutputListImpl final: public IStream<TOutputType*> {
+protected:
+    TWorkerHolder<IPullListWorker> WorkerHolder_;
+    //TOutputConverter<TOutputSpec> Converter_;
+
+public:
+    explicit TOutputListImpl(const TMessageOutputSpec& /*outputSpec*/, TWorkerHolder<IPullListWorker> worker)
+        : WorkerHolder_(std::move(worker))
+        //, Converter_(outputSpec, WorkerHolder_.Get())
+    {
+    }
+
+public:
+    TOutputType* Fetch() override {
+        TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
+
+        with_lock(WorkerHolder_->GetScopedAlloc()) {
+            NYql::NUdf::TUnboxedValue value;
+
+            if (!WorkerHolder_->GetOutputIterator().Next(value)) {
+                return nullptr;
+            }
+
+            Cerr << ">>>>> IsBoxed = " << value.IsBoxed() << Endl << Flush;
+            Cerr << ">>>>> Length = " << value.GetDictLength() << Endl << Flush; 
+            auto it = value.GetDictIterator();
+
+
+            for (NUdf::TUnboxedValue key, payload; it.NextPair(key, payload);) {
+               Cerr << ">>>>> key= " << key.IsBoxed() << Endl << Flush; 
+               //Cerr << ">>>>> payload = " << payload.IsSortedDict() << Endl << Flush; 
+            }
+
+            return nullptr; //Converter_.DoConvert(value);
+        }
+    }
+};
+
+
+class TMessagePushRelayImpl : public NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*> {
+public:
+    TMessagePushRelayImpl(const TMessageOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<ui64>> underlying)
+        : Underlying(std::move(underlying))
+        , Worker(worker)
+    {
+        Y_UNUSED(outputSpec);
+    }
+
+public:
+    void OnObject(const NYql::NUdf::TUnboxedValue* value) override {
+        Y_ENSURE(value->GetListLength() == 1, "Unexpected output schema size");
+
+        auto unguard = Unguard(Worker->GetScopedAlloc());
+        Underlying->OnObject(value->GetElement(0).Get<ui64>());
+    }
+
+    void OnFinish() override {
+        auto unguard = Unguard(Worker->GetScopedAlloc());
+        Underlying->OnFinish();
+    }
+
+private:
+    const THolder<NYql::NPureCalc::IConsumer<ui64>> Underlying;
+    NYql::NPureCalc::IWorker* Worker;
+};
+
+            template <typename T>
+            class TVectorStream final: public IStream<T*> {
+            private:
+                size_t I_;
+                TVector<T> Data_;
+
+            public:
+                explicit TVectorStream(TVector<T> data)
+                    : I_(0)
+                    , Data_(std::move(data))
+                {
+                }
+
+            public:
+                T* Fetch() override {
+                    if (I_ >= Data_.size()) {
+                        return nullptr;
+                    } else {
+                        return &Data_[I_++];
+                    }
+                }
+            };
+
+
+THolder<IStream<NYdb::NTopic::NPurecalc::TMessage*>> StreamFromVector(NYdb::NTopic::NPurecalc::TMessage& data) {
+    return MakeHolder<TVectorStream<NYdb::NTopic::NPurecalc::TMessage>>(TVector{data});
+}
+
+} // namespace
+
+} // namespace NKikimr::NReplication::NService
+
+
+template <>
+struct NYql::NPureCalc::TOutputSpecTraits<NKikimr::NReplication::NService::TMessageOutputSpec> {
+    static const constexpr bool IsPartial = false;
+
+//    static const constexpr bool SupportPullStreamMode = false;
+    static const constexpr bool SupportPullListMode = true;
+//    static const constexpr bool SupportPushStreamMode = true;
+
+    using TOutputItemType = NKikimr::NReplication::NService::TOutputType*;
+    using TPullStreamReturnType = THolder<IStream<TOutputItemType>>;
+    using TPullListReturnType = THolder<IStream<TOutputItemType>>;
+
+//    static const constexpr TOutputItemType StreamSentinel = nullptr;
+
+    //static TPullStreamReturnType ConvertPullStreamWorkerToOutputType(const NKikimr::NReplication::NService::TMessageOutputSpec&, TWorkerHolder<IPullStreamWorker>);
+    static TPullListReturnType ConvertPullListWorkerToOutputType(
+        const NKikimr::NReplication::NService::TMessageOutputSpec& outputSpec,
+        TWorkerHolder<IPullListWorker> worker
+    ) {
+        return MakeHolder<NKikimr::NReplication::NService::TOutputListImpl>(outputSpec, std::move(worker));
+    }
+
+    static void SetConsumerToWorker(
+        const NKikimr::NReplication::NService::TMessageOutputSpec& outputSpec,
+        NYql::NPureCalc::IPushStreamWorker* worker,
+        THolder<NYql::NPureCalc::IConsumer<ui64>> consumer
+    ) {
+        worker->SetConsumer(MakeHolder<NKikimr::NReplication::NService::TMessagePushRelayImpl>(outputSpec, worker, std::move(consumer)));
+    }
+};
+
+
+namespace NKikimr::NReplication::NService {
+
+namespace {
+/*
 NYT::TNode CreateTypeNode(const TString& fieldType) {
     return NYT::TNode::CreateList()
         .Add("DataType")
         .Add(fieldType);
 }
-
+*/
+/*
 void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
     node.Add(
         NYT::TNode::CreateList()
@@ -75,18 +228,12 @@ void AddColumn(NYT::TNode& node, const TSchemaColumn& column) {
             .Add(parsedType)
     );
 }
-
-NYT::TNode MakeInputSchema(const TVector<TSchemaColumn>& columns) {
-    auto structMembers = NYT::TNode::CreateList();
-    AddField(structMembers, OFFSET_FIELD_NAME, "Uint64");
-    for (const auto& column : columns) {
-        AddColumn(structMembers, column);
-    }
-    return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
-}
+*/
 
 NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& /*columns*/) {
     auto structMembers = NYT::TNode::CreateList();
+
+    // TODO
 /*    for (const auto& column : columns) {
         AddColumn(structMembers, column);
     }*/
@@ -103,43 +250,16 @@ NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& /*columns*/) {
     return NYT::TNode::CreateList().Add("StructType").Add(std::move(rootMembers));
 }
 
-class TFilterInputSpec : public NYql::NPureCalc::TInputSpecBase {
-public:
-    explicit TFilterInputSpec(const NYT::TNode& schema)
-        : Schemas({schema})
-    {}
-
-public:
-    const TVector<NYT::TNode>& GetSchemas() const override {
-        return Schemas;
-    }
-
-private:
-    const TVector<NYT::TNode> Schemas;
-};
-
-class TFilterOutputSpec : public NYql::NPureCalc::TOutputSpecBase {
-public:
-    explicit TFilterOutputSpec(const NYT::TNode& schema)
-        : Schema(schema)
-    {}
-
-public:
-    const NYT::TNode& GetSchema() const override {
-        return Schema;
-    }
-
-private:
-    const NYT::TNode Schema;
-};
-
 
 class TProgramHolder : public NFq::IProgramHolder {
 public:
     using TPtr = TIntrusivePtr<TProgramHolder>;
 
 public:
-    TProgramHolder(const TVector<TSchemaColumn>& tableColumns, const TString& sql)
+    TProgramHolder(
+        const TVector<TSchemaColumn>& tableColumns,
+        const TString& sql
+    )
         : TopicColumns()
         , TableColumns(tableColumns)
         , Sql(sql)
@@ -149,12 +269,17 @@ public:
     void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) override {
         // Program should be stateless because input values
         // allocated on another allocator and should be released
-        Program = programFactory->MakePushStreamProgram(
-            TFilterInputSpec(MakeInputSchema(TopicColumns)),
-            TFilterOutputSpec(MakeOutputSchema(TableColumns)),
+        Program = programFactory->MakePullListProgram(
+            NYdb::NTopic::NPurecalc::TMessageInputSpec(),
+            TMessageOutputSpec(MakeOutputSchema(TableColumns)),
             Sql,
             NYql::NPureCalc::ETranslationMode::SQL
         );
+
+    }
+
+    NYql::NPureCalc::TPullListProgram<NYdb::NTopic::NPurecalc::TMessageInputSpec, TMessageOutputSpec>* GetProgram() {
+        return Program.Get();
     }
 
 private:
@@ -163,7 +288,7 @@ private:
     const TVector<TSchemaColumn> TableColumns;
     const TString Sql;
 
-    THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
+    THolder<NYql::NPureCalc::TPullListProgram<NYdb::NTopic::NPurecalc::TMessageInputSpec, TMessageOutputSpec>> Program;
 };
 
 
@@ -191,11 +316,10 @@ private:
 
     STFUNC(StateGetTableScheme) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NFq::TEvRowDispatcher::TEvPurecalcCompileResponse, Handle);
-
-            hFunc(TEvWorker::TEvHandshake, Handle);
-            hFunc(TEvWorker::TEvData, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+
+            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvData, HoldHandle);
             sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -320,9 +444,8 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NFq::TEvRowDispatcher::TEvPurecalcCompileResponse, Handle);
 
-            hFunc(TEvWorker::TEvHandshake, Handle);
-            hFunc(TEvWorker::TEvData, Handle);
-            //hFunc(TEvExternalStorage::TEvPutObjectResponse, Handle);
+            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvData, HoldHandle);
             sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -337,12 +460,16 @@ private:
     }
 
     void Handle(NFq::TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) {
+        const auto& result = ev->Get();
+
+        LOG_D("Handle TEvPurecalcCompileResponse"
+            << ": result# " << (result ? result->Issues.ToOneLineString() : "nullptr"));
+
         if (ev->Cookie != InFlightCompilationId) {
             LOG_D("Outdated compiler response ignored for id " << ev->Cookie << ", current compile id " << InFlightCompilationId);
             return;
         }
 
-        const auto& result = ev->Get();
         if (!result->ProgramHolder) {
             return LogCritAndLeave(TStringBuilder() << "Compilation failed: " << result->Issues.ToOneLineString());
         }
@@ -351,6 +478,80 @@ private:
         Y_ENSURE(result, "Unexpected compile response");
 
         ProgramHolder = TIntrusivePtr<TProgramHolder>(r);
+
+        StartWork();
+    }
+
+private:
+    void StartWork() {
+        Become(&TThis::StateWork);
+
+        if (HandshakeEv) {
+            Handle(HandshakeEv);
+            HandshakeEv.Reset();
+        }
+
+        if (DataEv) {
+            Handle(DataEv);
+            DataEv.Reset();
+        }
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvWorker::TEvHandshake, Handle);
+            hFunc(TEvWorker::TEvData, Handle);
+            sFunc(TEvents::TEvWakeup, SendS3Request);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+    void HoldHandle(TEvWorker::TEvHandshake::TPtr& ev) {
+        Y_ABORT_UNLESS(!HandshakeEv);
+        HandshakeEv = ev;
+    }
+
+    void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
+        Worker = ev->Sender;
+        LOG_D("Handshake"
+            << ": worker# " << Worker);
+
+        Send(Worker, new TEvWorker::TEvHandshake());
+
+        //S3Client = RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+    }
+
+    void HoldHandle(TEvWorker::TEvData::TPtr& ev) {
+        Y_ABORT_UNLESS(!DataEv);
+        DataEv = ev;
+    }
+
+    void Handle(TEvWorker::TEvData::TPtr& ev) {
+        LOG_D("Handle TEvData " << ev->Get()->ToString());
+
+        if (!ev->Get()->Records) {
+            Finished = true;
+            //WriteIdentity();
+            return;
+        }
+
+        for (auto& message : ev->Get()->Records) {
+            Cerr << ">>>>> message.Data = " << message.Data << Endl << Flush;
+            NYdb::NTopic::NPurecalc::TMessage input;
+            input.Data = NYql::NUdf::TUnboxedValuePod(); //MakeString(message.Data);
+            input.Offset = NYql::NUdf::TUnboxedValuePod(message.Offset);
+
+
+            auto result = ProgramHolder->GetProgram()->Apply(StreamFromVector(input));
+            while (auto* m = result->Fetch()) {
+                Y_UNUSED(m);
+
+                //Cout << "url = " << message->GetUrl() << Endl;
+                //Cout << "hits = " << message->GetHits() << Endl;
+            }
+        }
+
+        // TODO Send to table
     }
 
 
@@ -409,40 +610,11 @@ private:
         //Send(S3Client, new TEvExternalStorage::TEvPutObjectRequest(RequestInFlight->Request, TString(RequestInFlight->Buffer)));
     }
 
-    void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
-        Worker = ev->Sender;
-        LOG_D("Handshake"
-            << ": worker# " << Worker);
-
-        //S3Client = RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
-    }
-
 
     void PassAway() override {
         TActor::PassAway();
     }
 
-    void Handle(TEvWorker::TEvData::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
-
-        if (!ev->Get()->Records) {
-            Finished = true;
-            //WriteIdentity();
-            return;
-        }
-
-        const TString key = GetPartKey(ev->Get()->Records[0].Offset, WriterName);
-
-
-        TStringBuilder buffer;
-
-        for (auto& rec : ev->Get()->Records) {
-            buffer << rec.Data << '\n';
-        }
-
-        //RequestInFlight = std::make_unique<TS3Request>(std::move(request), std::move(buffer));
-        //SendS3Request();
-    }
 
 /*
     void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
@@ -484,16 +656,6 @@ public:
         , WriterName(writerName)
     {}
 
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvWorker::TEvHandshake, Handle);
-            hFunc(TEvWorker::TEvData, Handle);
-            //hFunc(TEvExternalStorage::TEvPutObjectResponse, Handle);
-            sFunc(TEvents::TEvWakeup, SendS3Request);
-            sFunc(TEvents::TEvPoison, PassAway);
-        }
-    }
-
 private:
     const NKikimrReplication::TReplicationConfig Config;
     const TPathId TablePathId;
@@ -522,6 +684,9 @@ private:
     //const ui32 Retries = 3;
     ui32 Attempt = 0;
 
+    TEvWorker::TEvHandshake::TPtr HandshakeEv;
+    TEvWorker::TEvData::TPtr DataEv;
+
     TDuration Delay = TDuration::Minutes(1);
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 }; // TS3Writer
@@ -533,3 +698,4 @@ IActor* CreateTransferWriter(const NKikimrReplication::TReplicationConfig& confi
 }
 
 }
+

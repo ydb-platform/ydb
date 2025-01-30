@@ -185,11 +185,14 @@ void TTieringActualizer::DoExtractTasks(
                     portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
                 features.SetTargetTierName(info->GetTargetTierName());
 
+                const TRWAddress address = features.GetRWAddress();
                 if (!tasksContext.AddPortion(portion, std::move(features), info->GetLateness())) {
-                    limitEnriched = true;
-                    break;
+                    if (!tasksContext.IsRWAddressAvailable(address)) {
+                        limitEnriched = true;
+                        break;
+                    }
                 } else {
-                    portionIds.emplace(portion->GetPortionId());
+                    AFL_VERIFY(portionIds.emplace(portion->GetPortionId()).second);
                 }
             }
             if (limitEnriched) {

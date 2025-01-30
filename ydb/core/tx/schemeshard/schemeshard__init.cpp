@@ -4471,8 +4471,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         for (ui64 i = 0; i < count; ++i) {
                             Ydb::Table::ChangefeedDescription changefeed;
                             Ydb::Topic::DescribeTopicResult topic;
-                            Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(changefeed, rowset.GetValue<Schema::ImportItems::Changefeeds>())[i]);
-                            Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(topic, rowset.GetValue<Schema::ImportItems::Topics>())[i]);
+                            Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(changefeed, rowset.GetValue<Schema::ImportItems::Changefeeds>()[i] ));
+                            Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(topic, rowset.GetValue<Schema::ImportItems::Topics>()[i] ));
                             changefeeds.emplace_back(changefeed, topic);
                         }
                         item.Changefeeds = std::move(changefeeds);

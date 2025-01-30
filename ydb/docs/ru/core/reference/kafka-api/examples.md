@@ -1,4 +1,5 @@
 # Примеры чтения и записи по Kafka API
+<!-- markdownlint-disable blanks-around-fences -->
 
 В этой статье приведены примеры чтения и записи в [топики](../../concepts/topic.md) с использованием Kafka API.
 

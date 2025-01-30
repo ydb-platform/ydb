@@ -2689,18 +2689,6 @@ void FillAsyncAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqAsyncSt
     if (asyncAggr.HasSplits()) {
         FillAggrStat(node, asyncAggr.GetSplits(), "Splits");
     }
-    if (asyncAggr.HasFilteredBytes()) {
-        FillAggrStat(node, asyncAggr.GetFilteredBytes(), "FilteredBytes");
-    }
-    if (asyncAggr.HasFilteredRows()) {
-        FillAggrStat(node, asyncAggr.GetFilteredRows(), "FilteredRows");
-    }
-    if (asyncAggr.HasQueuedBytes()) {
-        FillAggrStat(node, asyncAggr.GetQueuedBytes(), "QueuedBytes");
-    }
-    if (asyncAggr.HasQueuedRows()) {
-        FillAggrStat(node, asyncAggr.GetQueuedRows(), "QueuedRows");
-    }
 
     if (asyncAggr.HasFirstMessageMs()) {
         FillAggrStat(node, asyncAggr.GetFirstMessageMs(), "FirstMessageMs");
@@ -2796,10 +2784,6 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         SetNonZero(node, "IngressRows", taskStats.GetIngressRows());
         SetNonZero(node, "IngressBytes", taskStats.GetIngressBytes());
         SetNonZero(node, "IngressDecompressedBytes", taskStats.GetIngressDecompressedBytes());
-        SetNonZero(node, "IngressFilteredBytes", taskStats.GetIngressFilteredBytes());
-        SetNonZero(node, "IngressFilteredRows", taskStats.GetIngressFilteredRows());
-        SetNonZero(node, "IngressQueuedBytes", taskStats.GetIngressQueuedBytes());
-        SetNonZero(node, "IngressQueuedRows", taskStats.GetIngressQueuedRows());
         SetNonZero(node, "EgressRows", taskStats.GetEgressRows());
         SetNonZero(node, "EgressBytes", taskStats.GetEgressBytes());
 
@@ -2903,18 +2887,6 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 }
                 if ((*stat)->HasIngressDecompressedBytes()) {
                     FillAggrStat(stats, (*stat)->GetIngressDecompressedBytes(), "IngressDecompressedBytes");
-                }
-                if ((*stat)->HasIngressFilteredBytes()) {
-                    FillAggrStat(stats, (*stat)->GetIngressFilteredBytes(), "IngressFilteredBytes");
-                }
-                if ((*stat)->HasIngressFilteredRows()) {
-                    FillAggrStat(stats, (*stat)->GetIngressFilteredRows(), "IngressFilteredRows");
-                }
-                if ((*stat)->HasIngressQueuedBytes()) {
-                    FillAggrStat(stats, (*stat)->GetIngressQueuedBytes(), "IngressQueuedBytes");
-                }
-                if ((*stat)->HasIngressQueuedRows()) {
-                    FillAggrStat(stats, (*stat)->GetIngressQueuedRows(), "IngressQueuedRows");
                 }
                 if ((*stat)->HasEgressRows()) {
                     FillAggrStat(stats, (*stat)->GetEgressRows(), "EgressRows");

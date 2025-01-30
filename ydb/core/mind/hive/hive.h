@@ -150,7 +150,7 @@ struct TCompleteNotifications {
             if (duration) {
                 ctx.ExecutorThread.Schedule(duration, notification.Release());
             } else {
-                ctx.ExecutorThread.Send(notification.Release());
+                ctx.Send(notification.Release());
             }
         }
         Notifications.clear();

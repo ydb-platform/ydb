@@ -25,7 +25,7 @@ class TLongTimer : public TActor<TLongTimer> {
         const TMonotonic now = ctx.Monotonic();
         if (SignalTime <= now) {
             if (!Cookie.Get() || Cookie.Detach())
-                ctx.ExecutorThread.Send(Ev);
+                ctx.Send(Ev);
             return Die(ctx);
         }
 

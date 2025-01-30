@@ -1093,7 +1093,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
                 ev->Rewrite(TEvInterconnect::EvForward, sessionId);
             }
 
-            ctx.ExecutorThread.Send(ev);
+            ctx.Send(ev);
         }
 
         void Handle(TEvents::TEvPing::TPtr &ev, const TActorContext &ctx) {

@@ -176,7 +176,7 @@ namespace NTxMediator {
 
             if (bucketIdx < Buckets.size()) {
                 ev->Rewrite(ev->GetTypeRewrite(), Buckets[bucketIdx].ActiveActor);
-                ctx.ExecutorThread.Send(ev.Release());
+                ctx.Send(ev.Release());
             }
         }
 
@@ -190,7 +190,7 @@ namespace NTxMediator {
 
             if (bucketIdx < Buckets.size()) {
                 ev->Rewrite(ev->GetTypeRewrite(), Buckets[bucketIdx].ActiveActor);
-                ctx.ExecutorThread.Send(ev.Release());
+                ctx.Send(ev.Release());
             }
         }
 

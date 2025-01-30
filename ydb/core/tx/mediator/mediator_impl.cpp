@@ -308,7 +308,7 @@ void TTxMediator::HandleForwardWatch(TAutoPtr<IEventHandle> &ev, const TActorCon
         << " FORWARD Watch from# " << ev->Sender << " to# " << ExecQueue.ToString() << " ExecQueue");
     // Preserve Recipient (server) and InterconnectSession
     ev->Rewrite(ev->GetTypeRewrite(), ExecQueue);
-    ctx.ExecutorThread.Send(ev.Release());
+    ctx.Send(ev.Release());
 }
 
 void TTxMediator::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {

@@ -1952,7 +1952,7 @@ namespace NActors {
                 delete Context->Queue->Pop();
             }
             auto ctx(ActorContext());
-            ctx.ExecutorThread.Send(IEventHandle::Forward(ev, originalSender));
+            ctx.Send(IEventHandle::Forward(ev, originalSender));
             if (!IsSync && Context->Queue->Head()) {
                 SendHead(ctx);
             }
@@ -1961,11 +1961,11 @@ namespace NActors {
     private:
         void SendHead(const TActorContext& ctx) {
             if (!IsSync) {
-                ctx.ExecutorThread.Send(GetForwardedEvent().Release());
+                ctx.Send(GetForwardedEvent().Release());
             } else {
                 while (Context->Queue->Head()) {
                     HasReply = false;
-                    ctx.ExecutorThread.Send(GetForwardedEvent().Release());
+                    ctx.Send(GetForwardedEvent().Release());
                     int count = 100;
                     while (!HasReply && count > 0) {
                         try {

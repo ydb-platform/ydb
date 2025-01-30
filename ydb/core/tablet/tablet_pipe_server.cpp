@@ -94,7 +94,7 @@ namespace NTabletPipe {
                     ev->OriginScopeId,
                     std::move(ev->TraceId));
             result->Rewrite(record.GetType(), RecipientId);
-            ctx.ExecutorThread.Send(result.release());
+            ctx.Send(result.release());
 
             if (ui64 seqNo = record.GetSeqNo()) {
                 LOG_TRACE_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
@@ -126,7 +126,7 @@ namespace NTabletPipe {
             }
 
             result->Rewrite(msg->Type, RecipientId);
-            ctx.ExecutorThread.Send(result.Release());
+            ctx.Send(result.Release());
 
             if (ui64 seqNo = msg->GetSeqNo()) {
                 LOG_TRACE_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
@@ -154,7 +154,7 @@ namespace NTabletPipe {
             }
 
             result->Rewrite(ev->Type, RecipientId);
-            ctx.ExecutorThread.Send(result);
+            ctx.Send(result);
         }
 
         void Handle(TEvTabletPipe::TEvShutdown::TPtr& ev, const TActorContext& ctx) {
@@ -252,7 +252,7 @@ namespace NTabletPipe {
                 ev->Rewrite(TEvInterconnect::EvForward, InterconnectSession);
             }
 
-            ctx.ExecutorThread.Send(ev);
+            ctx.Send(ev);
         }
 
     private:

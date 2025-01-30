@@ -38,17 +38,17 @@ public:
 
     template<typename TPtr>
     void HandleFw(TPtr& ev, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(new IEventHandle(VDiskId, ctx.SelfID, ev->Release().Release(), 0, ev->Cookie));
+        ctx.Send(new IEventHandle(VDiskId, ctx.SelfID, ev->Release().Release(), 0, ev->Cookie));
     }
 
     template<typename TPtr>
     void HandleBw(TPtr& ev, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(ev->Forward(QueueId));
+        ctx.Send(ev->Forward(QueueId));
     }
 
     template<typename TPtr>
     void HandleForward(TPtr& ev, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(ev->Forward(VDiskId));
+        ctx.Send(ev->Forward(VDiskId));
     }
 
     STFUNC(StateFunc) {

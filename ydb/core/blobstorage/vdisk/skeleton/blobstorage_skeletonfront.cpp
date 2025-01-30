@@ -234,7 +234,7 @@ namespace NKikimr {
                          ui64 internalMessageId) {
                 if (!Queue->Head() && CanSendToSkeleton(cost)) {
                     // send to Skeleton for further processing
-                    ctx.ExecutorThread.Send(converted.release());
+                    ctx.Send(converted.release());
                     ++InFlightCount;
                     InFlightCost += cost;
                     InFlightBytes += recByteSize;
@@ -292,7 +292,7 @@ namespace NKikimr {
                             ++Deadlines;
                             front.GetExtQueue(rec->ExtQueueId).DeadlineHappened(ctx, rec, now, front);
                         } else {
-                            ctx.ExecutorThread.Send(rec->Ev.release());
+                            ctx.Send(rec->Ev.release());
 
                             ++InFlightCount;
                             InFlightCost += cost;

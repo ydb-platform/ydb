@@ -180,7 +180,7 @@ public:
 
     void Handle(TEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) {
         if (!FirstUpdateSent) {
-            ctx.ExecutorThread.Send(
+            ctx.Send(
                 new NActors::IEventHandle(
                     SelfId(),
                     ev->Sender,

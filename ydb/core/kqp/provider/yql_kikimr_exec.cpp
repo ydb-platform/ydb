@@ -112,7 +112,10 @@ namespace {
             } else if (name == "nullPassword") {
                 // Default value
             } else if (name == "passwordEncrypted") {
-                createUserSettings.PasswordEncrypted = true;
+                // PasswordEncrypted is never used
+            } else if (name == "hash") {
+                createUserSettings.IsHashedPassword = true;
+                createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 createUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
@@ -133,7 +136,10 @@ namespace {
             } else if (name == "nullPassword") {
                 alterUserSettings.Password = TString();
             } else if (name == "passwordEncrypted") {
-                alterUserSettings.PasswordEncrypted = true;
+                // PasswordEncrypted is never used
+            } else if (name == "hash") {
+                alterUserSettings.IsHashedPassword = true;
+                alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 alterUserSettings.CanLogin = true;
             } else if (name == "noLogin") {

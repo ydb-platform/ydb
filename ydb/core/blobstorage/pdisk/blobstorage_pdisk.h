@@ -1584,7 +1584,6 @@ struct TEvShredPDiskResult : TEventLocal<TEvShredPDiskResult, TEvBlobStorage::Ev
 // PDisk sends this message to VDisk to ask for full compaction before shredding
 struct TEvPreShredCompactVDisk : TEventLocal<TEvPreShredCompactVDisk, TEvBlobStorage::EvPreShredCompactVDisk> {
     ui64 ShredGeneration;
-    std::vector<TChunkIdx> ChunksToShred;
 
     TEvPreShredCompactVDisk(ui64 shredGeneration)
         : ShredGeneration(shredGeneration)

@@ -2659,8 +2659,17 @@ namespace NKikimr {
         void HandleShred(NPDisk::TEvPreShredCompactVDisk::TPtr ev) {
             STLOG(PRI_DEBUG, BS_SHRED, BSSV01, VCtx->VDiskLogPrefix << "processing TEvPreShredCompactVDisk",
                 (ShredGeneration, ev->Get()->ShredGeneration));
-            Send(ev->Sender, new NPDisk::TEvPreShredCompactVDiskResult(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
-                ev->Get()->ShredGeneration, NKikimrProto::OK, TString()), 0, ev->Cookie);
+
+            VDiskCompactionState->Setup(TActivationContext::AsActorContext(), LoggedRecsVault.GetLastLsnInFlight(), {
+                .CompactLogoBlobs = true,
+                .CompactBlocks = false,
+                .CompactBarriers = false,
+                .Mode = TEvCompactVDisk::EMode::FULL,
+                .ClientId = ev->Sender,
+                .ClientCookie = ev->Cookie,
+                .Reply = std::make_unique<NPDisk::TEvPreShredCompactVDiskResult>(PDiskCtx->Dsk->Owner,
+                    PDiskCtx->Dsk->OwnerRound, ev->Get()->ShredGeneration, NKikimrProto::OK, TString()),
+            });
         }
 
         void HandleShred(NPDisk::TEvShredVDisk::TPtr ev) {

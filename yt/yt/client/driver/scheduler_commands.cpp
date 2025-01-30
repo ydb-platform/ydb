@@ -901,6 +901,24 @@ void TUpdateOperationParametersCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TPatchOperationSpecCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("patches", &TThis::Patches);
+}
+
+void TPatchOperationSpecCommand::DoExecute(ICommandContextPtr context)
+{
+    auto asyncResult = context->GetClient()->PatchOperationSpec(
+        OperationIdOrAlias,
+        Patches,
+        Options);
+
+    WaitFor(asyncResult)
+        .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TGetOperationCommand::Register(TRegistrar registrar)
 {
     registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(

@@ -37,6 +37,7 @@ public:
                     request.User = createUser.GetUser();
                     request.Password = createUser.GetPassword();
                     request.CanLogin = createUser.GetCanLogin();
+                    request.IsHashedPassword = createUser.GetIsHashedPassword();
 
                     auto response = context.SS->LoginProvider.CreateUser(request);
 
@@ -73,6 +74,7 @@ public:
 
                     if (modifyUser.HasPassword()) {
                         request.Password = modifyUser.GetPassword();
+                        request.IsHashedPassword = modifyUser.GetIsHashedPassword();
                     }
 
                     if (modifyUser.HasCanLogin()) {
@@ -182,18 +184,10 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kRemoveGroup: {
                     const auto& removeGroup = alterLogin.GetRemoveGroup();
-                    const TString& group = removeGroup.GetGroup();
-                    auto response = context.SS->LoginProvider.RemoveGroup({
-                        .Group = group,
-                        .MissingOk = removeGroup.GetMissingOk()
-                    });
+                    auto response = RemoveGroup(context, removeGroup, db);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
-                        db.Table<Schema::LoginSids>().Key(group).Delete();
-                        for (const TString& parent : response.TouchedGroups) {
-                            db.Table<Schema::LoginSidMembers>().Key(parent, group).Delete();
-                        }
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                     }
                     break;
@@ -249,20 +243,8 @@ public:
             return {.Error = "User not found"};
         }
 
-        auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
-        for (auto pathId : subTree) {
-            TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-            if (path->Owner == user) {
-                auto pathStr = TPath::Init(pathId, context.SS).PathString();
-                return {.Error = TStringBuilder() <<
-                    "User " << user << " owns " << pathStr << " and can't be removed"};
-            }
-            NACLib::TACL acl(path->ACL);
-            if (acl.HasAccess(user)) {
-                auto pathStr = TPath::Init(pathId, context.SS).PathString();
-                return {.Error = TStringBuilder() << 
-                    "User " << user << " has an ACL record on " << pathStr << " and can't be removed"};
-            }
+        if (auto canRemove = CanRemoveSid(context, user, "User"); canRemove.Error) {
+            return canRemove;
         }
 
         auto removeUserResponse = context.SS->LoginProvider.RemoveUser(user);
@@ -273,6 +255,53 @@ public:
         db.Table<Schema::LoginSids>().Key(user).Delete();
         for (const TString& group : removeUserResponse.TouchedGroups) {
             db.Table<Schema::LoginSidMembers>().Key(group, user).Delete();
+        }
+
+        return {}; // success
+    }
+
+    NLogin::TLoginProvider::TBasicResponse RemoveGroup(TOperationContext& context, const NKikimrSchemeOp::TLoginRemoveGroup& removeGroup, NIceDb::TNiceDb& db) {
+        const TString& group = removeGroup.GetGroup();
+
+        if (!context.SS->LoginProvider.CheckGroupExists(group)) {
+            if (removeGroup.GetMissingOk()) {
+                return {}; // success
+            }
+            return {.Error = "Group not found"};
+        }
+
+        if (auto canRemove = CanRemoveSid(context, group, "Group"); canRemove.Error) {
+            return canRemove;
+        }
+
+        auto removeGroupResponse = context.SS->LoginProvider.RemoveGroup(group);
+        if (removeGroupResponse.Error) {
+            return removeGroupResponse;
+        }
+
+        db.Table<Schema::LoginSids>().Key(group).Delete();
+        for (const TString& parent : removeGroupResponse.TouchedGroups) {
+            db.Table<Schema::LoginSidMembers>().Key(parent, group).Delete();
+        }
+
+        return {}; // success
+    }
+
+    NLogin::TLoginProvider::TBasicResponse CanRemoveSid(TOperationContext& context, const TString sid, const TString& sidType) {
+        auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
+        for (auto pathId : subTree) {
+            TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+            if (path->Owner == sid) {
+                auto pathStr = TPath::Init(pathId, context.SS).PathString();
+                return {.Error = TStringBuilder() <<
+                    sidType << " " << sid << " owns " << pathStr << " and can't be removed"};
+            }
+            NACLib::TACL acl(path->ACL);
+            if (acl.HasAccess(sid)) {
+                auto pathStr = TPath::Init(pathId, context.SS).PathString();
+                return {.Error = TStringBuilder() << 
+                    sidType << " " << sid << " has an ACL record on " << pathStr << " and can't be removed"};
+            }
         }
 
         return {}; // success

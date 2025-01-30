@@ -39,15 +39,17 @@ class YdbCliHelper:
             return [cli] + args
 
     class QueryPlan:
-        def __init__(self, plan: dict | None = None, table: str | None = None, ast: str | None = None, svg: str | None = None) -> None:
-            self.plan = plan
-            self.table = table
-            self.ast = ast
-            self.svg = svg
+        def __init__(self) -> None:
+            self.plan: dict = None
+            self.table: str = None
+            self.ast: str = None
+            self.svg: str = None
+            self.stats: str = None
 
     class Iteration:
         def __init__(self):
-            self.plan: Optional[YdbCliHelper.QueryPlan] = None
+            self.final_plan: Optional[YdbCliHelper.QueryPlan] = None
+            self.in_progress_plan: Optional[YdbCliHelper.QueryPlan] = None
             self.error_message: Optional[str] = None
             self.time: Optional[float] = None
 
@@ -183,13 +185,17 @@ class YdbCliHelper:
             if (os.path.exists(f'{pp}.svg')):
                 with open(f'{pp}.svg') as f:
                     result.svg = f.read()
+            if (os.path.exists(f'{pp}.stats')):
+                with open(f'{pp}.stats') as f:
+                    result.stats = f.read()
             return result
 
         def _load_plans(self) -> None:
             for i in range(self.iterations):
                 self._init_iter(i)
-                self.result.iterations[i].plan = self._load_plan(str(i))
-            self.result.explain.plan = self._load_plan('explain')
+                self.result.iterations[i].final_plan = self._load_plan(str(i))
+                self.result.iterations[i].in_progress_plan = self._load_plan(f'{i}.in_progress')
+            self.result.explain.final_plan = self._load_plan('explain')
 
         def _load_stats(self):
             if not os.path.exists(self._json_path):

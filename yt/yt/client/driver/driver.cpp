@@ -259,6 +259,7 @@ public:
         REGISTER    (TResumeOperationCommand,              "resume_op",                       Null,       Null,       true,  false, ApiVersion3);
         REGISTER    (TCompleteOperationCommand,            "complete_op",                     Null,       Null,       true,  false, ApiVersion3);
         REGISTER    (TUpdateOperationParametersCommand,    "update_op_parameters",            Null,       Null,       true,  false, ApiVersion3);
+        REGISTER    (TPatchOperationSpecCommand,           "patch_op_spec",                   Null,       Null,       true,  false, ApiVersion3);
 
         REGISTER    (TStartOperationCommand,               "start_operation",                 Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbortOperationCommand,               "abort_operation",                 Null,       Structured, true,  false, ApiVersion4);
@@ -266,6 +267,7 @@ public:
         REGISTER    (TResumeOperationCommand,              "resume_operation",                Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TCompleteOperationCommand,            "complete_operation",              Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TUpdateOperationParametersCommand,    "update_operation_parameters",     Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TPatchOperationSpecCommand,           "patch_operation_spec",            Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER_ALL(TParseYPathCommand,                   "parse_ypath",                     Null,       Structured, false, false);
 

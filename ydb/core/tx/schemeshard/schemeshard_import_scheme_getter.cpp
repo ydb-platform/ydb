@@ -10,6 +10,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -32,14 +33,22 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/metadata.json";
     }
 
-    static TString SchemeKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx) {
+    static TString SchemeKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx, TStringBuf filename) {
         Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
-        return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/scheme.pb";
+        return TStringBuilder() << settings.items(itemIdx).source_prefix() << '/' << filename;
     }
 
     static TString PermissionsKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
         return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/permissions.pb";
+    }
+
+    static bool IsView(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateView().FileName);
+    }
+
+    static bool NoObjectFound(Aws::S3::S3Errors errorType) {
+        return errorType == S3Errors::RESOURCE_NOT_FOUND || errorType == S3Errors::NO_SUCH_KEY;
     }
 
     void HeadObject(const TString& key) {
@@ -71,6 +80,13 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             << ": self# " << SelfId()
             << ", result# " << result);
 
+        if (!IsView(SchemeKey) && NoObjectFound(result.GetError().GetErrorType())) {
+            // try search for a view
+            SchemeKey = SchemeKeyFromSettings(ImportInfo->Settings, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
+            HeadObject(SchemeKey);
+            return;
+        }
+
         if (!CheckResult(result, "HeadObject")) {
             return;
         }
@@ -86,8 +102,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             << ": self# " << SelfId()
             << ", result# " << result);
 
-        if (result.GetError().GetErrorType() == S3Errors::RESOURCE_NOT_FOUND
-            || result.GetError().GetErrorType() == S3Errors::NO_SUCH_KEY) {
+        if (NoObjectFound(result.GetError().GetErrorType())) {
             Reply(); // permissions are optional
             return;
         } else if (!CheckResult(result, "HeadObject")) {
@@ -176,9 +191,13 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
         LOG_T("Trying to parse scheme"
             << ": self# " << SelfId()
+            << ", itemIdx# " << ItemIdx
+            << ", schemeKey# " << SchemeKey
             << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
 
-        if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &item.Scheme)) {
+        if (IsView(SchemeKey)) {
+            item.CreationQuery = msg.Body;
+        } else if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &item.Scheme)) {
             return Reply(false, "Cannot parse scheme");
         }
 
@@ -230,7 +249,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             StartValidatingChecksum(PermissionsKey, msg.Body, nextStep);
         } else {
             nextStep();
-        }        
+        }
     }
 
     void HandleChecksum(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
@@ -351,7 +370,7 @@ public:
         , ImportInfo(importInfo)
         , ItemIdx(itemIdx)
         , MetadataKey(MetadataKeyFromSettings(importInfo->Settings, itemIdx))
-        , SchemeKey(SchemeKeyFromSettings(importInfo->Settings, itemIdx))
+        , SchemeKey(SchemeKeyFromSettings(importInfo->Settings, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(importInfo->Settings, itemIdx))
         , Retries(importInfo->Settings.number_of_retries())
         , NeedDownloadPermissions(!importInfo->Settings.no_acl())
@@ -411,7 +430,7 @@ private:
     const ui32 ItemIdx;
 
     const TString MetadataKey;
-    const TString SchemeKey;
+    TString SchemeKey;
     const TString PermissionsKey;
 
     const ui32 Retries;

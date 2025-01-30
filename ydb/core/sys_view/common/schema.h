@@ -667,7 +667,7 @@ struct Schema : NIceDb::Schema {
         struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
         struct Sid: Column<2, NScheme::NTypeIds::Utf8> {};
 
-        using TKey = TableKey<Path, Sid>;
+        using TKey = TableKey<Path>;
         using TColumns = TableColumns<
             Path,
             Sid

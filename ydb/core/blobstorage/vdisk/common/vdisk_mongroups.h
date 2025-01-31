@@ -676,6 +676,16 @@ public:                                                                         
             COUNTER_DEF(BlobsFixed);
         };
 
+        class TMalfunctionGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TMalfunctionGroup)
+            {
+                COUNTER_INIT(DroppingStuckInternalQueue, false);
+            }
+
+            COUNTER_DEF(DroppingStuckInternalQueue);
+        };
+
     } // NMonGroup
 } // NKikimr
 

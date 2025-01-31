@@ -278,7 +278,6 @@ namespace NKikimr {
                     if (CanSendToSkeleton(cost) || forceError) {
                         ui32 recByteSize = rec->ByteSize;
                         Y_DEBUG_ABORT_UNLESS(DelayedCount > 0 && DelayedBytes >= recByteSize);
-                        Cerr << "PROCESS MSG " << cost << Endl;
 
                         --DelayedCount;
                         DelayedBytes -= recByteSize;
@@ -451,6 +450,7 @@ namespace NKikimr {
                 *SkeletonFrontCostProcessed = 0;
 
                 Msgs.clear();
+                UpdateState();
             }
 
             TString GenerateHtmlState() const {

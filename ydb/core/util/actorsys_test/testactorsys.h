@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/library/actors/core/scheduler_queue.h>
+#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/interconnect/interconnect_common.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <ydb/library/actors/core/monotonic_provider.h>

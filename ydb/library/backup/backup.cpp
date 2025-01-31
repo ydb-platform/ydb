@@ -596,6 +596,19 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
+void BackupTopic(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup topic " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto topicDescription = DescribeTopic(driver, dbPath);
+
+    Ydb::Topic::CreateTopicRequest creationRequest;
+    topicDescription.SerializeTo(creationRequest);
+
+    WriteProtoToFile(creationRequest, fsBackupFolder, NDump::NFiles::CreateTopic());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
 void CreateClusterDirectory(const TDriver& driver, const TString& path, bool rootBackupDir = false) {
     if (rootBackupDir) {
         LOG_I("Create temporary directory " << path.Quote());
@@ -682,6 +695,9 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
             }
             if (dbIt.IsView()) {
                 BackupView(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
+            }
+            if (dbIt.IsTopic()) {
+                BackupTopic(driver, dbIt.GetFullPath(), childFolderPath);
             }
             dbIt.Next();
         }

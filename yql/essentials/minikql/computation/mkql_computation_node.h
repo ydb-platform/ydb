@@ -114,7 +114,7 @@ struct TComputationContext : public TComputationContextLLVM {
     std::vector<NUdf::TUnboxedValue*> WideFields;
     const TTypeEnvironment& TypeEnv;
     const TComputationMutables Mutables;
-    std::shared_ptr<ISpillerFactory> SpillerFactory;
+    ISpillerFactory::TPtr SpillerFactory;
     const NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
     NUdf::ICountersProvider *const CountersProvider;
     const NUdf::ISecureParamsProvider *const SecureParamsProvider;

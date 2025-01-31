@@ -11,6 +11,8 @@ namespace NKikimr::NMiniKQL {
 class ISpillerFactory : private TNonCopyable
 {
 public:
+    using TPtr = std::shared_ptr<ISpillerFactory>;
+
     virtual ISpiller::TPtr CreateSpiller() = 0;
 
     virtual void SetTaskCounters(const TIntrusivePtr<NYql::NDq::TSpillingTaskCounters>& spillingTaskCounters) = 0;

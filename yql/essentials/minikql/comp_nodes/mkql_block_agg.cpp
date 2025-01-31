@@ -1192,16 +1192,28 @@ public:
     typename TFixedMapImpl::const_iterator HashFixedMapIt_;
     TPagedArena Arena_;
 
+
+    struct TSpillingBucket {
+
+        std::optional<NThreading::TFuture<ISpiller::TKey>> SpillingOperation_ = std::nullopt;
+        std::optional<NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>> LoadingOperation_ = std::nullopt;
+        std::vector<ISpiller::TKey> SpillingKeys_;
+        std::vector<size_t> SpillingSizes_;
+
+        ISpiller::TPtr Spiller_;
+    };
+
+    static constexpr ui64 NumberOfSpillingBuckets_ = 10;
+    std::deque<TSpillingBucket> SpillingBuckets_;
+
     ISpiller::TPtr Spiller_;
     typename TDynMapImpl::const_iterator SpillingHashMapIt_;
     typename TFixedMapImpl::const_iterator SpillingHashFixedMapIt_;
     size_t SpillingOutputBlockSize_ = 0;
-    std::optional<NThreading::TFuture<ISpiller::TKey>> SpillingOperation_ = std::nullopt;
-    std::optional<NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>> LoadingOperation_ = std::nullopt;
     bool IsExtractingFinished = false;
-    std::vector<ISpiller::TKey> SpillingKeys_;
-    std::vector<size_t> SpillingSizes_;
     bool IteratorsInitialized = false;
+
+    ISpillerFactory::TPtr SpillerFactory_;
 
     THashedWrapperBaseState(TMemoryUsageInfo* memInfo, ui32 keyLength, ui32 streamIndex, size_t width, size_t outputWidth, std::optional<ui32> filterColumn, const std::vector<TAggParams<TAggregator>>& params,
         const std::vector<std::vector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
@@ -1253,7 +1265,15 @@ public:
                 HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(TotalStateSize_, hasher, equal);
             }
         }
-        Spiller_ = ctx.SpillerFactory->CreateSpiller();
+        SpillerFactory_ = ctx.SpillerFactory;
+    }
+
+    void PrepareForSpilling() {
+        SpillingBuckets_.resize(NumberOfSpillingBuckets_);
+        auto spiller = SpillerFactory_->CreateSpiller();
+        for (auto &b: SpillingBuckets_) {
+            b.Spiller_ = spiller;
+        }
     }
 
     void Clear() {
@@ -1365,11 +1385,11 @@ public:
             IteratorsInitialized = true;
         }
         std::cerr << "Spilling everything" << std::endl;
-        if (SpillingOperation_.has_value() && !SpillingOperation_->HasValue()) return false;
+        if (SpillingBuckets_[0].SpillingOperation_.has_value() && !SpillingBuckets_[0].SpillingOperation_->HasValue()) return false;
 
-        if (SpillingOperation_.has_value()) {
-            SpillingKeys_.push_back(SpillingOperation_->ExtractValue());
-            SpillingOperation_ = std::nullopt;
+        if (SpillingBuckets_[0].SpillingOperation_.has_value()) {
+            SpillingBuckets_[0].SpillingKeys_.push_back(SpillingBuckets_[0].SpillingOperation_->ExtractValue());
+            SpillingBuckets_[0].SpillingOperation_ = std::nullopt;
         }
 
         while (!IsExtractingFinished) {
@@ -1377,37 +1397,37 @@ public:
             IsExtractingFinished = InlineAggState ?
                 SpillingIterate(*HashMap_, SpillingHashMapIt_, spillingBuffer) :
                 SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_, spillingBuffer);
-            SpillingSizes_.push_back(SpillingOutputBlockSize_);
+            SpillingBuckets_[0].SpillingSizes_.push_back(SpillingOutputBlockSize_);
             auto sb = spillingBuffer.Finish();
             if (!sb.size()) continue;
             TString s = TString(sb.begin(), sb.size());
             int stringSize = s.size();
             NYql::TChunkedBuffer cb = NYql::TChunkedBuffer(std::move(s));
-            SpillingOperation_ = Spiller_->Put(std::move(cb));
+            SpillingBuckets_[0].SpillingOperation_ = Spiller_->Put(std::move(cb));
             std::cerr << "Spilled block " << stringSize << "SpillingOutputBlockSize: " << SpillingOutputBlockSize_ << std::endl;
             SpillingOutputBlockSize_ = 0;
             break;
         }
-        return !SpillingOperation_.has_value();
+        return !SpillingBuckets_[0].SpillingOperation_.has_value();
     }
 
     bool LoadEverything() {
         std::cerr << "Loading everything" << std::endl;
-        if (LoadingOperation_.has_value() && !LoadingOperation_->HasValue()) return false;
+        if (SpillingBuckets_[0].LoadingOperation_.has_value() && !SpillingBuckets_[0].LoadingOperation_->HasValue()) return false;
 
-        if (LoadingOperation_.has_value()) {
-            auto data = *LoadingOperation_->ExtractValue();
-            LoadingOperation_ = std::nullopt;
+        if (SpillingBuckets_[0].LoadingOperation_.has_value()) {
+            auto data = *SpillingBuckets_[0].LoadingOperation_->ExtractValue();
+            SpillingBuckets_[0].LoadingOperation_ = std::nullopt;
 
             std::cerr << "ProcessingLoaded" << std::endl;
             SpillingProcessInput(data);
         }
-        if (!SpillingKeys_.empty()) {
-            LoadingOperation_ = Spiller_->Get(SpillingKeys_.back());
-            SpillingKeys_.pop_back();
+        if (!SpillingBuckets_[0].SpillingKeys_.empty()) {
+            SpillingBuckets_[0].LoadingOperation_ = Spiller_->Get(SpillingBuckets_[0].SpillingKeys_.back());
+            SpillingBuckets_[0].SpillingKeys_.pop_back();
         }
 
-        return !LoadingOperation_.has_value();
+        return !SpillingBuckets_[0].LoadingOperation_.has_value();
 
     }
 
@@ -1423,8 +1443,8 @@ public:
         NYql::NUdf::TInputBuffer input(tmp);
 
         ++BatchNum_;
-        const auto batchLength = SpillingSizes_.back();
-        SpillingSizes_.pop_back();
+        const auto batchLength = SpillingBuckets_[0].SpillingSizes_.back();
+        SpillingBuckets_[0].SpillingSizes_.pop_back();
         if (!batchLength) {
             return;
         }
@@ -2209,11 +2229,14 @@ private:
                             continue;
                         case NUdf::EFetchStatus::Finish:
                             if constexpr(Finalize) {
-                                if (spillingState == TSpillingState::InMemory || spillingState == TSpillingState::Spilling) {
+                                if (spillingState == TSpillingState::InMemory) {
+                                    state.PrepareForSpilling();
                                     spillingState = TSpillingState::Spilling;
+                                }
+                                if (spillingState == TSpillingState::Spilling) {
                                     if (!state.SpillEverything()) return NUdf::EFetchStatus::Yield;
                                     std::cerr << "MISHA blobs spilled: ";
-                                    for (auto blobId : state.SpillingKeys_) {
+                                    for (auto blobId : state.SpillingBuckets_[0].SpillingKeys_) {
                                         std::cerr << blobId << " ";
                                     }
                                     std::cerr << std::endl;

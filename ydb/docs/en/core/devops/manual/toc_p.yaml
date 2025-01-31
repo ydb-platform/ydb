@@ -15,6 +15,8 @@ items:
   href: upgrade.md
 - name: Changing an actor system's configuration
   href: ../../maintenance/manual/change_actorsystem_configs.md
+- name: Database node authentication and authorization
+  href: node-authorization.md
 - name: Updating configurations via CMS
   href: ../../maintenance/manual/cms.md
 - name: System views

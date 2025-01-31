@@ -105,7 +105,7 @@ struct TSplitSettings {
     TForceShardSplitSettings GetForceShardSplitSettings() const {
         return TForceShardSplitSettings{
             .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
-            .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
+            .DisableForceShardSplit = true,
         };
     }
 };
@@ -3688,7 +3688,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 percent += (multiply * (total - inProgress - toUpload)) / total;
             } else {
                 const auto parentSize = KMeans.BinPow(KMeans.K, KMeans.Level - 1);
-                const auto parentFrom = KMeans.ParentEnd - KMeans.BinPow(KMeans.K, KMeans.Level - 1) + 1;
+                const auto parentFrom = KMeans.ParentEnd - parentSize + 1;
                 percent += (multiply * (KMeans.Parent - parentFrom)) / parentSize;
             }
             return 100.f * percent;

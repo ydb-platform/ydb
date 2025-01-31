@@ -288,7 +288,7 @@ private:
     void SubscribeOnNextEvent();
     void SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void SendData(TClientsInfo& info);
-    void FatalError(TStatus status);
+    void FatalError(TStatus status, bool alreadyHasException = false);
     void SendDataArrived(TClientsInfo& client);
     void StopReadSession();
     TString GetSessionId() const;
@@ -332,7 +332,8 @@ private:
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
-        IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);,
+        IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
+        IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);,
         ExceptionFunc(std::exception, HandleException)
     )
 };
@@ -782,7 +783,7 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     }
 }
 
-void TTopicSession::FatalError(TStatus status) {
+void TTopicSession::FatalError(TStatus status, bool alreadyHasException) {
     LOG_ROW_DISPATCHER_ERROR("FatalError: " << status.GetErrorMessage());
 
     for (auto& [readActorId, info] : Clients) {
@@ -791,7 +792,9 @@ void TTopicSession::FatalError(TStatus status) {
     }
     StopReadSession();
     Become(&TTopicSession::ErrorState);
-    ythrow yexception() << "FatalError: " << status.GetErrorMessage();    // To exit from current stack and call once PassAway() in HandleException().
+    if (!alreadyHasException) {
+        ythrow yexception() << "FatalError: " << status.GetErrorMessage();
+    }
 }
 
 void TTopicSession::SendSessionError(TActorId readActorId, TStatus status) {
@@ -829,7 +832,7 @@ void TTopicSession::HandleException(const std::exception& e) {
     if (CurrentStateFunc() == &TThis::ErrorState) {
         return;
     }
-    FatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Session error, got unexpected exception: " << e.what()));
+    FatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Session error, got unexpected exception: " << e.what()), true);
 }
 
 void TTopicSession::SendStatistics() {

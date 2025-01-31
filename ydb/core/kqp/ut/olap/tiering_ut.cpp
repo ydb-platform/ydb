@@ -289,8 +289,10 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier("__DEFAULT");
 
+        csController->UnregisterLock("table");
         csController->EnableBackground(NYDBTest::ICSController::EBackground::TTL);
         csController->WaitActualization(TDuration::Seconds(5));
+        csController->WaitTtl(TDuration::Seconds(5));
         {
             auto selectQuery = TString(R"(
                 SELECT *

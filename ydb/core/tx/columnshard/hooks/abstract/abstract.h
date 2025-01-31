@@ -333,8 +333,8 @@ public:
         Y_UNUSED(txInfo);
     }
 
-    virtual const THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>>& GetExternalDataLocks() const {
-        return Default<THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>>>();
+    virtual THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>> GetExternalDataLocks() const {
+        return {};
     }
 };
 

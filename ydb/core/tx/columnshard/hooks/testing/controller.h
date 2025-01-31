@@ -220,7 +220,8 @@ protected:
         SharingIds.emplace(sessionId);
     }
 
-    virtual const THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>>& GetExternalDataLocks() const override {
+    virtual THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> GetExternalDataLocks() const override {
+        TGuard<TMutex> g(Mutex);
         return ExternalLocks;
     }
 
@@ -273,10 +274,12 @@ public:
     }
 
     void RegisterLock(const TString& name, const std::shared_ptr<NOlap::NDataLocks::ILock>& lock) {
+        TGuard<TMutex> g(Mutex);
         AFL_VERIFY(ExternalLocks.emplace(name, lock).second)("name", name);
     }
 
     void UnregisterLock(const TString& name) {
+        TGuard<TMutex> g(Mutex);
         AFL_VERIFY(ExternalLocks.erase(name))("name", name);
     }
 

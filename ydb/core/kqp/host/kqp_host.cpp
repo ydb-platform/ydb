@@ -1433,7 +1433,7 @@ private:
             return nullptr;
         }
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformerNewRBO, Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 

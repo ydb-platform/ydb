@@ -101,9 +101,8 @@ public:
                     ui64(OperationId.GetTxId()),
                     columnShardTxBody, seqNo,
                     context.SS->SelectProcessingParams(txState->TargetPathId));
-                if (const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId) {
-                     event->Record.SetSubDomainPathId(subDomainPathId);
-                }
+                const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
+                event->Record.SetSubDomainPathId(subDomainPathId);
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {

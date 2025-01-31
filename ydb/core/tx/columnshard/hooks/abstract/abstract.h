@@ -354,12 +354,22 @@ public:
             Y_ABORT_UNLESS(Controller);
         }
 
+        TGuard(TGuard&& other)
+            : TGuard(other.Controller) {
+            other.Controller = nullptr;
+        }
+        TGuard& operator=(TGuard&& other) {
+            std::swap(Controller, other.Controller);
+        }
+
         TController* operator->() {
             return Controller.get();
         }
 
         ~TGuard() {
-            Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+            if (Controller) {
+                Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+            }
         }
     };
 

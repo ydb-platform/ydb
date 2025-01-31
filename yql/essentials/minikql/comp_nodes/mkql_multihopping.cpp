@@ -180,17 +180,21 @@ public:
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            Cerr << "Fetch " << Endl;
             if (!Ready.empty()) {
                 result = std::move(Ready.front());
                 Ready.pop_front();
+                Cerr << "Fetch ok" << Endl;
                 return NUdf::EFetchStatus::Ok;
             }
             if (PendingYield) {
                 PendingYield = false;
+                Cerr << "Fetch Yield" << Endl;
                 return NUdf::EFetchStatus::Yield;
             }
 
             if (Finished) {
+                Cerr << "Fetch Finish" << Endl;
                 return NUdf::EFetchStatus::Finish;
             }
 
@@ -210,6 +214,7 @@ public:
                 if (!Ready.empty()) {
                     result = std::move(Ready.front());
                     Ready.pop_front();
+                    Cerr << "Fetch ok 2" << Endl;
                     return NUdf::EFetchStatus::Ok;
                 }
 
@@ -221,6 +226,7 @@ public:
                         if (!Ready.empty()) {
                             result = std::move(Ready.front());
                             Ready.pop_front();
+                            Cerr << "Fetch ok (Finish)" << Endl;
                             return NUdf::EFetchStatus::Ok;
                         }
                     } else if (status == NUdf::EFetchStatus::Yield) {
@@ -232,6 +238,7 @@ public:
                         if (!Ready.empty()) {
                             result = std::move(Ready.front());
                             Ready.pop_front();
+                            Cerr << "Fetch ok (Yield)" << Endl;
                             return NUdf::EFetchStatus::Ok;
                         }
                         PendingYield = false;

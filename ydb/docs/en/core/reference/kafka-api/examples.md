@@ -12,11 +12,9 @@ Before proceeding with the examples:
 
 ## How to try the Kafka API {#how-to-try-kafka-api}
 
-
 ### In Docker {#how-to-try-kafka-api-in-docker}
 
 Run Docker following [the quickstart guide](../../quickstart.md#install), and the Kafka API will be available on port 9092.
-
 
 ### In Yandex Cloud {#how-to-try-kafka-api-in-cloud}
 
@@ -30,23 +28,17 @@ To do this in your [Yandex Cloud console](https://console.yandex.cloud):
 1. Create an [API key](https://yandex.cloud/en/docs/iam/operations/sa/create-access-key) for this service account.
    For the key, select `yc.ydb.topics.manage` in the **Scope** field. You can also set a description and an expiration date.
 
-
 Authentication is required to work with Yandex Cloud, see authentication examples [below](#authentication-in-cloud-examples).
 
 ## Kafka API usage examples
-
 
 ### Reading
 
 Consider the following limitations of using the Kafka API for reading:
 
-
-
 - No support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option.
 - Only one partition assignment strategy - `roundrobin`.
-
 - No reading without a pre-created consumer group.
-
 
 Therefore, in the consumer configuration, you must always specify the **consumer group name** and the parameters:
 
@@ -220,9 +212,7 @@ The username is not specified in <path_to_database>. Only `@` is added, followed
 
 #### Authentication examples in on-prem YDB
 
-
-To use authentication in a on-prem database:
-
+To use authentication in a multinode self-deployed database:
 
 1. Create a user. [How to do this in YQL](../../yql/reference/syntax/create-user.md). [How to execute YQL from CLI](../ydb-cli/yql.md).
 2. Connect to the Kafka API as shown in the examples below. In all examples, it is assumed that:

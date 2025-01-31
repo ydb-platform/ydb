@@ -25,7 +25,7 @@ class TFixture : public NUnitTest::TBaseFixture {
 
             try {
                 ExecYdb({"init", "--topic", TopicName, "--table", TableName});
-            } catch (yexception) {
+            } catch (const yexception) {
                 // ignore errors
             }
         }
@@ -33,7 +33,7 @@ class TFixture : public NUnitTest::TBaseFixture {
         void TearDown(NUnitTest::TTestContext&) override {
             try {
                 ExecYdb({"clean", "--topic", TopicName, "--table", TableName});
-            } catch (yexception) {
+            } catch (const yexception) {
                 // ignore errors
             }
         }
@@ -172,7 +172,12 @@ Y_UNIT_TEST(Default_Run)
 
 Y_UNIT_TEST(Default_Init_Clean)
 {
-    // just setup and teardown executed here
+    // setip and tear down also executed but ignored
+    TopicName = GenerateTopicName();;
+    TableName = GenerateTableName();
+
+    ExecYdb({"init", "--topic", TopicName, "--table", TableName});
+    ExecYdb({"clean", "--topic", TopicName, "--table", TableName});
 }
 
 Y_UNIT_TEST(Specific_Init_Clean)

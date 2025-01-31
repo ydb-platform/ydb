@@ -160,6 +160,9 @@ TExprNode::TPtr IsUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
         .Add()
             .Name().Build("IsUpdate")
         .Build()
+        .Add()
+            .Name().Build("AllowStreamWrite")
+        .Build()
     .Done().Ptr();
 }
 

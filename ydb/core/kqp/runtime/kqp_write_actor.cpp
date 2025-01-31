@@ -1654,6 +1654,12 @@ public:
             || State == EState::COMMITTING
             || State == EState::ROLLINGBACK;
 
+        //ReplyErrorAndDie(
+        //    NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+        //    NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+        //    TStringBuilder() << "Stream write queries aren't allowed.",
+        //    {});
+
         if (needToFlush) {
             CA_LOG_D("Flush data");
             for (auto& [_, info] : WriteInfos) {
@@ -2716,9 +2722,7 @@ private:
     }
 
     i64 GetFreeSpace() const final {
-        return MessageSettings.MaxForwardedSize - DataSize > 0
-            ? MessageSettings.MaxForwardedSize - DataSize
-            : std::numeric_limits<i64>::min();
+        return MessageSettings.MaxForwardedSize - DataSize;
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {

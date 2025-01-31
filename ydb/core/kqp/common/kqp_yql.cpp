@@ -285,6 +285,9 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
         } else if (name == TKqpUpsertRowsSettings::AllowInconsistentWritesSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.AllowInconsistentWrites = true;
+        } else if (name == TKqpUpsertRowsSettings::AllowStreamWriteSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.AllowStreamWrite = true;
         } else if (name == TKqpUpsertRowsSettings::ModeSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.Mode = tuple.Value().template Cast<TCoAtom>().Value();
@@ -320,6 +323,12 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(AllowInconsistentWritesSettingName)
+                .Done());
+    }
+    if (AllowStreamWrite) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(AllowStreamWriteSettingName)
                 .Done());
     }
 

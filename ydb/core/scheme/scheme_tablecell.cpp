@@ -470,10 +470,10 @@ TCell TSerializedCellVec::ExtractCell(std::string_view data, size_t pos) {
 
     TCell cell;
     for (ui16 i = 0; i <= pos; ++i) {
+        cell = {};
         if (!reader.ReadNewCell(&cell)) {
             return {};
         }
-        cell = {};
     }
     return cell;
 }

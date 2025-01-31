@@ -252,6 +252,8 @@ public:
         }
     }
 
+    void SetupNode(ui32 nodeId, TPerNodeInfo& info);
+
     void Start() {
         for (auto& [nodeId, info] : PerNodeInfo) {
             SetupNode(nodeId, info);

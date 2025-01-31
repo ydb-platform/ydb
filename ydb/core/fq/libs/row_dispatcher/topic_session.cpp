@@ -288,7 +288,8 @@ private:
     void SubscribeOnNextEvent();
     void SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void SendData(TClientsInfo& info);
-    void FatalError(TStatus status, bool alreadyHasException = false);
+    void FatalError(const TStatus& status);
+    void ThrowFatalError(const TStatus& status);
     void SendDataArrived(TClientsInfo& client);
     void StopReadSession();
     TString GetSessionId() const;
@@ -568,7 +569,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClose
     const TString message = TStringBuilder() << "Read session to topic \"" << Self.TopicPathPartition << "\" was closed";
     LOG_ROW_DISPATCHER_DEBUG(message << ": " << ev.DebugString());
 
-    Self.FatalError(TStatus::Fail(
+    Self.ThrowFatalError(TStatus::Fail(
         NYql::NDq::YdbStatusToDqStatus(static_cast<Ydb::StatusIds::StatusCode>(ev.GetStatus())),
         NYdb::NAdapters::ToYqlIssues(ev.GetIssues())
     ).AddParentIssue(message));
@@ -783,7 +784,7 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     }
 }
 
-void TTopicSession::FatalError(TStatus status, bool alreadyHasException) {
+void TTopicSession::FatalError(const TStatus& status) {
     LOG_ROW_DISPATCHER_ERROR("FatalError: " << status.GetErrorMessage());
 
     for (auto& [readActorId, info] : Clients) {
@@ -792,9 +793,11 @@ void TTopicSession::FatalError(TStatus status, bool alreadyHasException) {
     }
     StopReadSession();
     Become(&TTopicSession::ErrorState);
-    if (!alreadyHasException) {
-        ythrow yexception() << "FatalError: " << status.GetErrorMessage();
-    }
+}
+
+void TTopicSession::ThrowFatalError(const TStatus& status) {
+    FatalError(status);
+    ythrow yexception() << "FatalError: " << status.GetErrorMessage();
 }
 
 void TTopicSession::SendSessionError(TActorId readActorId, TStatus status) {
@@ -832,7 +835,7 @@ void TTopicSession::HandleException(const std::exception& e) {
     if (CurrentStateFunc() == &TThis::ErrorState) {
         return;
     }
-    FatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Session error, got unexpected exception: " << e.what()), true);
+    FatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Session error, got unexpected exception: " << e.what()));
 }
 
 void TTopicSession::SendStatistics() {

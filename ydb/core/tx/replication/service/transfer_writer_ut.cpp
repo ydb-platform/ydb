@@ -35,7 +35,14 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
 
         NKikimrReplication::TReplicationConfig config;
         auto* target = config.MutableTransferSpecific()->AddTargets();
-        target->SetTransformLambda("$__ydb_transfer_lambda = ($x) -> { RETURN <|key:$x._offset, value:$x._data|>; }; ");
+        target->SetTransformLambda(R"(
+            $__ydb_transfer_lambda = ($x) -> {
+                RETURN <|
+                    key:CAST($x._offset As Uint32)
+                    --, value:CAST($x._data AS Utf8??)
+                |>;
+            };
+        )");
 
         const TPathId tablePathId = env.GetPathId("/Root/Table");
         const TString tableName = "/Root/Table";

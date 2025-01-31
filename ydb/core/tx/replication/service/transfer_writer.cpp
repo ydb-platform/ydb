@@ -20,6 +20,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
+#include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
 #include <yql/essentials/public/udf/udf_string.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
@@ -51,8 +52,9 @@ struct TOutputType {
 
 class TMessageOutputSpec : public NYql::NPureCalc::TOutputSpecBase {
 public:
-    explicit TMessageOutputSpec(const NYT::TNode& schema)
-        : Schema(schema)
+    explicit TMessageOutputSpec(const TVector<TSchemaColumn>& tableColumns, const NYT::TNode& schema)
+        : TableColumns(tableColumns)
+        , Schema(schema)
     {}
 
 public:
@@ -60,19 +62,24 @@ public:
         return Schema;
     }
 
+    const TVector<TSchemaColumn> GetTableColumns() const {
+        return TableColumns;
+    }
+
 private:
+    const TVector<TSchemaColumn> TableColumns;
     const NYT::TNode Schema;
 };
 
 class TOutputListImpl final: public IStream<TOutputType*> {
 protected:
     TWorkerHolder<IPullListWorker> WorkerHolder_;
-    //TOutputConverter<TOutputSpec> Converter_;
+    const TMessageOutputSpec& OutputSpec;
 
 public:
-    explicit TOutputListImpl(const TMessageOutputSpec& /*outputSpec*/, TWorkerHolder<IPullListWorker> worker)
+    explicit TOutputListImpl(const TMessageOutputSpec& outputSpec, TWorkerHolder<IPullListWorker> worker)
         : WorkerHolder_(std::move(worker))
-        //, Converter_(outputSpec, WorkerHolder_.Get())
+        , OutputSpec(outputSpec)
     {
     }
 
@@ -87,76 +94,26 @@ public:
                 return nullptr;
             }
 
-            Cerr << ">>>>> IsBoxed = " << value.IsBoxed() << Endl << Flush;
-            Cerr << ">>>>> Length = " << value.GetDictLength() << Endl << Flush; 
-            auto it = value.GetDictIterator();
+            auto v = value.GetElement(0);
 
+            size_t i = 0;
+            for (auto& c : OutputSpec.GetTableColumns()) {
+                auto e = v.GetElement(i++);
 
-            for (NUdf::TUnboxedValue key, payload; it.NextPair(key, payload);) {
-               Cerr << ">>>>> key= " << key.IsBoxed() << Endl << Flush; 
-               //Cerr << ">>>>> payload = " << payload.IsSortedDict() << Endl << Flush; 
+                // TODO
+                if (!e.HasValue()) {
+                    Cerr << ">>>>> " << c.Name << " IS NULL" << Endl << Flush;
+                } else if (c.TypeYson == "Uint32") {
+                    Cerr << ">>>>> " << c.Name << " = " << e.Get<ui32>() << Endl << Flush;
+                } else if (c.TypeYson == "Utf8") {
+                    Cerr << ">>>>> " << c.Name << " = '" << TString(e.AsStringRef()) << "'" << Endl << Flush;
+                }
             }
 
-            return nullptr; //Converter_.DoConvert(value);
+            return nullptr; // new TOutputType(); // TODO кто собирает мусор?
         }
     }
 };
-
-
-class TMessagePushRelayImpl : public NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*> {
-public:
-    TMessagePushRelayImpl(const TMessageOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<ui64>> underlying)
-        : Underlying(std::move(underlying))
-        , Worker(worker)
-    {
-        Y_UNUSED(outputSpec);
-    }
-
-public:
-    void OnObject(const NYql::NUdf::TUnboxedValue* value) override {
-        Y_ENSURE(value->GetListLength() == 1, "Unexpected output schema size");
-
-        auto unguard = Unguard(Worker->GetScopedAlloc());
-        Underlying->OnObject(value->GetElement(0).Get<ui64>());
-    }
-
-    void OnFinish() override {
-        auto unguard = Unguard(Worker->GetScopedAlloc());
-        Underlying->OnFinish();
-    }
-
-private:
-    const THolder<NYql::NPureCalc::IConsumer<ui64>> Underlying;
-    NYql::NPureCalc::IWorker* Worker;
-};
-
-            template <typename T>
-            class TVectorStream final: public IStream<T*> {
-            private:
-                size_t I_;
-                TVector<T> Data_;
-
-            public:
-                explicit TVectorStream(TVector<T> data)
-                    : I_(0)
-                    , Data_(std::move(data))
-                {
-                }
-
-            public:
-                T* Fetch() override {
-                    if (I_ >= Data_.size()) {
-                        return nullptr;
-                    } else {
-                        return &Data_[I_++];
-                    }
-                }
-            };
-
-
-THolder<IStream<NYdb::NTopic::NPurecalc::TMessage*>> StreamFromVector(NYdb::NTopic::NPurecalc::TMessage& data) {
-    return MakeHolder<TVectorStream<NYdb::NTopic::NPurecalc::TMessage>>(TVector{data});
-}
 
 } // namespace
 
@@ -184,59 +141,40 @@ struct NYql::NPureCalc::TOutputSpecTraits<NKikimr::NReplication::NService::TMess
     ) {
         return MakeHolder<NKikimr::NReplication::NService::TOutputListImpl>(outputSpec, std::move(worker));
     }
-
-    static void SetConsumerToWorker(
-        const NKikimr::NReplication::NService::TMessageOutputSpec& outputSpec,
-        NYql::NPureCalc::IPushStreamWorker* worker,
-        THolder<NYql::NPureCalc::IConsumer<ui64>> consumer
-    ) {
-        worker->SetConsumer(MakeHolder<NKikimr::NReplication::NService::TMessagePushRelayImpl>(outputSpec, worker, std::move(consumer)));
-    }
 };
 
 
 namespace NKikimr::NReplication::NService {
 
 namespace {
-/*
+
 NYT::TNode CreateTypeNode(const TString& fieldType) {
     return NYT::TNode::CreateList()
         .Add("DataType")
         .Add(fieldType);
 }
-*/
-/*
+
+NYT::TNode CreateOptionalTypeNode(const TString& fieldType) {
+    return NYT::TNode::CreateList()
+        .Add("OptionalType")
+        .Add(CreateTypeNode(fieldType));
+}
+
+
 void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
     node.Add(
         NYT::TNode::CreateList()
             .Add(fieldName)
-            .Add(CreateTypeNode(fieldType))
+            .Add(CreateOptionalTypeNode(fieldType))
     );
 }
 
-void AddColumn(NYT::TNode& node, const TSchemaColumn& column) {
-    TString parseTypeError;
-    TStringOutput errorStream(parseTypeError);
-    NYT::TNode parsedType;
-    if (!NYql::NCommon::ParseYson(parsedType, column.TypeYson, errorStream)) {
-        throw yexception() << "Failed to parse column '" << column.Name << "' type yson " << column.TypeYson << ", error: " << parseTypeError;
-    }
-
-    node.Add(
-        NYT::TNode::CreateList()
-            .Add(column.Name)
-            .Add(parsedType)
-    );
-}
-*/
-
-NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& /*columns*/) {
+NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& columns) {
     auto structMembers = NYT::TNode::CreateList();
 
-    // TODO
-/*    for (const auto& column : columns) {
-        AddColumn(structMembers, column);
-    }*/
+    for (const auto& column : columns) {
+        AddField(structMembers, column.Name, column.TypeYson);
+    }
 
     auto rootMembers = NYT::TNode::CreateList();
     rootMembers.Add(
@@ -249,7 +187,6 @@ NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& /*columns*/) {
 
     return NYT::TNode::CreateList().Add("StructType").Add(std::move(rootMembers));
 }
-
 
 class TProgramHolder : public NFq::IProgramHolder {
 public:
@@ -271,7 +208,7 @@ public:
         // allocated on another allocator and should be released
         Program = programFactory->MakePullListProgram(
             NYdb::NTopic::NPurecalc::TMessageInputSpec(),
-            TMessageOutputSpec(MakeOutputSchema(TableColumns)),
+            TMessageOutputSpec(TableColumns, MakeOutputSchema(TableColumns)),
             Sql,
             NYql::NPureCalc::ETranslationMode::SQL
         );
@@ -542,7 +479,7 @@ private:
             input.Offset = NYql::NUdf::TUnboxedValuePod(message.Offset);
 
 
-            auto result = ProgramHolder->GetProgram()->Apply(StreamFromVector(input));
+            auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
             while (auto* m = result->Fetch()) {
                 Y_UNUSED(m);
 

@@ -54,16 +54,6 @@ protected:
     }
 
     void StartScan() {
-        // TODO: support TableRange filter
-        if (auto cellsFrom = TBase::TableRange.From.GetCells(); cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "TableRange.From filter is not supported");
-            return;
-        }
-        if (auto cellsTo = TBase::TableRange.To.GetCells(); cellsTo.size() > 0 && !cellsTo[0].IsNull()) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "TableRange.To filter is not supported");
-            return;
-        }
-
         auto request = MakeHolder<TEvSchemeShard::TEvListUsers>();
 
         LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
@@ -99,6 +89,9 @@ protected:
             if (!user.HasName() || !CanAccessUser(user.GetName())) {
                 continue;
             }
+            if (!StringKeyIsInTableRange({user.GetName()})) {
+                continue;
+            }
             users.push_back(&user);
         }
         SortBatch(users, [](const auto* left, const auto* right) {
@@ -111,9 +104,7 @@ protected:
             for (auto& column : Columns) {
                 switch (column.Tag) {
                 case Schema::AuthUsers::Sid::ColumnId:
-                    cells.push_back(user->HasName()
-                        ? TCell(user->GetName().data(), user->GetName().size())
-                        : TCell());
+                    cells.push_back(TCell(user->GetName().data(), user->GetName().size()));
                     break;
                 case Schema::AuthUsers::IsEnabled::ColumnId:
                     cells.push_back(user->HasIsEnabled()

@@ -170,6 +170,10 @@ namespace NKikimr {
             const ui64 MaxInFlightCount;
             const ui64 MaxInFlightCost;
             THashMap<ui64, TMsgInfo> Msgs;
+
+            TMonotonic LastUpdate;
+            static constexpr TDuration StuckQueueThreshold = TDuration::Minutes(3);
+
         public:
             const NKikimrBlobStorage::EVDiskInternalQueueId IntQueueId;
             const TString Name;
@@ -205,6 +209,7 @@ namespace NKikimr {
                 , Deadlines(0)
                 , MaxInFlightCount(maxInFlightCount)
                 , MaxInFlightCost(maxInFlightCost)
+                , LastUpdate(TActivationContext::Monotonic())
                 , IntQueueId(intQueueId)
                 , Name(name)
                 , SkeletonFrontInFlightCount(MakeCounter(skeletonFrontGroup, "InFlightCount", false, false))
@@ -244,6 +249,7 @@ namespace NKikimr {
                     *SkeletonFrontInFlightBytes += recByteSize;
 
                     Msgs.emplace(internalMessageId, TMsgInfo(msgId.MsgId, ctx.Now(), std::move(trace)));
+                    UpdateState();
                 } else {
                     // enqueue
                     ++DelayedCount;
@@ -303,6 +309,7 @@ namespace NKikimr {
                             *SkeletonFrontInFlightBytes += recByteSize;
 
                             Msgs.emplace(rec->InternalMessageId, TMsgInfo(rec->MsgId.MsgId, ctx.Now(), std::move(rec->Trace)));
+                            UpdateState();
                         }
                         Queue->Pop();
                     } else {
@@ -314,6 +321,11 @@ namespace NKikimr {
         public:
             template <class TFront>
             void Completed(const TActorContext &ctx, const TVMsgContext &msgCtx, TFront &front) {
+                if (!Msgs.contains(msgCtx.InternalMessageId)) {
+                    // Completed request after resetting queue
+                    return;
+                }
+
                 Y_ABORT_UNLESS(InFlightCount >= 1 && InFlightBytes >= msgCtx.RecByteSize && InFlightCost >= msgCtx.Cost,
                          "IntQueueId# %s InFlightCount# %" PRIu64 " InFlightBytes# %" PRIu64
                          " InFlightCost# %" PRIu64 " msgCtx# %s Deadlines# %" PRIu64,
@@ -332,6 +344,7 @@ namespace NKikimr {
                 const size_t numErased = Msgs.erase(msgCtx.InternalMessageId);
                 Y_ABORT_UNLESS(numErased == 1);
 
+                UpdateState();
                 ProcessNext(ctx, front, false);
             }
 
@@ -416,6 +429,28 @@ namespace NKikimr {
                     str << name << ": " << val;
                 }
                 str << "<br>";
+            }
+
+            void UpdateState() {
+                LastUpdate = TActivationContext::Monotonic();
+            }
+
+            bool IsStuck() const {
+                return InFlightCount > 0 && TActivationContext::Monotonic() - LastUpdate > StuckQueueThreshold;
+            }
+
+            void ResetQueue() {
+                InFlightCount = 0;
+                InFlightCost = 0;
+                InFlightBytes = 0;
+
+                *SkeletonFrontInFlightCount = 0;
+                *SkeletonFrontInFlightCost = 0;
+                *SkeletonFrontInFlightBytes = 0;
+                *SkeletonFrontCostProcessed = 0;
+
+                Msgs.clear();
+                UpdateState();
             }
 
             TString GenerateHtmlState() const {
@@ -666,11 +701,14 @@ namespace NKikimr {
         NMonGroup::TSyncerGroup SyncerMonGroup;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
         NMonGroup::TCostGroup CostGroup;
+        NMonGroup::TMalfunctionGroup MalfunctionGroup;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         bool HasUnreadableBlobs = false;
         TInstant LastSanitizeTime = TInstant::Zero();
         TInstant LastSanitizeWithErrorTime = TInstant::Zero();
         ui64 NextUniqueMessageId = 1;
+
+        static constexpr TDuration StuckQueueCheckPeriod = TDuration::Seconds(60);
 
         ui64 AllocateMessageId() {
             return NextUniqueMessageId++;
@@ -821,6 +859,7 @@ namespace NKikimr {
                     }
                     case TEvFrontRecoveryStatus::SyncGuidRecoveryDone:
                         Become(&TThis::StateFunc);
+                        HandleWakeup(ctx);
                         SendNotifications(ctx);
                         break;
                     default: Y_ABORT("Unexpected case");
@@ -1103,7 +1142,9 @@ namespace NKikimr {
                          std::nullopt,
                          state,
                          replicated,
-                         outOfSpaceFlags));
+                         outOfSpaceFlags,
+                         std::nullopt,
+                         std::nullopt));
             // repeat later
             if (schedule) {
                 ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard);
@@ -1930,6 +1971,7 @@ namespace NKikimr {
             IgnoreFunc(TEvVDiskRequestCompleted)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
+            IgnoreFunc(TEvents::TEvWakeup)
         )
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2034,6 +2076,24 @@ namespace NKikimr {
             Send(ev);
         }
 
+        void HandleWakeup(const TActorContext& ctx) {
+            for (TIntQueueClass* queue : { IntQueueAsyncGets.get(), IntQueueFastGets.get(),
+                    IntQueueDiscover.get(), IntQueueLowGets.get(), IntQueueLogPuts.get(),
+                    IntQueueHugePutsForeground.get(), IntQueueHugePutsBackground.get() }) {
+                if (queue->IsStuck()) {
+                    queue->DropWithError(ctx, *this);
+                    queue->ResetQueue();
+                    DisconnectClients(ctx);
+                    LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
+                            << "Stuck internal queue detected, dropping queues, "
+                            << " Queue.Name# " << queue->Name
+                            << " Marker# BSVSF08");
+                    ++MalfunctionGroup.DroppingStuckInternalQueue();
+                }
+            }
+            Schedule(StuckQueueCheckPeriod, new TEvents::TEvWakeup);
+        }
+
         STRICT_STFUNC(StateFunc,
             HFunc(TEvBlobStorage::TEvVMovedPatch, Check)
             HFunc(TEvBlobStorage::TEvVPatchStart, Check)
@@ -2079,6 +2139,7 @@ namespace NKikimr {
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
             hFunc(TEvMinHugeBlobSizeUpdate, Handle)
+            CFunc(NActors::TEvents::TSystem::Wakeup, HandleWakeup)
         )
 
 #define HFuncStatus(TEvType, status, errorReason, now, wstatus) \
@@ -2205,6 +2266,7 @@ namespace NKikimr {
             , SyncerMonGroup(VDiskCounters, "subsystem", "syncer")
             , VDiskMonGroup(VDiskCounters, "subsystem", "state")
             , CostGroup(VDiskCounters, "subsystem", "cost")
+            , MalfunctionGroup(VDiskCounters, "subsystem", "malfunction")
         {
             ReplMonGroup.ReplUnreplicatedVDisks() = 1;
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::Initial);

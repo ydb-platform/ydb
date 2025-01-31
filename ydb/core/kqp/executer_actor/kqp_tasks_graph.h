@@ -156,6 +156,8 @@ struct TShardKeyRanges {
     void MakeFullPoint(TSerializedCellVec&& range);
     void MakeFull(TSerializedPointOrRange&& pointOrRange);
 
+    bool HasRanges() const;
+
     bool IsFullRange() const { return FullRange.has_value(); }
     TVector<TSerializedPointOrRange>& GetRanges() { return Ranges; }
 
@@ -164,7 +166,7 @@ struct TShardKeyRanges {
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
     void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange* proto) const;
     void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta_TReadOpMeta* proto) const;
-    void SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto) const;
+    void SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto, bool allowPoints = true) const;
 
     std::pair<const TSerializedCellVec*, bool> GetRightBorder() const;
 };

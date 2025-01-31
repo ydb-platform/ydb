@@ -4,6 +4,8 @@
 
 #include <util/digest/numeric.h>
 
+#include <tuple>
+
 namespace NKikimr::NOlap {
 
 class TSchemaVersionId {

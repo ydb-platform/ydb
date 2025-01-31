@@ -270,6 +270,15 @@ namespace NKikimr {
                 CurrentLogChunkCount > minLogChunkCount;
         }
 
+        ui32 GetThrottlingRate() const {
+            if (!IsActive()) {
+                return 1000;
+            }
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            double rate = (double)CurrentSpeedLimit / deviceSpeed;
+            return rate * 1000;
+        }
+
         TDuration BytesToDuration(ui64 bytes) const {
             auto limit = CurrentSpeedLimit;
             if (limit == 0) {
@@ -479,6 +488,14 @@ namespace NKikimr {
 
     void TOverloadHandler::SetLogChunkCount(ui32 logChunkCount) {
         LogChunkCount = logChunkCount;
+    }
+
+    bool TOverloadHandler::IsThrottling() const {
+        return ThrottlingController->IsActive();
+    }
+
+    ui32 TOverloadHandler::GetThrottlingRate() const {
+        return ThrottlingController->GetThrottlingRate();
     }
 
     template <class TEv>

@@ -87,6 +87,8 @@ void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flat
 //// TKqpRunner::TImpl
 
 class TKqpRunner::TImpl {
+    using EVerbose = TYdbSetupSettings::EVerbose;
+
 public:
     enum class EQueryType {
         ScriptQuery,
@@ -96,6 +98,7 @@ public:
 
     explicit TImpl(const TRunnerOptions& options)
         : Options_(options)
+        , VerboseLevel_(Options_.YdbSettings.VerboseLevel)
         , YdbSetup_(options.YdbSettings)
         , StatProcessor_(NFq::CreateStatProcessor("stat_full"))
         , CerrColors_(NColorizer::AutoColors(Cerr))
@@ -104,6 +107,10 @@ public:
 
     bool ExecuteSchemeQuery(const TRequestOptions& query) const {
         StartSchemeTraceOpt();
+
+        if (VerboseLevel_ >= EVerbose::QueriesText) {
+            Cout << CoutColors_.Cyan() << "Starting scheme request:\n" << CoutColors_.Default() << query.Query << Endl;
+        }
 
         TSchemeMeta meta;
         TRequestResult status = YdbSetup_.SchemeQueryRequest(query, meta);
@@ -122,6 +129,10 @@ public:
     bool ExecuteScript(const TRequestOptions& script) {
         StartScriptTraceOpt(script.QueryId);
 
+        if (VerboseLevel_ >= EVerbose::QueriesText) {
+            Cout << CoutColors_.Cyan() << "Starting script request:\n" << CoutColors_.Default() << script.Query << Endl;
+        }
+
         TRequestResult status = YdbSetup_.ScriptRequest(script, ExecutionOperation_);
 
         if (!status.IsSuccess()) {
@@ -138,6 +149,10 @@ public:
     bool ExecuteQuery(const TRequestOptions& query, EQueryType queryType) {
         StartScriptTraceOpt(query.QueryId);
         StartTime_ = TInstant::Now();
+
+        if (VerboseLevel_ >= EVerbose::QueriesText) {
+            Cout << CoutColors_.Cyan() << "Starting query request:\n" << CoutColors_.Default() << query.Query << Endl;
+        }
 
         TString queryTypeStr;
         TQueryMeta meta;
@@ -224,7 +239,7 @@ public:
         if (Options_.ResultOutput) {
             Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing script query results..." << CoutColors_.Default() << Endl;
             for (size_t i = 0; i < ResultSets_.size(); ++i) {
-                if (ResultSets_.size() > 1 && Options_.YdbSettings.VerboseLevel >= 1) {
+                if (ResultSets_.size() > 1 && Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
                     *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
                 }
                 PrintScriptResult(ResultSets_[i]);
@@ -306,7 +321,7 @@ private:
 
     void PrintSchemeQueryAst(const TString& ast) const {
         if (Options_.SchemeQueryAstOutput) {
-            if (Options_.YdbSettings.VerboseLevel >= 1) {
+            if (Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
                 Cout << CoutColors_.Cyan() << "Writing scheme query ast" << CoutColors_.Default() << Endl;
             }
             Options_.SchemeQueryAstOutput->Write(ast);
@@ -315,7 +330,7 @@ private:
 
     void PrintScriptAst(size_t queryId, const TString& ast) const {
         if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryAstOutputs, nullptr)) {
-            if (Options_.YdbSettings.VerboseLevel >= 1) {
+            if (Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
                 Cout << CoutColors_.Cyan() << "Writing script query ast" << CoutColors_.Default() << Endl;
             }
             output->Write(ast);
@@ -339,7 +354,7 @@ private:
 
     void PrintScriptPlan(size_t queryId, const TString& plan) const {
         if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryPlanOutputs, nullptr)) {
-            if (Options_.YdbSettings.VerboseLevel >= 1) {
+            if (Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
                 Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
             }
             PrintPlan(plan, output);
@@ -425,7 +440,7 @@ private:
     }
 
     void PrintScriptFinish(const TQueryMeta& meta, const TString& queryType) const {
-        if (Options_.YdbSettings.VerboseLevel < 1) {
+        if (Options_.YdbSettings.VerboseLevel < EVerbose::Info) {
             return;
         }
         Cout << CoutColors_.Cyan() << queryType << " request finished.";
@@ -439,6 +454,7 @@ private:
 
 private:
     TRunnerOptions Options_;
+    EVerbose VerboseLevel_;
 
     TYdbSetup YdbSetup_;
     std::unique_ptr<NFq::IPlanStatProcessor> StatProcessor_;

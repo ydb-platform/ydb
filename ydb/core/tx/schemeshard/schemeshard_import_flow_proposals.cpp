@@ -40,6 +40,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     auto* indexedTable = modifyScheme.MutableCreateIndexedTable();
     auto& tableDesc = *(indexedTable->MutableTableDescription());
     tableDesc.SetName(wdAndPath.second);
+    tableDesc.SetIsRestore(true);
 
     Y_ABORT_UNLESS(ss->TableProfilesLoaded);
     Ydb::StatusIds::StatusCode status;
